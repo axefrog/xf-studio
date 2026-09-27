@@ -125,7 +125,7 @@ function syntheticCore(): LoadedCoreDetail {
   const record = { schema: "xfs/render-detail-1", detail: "core-head", identity: "probe", origin: "game-files", provenance: { label: "probe", notes: [] },
     geometry: { file: "probe.glb", sha256: "", nodes: { head: "head", plate: "plate", eyes: "eyes" }, morphs: [] },
     textures: {} } as unknown as CoreDetail;
-  return { record, gltf: { scene: root } as unknown as LoadedCoreDetail["gltf"], meshes: [head, plate, eyes], head, surfaces: new Map([["plate", plate]]), eyes,
+  return { record, body: "female", gltf: { scene: root } as unknown as LoadedCoreDetail["gltf"], meshes: [head, plate, eyes], head, surfaces: new Map([["plate", plate]]), eyes,
     textures: { "head.albedo": canvasTexture("#c8a090"), "eyes.albedo": canvasTexture("#604030"), "head.normal": canvasTexture("#8080ff"),
       "head.roughness": canvasTexture("#a0a0a0") } };
 }

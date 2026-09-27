@@ -202,6 +202,10 @@ By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appeara
 
 [Beautiful EYEBROWS II](https://www.nexusmods.com/cyberpunk2077/mods/26168), [Beautiful EYEBROWS 2K Material Edit](https://www.nexusmods.com/cyberpunk2077/mods/18783), [Universal Skin Tone](https://www.nexusmods.com/cyberpunk2077/mods/15426), [Realistic Complexion III](https://www.nexusmods.com/cyberpunk2077/mods/19314) and [Character Rendering Editor](https://www.nexusmods.com/cyberpunk2077/mods/32842). The eyebrow mod taught us how ArchiveXL copy/patch declarations assemble complete resources from vanilla geometry, and how the game combines two alpha maps with a colour gradient for brows; it also showed that brow styles merge into the base game's brow row rather than adding a selector. The Material Edit showed the other route, replacing the base game's brow material and textures in place, which changes every NPC's brows too. The skin mods provided alternative skin maps for render-fidelity comparisons and showed how a complexion replacer works: same-path head textures plus replaced global skin resources, including the default skin profile the preview's skin lighting now reads. The Character Rendering Editor's list of hair, skin and eye rendering options with their vanilla values gave the preview's hair light its default tuning and names the runtime skin and rim-light options a capture must record. Private local reference only.
 
+### Atomiic
+
+[Smokey Diva Hair - Serena - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/29065), whose creator rows read "Atomiic - Serena Smokey Hair". Its fourth part mesh carries earrings and a hair pin on the engine's plain metal template, which showed that a hairstyle's own accessories are ordinary drawing components of its appearance and led the preview to draw that template. Studied only.
+
 ### Browser Extension
 
 By r457 and gh057, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/10038). Its small redscript framework showed how a mod adds a site to the in-game browser without replacing anything: a listener registers an address and icon for one browser, supplies its own page widget for that address, and joins a paginated home page that also lists every journal site. That is the basis of the terminal-content research. Studied only.
@@ -240,7 +244,8 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 
 ### icxrus
 
-[Heterochromia Eyes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/20349) and [Soft Natural Eyelashes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/29582). Heterochromia Eyes is a clear example of independently selected components; Soft Natural Eyelashes supplies the lash geometry and material used in the preview and showed how dynamic colour profiles bind to custom meshes. Private local reference only.
+[Heterochromia Eyes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/20349), [Soft Natural Eyelashes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/29582) and [Lush Manga Eyelashes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/28293). Heterochromia Eyes is a clear example of independently selected components; Soft Natural Eyelashes supplies the lash geometry and material used in the preview and showed how dynamic colour profiles bind to custom meshes. Soft Natural Eyelashes is a private local reference only. Lush Manga Eyelashes, studied only, showed that a lash mesh closes with the lid only as far as its weights follow the lid skin under it.
+
 
 ### A creator who asked not to be named (redacted-c01)
 
@@ -281,6 +286,10 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 ### MisterChedda
 
 [Responsive NPCs](https://www.nexusmods.com/cyberpunk2077/mods/14800) and [Responsive V](https://www.nexusmods.com/cyberpunk2077/mods/22694), per the creator link on both Nexus pages. Responsive NPCs showed how far the game's reaction manager can be bent from script: reactions to V's clothing, a naked or broke V, gang vehicles and the current district, read through NPC archetype visual tags and affiliations. Responsive V showed that a voiceset scene can be patched as it loads, the route we plan for voiced reactions. Studied only.
+
+### Nail mods
+
+[Unique Nails For V - A Framework](https://www.nexusmods.com/cyberpunk2077/mods/10420), [North Oak Nail Spa - Pedicures and Nails](https://www.nexusmods.com/cyberpunk2077/mods/24993), [NC Nails - Pedicure for V](https://www.nexusmods.com/cyberpunk2077/mods/7084) and [Cute Nails - Base Game Nails Morph](https://www.nexusmods.com/cyberpunk2077/mods/21113). Together they showed the ways mods change V's nails: replacing the nail meshes with per-hand materials, patching new appearances into every nail mesh with ArchiveXL, adding wearable nails that hide V's own, and reshaping the nails with a morph. That shaped the proposed Nail Salon export. Studied only; their individual authors are still being confirmed.
 
 ### Nola Dreamer
 
@@ -411,6 +420,10 @@ Michael Toksvig, "Mipmapping Normal Maps" (Journal of Graphics Tools), and Marc 
 ### Jewellery form and fit references
 
 The Association of Professional Piercers' [jewellery](https://safepiercing.org/wp-content/uploads/2020/05/APP_Initial_Print.pdf) and [procedure](https://safepiercing.org/wp-content/uploads/2020/10/APP_Procedures_2013_A_Web.pdf) brochures, including measurement material by Elayne Angel and photographs credited to Paul King, Neometal and Industrial Strength Body Jewelry, together with product pages from [Anatometal](https://anatometal.com/), [Maria Tash](https://www.mariatash.com/), [Stone and Strand](https://www.stoneandstrand.com/) and [BVLA](https://www.bvla.com/). They taught us gauges, ring sizes, closures and connection patterns for the jewellery design. Viewed as references only; no image or design was copied, and the APP jewellery brochure is licensed CC BY-NC-ND 4.0.
+
+### Nail polish finish references
+
+Product and guide pages from [OPI](https://www.opi.com/collections/shimmer-nail-polish), [ILNP](https://www.ilnp.com/mega-l-100-pure-linear-holographic-nail-polish/), [Holo Taco](https://www.holotaco.com/pages/magnetics), [Ready Ready](https://www.thereadyready.com/blogs/nail-trends/cat-eye-nails-explained), [Beetles](https://www.beetlesgel.com/blogs/guides/chrome-nail-powder) and [Cirque Colors](https://www.cirquecolors.com/blogs/blog/jelly-is-our-jam). They taught us the vocabulary and intended looks of nail finishes (crème, shimmer, glitter, linear and scattered holographic, magnetic cat-eye, chrome powder and jelly) behind the proposed nail finish families. Viewed as references only.
 
 ## Community members we are still identifying
 

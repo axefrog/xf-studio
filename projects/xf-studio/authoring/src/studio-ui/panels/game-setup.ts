@@ -1,7 +1,8 @@
 import type { FolderField } from "../../local-setup-actions";
 import type { LocalSetupFields } from "../../local-settings-server";
-import { applyCapability, button, note, Segmented } from "../controls";
+import { applyCapability, button, Segmented } from "../controls";
 import { h, setAttr, setText, setValue, uid } from "../dom";
+import { helpTip } from "../help-tip";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 
@@ -35,15 +36,15 @@ export function gameSetupSection(rt: StudioRuntime) {
   /** A folder setting: what XF Studio found as choices, another folder typed or picked, saved at once. */
   function folderField(field: FolderField, label: string, help: string, found: (frame: Frame) => Choice[]) {
     const id = uid("setup");
-    const select = h("select", { id, class: "field", "aria-describedby": `${id}-help` });
+    const select = h("select", { id, class: "field" });
     const input = h("input", { class: "field", type: "text", spellcheck: "false", "aria-label": `${label}: type the folder`,
       placeholder: "Type the folder, e.g. C:\\Games\\Cyberpunk 2077" });
     const browse = button({ label: "Browse…", icon: "folder", small: true, onClick: () => void pick() });
     const typed = h("div", { class: "row gap-s setup-typed" }, input, browse);
     let other = false, signature = "";
-    const element = h("div", { class: "control" }, h("label", { class: "control-label", for: id, text: label }),
-      h("div", { class: "select-wrap" }, select, icon("chevronDown")), typed,
-      h("small", { class: "control-help", id: `${id}-help`, text: help }));
+    // What the folder is, in a help tip beside its label (help-tip.ts).
+    const element = h("div", { class: "control" }, h("div", { class: "control-line" }, h("label", { class: "control-label", for: id, text: label }), helpTip(label, help)),
+      h("div", { class: "select-wrap" }, select, icon("chevronDown")), typed);
     select.addEventListener("change", () => {
       if (select.value === OTHER) { other = true; rt.changed(); requestAnimationFrame(() => input.focus()); return; }
       other = false;
@@ -100,17 +101,17 @@ export function gameSetupSection(rt: StudioRuntime) {
   const profileId = uid("setup");
   const profile = h("select", { id: profileId, class: "field" });
   const profileText = h("input", { class: "field", type: "text", spellcheck: "false", "aria-label": "Mod Organizer 2 profile: type its name" });
-  const profileField = h("div", { class: "control" }, h("label", { class: "control-label", for: profileId, text: "Profile" }),
-    h("div", { class: "select-wrap" }, profile, icon("chevronDown")), profileText,
-    h("small", { class: "control-help", text: "The profile you play with. Your mods are added to its list, and the 3D preview reads the mods it uses." }));
+  const profileField = h("div", { class: "control" }, h("div", { class: "control-line" }, h("label", { class: "control-label", for: profileId, text: "Profile" }),
+    helpTip("Profile", "The profile you play with. Your mods are added to its list, and the 3D preview reads the mods it uses.")),
+    h("div", { class: "select-wrap" }, profile, icon("chevronDown")), profileText);
   profile.addEventListener("change", () => void save({ mo2ProfileId: profile.value || null }));
   profileText.addEventListener("change", () => void save({ mo2ProfileId: profileText.value.trim() || null }));
   let profileKey = "";
 
   const wolvenKit = h("input", { class: "field", type: "text", spellcheck: "false", "aria-label": "Your own WolvenKit (optional)" });
   wolvenKit.addEventListener("change", () => void save({ wolvenKitCli: wolvenKit.value.trim() || null }));
-  const wolvenKitField = h("label", { class: "control" }, h("span", { class: "control-label", text: "Your own WolvenKit (optional)" }), wolvenKit,
-    h("small", { class: "control-help", text: "Leave this empty and XF Studio sets WolvenKit up for you (it asks before downloading)." }));
+  const wolvenKitField = h("div", { class: "control" }, h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Your own WolvenKit (optional)" }),
+    helpTip("Your own WolvenKit", "Leave this empty and XF Studio sets WolvenKit up for you (it asks before downloading).")), wolvenKit);
   const plateHead = h("select", { class: "field" });
   const plateHeadLabel = h("span", { class: "control-label" });
   plateHead.addEventListener("change", () => void save({ eyePlateHead: plateHead.value as LocalSetupFields["eyePlateHead"] }));
@@ -122,8 +123,8 @@ export function gameSetupSection(rt: StudioRuntime) {
     else rt.feedback.toast("warning", "Game & tools", outcome.message, [], { code: outcome.code });
   })() });
   const element = h("details", { class: "section setup-section" }, h("summary", { text: "Game & tools" }),
-    note("Saved on this computer as you choose. XF Studio finds your game and mod manager and sets up WolvenKit for you; change a choice only if it picked the wrong one."),
-    status, h("div", { class: "row wrap gap-s" }, restore),
+    h("div", { class: "control-line" }, status, helpTip("Game & tools",
+      "Saved on this computer as you choose. XF Studio finds your game and mod manager and sets up WolvenKit for you; change a choice only if it picked the wrong one.")), h("div", { class: "row wrap gap-s" }, restore),
     route.element, game.element, h("div", { class: "setup-mo2" }, mo2.element, profileField), h("div", { class: "setup-direct" }, direct.element),
     wolvenKitField, h("label", { class: "control" }, plateHeadLabel, plateHead),
     h("div", { class: "row wrap gap-s" }, findAgain));

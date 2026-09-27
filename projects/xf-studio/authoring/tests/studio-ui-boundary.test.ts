@@ -30,9 +30,9 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
   ["mod-branding", ["EYE_MAKEUP_MOD"]],
   // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
-  ["character-panel-sections", ["CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
-  // A creator choice's maker group and the groups' shown order (cc-panel.ts, pure over the projection).
-  ["cc-panel", ["choiceGroup", "compareGroups"]],
+  ["character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
+  // A creator choice's maker group, the groups' shown order and the pooled "Other mods" heading (cc-panel.ts, pure over the projection).
+  ["cc-panel", ["choiceGroup", "compareGroups", "OTHER_MODS_GROUP", "OTHER_MODS_INDEX"]],
   // The pure input binding catalogue: hint/cursor/label derivation and key matching.
   ["input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
     "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],

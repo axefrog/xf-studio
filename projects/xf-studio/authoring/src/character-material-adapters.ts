@@ -12,6 +12,8 @@ import { createFaceDecalMaterial, faceDecalParameters, type FaceDecalHandle } fr
 import type { DecalSurfaceUnderlay } from "./head-skin-placement";
 import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, IRIS_MASK_ENCODING, shellParameters, type EyeHandle } from "./eye-material";
 import type { DetailLimit } from "./detail-limits";
+import { createMetalBaseMaterial, metalBaseParameters } from "./metal-base-material";
+import { attachInteriorOcclusion } from "./mouth-occlusion";
 
 /**
  * Renderer material adapters: one per game material template the preview draws (render-templates.ts).
@@ -359,9 +361,35 @@ const layered: MaterialAdapter = {
   },
 };
 
+/**
+ * `metal_base.remt`: the engine's plain metal/rough surface (metal-base-material.ts), from the chunk's own maps and scalars. Every input
+ * falls back to the template's own neutral default (grey colour, black metalness, white roughness, flat normal) when the record lacks it;
+ * the colour honours its resource's `isGamma`, the other maps are data.
+ */
+const metalBase: MaterialAdapter = {
+  id: "metal-base",
+  create(chunk, textures) {
+    const owned: THREE.Texture[] = [];
+    const neutral = (rgba: number[], colour = false) => {
+      const texture = new THREE.DataTexture(new Uint8Array(rgba), 1, 1);
+      if (colour) texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+      owned.push(texture);
+      return texture;
+    };
+    const notes: string[] = [];
+    const baseColor = textures("BaseColor", "colour", "repeat");
+    if (!baseColor) notes.push("no readable base colour; the template's grey stands in");
+    const material = createMetalBaseMaterial({ baseColor: baseColor ?? neutral([128, 128, 128, 255], true),
+      metalness: textures("Metalness", "data", "repeat") ?? neutral(BLACK), roughness: textures("Roughness", "data", "repeat") ?? neutral(WHITE),
+      normal: textures("Normal", "data", "repeat") ?? neutral(FLAT_NORMAL) }, metalBaseParameters(chunk.scalars));
+    return { material, owned, notes };
+  },
+};
+
 export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter>> = Object.freeze({
   skin: skinAdapter, "hair-strand": hairStrand, "hair-cap-decal": hairCapDecal, "double-diffuse-decal": doubleDiffuseDecal,
-  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, layered, "decal-placeholder": decalPlaceholder });
+  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, layered, "metal-base": metalBase, "decal-placeholder": decalPlaceholder });
 
 /**
  * The adapter for a chunk's template (by its own name when known), or undefined when the preview does not draw that
@@ -370,5 +398,30 @@ export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter
 export function materialAdapter(template: string | null, templateName?: string | null, slot?: DetailSlot): MaterialAdapter | undefined {
   const inputs = renderTemplate(template, templateName);
   if (!inputs) return undefined;
-  return slot && decalFamilySlot(slot) && inputs.decal ? faceDecal : MATERIAL_ADAPTERS[inputs.adapter];
+  const adapter = slot && decalFamilySlot(slot) && inputs.decal ? faceDecal : MATERIAL_ADAPTERS[inputs.adapter];
+  return slot && INTERIOR_SLOTS.has(slot) ? withInteriorOcclusion(adapter) : adapter;
+}
+
+/** Slots drawn inside the head: the teeth (the creator's mouth interior), whatever template their chunks use. */
+const INTERIOR_SLOTS: ReadonlySet<DetailSlot> = new Set(["teeth"]);
+const interiorAdapters = new Map<MaterialAdapter, MaterialAdapter>();
+/**
+ * An adapter whose drawn chunks also take the mouth interior's occlusion (mouth-occlusion.ts): the light that reaches them through the
+ * lips, from their depth behind the drawn head. Without the resolved head to measure against, the chunk is drawn fully lit, as before,
+ * and says so in its notes.
+ */
+function withInteriorOcclusion(adapter: MaterialAdapter): MaterialAdapter {
+  let wrapped = interiorAdapters.get(adapter);
+  if (!wrapped) {
+    wrapped = { id: adapter.id, create(chunk, textures, mesh, context) {
+      const made = adapter.create(chunk, textures, mesh, context);
+      if (made.hidden) return made;
+      const head = context.skin?.chunks ?? [];
+      if (!head.length) return { ...made, notes: [...made.notes, "lit without the mouth's occlusion (no resolved head to measure against)"] };
+      const range = attachInteriorOcclusion(mesh, made.material, head);
+      return { ...made, notes: [...made.notes, `mouth occlusion ${range.min.toFixed(2)}–${range.max.toFixed(2)}`] };
+    } };
+    interiorAdapters.set(adapter, wrapped);
+  }
+  return wrapped;
 }

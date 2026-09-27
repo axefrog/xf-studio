@@ -11,15 +11,18 @@ export type TourRecord = "completed" | "skipped" | "declined";
  * developer IDs), off by default so the everyday interface shows only what a person uses (UI-85). Stored only once turned on.
  * `modules`: which Studio modules show (view-graph-design.md §4.2), by module ID, only where the person chose; a module not listed
  * follows its manifest's default. Presentation state: the application never reads it, and a hidden module's actions stay dispatchable.
+ * `folded`: the headings a panel shows folded (expander.ts), by the panel's own key for them (e.g. `character:head/Hair`); absent means
+ * open. Presentation state, remembered so a folded section stays folded; stored only while something is folded.
  */
 export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout;
-  tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean> };
+  tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean>; folded?: string[] };
 export type UIPreferenceAction =
   | { kind: "theme.set"; theme: ThemePreference }
   | { kind: "inputHints.set"; enabled: boolean }
   | { kind: "researchTools.set"; enabled: boolean }
   | { kind: "modules.set"; module: string; shown: boolean }
   | { kind: "layout.set"; layout?: DockLayout }
+  | { kind: "folded.set"; keys: readonly string[]; folded: boolean }
   | { kind: "tours.record"; tourId: string; outcome: TourRecord };
 export type UIPreferenceCapability = { available: boolean; reason?: string };
 
@@ -32,6 +35,9 @@ const tourId = (value: unknown): value is string => typeof value === "string" &&
 const tourRecord = (value: unknown): value is TourRecord => value === "completed" || value === "skipped" || value === "declined";
 const MAX_MODULES = 64;
 const moduleId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9.-]{0,63}$/.test(value);
+const MAX_FOLDED = 512;
+/** A panel's key for a heading: printable, bounded (a panel id, a colon, then its own path). */
+const foldKey = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9.-]{0,31}:[ -~]{1,160}$/.test(value);
 
 export function defaultUIPreferences(): UIPreferences {
   return { schema: "xfs/ui-preferences-1", theme: "system", inputHints: true };
@@ -121,6 +127,10 @@ export function parseUIPreferences(value: unknown): UIPreferences {
       const modules = Object.entries(candidate.modules).filter(([id, shown]) => moduleId(id) && typeof shown === "boolean").slice(0, MAX_MODULES);
       if (modules.length) result.modules = Object.fromEntries(modules) as Record<string, boolean>;
     }
+    if (Array.isArray(candidate.folded)) {
+      const folded = [...new Set(candidate.folded.filter(foldKey))].slice(0, MAX_FOLDED);
+      if (folded.length) result.folded = folded;
+    }
     if (candidate.tours && typeof candidate.tours === "object" && !Array.isArray(candidate.tours)) {
       const tours = Object.entries(candidate.tours).filter(([id, record]) => tourId(id) && tourRecord(record)).slice(0, MAX_TOURS);
       if (tours.length) result.tours = Object.fromEntries(tours) as Record<string, TourRecord>;
@@ -149,6 +159,12 @@ export class UIPreferenceActions {
       if (!Object.hasOwn(known, action.module) && Object.keys(known).length >= MAX_MODULES)
         return { available: false, reason: "Too many module choices are remembered already." };
     }
+    if (action.kind === "folded.set") {
+      if (!Array.isArray(action.keys) || !action.keys.length || action.keys.length > MAX_FOLDED || !action.keys.every(foldKey) || typeof action.folded !== "boolean")
+        return { available: false, reason: "Choose which headings fold, and whether they fold." };
+      if (action.folded && new Set([...this.value.folded ?? [], ...action.keys]).size > MAX_FOLDED)
+        return { available: false, reason: "Too many folded headings are remembered already. Open a few first." };
+    }
     if (action.kind === "layout.set" && action.layout !== undefined && !parseDockLayout(action.layout))
       return { available: false, reason: "The panel layout is not a supported bounded JSON document." };
     if (action.kind === "tours.record") {
@@ -167,6 +183,11 @@ export class UIPreferenceActions {
     else if (action.kind === "researchTools.set") { if (action.enabled) this.value.researchTools = true; else delete this.value.researchTools; }
     else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };
     else if (action.kind === "modules.set") this.value.modules = { ...this.value.modules, [action.module]: action.shown };
+    else if (action.kind === "folded.set") {
+      const folded = new Set(this.value.folded ?? []);
+      for (const key of action.keys) if (action.folded) folded.add(key); else folded.delete(key);
+      if (folded.size) this.value.folded = [...folded]; else delete this.value.folded;
+    }
     else {
       const layout = action.layout === undefined ? undefined : parseDockLayout(action.layout)!;
       if (layout) this.value.layout = layout;

@@ -7,6 +7,7 @@ import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
 import { applyCapability, button } from "./controls";
 import { installReasonTips } from "./reason-tip";
+import { installHelpTips } from "./help-tip";
 import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "./dock/persist";
@@ -40,6 +41,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref),
     expected: code => port.diagnostics.expected(code) });
   installReasonTips(document);
+  installHelpTips(document);
   const catalogue = views.catalogue;
   const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);
@@ -236,7 +238,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
 
   const commands = () => [...buildCommands(rt, theme, view, byId,
-    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...guidance.commands()];
+    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...guidance.commands()];
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
@@ -545,7 +547,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     file("savedV.import", "Load V from a save…", "Character", { kind: "savedV.import" }, { icon: "character" }),
     file("characterPreset.import", "Load a character preset…", "Character", { kind: "characterPreset.import" }, { icon: "import", keywords: "creator preset v load" }),
     file("characterPreset.export", "Save a character preset…", "Character", { kind: "characterPreset.export" }, { icon: "export", keywords: "creator preset v save" }),
-    act("character.useDefault", "Show the default V", "Character", { kind: "character.useDefault", bodyGender: "female" }, { icon: "character", keywords: "default v creator" }),
+    act("character.useDefault", "Show the default feminine V", "Character", { kind: "character.useDefault", bodyGender: "female" },
+      { icon: "character", keywords: "default v creator female woman feminine" }),
+    act("character.useDefault.male", "Show the default masculine V", "Character", { kind: "character.useDefault", bodyGender: "male" },
+      { icon: "character", keywords: "default v creator male man masculine" }),
     file("savedV.export", "Export appearance data", "Character", { kind: "savedV.export" }, { icon: "export" }),
     act("character.setOwnMakeup", character?.ownMakeup === false ? "Show my V's own makeup" : "Hide my V's own makeup", "Character",
       { kind: "character.setOwnMakeup", shown: character?.ownMakeup === false }, { icon: "eye", keywords: "makeup off on show hide creator options" }),

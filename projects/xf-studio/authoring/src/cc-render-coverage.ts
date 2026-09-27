@@ -2,7 +2,9 @@
  * What the Studio preview can show of each creator option today, so a control can say so honestly. Pure, and decided
  * from the option's own data with the preview plan's rules (character-detail-plan.ts), never from option names:
  *
- * - The preview draws a **female V** only: every option of a masculine V is not drawn.
+ * - Both body genders follow the same rules: the preview draws a masculine V's head on his own core head and his body through the
+ *   same consumer groups and censorship rules (the male V plan, phases 1 and 4). His beard is a face-group option like the makeup:
+ *   `conditional` until resolved, then drawn where its parts are face decals (the stubble), not where they are hair cards.
  * - **Body and arm** options the third-person body's consumers read (`bodyGroups`, the V with no clothing) are drawn as the body, except those the game's
  *   censorship rule leaves under the underwear cover the preview draws (`bodyOptionDraws`: nipples, genitals), which are drawn only while
  *   the viewer shows V uncensored (`uncensored`, character-detail-plan.ts `bodyRole`); body and arm morphs (breast size, nail length) shape
@@ -10,7 +12,8 @@
  * - **Morph** options on the head shape the head and every drawn part carrying the same `(target, region)` pair
  *   (face-morphs.ts).
  * - An **appearance** option on one of the preview's detail slots (`DETAIL_UI_SLOTS`: skin type, brows, lashes, hair,
- *   eyes, teeth, piercings) that the third-person head consumes is drawn as that detail.
+ *   eyes, teeth, piercings) that the third-person head consumes is drawn as that detail; any appearance in the hairstyle controller's
+ *   group (`HAIR_GROUP`: a multi-part hairstyle's part rows on slots of their own) is drawn as the hair.
  * - Any other head appearance consumed by the head's face groups (`FACE_GROUPS`) is drawn **when its parts are face
  *   decals** (the `mesh_decal` family: makeup, tattoos, scars, face cyberware); other parts are not.
  *   Which case applies is known only after resolving a choice, so the status is `conditional`; `refineCoverage` settles
@@ -24,7 +27,7 @@
  * Coverage is the preview's projection of a catalogue (`catalogueCoverage`), computed when it is asked for, never stored in
  * the catalogue: a host-cached catalogue stays right when the preview learns to draw more (CORE-60).
  */
-import { bodyGroups, bodyOptionDraws, bodyRole, DETAIL_UI_SLOTS, FACE_GROUPS, slotGroups, type CensorOption } from "./character-detail-plan";
+import { bodyGroups, bodyOptionDraws, bodyRole, DETAIL_UI_SLOTS, FACE_GROUPS, HAIR_GROUP, slotGroups, type CensorOption } from "./character-detail-plan";
 import type { CcoPart } from "./cco-model";
 import type { CcCatalogue } from "./cc-catalogue";
 import type { DetailSlot } from "./render-detail";
@@ -63,18 +66,15 @@ const WORDS: Record<DetailSlot, string> = { skin: "the skin", face: "a face deta
 
 export const NOT_HEAD = "The preview doesn't draw this part of the body, so changing it shows nothing.";
 export const UNDER_COVER = "The game's underwear covers it in the 3D view unless your V is shown uncensored (under Body).";
-export const NO_MALE_HEAD = "The preview has no masculine head yet, so this isn't drawn.";
-export const NO_MALE_BODY = "The preview has no masculine body yet, so this isn't drawn.";
 const NOT_CONSUMED = "The head the preview draws doesn't use this option, so changing it shows nothing.";
 const CONDITIONAL = "Shown when its parts are face decals (makeup, tattoos, scars, face cyberware); other parts aren't drawn yet.";
 
 /** Coverage of every option, keyed by option ID. */
-export function renderCoverage(options: readonly CoverageInput[], bodyGender: "female" | "male"): Map<string, RenderCoverage> {
+export function renderCoverage(options: readonly CoverageInput[]): Map<string, RenderCoverage> {
   const result = new Map<string, RenderCoverage>();
   const byPart = (part: CcoPart) => options.filter(option => option.part === part);
   const direct = (option: CoverageInput): RenderCoverage => {
     // A body row names the body, never the head (UI-92).
-    if (bodyGender === "male") return { status: "not-rendered", detail: null, note: option.part === "head" ? NO_MALE_HEAD : NO_MALE_BODY };
     if (option.part !== "head") {
       const consumed = option.groups.some(group => bodyGroups(option.part as "body" | "arms").includes(group));
       if (option.type === "morph") return { status: "rendered", detail: "body", note: "Shapes the body." };
@@ -86,7 +86,8 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
     }
     if (option.type === "morph") return { status: "rendered", detail: "morph", note: "Shapes the head and the parts that follow it." };
     if (option.type !== "appearance" || !option.hasResource) return { status: "not-rendered", detail: null, note: NOT_CONSUMED };
-    const slot = DETAIL_UI_SLOTS[option.uiSlot];
+    // Everything the hairstyle controller draws is hair, whatever its slot: a multi-part hairstyle's part rows (PREV-109).
+    const slot = DETAIL_UI_SLOTS[option.uiSlot] ?? (option.groups.includes(HAIR_GROUP) ? "hair" : undefined);
     if (slot && option.groups.some(group => slotGroups(slot).includes(group)))
       return { status: "rendered", detail: slot, note: `Drawn as ${WORDS[slot]}.` };
     if (option.groups.some(group => FACE_GROUPS.includes(group))) return { status: "conditional", detail: "face", note: CONDITIONAL };
@@ -99,7 +100,6 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
   // Options that add nothing read like the other options of their slot.
   for (const option of options) {
     if (!option.emitsNothing || option.type !== "appearance" || option.hasResource || option.link?.key || !option.uiSlot) continue;
-    if (bodyGender === "male") continue;
     const siblings = options.filter(other => other !== option && other.part === option.part && other.uiSlot === option.uiSlot && !other.emitsNothing);
     const shown = best(siblings.map(other => result.get(other.id)!));
     result.set(option.id, shown.status === "not-rendered" ? shown : { ...shown, note: "Adds nothing, so the preview shows nothing here, as the game does." });
@@ -107,7 +107,6 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
   // Colour-only controllers show through the followers of their link (the skin tone through the skin types).
   for (const option of options) {
     if (option.type !== "appearance" || option.hasResource || !option.link?.key || result.get(option.id)!.status !== "not-rendered") continue;
-    if (bodyGender === "male") continue;
     const followers = options.filter(other => other !== option && other.link?.key === option.link!.key).map(other => result.get(other.id)!);
     const shown = best(followers);
     if (shown.status !== "not-rendered") result.set(option.id, { ...shown,
@@ -116,7 +115,7 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
   // Switchers show what their targets show (nested switchers settle in a few passes).
   const byName = new Map(options.map(option => [`${option.part}/${option.name}`, option]));
   for (let pass = 0; pass < 4; pass++) for (const option of options) {
-    if (option.type !== "switcher" || (bodyGender === "male")) continue;
+    if (option.type !== "switcher") continue;
     const targets = option.targets.flatMap(name => { const target = byName.get(`${option.part}/${name}`); return target ? [target] : []; });
     const main = targets.filter(target => option.uiSlots.length && target.uiSlot === option.uiSlots[0]);
     const shown = best((main.length ? main : targets).map(target => result.get(target.id)!));
@@ -137,9 +136,8 @@ export function refineCoverage(coverage: RenderCoverage, planned: readonly { rea
 }
 
 /** The preview's coverage of every option of a catalogue (a projection owned by the preview side; CORE-60). */
-export function catalogueCoverage(catalogue: Pick<CcCatalogue, "options" | "bodyGender">): Map<string, RenderCoverage> {
+export function catalogueCoverage(catalogue: Pick<CcCatalogue, "options">): Map<string, RenderCoverage> {
   return renderCoverage(catalogue.options.map(option => ({ id: option.id, part: option.part, name: option.name, type: option.type,
     uiSlot: option.uiSlot, link: option.link, hasResource: option.type === "appearance" && !!option.app, groups: option.groups,
-    targets: option.targets, uiSlots: option.uiSlots, emitsNothing: option.emitsNothing, ...(option.censor ? { censor: option.censor } : {}) })),
-    catalogue.bodyGender);
+    targets: option.targets, uiSlots: option.uiSlots, emitsNothing: option.emitsNothing, ...(option.censor ? { censor: option.censor } : {}) })));
 }

@@ -12,6 +12,8 @@ const ICONS = {
   chevronRight: [s("M6 4l4 4-4 4")],
   chevronLeft: [s("M10 4L6 8l4 4")],
   chevronUp: [s("M4 10l4-4 4 4")],
+  expandAll: [s("M4 3.5l4 4 4-4"), s("M4 8.5l4 4 4-4")],
+  collapseAll: [s("M4 7.5l4-4 4 4"), s("M4 12.5l4-4 4 4")],
   arrowUp: [s("M8 13V3M4 7l4-4 4 4")],
   arrowDown: [s("M8 3v10M4 9l4 4 4-4")],
   undo: [s("M5.5 3.5l-3 3 3 3M2.5 6.5H9.5a3.5 3.5 0 0 1 0 7H6")],

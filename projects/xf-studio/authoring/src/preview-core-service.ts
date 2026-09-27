@@ -9,8 +9,8 @@ import { assemblePreviewGlb, verifyPreviewGlb, type PreviewGlbReport } from "./p
 import { GameAssetExportError, gameContentSource, type ExportSource, type GameAssetExporter } from "./game-asset-export";
 import { RENDER_DETAIL_SCHEMA, type CoreDetail } from "./render-detail";
 import {
-  PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECORD_FILE, PREVIEW_CORE_RECIPE, previewCoreCacheKey, previewCoreCacheName,
-  previewCoreRecipeSha256, type MapAdapter, type PreviewCoreRecipe,
+  PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECORD_FILE, PREVIEW_CORE_RECIPE, PREVIEW_CORE_RECIPES, previewCoreCacheKey,
+  previewCoreCacheName, previewCoreRecipeSha256, type CoreBody, type MapAdapter, type PreviewCoreRecipe,
 } from "./preview-core-recipe";
 
 /**
@@ -64,7 +64,9 @@ export const PREVIEW_CORE_STEPS: readonly { step: PreviewCoreStep; label: string
 ];
 export type EnsurePreviewCoreOptions = { gameRoot: string; cacheRoot: string; exporter: GameAssetExporter;
   /** Archive source to read; defaults to the game's own content archives. */
-  source?: ExportSource; recipe?: PreviewCoreRecipe;
+  source?: ExportSource;
+  /** Whose core to derive (default the feminine V's); an explicit `recipe` and `plateRecipe` take precedence. */
+  body?: CoreBody; recipe?: PreviewCoreRecipe;
   plateRecipe?: EyePlateRecipe; signal?: AbortSignal; progress?: (step: PreviewCoreStep, index: number, total: number, label: string) => void };
 
 const LIMITS = [
@@ -74,10 +76,18 @@ const LIMITS = [
   "The eyeballs follow the eye-shape choice through the eye's own morph targets; morph-specific joint binds are not applied, so the idle turns each eye about its unmorphed pivot.",
   "Brows, lashes, hair, piercings and the character-creator idle are not derived here.",
 ];
+/** The masculine core's plate is a derived selection that has not passed the eye plate's gates (male V plan phase 5). */
+const MASCULINE_LIMIT = "The masculine eye plate is a preview-only cut of his head over the feminine plate's UVs; " +
+  "it has not passed the eye plate's skin, lift and clearance checks, and Build does not use it yet.";
+const limitsFor = (recipe: PreviewCoreRecipe) => recipe.body === "male" ? [...LIMITS, MASCULINE_LIMIT] : LIMITS;
 const ARCHIVE_DIRECTORY = "archive/pc/content";
 
 export class PreviewCoreCache extends DerivedCache {
-  constructor(root: string) { super(root, "3D preview"); }
+  /** One cache holds every body's core; each recipe keeps its own status (the feminine one in the original file). */
+  constructor(root: string, private readonly recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE) { super(root, "3D preview"); }
+  protected override get statusFile() {
+    return this.recipe.id === PREVIEW_CORE_RECIPE.id ? super.statusFile : join(this.root, `status-${this.recipe.id}.json`);
+  }
   writeStatus(status: Omit<PreviewCoreStatus, "schema" | "updatedAt">): void {
     this.writeStatusDocument({ schema: PREVIEW_CORE_STATUS_SCHEMA, ...status, updatedAt: new Date().toISOString() });
   }
@@ -88,12 +98,13 @@ export class PreviewCoreCache extends DerivedCache {
 }
 
 
-function unsupportedMessage(plate: EyePlateRecipe): string {
+const headWord = (recipe: PreviewCoreRecipe) => recipe.body === "male" ? "male" : "female";
+function unsupportedMessage(plate: EyePlateRecipe, recipe: PreviewCoreRecipe): string {
   const labels = plate.source.supported.map(item => item.label).join(", ");
-  return `Your Cyberpunk 2077 has a different female player head from the one XF Studio checks against (${labels}). ` +
+  return `Your Cyberpunk 2077 has a different ${headWord(recipe)} player head from the one XF Studio checks against (${labels}). ` +
     "This usually means a newer game patch. Update XF Studio to a version that supports your game. Nothing was changed.";
 }
-const MISSING_MESSAGE = "XF Studio could not find the female player head in your Cyberpunk 2077 files. " +
+const missingMessage = (recipe: PreviewCoreRecipe) => `XF Studio could not find the ${headWord(recipe)} player head in your Cyberpunk 2077 files. ` +
   "Check that the game folder is correct, or verify the game files in your launcher, then try again.";
 const TOOL_FAILED_MESSAGE = "WolvenKit could not read your game files. Try again; if it keeps happening, check the WolvenKit CLI in Build setup.";
 const RUNTIME_MESSAGE = "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer. Install it, then try again.";
@@ -123,7 +134,7 @@ function classifyFailure(error: unknown, aborted: boolean): PreviewCoreError {
 
 /** Validate a cached entry against its manifest and the expected identity; `key` null accepts any matching recipe entry. */
 export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key: string | null,
-  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate: EyePlateRecipe = EYE_PLATE_RECIPE): PreviewCoreResult | null {
+  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate: EyePlateRecipe = PREVIEW_CORE_RECIPES[recipe.body]?.plate ?? EYE_PLATE_RECIPE): PreviewCoreResult | null {
   const directory = cache.entry(name);
   const manifestFile = join(directory, PREVIEW_CORE_MANIFEST_FILE);
   if (!existsSync(manifestFile)) return null;
@@ -144,7 +155,8 @@ export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key:
 }
 
 export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Promise<PreviewCoreResult> {
-  const recipe = options.recipe ?? PREVIEW_CORE_RECIPE, plate = options.plateRecipe ?? EYE_PLATE_RECIPE;
+  const chosen = PREVIEW_CORE_RECIPES[options.body ?? options.recipe?.body ?? "female"];
+  const recipe = options.recipe ?? chosen.recipe, plate = options.plateRecipe ?? chosen.plate;
   const { exporter, signal, gameRoot } = options;
   const total = PREVIEW_CORE_STEPS.length;
   const progress = (step: PreviewCoreStep) => {
@@ -153,7 +165,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
   };
   if (recipe.plateRecipeId !== plate.id) throw new PreviewCoreError("preview_verification_failed", "The preview recipe names a different eye plate recipe.");
   let cache: PreviewCoreCache, work: string;
-  try { cache = new PreviewCoreCache(options.cacheRoot); work = cache.createWork(); }
+  try { cache = new PreviewCoreCache(options.cacheRoot, recipe); work = cache.createWork(); }
   catch (error) { throw new PreviewCoreError("preview_cache_unavailable", "XF Studio could not open its private 3D preview cache.", (error as Error).message); }
   const fingerprint = contentFingerprint(gameRoot, ARCHIVE_DIRECTORY);
   const status = (state: PreviewCoreStatusState, code: string | null, message: string, cacheName: string | null = null) => {
@@ -181,13 +193,13 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
       // Only the game's own archive index can say a resource is absent; otherwise the tool produced nothing.
       const present = session.present(notExported);
       const absent = present ? notExported.filter(depot => !present.has(depot)) : [];
-      if (absent.length) fail("preview_source_missing", MISSING_MESSAGE, absent.join(", "), "missing");
+      if (absent.length) fail("preview_source_missing", missingMessage(recipe), absent.join(", "), "missing");
       fail("preview_tool_failed", TOOL_FAILED_MESSAGE, `WolvenKit exported nothing for ${notExported.join(", ")}` +
         (present ? " although the game's archives contain them." : "; the game's archive index could not be read."));
     }
     const hashes = { meshSha256: geometry.get(headMesh)!.rawSha256, morphSha256: geometry.get(headMorph)!.rawSha256 };
     const revision = supportedEyePlateSource(plate, hashes);
-    if (!revision) fail("preview_source_unsupported", unsupportedMessage(plate), `mesh ${hashes.meshSha256}, morph ${hashes.morphSha256}`, "unsupported");
+    if (!revision) fail("preview_source_unsupported", unsupportedMessage(plate, recipe), `mesh ${hashes.meshSha256}, morph ${hashes.morphSha256}`, "unsupported");
     const eyeMeshSha256 = geometry.get(eyeMesh)!.rawSha256, eyeMorphSha256 = geometry.get(eyeMorph)!.rawSha256;
     const exported = (file: string | null, depot: string, what: string) => {
       if (!file || !existsSync(file)) fail("preview_tool_failed", `WolvenKit did not export the ${what}. Try again; if it keeps happening, check the WolvenKit CLI in Build setup.`, depot);
@@ -265,7 +277,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     // The render detail record: what the renderer loads, with hashes and game-resource provenance.
     const record: CoreDetail = {
       schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: key, origin: "game-files",
-      provenance: { label: `Your Cyberpunk 2077 files (${revision!.label})`, notes: LIMITS, tool: session.tool.label },
+      provenance: { label: `Your Cyberpunk 2077 files (${revision!.label})`, notes: limitsFor(recipe), tool: session.tool.label },
       geometry: { file: "head.glb", sha256: file("head.glb").sha256, nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" },
         sources: [{ depotPath: headMorph, sha256: hashes.morphSha256 }, { depotPath: headMesh, sha256: hashes.meshSha256 },
           { depotPath: eyeMesh, sha256: eyeMeshSha256 }, { depotPath: eyeMorph, sha256: eyeMorphSha256 }],
@@ -286,7 +298,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
         eyeMorphDepotPath: eyeMorph, headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256, eyeMorphSha256,
         ...exportHashes, tool: { label: session.tool.label, key: session.tool.key }, textures: records },
       files: PREVIEW_CORE_FILES.map(file),
-      geometry: report, limits: LIMITS,
+      geometry: report, limits: limitsFor(recipe),
     };
     cache.writeJson(join(staging, PREVIEW_CORE_MANIFEST_FILE), manifest);
     cache.publish(staging, name);
@@ -318,10 +330,10 @@ export type PreviewCoreReadiness =
  * A missing or unsupported head stays blocked until the game or XF Studio's recipe changes.
  */
 export function previewCoreReadiness(cacheRoot: string | null, gameRoot: string | null,
-  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate: EyePlateRecipe = EYE_PLATE_RECIPE): PreviewCoreReadiness {
+  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate: EyePlateRecipe = PREVIEW_CORE_RECIPES[recipe.body]?.plate ?? EYE_PLATE_RECIPE): PreviewCoreReadiness {
   if (!cacheRoot || !gameRoot) return { state: "none" };
   let cache: PreviewCoreCache, status: PreviewCoreStatus | null;
-  try { cache = new PreviewCoreCache(cacheRoot); status = cache.readStatus(); } catch { return { state: "none" }; }
+  try { cache = new PreviewCoreCache(cacheRoot, recipe); status = cache.readStatus(); } catch { return { state: "none" }; }
   if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || status.deriverVersion !== PREVIEW_CORE_DERIVER_VERSION ||
       !samePath(status.gameRoot, gameRoot) || status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
   if (status.state === "ready" && status.cacheName) {

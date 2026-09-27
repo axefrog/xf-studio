@@ -1,6 +1,7 @@
 import type { PreviewTextureSize } from "../../preview-quality";
 import { applyCapability, badge, button, emptyState, note, section, Segmented, SelectField, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
+import { helpTip } from "../help-tip";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -91,7 +92,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
   // A research tool (UI-85): shown only with View preferences › Show research tools.
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
-    note("For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise."),
+    h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
+      helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
     intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
   const fovNote = note("");
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
@@ -150,11 +152,11 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
   const element = h("div", { class: "panel-content" },
-    section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
+    section({ title: "Camera", help: ["Camera and light are workspace settings: they persist locally and never enter recipes, the look's Undo or export.",
+      "Undo here (Ctrl+Z) steps back through view and lighting changes, which keep their own history."] }, fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section("Light", preset.element, presetNote, studioControls),
     diagnostics,
-    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)),
-    note("Camera and light are workspace settings: they persist locally and never enter recipes, the look's Undo or export. Undo here (Ctrl+Z) steps back through view and lighting changes, which keep their own history."));
+    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
@@ -302,8 +304,8 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
   const stateLine = h("div", { class: "quality-state" });
   const rebuild = button({ label: "Rebuild preview", icon: "refresh", small: true, onClick: () => rt.dispatch({ kind: "quality.rebuild" }) });
   const element = h("div", { class: "panel-content" },
-    section("Makeup preview textures", tiers.element, stateLine, h("div", { class: "row" }, rebuild),
-      note("Applies to generated masks and optical maps only. Head, eye and imported textures keep their detail. Preview quality is a local preference: it never changes recipes, Undo, library revisions or the 2048² export.")));
+    section({ title: "Makeup preview textures", help: ["Applies to generated masks and optical maps only. Head, eye and imported textures keep their detail.",
+      "Preview quality is a local preference: it never changes recipes, Undo, library revisions or the 2048² export."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)));
   return {
     spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
@@ -326,9 +328,11 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
 export function activityPanel(rt: StudioRuntime): PanelController {
   const list = h("ol", { class: "activity", "aria-label": "Recent activity, newest first" });
   const empty = emptyState("Nothing yet", "Saves, checks, imports, exports and errors appear here for this session.");
-  const clearHint = note("This log lasts only until XF Studio closes. Results that matter — library revisions, package manifests — are stored by their own services.");
+  // What the log keeps, in a help tip on its heading (help-tip.ts).
+  const head = h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow", text: "This session" }),
+    helpTip("the activity log", "This log lasts only until XF Studio closes. Results that matter (library revisions, package manifests) are stored by their own services.")));
   let count = -1;
-  const element = h("div", { class: "panel-content" }, empty, list, clearHint);
+  const element = h("div", { class: "panel-content" }, head, empty, list);
   const draw = () => {
     const log = rt.feedback.log;
     const newest = log.at(-1)?.id ?? 0;

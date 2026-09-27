@@ -110,7 +110,7 @@ derivedCharacterTest("resolved brow, lash, hair and body GLBs retain their shape
   // Many V's share a component's GLB: each distinct file (and morph expectation) is checked once, up to GLBS_PER_KIND of each slot
   // and morph kind, the first by path so a run is repeatable.
   const byKind = new Map<string, Map<string, boolean>>();
-  for (const { record, file } of records) for (const component of record.components) {
+  for (const { record, file } of records) for (const component of record.components ?? []) {
     slots.add(component.slot);
     const path = file(component.geometry.file), morphs = !!component.geometry.morphTargets;
     const kind = `${component.slot}|${morphs}`;
