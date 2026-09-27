@@ -11,7 +11,7 @@
 import { refusal, type ActionDescriptor, type Capability, type FeatureResult, type FeatureState, type HistoryLabel } from "../../platform/api";
 import { controlGroup, mirrorName, type ControlGroupId, CONTROL_GROUPS, controlSide } from "../../engines/facial-rig/vocabulary";
 import { counterpartName, linkedByDefault, linkKey, oppositeCandidates, writeAxis } from "../../engines/facial-rig/symmetry";
-import { CONTROL_NAME, normaliseVector, sameVector, storedWeight, vectorIssue, withControl, type ControlVector } from "../../engines/facial-rig/vector";
+import { CONTROL_NAME, interpolateWeight, normaliseVector, sameVector, storedWeight, vectorIssue, withControl, type ControlVector } from "../../engines/facial-rig/vector";
 import { linksIssue, MAX_LABEL, originIssue, type ExpressionEditor, type ExpressionOrigin, type ExpressionPart } from "./part";
 
 export type ExpressionAction =
@@ -22,7 +22,13 @@ export type ExpressionAction =
   | { kind: "expression.mirror"; from: "left" | "right" | "flip" }
   | { kind: "expression.reset"; scope: "all" | "group" | "control"; target?: string }
   | { kind: "expression.startFrom"; origin: ExpressionOrigin; controls: ControlVector; links?: Readonly<Record<string, boolean>> }
-  | { kind: "expression.setLabel"; label: string };
+  | { kind: "expression.setLabel"; label: string }
+  /**
+   * Adjust all › Intensity: every control in `base` (the non-zero weights when the drag began) moved together by `amount` (−1 to 1,
+   * eased by the view): toward full above 0, toward rest below (vector.ts `interpolateWeight`). Absolute, so each edit of one drag's
+   * transaction replaces the last; controls outside `base` are left as they are.
+   */
+  | { kind: "expression.intensity"; base: ControlVector; amount: number };
 export type ExpressionScope = "workspace";
 export type ExpressionEffect = { kind: "content" } | { kind: "none" };
 export type ExpressionState = FeatureState<ExpressionPart, ExpressionEditor>;
@@ -49,6 +55,8 @@ export const EXPRESSION_DESCRIPTORS: { readonly [K in ExpressionAction["kind"]]:
       links: input({ type: "object", required: false }) } },
   "expression.setLabel": { scope: ["workspace"], effect: "content", undo: "part",
     payload: { label: input({ type: "string", required: true, maxLength: MAX_LABEL }) } },
+  "expression.intensity": { scope: ["workspace"], effect: "content", undo: "part",
+    payload: { base: input({ type: "object", required: true }), amount: input({ type: "number", required: true, min: -1, max: 1 }) } },
 });
 
 /**
@@ -107,6 +115,12 @@ export function expressionCapability(state: ExpressionState, action: ExpressionA
     case "expression.setLabel":
       return typeof action.label === "string" && action.label.length <= MAX_LABEL
         ? { available: true } : refusal("invalid_value", `A label is at most ${MAX_LABEL} characters.`);
+    case "expression.intensity": {
+      const bad = vectorIssue(action.base);
+      if (bad) return refusal("invalid_value", bad);
+      return typeof action.amount === "number" && Number.isFinite(action.amount) && action.amount >= -1 && action.amount <= 1
+        ? { available: true } : refusal("invalid_value", "The intensity change is from −1 to 1.");
+    }
   }
 }
 
@@ -166,6 +180,11 @@ export function applyExpression(state: ExpressionState, action: ExpressionAction
       // A saved expression or sample brings its own links (its authored asymmetry survives the next edit); rest and installed ones keep them.
       return changedTo(state, { ...part, controls: normaliseVector(action.controls), origin: structuredClone(action.origin),
         ...(action.links ? { links: Object.fromEntries(Object.keys(action.links).sort().map(key => [key, action.links![key]!])) } : {}) });
+    case "expression.intensity": {
+      let controls = part.controls;
+      for (const [name, weight] of Object.entries(action.base)) if (weight > 0) controls = withControl(controls, name, interpolateWeight(weight, action.amount));
+      return changedTo(state, { ...part, controls });
+    }
     case "expression.setLabel": {
       const label = action.label.trim();
       const { label: _previous, ...rest } = part;
@@ -182,6 +201,7 @@ export function expressionLabel(action: ExpressionAction): HistoryLabel {
     : action.kind === "expression.mirror" ? (action.from === "flip" ? "Flip face" : `Mirror ${action.from} to ${action.from === "left" ? "right" : "left"}`)
     : action.kind === "expression.reset" ? (action.scope === "all" ? "Reset expression" : action.scope === "group" ? "Reset group" : "Reset control")
     : action.kind === "expression.startFrom" ? "Start expression from"
+    : action.kind === "expression.intensity" ? "Adjust intensity"
     : "Expression label";
   return { label, actionKind: action.kind };
 }

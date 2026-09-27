@@ -129,7 +129,8 @@
   "expression.mirror",
   "expression.reset",
   "expression.startFrom",
-  "expression.setLabel"
+  "expression.setLabel",
+  "expression.intensity"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -3407,6 +3408,27 @@
      "from": "input"
     }
    }
+  },
+  "expression.intensity": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "base": {
+     "type": "object",
+     "required": true,
+     "from": "input"
+    },
+    "amount": {
+     "type": "number",
+     "required": true,
+     "min": -1,
+     "max": 1,
+     "from": "input"
+    }
+   }
   }
  },
  "registry": [
@@ -4578,6 +4600,15 @@
   },
   {
    "id": "expression.setLabel",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "expression.intensity",
    "family": "action",
    "scope": [
     "workspace"

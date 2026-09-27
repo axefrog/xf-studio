@@ -122,22 +122,27 @@ export class Toggle {
   private readonly note: NoteLine;
   /** The help tip beside the label, when the toggle was given `help`. */
   private readonly tip: HTMLButtonElement | null;
+  private readonly labelText: HTMLSpanElement;
   constructor(private readonly options: { label: string; help?: HelpText; onChange(checked: boolean): void; id?: string; reserveNote?: boolean;
     /** Its unavailable reason is a wait or information (muted), not a problem (warning). */
-    quietReason?: boolean }) {
+    quietReason?: boolean;
+    /** The label while mixed ("Symmetric · some regions"), so the state is said in words as well as by the mark. */
+    mixedLabel?: string }) {
     const id = options.id ?? uid("toggle");
     this.input = h("input", { id, type: "checkbox", role: "switch", class: "switch" });
     this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.tip = options.help !== undefined ? helpTip(options.label, options.help) : null;
+    this.labelText = h("span", { class: "toggle-label", text: options.label });
     // The tip sits outside the label, so pressing it never flips the switch.
     this.element = h("div", { class: "control toggle-row" },
       h("div", { class: "control-line" }, h("label", { class: "toggle", for: id }, this.input, h("span", { class: "switch-track", "aria-hidden": "true" }),
-        h("span", { class: "toggle-label", text: options.label })), this.tip), this.note.element);
+        this.labelText), this.tip), this.note.element);
     this.input.addEventListener("change", () => options.onChange(this.input.checked));
   }
   /**
-   * `mixed`: a switch over several things of which some are on (Symmetric while some face regions are mirrored). It shows a half
-   * state and reads "mixed"; ARIA's switch has no mixed value, so while mixed it is announced as a checkbox. A press turns it fully on.
+   * `mixed`: a switch over several things of which some are on (Symmetric while some face regions are mirrored). The track shows a
+   * dash instead of a thumb (never a half-slid thumb, which reads as stuck), the label says so (`mixedLabel`), and it reads "mixed";
+   * ARIA's switch has no mixed value, so while mixed it is announced as a checkbox. A press turns it fully on.
    */
   update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string; reasonOnLine?: boolean; mixed?: boolean } = {}) {
     const mixed = !!state.mixed;
@@ -146,6 +151,7 @@ export class Toggle {
     setAttr(this.input, "aria-checked", mixed ? "mixed" : undefined);
     const on = mixed ? false : checked;
     if (this.input.checked !== on) this.input.checked = on;
+    setText(this.labelText, mixed && this.options.mixedLabel ? this.options.mixedLabel : this.options.label);
     setDisabled(this.input, !!state.disabled, state.reason);
     this.note.update(this.input, !!state.disabled, state.reason, state.note, state.reasonOnLine ?? true);
   }

@@ -46,6 +46,17 @@ export function normaliseVector(value: unknown): ControlVector {
 }
 
 /** Set one control (0 removes it), keeping the canonical form. */
+/**
+ * One control weight moved by the intensity operation (the drawer's Adjust all): `amount` from −1 to 1, already eased. Toward 1 the
+ * weight moves toward its full value, `v + (1 − v)·amount`; toward −1 toward rest, `v·(1 + amount)`; 0 leaves it. A weight at 0 stays 0
+ * (the operation moves only what the expression already uses). A two-way control is stored as its two ends' weights, so its value
+ * moves toward the full end on its own side and never crosses the centre.
+ */
+export function interpolateWeight(value: number, amount: number): number {
+  const v = storedWeight(value), a = Math.max(-1, Math.min(1, Number.isFinite(amount) ? amount : 0));
+  if (v === 0) return 0;
+  return storedWeight(a >= 0 ? v + (1 - v) * a : v * (1 + a));
+}
 export function withControl(vector: ControlVector, name: string, value: number): ControlVector {
   const weight = storedWeight(value), out: Record<string, number> = {};
   for (const key of new Set([...Object.keys(vector), name].sort())) {

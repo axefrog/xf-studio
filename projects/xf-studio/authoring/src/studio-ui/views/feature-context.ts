@@ -5,6 +5,7 @@
  * context's type (`feature-view.ts`).
  */
 import type { StudioAction } from "../../studio-application";
+import type { EasingId } from "../../easing";
 import type { Command } from "../commands";
 import { ViewportInputHints } from "../input-hints";
 import { menuFromSections, openMenu, type MenuItem, type MenuSection } from "../menu";
@@ -56,6 +57,15 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     openSettings: section => rt.settings.open(section),
     links: Object.freeze({ open: (link: Parameters<typeof port.links.open>[0]) => port.links.open(link) }),
     changed: () => rt.changed(),
+    easing: Object.freeze({
+      get: (scope: string) => port.preferences.snapshot().easings?.[scope],
+      set: (scope: string, easing: EasingId) => {
+        const action = { kind: "easing.set" as const, scope, easing };
+        if (!port.preferences.capability(action).available) return;
+        port.preferences.dispatch(action);
+        rt.changed();
+      },
+    }),
     targetSections,
     targetMenu: (target, menu, anchor, invoker) =>
       openMenu(menuFromSections(targetSections(target, menu, anchor)), anchor, { label: menu.title, invoker }),

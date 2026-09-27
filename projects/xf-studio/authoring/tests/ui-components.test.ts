@@ -671,9 +671,55 @@ test("choice list with swatches: the swatch card shows a choice's colour and nam
 test("switch: a mixed state (some of what it covers is on) reads mixed, shows no check, and a press turns it fully on", async () => {
   const { Toggle } = await lib();
   const changes: boolean[] = [];
-  const toggle = new Toggle({ label: "Symmetric", onChange: on => changes.push(on) });
+  const toggle = new Toggle({ label: "Symmetric", mixedLabel: "Symmetric · some regions", onChange: on => changes.push(on) });
+  const label = toggle.element.querySelector<HTMLElement>(".toggle-label")!;
   toggle.update(false, { mixed: true });
-  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked")]).toEqual([true, false, "checkbox", "mixed"]);
+  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked"), label.textContent])
+    .toEqual([true, false, "checkbox", "mixed", "Symmetric · some regions"]);
   toggle.update(true);
-  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked")]).toEqual([false, true, "switch", null]);
+  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked"), label.textContent])
+    .toEqual([false, true, "switch", null, "Symmetric"]);
+});
+
+test("scrub slider: rests at the middle, previews while moved, applies on release away from it, cancels at the middle, on Escape and in the bleed area", async () => {
+  const { ScrubSlider } = await lib();
+  const calls: string[] = [];
+  const scrub = new ScrubSlider<"linear" | "in">({ label: "Intensity", ends: { negative: "Rest", positive: "Full" },
+    onBegin: () => calls.push("begin"), onPreview: p => calls.push(`preview ${p}`), onCommit: () => calls.push("commit"), onCancel: () => calls.push("cancel"),
+    curves: [{ value: "linear", label: "Curve: Linear", icon: "easeLinear" }, { value: "in", label: "Curve: Ease in", icon: "easeIn" }], onCurve: c => calls.push(`curve ${c}`) });
+  document.body.append(scrub.element);
+  scrub.update({ curve: "linear" });
+  const readout = scrub.element.querySelector<HTMLElement>(".readout")!;
+  expect([scrub.input.value, readout.textContent]).toEqual(["50", "50 %"]);
+  const drag = (to: number) => { scrub.input.value = String(to); fire(scrub.input, "input"); };
+  const up = () => (globalThis as unknown as { dispatchEvent(e: unknown): void }).dispatchEvent(Object.assign(new Event("pointerup"), {}));
+  // A drag: preview live, release away from the middle applies, then it springs back.
+  fire(scrub.input, "pointerdown"); drag(70); drag(80); up();
+  expect([calls, scrub.input.value]).toEqual([["begin", "preview 70", "preview 80", "commit"], "50"]);
+  calls.length = 0;
+  // Released back at the middle: nothing applied.
+  fire(scrub.input, "pointerdown"); drag(40); drag(50); up();
+  expect(calls).toEqual(["begin", "preview 40", "preview 50", "cancel"]);
+  calls.length = 0;
+  // The bleed area: the pointer strays far from the slider, the preview snaps back to the middle, and a release out there applies nothing.
+  const move = (x: number, y: number) => (globalThis as unknown as { dispatchEvent(e: unknown): void }).dispatchEvent(Object.assign(new Event("pointermove"), { clientX: x, clientY: y }));
+  fire(scrub.input, "pointerdown"); drag(90); move(0, 200);
+  expect([scrub.input.value, scrub.element.classList.contains("bleed")]).toEqual(["50", true]);
+  drag(95); up();
+  expect([calls, scrub.input.value, scrub.element.classList.contains("bleed")]).toEqual([["begin", "preview 90", "preview 50", "cancel"], "50", false]);
+  calls.length = 0;
+  // Coming back within the margin resumes the preview.
+  fire(scrub.input, "pointerdown"); drag(60); move(0, 200); move(0, 10); drag(65); up();
+  expect(calls).toEqual(["begin", "preview 60", "preview 50", "preview 65", "commit"]);
+  calls.length = 0;
+  // Keyboard: arrows preview, Enter applies; Escape cancels.
+  drag(55); key(scrub.input, "Enter");
+  drag(45); key(scrub.input, "Escape");
+  expect(calls).toEqual(["begin", "preview 55", "commit", "begin", "preview 45", "cancel"]);
+  calls.length = 0;
+  // The curve buttons are toggles; choosing one tells the owner.
+  const [linear, easeIn] = (scrub.element.querySelector(".scrub-curves")! as unknown as LightElement).children as unknown as HTMLElement[];
+  expect([linear!.getAttribute("aria-pressed"), easeIn!.getAttribute("aria-pressed")]).toEqual(["true", "false"]);
+  easeIn!.click();
+  expect(calls).toEqual(["curve in"]);
 });
