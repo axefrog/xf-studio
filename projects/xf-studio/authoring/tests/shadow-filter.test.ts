@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { installShadowFilter, SHADOW_FILTER_MARK } from "../src/shadow-filter";
-import { shadowState } from "../src/lighting-preset-stage";
+import { shadowState } from "../src/lighting-setup-stage";
 
 test("the shadow filter replaces Three's per-pixel noise rotation with a fixed grid, once", () => {
   // Three's bundled PCF body, in the form this build ships it (comments stripped).

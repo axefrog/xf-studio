@@ -4,7 +4,8 @@ import type { InstallDetectionAction } from "./install-detection-actions";
 import type { DesktopAppAction } from "./desktop-app";
 import type { ModInstallAction } from "./mod-install-actions";
 import type { PoseAction } from "./pose-actions";
-import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
+import { STUDIO_KEY_ANGLE_RANGE } from "./studio-lighting";
+import { LIGHT_NUMBER_KEYS, LIGHT_RANGES, LIGHT_TYPES, LIGHTING_LIMITS, SETUP_BACKDROPS, SETUP_DISPLAYS, SETUP_ENVIRONMENT_RANGE } from "./lighting-setups";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
 import type { WolvenKitSetupAction } from "./wolvenkit-setup";
@@ -74,13 +75,28 @@ export const ACTION_DESCRIPTORS = {
     exposure: { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) } }),
   "preview.resetCreatorLighting": inView("viewport", "workspace", "none"),
   "preview.setCreatorShadows": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.setExposure": inView("viewport", "workspace", "none", { value: input("number", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) }),
+  // Lighting setups (lighting-setups.ts): one flat list; a change to a built-in's values forks it into a setup of the person's own.
+  // All are workspace view state in the View and lighting history, never look Undo.
+  "preview.selectLightingSetup": inView("viewport", "workspace", "none", { setup: target("string") }),
+  "preview.createLightingSetup": inView("viewport", "workspace", "none", { from: target("string") }),
+  "preview.renameLightingSetup": inView("viewport", "workspace", "none", { setup: target("string"), name: inputText(1, LIGHTING_LIMITS.name) }),
+  "preview.deleteLightingSetup": inView("viewport", "workspace", "none", { setup: target("string") }),
+  "preview.resetLightingSetup": inView("viewport", "workspace", "none", { setup: target("string") }),
+  // Exposure's range follows the shown setup's display: ACES 0.125–8, the game's k 0.01–20.
+  "preview.setExposure": inView("viewport", "workspace", "none", { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) }),
+  "preview.setRoomLight": inView("viewport", "workspace", "none", { value: input("number", SETUP_ENVIRONMENT_RANGE.min, SETUP_ENVIRONMENT_RANGE.max) }),
+  "preview.setBackdrop": inView("viewport", "workspace", "none", { backdrop: enumerated(SETUP_BACKDROPS) }),
+  "preview.setDisplayTransform": inView("viewport", "workspace", "none", { display: enumerated(SETUP_DISPLAYS) }),
+  "preview.setLight": inView("viewport", "workspace", "none", { light: target("string"), key: enumerated(LIGHT_NUMBER_KEYS), value: input("number") },
+    Object.fromEntries(LIGHT_NUMBER_KEYS.map(key => [key, { value: input("number", LIGHT_RANGES[key].min, LIGHT_RANGES[key].max) }]))),
+  "preview.setLightColour": inView("viewport", "workspace", "none", { light: target("string"), colour: input("string") }),
+  "preview.setLightShadows": inView("viewport", "workspace", "none", { light: target("string"), enabled: input("boolean") }),
+  "preview.setLightType": inView("viewport", "workspace", "none", { light: target("string"), type: enumerated(LIGHT_TYPES) }),
+  "preview.renameLight": inView("viewport", "workspace", "none", { light: target("string"), name: inputText(1, LIGHTING_LIMITS.name) }),
+  "preview.aimLightAtHead": inView("viewport", "workspace", "none", { light: target("string") }),
+  "preview.addLight": inView("viewport", "workspace", "none", { type: enumerated(LIGHT_TYPES) }),
+  "preview.removeLight": inView("viewport", "workspace", "none", { light: target("string") }),
   "preview.setKeyAngle": inView("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
-  "preview.setStudioLight": inView("viewport", "workspace", "none", { key: enumerated(STUDIO_LIGHT_KEYS), value: input("number") },
-    Object.fromEntries(STUDIO_LIGHT_KEYS.map(key => [key, { value: input("number", STUDIO_LIGHT_RANGES[key].min, STUDIO_LIGHT_RANGES[key].max) }]))),
-  "preview.setStudioNeutral": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
-  "preview.applyStudioSetup": inView("viewport", "workspace", "none", { setup: enumerated(STUDIO_SETUP_IDS) }),
-  "preview.resetStudioLighting": inView("viewport", "workspace", "none"),
   "preview.setEyeShape": inView("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
   "preview.setPiercings": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setBody": inView("viewport", "workspace", "none", { enabled: input("boolean") }),

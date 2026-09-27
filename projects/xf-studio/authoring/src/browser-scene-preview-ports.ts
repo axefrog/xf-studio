@@ -18,17 +18,14 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
     preview: {
       cameraState: scene.cameraState, front: scene.front, setFov: scene.setFov,
       endFovGesture: scene.endFovGesture, restoreCamera: scene.restoreCamera, distanceLimits: scene.distanceLimits,
-      setExposure: scene.setExposure, setLightAngle: scene.setLightAngle,
       setSurfaceControls: options.setSurfaceControls, setWire: scene.setWire,
       setNormals: scene.setNormals, setEyeOptics: scene.setEyeOptics,
       setHair: scene.setHair, setDetail: scene.setDetail, setEyeShape: scene.eyeShape,
       setPiercings: scene.setPiercings, setPhysics: scene.setPhysics,
       setBody: scene.setBody, frameBody: scene.frameBody,
       eyeShapeOptions: scene.eyeShapeOptions,
-      setLightingPreset: preset => scene.lighting.setPreset(preset),
-      // The studio stage's adjustable rig (studio-light-rig.ts), part of this port like every other scene device (PREV-69).
-      setStudioLights: lights => scene.setStudioLights(lights),
-      setCreatorLighting: options => scene.lighting.setCreatorOptions(options),
+      // The lighting setup shown (lighting-setup-stage.ts), part of this port like every other scene device (PREV-69).
+      setLighting: source => scene.setLighting(source),
       creatorCamera: page => scene.lighting.camera(page),
       lightingStatus: () => scene.lighting.status(),
       onLightingStatus: listener => scene.lighting.subscribe(listener),

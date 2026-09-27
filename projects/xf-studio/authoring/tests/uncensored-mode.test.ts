@@ -13,7 +13,7 @@ import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 const port = (withBody = true) => ({ cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
-  endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
+  endFovGesture: () => {}, restoreCamera: () => {}, setSurfaceControls: () => {},
   setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {},
   ...(withBody ? { setBody: () => {}, frameBody: () => false } : {}) }) as PreviewPort;
 

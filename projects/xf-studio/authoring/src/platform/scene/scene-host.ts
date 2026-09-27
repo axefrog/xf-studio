@@ -13,12 +13,11 @@ import { HeadLoadError } from "../../head-load-error";
 import { createViewportBackdrop } from "../../viewport-backdrop";
 import { attachHeadCameraInput } from "../../head-camera-input";
 import type { StageTheme } from "../../stage-backdrop";
-import { createLightingPresetStage, type GradingLutLoader } from "../../lighting-preset-stage";
+import { createLightingSetupStage, type GradingLutLoader } from "../../lighting-setup-stage";
 import { loadGradingLut } from "../../browser-grading-lut-device";
 import { viewportPixelRatio, watchDevicePixelRatio } from "../../device-pixel-ratio";
 import { linearTargetSupported } from "../../linear-display";
-import { createStudioLightRig } from "../../studio-light-rig";
-import type { StudioLights } from "../../studio-lighting";
+import type { LightingSource } from "../../lighting-setups";
 import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
 import { createHeadRig, type MotionLoader } from "./head-rig";
@@ -157,12 +156,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     controls.update();
     return requested > distance;
   }
-  // The studio stage's room environment, key, fill and rim (studio-light-rig.ts).
-  const studio = createStudioLightRig(renderer, scene);
-  releases.push(() => studio.dispose());
-  // Lighting presets: this studio stage (default) or the game's creator screen (lighting-preset-stage.ts).
-  const lighting = createLightingPresetStage({ scene, renderer, studioLights: studio.lights, loadLut: options.loadLut ?? (() => loadGradingLut()),
-    setStudioShadowMapSize: size => studio.setShadowMapSize(size) });
+  // The lighting setup shown: its lights, room, backdrop and display transform (lighting-setup-stage.ts; the backdrop is the stage's).
+  const lighting = createLightingSetupStage({ scene, renderer, loadLut: options.loadLut ?? (() => loadGradingLut()), studioBackground: scene.background });
   releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body) => loadCoreDetail(renderer, fetch, body)))(renderer, options.body ?? "female");
@@ -194,7 +189,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // renderers redraw theirs (eye makeup's composite), and the shown V's layered parts are baked again from their stacks (PREV-62).
   const restored = () => {
     options.onContext?.("restored");
-    studio.restore(); features?.contextRestored();
+    lighting.restore(); features?.contextRestored();
     character.contextRestored();
   };
   const lost = () => options.onContext?.("lost");
@@ -264,8 +259,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const invalidate = () => scheduler.invalidate();
   releases.push(() => scheduler.dispose());
   releases.push(bindRenderTriggers(invalidate, { controls, element: renderer.domElement, lighting }));
-  // Creator options (exposure, intensity form, cone) don't notify the lighting device's listeners.
-  Object.assign(lighting, invalidating(lighting, ["setCreatorOptions"], invalidate));
+  // A new setup or a trial turn doesn't always notify the lighting device's listeners (only a changed display or body does).
+  Object.assign(lighting, invalidating(lighting, ["setSource", "trialYaw", "solo"], invalidate));
   releases.push(rigMotion.connect(invalidate));
   const observer = new ResizeObserver(() => { resize(); invalidate(); });
   observer.observe(host);
@@ -444,17 +439,15 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
       character.setNormals(v);
       features?.setNormals(v);
     },
-    setExposure: (v: number) => (renderer.toneMappingExposure = v),
     /** Typed theme input for the stage backdrop; it never changes lighting. */
     setStage: (theme: StageTheme) => backdrop.setTheme(theme),
-    setLightAngle: (degrees: number) => studio.setKeyAngle(degrees),
-    /** The studio stage's environment, key, fill and rim strengths, key elevation and tint (studio-lighting.ts). */
-    setStudioLights: (lights: StudioLights) => studio.setLights(lights),
-    /** Evidence: the studio rig's current settings. */
-    studioLighting: () => studio.state(),
+    /** Light the scene by a lighting setup (lighting-setups.ts), or the built-in game rig for the shown body. */
+    setLighting: (source: LightingSource) => lighting.setSource(source),
+    /** Evidence: the setup drawn now, and how the room is lit on this GPU. */
+    lightingEvidence: () => ({ setup: lighting.shown(), environmentMode: lighting.environment.mode }),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
   return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
     "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
-    "setBlink", "animateBlink", "setWire", "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
+    "setBlink", "animateBlink", "setWire", "setNormals", "setStage", "setLighting"], invalidate) };
 }

@@ -271,7 +271,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     xfStudioSeekIdle: (seconds: number) => { scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; },
     // Creator rig evidence for calibration captures (tools/creator-light-look.ts): its lights, one alone, and the frame cost.
     xfStudioCreatorRig: {
-      lights: () => scene?.lighting.rig.specs.map(spec => ({ name: spec.name, castShadow: spec.castShadow })) ?? [],
+      lights: () => scene?.lighting.rig.lights.map(light => ({ name: light.id, castShadow: light.shadows })) ?? [],
       solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
       trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
       frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,

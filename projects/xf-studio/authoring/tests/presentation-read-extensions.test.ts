@@ -76,7 +76,7 @@ test("library summary is a primitive projection with the live layer count and re
 test("preview state excludes document and collection clones", () => {
   const { port } = mountFixture();
   const state = port.authoring.previewState();
-  expect(Object.keys(state).sort()).toEqual(["character", "control", "eyeShapeOptions", "gesture", "lighting", "motion", "preview", "quality", "savedV", "studioSetups"]);
+  expect(Object.keys(state).sort()).toEqual(["character", "control", "eyeShapeOptions", "gesture", "lighting", "lightingSetups", "motion", "preview", "quality", "savedV"]);
   expect(state.quality).toMatchObject({ size: 1024, blocked: false });
   expect(state.savedV).toMatchObject({ loaded: false });
 });

@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + lighting setups (claude/lighting-setups)",
  "states": {
   "starter": {
    "modes": {
@@ -416,11 +416,95 @@
       "max": 20
      }
     },
+    "layer/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "layer/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "layer/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "layer/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "layer/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "layer/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "layer/preview.setLightColour": {
+     "colour": {}
+    },
+    "layer/preview.setLightType": {
+     "type": {}
+    },
+    "layer/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/preview.addLight": {
+     "type": {}
     },
     "layer/preview.setKeyAngle": {
      "degrees": {
@@ -428,49 +512,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "layer/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "layer/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "layer/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "layer/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.applyStudioSetup": {
-     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -967,11 +1008,95 @@
       "max": 20
      }
     },
+    "point/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "point/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "point/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "point/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "point/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "point/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "point/preview.setLightColour": {
+     "colour": {}
+    },
+    "point/preview.setLightType": {
+     "type": {}
+    },
+    "point/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/preview.addLight": {
+     "type": {}
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -979,49 +1104,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "point/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "point/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "point/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "point/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.applyStudioSetup": {
-     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -1515,11 +1597,95 @@
       "max": 20
      }
     },
+    "viewport/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "viewport/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "viewport/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "viewport/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "viewport/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "viewport/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "viewport/preview.setLightColour": {
+     "colour": {}
+    },
+    "viewport/preview.setLightType": {
+     "type": {}
+    },
+    "viewport/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/preview.addLight": {
+     "type": {}
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -1527,49 +1693,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "viewport/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "viewport/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "viewport/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "viewport/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.applyStudioSetup": {
-     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -2063,11 +2186,95 @@
       "max": 20
      }
     },
+    "collection/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "collection/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "collection/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "collection/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "collection/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "collection/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "collection/preview.setLightColour": {
+     "colour": {}
+    },
+    "collection/preview.setLightType": {
+     "type": {}
+    },
+    "collection/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/preview.addLight": {
+     "type": {}
     },
     "collection/preview.setKeyAngle": {
      "degrees": {
@@ -2075,49 +2282,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "collection/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "collection/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "collection/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "collection/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.applyStudioSetup": {
-     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -2611,11 +2775,95 @@
       "max": 20
      }
     },
+    "preset/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "preset/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "preset/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "preset/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "preset/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "preset/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "preset/preview.setLightColour": {
+     "colour": {}
+    },
+    "preset/preview.setLightType": {
+     "type": {}
+    },
+    "preset/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/preview.addLight": {
+     "type": {}
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -2623,49 +2871,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "preset/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "preset/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "preset/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "preset/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.applyStudioSetup": {
-     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -3367,11 +3572,95 @@
       "max": 20
      }
     },
+    "layer/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "layer/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "layer/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "layer/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "layer/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "layer/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "layer/preview.setLightColour": {
+     "colour": {}
+    },
+    "layer/preview.setLightType": {
+     "type": {}
+    },
+    "layer/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/preview.addLight": {
+     "type": {}
     },
     "layer/preview.setKeyAngle": {
      "degrees": {
@@ -3379,49 +3668,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "layer/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "layer/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "layer/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "layer/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.applyStudioSetup": {
-     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -3925,11 +4171,95 @@
       "max": 20
      }
     },
+    "point/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "point/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "point/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "point/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "point/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "point/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "point/preview.setLightColour": {
+     "colour": {}
+    },
+    "point/preview.setLightType": {
+     "type": {}
+    },
+    "point/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/preview.addLight": {
+     "type": {}
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -3937,49 +4267,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "point/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "point/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "point/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "point/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.applyStudioSetup": {
-     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -4473,11 +4760,95 @@
       "max": 20
      }
     },
+    "viewport/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "viewport/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "viewport/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "viewport/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "viewport/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "viewport/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "viewport/preview.setLightColour": {
+     "colour": {}
+    },
+    "viewport/preview.setLightType": {
+     "type": {}
+    },
+    "viewport/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/preview.addLight": {
+     "type": {}
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -4485,49 +4856,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "viewport/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "viewport/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "viewport/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "viewport/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.applyStudioSetup": {
-     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -5021,11 +5349,95 @@
       "max": 20
      }
     },
+    "collection/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "collection/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "collection/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "collection/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "collection/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "collection/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "collection/preview.setLightColour": {
+     "colour": {}
+    },
+    "collection/preview.setLightType": {
+     "type": {}
+    },
+    "collection/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/preview.addLight": {
+     "type": {}
     },
     "collection/preview.setKeyAngle": {
      "degrees": {
@@ -5033,49 +5445,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "collection/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "collection/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "collection/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "collection/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.applyStudioSetup": {
-     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -5569,11 +5938,95 @@
       "max": 20
      }
     },
+    "preset/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "preset/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "preset/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "preset/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "preset/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "preset/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "preset/preview.setLightColour": {
+     "colour": {}
+    },
+    "preset/preview.setLightType": {
+     "type": {}
+    },
+    "preset/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/preview.addLight": {
+     "type": {}
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -5581,49 +6034,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "preset/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "preset/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "preset/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "preset/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.applyStudioSetup": {
-     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -6326,11 +6736,95 @@
       "max": 20
      }
     },
+    "layer/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "layer/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "layer/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "layer/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "layer/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "layer/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "layer/preview.setLightColour": {
+     "colour": {}
+    },
+    "layer/preview.setLightType": {
+     "type": {}
+    },
+    "layer/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/preview.addLight": {
+     "type": {}
     },
     "layer/preview.setKeyAngle": {
      "degrees": {
@@ -6338,49 +6832,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "layer/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "layer/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "layer/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "layer/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.applyStudioSetup": {
-     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -6885,11 +7336,95 @@
       "max": 20
      }
     },
+    "point/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "point/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "point/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "point/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "point/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "point/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "point/preview.setLightColour": {
+     "colour": {}
+    },
+    "point/preview.setLightType": {
+     "type": {}
+    },
+    "point/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/preview.addLight": {
+     "type": {}
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -6897,49 +7432,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "point/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "point/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "point/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "point/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.applyStudioSetup": {
-     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -7433,11 +7925,95 @@
       "max": 20
      }
     },
+    "viewport/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "viewport/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "viewport/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "viewport/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "viewport/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "viewport/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "viewport/preview.setLightColour": {
+     "colour": {}
+    },
+    "viewport/preview.setLightType": {
+     "type": {}
+    },
+    "viewport/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/preview.addLight": {
+     "type": {}
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -7445,49 +8021,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "viewport/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "viewport/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "viewport/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "viewport/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.applyStudioSetup": {
-     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -7981,11 +8514,95 @@
       "max": 20
      }
     },
+    "collection/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "collection/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "collection/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "collection/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "collection/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "collection/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "collection/preview.setLightColour": {
+     "colour": {}
+    },
+    "collection/preview.setLightType": {
+     "type": {}
+    },
+    "collection/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/preview.addLight": {
+     "type": {}
     },
     "collection/preview.setKeyAngle": {
      "degrees": {
@@ -7993,49 +8610,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "collection/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "collection/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "collection/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "collection/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.applyStudioSetup": {
-     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -8529,11 +9103,95 @@
       "max": 20
      }
     },
+    "preset/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "preset/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "preset/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "preset/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "preset/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "preset/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "preset/preview.setLightColour": {
+     "colour": {}
+    },
+    "preset/preview.setLightType": {
+     "type": {}
+    },
+    "preset/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/preview.addLight": {
+     "type": {}
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -8541,49 +9199,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "preset/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "preset/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "preset/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "preset/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.applyStudioSetup": {
-     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -9285,11 +9900,95 @@
       "max": 20
      }
     },
+    "layer/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "layer/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "layer/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "layer/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "layer/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "layer/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "layer/preview.setLightColour": {
+     "colour": {}
+    },
+    "layer/preview.setLightType": {
+     "type": {}
+    },
+    "layer/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/preview.addLight": {
+     "type": {}
     },
     "layer/preview.setKeyAngle": {
      "degrees": {
@@ -9297,49 +9996,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "layer/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "layer/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "layer/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "layer/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.applyStudioSetup": {
-     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -9843,11 +10499,95 @@
       "max": 20
      }
     },
+    "point/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "point/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "point/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "point/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "point/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "point/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "point/preview.setLightColour": {
+     "colour": {}
+    },
+    "point/preview.setLightType": {
+     "type": {}
+    },
+    "point/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/preview.addLight": {
+     "type": {}
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -9855,49 +10595,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "point/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "point/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "point/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "point/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.applyStudioSetup": {
-     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -10391,11 +11088,95 @@
       "max": 20
      }
     },
+    "viewport/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "viewport/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "viewport/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "viewport/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "viewport/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "viewport/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "viewport/preview.setLightColour": {
+     "colour": {}
+    },
+    "viewport/preview.setLightType": {
+     "type": {}
+    },
+    "viewport/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/preview.addLight": {
+     "type": {}
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -10403,49 +11184,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "viewport/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "viewport/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "viewport/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "viewport/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.applyStudioSetup": {
-     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -10939,11 +11677,95 @@
       "max": 20
      }
     },
+    "collection/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "collection/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "collection/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "collection/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "collection/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "collection/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "collection/preview.setLightColour": {
+     "colour": {}
+    },
+    "collection/preview.setLightType": {
+     "type": {}
+    },
+    "collection/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/preview.addLight": {
+     "type": {}
     },
     "collection/preview.setKeyAngle": {
      "degrees": {
@@ -10951,49 +11773,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "collection/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "collection/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "collection/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "collection/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.applyStudioSetup": {
-     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -11487,11 +12266,95 @@
       "max": 20
      }
     },
+    "preset/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "preset/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "preset/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "preset/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "preset/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "preset/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "preset/preview.setLightColour": {
+     "colour": {}
+    },
+    "preset/preview.setLightType": {
+     "type": {}
+    },
+    "preset/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/preview.addLight": {
+     "type": {}
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -11499,49 +12362,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "preset/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "preset/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "preset/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "preset/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.applyStudioSetup": {
-     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -12243,11 +13063,95 @@
       "max": 20
      }
     },
+    "layer/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "layer/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "layer/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "layer/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "layer/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "layer/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "layer/preview.setLightColour": {
+     "colour": {}
+    },
+    "layer/preview.setLightType": {
+     "type": {}
+    },
+    "layer/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/preview.addLight": {
+     "type": {}
     },
     "layer/preview.setKeyAngle": {
      "degrees": {
@@ -12255,49 +13159,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "layer/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "layer/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "layer/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "layer/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.applyStudioSetup": {
-     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -12801,11 +13662,95 @@
       "max": 20
      }
     },
+    "point/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "point/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "point/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "point/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "point/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "point/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "point/preview.setLightColour": {
+     "colour": {}
+    },
+    "point/preview.setLightType": {
+     "type": {}
+    },
+    "point/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/preview.addLight": {
+     "type": {}
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -12813,49 +13758,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "point/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "point/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "point/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "point/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.applyStudioSetup": {
-     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -13349,11 +14251,95 @@
       "max": 20
      }
     },
+    "viewport/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "viewport/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "viewport/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "viewport/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "viewport/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "viewport/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "viewport/preview.setLightColour": {
+     "colour": {}
+    },
+    "viewport/preview.setLightType": {
+     "type": {}
+    },
+    "viewport/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/preview.addLight": {
+     "type": {}
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -13361,49 +14347,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "viewport/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "viewport/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "viewport/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "viewport/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.applyStudioSetup": {
-     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -13897,11 +14840,95 @@
       "max": 20
      }
     },
+    "collection/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "collection/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "collection/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "collection/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "collection/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "collection/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "collection/preview.setLightColour": {
+     "colour": {}
+    },
+    "collection/preview.setLightType": {
+     "type": {}
+    },
+    "collection/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/preview.addLight": {
+     "type": {}
     },
     "collection/preview.setKeyAngle": {
      "degrees": {
@@ -13909,49 +14936,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "collection/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "collection/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "collection/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "collection/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.applyStudioSetup": {
-     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -14445,11 +15429,95 @@
       "max": 20
      }
     },
+    "preset/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "preset/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "preset/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "preset/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "preset/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "preset/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "preset/preview.setLightColour": {
+     "colour": {}
+    },
+    "preset/preview.setLightType": {
+     "type": {}
+    },
+    "preset/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/preview.addLight": {
+     "type": {}
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -14457,49 +15525,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "preset/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "preset/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "preset/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "preset/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.applyStudioSetup": {
-     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {
@@ -15204,11 +16229,95 @@
       "max": 20
      }
     },
+    "layer/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "layer/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "layer/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "layer/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "layer/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "layer/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "layer/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "layer/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "layer/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "layer/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "layer/preview.setLightColour": {
+     "colour": {}
+    },
+    "layer/preview.setLightType": {
+     "type": {}
+    },
+    "layer/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "layer/preview.addLight": {
+     "type": {}
     },
     "layer/preview.setKeyAngle": {
      "degrees": {
@@ -15216,49 +16325,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "layer/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "layer/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "layer/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "layer/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "layer/preview.applyStudioSetup": {
-     "setup": {}
     },
     "layer/preview.setEyeShape": {
      "index": {
@@ -15765,11 +16831,95 @@
       "max": 20
      }
     },
+    "point/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "point/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "point/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "point/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "point/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "point/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "point/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "point/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "point/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "point/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "point/preview.setLightColour": {
+     "colour": {}
+    },
+    "point/preview.setLightType": {
+     "type": {}
+    },
+    "point/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "point/preview.addLight": {
+     "type": {}
     },
     "point/preview.setKeyAngle": {
      "degrees": {
@@ -15777,49 +16927,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "point/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "point/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "point/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "point/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "point/preview.applyStudioSetup": {
-     "setup": {}
     },
     "point/preview.setEyeShape": {
      "index": {
@@ -16313,11 +17420,95 @@
       "max": 20
      }
     },
+    "viewport/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "viewport/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "viewport/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "viewport/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "viewport/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "viewport/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "viewport/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "viewport/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "viewport/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "viewport/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "viewport/preview.setLightColour": {
+     "colour": {}
+    },
+    "viewport/preview.setLightType": {
+     "type": {}
+    },
+    "viewport/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "viewport/preview.addLight": {
+     "type": {}
     },
     "viewport/preview.setKeyAngle": {
      "degrees": {
@@ -16325,49 +17516,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "viewport/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "viewport/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "viewport/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "viewport/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "viewport/preview.applyStudioSetup": {
-     "setup": {}
     },
     "viewport/preview.setEyeShape": {
      "index": {
@@ -16861,11 +18009,95 @@
       "max": 20
      }
     },
+    "collection/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "collection/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "collection/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "collection/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "collection/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "collection/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "collection/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "collection/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "collection/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "collection/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "collection/preview.setLightColour": {
+     "colour": {}
+    },
+    "collection/preview.setLightType": {
+     "type": {}
+    },
+    "collection/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "collection/preview.addLight": {
+     "type": {}
     },
     "collection/preview.setKeyAngle": {
      "degrees": {
@@ -16873,49 +18105,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "collection/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "collection/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "collection/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "collection/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "collection/preview.applyStudioSetup": {
-     "setup": {}
     },
     "collection/preview.setEyeShape": {
      "index": {
@@ -17409,11 +18598,95 @@
       "max": 20
      }
     },
+    "preset/preview.renameLightingSetup": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
     "preset/preview.setExposure": {
      "value": {
-      "min": 0.125,
-      "max": 8
+      "min": 0.01,
+      "max": 20
      }
+    },
+    "preset/preview.setRoomLight": {
+     "value": {
+      "min": 0,
+      "max": 3
+     }
+    },
+    "preset/preview.setBackdrop": {
+     "backdrop": {}
+    },
+    "preset/preview.setDisplayTransform": {
+     "display": {}
+    },
+    "preset/preview.setLight": {
+     "key": {},
+     "value": {}
+    },
+    "preset/preview.setLight/azimuth": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 360,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/elevation": {
+     "key": {},
+     "value": {
+      "min": -89,
+      "max": 89,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/distance": {
+     "key": {},
+     "value": {
+      "min": 0.1,
+      "max": 10
+     }
+    },
+    "preset/preview.setLight/intensity": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 10000
+     }
+    },
+    "preset/preview.setLight/cone": {
+     "key": {},
+     "value": {
+      "min": 1,
+      "max": 89.9,
+      "unit": "degrees"
+     }
+    },
+    "preset/preview.setLight/softness": {
+     "key": {},
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
+    "preset/preview.setLightColour": {
+     "colour": {}
+    },
+    "preset/preview.setLightType": {
+     "type": {}
+    },
+    "preset/preview.renameLight": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 60,
+      "unit": "characters"
+     }
+    },
+    "preset/preview.addLight": {
+     "type": {}
     },
     "preset/preview.setKeyAngle": {
      "degrees": {
@@ -17421,49 +18694,6 @@
       "max": 360,
       "unit": "degrees"
      }
-    },
-    "preset/preview.setStudioLight": {
-     "key": {},
-     "value": {}
-    },
-    "preset/preview.setStudioLight/environment": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 3
-     }
-    },
-    "preset/preview.setStudioLight/key": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/elevation": {
-     "key": {},
-     "value": {
-      "min": -30,
-      "max": 80,
-      "unit": "degrees"
-     }
-    },
-    "preset/preview.setStudioLight/fill": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.setStudioLight/rim": {
-     "key": {},
-     "value": {
-      "min": 0,
-      "max": 4
-     }
-    },
-    "preset/preview.applyStudioSetup": {
-     "setup": {}
     },
     "preset/preview.setEyeShape": {
      "index": {

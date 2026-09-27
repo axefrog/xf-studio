@@ -4,7 +4,8 @@ import { SavedAppearanceActions, type SavedAppearancePort } from "./saved-appear
 import type { WorkspaceState } from "./workspace-state";
 import type { ViewGraph } from "./platform/core/view-graph";
 import { MAIN_VIEW } from "./platform/api/view-graph";
-import { previewMirror } from "./preview-view-graph";
+import { previewLights, previewMirror } from "./preview-view-graph";
+import { lightingSource } from "./lighting-setups";
 
 /**
  * Restore the preview from workspace data without reading presentation controls. `graph` is the workspace's view graph (the
@@ -22,7 +23,9 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
     ? savedAppearance.dispatch({ kind: "savedV.restore", value: workspace.savedV }) : undefined;
   // A private copy: restoring adjusts it (unavailable details, piercing and eye-shape fallbacks), never the caller's workspace.
   // With the workspace's graph, a head (a retry too) restores what the graph's main view holds now.
-  const initial = structuredClone(graph ? { ...workspace.preview, ...previewMirror(graph) } : workspace.preview);
+  // The graph's mirror holds `lightingSetups` only while there are user setups: the stored field never outlives them.
+  const { lightingSetups: _stored, ...stored } = workspace.preview;
+  const initial = structuredClone(graph ? { ...stored, ...previewMirror(graph) } : workspace.preview);
   for (const detail of ["brows", "lashes"] as const) {
     if (ports.preview.availability?.(detail)) initial[detail] = false;
   }
@@ -39,12 +42,9 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   ports.preview.setEyeShape(initial.eyeShape);
   ports.preview.setWire(initial.wire);
   ports.preview.setNormals(initial.normals);
-  ports.preview.setExposure(initial.exposure);
-  ports.preview.setLightAngle(initial.lightAngle);
-  ports.preview.setStudioLights?.(initial.studioLights);
-  ports.preview.setCreatorLighting?.(initial.creatorLighting);
-  if (!ports.preview.setLightingPreset) initial.lightingPreset = "studio";
-  else ports.preview.setLightingPreset(initial.lightingPreset);
+  // The shown lighting setup (a workspace saved before setups migrates: lighting-setups.ts).
+  const lights = previewLights(initial);
+  ports.preview.setLighting?.(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));
   for (const detail of ["brows", "lashes"] as const)
     ports.preview.setDetail(detail, initial[detail]);
   ports.preview.setHair(initial.hair);
@@ -66,7 +66,6 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
         const seed = { applied: true, seed: true } as const;
         graph.edit(MAIN_VIEW, "display", { state: { brows: initial.brows, lashes: initial.lashes } }, seed);
         graph.edit(MAIN_VIEW, "scene", { state: { eyeShape: initial.eyeShape } }, seed);
-        graph.edit(MAIN_VIEW, "lights", { kind: initial.lightingPreset }, seed);
       });
       preview = new PreviewActions(initial, ports.preview, graph);
       ports.preview.setPiercings(initial.piercings);

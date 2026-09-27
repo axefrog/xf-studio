@@ -8,6 +8,8 @@ import {createRasterJob} from "../src/engines/layered-makeup/recipe";
 import {installGlitterMixtureStudy} from "./glitter-study-material";
 import {installProceduralGlintStudy} from "./glitter-glint-study";
 import { EYE_MAKEUP_REGION, initialRecipe } from "../src/features/eye-makeup/region";
+import { studioStageSetup } from "../src/lighting-setups";
+import { DEFAULT_STUDIO_STAGE } from "../src/studio-lighting";
 
 const SIZE=new URLSearchParams(location.search).get("size")==="2048"?2048:1024,
   BASE="#592640",variants=["legacy","sparse","default","default-16sample","dense","maximum","fine160k","fine350k","fine350k-covered","uv-cell-glints","uv-cell-polygons"] as const;
@@ -20,6 +22,8 @@ const status=element<HTMLParagraphElement>("status"),controls=element<HTMLFieldS
   roughnessInput=element<HTMLInputElement>("flake-roughness"),environmentInput=element<HTMLInputElement>("environment"),glintStrengthInput=element<HTMLInputElement>("glint-strength"),glintPowerInput=element<HTMLInputElement>("glint-power"),glintSeedInput=element<HTMLInputElement>("glint-seed"),glintDensityInput=element<HTMLInputElement>("glint-density"),glintFineInput=element<HTMLInputElement>("glint-fine"),
   metalInput=element<HTMLInputElement>("zero-metalness"),lightInput=element<HTMLInputElement>("light"),
   blinkInput=element<HTMLInputElement>("blink"),idleInput=element<HTMLInputElement>("idle"),pauseInput=element<HTMLInputElement>("pause");
+/** Soft studio with its key turned to an azimuth (the study's light slider). */
+const turnKey=(degrees:number)=>viewer?.setLighting({kind:"setup",setup:studioStageSetup({...DEFAULT_STUDIO_STAGE,angle:degrees})});
 let viewer:Awaited<ReturnType<typeof createScene>>|undefined,makeup:EyeMakeupRenderer|undefined,active:Variant|undefined,requested:Variant="default",
   loading=false,error="",generation=0,maskHash="",frames=0;
 let sources:Record<string,{url:string;sha256:string;width:number;height:number}>={},manifest:unknown=null,fineManifest:unknown=null,coveredManifest:unknown=null;
@@ -129,7 +133,7 @@ async function main(){
   makeup.layers.setCanvases([canvas]);makeup.layers.updateLayer(0,fixed);
   mixture=installGlitterMixtureStudy(makeup.materials[0]!,{baseColor:BASE,flakeColor:"#f5df9f"});
   glint=installProceduralGlintStudy(makeup.materials[0]!);
-  viewer.onFrame(()=>frames++);viewer.setIdle(false);viewer.setBlink(0);viewer.setLightAngle(Number(lightInput.value));
+  viewer.onFrame(()=>frames++);viewer.setIdle(false);viewer.setBlink(0);turnKey(Number(lightInput.value));
   controls.disabled=false;
   variantInput.addEventListener("change",()=>{const v=variantInput.value as Variant;if(variants.includes(v))void selectVariant(v,job.data);});
   normalInput.addEventListener("change",applyOverrides);metalInput.addEventListener("change",applyOverrides);
@@ -145,7 +149,7 @@ async function main(){
     applyOverrides();
   });
   environmentInput.addEventListener("input",()=>{viewer!.scene.environmentIntensity=Number(environmentInput.value);});
-  lightInput.addEventListener("input",()=>{viewer!.setLightAngle(Number(lightInput.value));element("light-value").textContent=`${lightInput.value}°`;});
+  lightInput.addEventListener("input",()=>{turnKey(Number(lightInput.value));element("light-value").textContent=`${lightInput.value}°`;});
   element("front").addEventListener("click",()=>viewer!.front());
   element("close").addEventListener("click",()=>viewer!.restoreCamera({position:[.05,1.702,-.17],target:[.026,1.702,.004],fov:30}));
   element("distant").addEventListener("click",()=>viewer!.restoreCamera({position:[0,1.67,-.95],target:[0,1.67,.005],fov:30}));

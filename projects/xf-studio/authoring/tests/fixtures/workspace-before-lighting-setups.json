@@ -1,0 +1,972 @@
+{
+ "build": "f1aa3bd",
+ "note": "Workspaces as the build before lighting setups stored them, written by that build's own serializer (scratch script over PreviewActions and WorkspaceComposer). `workspace` is the whole untouched workspace; each entry of `lighting` is the `preview` block (and `views`, when stored) that build wrote after the named steps, the rest of the workspace being identical.",
+ "workspace": {
+  "schema": "xfs/workspace-2",
+  "look": {
+   "parts": {
+    "eye-makeup": {
+     "schema": "xfs/eye-makeup-part-1",
+     "body": {
+      "schema": "xfs/recipe-7",
+      "uv": "gltf-uv0-top-left",
+      "layers": [
+       {
+        "id": "layer-1",
+        "name": "Petal wash",
+        "enabled": true,
+        "color": "#905774",
+        "finish": "matte",
+        "opacity": 0.85,
+        "strength": {
+         "mode": "smooth-boundary",
+         "blend": 0.0005
+        },
+        "softness": {
+         "mode": "uniform"
+        },
+        "feather": 0.012,
+        "symmetry": true,
+        "pathMode": "bezier",
+        "points": [
+         {
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.006499999999999996,
+            "v": 0.004833333333333333
+           },
+           "out": {
+            "u": -0.006499999999999996,
+            "v": -0.004833333333333333
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.33,
+          "v": 0.206,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.012500000000000002,
+            "v": 0.00416666666666667
+           },
+           "out": {
+            "u": 0.012500000000000002,
+            "v": -0.00416666666666667
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.378,
+          "v": 0.206,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.016166666666666663,
+            "v": -0.0038333333333333366
+           },
+           "out": {
+            "u": 0.016166666666666663,
+            "v": 0.0038333333333333366
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.427,
+          "v": 0.229,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.010166666666666666,
+            "v": -0.007833333333333336
+           },
+           "out": {
+            "u": 0.010166666666666666,
+            "v": 0.007833333333333336
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.439,
+          "v": 0.253,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.009666666666666665,
+            "v": -0.0009999999999999963
+           },
+           "out": {
+            "u": -0.009666666666666665,
+            "v": 0.0009999999999999963
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.369,
+          "v": 0.235,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.02266666666666667,
+            "v": 0.0036666666666666653
+           },
+           "out": {
+            "u": -0.02266666666666667,
+            "v": -0.0036666666666666653
+           },
+           "mode": "symmetric"
+          }
+         }
+        ],
+        "fields": [
+         {
+          "id": "layer-1-field-1",
+          "u": 0.342,
+          "v": 0.223,
+          "du": 0,
+          "dv": 0,
+          "radius": 0.07
+         }
+        ]
+       },
+       {
+        "id": "layer-2",
+        "name": "Fine wing",
+        "enabled": false,
+        "color": "#201b29",
+        "finish": "matte",
+        "opacity": 0.85,
+        "strength": {
+         "mode": "smooth-boundary",
+         "blend": 0.0005
+        },
+        "softness": {
+         "mode": "uniform"
+        },
+        "feather": 0.0015,
+        "symmetry": true,
+        "pathMode": "bezier",
+        "points": [
+         {
+          "u": 0.31,
+          "v": 0.241,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.0025000000000000022,
+            "v": 0.0024999999999999974
+           },
+           "out": {
+            "u": 0.0025000000000000022,
+            "v": -0.0024999999999999974
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.36,
+          "v": 0.231,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.01883333333333333,
+            "v": -0.00016666666666666682
+           },
+           "out": {
+            "u": 0.01883333333333333,
+            "v": 0.00016666666666666682
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.423,
+          "v": 0.242,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.015666666666666672,
+            "v": -0.003999999999999999
+           },
+           "out": {
+            "u": 0.015666666666666672,
+            "v": 0.003999999999999999
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.454,
+          "v": 0.255,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.005166666666666662,
+            "v": -0.0011666666666666676
+           },
+           "out": {
+            "u": -0.005166666666666662,
+            "v": 0.0011666666666666676
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.392,
+          "v": 0.249,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.018166666666666675,
+            "v": 0.0015000000000000013
+           },
+           "out": {
+            "u": -0.018166666666666675,
+            "v": -0.0015000000000000013
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.345,
+          "v": 0.246,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.013666666666666669,
+            "v": 0.0013333333333333346
+           },
+           "out": {
+            "u": -0.013666666666666669,
+            "v": -0.0013333333333333346
+           },
+           "mode": "symmetric"
+          }
+         }
+        ],
+        "fields": [
+         {
+          "id": "layer-2-field-1",
+          "u": 0.342,
+          "v": 0.223,
+          "du": 0,
+          "dv": 0,
+          "radius": 0.07
+         }
+        ]
+       },
+       {
+        "id": "layer-3",
+        "name": "Inner light",
+        "enabled": false,
+        "color": "#d4ae86",
+        "finish": "regular",
+        "opacity": 0.85,
+        "strength": {
+         "mode": "smooth-boundary",
+         "blend": 0.0005
+        },
+        "softness": {
+         "mode": "uniform"
+        },
+        "feather": 0.012,
+        "symmetry": true,
+        "pathMode": "bezier",
+        "points": [
+         {
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.006499999999999996,
+            "v": 0.004833333333333333
+           },
+           "out": {
+            "u": -0.006499999999999996,
+            "v": -0.004833333333333333
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.33,
+          "v": 0.206,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.012500000000000002,
+            "v": 0.00416666666666667
+           },
+           "out": {
+            "u": 0.012500000000000002,
+            "v": -0.00416666666666667
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.378,
+          "v": 0.206,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.016166666666666663,
+            "v": -0.0038333333333333366
+           },
+           "out": {
+            "u": 0.016166666666666663,
+            "v": 0.0038333333333333366
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.427,
+          "v": 0.229,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.010166666666666666,
+            "v": -0.007833333333333336
+           },
+           "out": {
+            "u": 0.010166666666666666,
+            "v": 0.007833333333333336
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.439,
+          "v": 0.253,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.009666666666666665,
+            "v": -0.0009999999999999963
+           },
+           "out": {
+            "u": -0.009666666666666665,
+            "v": 0.0009999999999999963
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.369,
+          "v": 0.235,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.02266666666666667,
+            "v": 0.0036666666666666653
+           },
+           "out": {
+            "u": -0.02266666666666667,
+            "v": -0.0036666666666666653
+           },
+           "mode": "symmetric"
+          }
+         }
+        ],
+        "fields": [
+         {
+          "id": "layer-3-field-1",
+          "u": 0.342,
+          "v": 0.223,
+          "du": 0,
+          "dv": 0,
+          "radius": 0.07
+         }
+        ]
+       },
+       {
+        "id": "layer-4",
+        "name": "Accent",
+        "enabled": false,
+        "color": "#328c94",
+        "finish": "matte",
+        "opacity": 0.85,
+        "strength": {
+         "mode": "smooth-boundary",
+         "blend": 0.0005
+        },
+        "softness": {
+         "mode": "uniform"
+        },
+        "feather": 0.012,
+        "symmetry": true,
+        "pathMode": "bezier",
+        "points": [
+         {
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.006499999999999996,
+            "v": 0.004833333333333333
+           },
+           "out": {
+            "u": -0.006499999999999996,
+            "v": -0.004833333333333333
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.33,
+          "v": 0.206,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.012500000000000002,
+            "v": 0.00416666666666667
+           },
+           "out": {
+            "u": 0.012500000000000002,
+            "v": -0.00416666666666667
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.378,
+          "v": 0.206,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.016166666666666663,
+            "v": -0.0038333333333333366
+           },
+           "out": {
+            "u": 0.016166666666666663,
+            "v": 0.0038333333333333366
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.427,
+          "v": 0.229,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": -0.010166666666666666,
+            "v": -0.007833333333333336
+           },
+           "out": {
+            "u": 0.010166666666666666,
+            "v": 0.007833333333333336
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.439,
+          "v": 0.253,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.009666666666666665,
+            "v": -0.0009999999999999963
+           },
+           "out": {
+            "u": -0.009666666666666665,
+            "v": 0.0009999999999999963
+           },
+           "mode": "symmetric"
+          }
+         },
+         {
+          "u": 0.369,
+          "v": 0.235,
+          "weight": 1,
+          "handles": {
+           "in": {
+            "u": 0.02266666666666667,
+            "v": 0.0036666666666666653
+           },
+           "out": {
+            "u": -0.02266666666666667,
+            "v": -0.0036666666666666653
+           },
+           "mode": "symmetric"
+          }
+         }
+        ],
+        "fields": [
+         {
+          "id": "layer-4-field-1",
+          "u": 0.342,
+          "v": 0.223,
+          "du": 0,
+          "dv": 0,
+          "radius": 0.07
+         }
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "memory": {
+    "eye-makeup": {
+     "editor": {
+      "active": 0,
+      "selected": 0,
+      "fieldSelection": {}
+     },
+     "partSchema": "xfs/eye-makeup-part-1",
+     "history": []
+    }
+   }
+  },
+  "features": {
+   "eye-makeup": {
+    "choices": {}
+   }
+  },
+  "uvView": {
+   "mode": "both",
+   "side": "low",
+   "u": 0.5,
+   "v": 0.2775,
+   "span": 0.5
+  },
+  "preview": {
+   "textureSize": 1024,
+   "eyeShape": 9,
+   "surface": true,
+   "wire": false,
+   "brows": true,
+   "lashes": true,
+   "hair": true,
+   "piercings": true,
+   "piercingStyle": "",
+   "piercingDefinition": "",
+   "normals": true,
+   "eyeOptics": false,
+   "exposure": 1.2,
+   "lightAngle": 329,
+   "blink": 0,
+   "blinkPlaying": false,
+   "lightingPreset": "studio",
+   "creatorLighting": {
+    "intensity": "isotropic",
+    "cone": "full",
+    "exposure": 0.46
+   },
+   "idle": false,
+   "idleTime": 0,
+   "idlePaused": false,
+   "idleBody": true,
+   "idleFace": true,
+   "camera": {
+    "position": [
+     0,
+     1.67,
+     -0.6
+    ],
+    "target": [
+     0,
+     1.67,
+     0.005
+    ],
+    "fov": 30
+   }
+  },
+  "library": {
+   "selected": "",
+   "name": "Untitled look"
+  },
+  "uiPreferences": {
+   "schema": "xfs/ui-preferences-1",
+   "theme": "system",
+   "inputHints": true
+  }
+ },
+ "lighting": {
+  "untouched": {
+   "preview": {
+    "textureSize": 1024,
+    "eyeShape": 9,
+    "surface": true,
+    "wire": false,
+    "brows": true,
+    "lashes": true,
+    "hair": true,
+    "piercings": true,
+    "piercingStyle": "",
+    "piercingDefinition": "",
+    "normals": true,
+    "eyeOptics": false,
+    "exposure": 1.2,
+    "lightAngle": 329,
+    "blink": 0,
+    "blinkPlaying": false,
+    "lightingPreset": "studio",
+    "creatorLighting": {
+     "intensity": "isotropic",
+     "cone": "full",
+     "exposure": 0.46
+    },
+    "idle": false,
+    "idleTime": 0,
+    "idlePaused": false,
+    "idleBody": true,
+    "idleFace": true,
+    "camera": {
+     "position": [
+      0,
+      1.67,
+      -0.6
+     ],
+     "target": [
+      0,
+      1.67,
+      0.005
+     ],
+     "fov": 30
+    }
+   },
+   "steps": "nothing"
+  },
+  "keyLight": {
+   "preview": {
+    "textureSize": 1024,
+    "eyeShape": 9,
+    "surface": true,
+    "wire": false,
+    "brows": true,
+    "lashes": true,
+    "hair": true,
+    "piercings": true,
+    "piercingStyle": "",
+    "piercingDefinition": "",
+    "normals": true,
+    "eyeOptics": false,
+    "exposure": 1.4,
+    "lightAngle": 305,
+    "blink": 0,
+    "blinkPlaying": false,
+    "lightingPreset": "studio",
+    "creatorLighting": {
+     "intensity": "isotropic",
+     "cone": "full",
+     "exposure": 0.46
+    },
+    "idle": false,
+    "idleTime": 0,
+    "idlePaused": false,
+    "idleBody": true,
+    "idleFace": true,
+    "camera": {
+     "position": [
+      0,
+      1.67,
+      -0.6
+     ],
+     "target": [
+      0,
+      1.67,
+      0.005
+     ],
+     "fov": 30
+    },
+    "studioLights": {
+     "environment": 0.2,
+     "key": 2.4,
+     "elevation": 35,
+     "fill": 0.25,
+     "rim": 0,
+     "neutral": false
+    }
+   },
+   "steps": "preview.applyStudioSetup key"
+  },
+  "adjusted": {
+   "preview": {
+    "textureSize": 1024,
+    "eyeShape": 9,
+    "surface": true,
+    "wire": false,
+    "brows": true,
+    "lashes": true,
+    "hair": true,
+    "piercings": true,
+    "piercingStyle": "",
+    "piercingDefinition": "",
+    "normals": true,
+    "eyeOptics": false,
+    "exposure": 1.6,
+    "lightAngle": 200,
+    "blink": 0,
+    "blinkPlaying": false,
+    "lightingPreset": "studio",
+    "creatorLighting": {
+     "intensity": "isotropic",
+     "cone": "full",
+     "exposure": 0.46
+    },
+    "idle": false,
+    "idleTime": 0,
+    "idlePaused": false,
+    "idleBody": true,
+    "idleFace": true,
+    "camera": {
+     "position": [
+      0,
+      1.67,
+      -0.6
+     ],
+     "target": [
+      0,
+      1.67,
+      0.005
+     ],
+     "fov": 30
+    },
+    "studioLights": {
+     "environment": 0.2,
+     "key": 2.4,
+     "elevation": 35,
+     "fill": 0.25,
+     "rim": 1.5,
+     "neutral": false
+    }
+   },
+   "steps": "applyStudioSetup key; setKeyAngle 200; setStudioLight rim 1.5; setExposure 1.6"
+  },
+  "creatorOverAdjusted": {
+   "preview": {
+    "textureSize": 1024,
+    "eyeShape": 9,
+    "surface": true,
+    "wire": false,
+    "brows": true,
+    "lashes": true,
+    "hair": true,
+    "piercings": true,
+    "piercingStyle": "",
+    "piercingDefinition": "",
+    "normals": true,
+    "eyeOptics": false,
+    "exposure": 1.2,
+    "lightAngle": 329,
+    "blink": 0,
+    "blinkPlaying": false,
+    "lightingPreset": "creator",
+    "creatorLighting": {
+     "intensity": "isotropic",
+     "cone": "full",
+     "exposure": 0.8,
+     "shadows": false
+    },
+    "idle": false,
+    "idleTime": 0,
+    "idlePaused": false,
+    "idleBody": true,
+    "idleFace": true,
+    "camera": {
+     "position": [
+      0,
+      1.67,
+      -0.6
+     ],
+     "target": [
+      0,
+      1.67,
+      0.005
+     ],
+     "fov": 30
+    },
+    "studioLights": {
+     "environment": 0.4,
+     "key": 1,
+     "elevation": 21.52659393903945,
+     "fill": 1,
+     "rim": 0,
+     "neutral": true
+    }
+   },
+   "steps": "setStudioLight environment 0.4; setStudioNeutral on; setLightingPreset creator; setCreatorLighting exposure 0.8; setCreatorShadows off"
+  },
+  "secondView": {
+   "preview": {
+    "textureSize": 1024,
+    "eyeShape": 9,
+    "surface": true,
+    "wire": false,
+    "brows": true,
+    "lashes": true,
+    "hair": true,
+    "piercings": true,
+    "piercingStyle": "",
+    "piercingDefinition": "",
+    "normals": true,
+    "eyeOptics": false,
+    "exposure": 1.2,
+    "lightAngle": 329,
+    "blink": 0,
+    "blinkPlaying": false,
+    "lightingPreset": "studio",
+    "creatorLighting": {
+     "intensity": "isotropic",
+     "cone": "full",
+     "exposure": 0.46
+    },
+    "idle": false,
+    "idleTime": 0,
+    "idlePaused": false,
+    "idleBody": true,
+    "idleFace": true,
+    "camera": {
+     "position": [
+      0,
+      1.67,
+      -0.6
+     ],
+     "target": [
+      0,
+      1.67,
+      0.005
+     ],
+     "fov": 30
+    },
+    "studioLights": {
+     "environment": 1,
+     "key": 2,
+     "elevation": 21.52659393903945,
+     "fill": 1,
+     "rim": 0,
+     "neutral": false
+    }
+   },
+   "views": {
+    "schema": "xfs/view-graph-1",
+    "views": [
+     {
+      "id": "main",
+      "kind": "3d",
+      "scene": "s1",
+      "camera": "c1",
+      "lights": "l1",
+      "display": "d1",
+      "tools": "t1"
+     },
+     {
+      "id": "v2",
+      "kind": "3d",
+      "title": "Whole body",
+      "scene": "s1",
+      "camera": "c3",
+      "lights": "l4",
+      "display": "d5",
+      "tools": "t6"
+     }
+    ],
+    "scenes": [
+     {
+      "id": "s1",
+      "kind": "character",
+      "eyeShape": 9,
+      "normals": true
+     }
+    ],
+    "cameras": [
+     {
+      "id": "c1",
+      "kind": "orbit"
+     },
+     {
+      "id": "c3",
+      "kind": "orbit"
+     }
+    ],
+    "lights": [
+     {
+      "id": "l1",
+      "kind": "studio",
+      "exposure": 1.2,
+      "lightAngle": 329,
+      "studioLights": {
+       "environment": 1,
+       "key": 2,
+       "elevation": 21.52659393903945,
+       "fill": 1,
+       "rim": 0,
+       "neutral": false
+      },
+      "creatorLighting": {
+       "intensity": "isotropic",
+       "cone": "full",
+       "exposure": 0.53,
+       "shadows": true
+      }
+     },
+     {
+      "id": "l4",
+      "kind": "creator",
+      "exposure": 1.2,
+      "lightAngle": 329,
+      "studioLights": {
+       "environment": 1,
+       "key": 1,
+       "elevation": 21.52659393903945,
+       "fill": 1,
+       "rim": 0,
+       "neutral": false
+      },
+      "creatorLighting": {
+       "intensity": "isotropic",
+       "cone": "full",
+       "exposure": 0.53,
+       "shadows": true
+      }
+     }
+    ],
+    "display": [
+     {
+      "id": "d1",
+      "brows": true,
+      "lashes": true,
+      "hair": true,
+      "piercings": true
+     },
+     {
+      "id": "d5",
+      "brows": true,
+      "lashes": true,
+      "hair": true,
+      "piercings": true
+     }
+    ],
+    "tools": [
+     {
+      "id": "t1",
+      "on": {
+       "eye-makeup.surface": true,
+       "eye-makeup.wire": false
+      }
+     },
+     {
+      "id": "t6",
+      "on": {}
+     }
+    ],
+    "focused": "main"
+   },
+   "steps": "addView v2 (sharing the scene, own lights) titled Whole body; setLightingPreset creator on v2; setStudioLight key 2 on main"
+  }
+ }
+}

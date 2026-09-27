@@ -10,12 +10,16 @@ import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENS
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
 import type { GradingLutSource } from "./grading-lut";
 import { refusal, type ReasonCode } from "./platform/api";
-import { DEFAULT_STUDIO_STAGE, isDefaultStudioStage, matchingStudioSetup, STUDIO_EXPOSURE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES,
-  STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioExposure, validStudioLightValue, type StudioLightKey, type StudioLights, type StudioSetupId } from "./studio-lighting";
+import { addLight, aimLightAtHead, BUILT_IN_SETUP_IDS, builtInInfo, colourHex, createSetup, deleteSetup, differsFromBase, editShownSetup,
+  findUserSetup, isBuiltInSetup, LIGHT_NUMBER_KEYS, LIGHT_RANGES, LIGHT_TYPES, lightingSource, lightPlacement, LIGHTING_LIMITS, parseColourHex,
+  removeLight, renameLight, renameSetup, resetSetup, rigKindOf, SETUP_BACKDROPS, SETUP_DISPLAYS, SETUP_ENVIRONMENT_RANGE,
+  SETUP_EXPOSURE_RANGES, setLightColour, setLightNumber, setLightShadows, setLightType, setSetupDisplay, setupBase, setupDefinition,
+  setupExists, setupLabel, shadowCasters, validSetupName, type BuiltInSetupId, type LightingSetup, type LightingSource, type LightNumberKey,
+  type LightType, type SetupBackdrop, type SetupDisplay, type SetupLibrary } from "./lighting-setups";
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" | "uncensored" | "physics" |
-  "eyeShape" | "normals" | "eyeOwnRoughness" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights">;
+  "eyeShape" | "normals" | "eyeOwnRoughness" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights" | "lightingSetups">;
 /** Every camera and preview action may name the view it acts on; without one it acts on the focused view (design §3.8). */
 export type PreviewAction = PreviewActionBody & { view?: ViewId };
 type PreviewActionBody =
@@ -33,12 +37,26 @@ type PreviewActionBody =
   | { kind: "preview.setCreatorLighting"; key: "exposure"; value: number }
   | { kind: "preview.setCreatorShadows"; enabled: boolean }
   | { kind: "preview.resetCreatorLighting" }
+  // Lighting setups (lighting-setups.ts). Every change to the shown setup's values forks a built-in first.
+  | { kind: "preview.selectLightingSetup"; setup: string }
+  | { kind: "preview.createLightingSetup"; from: string }
+  | { kind: "preview.renameLightingSetup"; setup: string; name: string }
+  | { kind: "preview.deleteLightingSetup"; setup: string }
+  | { kind: "preview.resetLightingSetup"; setup: string }
   | { kind: "preview.setExposure"; value: number }
+  | { kind: "preview.setRoomLight"; value: number }
+  | { kind: "preview.setBackdrop"; backdrop: SetupBackdrop }
+  | { kind: "preview.setDisplayTransform"; display: SetupDisplay }
+  | { kind: "preview.setLight"; light: string; key: LightNumberKey; value: number }
+  | { kind: "preview.setLightColour"; light: string; colour: string }
+  | { kind: "preview.setLightShadows"; light: string; enabled: boolean }
+  | { kind: "preview.setLightType"; light: string; type: LightType }
+  | { kind: "preview.renameLight"; light: string; name: string }
+  | { kind: "preview.aimLightAtHead"; light: string }
+  | { kind: "preview.addLight"; type: LightType }
+  | { kind: "preview.removeLight"; light: string }
+  /** The key light's azimuth (the shown setup's `key` light, else its first directional light): scripts and evidence tools. */
   | { kind: "preview.setKeyAngle"; degrees: number }
-  | { kind: "preview.setStudioLight"; key: StudioLightKey; value: number }
-  | { kind: "preview.setStudioNeutral"; enabled: boolean }
-  | { kind: "preview.applyStudioSetup"; setup: StudioSetupId }
-  | { kind: "preview.resetStudioLighting" }
   | { kind: "preview.setEyeShape"; index: number }
   | { kind: "preview.setPiercings"; enabled: boolean }
   | { kind: "preview.setBody"; enabled: boolean }
@@ -52,8 +70,19 @@ export type EyeShapeOptions = { choices: FaceMorphChoice[]; eyesFollow: boolean;
 /** The lighting device's read-only report: which rig is shown and where its colour grading came from. */
 export type LightingStatus = { preset: LightingPreset; sex: BodySex; defaultExposure: number;
   lut: { phase: "idle" | "loading" | "ready"; source: GradingLutSource | null } };
-/** The studio stage's named setups and the one the current lights match exactly (null once adjusted). Read-only; not persisted. */
-export type StudioSetupsView = { active: StudioSetupId | null; setups: { id: StudioSetupId; label: string; title: string }[] };
+/** One light as the editor shows it: placement about the setup's focus, the colour as sRGB hex, the cone in degrees. */
+export type LightView = { id: string; name: string; type: LightType; azimuth: number; elevation: number; distance: number; colour: string;
+  intensity: number; cone: number; softness: number; shadows: boolean };
+/**
+ * The lighting setups for the presentation (read-only; the setups themselves persist in the view graph's lights node): the one flat
+ * list, built-in templates first, the shown setup, and the shown setup's values for its editor.
+ */
+export type LightingSetupsView = {
+  active: string;
+  setups: { id: string; label: string; title: string; builtIn: boolean; base: BuiltInSetupId; baseLabel: string; display: SetupDisplay }[];
+  shown: { id: string; label: string; builtIn: boolean; baseLabel: string; resettable: boolean; display: SetupDisplay; backdrop: SetupBackdrop;
+    environment: number; exposure: number; exposureRange: { min: number; max: number }; lights: LightView[]; shadowCasters: number };
+};
 /** Persisted workspace bounds before a head is loaded (the female creator's 22 choices). */
 export const MAX_EYE_SHAPE_INDEX = EYE_SHAPE_RANGE.max;
 export type PreviewPort = {
@@ -61,9 +90,11 @@ export type PreviewPort = {
   restoreCamera(camera: CameraState): void;
   /** The view's orbit distance limits now (derived from its lens, aspect and scene: camera-framing.ts). Absent: the whole stored range. */
   distanceLimits?(): DistanceLimits;
-  setExposure(value: number): void; setLightAngle(degrees: number): void;
-  /** The studio stage's strengths, key elevation and tint (studio-lighting.ts). Absent on a preview without the adjustable rig. */
-  setStudioLights?(lights: StudioLights): void;
+  /**
+   * Light the view by a setup (lighting-setup-stage.ts): a complete definition, or the built-in game rig, which the device resolves for
+   * the body it shows. Absent on a preview without the lighting stage.
+   */
+  setLighting?(source: LightingSource): void;
   setSurfaceControls(enabled: boolean): void; setWire(enabled: boolean): void; setNormals(enabled: boolean): void;
   setEyeOptics(enabled: boolean): void; setHair(enabled: boolean): void;
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
@@ -74,21 +105,22 @@ export type PreviewPort = {
   eyeShapeOptions?(): EyeShapeOptions;
   setDetail(detail: "brows" | "lashes", enabled: boolean): void;
   availability?(target: "brows" | "lashes" | "hair"): string | undefined;
-  /** Lighting presets (creator-lighting.ts). Absent on a preview without the creator rig. */
-  setLightingPreset?(preset: LightingPreset): void;
-  setCreatorLighting?(options: CreatorLightingOptions): void;
   creatorCamera?(page: CreatorCameraPage): CameraState;
   lightingStatus?(): LightingStatus;
   onLightingStatus?(listener: () => void): () => void;
 };
 const NO_CREATOR = "Creator lighting is unavailable in this preview.";
 const NO_BODY = "This preview shows the head only.";
-const CREATOR_FIXED = "Creator lighting uses the game's own lights and fixed exposure. Switch to Studio lighting to adjust this.";
-const NO_STUDIO_RIG = "Studio light controls are unavailable in this preview.";
-const STUDIO_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setExposure", "preview.setKeyAngle", "preview.setStudioLight",
-  "preview.setStudioNeutral", "preview.applyStudioSetup", "preview.resetStudioLighting"]);
-const STUDIO_LIGHT_LABELS: Record<StudioLightKey, string> = { environment: "Environment strength", key: "Key light strength",
-  elevation: "Key light height", fill: "Fill light strength", rim: "Rim light strength" };
+const NO_LIGHTING = "Lighting controls are unavailable in this preview.";
+/** Actions that change the shown setup's values: on a built-in they fork it first. */
+const SETUP_EDITS = new Set<PreviewAction["kind"]>(["preview.setExposure", "preview.setRoomLight", "preview.setBackdrop", "preview.setDisplayTransform",
+  "preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType", "preview.renameLight", "preview.aimLightAtHead",
+  "preview.addLight", "preview.removeLight", "preview.setKeyAngle"]);
+/** Actions that name one of the shown setup's lights. */
+const LIGHT_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType",
+  "preview.renameLight", "preview.aimLightAtHead", "preview.removeLight"]);
+const LIGHT_NUMBER_LABELS: Record<LightNumberKey, string> = { azimuth: "direction", elevation: "height", distance: "distance", intensity: "strength",
+  cone: "cone", softness: "cone softness" };
 
 
 /** Undo labels in the View and lighting history (design §3.6). */
@@ -138,11 +170,9 @@ export class PreviewActions {
     const next = this.shownFields(), was = this.applied, port = this.port;
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     this.applied = next;
-    if (next.rig !== was.rig) port.setLightingPreset?.(next.rig);
-    if (changed(next.lights.creatorLighting, was.lights.creatorLighting)) port.setCreatorLighting?.(next.lights.creatorLighting);
-    if (changed(next.lights.studioLights, was.lights.studioLights)) port.setStudioLights?.(next.lights.studioLights);
-    if (next.lights.exposure !== was.lights.exposure) port.setExposure(next.lights.exposure);
-    if (next.lights.lightAngle !== was.lights.lightAngle) port.setLightAngle(next.lights.lightAngle);
+    const lighting = (f: Shown) => lightingSource({ setup: f.lights.setup, setups: f.lights.setups }, f.lights.creatorLighting);
+    const source = lighting(next);
+    if (changed(source, lighting(was))) port.setLighting?.(source);
     if (next.scene.eyeShape !== was.scene.eyeShape) port.setEyeShape(next.scene.eyeShape);
     if (next.scene.normals !== was.scene.normals) port.setNormals(next.scene.normals);
     if (next.scene.eyeOwnRoughness !== was.scene.eyeOwnRoughness) port.setEyeOptics(next.scene.eyeOwnRoughness ?? true);
@@ -200,49 +230,19 @@ export class PreviewActions {
       const invalid = validNavigation(action.command);
       if (invalid) return refusal("invalid_value", invalid);
     }
-    if (action.kind === "preview.setExposure" && !validStudioExposure(action.value))
-      return refusal("invalid_value", `Exposure must be between ${STUDIO_EXPOSURE_RANGE.min} and ${STUDIO_EXPOSURE_RANGE.max}.`);
-    if (action.kind === "preview.setKeyAngle" && (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360))
-      return refusal("invalid_value", "Key light angle must be between 0° and 360°.");
-    if ((action.kind === "preview.setStudioLight" || action.kind === "preview.setStudioNeutral") && !this.port.setStudioLights)
-      return refusal("unavailable", NO_STUDIO_RIG);
-    if (action.kind === "preview.setStudioNeutral" && typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
-    if (action.kind === "preview.setStudioLight") {
-      if (!STUDIO_LIGHT_KEYS.includes(action.key)) return refusal("invalid_value", "That studio light setting does not exist.");
-      if (!validStudioLightValue(action.key, action.value)) {
-        const range = STUDIO_LIGHT_RANGES[action.key];
-        return refusal("invalid_value", `${STUDIO_LIGHT_LABELS[action.key]} must be between ${range.min} and ${range.max}.`);
-      }
-    }
-    if (action.kind === "preview.applyStudioSetup") {
-      if (!this.port.setStudioLights) return refusal("unavailable", NO_STUDIO_RIG);
-      if (!Object.hasOwn(STUDIO_SETUPS, action.setup)) return refusal("invalid_value", "That lighting setup does not exist.");
-    }
-    if (action.kind === "preview.resetStudioLighting") {
-      if (!this.port.setStudioLights) return refusal("unavailable", NO_STUDIO_RIG);
-      if (isDefaultStudioStage(this.studioStage(action.view))) return refusal("unavailable", "The studio lighting is already at its defaults.");
-    }
-    // Under the creator preset these studio controls are not wrong, they belong to the other mode (UI-56).
-    if (STUDIO_ACTIONS.has(action.kind) && state.rig === "creator")
-      return refusal("incompatible_mode", CREATOR_FIXED);
-    if (action.kind === "preview.setLightingPreset") {
-      if (!LIGHTING_PRESETS.includes(action.preset)) return refusal("invalid_value", "That lighting preset does not exist.");
-      if (action.preset === "creator" && !this.port.setLightingPreset) return refusal("unavailable", NO_CREATOR);
-    }
+    if (action.kind.startsWith("preview.") && this.lightingAction(action) && !this.port.setLighting) return refusal("unavailable", NO_LIGHTING);
+    const lighting = this.checkLighting(action, state.lights);
+    if (lighting) return lighting;
+    if (action.kind === "preview.setLightingPreset" && !LIGHTING_PRESETS.includes(action.preset)) return refusal("invalid_value", "That lighting preset does not exist.");
     if (action.kind === "preview.setCreatorLighting") {
-      if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
       const valid = action.key === "intensity" ? INTENSITY_FORMS.includes(action.value)
         : action.key === "cone" ? CONE_READINGS.includes(action.value)
           : action.key === "exposure" && Number.isFinite(action.value) && action.value >= CREATOR_EXPOSURE_RANGE.min && action.value <= CREATOR_EXPOSURE_RANGE.max;
       if (!valid) return refusal("invalid_value", action.key === "exposure"
         ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist.");
     }
-    if (action.kind === "preview.setCreatorShadows") {
-      if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
-      if (typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
-    }
+    if (action.kind === "preview.setCreatorShadows" && typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
     if (action.kind === "preview.resetCreatorLighting") {
-      if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
       const current = state.lights.creatorLighting;
       if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
         && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure && current.shadows === DEFAULT_CREATOR_LIGHTING.shadows) return refusal("unavailable", "The calibration is already at its defaults.");
@@ -289,22 +289,19 @@ export class PreviewActions {
           this.jump(view, action.page === "face" ? "Creator face camera" : "Creator hair camera",
             () => { this.port.restoreCamera(this.port.creatorCamera!(action.page)); });
           break;
-        case "preview.setLightingPreset":
-          this.graph.edit(view, "lights", { kind: action.preset }, { label: action.preset === "creator" ? "Creator lighting" : "Studio lighting" }); break;
+        case "preview.setLightingPreset": {
+          // Scripts: the creator shows Character creator; the studio shows Soft studio unless an ACES setup already shows.
+          const library = this.library(view);
+          if (action.preset === "creator") this.write(view, { ...library, setup: "creator" }, "Lighting: Character creator");
+          else if (rigKindOf(library) === "creator") this.write(view, { ...library, setup: "soft" }, "Lighting: Soft studio");
+          break;
+        }
         case "preview.setCreatorLighting":
           lights({ creatorLighting: { ...state.lights.creatorLighting, [action.key]: action.value } }, "Creator lighting calibration",
             `creator.${action.key}`); break;
         case "preview.setCreatorShadows":
           lights({ creatorLighting: { ...state.lights.creatorLighting, shadows: action.enabled } }, action.enabled ? "Creator shadows on" : "Creator shadows off"); break;
         case "preview.resetCreatorLighting": lights({ creatorLighting: { ...DEFAULT_CREATOR_LIGHTING } }, "Restore creator calibration"); break;
-        case "preview.setExposure": lights({ exposure: action.value }, "Exposure", "exposure"); break;
-        case "preview.setKeyAngle": lights({ lightAngle: action.degrees }, "Key light direction", "angle"); break;
-        case "preview.setStudioLight":
-          lights({ studioLights: { ...state.lights.studioLights, [action.key]: action.value } }, STUDIO_LIGHT_LABELS[action.key], `studio.${action.key}`); break;
-        case "preview.setStudioNeutral": lights({ studioLights: { ...state.lights.studioLights, neutral: action.enabled } }, "Untinted lights"); break;
-        case "preview.applyStudioSetup":
-          this.applyStudioStage(view, STUDIO_SETUPS[action.setup], `Studio lighting: ${STUDIO_SETUPS[action.setup].label}`); break;
-        case "preview.resetStudioLighting": this.applyStudioStage(view, DEFAULT_STUDIO_STAGE, "Restore studio lighting"); break;
         case "preview.setEyeShape": scene({ eyeShape: action.index }, "Eye shape"); break;
         case "preview.setPiercings": display({ piercings: action.enabled }, shown(action.enabled, "piercings")); break;
         case "preview.setBody": display({ body: action.enabled }, shown(action.enabled, "the body")); break;
@@ -317,6 +314,9 @@ export class PreviewActions {
         case "preview.setHair": display({ hair: action.enabled }, shown(action.enabled, "hair")); break;
         case "preview.setDetail":
           display({ [action.detail]: action.enabled }, shown(action.enabled, action.detail === "brows" ? "eyebrows" : "eyelashes")); break;
+        default:
+          if (action.kind.startsWith("preview.") && this.lightingAction(action)) this.dispatchLighting(view, action);
+          break;
       }
     } finally { this.dispatching = false; }
     this.notify();
@@ -336,18 +336,164 @@ export class PreviewActions {
   cameraStep(direction: "back" | "forward", view?: ViewId): boolean {
     return this.graph.cameraStep(this.target(view), direction, { pose: this.port.cameraState() });
   }
-  /** The named studio setups for the presentation, and which one the stage matches. */
-  studioSetups(): StudioSetupsView {
-    return { active: matchingStudioSetup(this.studioStage()),
-      setups: STUDIO_SETUP_IDS.map(id => ({ id, label: STUDIO_SETUPS[id].label, title: STUDIO_SETUPS[id].title })) };
+  // ----- Lighting setups (lighting-setups.ts) -----
+
+  /** Whether an action is one of the setup and light actions (the creator calibration's included). */
+  private lightingAction(action: PreviewAction): boolean {
+    return SETUP_EDITS.has(action.kind) || action.kind === "preview.selectLightingSetup" || action.kind === "preview.createLightingSetup" ||
+      action.kind === "preview.renameLightingSetup" || action.kind === "preview.deleteLightingSetup" || action.kind === "preview.resetLightingSetup" ||
+      action.kind === "preview.setLightingPreset" || action.kind === "preview.setCreatorLighting" || action.kind === "preview.setCreatorShadows" ||
+      action.kind === "preview.resetCreatorLighting";
   }
-  /** The studio stage as the controls set it: the rig, exposure and key angle. */
-  studioStage(view?: ViewId) {
+  private library(view?: ViewId): SetupLibrary { const lights = this.fields(view).lights; return { setup: lights.setup, setups: lights.setups }; }
+  /** The body the device lights (the built-in creator rig and its forks follow it). */
+  private sex(): BodySex { return this.port.lightingStatus?.()?.sex ?? "female"; }
+  /** The shown setup's complete definition for the body shown. */
+  private shownSetup(view?: ViewId): LightingSetup {
     const lights = this.fields(view).lights;
-    return { lights: { ...lights.studioLights }, exposure: lights.exposure, angle: lights.lightAngle };
+    return setupDefinition({ setup: lights.setup, setups: lights.setups }, lights.setup, this.sex(), lights.creatorLighting);
   }
-  private applyStudioStage(view: ViewId, stage: { lights: Readonly<StudioLights>; exposure: number; angle: number }, label: string) {
-    this.graph.edit(view, "lights", { state: { studioLights: { ...stage.lights }, exposure: stage.exposure, lightAngle: stage.angle } }, { label });
+  /** Write a library into the view's lights node, with the rig kind its shown setup draws through, as one View and lighting step. */
+  private write(view: ViewId, library: SetupLibrary, label: string, coalesce?: string) {
+    this.graph.edit(view, "lights", { kind: rigKindOf(library), state: { setup: library.setup, setups: library.setups } }, { label, coalesce });
+  }
+  /** Change the shown setup's values (forking a built-in first); a change that changes nothing records nothing and forks nothing. */
+  private editShown(view: ViewId, label: string, change: (setup: LightingSetup) => LightingSetup, coalesce?: string) {
+    const lights = this.fields(view).lights, library = this.library(view), sex = this.sex();
+    const before = setupDefinition(library, library.setup, sex, lights.creatorLighting);
+    if (JSON.stringify(change(structuredClone(before))) === JSON.stringify(before)) return;
+    this.write(view, editShownSetup(library, sex, lights.creatorLighting, change), label, coalesce);
+  }
+  /** The light `setKeyAngle` turns: the shown setup's `key` light, else its first directional light. */
+  private keyLight(setup: LightingSetup) {
+    return setup.lights.find(light => light.id === "key" && light.type === "directional") ?? setup.lights.find(light => light.type === "directional");
+  }
+  /** Refusals for the setup and light actions (undefined: no objection). */
+  private checkLighting(action: PreviewAction, lights: LightsState): (PreviewCapability & { code?: ReasonCode }) | undefined {
+    const library = { setup: lights.setup, setups: lights.setups };
+    const exists = (id: unknown) => setupExists(library, id);
+    const own = (id: string, verb: string) => !exists(id) ? refusal("missing_target", "That lighting setup no longer exists.")
+      : isBuiltInSetup(id) ? refusal("incompatible_mode", `${builtInInfo(id).label} is built in and can't be ${verb}. Make your own setup from it to change it.`) : undefined;
+    const full = library.setups.length >= LIGHTING_LIMITS.setups;
+    const fullReason = `You have ${LIGHTING_LIMITS.setups} lighting setups, the most a workspace keeps. Delete one first.`;
+    switch (action.kind) {
+      case "preview.selectLightingSetup": return exists(action.setup) ? undefined : refusal("invalid_value", "That lighting setup doesn't exist.");
+      case "preview.createLightingSetup":
+        if (!exists(action.from)) return refusal("invalid_value", "That lighting setup doesn't exist.");
+        return full ? refusal("unavailable", fullReason) : undefined;
+      case "preview.renameLightingSetup":
+        return own(action.setup, "renamed") ?? (validSetupName(action.name) ? undefined
+          : refusal("invalid_value", `A setup name needs 1 to ${LIGHTING_LIMITS.name} characters.`));
+      case "preview.deleteLightingSetup": return own(action.setup, "deleted");
+      case "preview.resetLightingSetup": {
+        const refused = own(action.setup, "reset");
+        if (refused) return refused;
+        const setup = findUserSetup(library, action.setup)!;
+        return differsFromBase(setup, this.sex(), lights.creatorLighting) ? undefined
+          : refusal("unavailable", `${setup.name} already matches ${builtInInfo(setup.base).label}.`);
+      }
+    }
+    if (!SETUP_EDITS.has(action.kind)) return;
+    // Changing a built-in makes a copy, which needs room in the list.
+    if (isBuiltInSetup(library.setup) && full) return refusal("unavailable", `${fullReason} Changing a built-in setup makes a copy of it.`);
+    const shown = setupDefinition(library, library.setup, this.sex(), lights.creatorLighting);
+    const light = "light" in action ? shown.lights.find(item => item.id === action.light) : undefined;
+    if (LIGHT_ACTIONS.has(action.kind) && !light) return refusal("missing_target", "That light isn't in this setup any more.");
+    const outside = (what: string, range: { min: number; max: number }) => refusal("invalid_value", `${what} must be between ${range.min} and ${range.max}.`);
+    switch (action.kind) {
+      case "preview.setExposure": {
+        const range = SETUP_EXPOSURE_RANGES[shown.display];
+        return Number.isFinite(action.value) && action.value >= range.min && action.value <= range.max ? undefined : outside("Exposure", range);
+      }
+      case "preview.setRoomLight":
+        return Number.isFinite(action.value) && action.value >= SETUP_ENVIRONMENT_RANGE.min && action.value <= SETUP_ENVIRONMENT_RANGE.max
+          ? undefined : outside("Room light", SETUP_ENVIRONMENT_RANGE);
+      case "preview.setBackdrop": return SETUP_BACKDROPS.includes(action.backdrop) ? undefined : refusal("invalid_value", "That backdrop doesn't exist.");
+      case "preview.setDisplayTransform": return SETUP_DISPLAYS.includes(action.display) ? undefined : refusal("invalid_value", "That display doesn't exist.");
+      case "preview.setLight": {
+        if (!LIGHT_NUMBER_KEYS.includes(action.key)) return refusal("invalid_value", "That light setting doesn't exist.");
+        const range = LIGHT_RANGES[action.key];
+        if (!Number.isFinite(action.value) || action.value < range.min || action.value > range.max) return outside(`The ${LIGHT_NUMBER_LABELS[action.key]}`, range);
+        if ((action.key === "cone" || action.key === "softness") && light!.type !== "spot")
+          return refusal("incompatible_mode", "A directional light has no cone. Make it a spot light to shape one.");
+        return;
+      }
+      case "preview.setLightColour": return parseColourHex(action.colour) ? undefined : refusal("invalid_value", "Choose a colour as #rrggbb.");
+      case "preview.setLightShadows":
+        if (typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
+        return action.enabled && !light!.shadows && shadowCasters(shown) >= LIGHTING_LIMITS.shadowCasters
+          ? refusal("unavailable", `At most ${LIGHTING_LIMITS.shadowCasters} lights can cast shadows at once. Turn one off first.`) : undefined;
+      case "preview.setLightType": return LIGHT_TYPES.includes(action.type) ? undefined : refusal("invalid_value", "That kind of light doesn't exist.");
+      case "preview.renameLight": return validSetupName(action.name) ? undefined : refusal("invalid_value", `A light's name needs 1 to ${LIGHTING_LIMITS.name} characters.`);
+      case "preview.addLight":
+        if (!LIGHT_TYPES.includes(action.type)) return refusal("invalid_value", "That kind of light doesn't exist.");
+        return shown.lights.length >= LIGHTING_LIMITS.lights
+          ? refusal("unavailable", `A setup holds at most ${LIGHTING_LIMITS.lights} lights. Remove one first.`) : undefined;
+      case "preview.setKeyAngle":
+        if (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360) return refusal("invalid_value", "Key light angle must be between 0° and 360°.");
+        return this.keyLight(shown) ? undefined : refusal("unavailable", "This setup has no directional light to turn.");
+    }
+    return;
+  }
+  private dispatchLighting(view: ViewId, action: PreviewAction) {
+    const lights = this.fields(view).lights, library = this.library(view), sex = this.sex(), calibration = lights.creatorLighting;
+    const lightName = (id: string) => this.shownSetup(view).lights.find(light => light.id === id)?.name ?? "Light";
+    switch (action.kind) {
+      case "preview.selectLightingSetup": this.write(view, { ...library, setup: action.setup }, `Lighting: ${setupLabel(library, action.setup)}`); break;
+      case "preview.createLightingSetup":
+        this.write(view, createSetup(library, action.from, sex, calibration), `New lighting setup from ${setupLabel(library, action.from)}`); break;
+      case "preview.renameLightingSetup": this.write(view, renameSetup(library, action.setup, action.name), "Rename lighting setup"); break;
+      case "preview.deleteLightingSetup": this.write(view, deleteSetup(library, action.setup), `Delete ${setupLabel(library, action.setup)}`); break;
+      case "preview.resetLightingSetup":
+        this.write(view, resetSetup(library, action.setup, sex, calibration),
+          `Reset ${setupLabel(library, action.setup)} to ${builtInInfo(setupBase(library, action.setup)).label}`); break;
+      case "preview.setExposure": this.editShown(view, "Exposure", setup => ({ ...setup, exposure: action.value }), "exposure"); break;
+      case "preview.setRoomLight": this.editShown(view, "Room light", setup => ({ ...setup, environment: action.value }), "room"); break;
+      case "preview.setBackdrop":
+        this.editShown(view, action.backdrop === "black" ? "Black backdrop" : "Studio backdrop", setup => ({ ...setup, backdrop: action.backdrop })); break;
+      case "preview.setDisplayTransform":
+        this.editShown(view, action.display === "game" ? "Game colour grade" : "Studio tone mapping", setup => setSetupDisplay(setup, action.display, calibration)); break;
+      case "preview.setLight":
+        this.editShown(view, `${lightName(action.light)} ${LIGHT_NUMBER_LABELS[action.key]}`, setup => setLightNumber(setup, action.light, action.key, action.value),
+          `light.${action.light}.${action.key === "azimuth" || action.key === "elevation" || action.key === "distance" ? "place" : action.key}`); break;
+      case "preview.setLightColour":
+        this.editShown(view, `${lightName(action.light)} colour`, setup => setLightColour(setup, action.light, parseColourHex(action.colour)!), `light.${action.light}.colour`); break;
+      case "preview.setLightShadows":
+        this.editShown(view, `${lightName(action.light)} shadows ${action.enabled ? "on" : "off"}`, setup => setLightShadows(setup, action.light, action.enabled)); break;
+      case "preview.setLightType":
+        this.editShown(view, `${lightName(action.light)}: ${action.type} light`, setup => setLightType(setup, action.light, action.type)); break;
+      case "preview.renameLight": this.editShown(view, "Rename light", setup => renameLight(setup, action.light, action.name)); break;
+      case "preview.aimLightAtHead": this.editShown(view, `Aim ${lightName(action.light)} at the head`, setup => aimLightAtHead(setup, action.light)); break;
+      case "preview.addLight": this.editShown(view, `Add a ${action.type} light`, setup => addLight(setup, action.type).setup); break;
+      case "preview.removeLight": this.editShown(view, `Remove ${lightName(action.light)}`, setup => removeLight(setup, action.light)); break;
+      case "preview.setKeyAngle": {
+        const key = this.keyLight(this.shownSetup(view))!;
+        this.editShown(view, "Key light direction", setup => setLightNumber(setup, key.id, "azimuth", action.degrees), `light.${key.id}.place`); break;
+      }
+    }
+  }
+  /** The setups for the presentation: one flat list (built-in templates first, then the person's own) and the shown setup's values. */
+  lightingSetups(view?: ViewId): LightingSetupsView {
+    const lights = this.fields(view).lights, library = this.library(view), sex = this.sex();
+    const shown = setupDefinition(library, library.setup, sex, lights.creatorLighting), user = findUserSetup(library, library.setup);
+    const base = setupBase(library, library.setup);
+    return {
+      active: library.setup,
+      setups: [
+        ...BUILT_IN_SETUP_IDS.map(id => ({ id, ...builtInInfo(id), builtIn: true, base: id, baseLabel: builtInInfo(id).label,
+          display: (id === "creator" ? "game" : "aces") as SetupDisplay })),
+        ...library.setups.map(setup => ({ id: setup.id, label: setup.name, title: `Your setup, made from ${builtInInfo(setup.base).label}`, builtIn: false,
+          base: setup.base, baseLabel: builtInInfo(setup.base).label, display: setup.setup.display })),
+      ],
+      shown: {
+        id: library.setup, label: setupLabel(library, library.setup), builtIn: !user, baseLabel: builtInInfo(base).label,
+        resettable: !!user && differsFromBase(user, sex, lights.creatorLighting), display: shown.display, backdrop: shown.backdrop,
+        environment: shown.environment, exposure: shown.exposure, exposureRange: { ...SETUP_EXPOSURE_RANGES[shown.display] },
+        lights: shown.lights.map(light => ({ id: light.id, name: light.name, type: light.type, ...lightPlacement(light, shown.focus),
+          colour: colourHex(light.colour), intensity: light.intensity, cone: light.angle * 180 / Math.PI, softness: light.penumbra, shadows: light.shadows })),
+        shadowCasters: shadowCasters(shown),
+      },
+    };
   }
   /** Whether a view's scene simulates its dangles (the scene node's `physics`; off until the viewer turns it on). */
   scenePhysics(view?: ViewId): boolean { return this.fields(view).scene.physics === true; }

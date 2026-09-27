@@ -33,7 +33,7 @@ test("preview bootstrap restores saved V, scene, motion and camera in order with
   const preview: PreviewPort = {
     cameraState: () => camera, front: () => false, setFov: () => false,
     endFovGesture: () => {}, restoreCamera: next => { calls.push("camera"); camera = next; },
-    setExposure: () => calls.push("exposure"), setLightAngle: () => calls.push("light"),
+    setLighting: () => calls.push("lighting"),
     setSurfaceControls: () => calls.push("surface"), setWire: () => calls.push("wire"),
     setNormals: () => calls.push("normals"), setEyeOptics: () => calls.push("optics"),
     setHair: () => calls.push("hair"), setEyeShape: index => calls.push(`eye:${index}`),
@@ -110,8 +110,8 @@ test("the creator rig's body follows the applied save, derived by the saved-appe
   expect(source).toContain("setBodySex: sex => scene.lighting.setBodySex(sex)");
   expect(source).not.toContain("isMale");
   // The studio rig is part of the scene preview port, not spread in by the head attachment (PREV-69).
-  expect(source).toContain("setStudioLights: lights => scene.setStudioLights(lights)");
-  expect(readFileSync(resolve(import.meta.dir, "..", "src", "browser-head-attachment.ts"), "utf8")).not.toMatch(/setStudioLights|...scenePorts/);
+  expect(source).toContain("setLighting: source => scene.setLighting(source)");
+  expect(readFileSync(resolve(import.meta.dir, "..", "src", "browser-head-attachment.ts"), "utf8")).not.toMatch(/setLighting|...scenePorts/);
 });
 
 test("restoring the preview never changes the caller's workspace (CORE-25)", () => {
@@ -127,11 +127,11 @@ test("restoring the preview never changes the caller's workspace (CORE-25)", () 
   const noop = () => {};
   const preview: PreviewPort = {
     cameraState: () => workspace.preview.camera!, front: () => false, setFov: () => false, endFovGesture: noop, restoreCamera: noop,
-    setExposure: noop, setLightAngle: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop,
+    setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop,
     setHair: noop, setEyeShape: noop, setPiercings: noop, setDetail: noop,
     availability: target => target === "brows" ? "Unavailable" : undefined,
     eyeShapeOptions: () => ({ choices: [], eyesFollow: false, eyeSource: null }),
-    setLightingPreset: noop, setCreatorLighting: noop,
+    setLighting: noop,
   };
   const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
   const services = createTrustedPreviewServices(workspace, { savedAppearance: { apply: () => applied }, preview, motion });
@@ -152,7 +152,7 @@ test("the preview services leave the tried piercing style to the character servi
   const noop = () => {};
   const preview: PreviewPort = {
     cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false, endFovGesture: noop, restoreCamera: noop,
-    setExposure: noop, setLightAngle: noop, setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop,
+    setSurfaceControls: noop, setWire: noop, setNormals: noop, setEyeOptics: noop,
     setHair: noop, setEyeShape: noop, setPiercings: enabled => calls.push(`piercings:${enabled}`), setDetail: noop,
   };
   const motion: MotionPort = { available: false, blink: { available: false }, setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
@@ -165,7 +165,7 @@ test("the preview services leave the tried piercing style to the character servi
 test("the eye's own roughness is on by default, also for a workspace that stored the retired opt-in off; turning it off is stored", () => {
   const values: boolean[] = [];
   const port = (): PreviewPort => ({ cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
-    endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {}, setWire: () => {},
+    endFovGesture: () => {}, restoreCamera: () => {}, setSurfaceControls: () => {}, setWire: () => {},
     setNormals: () => {}, setEyeOptics: enabled => values.push(enabled), setHair: () => {}, setEyeShape: () => {}, setPiercings: () => {}, setDetail: () => {} });
   const motion: MotionPort = { available: false, blink: { available: false }, idle: undefined, setIdle: () => {}, setIdlePaused: () => {},
     setIdleContributions: () => {}, setBlink: () => {}, animateBlink: () => {} } as unknown as MotionPort;

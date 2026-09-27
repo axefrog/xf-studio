@@ -68,7 +68,7 @@ test("rule 7: the module registration is complete, and an incomplete one says wh
 function recordingPreviewPort(calls: string[]): PreviewPort {
   const camera = { position: [0, 1.6, -0.6], target: [0, 1.6, 0.005], fov: 30 };
   return { cameraState: () => camera, front: () => false, setFov: () => false, endFovGesture: () => {}, restoreCamera: () => {},
-    setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: enabled => calls.push(`surface:${enabled}`),
+    setLighting: () => {}, setSurfaceControls: enabled => calls.push(`surface:${enabled}`),
     setWire: enabled => calls.push(`wire:${enabled}`), setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setEyeShape: () => {},
     setPiercings: () => {}, setDetail: () => {} };
 }
