@@ -22,6 +22,20 @@ export function shownModules(port: Pick<Port, "preferences" | "views">): string[
   const chosen = port.preferences.snapshot().modules ?? {};
   return port.views.modules().filter(module => chosen[module.id] ?? module.shownByDefault).map(module => module.id);
 }
+/**
+ * Where the dock must change so each module's panels match whether it shows (CORE-115): the panels of a shown module the dock lacks
+ * come back, and those of a hidden module the dock holds leave (parked). The one path from the modules preference to the dock: the
+ * Modules menu, the palette and a typed `modules.set` from anywhere all end here, so they never disagree. Nothing to do: empty lists.
+ */
+export function modulePanelChanges<Module extends { id: string }, Panel extends string>(modules: readonly Module[], shown: readonly string[],
+  panelsOf: (module: Module) => readonly Panel[], docked: (panel: Panel) => boolean): { add: Panel[]; remove: Panel[] } {
+  const on = new Set(shown), add: Panel[] = [], remove: Panel[] = [];
+  for (const module of modules) for (const panel of panelsOf(module)) {
+    if (on.has(module.id) && !docked(panel)) add.push(panel);
+    else if (!on.has(module.id) && docked(panel)) remove.push(panel);
+  }
+  return { add, remove };
+}
 /** The filter every derived view-tool list uses: the shown modules and whether research tools show. */
 export function toolFilter(port: Pick<Port, "preferences" | "views">) {
   return { modules: shownModules(port), research: !!port.preferences.snapshot().researchTools };

@@ -234,11 +234,19 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
  * a minute idle (native-decode.ts), and the next request starts another. The texture exporter keeps one set, the mesh exporter
  * (native-geometry-export.ts) another, so textures and meshes decode side by side.
  */
+/**
+ * How long a texture or mesh worker may sit idle before it exits. Such a worker keeps 60–190 MB (its heap and the archive indexes it read)
+ * until it exits, and its work comes in bursts (a V, one click's parts), so it goes after 15 s rather than the resolver decoder's minute
+ * (DESK-08). Starting one again costs about 35 ms with its first texture, against the hundreds of milliseconds a new part takes anyway.
+ */
+export const MEDIA_WORKER_IDLE_MS = 15_000;
+
 export class NativeDecoders {
   private readonly decoders = new Map<string, { stamp: string; opened: Promise<OpenedDecoder>; at: number }>();
   constructor(private readonly options: { script?: string | URL; open?: (gameRoot: string) => Promise<OpenedDecoder>; log?: (message: string) => void;
     env?: Record<string, string | undefined>;
     /** Time budget per request in the worker (default: a texture's). */ timeoutMs?: number;
+    /** How long a worker may sit idle before it exits (default: `MEDIA_WORKER_IDLE_MS`). */ idleMs?: number;
     /** What the decoder reads, for the log line when it can't be opened (default: textures). */ label?: { reader: string; what: string };
     /** An environment variable that turns this reader alone off when "0" (besides `XFS_NATIVE_READER`), for comparisons. */ offSwitch?: string } = {}) {}
 
@@ -254,7 +262,8 @@ export class NativeDecoders {
       entry = undefined;
     }
     const timeoutMs = this.options.timeoutMs ?? NATIVE_TEXTURE_TIMEOUT_MS;
-    const open = this.options.open ?? (root => openNativeDecoderAsync(root, { timeoutMs, ...(this.options.script ? { script: this.options.script } : {}) }));
+    const idleMs = this.options.idleMs ?? MEDIA_WORKER_IDLE_MS;
+    const open = this.options.open ?? (root => openNativeDecoderAsync(root, { timeoutMs, idleMs, ...(this.options.script ? { script: this.options.script } : {}) }));
     const opened = open(gameRoot).catch((error: unknown): OpenedDecoder => ({ decoder: null, reason: String((error as Error)?.message ?? error), permanent: false }));
     this.decoders.set(gameRoot, { stamp, opened, at: Date.now() });
     const settled = await opened;

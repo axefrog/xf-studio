@@ -118,10 +118,10 @@ test("NATIVE-03/07: package values are contiguous and in order, nesting is cappe
   hdr.u16(0);
   refusedQuickly(() => readPackage(hdr.done(), "entEntityTemplate.compiledData"), NativeMalformedError, 500);
 
-  // Well-formed but 300 levels deep: refused by the nesting cap, not by a stack overflow.
+  // Well-formed but deeper than the nesting cap: refused by the cap, not by a stack overflow.
   const deepNames = ["Vector3", "f"];
   let value = packageStruct(deepNames, []);
-  for (let i = 0; i < 300; i++) value = packageStruct(deepNames, [{ name: "f", type: "Vector3", value }]);
+  for (let i = 0; i < DEFAULT_LIMITS.maxDepth + 100; i++) value = packageStruct(deepNames, [{ name: "f", type: "Vector3", value }]);
   const deep = buildPackage({ names: deepNames, refs: [], cruids: [], rootIndex: 0, objects: [{ type: "Vector3", fields: [{ name: "f", type: "Vector3", write: w => { w.bytes(value.subarray(0)); } }] }] });
   refusedQuickly(() => readPackage(deep, "entEntityTemplate.compiledData"), NativeBudgetError, 500);
   // 50 levels decode.
@@ -285,11 +285,27 @@ test("NATIVE-13: a long handle chain is refused by the nesting cap, in decoding 
   for (let i = 0; i < 10_000; i++) chain.export("CMaterialInstance", i + 1 < 10_000 ? [prop("next", "handle:CMaterialInstance", v.handle(i + 1))] : []);
   refusedQuickly(() => json(chain.build()), NativeBudgetError, 2000);
   // Decoding in file order stays shallow here, but writing in key order walks the whole chain: the writer is capped too.
-  const n = 1000, file = new Cr2wBuilder();
+  const n = DEFAULT_LIMITS.maxDepth + 500, file = new Cr2wBuilder();
   file.export("XfsTestRoot", [prop("zz", "array:handle:XfsTestNode", v.array(Array.from({ length: n }, (_, i) => v.handle(n - i)))), prop("aa", "handle:XfsTestNode", v.handle(1))]);
   for (let k = 1; k <= n; k++) file.export("XfsTestNode", k < n ? [prop("next", "handle:XfsTestNode", v.handle(k + 1))] : []);
   const error = refusedQuickly(() => json(file.build()), NativeBudgetError, 2000);
   expect(error.message).toContain("nest deeper");
+});
+
+test("PIPE-114: a handle chain as deep as the vanilla body deformation graphs (844 levels) decodes, and the cap holds well inside the stack", () => {
+  const chain = (n: number) => {
+    const file = new Cr2wBuilder();
+    for (let i = 0; i < n; i++) file.export("CMaterialInstance", i + 1 < n ? [prop("next", "handle:CMaterialInstance", v.handle(i + 1))] : []);
+    return file.build();
+  };
+  // The real graphs nest 844 (woman) and 840 (man) levels: one constraint chain of handles.
+  const graph = readResource(chain(844), fakeDecompress);
+  expect(graph.usage.depth).toBeGreaterThanOrEqual(844);
+  // At the cap itself decoding, deriving and writing still fit the call stack (a handle chain overflows near 5,400 levels).
+  const atCap = readResource(chain(DEFAULT_LIMITS.maxDepth - 2), fakeDecompress);
+  expect(atCap.usage.depth).toBeLessThanOrEqual(DEFAULT_LIMITS.maxDepth);
+  expect(DEFAULT_LIMITS.maxDepth * 2).toBeLessThan(5000);
+  refusedQuickly(() => readResource(chain(DEFAULT_LIMITS.maxDepth + 10), fakeDecompress), NativeBudgetError, 2000);
 });
 
 test("NATIVE-14: caches keyed by type names from files stay bounded", () => {
@@ -527,6 +543,47 @@ test("NATIVE-42: the worker loop releases what its opener loaded when told to cl
   send({ type: "init", decompressor: { test: "fake" }, roots: [], limits: DEFAULT_LIMITS, identity: "t" });
   await Bun.sleep(1);
   expect(replies).toEqual([{ type: "ready" }]);
+  send({ type: "close" });
+  expect([released, ended]).toEqual([1, 1]);
+});
+
+test("DESK-08: a worker whose queue has drained is told once to trim, and again only after more work; it still exits when idle", async () => {
+  const { decoder, workers } = fakeDecoder({ trimMs: 20, idleMs: 120 });
+  try {
+    const first = decoder.decode(decodeRequest("1"));
+    workers[0]!.emit("message", { type: "ready" });
+    workers[0]!.emit("message", { type: "outcome", id: workers[0]!.lastDecode.id, outcome: answer("one") });
+    await first;
+    // Work arriving before the pause is up postpones the trim.
+    await Bun.sleep(5);
+    const second = decoder.decode(decodeRequest("2"));
+    workers[0]!.emit("message", { type: "outcome", id: workers[0]!.lastDecode.id, outcome: answer("two") });
+    await second;
+    expect(workers[0]!.sent.map(message => message.type)).toEqual(["init", "decode", "decode"]);
+    await Bun.sleep(40);
+    expect(workers[0]!.sent.map(message => message.type as string)).toEqual(["init", "decode", "decode", "trim"]);
+    // Nothing done since: no second trim; then the idle exit as before.
+    await Bun.sleep(130);
+    expect(workers[0]!.sent.map(message => message.type as string)).toEqual(["init", "decode", "decode", "trim", "close"]);
+  } finally { decoder.close(); }
+});
+
+test("DESK-08: the worker loop trims by letting go of its archive indexes and collecting, and keeps serving", async () => {
+  const { serveDecodes } = await import("../src/native/native-decode-serve");
+  const listeners: ((event: { data: unknown }) => void)[] = [], replies: unknown[] = [];
+  let released = 0, ended = 0;
+  serveDecodes({ addEventListener: (_type, listener) => { listeners.push(listener); }, postMessage: message => { replies.push(message); }, close: () => { ended++; } },
+    () => ({ decompress: fakeDecompress, close: () => { released++; } }));
+  const send = (data: unknown) => { for (const listener of listeners) listener({ data }); };
+  // A trim before the worker is set up is harmless.
+  send({ type: "trim" });
+  send({ type: "init", decompressor: { test: "fake" }, roots: [], limits: DEFAULT_LIMITS, identity: "t" });
+  await Bun.sleep(1);
+  send({ type: "trim" });
+  // A trim answers nothing, releases no library and doesn't end the worker; a decode after it is still answered.
+  expect([replies, released, ended]).toEqual([[{ type: "ready" }], 0, 0]);
+  send({ type: "decode", id: 7, request: decodeRequest("1") });
+  expect(replies.at(-1)).toMatchObject({ type: "outcome", id: 7 });
   send({ type: "close" });
   expect([released, ended]).toEqual([1, 1]);
 });

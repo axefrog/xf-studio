@@ -18,7 +18,7 @@ import { boundJson, DIAGNOSTIC_LIMITS, type DiagnosticEntry, type TraceEntry } f
 import { redactValue, textRedactor, type KnownRoot } from "./redact";
 import type { HostDiagnostics } from "./host-log";
 import { processPersonalRoots } from "./host-roots";
-import { involvedMods, MOD_FILE_LIMIT, REPORT_LIMIT } from "./mod-identity";
+import { involvedMods, MOD_FILE_LIMIT, type OwnInstall, readOwnInstalls, REPORT_LIMIT } from "./mod-identity";
 import { formatBytes, previewOf, REPORT_MANIFEST_SCHEMA, type ReportFacts, type ReportGroup, type ReportItemView, type ReportManifest } from "./report";
 
 export type HostAppFacts = { version: string; commit: string | null; channel: string | null; host: "localhost" | "desktop" };
@@ -35,6 +35,8 @@ export type HostReportSources = {
   resolverCache?: string | null;
   /** Time a report spends hashing mod files before using their size and date (`HASH_BUDGET_MS`; tests set it). */
   hashBudgetMs?: number;
+  /** Folders of XF Studio's install receipts, so the mods it built and placed are named as its own (PIPE-116). */
+  installReceipts?: () => readonly string[];
 };
 /** The rolling window's share of a report file; its newest events are kept. */
 export const TRACE_REPORT_BYTES = 4 * 1024 * 1024;
@@ -305,7 +307,9 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
   const state = diagnostics.trace.state();
   const resources = resolutionResources(resolved, prepared);
   const winnerList = winners(resources);
-  const mods = await involvedMods(winnerList, settings, undefined, { hashBudgetMs: sources.hashBudgetMs,
+  let ownInstalls: OwnInstall[] = [];
+  try { ownInstalls = readOwnInstalls(sources.installReceipts?.() ?? []); } catch { /* Then no mod is recognised as XF Studio's. */ }
+  const mods = await involvedMods(winnerList, settings, undefined, { hashBudgetMs: sources.hashBudgetMs, ownInstalls,
     progress: (done, total) => { if (total) progress(`Fingerprinting the mod files involved (${done} of ${total})…`); } });
   progress("Putting the report together…");
   const full = fullResources(resources, sources.resolverCache);

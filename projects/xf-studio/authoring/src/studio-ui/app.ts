@@ -27,7 +27,7 @@ import { mountGuidance, type GuidanceController } from "./guidance/controller";
 import type { ViewComposition, ViewContext } from "./views/panels";
 import { featureCommands, featureViewContext, moduleViewContext } from "./views/feature-context";
 import type { FeatureViewContext, ModuleViewContext } from "./views/feature-view";
-import { Frame, StudioRuntime, type Port } from "./runtime";
+import { Frame, modulePanelChanges, StudioRuntime, type Port } from "./runtime";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance/desktop-app-sheet";
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
@@ -168,10 +168,22 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     if (!module || rt.shownModules().includes(id) === shown) return;
     if (!shown) finishInput();
     if (!setPreference(port, feedback, { kind: "modules.set", module: id, shown }, `${module.label} ${shown ? "shown" : "hidden"}`)) return;
+    placeModules();
+  }
+  /**
+   * Bring the dock in line with the modules preference (CORE-115): the menu above calls it at once, and every paint checks it, so a
+   * `modules.set` dispatched through the port by anything else places (or parks) the module's panels the same way. A saved layout's
+   * switch loads its own arrangement first, so there is nothing left to do by then.
+   */
+  let placedModules = rt.shownModules().join(",");
+  function placeModules() {
+    const shown = rt.shownModules();
+    placedModules = shown.join(",");
+    const { add, remove } = modulePanelChanges(modules, shown, panelsOf, panel => !!dock.panel(panel));
+    if (!add.length && !remove.length) return;
+    if (remove.length) { finishInput(); dock.removePanels(remove); }
+    if (add.length) dock.addPanels(add.map(panel => specOf(byId.get(panel)!)));
     withdrawUnoffered();
-    const ids = panelsOf(module);
-    if (shown) dock.addPanels(ids.map(panel => specOf(byId.get(panel)!)));
-    else dock.removePanels(ids);
     schedule();
   }
   rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
@@ -208,6 +220,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   const paint = () => {
     queued = false;
+    // A module shown or hidden through the port (a typed `modules.set`) places its panels as the Modules menu does (CORE-115).
+    if (rt.shownModules().join(",") !== placedModules) placeModules();
     // The research preference may have changed: its tools are withdrawn or offered again before anything reads the tools.
     withdrawUnoffered();
     const frame = new Frame(port);

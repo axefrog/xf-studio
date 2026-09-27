@@ -12,6 +12,7 @@ import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { activate, allGroups, applyDrop, closePanel, locate, openShares, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
+import { modulePanelChanges } from "../src/studio-ui/runtime";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
 import { parseUIPreferences, UIPreferenceActions } from "../src/ui-preferences";
 import { EYE_MAKEUP_GRANDFATHERED_PANELS } from "../src/features/eye-makeup/view/contribution";
@@ -219,4 +220,19 @@ test("module visibility is a bounded presentation preference, stored only where 
   expect(actions.capability({ kind: "modules.set", module: "", shown: true }).available).toBe(false);
   actions.dispatch({ kind: "modules.set", module: "eye-makeup", shown: false });
   expect(actions.snapshot().modules).toEqual({ "eye-makeup": false });
+});
+
+test("CORE-115: one path places a module's panels from the modules preference, whoever set it", () => {
+  const modules = [{ id: "eye-makeup" }, { id: "character" }, { id: "poses" }];
+  const panels: Record<string, string[]> = { "eye-makeup": ["layers", "shape"], character: ["character"], poses: ["poses"] };
+  const panelsOf = (module: { id: string }) => panels[module.id] ?? [];
+  const dock = new Set(["layers", "shape", "poses"]);
+  // A typed `modules.set` showed Character and hid Poses: Character's panel comes back, Poses' is parked.
+  expect(modulePanelChanges(modules, ["eye-makeup", "character"], panelsOf, panel => dock.has(panel))).toEqual({ add: ["character"], remove: ["poses"] });
+  // Once the dock matches (the Modules menu, a layout's switch, or an earlier paint placed them), there is nothing left to do.
+  expect(modulePanelChanges(modules, ["eye-makeup", "poses"], panelsOf, panel => dock.has(panel))).toEqual({ add: [], remove: [] });
+  // The shown list comes from the preference, as the menu's does.
+  const actions = new UIPreferenceActions();
+  actions.dispatch({ kind: "modules.set", module: "poses", shown: false });
+  expect(actions.snapshot().modules).toEqual({ poses: false });
 });

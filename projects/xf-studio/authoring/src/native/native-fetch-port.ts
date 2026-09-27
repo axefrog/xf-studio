@@ -86,7 +86,9 @@ const refusal = (error: unknown) => ({ reader: null, reason: (error as Error).me
 type ReaderOptions = { limits?: NativeLimits };
 type DecoderOptions = { timeoutMs?: number; limits?: NativeLimits; roots?: ReadonlySet<string>;
   /** The worker script: a packaged host's bundle of native-decode-worker.ts (the source file next to the reader otherwise). */
-  script?: string | URL };
+  script?: string | URL;
+  /** How long the worker may sit idle before it exits (native-decode.ts `DEFAULT_WORKER_IDLE_MS` otherwise). */
+  idleMs?: number };
 
 function readerOver(oodle: OodleLibrary, limits: NativeLimits = DEFAULT_LIMITS): NativeReader {
   const pool = new NativeArchivePool(oodle.decompress, 64, limits);
@@ -120,7 +122,7 @@ function workerDecoderFor(gameRoot: string, opened: Opened<NativeReader>, option
   const { identity, oodleSha256 } = opened.reader;
   opened.reader.close();
   return { decoder: new WorkerDecoder({ decompressor: { gameRoot, trustedSha256: oodleSha256 }, roots: options.roots ?? NATIVE_ROOTS, limits: options.limits, identity,
-    timeoutMs: options.timeoutMs, ...(options.script ? { script: options.script } : {}) }) };
+    timeoutMs: options.timeoutMs, ...(options.script ? { script: options.script } : {}), ...(options.idleMs !== undefined ? { idleMs: options.idleMs } : {}) }) };
 }
 
 /**

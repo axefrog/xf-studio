@@ -152,6 +152,11 @@ export type WorkerDecompressor = { readonly gameRoot: string; readonly trustedSh
 
 /** What a worker is told when it has been idle: release the library and exit (NATIVE-42). */
 export interface WorkerCloseMessage { readonly type: "close" }
+/**
+ * What a worker is told once its queue has drained for a moment: collect its garbage now (DESK-08). A texture or mesh leaves tens to
+ * hundreds of MB behind in the worker's heap, which otherwise stays committed until the worker exits a minute later.
+ */
+export interface WorkerTrimMessage { readonly type: "trim" }
 
 /** What a worker is told at start. */
 export interface WorkerInit {
@@ -182,7 +187,7 @@ export type WorkerReply =
 
 /** The part of a `Worker` the decoder uses, so a test can drive one by hand. */
 export interface DecodeWorker {
-  postMessage(message: WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerGeometryMessage | WorkerAnimMessage | WorkerCloseMessage): void;
+  postMessage(message: WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerGeometryMessage | WorkerAnimMessage | WorkerCloseMessage | WorkerTrimMessage): void;
   addEventListener(type: "message" | "error" | "close", listener: (event: any) => void): void;
   terminate(): unknown;
 }
@@ -205,6 +210,8 @@ export interface WorkerDecoderOptions {
    * the file while the Studio stays open (NATIVE-42); the next request starts a new worker (well under a second).
    */
   readonly idleMs?: number;
+  /** How long a worker's queue must have been empty before it is told to collect its garbage (`WorkerTrimMessage`). */
+  readonly trimMs?: number;
   /** The worker script (defaults to native-decode-worker.ts next to this module). */
   readonly script?: URL | string;
   /** Starts a worker (tests inject one; the default is `new Worker(script)`). */
@@ -218,6 +225,11 @@ export const DEFAULT_WORKER_START_TIMEOUT_MS = 15_000;
 export const DEFAULT_WORKER_RESTART_DELAY_MS = 60_000;
 export const DEFAULT_WORKER_MAX_START_FAILURES = 3;
 export const DEFAULT_WORKER_IDLE_MS = 60_000;
+/**
+ * A pause in the queue long enough that the burst of work (a V's textures, one click's reads) is over. The trim lets go of the archive
+ * indexes the worker read (re-reading one takes milliseconds: 6–9 ms for an 81,000-entry content archive) and collects its heap.
+ */
+export const DEFAULT_WORKER_TRIM_MS = 5_000;
 /** How long an idle worker told to close may take to exit before it is terminated. */
 const CLOSE_GRACE_MS = 5_000;
 /** Let a timer not keep the process alive. */
@@ -256,6 +268,9 @@ export class WorkerDecoder implements NativeDecoder {
   private unavailableUntil = 0;
   private unavailableReason = "";
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private trimTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Whether the current worker has done work since it last collected its garbage. */
+  private untrimmed = false;
   /** Workers started (1 + replacements after timeouts, crashes or start retries). */
   started = 0;
 
@@ -353,11 +368,24 @@ export class WorkerDecoder implements NativeDecoder {
     this.send();
   }
 
-  private clearIdle(): void { if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; } }
-  /** Nothing queued or in progress: after `idleMs`, the worker releases the library and goes (NATIVE-42). */
+  private clearIdle(): void {
+    if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
+    if (this.trimTimer) { clearTimeout(this.trimTimer); this.trimTimer = null; }
+  }
+  /**
+   * Nothing queued or in progress: after `trimMs` the worker collects its garbage (once per burst of work, DESK-08), and after `idleMs`
+   * it releases the library and goes (NATIVE-42).
+   */
   private idleLater(): void {
     if (this.busy || this.closed || !this.current || this.queue.length || this.backgroundQueue.length) return;
     this.clearIdle();
+    if (this.untrimmed) this.trimTimer = unref(setTimeout(() => {
+      this.trimTimer = null;
+      const current = this.current;
+      if (this.busy || this.closed || !current?.ready) return;
+      this.untrimmed = false;
+      try { current.worker.postMessage({ type: "trim" }); } catch { /* Ended: nothing to trim. */ }
+    }, this.options.trimMs ?? DEFAULT_WORKER_TRIM_MS));
     this.idleTimer = unref(setTimeout(() => {
       this.idleTimer = null;
       const current = this.current;
@@ -388,6 +416,7 @@ export class WorkerDecoder implements NativeDecoder {
     if (!busy || busy.sent || !current?.ready) return;
     const { worker } = current, id = busy.id;
     busy.sent = true;
+    this.untrimmed = true;
     busy.timer = setTimeout(() => this.timeout(worker, id), this.budget(busy.pending.request));
     const pending = busy.pending;
     worker.postMessage(pending.kind === "texture" ? { type: "texture", id, request: pending.request }

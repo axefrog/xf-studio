@@ -34,6 +34,22 @@ export function animatedComponents(root: JsonObject): { name: string; rig: strin
   return out;
 }
 
+/**
+ * Rig refusals already logged, by rig, graph file content and reason (PIPE-115): a graph that isn't evaluated yet is refused on every V
+ * and choice-preview derivation (about 60 times while one hairstyle grid draws), so the log says it once per rig and game build (a game
+ * update or a mod replacing the graph changes its content hash) instead of crowding the app log a problem report carries. Bounded.
+ */
+const loggedRefusals = new Set<string>();
+const MAX_LOGGED_REFUSALS = 256;
+/** Log a rig refusal the first time it is seen; true when it was logged. */
+export function logRigRefusalOnce(key: string, line: string, log?: (line: string) => void): boolean {
+  if (!log || loggedRefusals.has(key)) return false;
+  if (loggedRefusals.size >= MAX_LOGGED_REFUSALS) loggedRefusals.clear();
+  loggedRefusals.add(key);
+  log(line);
+  return true;
+}
+
 const refOf = (text: string) => /^[0-9]+$/.test(text) ? refFromHash(text) : refFromPath(text);
 
 /** Compile the deformation rigs of the player puppet for a body gender. Failures become plain notes, never errors. */
@@ -71,8 +87,9 @@ export async function puppetDeformationRigs(graph: ResourceGraph, gender: BodyGe
       if (program.skipped.length) notes.push(`The player's ${component.name} rig uses parts XF Studio doesn't evaluate yet (${program.skipped.join(", ")}).`);
     } catch (error) {
       if (!(error instanceof DeformationRigError)) throw error;
-      // The technical reason goes to the log; the note stays plain.
-      log?.(`${component.name} rig: ${error.message}`);
+      // The technical reason goes to the log, once per rig and graph file; the note stays plain.
+      const graphFile = animGraph.provenance.extractedSha256 ?? `${animGraph.provenance.archive ?? ""}|${component.graph}`;
+      logRigRefusalOnce([component.name, component.graph, graphFile, error.message].join("\n"), `${component.name} rig: ${error.message}`, log);
       notes.push(`The player's ${component.name} rig isn't evaluated yet, so the joints only it moves hold the pose the body's animation and its other rigs give them.`);
     }
   }
