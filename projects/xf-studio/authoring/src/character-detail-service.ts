@@ -209,10 +209,11 @@ async function loadTemplates(graph: ResourceGraph, templates: Iterable<Provenanc
   const wanted = new Map<string, Provenance>();
   for (const template of templates) {
     const key = refLabel(template.ref).toLowerCase();
-    if (!cache.identities.has(key) && /\.mt$/i.test(key)) wanted.set(key, template);
+    // Both template kinds are `CMaterialTemplate`s: `.mt` and the engine's `.remt` (`metal_base.remt` is named `metal_base`) [resource].
+    if (!cache.identities.has(key) && /\.(?:mt|remt)$/i.test(key)) wanted.set(key, template);
   }
   await Promise.all([...wanted].map(async ([key, template]) => {
-    const loaded = await graph.load(template.ref, "mt");
+    const loaded = await graph.load(template.ref, /\.remt$/i.test(key) ? "remt" : "mt");
     const identity = templateIdentity(loaded?.root);
     cache.identities.set(key, identity);
     if (!renderTemplate(key, identity.name)) return;

@@ -10,7 +10,8 @@
  * - **Morph** options on the head shape the head and every drawn part carrying the same `(target, region)` pair
  *   (face-morphs.ts).
  * - An **appearance** option on one of the preview's detail slots (`DETAIL_UI_SLOTS`: skin type, brows, lashes, hair,
- *   eyes, teeth, piercings) that the third-person head consumes is drawn as that detail.
+ *   eyes, teeth, piercings) that the third-person head consumes is drawn as that detail; any appearance in the hairstyle controller's
+ *   group (`HAIR_GROUP`: a multi-part hairstyle's part rows on slots of their own) is drawn as the hair.
  * - Any other head appearance consumed by the head's face groups (`FACE_GROUPS`) is drawn **when its parts are face
  *   decals** (the `mesh_decal` family: makeup, tattoos, scars, face cyberware); other parts are not.
  *   Which case applies is known only after resolving a choice, so the status is `conditional`; `refineCoverage` settles
@@ -24,7 +25,7 @@
  * Coverage is the preview's projection of a catalogue (`catalogueCoverage`), computed when it is asked for, never stored in
  * the catalogue: a host-cached catalogue stays right when the preview learns to draw more (CORE-60).
  */
-import { bodyGroups, bodyOptionDraws, bodyRole, DETAIL_UI_SLOTS, FACE_GROUPS, slotGroups, type CensorOption } from "./character-detail-plan";
+import { bodyGroups, bodyOptionDraws, bodyRole, DETAIL_UI_SLOTS, FACE_GROUPS, HAIR_GROUP, slotGroups, type CensorOption } from "./character-detail-plan";
 import type { CcoPart } from "./cco-model";
 import type { CcCatalogue } from "./cc-catalogue";
 import type { DetailSlot } from "./render-detail";
@@ -86,7 +87,8 @@ export function renderCoverage(options: readonly CoverageInput[], bodyGender: "f
     }
     if (option.type === "morph") return { status: "rendered", detail: "morph", note: "Shapes the head and the parts that follow it." };
     if (option.type !== "appearance" || !option.hasResource) return { status: "not-rendered", detail: null, note: NOT_CONSUMED };
-    const slot = DETAIL_UI_SLOTS[option.uiSlot];
+    // Everything the hairstyle controller draws is hair, whatever its slot: a multi-part hairstyle's part rows (PREV-109).
+    const slot = DETAIL_UI_SLOTS[option.uiSlot] ?? (option.groups.includes(HAIR_GROUP) ? "hair" : undefined);
     if (slot && option.groups.some(group => slotGroups(slot).includes(group)))
       return { status: "rendered", detail: slot, note: `Drawn as ${WORDS[slot]}.` };
     if (option.groups.some(group => FACE_GROUPS.includes(group))) return { status: "conditional", detail: "face", note: CONDITIONAL };

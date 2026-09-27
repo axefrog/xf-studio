@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { descriptorsFromUiState } from "../src/cco-model";
 import type { CharacterChoice } from "../src/character-context";
 import { characterRequestFor, characterRequestFromSave, DEFAULT_CHARACTER, inputFromCharacterRequest, parseCharacterRequest } from "../src/character-detail-request";
-import { bodyOptionDraws, bodyRole, type BodyCensorship, censorRole, choiceLabel, planCharacterDetails, requiredCovers, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character-detail-plan";
+import { bodyOptionDraws, bodyRole, type BodyCensorship, censorRole, choiceLabel, detailSlotOf, hairLabels, parseVector, planCharacterDetails, requiredCovers, previewInput, skinLabel, teethLabel, type TemplateIdentities } from "../src/character-detail-plan";
 import { templateIdentity } from "../src/character-detail-service";
 import { loadMergedCco, resolveCharacter, type ResolvedParam } from "../src/character-resolver";
 import { depotHash, refFromPath, refLabel } from "../src/depot-path";
 import { templateDefaults } from "../src/material-template";
 import { renderTemplate } from "../src/render-templates";
 import type { SavedV } from "../src/save-reader";
-import { BODY, BODY_MASK, BODY_REQUEST, detailFixture, EYE_MASK, eyeRequest, FACE, P, REQUEST_A, REQUEST_B, TEETH, teethRequest, TONES } from "./character-detail-fixtures";
+import { BODY, BODY_MASK, BODY_REQUEST, detailFixture, EYE_MASK, eyeRequest, FACE, MCH_REQUEST, P, REQUEST_A, REQUEST_B, TEETH, teethRequest, TONES } from "./character-detail-fixtures";
 
 async function plan(request: typeof REQUEST_A | "default", fixture = detailFixture(), state: Record<string, string> = {}, censorship: BodyCensorship = "censored") {
   const { graph } = fixture.installation();
@@ -20,8 +20,8 @@ async function plan(request: typeof REQUEST_A | "default", fixture = detailFixtu
   const resolved = await resolveCharacter(graph, input, cco);
   const defaults = new Map<string, ResolvedParam[]>();
   const identities = new Map<string, { name: string | null; priority: string | null }>() as Map<string, { name: string | null; priority: string | null }>;
-  for (const path of [P.hairMt, P.decalMt, P.capMt, P.skinMt, P.eyeMt, P.eyeGradMt, P.eyeShadowMt, P.layeredMt, P.meshDecalMt, P.emissiveMt, P.packFrontMt]) {
-    const loaded = await graph.load(refFromPath(path), "mt");
+  for (const path of [P.hairMt, P.decalMt, P.capMt, P.skinMt, P.eyeMt, P.eyeGradMt, P.eyeShadowMt, P.layeredMt, P.meshDecalMt, P.emissiveMt, P.packFrontMt, P.metalBaseRemt]) {
+    const loaded = await graph.load(refFromPath(path), path.endsWith(".remt") ? "remt" : "mt");
     identities.set(path.toLowerCase(), templateIdentity(loaded!.root));
     defaults.set(path.toLowerCase(), templateDefaults(loaded!.root).map(([name, value]) => ({ name, kind: value.kind, setBy: "template",
       value: value.kind === "scalar" ? JSON.stringify(value.value) : value.kind === "resource" ? value.text ?? "" : value.value,
@@ -149,6 +149,51 @@ describe("resolver selection for brows, lashes and hair", () => {
     expect(choiceLabel("female__05_brown_liquorice")).toBe("brown liquorice");
     expect(choiceLabel("38_ash_brown")).toBe("ash brown");
     expect(choiceLabel("01_blonde_platinum")).toBe("blonde platinum");
+  });
+});
+
+describe("resolver selection for multi-part hair and hair accessories", () => {
+  test("everything the hairstyle controller draws is hair: each part of a two-part hairstyle, and the earrings its base part carries", async () => {
+    const { plan: result } = await plan(MCH_REQUEST);
+    const hair = result.components.filter(c => c.slot === "hair");
+    // Both parts, on creator slots of their own, draw by the `hairs` consumer rule; the repeated creator-group entry adds nothing.
+    expect(hair.map(c => `${c.option}:${c.component}`)).toEqual(["mch_part_01:mch_base", "mch_part_01:mch_earrings", "mch_part_02:mch_face_frame"]);
+    expect(result.slots.find(s => s.slot === "hair")).toEqual({ slot: "hair", state: "shown", label: "hair base: brown, face frame: dark" });
+    // The accessory is the engine's metal template: its instance's colour map and scale, the template's defaults for the rest.
+    const earrings = hair.find(c => c.component === "mch_earrings")!.materials[0]!;
+    expect([earrings.templateName, renderTemplate(earrings.template, earrings.templateName)?.adapter]).toEqual(["metal_base", "metal-base"]);
+    expect(refLabel(earrings.textures.BaseColor!.ref)).toBe(P.accessoryD);
+    expect(Object.keys(earrings.textures).sort()).toEqual(["BaseColor", "Metalness", "Normal", "Roughness"]);
+    expect(earrings.scalars).toMatchObject({ "BaseColorScale.x": 0.5, "BaseColorScale.y": 0.25, "BaseColorScale.z": 1, "BaseColorScale.w": 1,
+      MetalnessBias: 0.8, MetalnessScale: 1, RoughnessScale: 1, NormalStrength: 1, LayerTile: 1 });
+    expect(earrings.scalars.BaseColorScale).toBeUndefined();
+    // Never a face detail.
+    expect(result.slots.find(s => s.slot === "face")).toEqual({ slot: "face", state: "none", label: "None" });
+  });
+
+  test("the hair slot of every option the hairstyle controller's group lists, whatever its creator slot", async () => {
+    const { graph } = detailFixture().installation();
+    const cco = (await loadMergedCco(graph, "female")).merged.cco;
+    const slots = detailSlotOf(cco);
+    expect([slots.get("hair_color1"), slots.get("mch_part_01"), slots.get("mch_part_02"), slots.get("hair_color_fpp_01")]).toEqual(["hair", "hair", "hair", undefined]);
+  });
+
+  test("hair labels: one colour for one option; each part's own creator label beside its colour for several", async () => {
+    const { graph } = detailFixture().installation();
+    const cco = (await loadMergedCco(graph, "female")).merged.cco;
+    expect(hairLabels(cco, [{ option: "hair_color1", definition: "female__05_brown_liquorice" }])).toEqual(["brown liquorice"]);
+    // In the creator's option order, not the save's; a part whose label is not readable reads by its position.
+    expect(hairLabels(cco, [{ option: "mch_part_02", definition: "dark" }, { option: "mch_part_01", definition: "05_brown_liquorice" }]))
+      .toEqual(["hair base: brown liquorice", "face frame: dark"]);
+    expect(hairLabels(cco, [{ option: "hair_color1", definition: "brown" }, { option: "mch_part_01", definition: "ash_brown" }]))
+      .toEqual(["part 1: brown", "hair base: ash brown"]);
+  });
+
+  test("a Vector4 parameter reads as four numbers; a component the serializer left out is 0", () => {
+    const param = (value: string): ResolvedParam => ({ name: "BaseColorScale", kind: "scalar", value, setBy: "test" });
+    expect(parseVector(param(JSON.stringify({ $type: "Vector4", X: 0.448, Y: 0.5, Z: 1 })))).toEqual([0.448, 0.5, 1, 0]);
+    expect(parseVector(param("0.5"))).toBeNull();
+    expect(parseVector(param(JSON.stringify({ $type: "Vector4", X: "1" })))).toBeNull();
   });
 });
 
@@ -321,16 +366,19 @@ describe("resolver selection for the teeth", () => {
     expect(result.slots.find(s => s.slot === "face")).toEqual({ slot: "face", state: "none", label: "None" });
   });
 
-  test("a metal or pink finish draws through the layered adapter; a chunk the preview has no adapter for is said plainly", async () => {
+  test("a metal or pink finish draws through the layered adapter; the unreached `metal_base.remt` appearance through the metal adapter", async () => {
     const gold = (await plan(teethRequest(TEETH.gold))).plan;
     const teeth = gold.components.find(c => c.slot === "teeth")!;
     expect(teeth.materials.map(m => [m.template, refLabel(m.layered!.setup.ref)])).toEqual([[P.layeredMt, P.silverSetup]]);
     expect(gold.slots.find(s => s.slot === "teeth")).toEqual({ slot: "teeth", state: "shown", label: "gold" });
-    // The unreached `default` appearance is `metal_base.remt`: nothing is drawn and nothing breaks.
+    // The unreached `default` appearance is `metal_base.remt`, whose own name the host reads (a `.remt` is a `CMaterialTemplate` too).
     const metal = (await plan(teethRequest(TEETH.metal))).plan;
-    expect(metal.components.filter(c => c.slot === "teeth")).toEqual([]);
-    expect(metal.slots.find(s => s.slot === "teeth")).toEqual({ slot: "teeth", state: "unavailable", label: "metal",
-      message: "XF Studio can't draw your V's teeth (metal) yet, so they aren't shown." });
+    const chunk = metal.components.find(c => c.slot === "teeth")!.materials[0]!;
+    expect([chunk.template, chunk.templateName, renderTemplate(chunk.template, chunk.templateName)?.adapter]).toEqual([P.metalBaseRemt, "metal_base", "metal-base"]);
+    // An instance that sets nothing takes the template's defaults: its grey colour, and the colour scale as four scalars.
+    expect(refLabel(chunk.textures.BaseColor!.ref)).toBe(P.grey);
+    expect([chunk.scalars["BaseColorScale.x"], chunk.scalars["BaseColorScale.y"], chunk.scalars["BaseColorScale.z"], chunk.scalars["BaseColorScale.w"]]).toEqual([1, 1, 1, 0]);
+    expect(metal.slots.find(s => s.slot === "teeth")).toEqual({ slot: "teeth", state: "shown", label: "metal" });
   });
 
   test("teeth labels: the finish, or natural without one", () => {

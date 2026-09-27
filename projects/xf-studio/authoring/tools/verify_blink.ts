@@ -8,7 +8,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { readdirSync, existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { GameBlink, parseGameBlink } from "../src/game-blink";
-import { extendSkin, restoreFirstWeights } from "../src/skin";
+import { extendSkin, restoreFirstWeights, skinSets } from "../src/skin";
 
 const app = resolve(import.meta.dir, "..");
 const cache = resolve(app, "data/preview-cache");
@@ -82,6 +82,27 @@ const dominantBone = (mesh: THREE.SkinnedMesh, i: number) => {
   for (let k = 0; k < 4; k++) if (weight.getComponent(i, k) > best) { best = weight.getComponent(i, k); bone = index.getComponent(i, k); }
   return mesh.skeleton.bones[bone]?.name ?? "";
 };
+/** A vertex's skin weights by joint name over every influence set (skinSets), lash joints folded into the lid joint they hang under. */
+const jointWeights = (mesh: THREE.SkinnedMesh, i: number, lidOf: (name: string) => string) => {
+  const out = new Map<string, number>();
+  for (const { j, w } of skinSets(mesh.geometry)) {
+    const index = mesh.geometry.getAttribute(j), weight = mesh.geometry.getAttribute(w);
+    for (let k = 0; k < 4; k++) {
+      const value = weight.getComponent(i, k), name = mesh.skeleton.bones[index.getComponent(i, k)]?.name;
+      if (value > 0 && name) out.set(lidOf(name), (out.get(lidOf(name)) ?? 0) + value);
+    }
+  }
+  return out;
+};
+/**
+ * How much of two vertices' skin weight follows the same joints (0 to 1: the sum over joints of the smaller weight). A lash root
+ * whose weights match the lid skin under it moves with that skin under any lid pose; a low value means the mesh is rigged to other
+ * joints than the skin it sits on, so it leaves that skin when the lid turns, in any renderer that skins it the engine's way.
+ */
+export const weightAgreement = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>) =>
+  [...a].reduce((sum, [name, value]) => sum + Math.min(value, b.get(name) ?? 0), 0);
+/** Lash roots whose weights agree with the lid skin under them at least this much (median) are held to the drift limit. */
+export const LASH_SKIN_AGREEMENT = 0.5;
 const positions = (mesh: THREE.Mesh) => Array.from({ length: mesh.geometry.getAttribute("position").count }, (_, i) =>
   mesh.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld));
 
@@ -101,6 +122,12 @@ export async function measureBlink(shapes = ["neutral", "h011_eyes", "h091_eyes"
   const blink = new GameBlink(blinkGltf.scene, clips, head.bones);
   blink.attach([...lashes, ...brows].flatMap(d => d.bones));
   const synthetic = syntheticStudy(head.scene);
+  // A lash joint (`eye_lid_lashes_*`) hangs under a lid joint in the game's rig and has no pose of its own (knowledge/facial-animation.md §2).
+  const lidOf = (name: string) => {
+    let node = blinkGltf.scene.getObjectByName(name) ?? null;
+    while (node && /_lashes_/.test(node.name) && node.parent) node = node.parent;
+    return node?.name || name;
+  };
   const detailMeshes = [...lashes, ...brows].flatMap(d => d.meshes);
   const originals = [...head.bones, ...lashes.flatMap(l => l.bones), ...brows.flatMap(b => b.bones)].map(b => b.matrixWorld.clone());
 
@@ -193,6 +220,14 @@ export async function measureBlink(shapes = ["neutral", "h011_eyes", "h091_eyes"
     all.sort((a, b) => a - b);
     return { vertices: all.length, medianMm: (all[all.length >> 1] ?? 0) * 1000, maxMm: max * 1000 };
   };
+  // Per lash component: the median weight agreement of its upper lash roots with the head vertex each sits on (at rest).
+  const skinAgreement = (sets: ReturnType<typeof anchors>) => {
+    const values: number[] = [];
+    for (const { mesh, picks } of sets) for (const { i, anchor } of picks)
+      values.push(weightAgreement(jointWeights(mesh as THREE.SkinnedMesh, i, lidOf), jointWeights(headMesh, anchor, lidOf)));
+    values.sort((a, b) => a - b);
+    return +(values[values.length >> 1] ?? 0).toFixed(3);
+  };
   const finite = () => [headMesh, plate, eyes, ...detailMeshes].every(mesh => positions(mesh).every(p => p.toArray().every(Number.isFinite)));
 
   const allMeshes = [headMesh, plate, eyes, ...detailMeshes];
@@ -203,6 +238,7 @@ export async function measureBlink(shapes = ["neutral", "h011_eyes", "h091_eyes"
       mesh.morphTargetInfluences![index] = name === shape ? 1 : 0;
     blink.setClosure(0); synthetic(0); world.updateMatrixWorld(true);
     const lashAnchors = lashes.map(l => ({ component: l.component, sets: anchors(l.meshes, upperLashes) }));
+    const lashSkinAgreement = Object.fromEntries(lashAnchors.map(({ component, sets }) => [component, skinAgreement(sets)]));
     const browAnchors = anchors(brows.flatMap(b => b.meshes));
     const plateAnchors = anchors([plate]);
     const open = exposed();
@@ -215,7 +251,7 @@ export async function measureBlink(shapes = ["neutral", "h011_eyes", "h091_eyes"
       upperLashRootDrift: Object.fromEntries(lashAnchors.map(({ component, sets }) => [component, drift(sets)])),
       browDrift: drift(browAnchors), plateDrift: drift(plateAnchors), label,
     });
-    const result: Record<string, unknown> = { openExposedCells: open };
+    const result: Record<string, unknown> = { openExposedCells: open, upperLashRootSkinAgreement: lashSkinAgreement };
     synthetic(1); world.updateMatrixWorld(true); result.synthetic = measure("retired synthetic study at 100%"); synthetic(0);
     const target = shape === "neutral" ? null : shape.replace(/_eyes$/, "");
     if (target) {
@@ -246,6 +282,7 @@ export async function measureBlink(shapes = ["neutral", "h011_eyes", "h091_eyes"
     limitations: ["Offline CPU skinning of local derived assets; the browser's GPU skinning uses the same bones and eight influences.",
       "Neutral and three eye shapes only; exposed eyeball is measured along the front view only.",
       "Detail attachment is measured against the nearest core-head vertex at rest; it is not an intersection proof.",
+      "Lash skin agreement compares each upper lash root's joint weights (lash joints folded into their lid joint) with its nearest head vertex's; a lash mesh below LASH_SKIN_AGREEMENT follows other joints than the lid skin it sits on, which linear skinning reproduces in any renderer.",
       "Not in-game evidence: no game graph, timing or rendering parity."] };
 }
 

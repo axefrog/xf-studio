@@ -198,6 +198,10 @@ By MaximiliumM and contributors. [GitHub](https://github.com/MaximiliumM/appeara
 
 [Beautiful EYEBROWS II](https://www.nexusmods.com/cyberpunk2077/mods/26168), [Beautiful EYEBROWS 2K Material Edit](https://www.nexusmods.com/cyberpunk2077/mods/18783), [Universal Skin Tone](https://www.nexusmods.com/cyberpunk2077/mods/15426), [Realistic Complexion III](https://www.nexusmods.com/cyberpunk2077/mods/19314) and [Character Rendering Editor](https://www.nexusmods.com/cyberpunk2077/mods/32842). The eyebrow mod taught us how ArchiveXL copy/patch declarations assemble complete resources from vanilla geometry, and how the game combines two alpha maps with a colour gradient for brows; it also showed that brow styles merge into the base game's brow row rather than adding a selector. The Material Edit showed the other route, replacing the base game's brow material and textures in place, which changes every NPC's brows too. The skin mods provided alternative skin maps for render-fidelity comparisons and showed how a complexion replacer works: same-path head textures plus replaced global skin resources, including the default skin profile the preview's skin lighting now reads. The Character Rendering Editor's list of hair, skin and eye rendering options with their vanilla values gave the preview's hair light its default tuning and names the runtime skin and rim-light options a capture must record. Private local reference only.
 
+### Atomiic
+
+[Smokey Diva Hair - Serena - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/29065), whose creator rows read "Atomiic - Serena Smokey Hair". Its fourth part mesh carries earrings and a hair pin on the engine's plain metal template, which showed that a hairstyle's own accessories are ordinary drawing components of its appearance and led the preview to draw that template. Studied only.
+
 ### Browser Extension
 
 By r457 and gh057, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/10038). Its small redscript framework showed how a mod adds a site to the in-game browser without replacing anything: a listener registers an address and icon for one browser, supplies its own page widget for that address, and joins a paginated home page that also lists every journal site. That is the basis of the terminal-content research. Studied only.
@@ -236,7 +240,8 @@ By Boe6, per its script headers. [Pachinko](https://www.nexusmods.com/cyberpunk2
 
 ### icxrus
 
-[Heterochromia Eyes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/20349) and [Soft Natural Eyelashes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/29582). Heterochromia Eyes is a clear example of independently selected components; Soft Natural Eyelashes supplies the lash geometry and material used in the preview and showed how dynamic colour profiles bind to custom meshes. Private local reference only.
+[Heterochromia Eyes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/20349), [Soft Natural Eyelashes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/29582) and [Lush Manga Eyelashes - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/28293). Heterochromia Eyes is a clear example of independently selected components; Soft Natural Eyelashes supplies the lash geometry and material used in the preview and showed how dynamic colour profiles bind to custom meshes. Soft Natural Eyelashes is a private local reference only. Lush Manga Eyelashes, studied only, showed that a lash mesh closes with the lid only as far as its weights follow the lid skin under it.
+
 
 ### A creator who asked not to be named (redacted-c01)
 
