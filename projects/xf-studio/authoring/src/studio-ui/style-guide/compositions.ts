@@ -1,7 +1,7 @@
 import { badge, btn, chip, code, empty, group, i, menuHeading, menuItem, menuSep, note, pattern, reasonTip, row, section, segmented, slider, toast, toggle } from "./kit";
 
 export function states() {
-  return section("states", "05", "Communicating state",
+  return section("states", "06", "Communicating state",
     `Four kinds of state must stay intelligible: the portable recipe/collection (authored work), the browser workspace (draft autosave, selections, view),
      immutable SQLite library revisions, and exported files. These patterns keep them apart in words and placement.`, [
     pattern({ id: "t-saved", title: "Saved versus unsaved", status: "implemented", wide: true,
@@ -49,11 +49,11 @@ const stage = (label: string) => `<div class="viewport-panel mock-stage"><div cl
 export function compositions() {
   const editing = `<div class="mock-shell">${mockHeader("Chrome dusk")}
     <div class="mock-dock wide-3 portrait-stage">
-      <div class="mock-col">${group([["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Chrome dusk", "3 layers", { preset: true, selected: true })}${row("Soft day", "1 layer", { preset: true })}</ol></div>`, { condensed: true })}
+      <div class="mock-col">${group([["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Chrome dusk", "3 layers", { preset: true, selected: true })}${row("Soft day", "1 layer", { preset: true })}</ol></div>`, { stage: "icons" })}
         ${group([["Layers", "layers"]], 0, `<div class="panel-content"><ol class="item-list">${row("Glitter veil", "Glitter · 60%", { swatch: "#8c6fb0", finish: "glitter", warn: true })}${row("Petal wash", "Matte · 85%", { swatch: "#b0587a", selected: true })}${row("Base", "Satin · 70%", { swatch: "#6b4450", finish: "regular" })}</ol></div>`)}</div>
       <div class="mock-col">${group([["3D view", "head"]], 0, stage("Chrome dusk › Petal wash"))}</div>
       <div class="mock-col" style="grid-template-rows: minmax(0, 2fr) minmax(0, 3fr)">${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}
-        ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"], ["Motion", "motion"], ["Preview quality", "quality"]], 0, `<div class="panel-content"><div class="layer-strip"><span class="swatch" style="--swatch:#b0587a"></span><div><strong>Petal wash</strong><span class="muted">2 of 3 from front</span></div></div>${slider("Opacity", .85, "85%")}</div>`, { condensed: true })}</div>
+        ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"], ["Motion", "motion"], ["Preview quality", "quality"]], 0, `<div class="panel-content"><div class="layer-strip"><span class="swatch" style="--swatch:#b0587a"></span><div><strong>Petal wash</strong><span class="muted">2 of 3 from front</span></div></div>${slider("Opacity", .85, "85%")}</div>`, { stage: "icons" })}</div>
     </div><footer class="status-bar"><button type="button" class="status-item status-message" data-tone="success">Saved “Chrome dusk” · version 4.</button><span class="grow"></span><span class="status-item ready-badge" data-phase="ready">Preview 1K · ready</span></footer></div>`;
   const library = `<div class="mock-shell">${mockHeader("Night market set", "Newer r5 saved")}<div class="mock-dock wide-2">
     ${group([["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 1, `<div class="panel-content"><section class="section"><h3 class="section-title">Local library</h3><p class="state-line warning">Your draft is based on revision 3; the library has revision 5 from elsewhere.</p><div class="row wrap gap-s">${btn("Save to library", { icon: "save", variant: "primary" })}${btn("Save a copy", { icon: "duplicate" })}</div></section>
@@ -64,14 +64,14 @@ export function compositions() {
       <div class="result-card ok"><div class="result-head"><strong>Check result</strong>${badge("Current", "success")}</div><p class="result-summary">3 of 4 presets can become mod files. This check created no files.</p><ul class="result-list"><li>${i("check")}<span>Chrome dusk</span></li><li>${i("check")}<span>Soft day</span></li></ul><div class="omissions"><span class="eyebrow">Omitted from the package</span><ul class="result-list"><li>${i("warning")}<span>Whole preset “Glitter night” — No active exportable layers remain.</span></li></ul></div></div></div>`)}
     ${group([["Layers", "layers"]], 0, `<div class="panel-content"><ol class="item-list">${row("Glitter veil", "Glitter · 60%", { swatch: "#8c6fb0", finish: "glitter", warn: true, selected: true })}</ol><div class="export-line">${badge("Preview only", "warning")}<span class="small">Preview only for now. Check and Build leave out layers with this finish and tell you which.</span></div></div>`)}</div></div>`;
   const compact = `<div class="mock-shell compact-mock">${mockHeader("Chrome dusk")}<div class="mock-dock compact-2"><div class="mock-row stage-row">${group([["3D view", "head"]], 0, stage("Petal wash"))}${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}</div>
-    <div class="mock-row">${group([["Layers", "layers"], ["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Petal wash", "Matte", { swatch: "#b0587a", selected: true })}</ol></div>`, { condensed: true })}
-    ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]], 0, `<div class="panel-content">${slider("Opacity", .85, "85%")}</div>`, { condensed: true })}</div></div></div>`;
+    <div class="mock-row">${group([["Layers", "layers"], ["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Petal wash", "Matte", { swatch: "#b0587a", selected: true })}</ol></div>`, { stage: "icons" })}
+    ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]], 0, `<div class="panel-content">${slider("Opacity", .85, "85%")}</div>`, { stage: "icons" })}</div></div></div>`;
   const future = `<div class="mock-shell future-mock">${mockHeader("Arched brows — draft", "Not saved yet", "Eyebrows (future)")}
     <div class="future-banner">${i("info")}<span>Future direction — illustration only. Eyebrow authoring is not built and needs discussion before any data model is chosen.</span></div>
     <div class="mock-dock wide-3"><div class="mock-col">${group([["Brow sets", "presets"], ["Library", "library"]], 0, `<div class="panel-content"><ol class="item-list">${row("Arched brows", "draft", { preset: true, selected: true })}</ol></div>`)}</div>
     <div class="mock-col">${group([["3D view", "head"]], 0, stage("Brows · Arched brows"))}</div>
     <div class="mock-col">${group([["Brow shape", "shape"], ["Brow material", "finish"]], 0, `<div class="panel-content">${segmented("Hair density", ["Sparse", "Natural", "Full"], 1)}${note("Its own concepts — not makeup layers or makeup finish families.")}</div>`)}</div></div></div>`;
-  return section("compositions", "06", "Compositions",
+  return section("compositions", "07", "Compositions",
     `Representative arrangements built from the patterns above. They are starting points users can rearrange, not fixed screens.`, [
     pattern({ id: "k-editing", title: "Eye-makeup editing (wide)", status: "implemented", wide: true, specimen: editing,
       what: "Stack on the left (presets over layers); the head in a full-height portrait column at the centre; the UV map over the selected layer's inspectors on the right, with the preview context (Character, Camera & light, Motion, Quality) one tab along.",
@@ -87,7 +87,7 @@ export function compositions() {
       when: "Before building: Check, read omissions, fix or accept them, then Build (confirmed in place).",
       combine: "Result freshness turns Stale as soon as the draft changes; the finish status and the omission list use the same catalogue wording." }),
     pattern({ id: "k-compact", title: "Compact workspace", status: "implemented", wide: true, specimen: compact,
-      what: "Head and UV map side by side above two condensed tab groups; the head keeps a portrait cell; header actions become icons. Condensed tabs shorten their labels but never become bare icons (UI-96).",
+      what: "Head and UV map side by side above two condensed tab groups; the head keeps a portrait cell; header actions become icons. Crowded tab strips condense in stages: shortened labels, then icon-only inactive tabs (named by tooltip and accessible name), then an overflow menu (UI-109).",
       when: "Windows narrower than 1100 px, tablets, or a narrow browser beside the game." }),
     pattern({ id: "k-future", title: "A future category joining", status: "future", wide: true, specimen: future,
       what: "How a later category (eyebrows is only an example) would join: an entry in the category switcher, its own panel registry and default layouts, reuse of the shell, dock, lists, controls, library and package patterns — and its own concepts.",
@@ -98,7 +98,7 @@ export function compositions() {
 }
 
 export function futures() {
-  return section("futures", "07", "Plausible future affordances",
+  return section("futures", "08", "Plausible future affordances",
     `Clearly labelled directions the information architecture already has room for. None of these is built; each needs its application actions first.
      They are here so today's patterns are chosen with them in mind.`, [
     pattern({ id: "x-history", title: "Revision history browser", status: "future",

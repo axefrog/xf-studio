@@ -1,4 +1,5 @@
 import { keyBinding, panelModifiersHeld } from "../../input-bindings";
+import { button } from "../controls";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
@@ -165,7 +166,7 @@ export class DockView {
     else this.surface.append(h("div", { class: "dock-empty" },
       h("p", { text: "Every panel is floating or closed." }),
       h("p", { class: "muted", text: "Drag a panel onto an edge guide, or reset the layout." }),
-      h("button", { class: "btn", type: "button", text: "Reset layout", onclick: () => this.reset() })));
+      button({ label: "Reset layout", onClick: () => this.reset() })));
     // Floating windows stay available above a maximized docked group.
     tree.floating.forEach((window, index) => this.floatingLayer.append(this.renderWindow(window, index, shown)));
     const previous = this.visible;
@@ -277,8 +278,7 @@ export class DockView {
     if (composite) {
       const bar = h("div", { class: "dock-window-bar", title: "Drag to move the composite" },
         icon("grip"), h("span", { text: `${titles.length} panels · magnetic composite` }),
-        h("button", { class: "icon-btn", type: "button", "aria-label": "Composite options", "aria-haspopup": "menu",
-          onclick: (event: MouseEvent) => this.openWindowMenu(window.id, event.currentTarget as Element) }, icon("more")));
+        iconButton({ label: "Composite options", icon: "more", menu: true, onClick: event => this.openWindowMenu(window.id, event.currentTarget as Element) }));
       bar.addEventListener("pointerdown", event => this.pointerDown(event, { kind: "window", windowId: window.id }, bar));
       element.append(bar);
     }

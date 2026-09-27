@@ -1,6 +1,7 @@
 import type { PreviewSetupAction, PreviewSetupButton } from "../preview-setup";
 import type { ReadonlyDeep } from "../read-only";
 import type { WolvenKitLink } from "../wolvenkit-setup";
+import { progressBar } from "./components/progress";
 import { applyCapability, button } from "./controls";
 import { h, setText, uid } from "./dom";
 import type { Frame, StudioRuntime } from "./runtime";
@@ -19,9 +20,7 @@ export function previewSetupCard(rt: StudioRuntime) {
   const titleId = "preview-card-title";
   const title = h("h2", { class: "setup-card-title", id: titleId, tabindex: "-1" });
   const body = h("p", { class: "setup-card-body", id: "preview-card-body" });
-  const fill = h("span", { class: "progress-fill" });
-  const bar = h("div", { class: "progress", id: "preview-card-progress", role: "progressbar", "aria-labelledby": titleId,
-    "aria-valuemin": "0", "aria-valuemax": "100" }, fill);
+  const cardProgress = progressBar({ id: "preview-card-progress", labelledBy: titleId, fraction: 0 }), bar = cardProgress.element;
   const step = h("p", { class: "setup-card-step", id: "preview-card-step", role: "status", "aria-live": "polite" });
   const notice = h("p", { class: "setup-card-notice", role: "alert" });
   const links = h("div", { class: "setup-card-links" });
@@ -94,7 +93,7 @@ export function previewSetupCard(rt: StudioRuntime) {
         setText(title, card.title);
         setText(body, card.body);
         bar.hidden = card.progress === null;
-        if (card.progress !== null) { fill.style.width = `${Math.round(card.progress * 100)}%`; bar.setAttribute("aria-valuenow", String(Math.round(card.progress * 100))); }
+        if (card.progress !== null) cardProgress.set(card.progress);
         setText(step, card.step ?? "");
         step.hidden = !card.step;
         setText(notice, card.notice ?? "");

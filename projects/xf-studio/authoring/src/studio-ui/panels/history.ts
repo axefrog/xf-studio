@@ -1,6 +1,6 @@
 import { keyBinding, shortcutLabel } from "../../input-bindings";
 import { button, emptyState } from "../controls";
-import { h, setAttr, setText } from "../dom";
+import { h, setAttr, setText, setUnavailable } from "../dom";
 import { helpTip } from "../help-tip";
 import { historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable, jumpAnnouncement, type HistoryRow } from "../history-model";
 import { icon } from "../icons";
@@ -67,8 +67,9 @@ export function historyPanel(rt: StudioRuntime): PanelController {
       const hasPreset = !draft || !!draft.selected;
       const undoCap = port.authoring.capability({ kind: "history.undo" }), redoCap = port.authoring.capability({ kind: "history.redo" });
       const labels = port.authoring.history();
-      undo.disabled = !undoCap.available; undo.title = historyCommandTitle("undo", undoCap, labels.undo?.label, keys.undo);
-      redo.disabled = !redoCap.available; redo.title = historyCommandTitle("redo", redoCap, labels.redo?.label, keys.redo);
+      // The main-action pattern (UI-84), as the header's Undo and Redo: unavailable, each stays focusable and says why.
+      setUnavailable(undo, !undoCap.available, undoCap.reason); undo.title = historyCommandTitle("undo", undoCap, labels.undo?.label, keys.undo);
+      setUnavailable(redo, !redoCap.available, redoCap.reason); redo.title = historyCommandTitle("redo", redoCap, labels.redo?.label, keys.redo);
       setText(summary, hasPreset ? historySummary(timeline) : "No preset");
       // One capability stands for every row: jumps are refused for the same reason (busy, no preset).
       rows = hasPreset ? historyRows(timeline) : [];
@@ -97,6 +98,8 @@ export function historyPanel(rt: StudioRuntime): PanelController {
         setAttr(view.main, "aria-current", row.kind === "current" ? "step" : undefined);
         setAttr(view.main, "aria-label", row.description);
         setAttr(view.main, "aria-disabled", blocked && row.kind !== "current" ? "true" : undefined);
+        // Its reason shows in the page's reason tip on focus, hover or a press (UI-84), not only as a tooltip.
+        setAttr(view.main, "data-reason", blocked && row.kind !== "current" ? blocked : undefined);
         view.main.title = row.kind === "current" ? "The look as it is now" : blocked ? blocked :
           row.kind === "undone" ? `Redo up to “${row.label}”` : row.kind === "start" ? "Go back to before the first listed step" : `Go back to just after “${row.label}”`;
         view.main.tabIndex = row.kind === "current" ? 0 : -1;

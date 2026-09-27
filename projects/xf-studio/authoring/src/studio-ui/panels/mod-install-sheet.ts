@@ -1,4 +1,5 @@
 import { applyCapability, button, note } from "../controls";
+import { iconButton } from "../components/icon-button";
 import { h, setText, uid } from "../dom";
 import { icon } from "../icons";
 import type { StudioRuntime } from "../runtime";
@@ -28,7 +29,7 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
   const cancel = button({ label: "Cancel", variant: "quiet", onClick: () => close() });
   const dialog = h("dialog", { class: "sheet install-sheet", "aria-labelledby": titleId },
     h("div", { class: "sheet-head" }, title,
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => close() }, icon("close"))),
+      iconButton({ label: "Close", icon: "close", onClick: () => close() })),
     where, changes, notes, h("div", { class: "install-state" }, status, again, rename, setup),
     h("div", { class: "report-foot" }, add, h("span", { class: "grow" }), cancel));
   let said = "";

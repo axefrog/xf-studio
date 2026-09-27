@@ -1,5 +1,6 @@
 import { keyBinding, type KeyEvent } from "../../input-bindings";
 import { button } from "../controls";
+import { iconButton } from "../components/icon-button";
 import { h, reducedMotion, setAttr, setText, uid } from "../dom";
 import { icon } from "../icons";
 import type { AnchorRect } from "./anchors";
@@ -36,8 +37,7 @@ export class Callout {
     this.note = h("p", { class: "guidance-note", hidden: true });
     this.actions = h("div", { class: "guidance-actions" });
     this.dots = h("div", { class: "guidance-dots", "aria-hidden": "true" });
-    const close = h("button", { class: "icon-btn small guidance-close", type: "button", "aria-label": options.closeLabel, title: options.closeLabel,
-      onclick: () => options.onClose() }, icon("close"));
+    const close = iconButton({ label: options.closeLabel, icon: "close", small: true, className: "guidance-close", onClick: () => options.onClose() });
     this.element = h("section", { class: `guidance-callout ${options.className}`, role: "dialog", "aria-modal": "false",
       "aria-labelledby": titleId, "aria-describedby": bodyId, hidden: true },
       h("header", { class: "guidance-head" }, this.eyebrow, close), this.title, this.body, this.note, h("footer", { class: "guidance-foot" }, this.dots, this.actions));
