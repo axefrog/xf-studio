@@ -44,6 +44,8 @@ const CORE_VALUES = new Map<string, readonly string[]>([
  */
 const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   ["studio-ui/controls", ["*"]], ["studio-ui/dom", ["*"]], ["studio-ui/icons", ["*"]], ["studio-ui/item-list", ["*"]],
+  // The component library (research/authoring/ui-component-library.md): its entry point, stateless components only.
+  ["studio-ui/components", ["*"]],
   ["studio-ui/panels/viewports", ["contextMenuGate", "keyDescription"]],
   ["studio-ui/views/contribution", ["panelMeta"]],
   ["studio-ui/views/feature-view", ["featureView", "moduleView"]],

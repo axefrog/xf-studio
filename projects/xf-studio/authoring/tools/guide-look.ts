@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { launch } from "./cdp";
 const [scheme = "dark", ...ids] = process.argv.slice(2);
 const url = "file:///" + resolve(import.meta.dir, "../public/style-guide.html").replaceAll("\\", "/");
-const page = await launch(url, { width: 1440, height: 1000, scheme: scheme as "dark" | "light", debugPort: 9344 });
+const page = await launch(url, { width: 1440, height: 1000, scheme: scheme as "dark" | "light", debugPort: Number(process.env.GUIDE_DEBUG_PORT ?? 9344) });
 try {
   await page.waitFor("document.querySelector('#live-dock .dock')", 20000);
   for (const id of ids.length ? ids : ["top"]) {

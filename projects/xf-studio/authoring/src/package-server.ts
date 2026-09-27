@@ -112,8 +112,8 @@ export function localPackageAdapter(options: { exporters: readonly FeatureExport
 }
 
 /** Why a Build can't start when the Local setup and its backup are unreadable (PIPE-94), in plain words. */
-export const SETUP_UNREADABLE_MESSAGE = "XF Studio couldn't read your Local setup, so it can't build mod files. Open Game & tools in " +
-  "Mod package, check your choices and save them again, then try once more. Your collection is unchanged.";
+export const SETUP_UNREADABLE_MESSAGE = "XF Studio couldn't read your Local setup, so it can't build mod files. Open Settings › Game, " +
+  "check your choices and save them again, then try once more. Your collection is unchanged.";
 /**
  * The Local setup a package request uses (PIPE-94), as the desktop host reads it: when the saved settings and their
  * backup are unreadable, Check plans with the defaults (it needs no tools) and Build is refused in plain words.

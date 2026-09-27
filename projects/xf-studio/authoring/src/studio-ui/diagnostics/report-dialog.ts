@@ -1,5 +1,6 @@
 import type { DiagnosticsAction, ReportItemState, ReportState } from "../../diagnostics/actions";
 import { button, Toggle } from "../controls";
+import { iconButton } from "../components/icon-button";
 import { h, setDisabled, setText, uid } from "../dom";
 import { icon } from "../icons";
 import type { StudioRuntime } from "../runtime";
@@ -53,7 +54,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   const closeButton = button({ label: "Close", variant: "quiet", onClick: () => close() });
   const dialog = h("dialog", { class: "sheet report-sheet", "aria-labelledby": titleId },
     h("div", { class: "sheet-head" }, h("h2", { id: titleId, text: "Report a problem" }),
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => close() }, icon("close"))),
+      iconButton({ label: "Close", icon: "close", onClick: () => close() })),
     h("div", { class: "report-body" },
       h("p", { class: "report-intro", text: "Nothing leaves your computer unless you send it. Review what the report holds, save it, then attach it to a GitHub issue. " +
         "Personal folder names and e-mail addresses are already replaced with placeholders." }),

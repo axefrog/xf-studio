@@ -8,6 +8,7 @@ import { h } from "../dom";
 import { Feedback } from "../feedback";
 import { icon } from "../icons";
 import { openMenu, openValuePopover } from "../menu";
+import { mountLibrary } from "./library-demo";
 
 const root = document.documentElement;
 const live = document.getElementById("guide-live")!;
@@ -33,6 +34,7 @@ document.getElementById("compare-themes")!.addEventListener("change", event => {
     } else if (originals.has(specimen)) { specimen.classList.remove("compare"); specimen.innerHTML = originals.get(specimen)!; }
   }
   bindStaticControls();
+  mountLibrary();
   announce(on ? "Specimens show light and dark side by side" : "Specimens follow the guide theme");
 });
 
@@ -50,6 +52,7 @@ function bindStaticControls() {
   };
 }
 bindStaticControls();
+mountLibrary();
 
 // ---- Snapping sandbox: the production resolver, a deliberately large dragged panel ----
 function sandbox() {

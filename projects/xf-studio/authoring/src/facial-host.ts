@@ -185,7 +185,7 @@ type Preparation = { key: string; controller: AbortController; promise: Promise<
 class Superseded extends Error {}
 
 const fingerprint = (path: string) => { try { const s = statSync(path); return `${path}|${s.size}|${s.mtimeMs}`; } catch { return path; } };
-const NOT_SET_UP = "Live expressions read your V's face from your game files: set your game folder and WolvenKit in Game & tools.";
+const NOT_SET_UP = "Live expressions read your V's face from your game files: set your game folder and WolvenKit in Settings.";
 const plainFailure = (error: unknown) => error instanceof WolvenKitRunError
   ? (error.code === "runtime_missing" ? "WolvenKit needs its .NET runtime before your V's face can be read." : "WolvenKit couldn't read your V's face from your game files.")
   : "Your V's face couldn't be read from your game files.";

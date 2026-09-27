@@ -73,6 +73,9 @@ const ICONS = {
   layout: [s("M2 2.5h12v11H2z"), s("M6 2.5v11M6 8h8")],
   category: [s("M2.5 2.5h4.5v11H2.5z"), s("M9 2.5h4.5v4.5H9zM9 9h4.5v4.5H9z")],
   dot: [f("M5.5 5.5h5v5h-5z")],
+  link: [s("M6.8 9.2l2.4-2.4"), s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7")],
+  star: [s("M8 2.3l1.75 3.55 3.9.57-2.83 2.76.67 3.89L8 11.23l-3.49 1.84.67-3.89L2.35 6.42l3.9-.57z")],
+  starFilled: [f("M8 2.3l1.75 3.55 3.9.57-2.83 2.76.67 3.89L8 11.23l-3.49 1.84.67-3.89L2.35 6.42l3.9-.57z")],
 } satisfies Record<string, Shape[]>;
 export type IconName = keyof typeof ICONS;
 /** Whether a name (a module contribution's) is one of the shell's icons. */

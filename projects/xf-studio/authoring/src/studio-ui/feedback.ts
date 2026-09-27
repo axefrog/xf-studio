@@ -1,3 +1,5 @@
+import { iconButton } from "./components/icon-button";
+import { button } from "./controls";
 import { h } from "./dom";
 import { icon, type IconName } from "./icons";
 
@@ -60,8 +62,8 @@ export class Feedback {
       h("div", { class: "toast-body" }, h("strong", { text: source }), h("p", { text: message }),
         ref ? h("p", { class: "toast-ref", text: `Reference ${ref}` }) : null,
         all.length ? h("div", { class: "toast-actions" }, all.map(action =>
-          h("button", { class: "btn small", type: "button", text: action.label, onclick: () => { close(); action.run(); } }))) : null),
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Dismiss notification", onclick: close }, icon("close")));
+          button({ label: action.label, small: true, onClick: () => { close(); action.run(); } }))) : null),
+      iconButton({ label: "Dismiss notification", icon: "close", onClick: close }));
     this.toasts.append(element);
     while (this.toasts.children.length > 4) {
       const transient = [...this.toasts.children].find(child => !child.classList.contains("error") && child !== element);

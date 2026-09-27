@@ -17,7 +17,7 @@ export const MOD_INSTALL_PLAN = "xfs/mod-install-plan-1" as const;
 export const MOD_INSTALL_RESULT = "xfs/mod-install-result-1" as const;
 export type ModInstallRoute = "mo2" | "direct";
 /**
- * The one next step a blocked plan offers as a button (UI-99): open Game & tools, rename the mod in Mod package, or check again
+ * The one next step a blocked plan offers as a button (UI-99): open Settings, rename the mod in Mod package, or check again
  * once the person has done what `blocked` says. Null when there is nothing to press (a test workspace).
  */
 export type ModInstallNextStep = "setup" | "rename" | "retry" | null;

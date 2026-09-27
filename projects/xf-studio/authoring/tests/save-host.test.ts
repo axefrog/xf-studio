@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, utimesSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSavesHandler, describeSave, listSaves } from "../src/features/save-explorer/host/saves-server";
-import { cyberpunkSavesFolder, expandEnvironment, savedGamesFromRegistry, scriptBundleCandidates, SHELL_FOLDERS_KEY } from "../src/saves-host-sources";
+import { cyberpunkSavesFolder, expandEnvironment, savedGamesFromRegistry, SAVES_FOLDER_DISPLAY, savesLocation, scriptBundleCandidates, SHELL_FOLDERS_KEY } from "../src/saves-host-sources";
 import { parseSaveListing, parseSaveTypeNames } from "../src/features/save-explorer";
 import { scriptBundle } from "./fixtures/synthetic-save";
 
@@ -70,7 +70,7 @@ describe("saves endpoints", () => {
     expect(names.engine.enums).toEqual(["gameE"]);
     expect(names.scripts).toEqual({ available: true, names: ["DoorControllerPS", "m_isOpen"] });
     const missing = parseSaveTypeNames(await (await handler({ bundles: [join(root, "none.redscripts")] })(get("/api/saves/types"))).json());
-    expect(missing.scripts).toMatchObject({ available: false, names: [], reason: expect.stringMatching(/Game & tools/) });
+    expect(missing.scripts).toMatchObject({ available: false, names: [], reason: expect.stringMatching(/Settings › Game/) });
   });
 
   test("a saves folder that is itself a link or junction is followed; a linked save folder below it is still refused (SAVE-07)", async () => {
@@ -125,5 +125,39 @@ describe("saves host sources", () => {
     expect(scriptBundleCandidates(providers, path => present.has(path))).toEqual([join("modA", "r6", "cache", "final.redscripts.modded"),
       join("game", "r6", "cache", "final.redscripts")]);
     expect(scriptBundleCandidates([], () => true)).toEqual([]);
+  });
+});
+
+describe("where saves are read from (UI-109)", () => {
+  test("the listing names where it looked; the detected folder is only described; each missing folder says what to do", async () => {
+    const display = "Saved Games\\CD Projekt Red\\Cyberpunk 2077";
+    const at = (value: { path: string | null; source: "chosen" | "detected" | "developer"; display: string }, prefix?: string) =>
+      createSavesHandler({ root: () => value, scriptBundles: () => [bundle], engine: () => engine }, undefined, prefix);
+    const found = await (await at({ path: root, source: "detected", display })(get("/api/saves"))).json();
+    expect(parseSaveListing(found)).toMatchObject({ available: true, folder: { source: "detected", display } });
+    expect(JSON.stringify(found)).not.toContain(root);
+    const gone = parseSaveListing(await (await at({ path: join(root, "gone"), source: "chosen", display: join(root, "gone") })(get("/api/saves"))).json());
+    expect(gone).toMatchObject({ available: false, folder: { source: "chosen" }, reason: expect.stringMatching(/isn't there any more.*Settings › Saves/) });
+    const none = parseSaveListing(await (await at({ path: join(root, "gone"), source: "detected", display })(get("/api/saves"))).json());
+    expect(none.reason).toContain(`in ${display}. If you keep them somewhere else, choose that folder in Settings › Saves.`);
+    // A verification workspace's mount reads its own sources at its own paths.
+    const verification = at({ path: root, source: "chosen", display: root }, "/api/verification/saves");
+    expect(parseSaveListing(await (await verification(get("/api/verification/saves"))).json()).saves).toHaveLength(3);
+    expect((await verification(get("/api/verification/saves/file?save=ManualSave-1&part=data"))).status).toBe(200);
+    expect((await verification(get("/api/saves"))).status).toBe(404);
+    // A listing from an older host (no folder) is still read.
+    expect(parseSaveListing({ available: true, saves: [] }).folder).toBeUndefined();
+    expect(() => parseSaveListing({ available: true, saves: [], folder: { source: "elsewhere", display: "x" } })).toThrow();
+  });
+
+  test("the saves folder in effect: the developer override, else the folder chosen in Settings, else the detected one", async () => {
+    const env = (name: string) => name === "USERPROFILE" ? "D:\\Profile" : undefined;
+    const host = { platform: "win32", env, registry: async () => null };
+    expect(await savesLocation(host, { savesDirectory: null })).toEqual({ path: "D:\\Profile\\Saved Games\\CD Projekt Red\\Cyberpunk 2077",
+      source: "detected", display: SAVES_FOLDER_DISPLAY });
+    expect(SAVES_FOLDER_DISPLAY).toBe("Saved Games\\CD Projekt Red\\Cyberpunk 2077");
+    expect(await savesLocation(host, { savesDirectory: "E:\\Saves" })).toEqual({ path: "E:\\Saves", source: "chosen", display: "E:\\Saves" });
+    expect(await savesLocation(host, { savesDirectory: "E:\\Saves" }, "/tmp/copies")).toMatchObject({ path: "/tmp/copies", source: "developer" });
+    expect(await savesLocation({ platform: "linux", env }, null)).toMatchObject({ path: null, source: "detected" });
   });
 });

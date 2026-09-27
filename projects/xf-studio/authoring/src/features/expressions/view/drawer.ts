@@ -189,7 +189,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   }
   function runNext() {
     const step = preview?.next;
-    if (step === "game-setup") ctx.reveal("package", true);
+    if (step === "game-setup") ctx.openSettings("game");
     else if (step === "guide") void ctx.links.open("project-knowledge");
     else if (step === "stop-idle") ctx.platform({ kind: "motion.setIdle", enabled: false });
     else if (step === "retry") ctx.facial.retry();
@@ -228,7 +228,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   }
   function statusText(snapshot: FacialPreviewSnapshot | undefined): { text: string; tone: string; next?: string } {
     if (!snapshot) return { text: "The live face preview isn't connected here.", tone: "muted" };
-    const nextLabel = { "game-setup": "Open Game & tools", guide: "How live expressions work", "stop-idle": "Stop the idle", retry: "Try again" } as const;
+    const nextLabel = { "game-setup": "Open Settings", guide: "How live expressions work", "stop-idle": "Stop the idle", retry: "Try again" } as const;
     const label = snapshot.next ? nextLabel[snapshot.next] : undefined;
     switch (snapshot.phase) {
       case "ready": return snapshot.reason ? { text: snapshot.reason, tone: "warning", next: label } : { text: "Showing your expression on the 3D head, solved with the game's own face rig.", tone: "muted" };
