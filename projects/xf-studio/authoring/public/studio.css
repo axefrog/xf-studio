@@ -1131,20 +1131,24 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .result-details > summary { cursor: pointer; color: var(--text-muted, inherit); }
 .result-details[open] > .facts { margin: var(--sp-2) 0; }
 
-/* Expression drawer (features/expressions/view/drawer.ts): compact control rows, pairs with a link toggle, groups by region. */
-/* Expression drawer (features/expressions/view/drawer.ts): composed from the library; only its own layout lives here. */
-.expr-drawer { display: flex; flex-direction: column; gap: var(--sp-5); }
-.expr-status-line { display: flex; align-items: flex-start; gap: var(--sp-3); min-height: 2.6em; }
+/* Expression drawer (features/expressions/view/drawer.ts): composed from the library inside .panel-content; only its own layout lives here. */
+.expr-status-line { display: flex; align-items: flex-start; gap: var(--sp-3); }
 .expr-status-line .expr-status { flex: 1; margin: 0; }
-.expr-section { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
-.expr-section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
-.expr-section-head .section-title { margin: 0; }
-.expr-start-tree { height: 240px; resize: vertical; }
-.expr-bar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
-.expr-tools .btn { flex: 1 1 auto; }
-.expr-groups { display: flex; flex-direction: column; gap: var(--sp-4); }
-.expr-group { border-top: 1px solid var(--line); padding-top: var(--sp-3); }
-.expr-footnote { margin-top: var(--sp-3); }
+.expr-drawer .section-head { position: relative; min-height: 24px; }
+.expr-drawer .block-actions { gap: var(--sp-3); }
+/* Symmetric sits in the Face heading as a compact switch; its reserved note line is not used there. */
+.expr-symmetric { flex: none; }
+.expr-symmetric .toggle { gap: var(--sp-3); min-height: 22px; font-size: var(--fs-sm); }
+.expr-symmetric .control-note { display: none; }
+/* The update sweep floats along the heading's foot, so showing it moves nothing. */
+.expr-updating { position: absolute; left: 0; right: 0; bottom: -5px; height: 2px; visibility: hidden; }
+.expr-updating.active { visibility: visible; }
+.expr-groups { display: flex; flex-direction: column; gap: var(--sp-5); }
+.expr-group .group-section-body { margin-top: var(--sp-2); }
+.expr-axis-pair, .expr-axis-sides { display: flex; flex-direction: column; gap: var(--sp-3); }
+.expr-axis-pair > [hidden] { display: none; }
+.expr-caption { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.expr-axis-sides .bipolar-slider { padding-left: var(--sp-5); }
 /* Save Explorer: the saves list, a save's node tree and the object inspector (read-only) */
 .save-explorer { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; container-type: inline-size; }
 .save-explorer .list-head { flex-wrap: wrap; row-gap: var(--sp-3); }

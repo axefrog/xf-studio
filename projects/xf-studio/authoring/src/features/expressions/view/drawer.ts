@@ -3,25 +3,30 @@
  * (UI-108): every main-pose control of V's own face rig, grouped by region with readable labels, and the ways to start and keep an
  * expression.
  *
- * - **Start from** is a searchable tree grouped by source: "Rest" first, then your saved expressions, the built-in natural samples
- *   ("Natural (XF)", from `data/expression-samples`), the game's own and each mod's. One click (or Enter) starts from a row; the row
+ * - **Layout** follows the design review's target (research/authoring/ui-visual-qa-checklist.md): the panel's padding and rhythm, two
+ *   sections (Start from, Face), one readout per value, the whole-face commands in the Face heading, and status text only when there is
+ *   something to act on.
+ * - **Start from** is a searchable tree that fits its rows (up to six, then it scrolls), grouped by source: your saved expressions, the
+ *   built-in natural samples ("Natural", from `data/expression-samples`), the game's own and each mod's. One click (or Enter) starts from a row; the row
  *   the expression started from is marked current. A saved expression's Rename and Delete are in its context menu (right-click,
  *   Shift+F10, its More button), and F2 and Delete work on a focused row; Rename edits in place (a value popover) and Delete asks first
  *   (a confirm popover), since the library can't undo it.
- * - **Save expression…** opens a value popover with a name to accept or change.
- * - **Controls:** a search, the whole-face commands (mirror, reset all), and one group section per region (count, reset). A left/right
- *   pair is a PairControl (linked by default: one slider sets both; a direction pair such as gaze starts separate), a centre control a
- *   SliderWithValue; both have exact entry and reset, and one Undo step per drag. The neck and head turn and tilt correctives sit in
+ * - **Save expression…** (in the Start from heading) opens a value popover with a name to accept or change.
+ * - **Face:** the heading holds Symmetric (every left/right pair follows its counterpart), a More menu (mirror either side onto the other,
+ *   flip the face) and Reset all (back to rest); then a search and one group section per region (count, reset). A left/right pair is a
+ *   PairControl, a centre control a SliderWithValue, an opposing pair one BipolarSlider (gaze and the nostrils per side: one slider while
+ *   linked, one per side while separate); all have exact entry and reset, and one Undo step per drag. The neck and head turn and tilt correctives sit in
  *   Advanced, folded. Controls the host's solver found move nothing on this face are not offered (a stored value on one is kept and
  *   cleared by Reset all).
- * - It shows the live preview's readiness in place, in plain words with the one next step, and never freezes: every edit is recorded at
- *   once, whatever the preview is doing.
+ * - **Status:** a problem with the live preview shows at the top in plain words with the one next step; while the face updates, the Face
+ *   heading says so in a reserved place (nothing moves); what the preview is and how fast it updates is the Face heading's help tip.
+ *   It never freezes: every edit is recorded at once, whatever the preview is doing.
  *
  * It reaches the feature only through its view context (UI-73): the generic facade (the part, actions and form-control transactions),
  * the facial preview's snapshot (the rig's controls, the installed expressions and the built-in samples) and its part presets.
  */
-import { applyCapability, button, GroupSection, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, SearchField,
-  SliderWithValue, BipolarSlider, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
+import { applyCapability, button, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
+  setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
@@ -37,9 +42,6 @@ const EMPTY: ExpressionPart = Object.freeze({ controls: {}, links: {} });
 /** Whether a pair edits both sides: its stored link, else its default (the feature's rule, core.ts `pairLinked`, read from the snapshot). */
 const linkedPair = (part: ExpressionPart, control: FacialControl) => !!control.link && (part.links[control.link.key] ?? control.link.byDefault);
 const linkedAxis = (part: ExpressionPart, axis: FacialAxisControl) => !!axis.link && axis.link.keys.every(key => part.links[key] ?? axis.link!.byDefault);
-/** Two-way controls show −100 to 100 %, the end's word after the number ("35 % left"). */
-const AXIS = (axis: FacialAxisControl) => ({ min: -100, max: 100, step: 1, unit: "%", defaultValue: 0, reset: true,
-  format: (value: number) => value === 0 ? "centre" : `${Math.abs(Math.round(value))} % ${value < 0 ? axis.ends[0] : axis.ends[1]}` });
 /** The note a mixed axis carries: both ends are set (a game expression can do this); the raw weights stay until the axis is moved. */
 const mixedNote = (axis: FacialAxisControl, part: ExpressionPart) => {
   const negative = part.controls[axis.negative] ?? 0, positive = part.controls[axis.positive] ?? 0;
@@ -107,20 +109,29 @@ function axisEntry(ctx: Ctx, axis: FacialAxisControl, group: string): Entry {
   return { element: slider.element, group, search: `${axis.label} ${axis.negative} ${axis.positive}`.toLowerCase(), names: [axis.negative, axis.positive],
     update: (part, state) => slider.update(axisPercent(part, axis), { ...state, mixed: !!mixedNote(axis, part) }) };
 }
-/** A left/right pair of two-way controls (gaze per eye, the nostrils): linked, one value moves both the way the rule says. */
+/**
+ * A left/right pair of two-way controls (gaze per eye, the nostrils). Linked, one slider moves both the way the symmetry rule says (the
+ * eyes look the same way, never crossed); separate, the pair's name heads one slider per side. Both layouts are built once and only one
+ * shows at a time.
+ */
 function axisPairEntry(ctx: Ctx, left: FacialAxisControl, right: FacialAxisControl, group: string): Entry {
-  const tx = { left: axisTransaction(ctx, left), right: axisTransaction(ctx, right) };
-  let active = tx.left;
-  const label = left.gaze ? `Gaze: look ${left.ends[0]} ↔ ${left.ends[1]}` : left.label.replace(/, left:/, ":");
-  const pair = new PairControl({ ...AXIS(left), label, sideLabels: left.gaze ? { left: "left eye", right: "right eye" } : undefined,
-    help: left.gaze ? "Linked, both eyes look the same way (never crossed). Separate, each eye has its own value." : undefined,
-    transaction: { begin: sides => { active = sides === "right" ? tx.right : tx.left; active.begin(); }, edit: ({ value }) => active.edit(value),
-      commit: () => active.commit(), cancel: () => active.cancel() },
-    onLinkChange: linked => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(left.link!.keys.map(key => [key, linked])) } as ExpressionAction) });
-  pair.element.dataset.axis = left.key;
-  return { element: pair.element, group, search: `${label} ${left.label} ${right.label} ${left.negative} ${left.positive}`.toLowerCase(),
+  const lateral = left.ends[0] === "left";
+  const name = left.gaze ? (lateral ? "Look sideways" : "Look up or down") : left.label.replace(/, left:.*$/, "").replace(/: [^:]*↔.*$/, "");
+  const ends = { negative: capital(left.ends[0]), positive: capital(left.ends[1]) };
+  const sideNames = left.gaze ? { left: "Left eye", right: "Right eye" } : { left: "Left", right: "Right" };
+  const make = (label: string, axis: FacialAxisControl) => new BipolarSlider({ label, min: -100, max: 100, step: 1, unit: "%", ends, transaction: axisTransaction(ctx, axis) });
+  const both = make(name, left), sides = { left: make(sideNames.left, left), right: make(sideNames.right, right) };
+  const separate = h("div", { class: "expr-axis-sides", role: "group", "aria-label": name }, h("p", { class: "expr-caption", text: name }), sides.left.element, sides.right.element);
+  const element = h("div", { class: "expr-axis-pair", "data-axis": left.key }, both.element, separate);
+  return { element, group, search: `${name} ${left.label} ${right.label} ${left.negative} ${left.positive}`.toLowerCase(),
     names: [left.negative, left.positive, right.negative, right.positive],
-    update: (part, state) => pair.update({ left: axisPercent(part, left), right: axisPercent(part, right) }, { linked: linkedAxis(part, left), ...state }) };
+    update: (part, state) => {
+      const linked = linkedAxis(part, left);
+      both.element.hidden = !linked; separate.hidden = linked;
+      both.update(axisPercent(part, left), { ...state, mixed: !!mixedNote(left, part) });
+      sides.left.update(axisPercent(part, left), { ...state, mixed: !!mixedNote(left, part) });
+      sides.right.update(axisPercent(part, right), { ...state, mixed: !!mixedNote(right, part) });
+    } };
 }
 
 /** Rows of the Start from tree: what one starts from. */
@@ -136,17 +147,20 @@ const matches = (label: string, query: string): [number, number][] => {
 };
 
 export function expressionDrawer(ctx: Ctx): PanelController {
-  const status = note("", "muted"); status.classList.add("expr-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
+  // A problem with the live preview (and its one next step) shows at the top; nothing shows while all is well.
+  const status = note("", "warning"); status.classList.add("expr-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
   const next = button({ label: "Try again", small: true, onClick: () => runNext() });
+  const statusLine = h("div", { class: "expr-status-line" }, status, next);
+  // While the face updates, a sweep runs along the Face heading's foot (floating, so it moves nothing) and the live region says so.
+  const updating = progressBar({ label: "Updating the face", className: "expr-updating" });
+  const updatingText = h("span", { class: "sr-only", role: "status", "aria-live": "polite" });
   const report = (outcome: { ok: boolean; message?: string }) => { if (!outcome.ok) ctx.feedback.toast("warning", "Expression", outcome.message ?? "That didn't work."); };
 
   // ---- Start from ----
-  const rest = button({ label: "Rest (no expression)", icon: "reset", small: true, title: "Start again from V's resting face",
-    onClick: () => ctx.dispatch({ kind: "expression.startFrom", origin: { kind: "rest" }, controls: {}, links: {} } as ExpressionAction) });
   let startQuery = "";
   const startSearch = new SearchField({ label: "Find an expression to start from", placeholder: "Find an expression", onFilter: query => { startQuery = query.toLowerCase(); paintStart(); },
     onArrowDown: () => tree.focus() });
-  const tree: TreeView = new TreeView({ label: "Start from", emptyText: "No expression matches.",
+  const tree: TreeView = new TreeView({ label: "Start from", emptyText: "No expression matches.", maxRows: 6, minRows: 3,
     onActivate: key => begin(key),
     onToggle: (group, open) => { if (open) openStartGroups.add(group); else openStartGroups.delete(group); paintStart(); },
     onKey: (event, item) => {
@@ -158,42 +172,38 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     onMenu: (item, anchor) => { if (item.kind === "row" && item.id.startsWith("saved:")) presetMenu(item.id.slice(6), anchor); },
     trailing: row => row.id.startsWith("saved:") ? iconButton({ label: `More actions for “${row.label}”`, icon: "more", small: true, menu: true,
       onClick: event => presetMenu(row.id.slice(6), event.currentTarget as Element) }) : null });
-  tree.element.classList.add("expr-start-tree");
   const rowElement = (item: TreeItemRef) => tree.element.querySelector<HTMLElement>(`[data-id="${CSS.escape(item.id)}"]`) ?? tree.element;
   const save = button({ label: "Save expression…", icon: "save", small: true, title: "Save this expression to your library under a name, to start from it later",
     onClick: event => savePreset(event.currentTarget as Element) });
   const presetsNote = note("", "muted");
 
-  // ---- Controls ----
+  // ---- Face ----
   let controlQuery = "";
   const controlSearch = new SearchField({ label: "Find a face control", placeholder: "Find a control", onFilter: query => { controlQuery = query.toLowerCase(); filter(); } });
-  const mirrorLeft = button({ label: "Mirror left → right", icon: "mirror", small: true, variant: "quiet",
-    onClick: () => ctx.dispatch({ kind: "expression.mirror", from: "left" } as ExpressionAction) });
-  const mirrorRight = button({ label: "Mirror right → left", icon: "mirror", small: true, variant: "quiet",
-    onClick: () => ctx.dispatch({ kind: "expression.mirror", from: "right" } as ExpressionAction) });
-  const resetAll = button({ label: "Reset all", icon: "reset", small: true, variant: "quiet",
-    onClick: () => ctx.dispatch({ kind: "expression.reset", scope: "all" } as ExpressionAction) });
-  const flip = button({ label: "Flip face", icon: "mirror", small: true, variant: "quiet", title: "Swap the face for its mirror image: left and right trade places, a look to one side becomes a look to the other",
-    onClick: () => ctx.dispatch({ kind: "expression.mirror", from: "flip" } as ExpressionAction) });
   // Symmetric: every left/right pair linked (one Undo step), so a change on one side follows on the other by its rule.
-  const symmetric = new Toggle({ label: "Symmetric", help: "Linked pairs follow each other: skin as a mirror image, the eyes looking the same way. Turn it off to set each side on its own.",
+  const symmetric = new Toggle({ label: "Symmetric",
     onChange: on => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(allLinkKeys().map(key => [key, on])) } as ExpressionAction) });
+  symmetric.element.classList.add("expr-symmetric");
+  symmetric.input.title = "Each left/right pair follows the other: skin as a mirror image, the eyes looking the same way. Turn it off to set each side on its own.";
+  // The one-off whole-face commands, in the heading's More menu.
+  const more = iconButton({ label: "More face commands", icon: "more", small: true, menu: true, onClick: event => faceMenu(event.currentTarget as Element) });
+  // Reset all: back to V's resting face (the Start from marker clears too).
+  const resetAll = iconButton({ label: "Reset all", icon: "reset", small: true, title: "Reset all: back to V's resting face",
+    onClick: () => ctx.dispatch({ kind: "expression.startFrom", origin: { kind: "rest" }, controls: {}, links: {} } as ExpressionAction) });
+  const faceHelp = helpTip("the face controls");
   const groupsHost = h("div", { class: "expr-groups" });
   const waiting = note("", "muted");
   const noControls = h("div", { class: "expr-no-match" });
-  const footnote = note("", "muted"); footnote.classList.add("expr-footnote");
 
-  const element = h("div", { class: "panel-body expr-drawer" },
-    h("div", { class: "expr-status-line" }, status, next),
-    h("section", { class: "expr-section", "aria-label": "Start from" },
-      h("div", { class: "expr-section-head" }, h("h3", { class: "section-title", text: "Start from" }), rest),
-      startSearch.element, tree.element,
-      h("div", { class: "expr-bar" }, save), presetsNote),
-    h("section", { class: "expr-section", "aria-label": "Face controls" },
-      h("div", { class: "expr-section-head" }, h("h3", { class: "section-title", text: "Face controls" })),
-      controlSearch.element, symmetric.element, h("div", { class: "expr-bar expr-tools" }, mirrorLeft, mirrorRight, flip, resetAll),
-      waiting, noControls, groupsHost),
-    footnote);
+  const element = h("div", { class: "panel-content expr-drawer" },
+    statusLine,
+    h("section", { class: "section", "aria-label": "Start from" },
+      h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Start from" }), h("span", { class: "block-actions" }, save)),
+      startSearch.element, tree.element, presetsNote),
+    h("section", { class: "section", "aria-label": "Face" },
+      h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Face" }), faceHelp,
+        h("span", { class: "block-actions" }, symmetric.element, more, resetAll), updating.element, updatingText),
+      controlSearch.element, waiting, noControls, groupsHost));
 
   let entries: Entry[] = [], groups: { id: string; section: GroupSection; entries: Entry[] }[] = [], built = "";
   let preview: FacialPreviewSnapshot | undefined, startPoints = new Map<string, FacialStartPoint>(), current = EMPTY, availability: Availability = { disabled: false };
@@ -237,7 +247,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     const saved = ctx.presets.list().items;
     const groups: TreeGroupData[] = [
       { id: "saved", label: "Your saved expressions", rows: rows(saved.map(item => row({ kind: "saved", id: item.id }, item.name))) },
-      { id: "natural", label: "Natural (XF)", secondary: "built in", rows: rows((preview?.samples ?? []).map(sample => row({ kind: "sample", id: sample.id }, sample.name, { search: sample.summary }))) },
+      { id: "natural", label: "Natural", secondary: "built in", rows: rows((preview?.samples ?? []).map(sample => row({ kind: "sample", id: sample.id }, sample.name, { search: sample.summary }))) },
     ];
     // The installed expressions by who provides them: the game first, then each mod in the order the table lists them.
     const providers = new Map<string, FacialStartPoint[]>();
@@ -268,6 +278,14 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       { kind: "action", label: "Delete…", icon: "trash", shortcut: "Del", danger: true, capability: edit, run: () => deletePreset(id, anchor) },
     ];
     openMenu(items, anchor, { label: `${preset.name} actions` });
+  }
+  function faceMenu(anchor: Element) {
+    const edit = ctx.facade.editable();
+    openMenu([
+      { kind: "action", label: "Mirror left onto right", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "left" } as ExpressionAction) },
+      { kind: "action", label: "Mirror right onto left", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "right" } as ExpressionAction) },
+      { kind: "action", label: "Flip face", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "flip" } as ExpressionAction) },
+    ], anchor, { label: "Face commands" });
   }
   function renamePreset(id: string, anchor: Element | { x: number; y: number }) {
     const preset = ctx.presets.list().items.find(item => item.id === id);
@@ -363,15 +381,15 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     }).filter(group => group.entries.length);
     groupsHost.replaceChildren(...groups.map(group => group.section.element));
   }
-  function statusText(snapshot: FacialPreviewSnapshot | undefined): { text: string; tone: "muted" | "warning" | "info"; next?: string } {
+  /** A problem with the live preview, in plain words with its one next step; nothing while all is well (or while it only updates). */
+  function statusText(snapshot: FacialPreviewSnapshot | undefined): { text: string; tone: "muted" | "warning" | "info"; next?: string } | undefined {
     if (!snapshot) return { text: "The live face preview isn't connected here.", tone: "muted" };
     const nextLabel = { "game-setup": "Open Settings", guide: "How live expressions work", "stop-idle": "Stop the idle", retry: "Try again" } as const;
     const label = snapshot.next ? nextLabel[snapshot.next] : undefined;
     switch (snapshot.phase) {
-      case "ready": return snapshot.reason ? { text: snapshot.reason, tone: "warning", next: label } : { text: "Showing your expression on the 3D head, solved with the game's own face rig.", tone: "muted" };
-      case "updating": return { text: "Updating the face…", tone: "info" };
-      case "idle": return { text: "Move a control or start from an expression: the 3D head shows it at once.", tone: "muted" };
-      case "preparing": return { text: snapshot.reason ?? "Preparing…", tone: "info" };
+      case "ready": return snapshot.reason ? { text: snapshot.reason, tone: "warning", next: label } : undefined;
+      case "updating": case "idle": return undefined;
+      case "preparing": return { text: snapshot.reason ?? "Preparing the live face preview…", tone: "info" };
       default: return { text: snapshot.reason ?? "The live face preview isn't available.", tone: "warning", next: label };
     }
   }
@@ -387,26 +405,27 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       preview = ctx.facial.snapshot();
       current = part();
       const shown = statusText(preview);
-      setText(status, shown.text); status.className = `note ${shown.tone} expr-status`;
-      next.hidden = !shown.next; if (shown.next) setText(next.querySelector("span") ?? next, shown.next);
+      statusLine.hidden = !shown;
+      setText(status, shown?.text ?? ""); status.className = `note ${shown?.tone ?? "muted"} expr-status`;
+      next.hidden = !shown?.next; if (shown?.next) setText(next.querySelector("span") ?? next, shown.next);
+      updating.element.classList.toggle("active", preview?.phase === "updating");
+      setText(updatingText, preview?.phase === "updating" ? "Updating the face…" : "");
       const editable = ctx.facade.editable();
       availability = editable.available ? { disabled: false } : { disabled: true, reason: editable.reason };
-      for (const control of [rest, save, mirrorLeft, mirrorRight, resetAll]) applyCapability(control, editable);
+      for (const control of [save, more, resetAll]) applyCapability(control, editable);
       startPoints = new Map((preview?.startPoints.items ?? []).map(point => [point.id, point]));
       paintStart(); updatePresetsNote();
       const controls = preview?.controls;
       if (controls?.length) build(controls, preview?.axes ?? []);
       const keys = allLinkKeys();
-      symmetric.update(keys.length > 0 && keys.every(key => current.links[key] ?? true), { ...availability, note: keys.length ? undefined : "" });
-      applyCapability(flip, editable);
+      symmetric.update(keys.length > 0 && keys.every(key => current.links[key] ?? true), availability);
       waiting.hidden = !!controls?.length;
-      setText(waiting, controls?.length ? "" : preview?.phase === "preparing" ? "The face's controls appear once your V's face is read from your game files."
-        : "The face's controls come from your V's own face rig in your game files; they appear once it can be read.");
+      setText(waiting, controls?.length ? "" : "Your V's face controls appear once your game files are read.");
       for (const entry of entries) entry.update(current, availability);
       filter();
       const latency = preview?.latency;
-      setText(footnote, `A solved preview of the game's facial rig on your V; not yet compared with the game in photo mode.${latency
-        ? ` Updates in about ${Math.round(latency.median)} ms.` : ""}`);
+      setHelp(faceHelp, [`Every control of your V's own face rig, solved live on the 3D head with the game's face rig. Not yet compared with photo mode.${latency
+        ? ` It updates in about ${Math.round(latency.median)} ms.` : ""}`, "Symmetric makes each left/right pair follow the other: skin as a mirror image, the eyes looking the same way."]);
     },
   };
 }
