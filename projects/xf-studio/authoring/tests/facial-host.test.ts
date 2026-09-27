@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFacialHandler, FacialHost, locateFacialSolver, MAX_RESTARTS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
+import { createFacialHandler, FacialHost, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
   type FacialSolverProcess, type FacialSolverSpawner } from "../src/facial-host";
 import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG } from "../src/facial-catalogue";
 import { depotHash } from "../src/depot-path";
@@ -51,7 +51,9 @@ const rig = cr2w({ $type: "appearanceAppearanceResource", appearances: [handle({
 
 type WorldOptions = { spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?: () => number; jsonBudget?: number;
   /** A mod archive that also provides the animation set, with these faces. */
-  setOverride?: object };
+  setOverride?: object;
+  /** Awaited before extraction number `n` (from 1) writes anything; a throw fails that extraction. */
+  gate?: (n: number) => Promise<void> };
 function world(root: string, options: WorldOptions = {}) {
   const fixture = fixtureInstallation([
     { virtualPath: "archive/pc/content/basegame_4_animation.archive", files: { [FACE_SKELETON]: {}, [FACE_SETUP]: {}, [FACIAL_ADDITIVES]: {}, [SET]: {},
@@ -66,6 +68,7 @@ function world(root: string, options: WorldOptions = {}) {
   let extractions = 0;
   const extract: FacialExtractor = async (_cli, _archive, resources, _dir, take) => {
     extractions++;
+    await options.gate?.(extractions);
     for (const resource of resources) { const document = documents.get(resource.hash); if (document) take(resource.hash, JSON.stringify(document)); }
   };
   const solves: { frames: number; resolve(value: { q: string; t: string; ms: number }): void }[] = [];
@@ -373,5 +376,46 @@ test("the real protocol over a process's pipes: split and joined lines, a printe
     expect(solver.exited).toBe(true);
     expect(await outcome(solver.solve(frame(0.3)))).toEqual({ error: expect.stringContaining("stopped") });
     solver.dispose();
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a clear keeps the stopped preparation current until its files are gone, so a question meanwhile can't lose a new one's files (CORE-108)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    // The first preparation's extraction waits until released; everything after answers at once.
+    let release!: () => void, entered!: () => void;
+    const first = new Promise<void>(resolve => { release = resolve; }), extracting = new Promise<void>(resolve => { entered = resolve; });
+    const { host, extractions } = world(root, { gate: n => { if (n > 1) return Promise.resolve(); entered(); return first; } });
+    host.state();
+    await extracting;
+    const clearing = host.clearPrepared();
+    // A poll while the clear waits for the stopped preparation used to start a preparation at once, whose files the clear then deleted
+    // (its extractions ran meanwhile); now the poll is answered from the stopped one and nothing else is extracted.
+    host.state();
+    for (let waited = 0; waited < 200 && extractions() < 3; waited += 5) await new Promise(resolve => setTimeout(resolve, 5));
+    expect(extractions()).toBe(1);
+    release();
+    await clearing;
+    await ready(host);
+    expect(host.state().rig.phase).toBe("ready");
+    // The face files the ready preparation uses are on disk.
+    expect(readdirSync(join(root, "facial", "json")).length).toBeGreaterThanOrEqual(2);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a failed preparation is tried again on a later question, not kept for its installation (CORE-108)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    let now = 1_000_000;
+    const { host } = world(root, { now: () => now, gate: async n => { if (n === 1) throw Error("The archive was busy."); } });
+    await ready(host);
+    expect(host.state().rig.phase).toBe("failed");
+    // Too soon: the failure stands.
+    now += PREPARE_RETRY_MS - 1;
+    await ready(host);
+    expect(host.state().rig.phase).toBe("failed");
+    now += 1;
+    await ready(host);
+    expect(host.state().rig.phase).toBe("ready");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

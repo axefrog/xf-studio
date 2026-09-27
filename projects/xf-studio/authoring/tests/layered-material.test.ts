@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { accumulateLayer, bakeOrder, BAKE_SIZE, bakeSurface, colourMaskLevels, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters,
+import { accumulateLayer, bakeOrder, BAKE_SIZE, bakeSurface, colourMaskLevels, createLayeredMaterial, DEFAULT_MICROBLEND, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters,
   layeredBakeExtent, layeredBakeSize, layeredContextRestored, layeredGlobals, layerMapUv, levels, microblendContrastFactor, MIN_MICROBLEND_CONTRAST, NEUTRAL_BASE_COLOUR, reorientedNormal,
   resolveSurface, stackProblems, uvDomain,
   type LayerAccumulator, type LayerBakeParameters, type LayerSamples } from "../src/layered-material";
@@ -118,6 +118,24 @@ describe("microblend and normals", () => {
     expect(k + (0.11 - k) * 0.49).toBeGreaterThan(0.35);
   });
 
+  test("a layer without a readable microblend draws over the game's default one, not alpha 1, and is reported (PREV-138)", () => {
+    // default.xbm: RGB (126, 127, 255), alpha 104/255 (k = 0.592).
+    expect(DEFAULT_MICROBLEND.map(v => Math.round(v * 255))).toEqual([126, 127, 255, 104]);
+    // The vanilla ring layer (contrast 0.49) over its faint fill (mask 0.11): no share over the default microblend. Alpha 1 (the old
+    // stand-in, k = 0) gave it 0.11 / 0.49 = 0.22 of every masked texel.
+    const ring = params(8, { microblendContrast: 0.49 });
+    const share = (microblend: LayerSamples["microblend"]) => accumulateLayer(EMPTY_ACCUMULATOR, ring, samples({ mask: 0.11, microblend }), false).sumA;
+    expect(share(null)).toBe(0);
+    expect(share(null)).toBe(share(DEFAULT_MICROBLEND));
+    expect(share([0.5, 0.5, 1, 1])).toBeCloseTo(0.11 / 0.49, 6);
+    // The adapter's note: masked drawn layers whose coverage depends on a microblend they don't have (contrast 1 doesn't).
+    const stack = (layers: RenderLayer[]): RenderLayered => ({ setup: { depotPath: "s", archive: null, sha256: null }, mask: { depotPath: "m", archive: "a", sha256: null, layers: 3 },
+      ratio: 1, useNormal: true, layers });
+    const masked = (fields: Partial<RenderLayer>) => layer({ textures: { mask: texture() }, ...fields });
+    expect(stackProblems(stack([layer(), masked({ microblendContrast: 0.49 }), masked({ microblendContrast: 1 })])).microblends).toBe(1);
+    expect(stackProblems(stack([layer(), masked({ microblendContrast: 0.49, textures: { mask: texture(), microblend: texture() } }), masked({})])).microblends).toBe(0);
+  });
+
   test("microblend normals blend in at the mask's edges, weighted by what the layers above already covered", () => {
     const mb = params(1, { microblendNormalStrength: 1 });
     const edge = accumulateLayer(EMPTY_ACCUMULATOR, mb, samples({ mask: 0.5, microblend: [1, 0.5, 1, 1] }), false);
@@ -216,6 +234,14 @@ describe("bake size, sharing and failure (PREV-63, PREV-65, PREV-66)", () => {
   }
   const input = (size = 8) => ({ layers: [{ parameters: params(0), textures: {} }], domain: { min: [0, 0] as [number, number], max: [1, 1] as [number, number] },
     size, globals: { ratio: 1, normalIntensity: 1, normalUvScale: [1, 1] as [number, number], normalUvBias: [0, 0] as [number, number] } });
+
+  test("the layer program samples the game's default microblend where a layer has none, like its CPU twin (PREV-138)", () => {
+    const { renderer, materials } = fakeRenderer();
+    createLayeredMaterial(input()).handle.bake(renderer);
+    const program = materials.map(material => (material as THREE.RawShaderMaterial).fragmentShader ?? "").find(source => source.includes("vec4 mb ="))!;
+    expect(program).toContain(`: vec4( ${DEFAULT_MICROBLEND.map(v => Number.isInteger(v) ? `${v}.0` : String(v)).join(", ")} );`);
+    expect(program).not.toContain("vec4( 0.5, 0.5, 1.0, 1.0 )");
+  });
 
   test("a bake that fails on the GPU is reported as failed with its reason, never as baked with black maps (PREV-65)", () => {
     for (const [options, reason] of [[{ runnable: false }, /failed to build/], [{ framebuffer: 0x8cd6 }, /incomplete \(0x8cd6\)/],
@@ -350,12 +376,12 @@ describe("what the host could read (PREV-67) and hostile numbers (PIPE-43)", () 
   test("the mask limit is only for a mask the host could not read, not for a mask with fewer layers than the setup", () => {
     const masked = layer({ textures: { mask: texture() } });
     // Three setup layers, a two-layer mask: layer 2 has no mask image and simply covers nothing, as in game.
-    expect(stackProblems(stack([layer(), masked, layer()], maskRef(2)))).toEqual({ mask: false, templates: 0, base: false });
+    expect(stackProblems(stack([layer(), masked, layer()], maskRef(2)))).toEqual({ mask: false, templates: 0, base: false, microblends: 0 });
     // The mask could not be read at all, or a layer inside its count lacks its image.
-    expect(stackProblems(stack([layer(), layer()], maskRef(0)))).toEqual({ mask: true, templates: 0, base: false });
-    expect(stackProblems(stack([layer(), layer(), masked], maskRef(3)))).toEqual({ mask: true, templates: 0, base: false });
+    expect(stackProblems(stack([layer(), layer()], maskRef(0)))).toEqual({ mask: true, templates: 0, base: false, microblends: 0 });
+    expect(stackProblems(stack([layer(), layer(), masked], maskRef(3)))).toEqual({ mask: true, templates: 0, base: false, microblends: 0 });
     // The setup names no mask: nothing unread.
-    expect(stackProblems(stack([layer(), layer()], null))).toEqual({ mask: false, templates: 0, base: false });
+    expect(stackProblems(stack([layer(), layer()], null))).toEqual({ mask: false, templates: 0, base: false, microblends: 0 });
   });
 
   test("a layer whose template could not be read is left out of the bake, and counted", () => {
@@ -369,7 +395,7 @@ describe("what the host could read (PREV-67) and hostile numbers (PIPE-43)", () 
     const order = bakeOrder(unreadBottom);
     expect(order.map(entry => [entry.index, !!entry.neutral])).toEqual([[1, false], [0, true]]);
     expect(order[1]!.maps).toEqual({ color: false, normal: false, roughness: false, metalness: false, microblend: false, mask: false });
-    expect(stackProblems(unreadBottom)).toEqual({ mask: false, templates: 1, base: true });
+    expect(stackProblems(unreadBottom)).toEqual({ mask: false, templates: 1, base: true, microblends: 0 });
     // What it bakes to where no masked layer covers: mid grey, fully rough, not metallic.
     const baked = accumulateLayer(EMPTY_ACCUMULATOR, order[1]!, samples({ colour: [1, 1, 1], roughness: 1, metalness: 0 }), true);
     close(baked.colour, [NEUTRAL_BASE_COLOUR, NEUTRAL_BASE_COLOUR, NEUTRAL_BASE_COLOUR]);

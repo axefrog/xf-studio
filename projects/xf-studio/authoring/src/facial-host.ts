@@ -237,7 +237,9 @@ type Preparation = { key: string; controller: AbortController; promise: Promise<
   /** The process must be replaced before the next solve (a solve timed out: it may have lost an answer). */
   stale?: boolean;
   /** When the solver was started again after it stopped, within the last `RESTART_WINDOW_MS` (CORE-101). */
-  restarts: number[] };
+  restarts: number[];
+  /** Failed preparations of this fingerprint so far, and when the last one failed (CORE-108: a failure is tried again later). */
+  failures: number; failedAt?: number };
 class Superseded extends Error {}
 
 /** A solve slower than this means the solver is stuck (or lost the answer): it is stopped and started again (CORE-100). */
@@ -249,6 +251,9 @@ export const RESTART_WINDOW_MS = 10 * 60_000;
 export const FACIAL_JSON_BUDGET = 768 * 1024 ** 2;
 /** Start points kept for this many installations (the newest). */
 export const START_POINT_FILES = 8;
+/** A failed preparation is tried again on a question after this long, doubled for each later failure, at most `MAX_PREPARE_RETRIES` times. */
+export const PREPARE_RETRY_MS = 30_000;
+export const MAX_PREPARE_RETRIES = 3;
 /** A temporary extraction folder older than this was left by a host that ended mid-extraction, and is removed. */
 export const STALE_TEMP_MS = 60 * 60_000;
 /** Most pages whose solves wait at once; past it the oldest waiting one is answered superseded (CORE-104). */
@@ -280,6 +285,8 @@ export class FacialHost {
   private readonly waiting = new Map<string, { request: FacialSolveRequest; resolve(answer: FacialSolveAnswer): void }>();
   /** A temporary-folder sweep ran this session. */
   private swept = false;
+  /** A "Clear prepared game files" still removing files: a preparation started meanwhile waits for it (CORE-108). */
+  private clearing: Promise<void> | null = null;
   constructor(private readonly options: FacialHostOptions) {
     this.installations = options.open ? new InstallationRegistry({ open: options.open }) : installations;
   }
@@ -318,29 +325,45 @@ export class FacialHost {
    */
   async clearPrepared(): Promise<{ freed: number }> {
     const entry = this.current;
-    this.current = null;
     entry?.controller.abort(); entry?.process?.dispose();
-    await entry?.promise.catch(() => {});
-    const before = await this.preparedBytes();
-    for (const name of ["json", "start-points", "tmp"]) { try { rmSync(join(this.root, name), { recursive: true, force: true }); } catch { /* In use: kept. */ } }
-    return { freed: Math.max(0, before - await this.preparedBytes()) };
+    // The stopped preparation stays current until its files are gone (CORE-108): a question meanwhile is answered from it instead of
+    // starting a preparation whose files this clear would then delete; one started meanwhile for another installation waits for it.
+    const removing = (async () => {
+      await entry?.promise.catch(() => {});
+      const before = await this.preparedBytes();
+      for (const name of ["json", "start-points", "tmp"]) { try { rmSync(join(this.root, name), { recursive: true, force: true }); } catch { /* In use: kept. */ } }
+      return Math.max(0, before - await this.preparedBytes());
+    })();
+    const clearing = this.clearing = removing.then(() => {}, () => {});
+    try { return { freed: await removing }; }
+    finally {
+      if (this.current === entry) this.current = null;
+      if (this.clearing === clearing) this.clearing = null;
+    }
   }
 
   private ensure(): Preparation {
     const settings = this.options.settings(), key = installationFingerprint(settings, this.installations);
-    if (this.current?.key === key) return this.current;
+    if (this.current?.key === key && !this.retryDue(this.current)) return this.current;
     const previous = this.current;
     previous?.controller.abort(); previous?.process?.dispose();
     const entry: Preparation = { key, controller: new AbortController(), promise: Promise.resolve(),
-      rig: { phase: "preparing" }, expressions: { phase: "preparing", items: [] }, solver: { phase: "starting" }, restarts: [] };
+      rig: { phase: "preparing" }, expressions: { phase: "preparing", items: [] }, solver: { phase: "starting" }, restarts: [],
+      failures: previous?.key === key ? previous.failures : 0 };
     this.current = entry;
-    entry.promise = (previous?.promise ?? Promise.resolve()).catch(() => {}).then(() => this.prepare(entry, settings)).catch(error => {
+    entry.promise = Promise.all([(previous?.promise ?? Promise.resolve()).catch(() => {}), this.clearing]).then(() => this.prepare(entry, settings)).catch(error => {
       if (error instanceof Superseded || entry.controller.signal.aborted) return;
+      entry.failures++; entry.failedAt = this.now();
       hostFailure("facial", "facial_prepare_failed", "Your V's face couldn't be prepared for live expressions.", error, "warn");
       entry.rig = entry.rigData ? entry.rig : { phase: "failed", reason: plainFailure(error) };
       if (entry.expressions.phase === "preparing") entry.expressions = { phase: "failed", reason: "The installed expressions couldn't be read from your game files.", items: [] };
     });
     return entry;
+  }
+
+  /** A failed preparation is started again on a question once its wait is over (`PREPARE_RETRY_MS`, doubling), a few times at most. */
+  private retryDue(entry: Preparation): boolean {
+    return entry.failedAt !== undefined && entry.failures <= MAX_PREPARE_RETRIES && this.now() - entry.failedAt >= PREPARE_RETRY_MS * 2 ** (entry.failures - 1);
   }
 
   private async prepare(entry: Preparation, settings: CharacterDetailSettings) {
@@ -460,6 +483,8 @@ export class FacialHost {
    * plainly, and the budget refills as old restarts age out (CORE-101). Answers whether a new process was started.
    */
   private checkSolver(entry: Preparation): boolean {
+    // A stopped preparation (a clear in progress, CORE-108) never starts its solver again.
+    if (entry.controller.signal.aborted) return false;
     if (!entry.process || entry.solver.phase === "missing" || entry.solver.phase === "starting") return false;
     if (!entry.process.exited && !entry.stale) return false;
     if (entry.solver.phase === "failed" && entry.solver.reason !== SOLVER_STOPPED) return false;

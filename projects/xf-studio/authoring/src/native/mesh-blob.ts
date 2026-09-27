@@ -63,6 +63,10 @@ const DECODED: Readonly<Record<string, string>> = {
 };
 /** Streams of per-vertex data (0–4 in the files seen); stream 7 carries per-instance data the preview never reads. */
 const VERTEX_STREAMS = 5;
+/** Elements a vertex layout holds (`GpuWrapApiVertexLayoutDesc.elements` is `static:32`; NATIVE-65). */
+const LAYOUT_ELEMENTS = 32;
+/** UV sets decoded: the GLB carries two, `TEXCOORD_0` and `TEXCOORD_1` (NATIVE-65: every set was decoded, then all but two dropped). */
+const UV_SETS = 2;
 
 export interface VertexElement {
   readonly usage: string;
@@ -204,7 +208,9 @@ function chunkLayout(info: RedObject | null, index: number, sizes: { vertexBuffe
   const strides = elementsOf(fieldOf(layout, "slotStrides")).map(value => typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : -1);
   const elements: VertexElement[] = [];
   const used = new Array<number>(VERTEX_STREAMS).fill(0);
-  for (const value of elementsOf(fieldOf(layout, "elements"))) {
+  const stored = elementsOf(fieldOf(layout, "elements"));
+  if (stored.length > LAYOUT_ELEMENTS) throw new NativeMalformedError(`Chunk ${index}'s vertex layout lists ${stored.length} elements (a layout holds ${LAYOUT_ELEMENTS}).`);
+  for (const value of stored) {
     const element = objectAt(value);
     if (!element) continue;
     const usage = enumText(element, "usage"), type = enumText(element, "type"), streamType = enumText(element, "streamType");
@@ -269,7 +275,7 @@ export interface DecodedChunk {
   /** Decoded 10:10:10:2 normals (x, y, z, w per vertex), not yet normalised; null without normals. */
   readonly normals: Float32Array | null;
   readonly tangents: Float32Array | null;
-  /** UV sets in usage-index order (u, v per vertex, as stored). */
+  /** The first two UV sets in usage-index order (u, v per vertex, as stored). */
   readonly uvs: readonly Float32Array[];
   /** Colour bytes (r, g, b, a per vertex); null without colours. */
   readonly colors: Uint8Array | null;
@@ -304,7 +310,7 @@ export function decodeChunk(blob: MeshBlob, chunk: MeshChunk, buffer: Uint8Array
     return out;
   };
   const uvs: Float32Array[] = [];
-  const uvElements = chunk.elements.filter(element => element.usage === "PS_TexCoord").sort((a, b) => a.usageIndex - b.usageIndex);
+  const uvElements = chunk.elements.filter(element => element.usage === "PS_TexCoord").sort((a, b) => a.usageIndex - b.usageIndex).slice(0, UV_SETS);
   for (const element of uvElements) {
     const out = new Float32Array(n * 2);
     for (let i = 0, at = base(element), step = stride(element); i < n; i++, at += step) {

@@ -73,13 +73,13 @@ describe("SAVE-02: world-object values", () => {
     // The review's 8 MB entry (231 MB decoded), scaled to 1 MB.
     const body = persistencyBody([{ id: 1n, type: "gameDeviceComponentPS", data: boolArray(1 << 20) }]);
     const index = readPersistencyIndex(body);
-    const result = decodePersistencyEntry(body, index.entries[0]!, oracle());
+    const result = decodePersistencyEntry(body, index.entry(0)!, oracle());
     expect(result).toMatchObject({ ok: false, reason: expect.stringMatching(/more values than any save's entry/) });
     expect(result.values).toBeLessThanOrEqual(MAX_ENTRY_VALUES + (1 << 20));
     if (!result.ok) expect(result.partial.props).toHaveLength(0);
     // Just under the cap, it reads.
     const fits = persistencyBody([{ id: 1n, type: "gameDeviceComponentPS", data: boolArray(MAX_ENTRY_VALUES - 2) }]);
-    expect(decodePersistencyEntry(fits, readPersistencyIndex(fits).entries[0]!, oracle())).toMatchObject({ ok: true, values: MAX_ENTRY_VALUES - 1 });
+    expect(decodePersistencyEntry(fits, readPersistencyIndex(fits).entry(0)!, oracle())).toMatchObject({ ok: true, values: MAX_ENTRY_VALUES - 1 });
   });
 
   test("the explorer's decoded entries are bounded by what they decoded to, not only by count", () => {
@@ -211,8 +211,8 @@ describe("SAVE-09: mutated saves never fail inside the readers", () => {
             expect(rows.length).toBeGreaterThan(0);
           } catch (error) { internal.push(`explorer: ${String((error as Error)?.stack ?? error)}`); }
         }); break;
-        case 2: attempt(() => { const frame = readPackageFrame(mutate(pkg), "save"); for (let i = 0; i < frame.chunks.length; i++) decodeChunk(frame, i, types, { opaque: true, fieldTypes: true }); countOf(packageNames(frame)); }); break;
-        case 3: attempt(() => { const body = mutate(world); const index = readPersistencyIndex(body); for (const entry of index.entries) decodePersistencyEntry(body, entry, types); }); break;
+        case 2: attempt(() => { const frame = readPackageFrame(mutate(pkg), "save"); for (let i = 0; i < frame.chunkCount; i++) decodeChunk(frame, i, types, { opaque: true, fieldTypes: true }); countOf(packageNames(frame)); }); break;
+        case 3: attempt(() => { const body = mutate(world); const index = readPersistencyIndex(body); for (let i = 0; i < index.count; i++) decodePersistencyEntry(body, index.entry(i)!, types); }); break;
         case 4: attempt(() => { const read = readTypeDatabase(mutate(database)); createTypeOracle({ database: read }); }); break;
         case 5: attempt(() => { readScriptBundleNames(mutate(bundle)); }); break;
       }
