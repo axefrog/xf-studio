@@ -36,6 +36,37 @@ async function service(options: { fingerprint?: () => string; route?: boolean } 
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 
 describe("the creator catalogue service", () => {
+  test("a colour row's swatches and icons come from the built catalogue's swatch source; the view's current choice carries its swatch", async () => {
+    const source = await fixtureSource(true);
+    const asked: string[] = [];
+    let started = 0;
+    const host = new CreatorCatalogueHost({ route: () => ({ gameRoot: root, launchRoute: "direct", wolvenKitCli: "wk" }), fingerprint: () => "one",
+      resolverCache: join(root, "resolver"), open: () => ({}) as never, swatchDelayMs: 0,
+      load: async () => ({ source, catalogue: source.catalogue, evidence: { language: { code: "en-us", from: "default" }, texts: [], tweakDb: null, customResources: 1 } }),
+      swatches: () => ({ answer: option => { asked.push(option); return option === "head/eyes_color" ? { swatches: ["#112233"], icons: ["0:1"], pending: true,
+        sheets: [{ id: 0, key: "0123456789abcdef", columns: 2, rows: 1, cell: 64 }] } : null; },
+        swatchOf: (option, position) => option === "head/eyes_color" && position === 0 ? "#112233" : null,
+        sheet: (id, key) => id === 0 && key === "0123456789abcdef" ? new Uint8Array([1, 2, 3]) : null, start: () => { started++; }, stop: () => {} }) });
+    const answer = await host.swatches("female", "head/eyes_color");
+    expect(answer).toMatchObject({ option: "head/eyes_color", pending: true, swatches: ["#112233"], icons: ["0:1"] });
+    // An offered option that isn't a colour row answers empty; one the installation lacks, null.
+    expect(await host.swatches("female", "head/teeth")).toMatchObject({ swatches: [], pending: false });
+    expect(await host.swatches("female", "head/nothing")).toBeNull();
+    expect([...await host.sheet("female", 0, "0123456789abcdef") ?? []]).toEqual([1, 2, 3]);
+    await settle();
+    expect(started).toBe(1);
+    const view = await host.view({ ...DEFAULT_CHARACTER });
+    expect(view.values["head/eyes_color"]!.swatch).toBe("#112233");
+    // Served by the endpoint, and read back by the page's reader.
+    const handler = createCreatorHandler(host);
+    const response = await handler(new Request("http://127.0.0.1/api/preview-character/creator?gender=female&swatches=head%2Feyes_color"));
+    const { readSwatches } = await import("../src/cc-panel");
+    expect(readSwatches(await response.json()).sheets[0]!.key).toBe("0123456789abcdef");
+    const png = await handler(new Request("http://127.0.0.1/api/preview-character/creator?gender=female&sheet=0&key=0123456789abcdef"));
+    expect(png.headers.get("Content-Type")).toBe("image/png");
+    expect((await handler(new Request("http://127.0.0.1/api/preview-character/creator?gender=female&sheet=0&key=ZZ"))).status).toBe(400);
+  });
+
   test("built once per installation and body; the first paint arrives when ready; another installation builds again (UI-59)", async () => {
     let fingerprint = "one";
     const { host, builds } = await service({ fingerprint: () => fingerprint });
@@ -109,7 +140,7 @@ describe("the creator catalogue service", () => {
     expect((await post({ kind: "view", request: { schema: "xfs/character-request-9", source: "default", bodyGender: "female" } })).status).toBe(409);
     expect((await post({ kind: "view", request: { ...DEFAULT_CHARACTER, choices: [{ part: "head" }] } })).status).toBe(400);
     expect((await post({ kind: "view", request: DEFAULT_CHARACTER }, "http://evil.example")).status).toBe(403);
-    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-7");
+    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-8");
   });
 });
 

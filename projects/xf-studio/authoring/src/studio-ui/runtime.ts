@@ -66,6 +66,8 @@ export class Frame {
   get viewTools() { return this.once("viewTools", () => this.port.views.tools(undefined, this.toolFilter)); }
   /** The view graph: views, what they share, the focus and the View and lighting history. */
   get views() { return this.once("views", () => this.port.views.snapshot()); }
+  /** Each view's derived title and subject (its panel's tab). */
+  get viewTitles() { return this.once("viewTitles", () => this.port.views.titles()); }
 }
 export type FrameState = Frame;
 /** How a dispatch reports: `success` is recorded, a failure toasts unless `quiet` (with `failure` instead of its reason). */

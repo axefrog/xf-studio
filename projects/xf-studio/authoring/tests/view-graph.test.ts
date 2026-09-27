@@ -3,8 +3,8 @@
  * against scene kinds, the default one-view graph from the workspace's preview, persistence and the View and lighting history.
  */
 import { expect, test } from "bun:test";
-import { MAIN_VIEW, viewPanelId, type ViewGraphChange } from "../src/platform/api/view-graph";
-import { COALESCE_MS, parseViewGraph, ViewGraph } from "../src/platform/core/view-graph";
+import { MAIN_VIEW, validViewId, viewPanelId, type ViewGraphChange } from "../src/platform/api/view-graph";
+import { parseViewGraph, ViewGraph } from "../src/platform/core/view-graph";
 import { createStudioViewGraph, defaultViewGraph, isDefaultViewGraph, previewMirror, storedViewGraph, STUDIO_VIEW_GRAPH_RULES,
   workspaceViewGraph } from "../src/preview-view-graph";
 import { PreviewActions, type PreviewPort } from "../src/preview-actions";
@@ -13,8 +13,7 @@ import { WorkspaceComposer } from "../src/workspace-composer";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
-const clock = () => { let now = 1000; return { now: () => now, advance: (ms: number) => { now += ms; } }; };
-const graph = (time = clock()) => ({ time, graph: createStudioViewGraph(freshWorkspace().preview, undefined, { now: time.now }) });
+const graph = () => ({ graph: createStudioViewGraph(freshWorkspace().preview) });
 
 test("the default graph is one main view over the workspace's preview, and mirrors it field for field", () => {
   const preview = freshWorkspace().preview;
@@ -91,13 +90,21 @@ test("edits are validated by the slot's codec, and a camera or rig must suit the
   expect(parseViewGraph({ ...data, views: [{ ...data.views[0], id: "other" }], focused: "other" }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
 });
 
-test("the View and lighting history records settings and camera jumps, coalesces a drag, and never records navigation or tools", () => {
-  const { graph: views, time } = graph();
-  for (const value of [1.3, 1.4, 1.5]) { views.edit(MAIN_VIEW, "lights", { state: { exposure: value } }, { label: "Exposure", coalesce: "exposure" }); time.advance(100); }
+test("the View and lighting history records settings and camera jumps, coalesces a drag until it is sealed, and never records navigation or tools", () => {
+  const { graph: views } = graph();
+  // One drag is one step however long it pauses; releasing the slider seals it, so the next drag is a step of its own (CORE-95).
+  for (const value of [1.3, 1.4, 1.5]) views.edit(MAIN_VIEW, "lights", { state: { exposure: value } }, { label: "Exposure", coalesce: "exposure" });
   expect(views.history()).toEqual({ undo: "Exposure", depth: 1, redoDepth: 0 });
-  time.advance(COALESCE_MS + 1);
+  views.seal();
   views.edit(MAIN_VIEW, "lights", { state: { exposure: 1.6 } }, { label: "Exposure", coalesce: "exposure" });
   expect(views.history().depth).toBe(2);
+  // A different edit also ends the run: the same slider afterwards starts a new step.
+  views.edit(MAIN_VIEW, "lights", { state: { lightAngle: 300 } }, { label: "Key light direction", coalesce: "angle" });
+  views.edit(MAIN_VIEW, "lights", { state: { exposure: 1.7 } }, { label: "Exposure", coalesce: "exposure" });
+  expect(views.history().depth).toBe(4);
+  views.undo(); views.undo();
+  expect(views.history().depth).toBe(2);
+
   views.edit(MAIN_VIEW, "tools", { state: { on: { "eye-makeup.surface": false } } });
   views.cameraMoved(MAIN_VIEW, { pose: { position: [0, 1, 2], target: [0, 1, 0], fov: 30 } });
   expect(views.history().depth).toBe(2);
@@ -222,4 +229,108 @@ test("preview actions edit the graph node of the view they name, and the device 
   calls.length = 0;
   views.edit(MAIN_VIEW, "lights", { state: { exposure: 1.7 } });
   expect(calls).toEqual([]);
+});
+
+test("every structure edit records a step, an unrecorded one clears the history it would break, and a replay is checked first (CORE-94)", () => {
+  const { graph: views } = graph();
+  const v2 = views.addView(MAIN_VIEW, { scene: true });
+  expect(views.history()).toMatchObject({ undo: "New view", depth: 1 });
+  expect(views.unlink(v2, "scene")).toBe(true);
+  expect(views.history()).toMatchObject({ undo: "Unlink scene", depth: 2 });
+  views.edit(v2, "lights", { state: { exposure: 3 } }, { label: "Exposure" });
+  // A structure change the history doesn't hold (a restore) leaves no step that could name its removed nodes.
+  views.withoutHistory(() => views.closeView(v2));
+  expect(views.history()).toMatchObject({ depth: 0, redoDepth: 0 });
+  expect(views.undo()).toBe(false);
+  expect(views.viewIds()).toEqual([MAIN_VIEW]);
+  // The check itself: a step whose views would name a missing node is dropped with the steps behind it, and nothing changes.
+  views.edit(MAIN_VIEW, "lights", { state: { exposure: 2 } }, { label: "Exposure" });
+  const broken = { views: [{ id: MAIN_VIEW, kind: "3d", scene: "s1", camera: "gone", lights: "l1", display: "d1", tools: "t1" }], focused: MAIN_VIEW };
+  (views as unknown as { undoSteps: unknown[] }).undoSteps.push({ label: "Broken", nodes: new Map(), structure: { before: broken, after: broken } });
+  const changes: ViewGraphChange[] = [];
+  views.subscribe(change => changes.push(change));
+  expect(views.undo()).toBe(false);
+  expect(views.history()).toMatchObject({ depth: 0 });
+  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ exposure: 2 });
+  expect(changes).toHaveLength(1);
+  expect(views.node(MAIN_VIEW, "camera").id).toBe("c1");
+});
+
+test("a camera jump that didn't move the camera records nothing and leaves no Back step", () => {
+  const { graph: views } = graph();
+  const pose = { position: [0, 1.67, -0.6], target: [0, 1.67, 0.005], fov: 30 };
+  views.cameraJump(MAIN_VIEW, { pose }, { pose }, "Front view");
+  expect(views.cameraTrail(MAIN_VIEW)).toEqual({ back: 0, forward: 0 });
+  expect(views.history().depth).toBe(0);
+  expect(views.state(MAIN_VIEW, "camera")).toEqual({ pose });
+});
+
+test("node codecs enforce the ranges parseWorkspace does (CORE-96)", () => {
+  const { graph: views } = graph();
+  expect(() => views.edit(MAIN_VIEW, "scene", { state: { eyeShape: 999.5 } })).toThrow("isn't valid");
+  expect(() => views.edit(MAIN_VIEW, "scene", { state: { eyeShape: -1 } })).toThrow("isn't valid");
+  expect(views.edit(MAIN_VIEW, "scene", { state: { eyeShape: 3.4 } })).toBe(true);
+  expect(views.state(MAIN_VIEW, "scene")).toMatchObject({ eyeShape: 3 });
+  expect(() => views.edit(MAIN_VIEW, "lights", { state: { exposure: 100 } })).toThrow("isn't valid");
+  expect(() => views.edit(MAIN_VIEW, "lights", { state: { lightAngle: 400 } })).toThrow("isn't valid");
+  for (const pose of [{ position: [0, 1.6, -50], target: [0, 1.6, 0], fov: 30 }, { position: [0, 1.6, -0.6], target: [0, 1.6, 0], fov: 5 },
+    { position: [0, 1.6, -200], target: [0, 1.6, -199], fov: 30 }])
+    expect(() => views.cameraMoved(MAIN_VIEW, { pose })).toThrow("isn't valid");
+  // The same values are refused on read, from the graph and from the legacy fields alike.
+  const data = defaultViewGraph(freshWorkspace().preview);
+  expect(parseViewGraph({ ...data, scenes: [{ ...data.scenes[0], eyeShape: 999.5 }] }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
+  const bytes = serializeWorkspace(freshWorkspace(), STUDIO_DOCUMENTS) as { preview: Record<string, unknown> };
+  const read = parseWorkspace({ ...bytes, preview: { ...bytes.preview, eyeShape: 999.5, exposure: 100, camera: { position: [0, 1.6, -50], target: [0, 1.6, 0], fov: 30 } } }, STUDIO_DOCUMENTS);
+  expect([read.preview.eyeShape, read.preview.exposure, read.preview.camera]).toEqual([9, 1.2, undefined]);
+});
+
+test("a main-view tool the legacy fields can't hold is kept on save (CORE-97)", () => {
+  const workspace = freshWorkspace(), views = createStudioViewGraph(workspace.preview);
+  const on = views.state<{ on: Record<string, boolean> }>(MAIN_VIEW, "tools").on;
+  expect(storedViewGraph(views)).toBeUndefined();
+  views.edit(MAIN_VIEW, "tools", { state: { on: { ...on, "poses.menu": true } } });
+  const stored = storedViewGraph(views);
+  expect(stored).toBeDefined();
+  const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...workspace, views: stored }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
+  // The legacy field still wins for Surface controls (an older build may have changed it); the other tool is kept.
+  read.preview.surface = false;
+  expect(createStudioViewGraph(read.preview, read.views).state(MAIN_VIEW, "tools"))
+    .toEqual({ on: { "eye-makeup.surface": false, "eye-makeup.wire": false, "poses.menu": true } });
+});
+
+test("view IDs the gestures and the viewport port reserve are refused (CORE-98)", () => {
+  for (const id of ["uv", "surface", "head"]) expect(validViewId(id)).toBe(false);
+  expect(validViewId("v2")).toBe(true);
+  const data = defaultViewGraph(freshWorkspace().preview);
+  const extra = { id: "uv", kind: "3d", scene: "s1", camera: "c1", lights: "l1", display: "d1", tools: "t1" };
+  expect(parseViewGraph({ ...data, views: [...data.views, extra] }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
+});
+
+test("views and nodes of kinds this build doesn't know are kept and written back unchanged, never drawn", () => {
+  const workspace = freshWorkspace(), data = defaultViewGraph(workspace.preview);
+  // A newer build's World view (a location seen by a fly camera, sharing the main view's lights) and a 2D map view.
+  const newer = { ...data,
+    views: [data.views[0], { id: "w1", kind: "3d", title: "Night City", scene: "s9", camera: "c9", lights: "l1", display: "d1", tools: "t9", pinned: true },
+      { id: "m1", kind: "map2d", lights: "l1", zoom: 3 }],
+    scenes: [...data.scenes, { id: "s9", kind: "location", sectors: [1, 2] }], cameras: [...data.cameras, { id: "c9", kind: "fly", speed: 2 }],
+    tools: [...data.tools, { id: "t9", on: {} }], focused: "w1" };
+  const parsed = parseViewGraph(newer, STUDIO_VIEW_GRAPH_RULES);
+  expect(parsed).toEqual({ ...newer, focused: MAIN_VIEW });
+  const views = new ViewGraph(parsed!, STUDIO_VIEW_GRAPH_RULES);
+  expect(views.viewIds()).toEqual([MAIN_VIEW]);
+  expect(views.snapshot().views.map(view => view.id)).toEqual([MAIN_VIEW]);
+  expect(isDefaultViewGraph(views.data())).toBe(false);
+  // Edits here never touch them: new IDs avoid theirs, and a node they name stays while they do.
+  const v2 = views.addView(MAIN_VIEW, { scene: true, lights: true });
+  views.unlink(MAIN_VIEW, "lights");
+  views.closeView(v2);
+  expect(views.data().views.map(view => view.id)).toEqual([MAIN_VIEW, "w1", "m1"]);
+  expect(views.data().lights.map(node => node.id)).toContain("l1");
+  expect(views.data().scenes).toContainEqual({ id: "s9", kind: "location", sectors: [1, 2] });
+  // Through a workspace round trip too.
+  const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...workspace, views: parsed }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
+  expect(read.views).toEqual(parsed);
+  // Damage is still refused: a kept view naming a missing node, or a main view this build can't show.
+  expect(parseViewGraph({ ...newer, views: [data.views[0], { id: "m1", kind: "map2d", lights: "l7" }] }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
+  expect(parseViewGraph({ ...newer, views: [{ ...data.views[0], scene: "s9" }], focused: MAIN_VIEW }, STUDIO_VIEW_GRAPH_RULES)).toBeUndefined();
 });

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
+import { parseDeformationProgram, type DeformationProgram } from "./deformation-rig";
 import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "./render-detail";
@@ -49,6 +50,8 @@ export type LoadedCharacterDetails = {
   /** Shown slots with a part the preview can't draw yet, as codes the presentation words. */
   limits: { slot: DetailSlot; limit: DetailLimit }[];
   notes: string[];
+  /** The player puppet's deformation rigs the record carries (with a loaded body only): they pose the body's helper joints. */
+  rigs: DeformationProgram[];
   /** How many components were taken over from `reuse` unchanged. */
   reused: number;
   readonly disposed: boolean;
@@ -372,7 +375,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   };
   const aborted = () => { if (signal?.aborted) throw new DOMException("Loading the details was cancelled.", "AbortError"); };
   const bytesOf = new Map<string, Promise<ArrayBuffer>>();
-  const fetchBytes = (resource: RenderResource) => {
+  const fetchBytes = (resource: Pick<RenderResource, "file" | "sha256">) => {
     let pending = bytesOf.get(resource.file);
     if (!pending) {
       pending = (async () => {
@@ -635,10 +638,19 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     problems.push({ slot: "body", message: UNCOVERED_BODY });
     notes.push("body: its underwear couldn't be loaded, so the body is not shown.");
   }
+  // The deformation rigs, with a body only; one that can't be read leaves a note, and the helper joints follow their limbs.
+  const rigs: DeformationProgram[] = [];
+  if (components.some(item => item.component.slot === "body")) for (const rig of record.rigs ?? []) {
+    try { rigs.push(parseDeformationProgram(JSON.parse(new TextDecoder().decode(await fetchBytes(rig))))); }
+    catch (error) {
+      aborted();
+      notes.push(`body: its ${rig.component} rig couldn't be loaded (${(error as Error).message}), so the joints it solves follow the limbs they sit on.`);
+    }
+  }
   // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
   const shown = new Set(components.map(item => item.component.slot));
   const loaded: LoadedCharacterDetails = { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
-    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes,
+    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes, rigs,
     reused: borrowed.size,
     get disposed() { return disposed; },
     // The scene shows these details now: the parts taken over from the shown details are this load's to release from here on

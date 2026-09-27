@@ -16,8 +16,9 @@ export const SHELL_VIEW = {
       description: "Local library revisions, recovery and portable files." },
     { id: "package", title: "Mod package", icon: "package", order: 50, slot: "collection", heavy: true,
       description: "Check and build private local mod candidates." },
-    { id: "head", title: "Head", icon: "head", order: 60, slot: "stage",
-      description: "Live 3D preview on V's head with on-surface editing." },
+    // The main view's panel keeps the ID `head` so saved layouts restore; its tab is titled from the view graph (viewTitles).
+    { id: "head", title: "3D view", icon: "head", order: 60, slot: "stage",
+      description: "Live 3D preview of your V with on-surface editing." },
     { id: "character", title: "Character", icon: "character", order: 120, slot: "inspect",
       description: "Your V's creator options from your game and mods: change, turn Off or reset each one, and save presets." },
     { id: "lighting", title: "Camera & light", icon: "lighting", order: 130, slot: "inspect",

@@ -225,18 +225,23 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
 }
 
 /**
- * One texture decoder per game folder, opened when first asked for (a worker of its own, so a long texture never holds up the resolver's
- * reads) and opened again when the game's Oodle library changes. One that couldn't be opened for a reason that may pass is tried again
- * after a minute; `XFS_NATIVE_READER=0` turns it off (WolvenKit exports every texture). The worker releases the library after a minute
- * idle (native-decode.ts), and the next texture starts another.
+ * One native decoder per game folder, opened when first asked for (a worker of its own, so a long texture or mesh never holds up the
+ * resolver's reads) and opened again when the game's Oodle library changes. One that couldn't be opened for a reason that may pass is
+ * tried again after a minute; `XFS_NATIVE_READER=0` turns it off (WolvenKit exports everything). The worker releases the library after
+ * a minute idle (native-decode.ts), and the next request starts another. The texture exporter keeps one set, the mesh exporter
+ * (native-geometry-export.ts) another, so textures and meshes decode side by side.
  */
-export class NativeTextureDecoders {
+export class NativeDecoders {
   private readonly decoders = new Map<string, { stamp: string; opened: Promise<OpenedDecoder>; at: number }>();
   constructor(private readonly options: { script?: string | URL; open?: (gameRoot: string) => Promise<OpenedDecoder>; log?: (message: string) => void;
-    env?: Record<string, string | undefined> } = {}) {}
+    env?: Record<string, string | undefined>;
+    /** Time budget per request in the worker (default: a texture's). */ timeoutMs?: number;
+    /** What the decoder reads, for the log line when it can't be opened (default: textures). */ label?: { reader: string; what: string };
+    /** An environment variable that turns this reader alone off when "0" (besides `XFS_NATIVE_READER`), for comparisons. */ offSwitch?: string } = {}) {}
 
-  async get(gameRoot: string): Promise<TextureDecoder | null> {
-    if ((this.options.env ?? process.env).XFS_NATIVE_READER === "0") return null;
+  async get(gameRoot: string): Promise<NativeDecoder | null> {
+    const env = this.options.env ?? process.env;
+    if (env.XFS_NATIVE_READER === "0" || (this.options.offSwitch && env[this.options.offSwitch] === "0")) return null;
     const stamp = nativeRouteStamp(gameRoot);
     let entry = this.decoders.get(gameRoot);
     if (entry && entry.stamp !== stamp) { this.closeEntry(entry); entry = undefined; }
@@ -245,11 +250,13 @@ export class NativeTextureDecoders {
       if (settled.decoder || settled.permanent || Date.now() - entry.at < 60_000) return settled.decoder;
       entry = undefined;
     }
-    const open = this.options.open ?? (root => openNativeDecoderAsync(root, { timeoutMs: NATIVE_TEXTURE_TIMEOUT_MS, ...(this.options.script ? { script: this.options.script } : {}) }));
+    const timeoutMs = this.options.timeoutMs ?? NATIVE_TEXTURE_TIMEOUT_MS;
+    const open = this.options.open ?? (root => openNativeDecoderAsync(root, { timeoutMs, ...(this.options.script ? { script: this.options.script } : {}) }));
     const opened = open(gameRoot).catch((error: unknown): OpenedDecoder => ({ decoder: null, reason: String((error as Error)?.message ?? error), permanent: false }));
     this.decoders.set(gameRoot, { stamp, opened, at: Date.now() });
     const settled = await opened;
-    if (!settled.decoder) this.options.log?.(`XF Studio's texture reader is off for this game folder, so WolvenKit exports textures: ${settled.reason}`);
+    const label = this.options.label ?? { reader: "texture reader", what: "textures" };
+    if (!settled.decoder) this.options.log?.(`XF Studio's ${label.reader} is off for this game folder, so WolvenKit exports ${label.what}: ${settled.reason}`);
     return settled.decoder;
   }
 
@@ -257,3 +264,6 @@ export class NativeTextureDecoders {
 
   close(): void { for (const entry of this.decoders.values()) this.closeEntry(entry); this.decoders.clear(); }
 }
+/** The texture exporter's decoders (the name it had before meshes shared the class). */
+export const NativeTextureDecoders = NativeDecoders;
+export type NativeTextureDecoders = NativeDecoders;

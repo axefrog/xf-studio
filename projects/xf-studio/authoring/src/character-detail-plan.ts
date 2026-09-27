@@ -109,6 +109,11 @@ export type PlannedComponent = {
   skippedChunks: number;
   /** Morph components: the effective `baseTexture` rule (already applied to `materials`). */
   morphTexture: { morph: Provenance; texture: Provenance | null; parameter: string } | null;
+  /**
+   * Morph components: the morph target's effective base mesh (after ArchiveXL patches), whose bones its shapes move with. The game finds
+   * it by archive precedence like any resource, so its winning archive, not the morph target's own, gives the exported skin.
+   */
+  baseMesh?: Provenance;
   /** Body components: the morph targets the resolver applied (`<target>_<region>`); absent on head parts, which follow the facial shapes. */
   morphs?: string[];
   /** Garment components: the clothing area and item record that brought it, and its layer score. */
@@ -193,7 +198,8 @@ const chunkTemplate = (material: ResolvedChunkMaterial, identities: TemplateIden
 };
 
 /** Plan one chunk of a slot's component. On the face only decal-family templates draw, with the decal family's inputs. */
-function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
+/** One resolved chunk's effective inputs for its template's adapter (also the creator swatches', cc-swatch.ts). */
+export function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDefaults, rule: PlannedComponent["morphTexture"],
   identities: TemplateIdentities, slot: DetailSlot): PlannedChunk {
   const faceDetail = slot === "face", decals = decalFamilySlot(slot);
   const template = material.template ? refLabel(material.template.ref) : null;
@@ -250,6 +256,7 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   return { slot, option: entry.option, definition: entry.definition, component: component.name, drawnFrom: geometry.drawnFrom,
     morphTargets: component.type === "entMorphTargetSkinnedMeshComponent", renderChunks: geometry.renderChunks,
     chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture,
+    ...(component.type === "entMorphTargetSkinnedMeshComponent" && geometry.morphTarget && geometry.mesh?.status === "archive" ? { baseMesh: geometry.mesh } : {}),
     ...(slot === "body" ? { morphs: [...new Set(component.appliedMorphs.map(morph => `${morph.target}_${morph.region}`))].slice(0, 16) } : {}),
     ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}) };
 }
@@ -356,6 +363,27 @@ export const FEET_GROUPS: Readonly<Record<FeetState, string>> = Object.freeze({ 
 /** The body's state as worn items would set it; the default is the V with no clothing. */
 export type BodyState = { readonly feet: FeetState };
 export const DEFAULT_BODY_STATE: BodyState = Object.freeze({ feet: "flat" });
+/**
+ * The character creator's puppet (`Character.Player_Puppet_Menu`, `player_wa_tpp.ent`) wears the appearance `character_creation`
+ * [resource: REDmod `player_menu_record.tweak`], and the creator resource's body group of that name lists the feet group it draws
+ * (`lifted_feet` in the feminine resource) [resource]. The creator's idles are authored for those feet: posed by them, the lifted feet
+ * stand flat, while the flat feet sink their heels through the floor and bend the toes (knowledge/body-animation.md §4).
+ */
+export const CREATOR_PUPPET_GROUP = "character_creation";
+/** The feet state the creator's puppet draws bare: the one its group lists, or null when it lists none (the masculine resource). */
+export function creatorPuppetFeet(cco: CcoResource): FeetState | null {
+  const group = cco.parts.body.groups.find(entry => entry.name === CREATOR_PUPPET_GROUP);
+  const listed = (Object.entries(FEET_GROUPS) as [FeetState, string][]).filter(([, name]) => group?.options.includes(name));
+  return listed.length === 1 ? listed[0]![0] : null;
+}
+/**
+ * The body state a request draws: footwear lifts the feet; bare feet stand as the request's puppet draws them (the creator's, for its
+ * idles), else flat, as in the inventory and in gameplay.
+ */
+export function bodyStateFor(footwear: FeetState | null | undefined, puppet: "creator" | undefined, cco: CcoResource): BodyState {
+  if (footwear === "lifted") return { feet: "lifted" };
+  return { feet: (puppet === "creator" ? creatorPuppetFeet(cco) : null) ?? "flat" };
+}
 /** The groups the third-person body reads in one part for a body state. */
 export const bodyGroups = (part: "body" | "arms", state: BodyState = DEFAULT_BODY_STATE): readonly string[] =>
   part === "body" ? [...BODY_GROUPS.body, FEET_GROUPS[state.feet]] : BODY_GROUPS.arms;

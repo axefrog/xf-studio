@@ -47,6 +47,17 @@ export type ViewToolContribution = {
   readonly placement: "toolbar" | "menu" | "research";
   readonly kind: "toggle" | "action" | "menu";
   readonly state: "tools" | "camera" | "scene";
+  /**
+   * The action kind it dispatches on its view: `view.setTool` for a toggle held in the view's tools node, a camera command's own
+   * kind (`camera.front`), or the action a subject's toggle starts from (`motion.setIdle`). The application resolves each tool's
+   * current state and payload from this, never from the tool's ID.
+   */
+  readonly dispatches: string;
+  /**
+   * Turning it on lets the pointer edit in the view (Surface controls). While it is on, the view's hints list editing targets; while
+   * it is off they say how to turn it on; a view that offers no such tool (its module is hidden) hints only camera input (UI-102).
+   */
+  readonly editing?: boolean;
   /** The key binding whose chord the tool's menu entry shows (an input-binding ID such as `head.front`). */
   readonly binding?: string;
   /** Palette search words. */
@@ -83,9 +94,12 @@ export function deriveViewSummaries(registration: Pick<ModuleRegistration, "summ
   return registration.summaries.filter(summary => shown.has(summary.module) && summary.scenes.includes(sceneKind))
     .sort((a, b) => order.indexOf(a.module) - order.indexOf(b.module));
 }
+/** The action every toggle held in a view's tools node dispatches (view-actions.ts). */
+export const SET_VIEW_TOOL = "view.setTool";
 /**
  * Registry completeness (design §6.3 rule 7): module IDs are unique; every tool and summary names a registered module (or the
- * platform) and only registered scene kinds; tool IDs are unique and module tools are prefixed with their module's ID. Returns
+ * platform) and only registered scene kinds; tool IDs are unique and module tools are prefixed with their module's ID; every tool
+ * names the action it dispatches, and a tool whose state is the view's tools node is a toggle dispatching `view.setTool`. Returns
  * the problems found (empty when complete).
  */
 export function moduleRegistrationIssues(registration: ModuleRegistration): string[] {
@@ -100,6 +114,10 @@ export function moduleRegistrationIssues(registration: ModuleRegistration): stri
     if (tool.module !== "platform" && !ids.has(tool.module)) issues.push(`tool ${tool.id} names unregistered module ${tool.module}`);
     if (tool.module !== "platform" && !tool.id.startsWith(`${tool.module}.`)) issues.push(`tool ${tool.id} is not prefixed with its module ${tool.module}`);
     if (!tool.scenes.length || tool.scenes.some(kind => !scenes.has(kind))) issues.push(`tool ${tool.id} names an unregistered scene kind`);
+    if (typeof tool.dispatches !== "string" || !/^[a-z][a-zA-Z]*\.[a-zA-Z]+$/.test(tool.dispatches)) issues.push(`tool ${tool.id} names no action to dispatch`);
+    else if ((tool.state === "tools") !== (tool.dispatches === SET_VIEW_TOOL) || (tool.state === "tools" && tool.kind !== "toggle"))
+      issues.push(`tool ${tool.id} must be a toggle dispatching ${SET_VIEW_TOOL} exactly when its state is the view's tools node`);
+    if (tool.editing && tool.state !== "tools") issues.push(`tool ${tool.id} turns on editing but isn't held in the view's tools node`);
   }
   for (const summary of registration.summaries) {
     if (!ids.has(summary.module)) issues.push(`summary names unregistered module ${summary.module}`);

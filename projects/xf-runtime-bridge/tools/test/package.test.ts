@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { PLUGIN_DIR, PRESETS_FILE, stageVariant, variantConfig, VARIANTS, type Variant } from "../packaging.ts";
+import { PANEL_FILE, PLUGIN_DIR, PRESETS_FILE, stageVariant, variantConfig, VARIANTS, type Variant } from "../packaging.ts";
 
 const projectDir = resolve(import.meta.dir, "..", "..");
 
@@ -29,15 +29,27 @@ describe("packages", () => {
     }),
   ) as Record<Variant, { stageDir: string; manifest: ReturnType<typeof stageVariant>; config: string }>;
 
-  test("the default package has the bridge off, no camera presets and allow_creator_leave off", () => {
+  test("the default package has the bridge off, no camera presets, no panel, no carrier and every switch off", () => {
     const { stageDir, manifest, config } = staged.default;
     expect(existsSync(join(stageDir, PRESETS_FILE))).toBe(false);
+    expect(existsSync(join(stageDir, PANEL_FILE))).toBe(false);
     expect(manifest.files.some((f) => f.path.includes("xf_photo_mode_presets"))).toBe(false);
+    expect(manifest.files.some((f) => /live_pose|xfs_live|\.archive/.test(f.path))).toBe(false);
     expect(config).toMatch(/^enabled = false$/m);
     expect(config).toMatch(/^allow_writes = false$/m);
     expect(config).toMatch(/^allow_creator_leave = false$/m);
+    expect(config).toMatch(/^allow_live_pose = false$/m);
     expect(config).not.toMatch(/= true$/m);
-    expect(manifest).toMatchObject({ variant: "default", bridge_enabled: false, allow_writes: false, allow_creator_leave: false, photo_mode_presets: null, write_classes: [] });
+    expect(manifest).toMatchObject({
+      variant: "default",
+      bridge_enabled: false,
+      allow_writes: false,
+      allow_creator_leave: false,
+      allow_live_pose: false,
+      photo_mode_presets: null,
+      cet_panel: false,
+      write_classes: [],
+    });
   });
 
   test("the diagnostic package is on and read-only, with the test profile's camera presets", () => {
@@ -46,7 +58,9 @@ describe("packages", () => {
     expect(config).toMatch(/^enabled = true$/m);
     expect(config).toMatch(/^allow_writes = false$/m);
     expect(config).toMatch(/^allow_creator_leave = false$/m);
-    expect(manifest).toMatchObject({ bridge_enabled: true, allow_writes: false, allow_creator_leave: false });
+    expect(config).toMatch(/^allow_live_pose = false$/m);
+    expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
+    expect(manifest).toMatchObject({ bridge_enabled: true, allow_writes: false, allow_creator_leave: false, allow_live_pose: false, cet_panel: true });
   });
 
   test("only the writes package allows writes and leaving the creator, and says so at the top", () => {
@@ -54,8 +68,11 @@ describe("packages", () => {
     expect(existsSync(join(stageDir, PRESETS_FILE))).toBe(true);
     expect(config).toMatch(/^allow_writes = true$/m);
     expect(config).toMatch(/^allow_creator_leave = true$/m);
+    expect(config).toMatch(/^allow_live_pose = true$/m);
     expect(config).toContain("THIS COPY ALLOWS WRITES");
-    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, write_classes: ["photo", "world", "character"] });
+    expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
+    expect(manifest.files.some((f) => /\.archive/.test(f.path))).toBe(false); // the carrier is its own test package
+    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, cet_panel: true, write_classes: ["photo", "world", "character"] });
   });
 
   test("every package carries the same plugin, scripts and notices, and a manifest hashing each file", () => {
@@ -74,6 +91,7 @@ describe("packages", () => {
     expect(() => variantConfig(base.replace("allow_creator_leave = false", "allow_creator_leave = true"), "default")).toThrow(/allow_creator_leave/);
     expect(() => variantConfig(base.replace("allow_writes = false", "allow_writes = true"), "default")).toThrow(/allow_writes/);
     expect(() => variantConfig(base.replace("enabled = false", "enabled = true"), "default")).toThrow(/enabled/);
+    expect(() => variantConfig(base.replace("allow_live_pose = false", "allow_live_pose = true"), "default")).toThrow(/allow_live_pose/);
     rmSync(work, { recursive: true, force: true });
   });
 });

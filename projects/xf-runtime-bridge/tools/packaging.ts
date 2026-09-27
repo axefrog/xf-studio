@@ -9,6 +9,8 @@
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
 //   r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
+//   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/panel.lua  (CET panel; diagnostic and writes packages only)
+// The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
 //   red4ext/plugins/XFRuntimeBridge/THIRD_PARTY_NOTICES.txt  (nlohmann/json and RED4ext.SDK, MIT)
 //   red4ext/plugins/XFRuntimeBridge/manifest.json        (versions and SHA-256 of every other file)
 
@@ -27,6 +29,8 @@ export const DESCRIBE: Record<Variant, string> = {
 
 export const PLUGIN_DIR = "red4ext/plugins/XFRuntimeBridge";
 export const PRESETS_FILE = "r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml";
+export const CET_DIR = "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge";
+export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 
 export const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -45,6 +49,7 @@ export function variantConfig(base: string, variant: Variant): string {
   let config = base;
   if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
   if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
+  if (!/^allow_live_pose = false$/m.test(config)) throw new Error("native/config/config.ini must keep allow_live_pose = false");
   if (!/^enabled = false$/m.test(config)) throw new Error("native/config/config.ini must keep enabled = false");
   if (variant !== "default") {
     config = config.replace(/^enabled = false$/m, "enabled = true");
@@ -58,6 +63,10 @@ export function variantConfig(base: string, variant: Variant): string {
     // character creator, in sessions that end by loading the safety save.
     config = config.replace(/^allow_creator_leave = false$/m, "allow_creator_leave = true");
     if (!/^allow_creator_leave = true$/m.test(config)) throw new Error("writes config did not allow leaving the creator");
+    // The live-posing experiment (research/animation/pose-editor-design.md §7.4, question Q6's default):
+    // writing the XF carrier clip's keys, in the test profile only, with the separate carrier test package.
+    config = config.replace(/^allow_live_pose = false$/m, "allow_live_pose = true");
+    if (!/^allow_live_pose = true$/m.test(config)) throw new Error("writes config did not allow the live-pose carrier");
     const warning = "; THIS COPY ALLOWS WRITES: stage it only in the dedicated XF test MO2 profile, never an everyday one.";
     config = config.replace(/^(\[bridge\])$/m, `${warning}\n$1`);
     if (!config.includes(warning)) throw new Error("writes config lost its warning");
@@ -85,7 +94,9 @@ export type Manifest = {
   allow_writes: boolean;
   write_classes: string[];
   allow_creator_leave: boolean;
+  allow_live_pose: boolean;
   photo_mode_presets: string | null;
+  cet_panel: boolean;
   commit: string;
   source_tree_clean: true;
   built_for: Record<string, string>;
@@ -115,7 +126,10 @@ export function stageVariant(options: StageOptions): Manifest {
   // test profile only (26 September 2026), so only the diagnostic and writes packages carry them;
   // the distribution package must not, since they replace four of the player's presets.
   if (variant !== "default") put(join(projectDir, "tweaks", "test-profile", "xf_photo_mode_presets.yaml"), PRESETS_FILE);
-  put(join(projectDir, "cet", "xf_runtime_bridge", "init.lua"), "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua");
+  put(join(projectDir, "cet", "xf_runtime_bridge", "init.lua"), `${CET_DIR}/init.lua`);
+  // The in-game panel (reconnect after the kill switch, pause changes): test builds only. Without it the
+  // distribution package's CET layer shows its plain status window.
+  if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "panel.lua"), PANEL_FILE);
 
   const files = listFiles(stageDir).map((path) => ({
     path: relative(stageDir, path).replaceAll("\\", "/"),
@@ -130,7 +144,9 @@ export function stageVariant(options: StageOptions): Manifest {
     allow_writes: variant === "writes",
     write_classes: variant === "writes" ? ["photo", "world", "character"] : [],
     allow_creator_leave: variant === "writes",
+    allow_live_pose: variant === "writes",
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
+    cet_panel: variant !== "default",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {

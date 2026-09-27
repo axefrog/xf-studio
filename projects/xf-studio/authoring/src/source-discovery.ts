@@ -9,7 +9,8 @@ import { attributeVortexFile, type VortexAttribution } from "./vortex-deployment
 import { readVortexManifests } from "./vortex-host";
 
 /** Physical inventory only. An archive has no known depot members until an index adapter examines it. */
-export type SourceFileKind = "archive" | "archive-xl" | "loose-customization" | "archive-modlist";
+/** `tweak`: a TweakXL file under `r6/tweaks` (YAML, or TweakXL's own `.tweak` format). */
+export type SourceFileKind = "archive" | "archive-xl" | "loose-customization" | "archive-modlist" | "tweak";
 export type SourceProviderKind = "game" | "manual" | "mo2-mod" | "mo2-overwrite";
 export type SourceConfidence = "observed" | "source-derived" | "ambiguous" | "unknown";
 
@@ -132,6 +133,7 @@ const linkedAncestor = (path: string): boolean => {
 };
 const kindOf = (path: string): SourceFileKind | null => {
   if (key(path) === "archive/pc/mod/modlist.txt") return "archive-modlist";
+  if (/^r6\/tweaks\/.+\.(?:ya?ml|tweak)$/.test(key(path))) return "tweak";
   const lower = path.toLowerCase();
   return Object.entries(extensions).find(([suffix]) => lower.endsWith(suffix))?.[1] ?? null;
 };
@@ -230,7 +232,13 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
   };
 
   if (!settings.gameRoot) issue("game_root_unset", "Select a game root.");
-  else scan(join(settings.gameRoot, "archive", "pc"), "game", "Installed game", true, null, "archive/pc/");
+  else {
+    scan(join(settings.gameRoot, "archive", "pc"), "game", "Installed game", true, null, "archive/pc/");
+    // TweakXL's folder is optional: without it nothing is missing, so it is scanned (and watched) only when it is there.
+    const tweaks = join(settings.gameRoot, "r6", "tweaks"), tweakStat = lstatOrNull(tweaks);
+    if (tweakStat?.isDirectory()) scan(tweaks, "game", "Installed game", true, null, "r6/tweaks/");
+    else watch(tweaks, tweakStat);
+  }
   // A separate manual root has the same install tree shape as a game root.
   if (settings.manualModRoot) scan(join(settings.manualModRoot, "archive", "pc"), "manual", "Manual files", true,
     null, "archive/pc/");

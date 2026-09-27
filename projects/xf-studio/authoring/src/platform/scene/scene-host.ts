@@ -292,6 +292,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     eyeAppearance: character.eyeAppearance,
     setEyeOptics: character.setEyeOptics,
     setHair: (enabled: boolean) => character.setSlotVisible("hair", enabled),
+    /** The head options whose parts the view hides (the V's own makeup); a visibility preference, instant. */
+    setHiddenOptions: (options: readonly string[]) => character.setHiddenOptions(options),
     /** The host's detail loader (§5): the V's resolved components, each chunk through the adapter for its template. */
     details: character.details,
     setCharacterDetails: character.setCharacterDetails,
@@ -346,6 +348,14 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     },
     endFovGesture: () => { fovGestureAnchor = undefined; },
     setIdle: (enabled: boolean) => { if (rigMotion.setIdle(enabled)) frameIdle(); },
+    /** The game's preview idles prepared on this computer (idle-catalogue.ts). */
+    idles: motion.idles,
+    /** Play another of them; the framing follows the new clip's head, as enabling the idle does. */
+    selectIdle: async (id: string) => {
+      if (!motion.selectIdle) throw Error("The game's other idles aren't prepared on this computer.");
+      await motion.selectIdle(id);
+      frameIdle();
+    },
     setIdlePaused: (paused: boolean) => idle?.setPaused(paused),
     setIdleContributions: (body: boolean, face: boolean) => {
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;
@@ -372,6 +382,6 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
   return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
-    "setCharacterDetails", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail",
+    "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail",
     "setBlink", "animateBlink", "setWire", "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }

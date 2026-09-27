@@ -7,7 +7,8 @@
  * `0x0BB1DB47`, a 28-byte header (blob version 8, parser version 4, record checksum, then the offsets of the flats,
  * records, queries and group tags). The flats section lists value types by FNV-1a 64 of the type name, each with its
  * values and a `(TweakDBID, value index)` key table. Strings are length-prefixed with a signed VLQ (negative: one byte per
- * character, positive: UTF-16).
+ * character, positive: UTF-16); arrays (`array:CName`, `array:String`, `array:TweakDBID`) are a VLQ count and their elements; a `Vector3`
+ * is three float32 [resource: the photo-mode pose lists read 142/143 names and the pose offsets `(0, 0, 0.35)` as the REDmod sources say].
  *
  * A TweakDBID is CRC-32 of the name plus the name's length in the next byte. A record's field is the flat
  * `<record>.<field>`; its CRC continues the record's CRC over `.<field>`, so a field of a record known only by ID is
@@ -61,10 +62,12 @@ export type TweakValue =
   | { readonly type: "gamedataLocKeyWrapper"; readonly value: string }
   | { readonly type: "Int32" | "Bool"; readonly value: number }
   | { readonly type: "Float"; readonly value: number }
-  | { readonly type: "array:CName"; readonly value: readonly string[] };
+  | { readonly type: "array:CName" | "array:String"; readonly value: readonly string[] }
+  /** Three float32 (x, y, z). */
+  | { readonly type: "Vector3"; readonly value: readonly [number, number, number] };
 export type TweakType = TweakValue["type"];
 export const TWEAK_TYPES: readonly TweakType[] = ["CName", "String", "TweakDBID", "array:TweakDBID", "raRef:CResource", "gamedataLocKeyWrapper", "Int32", "Bool",
-  "Float", "array:CName"];
+  "Float", "array:CName", "array:String", "Vector3"];
 
 interface FlatType { type: TweakType; values: number; keys: number; offset: number; valueStarts: Uint32Array | null; keyTable: number }
 
@@ -132,7 +135,7 @@ export class TweakDbBlob {
         break;
       }
       case "array:TweakDBID": { const [length, next] = this.vlq(pos); size = next - pos + Math.abs(length) * 8; break; }
-      case "array:CName": {
+      case "array:CName": case "array:String": {
         let [length, at] = this.vlq(pos);
         if (Math.abs(length) > this.bytes.byteLength - at) throw Error("TweakDB blob is truncated.");
         for (let i = 0; i < Math.abs(length); i++) at += this.skip("CName", at);
@@ -140,6 +143,7 @@ export class TweakDbBlob {
         break;
       }
       case "Int32": case "Float": size = 4; break;
+      case "Vector3": size = 12; break;
       case "Bool": size = 1; break;
       default: size = 8;
     }
@@ -165,7 +169,8 @@ export class TweakDbBlob {
       case "Int32": return { type, value: this.view.getInt32(pos, true) };
       case "Float": return { type, value: this.view.getFloat32(pos, true) };
       case "Bool": return { type, value: this.view.getUint8(pos) };
-      case "array:CName": {
+      case "Vector3": return { type, value: [this.view.getFloat32(pos, true), this.view.getFloat32(pos + 4, true), this.view.getFloat32(pos + 8, true)] };
+      case "array:CName": case "array:String": {
         const [length, next] = this.vlq(pos);
         const names: string[] = [];
         for (let i = 0, at = next; i < Math.abs(length); i++) {
@@ -183,8 +188,8 @@ export class TweakDbBlob {
     let pos = flat.offset;
     const count = this.u32(pos); pos += 4;
     // Each value takes at least one byte (eight for fixed-size types): a larger count cannot fit, so nothing is allocated for it.
-    const least = flat.type === "CName" || flat.type === "String" || flat.type === "array:TweakDBID" || flat.type === "array:CName" || flat.type === "Bool" ? 1
-      : flat.type === "Int32" || flat.type === "Float" ? 4 : 8;
+    const least = flat.type === "CName" || flat.type === "String" || flat.type === "array:TweakDBID" || flat.type === "array:CName" || flat.type === "array:String"
+      || flat.type === "Bool" ? 1 : flat.type === "Int32" || flat.type === "Float" ? 4 : flat.type === "Vector3" ? 12 : 8;
     if (count * least > this.bytes.byteLength - pos) throw Error("TweakDB blob is truncated.");
     const starts = new Uint32Array(count);
     for (let i = 0; i < count; i++) { starts[i] = pos; pos += this.skip(flat.type, pos); }
