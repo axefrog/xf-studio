@@ -46,6 +46,48 @@ export type SupersededPart = { readonly slot: CharacterSlot; readonly options?: 
 export type SkinLight = { readonly lobes: { readonly roughness0: number; readonly roughness1: number; readonly weight: number };
   readonly wrap: readonly [number, number, number] };
 
+/**
+ * How a material takes part in the host's G-buffer-like passes (platform/scene/pass-variants.ts): today the skin scatter's input pass
+ * (research/materials/shader-skin.md §11), later the parity passes. The host draws every visible mesh once more with an input variant of
+ * its own material; a material states its role, and one that states none is drawn by the host's rules (opaque surfaces occlude, blended
+ * forward-only ones are left out).
+ * - `skin`: a Subsurface (class 1) surface: writes its diffuse irradiance, √albedo, metalness, class and profile slot, opaque;
+ * - `decal`: drawn over the skin after it (a post-G-buffer decal, the authored plate): blends √colour, irradiance and metalness each at its
+ *   own alpha and never changes the pixel's class or slot;
+ * - `skip`: forward-only (drawn after the game's scatter): not drawn in the pass.
+ */
+export type PassRole = "skin" | "decal" | "skip";
+/** A skin profile's fields the scatter reads (`CSkinProfile`: colours as stored 8-bit sRGB). */
+export type PassSkinProfile = { readonly blurSize: number; readonly diffuse: readonly number[]; readonly falloff: readonly number[] };
+/**
+ * A material's declaration. `wrapGate` scales the skin light's wrap (1: the wrap stand-in; 0 while the scatter runs, which replaces it);
+ * a `skin` material also carries its profile and the uniform its profile slot is written to.
+ */
+export type PassParticipation = { readonly role: PassRole; readonly profile?: PassSkinProfile;
+  readonly slot?: { value: number }; readonly wrapGate?: { value: number } };
+const PASS_KEY = "xfsPass";
+/** Declare (or with null, withdraw) how `material` takes part in the host's passes. */
+export function declarePass(material: THREE.Material, participation: PassParticipation | null): void {
+  if (participation) material.userData[PASS_KEY] = participation; else delete material.userData[PASS_KEY];
+}
+/** A material's declaration, if it made one. */
+export const passParticipation = (material: THREE.Material): PassParticipation | undefined =>
+  material.userData?.[PASS_KEY] as PassParticipation | undefined;
+
+/**
+ * The scatter-input pass's shader contract (platform/scene/skin-scatter.ts). A variant's program has `SCATTER_INPUT_DEFINE` defined and
+ * writes three targets: location 0 (Three's `gl_FragColor`) = S0, the direct diffuse irradiance at albedo 1 (RGB) and, for a Subsurface
+ * pixel, its view depth (A, 0 elsewhere: the class-1 flag); `xfsScatterOut1` = S1, √albedo (RGB) and the profile slot as (slot + 1) / 8
+ * (A); `xfsScatterOut2` = S2, the metalness (R). A decal's alpha in each output is its blend weight for that target; the blend keeps the
+ * alphas underneath. `SCATTER_INPUT_OUTPUTS` declares the two extra outputs at global scope (once per program).
+ */
+export const SCATTER_INPUT_DEFINE = "XFS_SCATTER_INPUT";
+export const SCATTER_INPUT_OUTPUTS = /* glsl */`
+#ifdef XFS_SCATTER_INPUT
+layout( location = 1 ) out highp vec4 xfsScatterOut1;
+layout( location = 2 ) out highp vec4 xfsScatterOut2;
+#endif`;
+
 /** The skin under each vertex of a surface: linear colour (3), roughness (1) and metalness (1), with how it was read. */
 export type SurfaceUnderlay = { colour: THREE.BufferAttribute; roughness: THREE.BufferAttribute; metalness: THREE.BufferAttribute;
   evidence?: Readonly<Record<string, unknown>> };

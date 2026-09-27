@@ -27,7 +27,17 @@ import type { LightingPreset } from "./creator-lighting";
  * "srgb8"`): the GPU encodes on write and blends in linear light, as the half-float target does, but scene values clip at one
  * before the grade (about 2.2 × the default exposure's forehead), so only the brightest highlights differ.
  * Nothing here runs unless a frame is drawn, so an idle viewport costs no GPU work.
+ *
+ * **Skin scatter.** A frame may carry the skin scatter's Δ (platform/scene/skin-scatter.ts, research/materials/shader-skin.md §11): the
+ * `scatter` callback runs after the scene is drawn and before the display pass, and its drawing-buffer-sized texture is added to the scene
+ * value at the same pixel, before the exposure and grade (creator) or the tone mapping (studio, to the coverage-divided value, so a
+ * partly covered pixel takes Δ at its coverage like the scene colour).
  */
+/** The skin scatter's Δ at this pixel (zero without one): the display pass covers the drawing buffer the scene target has. */
+const SCATTER_UNIFORMS = /* glsl */ `
+uniform highp sampler2D tScatter;
+uniform float uScatter;
+vec3 xfsScatterDelta() { return uScatter > 0.5 ? texelFetch(tScatter, ivec2(gl_FragCoord.xy), 0).rgb : vec3(0.0); }`;
 const QUAD_VERTEX = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
@@ -36,6 +46,7 @@ uniform sampler2D tScene;
 uniform highp sampler3D tLut;
 uniform float uExposure;
 uniform float uLutSize;
+${SCATTER_UNIFORMS}
 varying vec2 vUv;
 float logC3(float x) {
   return x > 0.010591 ? 0.24719 * log(5.555556 * x + 0.052272) * 0.4342944819 + 0.385537 : 5.367655 * x + 0.092809;
@@ -45,7 +56,7 @@ vec3 srgbEncode(vec3 c) {
   return mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
 }
 void main() {
-  vec3 x = max(texture2D(tScene, vUv).rgb, vec3(0.0)) * uExposure;
+  vec3 x = max(texture2D(tScene, vUv).rgb + xfsScatterDelta(), vec3(0.0)) * uExposure;
   vec3 t = clamp(vec3(logC3(x.r), logC3(x.g), logC3(x.b)), 0.0, 1.0);
   vec3 graded = texture(tLut, t * (uLutSize - 1.0) / uLutSize + 0.5 / uLutSize).rgb;
   gl_FragColor = vec4(srgbEncode(graded), 1.0);
@@ -53,12 +64,13 @@ void main() {
 /** Three prefixes a tone-mapped `ShaderMaterial` with the renderer's `toneMapping()` and `linearToOutputTexel()`. */
 const STUDIO_FRAGMENT = /* glsl */ `
 uniform sampler2D tScene;
+${SCATTER_UNIFORMS}
 varying vec2 vUv;
 void main() {
   vec4 texel = texture2D(tScene, vUv);
   float coverage = clamp(texel.a, 0.0, 1.0);
   if (coverage <= 0.0) discard;
-  gl_FragColor = vec4(max(texel.rgb / coverage, vec3(0.0)), 1.0);
+  gl_FragColor = vec4(max(texel.rgb / coverage + xfsScatterDelta(), vec3(0.0)), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   gl_FragColor = vec4(gl_FragColor.rgb * coverage, coverage);
@@ -96,6 +108,10 @@ export const linearTargetSupported = (context: Pick<WebGL2RenderingContext, "get
 export const halfFloatRenderable = (extensions: { has?(name: string): boolean } | undefined) =>
   HALF_FLOAT_RENDER_EXTENSIONS.some(name => !!extensions?.has?.(name));
 
+const scatterUniforms = () => ({ tScatter: { value: null as THREE.Texture | null }, uScatter: { value: 0 } });
+/** A frame's skin scatter: run after the scene is drawn, it returns Δ, or null for none this frame. */
+export type ScatterPass = () => THREE.Texture | null;
+
 function fullScreen(material: THREE.Material) {
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   quad.frustumCulled = false;
@@ -110,12 +126,12 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
   let target: THREE.WebGLRenderTarget | null = null;
   let lut = lutTexture(neutralGradingLut(32));
   const creator = new THREE.ShaderMaterial({
-    uniforms: { tScene: { value: null }, tLut: { value: lut }, uExposure: { value: 1 }, uLutSize: { value: 32 } },
+    uniforms: { tScene: { value: null }, tLut: { value: lut }, uExposure: { value: 1 }, uLutSize: { value: 32 }, ...scatterUniforms() },
     vertexShader: QUAD_VERTEX, fragmentShader: CREATOR_FRAGMENT, depthTest: false, depthWrite: false, toneMapped: false,
   });
   creator.name = "xfs-creator-display";
   const studio = new THREE.ShaderMaterial({
-    uniforms: { tScene: { value: null } }, vertexShader: QUAD_VERTEX, fragmentShader: STUDIO_FRAGMENT, depthTest: false, depthWrite: false,
+    uniforms: { tScene: { value: null }, ...scatterUniforms() }, vertexShader: QUAD_VERTEX, fragmentShader: STUDIO_FRAGMENT, depthTest: false, depthWrite: false,
     toneMapped: true, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
   });
@@ -149,13 +165,20 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
     renderer.autoClear = false;
     try { renderer.render(pass, quadCamera); } finally { renderer.autoClear = autoClear; }
   }
-  function renderCreator(scene: THREE.Scene, camera: THREE.Camera) {
+  /** Bind this frame's Δ to a display pass (none: the pass adds nothing). */
+  function bindScatter(material: THREE.ShaderMaterial, scatter: ScatterPass | undefined) {
+    const delta = scatter?.() ?? null;
+    material.uniforms.tScatter!.value = delta;
+    material.uniforms.uScatter!.value = delta ? 1 : 0;
+  }
+  function renderCreator(scene: THREE.Scene, camera: THREE.Camera, scatter?: ScatterPass) {
     const previous = renderer.getRenderTarget();
     renderer.setRenderTarget(ensureTarget());
     try { renderer.render(scene, camera); } finally { renderer.setRenderTarget(previous); }
+    bindScatter(creator, scatter);
     renderer.render(creatorPass.scene, quadCamera);
   }
-  function renderStudio(scene: THREE.Scene, camera: THREE.Camera) {
+  function renderStudio(scene: THREE.Scene, camera: THREE.Camera, scatter?: ScatterPass) {
     if (!linear) { renderer.render(scene, camera); return; }
     const previous = renderer.getRenderTarget(), background = scene.background;
     renderer.getClearColor(clearColour);
@@ -171,6 +194,7 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
       renderer.setClearColor(clearColour, clearAlpha);
       renderer.setRenderTarget(previous);
     }
+    bindScatter(studio, scatter);
     // The backdrop exactly as Three draws a scene background, then the toned scene over it.
     backdrop.background = background;
     backdrop.backgroundIntensity = scene.backgroundIntensity;
@@ -185,9 +209,12 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
     /** What the creator preset renders into: the half-float target, or the 8-bit sRGB fallback. */
     creatorTarget: (linear ? "half-float" : "srgb8") as CreatorTarget,
     samples,
-    /** Draw one frame of `scene` through the preset's display transform to the canvas. */
-    render(scene: THREE.Scene, camera: THREE.Camera, preset: LightingPreset) {
-      if (preset === "creator") renderCreator(scene, camera); else renderStudio(scene, camera);
+    /** Whether the scene target is half float, which the skin scatter's targets need too (the direct and 8-bit paths keep the wrap). */
+    scatterPossible: linear,
+    /** Draw one frame of `scene` through the preset's display transform to the canvas, with the skin scatter's Δ when given. */
+    render(scene: THREE.Scene, camera: THREE.Camera, preset: LightingPreset, scatter?: ScatterPass) {
+      if (preset === "creator") renderCreator(scene, camera, linear ? scatter : undefined);
+      else renderStudio(scene, camera, scatter);
     },
     /** Use a decoded game LUT, or the neutral LUT (null). */
     setLut(next: GradingLut | null) {

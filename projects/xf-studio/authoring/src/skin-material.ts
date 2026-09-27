@@ -12,6 +12,10 @@
  *   barely wraps, a nose wing does), and the macro normal (without the tiled microdetail) for diffuse, because the
  *   game's blur of the diffuse irradiance removes shading detail finer than its kernel while specular keeps it;
  * - image-based light uses the same two lobes (the creator scene has no probe term; the ordinary stage does).
+ * When the host's screen-space scatter runs (platform/scene/skin-scatter.ts, research/materials/shader-skin.md §11) the wrap is gated off
+ * (`xfsWrapGate` 0) and the material's scatter-input variant (`XFS_SCATTER_INPUT`) writes what the game's G-buffer and diffuse target hold
+ * for the blur: the direct diffuse irradiance at albedo 1 with its shadows, the view depth as the class-1 flag, √albedo with the profile
+ * slot, and the metalness.
  * Not drawn: the wrinkle maps and blood flow (animation-driven, neutral at rest) and the emissive mask
  * (no emissive path yet; the adapter says so when a mask would glow).
  *
@@ -20,6 +24,7 @@
  */
 import * as THREE from "three";
 import type { RenderChunkMaterial, RenderSkinProfile } from "./render-detail";
+import { declarePass, SCATTER_INPUT_OUTPUTS, type PassSkinProfile } from "./platform/api/scene";
 
 /**
  * How a `TintColor` byte reaches the program. The engine's encoding is still open (materials open
@@ -58,8 +63,10 @@ export type SkinParameters = {
   secondaryInfluence: number; secondaryTintInfluence: number; emissiveEV: number;
   /** Dual specular lobe: roughness scales and the lobe weight (1 + lobeMix) / 2. */
   lobes: { roughness0: number; roughness1: number; weight: number };
-  /** Per-channel diffuse wrap standing in for the subsurface blur (approximation). */
+  /** Per-channel diffuse wrap standing in for the subsurface blur (approximation; off while the screen-space scatter runs). */
   wrap: [number, number, number];
+  /** The profile fields the screen-space scatter reads (blur size, strength and falloff colours). */
+  scatter: PassSkinProfile;
   /** The skin profile the values came from, or null when the template's default was unreadable. */
   profile: string | null;
 };
@@ -92,6 +99,7 @@ export function skinParameters(chunk: Pick<RenderChunkMaterial, "scalars" | "col
     emissiveEV: scalar("EmissiveEV"),
     lobes: skinLobes(profile),
     wrap: profile.falloff.map(c => SKIN_WRAP_SCALE * (c / 255) * blur) as [number, number, number],
+    scatter: { blurSize: profile.blurSize, diffuse: [...profile.diffuse], falloff: [...profile.falloff] },
     profile: resolved?.depotPath ?? null,
   };
 }
@@ -272,6 +280,14 @@ vec3 xfsTangentMacro = normalize( mix( vec3( 0.0, 0.0, 1.0 ), vec3( xfsMacroN.x,
 const LIGHT = /* glsl */`
 uniform vec3 xfsLobes;
 uniform vec3 xfsWrap;
+uniform float xfsWrapGate;
+${SCATTER_INPUT_OUTPUTS}
+#ifdef XFS_SCATTER_INPUT
+// The direct diffuse irradiance at albedo 1 (the game's forced albedo, research/materials/shader-skin.md §6.1): the forward diffuse before
+// the albedo multiplies it, shadows included, image-based light excluded. A plate keeps the skin's under it apart (xfsScatterEUnder).
+vec3 xfsScatterE = vec3( 0.0 );
+vec3 xfsScatterEUnder = vec3( 0.0 );
+#endif
 // Curvature (1/m) of the interpolated surface normal, from screen-space derivatives in view space; 0 when flat-shaded.
 float xfsSurfaceCurvature() {
 #ifndef FLAT_SHADED
@@ -310,9 +326,13 @@ void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geomet
 	float burley = ( 1.0 + ( fd90 - 1.0 ) * pow( 1.0 - saturate( xfsDiffuseNoL ), 5.0 ) ) * ( 1.0 + ( fd90 - 1.0 ) * pow( 1.0 - dotNV, 5.0 ) ) * ( 1.0 - 0.338 * r );
 	// Subsurface stand-in: the profile's falloff wraps light past the terminator per channel over the scatter distance, so by the
 	// angle the surface turns across it (metal skips it, as the engine's SSS does).
-	vec3 wrap = material.metalness > 0.1 ? vec3( 0.0 ) : xfsWrap * min( 1.0, ${SKIN_SCATTER_LENGTH.toFixed(6)} * xfsSurfaceCurvature() );
+	// Gated off (xfsWrapGate 0) while the screen-space scatter replaces it.
+	vec3 wrap = material.metalness > 0.1 ? vec3( 0.0 ) : xfsWrapGate * xfsWrap * min( 1.0, ${SKIN_SCATTER_LENGTH.toFixed(6)} * xfsSurfaceCurvature() );
 	vec3 wrapped = saturate( ( xfsDiffuseNoL + wrap ) / ( 1.0 + wrap ) ) / ( 1.0 + wrap );
 	reflectedLight.directDiffuse += directLight.color * wrapped * burley * BRDF_Lambert( material.diffuseContribution );
+#ifdef XFS_SCATTER_INPUT
+	xfsScatterE += directLight.color * wrapped * burley * BRDF_Lambert( vec3( 1.0 - material.metalness ) );
+#endif
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_XfsSkin
@@ -349,11 +369,24 @@ export function patchSkinLight(fragment: string, chunks: Record<string, string> 
   return replace(fragment, "#include <lights_fragment_maps>", maps);
 }
 
-/** Uniform values for the skin light from a skin's parameters. */
+/** Uniform values for the skin light from a skin's parameters; `xfsWrapGate` is the host's (1 until the scatter runs). */
 export const skinLightUniforms = (parameters: Pick<SkinParameters, "lobes" | "wrap">) => ({
   xfsLobes: { value: new THREE.Vector3(parameters.lobes.roughness0, parameters.lobes.roughness1, parameters.lobes.weight) },
   xfsWrap: { value: new THREE.Vector3(...parameters.wrap) },
+  xfsWrapGate: { value: 1 },
 });
+
+/**
+ * The skin's scatter-input write (after `dithering_fragment`): S0 = irradiance and the view depth (the class-1 flag), S1 = √albedo and
+ * the profile slot as (slot + 1) / 8, S2 = metalness. Opaque, so decals drawn after it blend over these values.
+ */
+const SKIN_SCATTER_OUTPUT = /* glsl */`
+#include <dithering_fragment>
+#ifdef XFS_SCATTER_INPUT
+	gl_FragColor = vec4( xfsScatterE, vViewPosition.z );
+	xfsScatterOut1 = vec4( sqrt( clamp( diffuseColor.rgb, 0.0, 1.0 ) ), ( xfsScatterSlot + 1.0 ) / 8.0 );
+	xfsScatterOut2 = vec4( metalnessFactor, 0.0, 0.0, 1.0 );
+#endif`;
 
 /** Patch a `MeshStandardMaterial` program for the skin; throws when this Three.js build lacks an expected chunk. */
 export function patchSkinShader(shader: { vertexShader: string; fragmentShader: string }, chunks: Record<string, string> = THREE.ShaderChunk as unknown as Record<string, string>) {
@@ -368,6 +401,8 @@ export function patchSkinShader(shader: { vertexShader: string; fragmentShader: 
   fragment = replace(fragment, "#include <metalnessmap_fragment>", "float metalnessFactor = xfsR.y;");
   fragment = replace(fragment, "#include <normal_fragment_maps>",
     "normal = normalize( tbn * xfsTangentNormal );\nxfsDiffuseNormal = normalize( tbn * xfsTangentMacro );");
+  fragment = replace(fragment, "#include <common>", "#include <common>\nuniform float xfsScatterSlot;");
+  fragment = replace(fragment, "#include <dithering_fragment>", SKIN_SCATTER_OUTPUT);
   shader.fragmentShader = fragment;
   return shader;
 }
@@ -389,12 +424,15 @@ export function createSkinMaterial(textures: SkinTextures, parameters: SkinParam
     xfsSecondaryParams: { value: new THREE.Vector2(parameters.secondaryInfluence, parameters.secondaryTintInfluence) },
     ...skinLightUniforms(parameters),
     xfsNormalFlipY: { value: -1 },
+    xfsScatterSlot: { value: 0 },
   };
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     patchSkinShader(shader);
   };
-  material.customProgramCacheKey = () => "xfs-skin-1";
+  material.customProgramCacheKey = () => "xfs-skin-2";
   material.name = "xfs_skin";
+  // A Subsurface surface for the host's scatter: its profile, the slot the host assigns it, and the wrap the scatter replaces.
+  declarePass(material, { role: "skin", profile: parameters.scatter, slot: uniforms.xfsScatterSlot, wrapGate: uniforms.xfsWrapGate });
   return { material, handle: { parameters, setNormals: enabled => { uniforms.xfsSkinScalars.value.w = enabled ? 1 : 0; } } };
 }

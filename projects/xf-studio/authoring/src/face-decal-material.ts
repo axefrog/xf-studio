@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { DecalKind } from "./render-templates";
 import { patchSkinLight, skinLightUniforms, type SkinParameters } from "./skin-material";
+import { declarePass } from "./platform/api/scene";
 
 /**
  * The face-detail decal family for the browser renderer: one material for the post-G-buffer decal templates the game
@@ -224,6 +225,8 @@ if ( xfsDecalNormal.z > 0.5 ) xfsNormalA *= clamp( 50.0 - 50.0 * xfsDecalN.z, 0.
 xfsNormalA = clamp( xfsNormalA, 0.0, 1.0 );
 float xfsDecalRough = clamp( texture2D( xfsDecalRoughness, xfsDecalUv ).r * xfsDecalSurface.x + xfsDecalSurface.y, 0.0, 1.0 );
 float xfsDecalMetal = clamp( texture2D( xfsDecalMetalness, xfsDecalUv ).r * xfsDecalMisc.w + xfsDecalNormal.w, 0.0, 1.0 );
+// The decal's own colour, before the forward solve below replaces it (the scatter input blends it as the G-buffer does).
+vec3 xfsTrueColour = xfsColour;
 float xfsDrawn;
 float xfsUnderRough;
 float xfsUnderMetal;
@@ -253,6 +256,19 @@ if ( xfsDrawn < 0.002 ) discard;
 diffuseColor = vec4( xfsColour, xfsDrawn );
 `;
 
+/**
+ * The scatter input of a decal lit as skin (research/materials/shader-skin.md §11.3): as the game's post-G-buffer decal, √colour at the
+ * colour alpha over the skin's √albedo (S1) and metalness at the surface alpha (S2); the irradiance of the lit blend at the forward's
+ * drawn alpha (S0), so S0 mixes as the forward light does. Class and slot (the alphas underneath) stay the skin's.
+ */
+const DECAL_SCATTER_OUTPUT = /* glsl */`
+#include <dithering_fragment>
+#ifdef XFS_SCATTER_INPUT
+	gl_FragColor = vec4( xfsScatterE, xfsDrawn );
+	xfsScatterOut1 = vec4( sqrt( clamp( xfsTrueColour, 0.0, 1.0 ) ), xfsColourA );
+	xfsScatterOut2 = vec4( xfsDecalMetal, 0.0, 0.0, xfsSurfaceA );
+#endif`;
+
 /** Patch a `MeshStandardMaterial` program for the decal family; throws when this Three.js build lacks an expected chunk. */
 export function patchFaceDecalShader(shader: { vertexShader: string; fragmentShader: string }, options: { underlay: boolean; skinLight: boolean },
   chunks?: Record<string, string>) {
@@ -281,6 +297,7 @@ vXfsUnderMetalness = xfsUnderMetalness;`);
   fragment = replace(fragment, "#include <roughnessmap_fragment>", "float roughnessFactor = xfsRoughnessValue;");
   fragment = replace(fragment, "#include <metalnessmap_fragment>", "float metalnessFactor = xfsMetalnessValue;");
   fragment = replace(fragment, "#include <normal_fragment_maps>", "normal = normalize( tbn * xfsTangentNormal );");
+  if (options.skinLight) fragment = replace(fragment, "#include <dithering_fragment>", DECAL_SCATTER_OUTPUT);
   shader.fragmentShader = fragment;
   return shader;
 }
@@ -321,8 +338,10 @@ export function createFaceDecalMaterial(textures: FaceDecalTextures, parameters:
     Object.assign(shader.uniforms, uniforms);
     patchFaceDecalShader(shader, { underlay: options.underlay, skinLight: !!options.skinLight });
   };
-  material.customProgramCacheKey = () => `xfs-face-decal-2|${p.kind}|${options.underlay ? "u" : ""}|${options.skinLight ? "s" : ""}`;
+  material.customProgramCacheKey = () => `xfs-face-decal-3|${p.kind}|${options.underlay ? "u" : ""}|${options.skinLight ? "s" : ""}`;
   material.name = `xfs_face_decal_${p.kind}`;
+  // Lit as skin, it scatters with the skin under it (and its wrap goes with the skin's); lit as a standard surface, there is no skin to scatter.
+  declarePass(material, options.skinLight ? { role: "decal", wrapGate: (uniforms as { xfsWrapGate?: { value: number } }).xfsWrapGate } : { role: "skip" });
   return { material, handle: { parameters, underlay: options.underlay, skinLight: !!options.skinLight,
     setNormals(enabled) { uniforms.xfsDecalView.value.y = enabled ? 1 : 0; } } };
 }
