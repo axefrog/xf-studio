@@ -199,7 +199,70 @@ Attribute numbers can shift with the game version and with mods that add rows; t
 | A calmer look-at | `GameOptions.SetFloat("LookAt", "MaxIterationsCount", …)` slows or freezes the look-at-camera turn for every character until reset | [source] AMM `Modules/tools.lua:484-491` |
 | Hide the photo-mode menu, not the game | The ink tree under `inkPhotoModeLayer` (`options_panel`, `input_panel`, `others`) can be hidden widget by widget, as Customisable Photo Mode UI does on each `OnShow` | [source] `r6/scripts/CustomisablePhotoModeUI.reds:3-11, 49-107` |
 
-**Persistence to watch:** AMM's HUD toggle changes the player's real `/interface/hud/*` settings, and the look-at option is global; any bridge use must record and restore them [source] AMM `init.lua:1353-1367`. Photo Mode Ex keeps some values per save [source].
+**Persistence to watch:** AMM's HUD toggle changes the player's real `/interface/hud/*` settings, and the look-at option is global; any bridge use must record and restore them [source] AMM `init.lua:1353-1367`. Photo Mode Ex keeps some values per save (§9.4) [source].
+
+## 9. The three save slots
+
+Vanilla photo mode's "saved settings" page (attributes 29–31) keeps three slots. Players report that restoring a slot loses details they set. What follows was decoded from the maintainer's local 2.21 and 2.31 saves, read-only with the Studio's save container codec, and cross-read with Photo Mode Ex's native layouts. **[offline]** marks our reading of those saves. The design built on it is in [photo-mode snapshots](../research/runtime/photo-snapshots-design.md).
+
+### 9.1 Where the slots live
+
+- **In the save file**, in five root nodes: `PhotoMode_Settings` (the slots), `PhotoMode_LightSettings`, `PhotoMode_OutfitWeather` (2.3 and later), `PhotoMode_NewStickersEditor` and `PhotoMode_QuestRequest`, next to `photoModeSystem` [offline]. `photoModeSystem` is a count and 8-byte TweakDBIDs, probably the unlocked photo-mode items [hypothesis].
+  - So the slots belong to one save. A slot written after the last save is gone once an earlier save loads, and each save and character has its own three [offline; the in-game effect is a hypothesis until tested].
+- **Save and load are native.** The menu passes the hold actions `PhotoMode_SaveSettings` and `PhotoMode_LoadSettings` with the slot's attribute key to the native `OnHoldComplete(attributeKey, actionName)`. No script sees what is stored [source] 2.31 `photoModeMenuController.script:134, 831-854`.
+- The native system reads and writes attribute values through `PhotoModeSystem::GetAttributeValue`, `SetAttributeValue(key, value, apply)` and `ProcessAttribute`. These are in the address library (IDs 818420519, 815536999, 2433030483), next to `UpdatePoseDependents` (231086722), `UpdateCategoryDependents` (3893174133), `ApplyPuppetTransforms` (2694650124) and `SetRelativePosition`/`SyncRelativePosition` (1847598004, 4175827669). A slot load is probably a replay of the stored values through these [source] Photo Mode Ex `src/Red/Addresses/Library.hpp:19-43`, `src/Red/PhotoMode.hpp`; replay [hypothesis].
+
+### 9.2 What a slot holds
+
+`PhotoMode_Settings` is a u32 count (3) and three slot records, then a second array of three records that is empty in every save seen (its purpose is unknown). Counts inside a record are the save's packed integers (VLQ). Each record holds, in order [offline]:
+
+| Field | Encoding | What it holds |
+|---|---|---|
+| Label | Save string | The date and time of saving; empty for an unused slot |
+| **Attribute values** | Count, then float32 × count, indexed by attribute key | **94 values in 2.3x (keys 0–93), 69 in 2.21 (keys 0–68):** the vanilla key range of that version. Values in real slots match the menu: FOV (1), pose category and pose (5, 6), V's close/far (9), look at camera (15), camera type (16), expression (28), look-at body part and angles (74–76), time of day (70), colour balance (83–91) |
+| Stickers | Count (10), then 10 × 16 bytes | Zero in every slot seen |
+| Pose category | i32 | Repeats key 5; −1 when unused |
+| **Pose** | Save string `<animationName>__<time>` | e.g. `solo_pose1__0.000000`, `CrossArms__0.000000`: the pose by clip name as well as by list index |
+| Camera | 7 × float32 | Small values, e.g. (−0.80, −1.66, 0, 1.55, 1.67, 0.04, 24), with the FOV last. Probably pitch and yaw in degrees and a position **relative to V** [hypothesis] |
+
+- **`PhotoMode_LightSettings`**: three slots of three light records, then three 42-byte entries per slot [offline]. The 2.21 record (about 110 bytes) held each light's **world position and rotation**, e.g. (−570.0, 805.2, 26.9). The 2.3x record is 58 bytes, and every 2.3x save seen has default lights, so whether positions are still stored is open.
+- **`PhotoMode_OutfitWeather`**: three slots, each with three inner entries (per NPC slot? [hypothesis]). Not decoded.
+- **`PhotoMode_NewStickersEditor`**: three slots of 10 sticker indices, −1 for empty [offline].
+
+### 9.3 Why details get lost
+
+| Cause | What it hits | Grade |
+|---|---|---|
+| **Keys outside the vanilla range are never stored** | Every Photo Mode Ex row: V's pitch and roll (3421, 3422), NPC pitch, roll and appearance (3431–3433), control scheme, snap to terrain, adjustable steps. Photo Mode Ex keeps them in its own per-character map (`s_characterAddons`), which the native slot never reads. Also everything other mods add (AMM props and NPCs, spawned lights) and anything changed outside the menu | [offline] save layout; [source] Photo Mode Ex `PhotoModeExService.cpp:32-36, 666-716` |
+| **One value per key for three NPCs** | The NPC rows (55–57, 60–62, 65, 66) edit whichever NPC is selected, and the slot has one value per key. Photo Mode Pose Selector has to switch the menu page and selection to read each NPC's placement for the same reason | [offline]; [source] Photo Mode Pose Selector `init.lua:1644-1760` |
+| **Stored, but reset by the pose** | Changing a pose runs `UpdatePoseDependents`, which applies the pose record's `lookAtPreset`, `positionOffset` and `rotation` and resets the character's look-at state (`allowLookAtCamera`, `lookAtCameraPreset`, `lootAtCameraState` on the native character). If the replay sets look-at (74–77), expression (28) or placement (7, 8, 9, 37) before the pose finishes applying, the pose can overwrite them. Photo Mode Pose Selector re-applies V's look-at 3 frames (0.05 s) after events that reset it, which fits this reading | [source] Photo Mode Ex `PhotoMode.hpp` character layout, `PhotoModeExService.cpp:380-400`; Photo Mode Pose Selector `init.lua:72-73, 976-996`; the reset on slot load [hypothesis] |
+| **Placement depends on the control scheme** | Photo Mode Ex's alternative controls rewrite the character's `relativePosition`, so a slot saved under one scheme may land elsewhere under the other | [source] Photo Mode Ex `PhotoModeExService.cpp:455, 560, 570` (`FixRelativePosition`); effect [hypothesis] |
+| **Pose lists shift** | Keys 5 and 6 are list indices, which move when pose packs change. Whether the loader falls back to the stored clip name is unknown | [offline]; [hypothesis] |
+| **Per-save storage** | Loading an earlier save, or switching characters, brings a different set of slots | [offline] |
+
+### 9.4 Persistence in Photo Mode Ex
+
+Photo Mode Ex stores `alternativeControls`, `snapToTerrain` and `depthOfField` per save in its own persistent state (`PhotoModeExPS : PersistentState`, fetched from the persistency system when photo mode starts). Its pitch and roll values are not persisted [source] `src/App/PhotoMode/PhotoModeExPS.hpp`, `PhotoModeExService.cpp:272`.
+
+## 10. Holding the head and eyes
+
+### 10.1 The global look-at option
+
+- **What mods do:** the legacy Photo Mode Tools script and AMM both call `GameOptions.SetFloat("LookAt", "MaxIterationsCount", …)`. 0.9 "freezes" the head and eyes, 1.0 lets them move, and 3.0 is written back as the "restore" value. Neither reads the original value first [source] legacy `photo_mode_tools/init.lua:2-22`; AMM `Release/bin/x64/plugins/cyber_engine_tweaks/mods/AppearanceMenuMod/Modules/tools.lua:484-491`.
+- **CET passes the float through unchanged** to the engine's option setter, typed as a float, and logs an error if the engine refuses it. So the freeze is not CET truncating 0.9 to 0 [source] CET `9a8522f` `src/scripting/GameOptions.cpp:107-110, 133-145, 264-278`.
+- **It is an engine config variable**, registered at the engine's option init as CET's option patches are. It is not in `engine/config`, and CET never writes it to disk, so it resets when the game restarts [source] CET `GameOptions.h:3-56`, `OptionsPatch.cpp:9-38`; [resource] negative search of `engine/config`; reset [hypothesis].
+- **Why below 1 freezes** [hypothesis]: the engine takes the whole part as the look-at solver's iteration count. At 0 the solver stops and the last look-at pose holds. The option is global, so while it is below 1 every character's look-at holds, including NPCs and in scenes. Whether 3.0 is the engine default is unconfirmed; `GameOptions.Print("LookAt", "MaxIterationsCount")` in game shows the type, value and default.
+
+### 10.2 Actor-scoped levers on the photo-mode stand-in
+
+| Lever | What it does | Grade |
+|---|---|---|
+| **Individual time dilation, following the world's** | Photo Mode Pose Selector freezes one character with `SetIndividualTimeDilation(n"PMPSPhotoMode", 1.0, 0.0, n"None", n"None", false, false)` and releases it with the same call and `ignoreGlobalDilation = true`. The stand-in normally ignores the frozen world's dilation, and this makes it follow it, so its graph (look-at and blinks) stops. It releases the freeze automatically when a pose, category or expression changes, and on shutdown | [source] Photo Mode Pose Selector `init.lua:19-26, 329-400`; 2.31 `orphans.script:11871-11873` |
+| Look-at attributes | 15 (look at camera) and 74–77 (body part: upper body 0, head 1, eyes 2; angles) are menu rows, stored in slots, and reset by pose changes (§9.3) | [runtime] menu; [source] Photo Mode Pose Selector `init.lua:27-32` |
+| `LookAtAddEvent` / `LookAtRemoveEvent` | A static target with per-part weights (eyes, head, chest) queued on the stand-in; untested on a posed stand-in ([poses](poses.md) open question 8) | [source]; effect [hypothesis] |
+| `AnimFeature_PhotomodeBodyPartRotate` | The graph's head and chest rotation inputs (`RotateHeadX`…), on top of any pose | [resource] [source] ([poses §7](poses.md#7-what-the-body-graph-does-after-the-pose-clip)); effect [hypothesis] |
+
+**Recommendation.** Freeze with individual time dilation, which is scoped to one character, already works in a published mod, and releases by name. Hold an exact direction by restoring look-at part and angles after the pose settles (§9.3). Keep the global option only as a fallback behind a settings guard: read the original value, apply only while photo mode is open, and restore the original on exit, save load, CET reload or shutdown, session end and the kill switch.
 
 ## Open questions
 
@@ -210,6 +273,8 @@ Attribute numbers can shift with the game version and with mods that add rows; t
 5. Where does a photo-mode light start when switched on, and can its entity be caught and moved? (Step T2 of the [lighting mirror's first session](../research/runtime/lighting-mirror-design.md#6-the-first-game-session-test-plan) reads it.)
 6. Does the AMM-style `Hide` context hide the photo-mode cursor without side effects on the menu's mouse input?
 7. Does the system send `OnOptionUpdated` after an external `ApplyChangeToOption`, for any option type?
+8. Does a vanilla slot load restore look-at (74–77), expression and V's placement, or does the pose's own setup reset them? Does it find a moved pose by the stored clip name? Do 2.3x light slots keep light positions? What do the second `PhotoMode_Settings` array and `PhotoMode_OutfitWeather` hold? (The [snapshot design's session](../research/runtime/photo-snapshots-design.md#7-first-game-session-test-plan) answers these.)
+9. Is `LookAt/MaxIterationsCount` a float with default 3, and does 0.9 hold every character's look-at, NPCs and scenes included? Does following the world's time dilation freeze the stand-in's look-at without side effects on its pose changes?
 
 ## Related pages
 
