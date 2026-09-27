@@ -136,7 +136,7 @@ test("without a game folder the host says so plainly; the solver is found only w
     const host = new FacialHost({ cacheRoot: root, resolverCache: root, solver: () => ({ missing: SOLVER_MISSING }),
       settings: () => ({ gameRoot: null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null }) });
     host.state(); await host.settled();
-    expect(host.state()).toMatchObject({ rig: { phase: "unconfigured", reason: expect.stringContaining("Game & tools") }, solver: { phase: "missing" } });
+    expect(host.state()).toMatchObject({ rig: { phase: "unconfigured", reason: expect.stringContaining("in Settings") }, solver: { phase: "missing" } });
   } finally { rmSync(root, { recursive: true, force: true }); }
   const has = (paths: string[]) => (path: string) => paths.some(entry => path.replaceAll("\\", "/").startsWith(entry));
   const solverFile = "i_scene_cp77_gltf/animation/facial/solver.py";

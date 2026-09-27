@@ -5,6 +5,7 @@ import type {IrregularFlakes} from "./flake-field";
 import type {DirectGlintFlakes} from "./direct-glint-settings";
 import type { LayerModel, LayerModelRegistry } from "./layer-models";
 import { mirrored, type Mirror } from "./region";
+import { prepareMottle, type LayerEffects, type PreparedMottle, type SkinScale } from "./mottle";
 export type Point = { u: number; v: number; weight: number; feather?: number; handles?: Handles };
 export type Field = {
   u: number;
@@ -44,6 +45,8 @@ export type Layer = {
   fields: WarpField[];
   strength: Strength;
   softness: Softness;
+  /** Layer effects (`mottle-1`); absent on a layer without any, which is then exactly as before effects existed. */
+  effects?: LayerEffects;
 };
 /**
  * The in-memory recipe: a feature's layered-makeup part (eye makeup's is `xfs/eye-makeup-part-2`). It has no
@@ -274,16 +277,45 @@ export function warpFields(u: number, v: number, fields: readonly Field[]): [num
   }
   return [u - du, v - dv];
 }
-/** One layer's coverage at (u, v); a symmetric layer also covers its reflection across the feature's `mirror`. */
+/**
+ * One layer's coverage at (u, v); a symmetric layer also covers its reflection across the feature's `mirror`. This is
+ * the independent scalar reference the raster is tested against. With `mottle` (the region's skin scale and the
+ * raster's texel spacing in UV) a mottled layer's effect is applied as the raster applies it; without it the
+ * coverage is the layer's unmottled coverage.
+ */
 export function coverage(
   u: number,
   v: number,
   l: Layer,
   mirror: Mirror,
   polygon = curve(l.points),
+  mottle?: { skin: SkinScale; spacing: { u: number; v: number } },
 ): number {
   if (!l.enabled) return 0;
-  return preparedCoverage(u, v, l, polygon, mirror, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon).width);
+  const strength = prepareLayerStrength(l, polygon), softness = prepareLayerSoftness(l, polygon).width;
+  const effect = mottle && l.effects?.mottle ? prepareMottle(l.effects.mottle, mottle.skin, mottle.spacing, mirror) : undefined;
+  if (!effect) return preparedCoverage(u, v, l, polygon, mirror, strength, softness);
+  // The same side choice as the raster: the authored copy unless the mirrored one covers strictly more.
+  const own = coverageAt(u, v, l, polygon, strength, softness);
+  let c = own, flipped = false, [su, sv] = [u, v];
+  if (l.symmetry) {
+    const [mu, mv] = mirrored(mirror)(u, v), other = coverageAt(mu, mv, l, polygon, strength, softness);
+    if (other > own) { c = other; flipped = true; [su, sv] = [mu, mv]; }
+  }
+  const [ex, ey] = effect.streaks === "edge" ? nearestEdge(su, sv, l, polygon) : [0, 0];
+  return effect.apply(c, u, v, ex, ey, flipped);
+}
+/** The direction of the polygon edge nearest the warped sample (the scalar loop's edge order and tie rule). */
+function nearestEdge(u: number, v: number, l: Layer, polygon: Point[]): [number, number] {
+  [u, v] = warpFields(u, v, l.fields);
+  let best = Infinity, ex = 0, ey = 0;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[j], b = polygon[i], dx = b.u - a.u, dy = b.v - a.v;
+    const t = clamp(((u - a.u) * dx + (v - a.v) * dy) / (dx * dx + dy * dy || 1));
+    const dist = (u - a.u - dx * t) ** 2 + (v - a.v - dy * t) ** 2;
+    if (dist < best) { best = dist; ex = dx; ey = dy; }
+  }
+  return [ex, ey];
 }
 function prepareLayerStrength(l: Layer, polygon: Point[]): PigmentStrength | undefined {
   // Keep the legacy arithmetic for uniform knots, including its last-bit linear
@@ -338,7 +370,11 @@ function coverageAt(u: number, v: number, l: Layer, polygon: Point[], strength?:
 
 /** Raster-only preparation. Keep coverageAt above as the independent scalar
  * reference: these bounds skip only samples whose exact feather result is
- * already zero or one, without approximating either boundary integral. */
+ * already zero or one, without approximating either boundary integral.
+ * `sample` is the layer's coverage; `sided` also reports which copy of a symmetric layer gave it and the direction of
+ * that copy's nearest edge (mottle's streaks), with the same arithmetic. For a paired raster it also reports what the
+ * mirror-opposite pixel would get (`o…`): the same two samples with the copies' roles exchanged. */
+type Sided = { c: number; ex: number; ey: number; flipped: boolean; oex: number; oey: number; oflipped: boolean };
 function prepareRasterCoverage(l:Layer,polygon:Point[],mirror:Mirror,strength:PigmentStrength|undefined,
   softness:{maxWidth:number;width:number|PigmentStrength}) {
   // Match the scalar loop's closing edge first, including nearest-edge ties.
@@ -355,6 +391,8 @@ function prepareRasterCoverage(l:Layer,polygon:Point[],mirror:Mirror,strength:Pi
     minV=Math.min(...polygon.map(p=>p.v))-halfWidth,maxV=Math.max(...polygon.map(p=>p.v))+halfWidth;
   const warpU=l.fields.reduce((sum,f)=>sum+Math.abs(f.du),0)+margin,
     warpV=l.fields.reduce((sum,f)=>sum+Math.abs(f.dv),0)+margin;
+  // The last evaluated sample's nearest edge (read by `sided` only).
+  let nearest=edges[0];
   function at(u:number,v:number) {
     if(u<minU-warpU||u>maxU+warpU||v<minV-warpV||v>maxV+warpV)return 0;
     [u,v]=warpFields(u,v,l.fields);
@@ -364,7 +402,7 @@ function prepareRasterCoverage(l:Layer,polygon:Point[],mirror:Mirror,strength:Pi
       if(edge.v>v!==edge.endV>v&&u<edge.dx*(v-edge.v)/edge.dy+edge.u)inside=!inside;
       const du=u-edge.u,dv=v-edge.v,t=clamp((du*edge.dx+dv*edge.dy)/edge.denominator);
       const distance=(du-edge.dx*t)**2+(dv-edge.dy*t)**2;
-      if(distance<best){best=distance;weight=edge.weight*(1-t)+edge.endWeight*t;}
+      if(distance<best){best=distance;weight=edge.weight*(1-t)+edge.endWeight*t;nearest=edge;}
     }
     const distance=Math.sqrt(best);
     let x:number;
@@ -376,9 +414,32 @@ function prepareRasterCoverage(l:Layer,polygon:Point[],mirror:Mirror,strength:Pi
     }
     return x*x*(3-2*x)*(strength?strength(u,v):weight)*l.opacity;
   }
-  if(!l.symmetry)return at;
-  const twice=2*mirror.centre;
-  return mirror.axis==="u"?(u:number,v:number)=>Math.max(at(u,v),at(twice-u,v)):(u:number,v:number)=>Math.max(at(u,v),at(u,twice-v));
+  const twice=2*mirror.centre,axisU=mirror.axis==="u";
+  const sample=!l.symmetry?at:axisU?(u:number,v:number)=>Math.max(at(u,v),at(twice-u,v)):(u:number,v:number)=>Math.max(at(u,v),at(u,twice-v));
+  function sided(u:number,v:number,out:Sided){
+    const own=at(u,v),ex=nearest.dx,ey=nearest.dy;
+    out.c=own;out.ex=ex;out.ey=ey;out.flipped=false;
+    if(!l.symmetry)return;
+    const other=axisU?at(twice-u,v):at(u,twice-v),ox=nearest.dx,oy=nearest.dy;
+    // The authored copy unless the mirrored one covers strictly more (coverage equals Math.max either way).
+    if(other>own){out.c=other;out.ex=ox;out.ey=oy;out.flipped=true;}
+    // The opposite pixel samples `other` as its own copy and `own` as its mirrored one.
+    if(own>other){out.oex=ex;out.oey=ey;out.oflipped=true;}else{out.oex=ox;out.oey=oy;out.oflipped=false;}
+  }
+  return {sample,sided};
+}
+/** A layer's coverage with its mottle applied at each sample's own UV (the paired raster reuses only `c`). */
+function mottledSampler(raster:ReturnType<typeof prepareRasterCoverage>,mottle:PreparedMottle){
+  const side:Sided={c:0,ex:0,ey:0,flipped:false,oex:0,oey:0,oflipped:false};
+  if(mottle.streaks==="none")return (u:number,v:number)=>mottle.apply(raster.sample(u,v),u,v,0,0,false);
+  return (u:number,v:number)=>{raster.sided(u,v,side);return mottle.apply(side.c,u,v,side.ex,side.ey,side.flipped);};
+}
+/** A layer's prepared mottle for a raster with texel `spacing`, or undefined without one. Mottle needs the region's skin scale. */
+function layerMottle(l:Layer,mirror:Mirror,skin:SkinScale|undefined,spacing:{u:number;v:number}){
+  const mottle=l.enabled?l.effects?.mottle:undefined;
+  if(!mottle)return undefined;
+  if(!skin)throw Error("This layer's mottle needs its region's skin scale.");
+  return prepareMottle(mottle,skin,spacing,mirror);
 }
 /** A symmetric layer's padded bounds grown to hold its reflection across `mirror`. */
 function mirroredBounds(b:{minU:number;maxU:number;minV:number;maxV:number},mirror:Mirror){
@@ -387,8 +448,11 @@ function mirroredBounds(b:{minU:number;maxU:number;minV:number;maxV:number},mirr
   else{const a=b.minV;b.minV=Math.min(b.minV,twice-b.maxV);b.maxV=Math.max(b.maxV,twice-a);}
   return b;
 }
-// Alpha-only design: white RGB provides colour-independent masks and clean edges.
-export function createRasterJob(l: Layer, size: number, mirror: Mirror) {
+/**
+ * Alpha-only design: white RGB provides colour-independent masks and clean edges. `skin` is the region's skin scale,
+ * which a mottled layer needs (its mottle is sampled at this raster's texel spacing, 1/size).
+ */
+export function createRasterJob(l: Layer, size: number, mirror: Mirror, skin?: SkinScale) {
   if (!Number.isInteger(size) || size < 1 || size > 4096) throw Error("Invalid raster size.");
   l = structuredClone(l);
   const data = new Uint8ClampedArray(size * size * 4);
@@ -397,7 +461,8 @@ export function createRasterJob(l: Layer, size: number, mirror: Mirror) {
     data[i] = data[i + 1] = data[i + 2] = 255;
   const strength = prepareLayerStrength(l, polygon);
   const softness = prepareLayerSoftness(l, polygon);
-  const sample=prepareRasterCoverage(l,polygon,mirror,strength,softness);
+  const prepared=prepareRasterCoverage(l,polygon,mirror,strength,softness),sample=prepared.sample;
+  const mottle=layerMottle(l,mirror,skin,{u:1/size,v:1/size});
   const pad = softness.maxWidth + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
   const bounds = { minU: Math.min(...polygon.map((p) => p.u)) - pad, maxU: Math.max(...polygon.map((p) => p.u)) + pad,
     minV: Math.min(...polygon.map((p) => p.v)) - pad, maxV: Math.max(...polygon.map((p) => p.v)) + pad };
@@ -407,7 +472,10 @@ export function createRasterJob(l: Layer, size: number, mirror: Mirror) {
   // A mirror across u = 1/2 at power-of-two sizes: both pixel-centre coordinates and 1-u are exact
   // binary fractions. Symmetric pairs therefore invoke identical two samples
   // in reverse order. Reuse that result; other mirrors and arbitrary sizes retain scalar sampling.
+  // Mottle is applied at each pixel's own UV; streaks also take each pixel's own winning copy and its edge.
   const paired=l.symmetry&&mirror.axis==="u"&&mirror.centre===.5&&(size&(size-1))===0;
+  const own=mottle&&!paired?mottledSampler(prepared,mottle):undefined;
+  const side:Sided={c:0,ex:0,ey:0,flipped:false,oex:0,oey:0,oflipped:false},streaks=!!mottle&&mottle.streaks!=="none";
   const workX0=paired?Math.min(x0,size-x1):x0,workX1=paired?Math.ceil(size/2):x1;
   let x = workX0, y = y0, pendingIndex=-1,pendingAlpha=0;
   let done = !l.enabled || x0 >= x1 || y0 >= y1;
@@ -420,13 +488,20 @@ export function createRasterJob(l: Layer, size: number, mirror: Mirror) {
         // Retain the original write budget even when a one-pixel slice splits
         // a pair. Cancellation still cannot publish an incomplete raster.
         if(pendingIndex>=0){data[pendingIndex]=pendingAlpha;pendingIndex=-1;count++;next();continue;}
-        const alpha=Math.round(255*sample((x+.5)/size,(y+.5)/size));
+        const u=(x+.5)/size,v=(y+.5)/size;
+        let alpha:number,c=0;
+        if(own)alpha=Math.round(255*own(u,v));
+        else if(streaks){prepared.sided(u,v,side);c=side.c;alpha=Math.round(255*mottle!.apply(c,u,v,side.ex,side.ey,side.flipped));}
+        else if(mottle){c=sample(u,v);alpha=Math.round(255*mottle.apply(c,u,v,0,0,false));}
+        else alpha=Math.round(255*sample(u,v));
         if(x>=x0&&x<x1){data[(y*size+x)*4+3]=alpha;count++;}
         const opposite=size-1-x;
         if(paired&&opposite!==x&&opposite>=x0&&opposite<x1){
           const index=(y*size+opposite)*4+3;
-          if(count<maxPixels){data[index]=alpha;count++;}
-          else {pendingIndex=index;pendingAlpha=alpha;continue;}
+          const mirroredAlpha=!mottle?alpha:streaks?Math.round(255*mottle.apply(c,(opposite+.5)/size,v,side.oex,side.oey,side.oflipped))
+            :Math.round(255*mottle.apply(c,(opposite+.5)/size,v,0,0,false));
+          if(count<maxPixels){data[index]=mirroredAlpha;count++;}
+          else {pendingIndex=index;pendingAlpha=mirroredAlpha;continue;}
         }
         next();
       }
@@ -436,17 +511,19 @@ export function createRasterJob(l: Layer, size: number, mirror: Mirror) {
 }
 
 /** One layer's coverage at authored (u, v), with the raster's own per-sample arithmetic, prepared once for
- * point queries (the package filter's plate-reach test). 0 for a disabled layer. */
+ * point queries (the package filter's plate-reach test). 0 for a disabled layer. It is the layer's unmottled
+ * coverage: mottle never extends a layer beyond it (its weight is zero where coverage is), so reach is judged on
+ * the shape itself. */
 export function layerCoverageSampler(l: Layer, mirror: Mirror): (u: number, v: number) => number {
   if (!l.enabled) return () => 0;
   l = structuredClone(l);
   const polygon = curve(l.points);
-  return prepareRasterCoverage(l, polygon, mirror, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon));
+  return prepareRasterCoverage(l, polygon, mirror, prepareLayerStrength(l, polygon), prepareLayerSoftness(l, polygon)).sample;
 }
 
 // Synchronous compiler/export callers retain the same exact pixel arithmetic.
-export function raster(l: Layer, size: number, mirror: Mirror): Uint8ClampedArray<ArrayBuffer> {
-  const job = createRasterJob(l, size, mirror);
+export function raster(l: Layer, size: number, mirror: Mirror, skin?: SkinScale): Uint8ClampedArray<ArrayBuffer> {
+  const job = createRasterJob(l, size, mirror, skin);
   job.advance(Infinity);
   return job.data;
 }
@@ -455,10 +532,11 @@ export function raster(l: Layer, size: number, mirror: Mirror): Uint8ClampedArra
  * Export-only raster of one layer over a rectangle of authored UV (the package's plate-local window):
  * texel (x, y) of the width × height result samples u = u0 + (x + ½)/width·(u1 − u0) and
  * v = v0 + (y + ½)/height·(v1 − v0) with the same per-sample evaluator as `raster`. White RGB,
- * coverage in alpha. The recipe and every editor or preview path keep using head UV.
+ * coverage in alpha. The recipe and every editor or preview path keep using head UV. A mottled layer's mottle is
+ * sampled at the window's texel spacing (it needs the region's `skin` scale).
  */
 export function rasterWindow(l: Layer, width: number, height: number,
-  area: { u0: number; u1: number; v0: number; v1: number }, mirror: Mirror): Uint8ClampedArray<ArrayBuffer> {
+  area: { u0: number; u1: number; v0: number; v1: number }, mirror: Mirror, skin?: SkinScale): Uint8ClampedArray<ArrayBuffer> {
   if (![width, height].every(n => Number.isInteger(n) && n >= 1 && n <= 8192)) throw Error("Invalid raster size.");
   if (!(area.u1 > area.u0 && area.v1 > area.v0)) throw Error("Invalid raster window.");
   l = structuredClone(l);
@@ -467,12 +545,14 @@ export function rasterWindow(l: Layer, width: number, height: number,
   if (!l.enabled) return data;
   const polygon = curve(l.points);
   const strength = prepareLayerStrength(l, polygon), softness = prepareLayerSoftness(l, polygon);
-  const sample = prepareRasterCoverage(l, polygon, mirror, strength, softness);
+  const prepared = prepareRasterCoverage(l, polygon, mirror, strength, softness);
   const pad = softness.maxWidth + l.fields.reduce((sum, f) => sum + Math.hypot(f.du, f.dv), 0);
   const bounds = { minU: Math.min(...polygon.map(p => p.u)) - pad, maxU: Math.max(...polygon.map(p => p.u)) + pad,
     minV: Math.min(...polygon.map(p => p.v)) - pad, maxV: Math.max(...polygon.map(p => p.v)) + pad };
   const { minU, maxU, minV, maxV } = l.symmetry ? mirroredBounds(bounds, mirror) : bounds;
   const du = (area.u1 - area.u0) / width, dv = (area.v1 - area.v0) / height;
+  const mottle = layerMottle(l, mirror, skin, { u: du, v: dv });
+  const sample = mottle ? mottledSampler(prepared, mottle) : prepared.sample;
   // Texels whose centre lies in the padded bounds; the rest stay zero exactly as `raster` leaves them.
   const x0 = Math.max(0, Math.floor((clamp(minU) - area.u0) / du)), x1 = Math.min(width, Math.ceil((clamp(maxU) - area.u0) / du));
   const y0 = Math.max(0, Math.floor((clamp(minV) - area.v0) / dv)), y1 = Math.min(height, Math.ceil((clamp(maxV) - area.v0) / dv));

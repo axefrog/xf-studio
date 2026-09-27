@@ -107,14 +107,14 @@ export function installIssue(error: unknown, modName: string, context: InstallIs
     `finished. XF Studio finishes or undoes it when you check again: close the game if it's running, ${CHECK_AGAIN}` };
   if (/already active|lock needs review/i.test(message)) return { next: "retry", text: `Another install is running. Wait for it to finish, ${CHECK_AGAIN}` };
   if (/Linked path|symlink|junction/i.test(message)) return { next: "setup", text: "That folder is a link to somewhere else, so XF Studio won't " +
-    "write into it. Choose the real folder in Game & tools, then try again." };
+    "write into it. Choose the real folder in Settings › Game, then try again." };
   if (/Changing the installed namespace/i.test(message)) return { next: "rename", text: `A different collection's ${quoted(modName)} is installed ` +
     "there. Remove it in your mod manager first, or rename this mod in Mod package, then try again." };
   const legacy = /legacy folder "([^"]+)"/.exec(message);
   if (legacy) return { next: "retry", text: `Mod Organizer 2 still has an early test copy of this mod: the mod ${quoted(legacy[1]!)}. ` +
     `Remove that mod in Mod Organizer 2 (right-click it, then Remove mod), ${CHECK_AGAIN}` };
   if (/Configured game root|game root is missing|Cyberpunk2077\.exe|archive\/pc|Expected a real directory|Expected a regular file|MO2 instance and profile/i.test(message))
-    return { next: "setup", text: "XF Studio couldn't find your game or mod manager where Game & tools says they are. Check Game & tools, then try again." };
+    return { next: "setup", text: "XF Studio couldn't find your game or mod manager where Settings says they are. Check Settings › Game, then try again." };
   // The transport's own refusals about another XF mod and a foreign MO2 folder are already plain.
   if (/nothing was installed|Nothing was installed|Mod Organizer 2 already has/i.test(message)) return { next: "rename", text: message };
   return { next: "retry", text: "XF Studio couldn't add this mod safely, so nothing was changed. Try again, or report the problem from Help." };
@@ -150,7 +150,7 @@ export class ModInstallHost {
       const { plan, transport, modlist } = this.prepare(candidateId, running);
       if (plan.blocked) throw new ModInstallError("install_blocked", plan.blocked);
       if (plan.token !== token) throw new ModInstallError("stale_plan",
-        "Something changed since you reviewed this (your mod list, an earlier install or Game & tools), so nothing was changed. Review it again.");
+        "Something changed since you reviewed this (your mod list, an earlier install or your settings), so nothing was changed. Review it again.");
       // The new mod list is written beside the old one first, so a list XF Studio can't write stops the install before any file
       // is copied (INSTALL-08).
       let staged: StagedModlist | undefined;
@@ -218,9 +218,9 @@ export class ModInstallHost {
     if (route === "mo2" && /_separator$/i.test(modName))
       return blocked(`Mod Organizer 2 treats a name ending in “_separator” as a section heading, so ${quoted(modName)} can't be a mod's name there. ` +
         "Rename it in Mod package, then build it again.", "rename");
-    if (!settings.gameRoot) return blocked("Choose your Cyberpunk 2077 folder in Game & tools first.", "setup");
+    if (!settings.gameRoot) return blocked("Choose your Cyberpunk 2077 folder in Settings › Game first.", "setup");
     if (route === "mo2" && (!settings.mo2Root || !settings.mo2ProfileId))
-      return blocked("Choose your Mod Organizer 2 instance and profile in Game & tools first.", "setup");
+      return blocked("Choose your Mod Organizer 2 instance and profile in Settings › Game first.", "setup");
     const context = this.issueContext();
     const refused = (error: unknown) => { const issue = installIssue(error, modName, context); return blocked(issue.text, issue.next); };
     let mo2: ReturnType<typeof readConfiguredMo2Instance>["paths"] | null = null, modlistFile = "";

@@ -1,7 +1,8 @@
 import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, type ViewportScope } from "../../input-bindings";
 import { ViewportInputHints } from "../input-hints";
 import { button, applyCapability } from "../controls";
-import { h, setAttr, setText, isTextInput } from "../dom";
+import { progressBar } from "../components/progress";
+import { h, setAttr, setText, isTextInput, uid } from "../dom";
 import { icon, isIconName, type IconName } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { ViewToolEntry } from "../../studio-application";
@@ -56,9 +57,8 @@ function viewToolbar(rt: StudioRuntime) {
   const buttons = new Map<string, HTMLButtonElement>();
   const make = (tool: ViewToolEntry): HTMLButtonElement => {
     const title = tool.title ?? tool.label;
-    const control = tool.kind === "action"
-      ? button({ label: tool.label, icon: toolIcon(tool.icon), iconOnly: true, small: true, variant: "ghost", onClick: () => {} })
-      : h("button", { class: "btn icon-only small ghost", type: "button", "aria-label": tool.label, title, "data-title": title }, icon(toolIcon(tool.icon)));
+    // Actions and toggles are the same button; a toggle also carries its state (`aria-pressed`).
+    const control = button({ label: tool.label, icon: toolIcon(tool.icon), iconOnly: true, small: true, variant: "ghost", title: tool.kind === "action" ? tool.title : title, onClick: () => {} });
     if (tool.state === "tools") control.setAttribute("aria-pressed", "false");
     // The tool's current action, read at click time (a toggle's next state, Play or Pause).
     control.addEventListener("click", () => { const entry = rt.port.views.tools(undefined, rt.toolFilter()).find(item => item.id === tool.id); if (entry) rt.dispatch(entry.action); });
@@ -87,9 +87,8 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   // What the head pane shows until the head is interactive: progress, a neutral "still needed" note or a
   // failure, always with the one next step from the preview setup (unless the setup card shows it).
   const stateIcon = h("span", { class: "viewport-state-icon" });
-  const stateBar = h("div", { class: "progress" }), stateFill = h("span", { class: "progress-fill" });
-  stateBar.append(stateFill);
-  const stateText = h("p", { text: "Checking the 3D preview…" });
+  const stateText = h("p", { id: uid("viewport-state"), text: "Checking the 3D preview…" });
+  const stateProgress = progressBar({ labelledBy: stateText.id }), stateBar = stateProgress.element;
   const stateNote = h("p", { class: "muted small", text: "You can keep working in the UV map.", hidden: true });
   let nextAction: Parameters<typeof port.previewSetup.dispatch>[0] | undefined;
   const next = button({ label: "Set up 3D preview", variant: "primary", small: true, onClick: () => {
@@ -136,8 +135,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
     stateIcon.hidden = tone === "progress";
     stateBar.hidden = tone !== "progress";
     const progress = state.phase === "preparing" && typeof state.progress === "number" ? state.progress : null;
-    stateBar.classList.toggle("indeterminate", progress === null);
-    stateFill.style.width = progress === null ? "" : `${Math.round(progress * 100)}%`;
+    stateProgress.set(progress);
     const text = state.error ?? state.message ?? (tone === "error" ? "The 3D preview could not load." : "Checking the 3D preview…");
     setText(stateText, text);
     // Say what still works unless the message already does.

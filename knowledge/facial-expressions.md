@@ -12,8 +12,8 @@ V's face is a solver rig. An animation drives **414 float tracks** on the face s
 |---|---:|---|
 | Envelopes | 13 | Global gates: `faceEnvelope`, `upperFace`, `lowerFace`, `antiStretch`, three lipsync envelopes, `jaliJaw`, `jaliLips`, and four "muzzle" mutes for lips, eyes, brows and eye directions |
 | Main-pose weights | 141 | The artist-meaningful controls, 0–1 (see below) |
-| Lipsync override weights | 86 | `…AnimOverrideWeight`, reference value 1 |
-| Lipsync pose outputs | 141 | Solver outputs |
+| Lipsync override weights | 86 | `…AnimOverrideWeight`, reference value 1; lip-sync clips lower them to mute the expression's mouth ([lip sync](lipsync.md)) |
+| Lipsync pose outputs | 141 | Despite the name, values lip-sync clips write and the solver adds to the main-pose weights ([lip sync](lipsync.md)) |
 | Wrinkle outputs | 33 | Solver outputs that can drive wrinkle shading |
 
 The **reference values** matter for anything additive: envelopes and override weights rest at 1, every main pose at 0 [resource]. The main poses are 121 face poses (with 133 in-betweens, 255 correctives, 68 limits and 31 influences), 12 eye poses and 18 tongue poses that share the two jaw controls [resource: pwa basehead facialsetup, measured by the wiki/add-on survey in the evidence note]. The solver order and stages are documented in the add-on's `animation/facial/solver.py` (pinned commit `7a4ee793`) [source].
@@ -44,7 +44,7 @@ Every vanilla player `face_rig` component, female and male, in the creator, game
 | Character creator and inventory preview ("paperdoll") | `_facial_graphs\player_woman_paperdoll_sermo.animgraph` (male: `pma_paperdoll_sermo`) | `ui_female_face.anims` (priority 128) plus the generic facial sets in `man_face_base_animations` | [resource] |
 | Photo mode | `player_woman_photomode_sermo.animgraph` (male: `player_man_photomode_sermo`) | `PhotomodeAnimations`: `ui\photomode\photomode_female_facial.anims` and the empty `photomode__v_female__facial.anims` (male twins) | [resource] |
 | Gameplay third-person head | The gameplay `face_rig` appearance also uses the paperdoll graph | as the creator | [resource]; what plays outside the creator is [hypothesis] |
-| Scenes and dialogue | Scene facial animation is pushed through the graph's `FacialMixerSlot` | `facialCinematicAnimSets` / lipsync sets on the scene | [wiki] [resource: slot node present]; "V has no lipsync" [wiki] |
+| Scenes and dialogue | Scene facial animation and lip sync are pushed through the graph's `FacialMixerSlot` | `facialCinematicAnimSets` on the scene; lip-sync sets found through the per-language lipmap, V's included ([lip sync](lipsync.md)) | [wiki] [resource: slot node present; V has lip-sync sets in 456 scenes, although the wiki's generator guide says V has none] |
 
 Both player face graphs share one spine [resource]: reference pose, then **`BlendAdditive` (local, tracks added)** of the context's clip, then `FacialMixerSlot`, `FacialSharedMetaPose`, a facial look-at controller, neck/head twist constraints, eye-direction tracks, and finally the `Sermo` node that runs the facial setup. The look-at controller plays **additive blink clips on gaze changes**: `additive__blink_fast__01` or `…blink_half__01` after 0.15 s (minimum transition 0.85 s) and `additive__blink_slow__01` after 0.25 s (minimum 5 s); these live in `generic_facial_additives.anims` with `tiny` and `normal` variants [resource]. No periodic blink node was found in either graph [resource]; the creator idle clip bakes its own blinks as tracks ([CC idle](../research/animation/cc-idle.md)).
 

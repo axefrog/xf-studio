@@ -149,7 +149,7 @@ It is its own dockable panel, **Poses**, docked by default as a tab beside Chara
 | **Thumbnails** | None in the first release: no game data has icons, and rendering 1,650 full V thumbnails is expensive. Instead, moving through the list with the keyboard poses V live, which is the true preview. Phase 5 may add small stick-figure silhouettes drawn from the decoded skeleton, lazily and cached (question Q2). |
 | **Keyboard** | In the search field, Down moves to the list. In the list, Up and Down move and pose V live; Enter keeps the pose and returns to search; Esc restores the pose held before the list took focus; F stars. A focus shortcut for the panel is added to the [input bindings contract](../authoring/input-bindings.md). Every action is also reachable with the mouse and the command palette. |
 | **Clear** | "Stand still" (bind pose) and "Creator idle" are two fixed entries at the top of the list, so returning to the idle is one step. |
-| **Empty and error states** | No game folder: "Poses come from your game. Choose your game folder in Game & tools" (button). A pack whose clips aren't installed: counted in the diagnostics, not shown as an error. |
+| **Empty and error states** | No game folder: "Poses come from your game. Choose your game folder in Settings › Game" (button). A pack whose clips aren't installed: counted in the diagnostics, not shown as an error. |
 
 **Content.** Poses are content-neutral: the panel lists every installed pose without judgement. What the body shows is governed only by the body's own censorship setting ([body rendering §3](../../knowledge/body-rendering.md#3-censorship-and-nudity-resource-source)), never by the pose.
 

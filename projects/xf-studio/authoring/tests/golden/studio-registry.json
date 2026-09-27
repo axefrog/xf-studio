@@ -32,6 +32,10 @@
   "field.setVector",
   "layer.edit",
   "layer.setEnabled",
+  "effect.mottle.enable",
+  "effect.mottle.set",
+  "effect.mottle.shuffle",
+  "effect.mottle.preset",
   "preset.edit",
   "preset.select",
   "collection.rename",
@@ -1216,6 +1220,201 @@
      "type": "boolean",
      "required": true,
      "from": "input"
+    }
+   }
+  },
+  "effect.mottle.enable": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
+  },
+  "effect.mottle.set": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "transaction",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "key": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "amount",
+      "grain",
+      "clumping",
+      "where",
+      "streaks",
+      "angle",
+      "length",
+      "seed"
+     ]
+    },
+    "value": {
+     "type": "number|string",
+     "required": true,
+     "from": "input"
+    }
+   },
+   "variants": {
+    "amount": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "grain": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0.25,
+       "max": 3
+      }
+     },
+     "undo": "transaction"
+    },
+    "clumping": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 1
+      }
+     },
+     "undo": "transaction"
+    },
+    "where": {
+     "payload": {
+      "value": {
+       "type": "enum",
+       "required": true,
+       "from": "input",
+       "values": [
+        "edges",
+        "everywhere"
+       ]
+      }
+     },
+     "undo": "part"
+    },
+    "streaks": {
+     "payload": {
+      "value": {
+       "type": "enum",
+       "required": true,
+       "from": "input",
+       "values": [
+        "off",
+        "angle",
+        "edge"
+       ]
+      }
+     },
+     "undo": "part"
+    },
+    "angle": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 180
+      }
+     },
+     "undo": "transaction"
+    },
+    "length": {
+     "payload": {
+      "value": {
+       "type": "number",
+       "required": true,
+       "from": "input",
+       "min": 1,
+       "max": 8
+      }
+     },
+     "undo": "transaction"
+    },
+    "seed": {
+     "payload": {
+      "value": {
+       "type": "integer",
+       "required": true,
+       "from": "input",
+       "min": 0,
+       "max": 2147483647
+      }
+     },
+     "undo": "part"
+    }
+   }
+  },
+  "effect.mottle.shuffle": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    }
+   }
+  },
+  "effect.mottle.preset": {
+   "scope": [
+    "layer"
+   ],
+   "effect": "content",
+   "undo": "part",
+   "payload": {
+    "layerId": {
+     "type": "string",
+     "required": true,
+     "from": "target"
+    },
+    "preset": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "powder",
+      "cream",
+      "mascara",
+      "sponge"
+     ]
     }
    }
   },
@@ -3054,6 +3253,42 @@
   },
   {
    "id": "layer.setEnabled",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "effect.mottle.enable",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "effect.mottle.set",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "transaction",
+   "async": false
+  },
+  {
+   "id": "effect.mottle.shuffle",
+   "family": "action",
+   "scope": [
+    "layer"
+   ],
+   "undo": "part",
+   "async": false
+  },
+  {
+   "id": "effect.mottle.preset",
    "family": "action",
    "scope": [
     "layer"

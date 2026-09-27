@@ -5,7 +5,8 @@ import type { IrregularFlakes } from "../../../engines/layered-makeup/flake-fiel
 import type { LegacyFlakes } from "../../../engines/layered-makeup/finish";
 import type { GlitterModel } from "../../../engines/layered-makeup/glitter-model";
 import type { Layer } from "../../../engines/layered-makeup/recipe";
-import type { RecipeAction } from "../../../engines/layered-makeup/recipe-actions";
+import type { Mottle, MottlePresetId } from "../../../engines/layered-makeup/mottle";
+import type { MottleKey, RecipeAction } from "../../../engines/layered-makeup/recipe-actions";
 import type { ReadonlyDeep } from "../../../read-only";
 import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../../../studio-ui/controls";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
@@ -19,14 +20,15 @@ type RLayer = ReadonlyDeep<Layer>;
 const uvPct = (value: number) => `${(value * 100).toFixed(2)}% UV`;
 
 /** One Undo step per continuous edit; refused or failed edits are reported, never swallowed. */
-function recipeTransaction<T>(ctx: EyeMakeupViewContext, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined): Transaction<T> {
+function recipeTransaction<T>(ctx: EyeMakeupViewContext, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined,
+  title = "Colour & finish"): Transaction<T> {
   return {
     begin: () => { const layer = ctx.facade.view().layer(); if (layer) ctx.facade.controlBegin(id, layer.id); },
     edit: value => {
       const layer = ctx.facade.view().layer(); if (!layer) return;
       const action = make(layer, value); if (!action) return;
       const outcome = ctx.facade.controlEdit(id, action);
-      if (!outcome.ok) { ctx.feedback.toast("warning", "Colour & finish", outcome.message); ctx.changed(); }
+      if (!outcome.ok) { ctx.feedback.toast("warning", title, outcome.message); ctx.changed(); }
     },
     commit: () => ctx.facade.controlCommit(id),
     cancel: () => ctx.facade.controlCancel(id),
@@ -315,9 +317,10 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
       command: layer.softness.mode === "boundary" ? { kind: "point-softness", index: ctx.facade.view().selected(), value } : { kind: "uniform-softness", value } })) });
   const softnessNote = note("");
   const pointLabel = h("span", { class: "muted small" });
+  const mottle = mottleSection(ctx);
   const body = h("div", { class: "stack" },
     section("Pigment strength", pointLabel, weight.element, smooth.element, blend.element, pigmentNote),
-    section("Edge softness", variable.element, width.element, softnessNote));
+    section("Edge softness", variable.element, width.element, softnessNote), mottle.element);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "edge", ...EYE_MAKEUP_PANEL_META.edge, element },
@@ -342,8 +345,68 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
       setText(softnessNote, perPoint
         ? "Widths blend between points; very soft edges can influence nearby sharp edges in narrow shapes. Turning this off keeps your point settings."
         : "One fade width around the whole shape. Enable per-point softness to vary the edge independently of pigment strength.");
+      mottle.update(layer);
     },
   };
+}
+
+/**
+ * Mottle (vector engine extensions §7): skin-scale breakup of the layer's coverage, baked into the exported texture.
+ * Sliders are one Undo step per drag; the switch, presets, placement, streaks and Shuffle are one step each.
+ */
+function mottleSection(ctx: EyeMakeupViewContext) {
+  const set = (key: MottleKey, value: number | string) => {
+    const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "effect.mottle.set", layerId: layer.id, key, value });
+  };
+  const slider = (key: "amount" | "grain" | "clumping" | "angle" | "length", label: string, step: number, format: (value: number) => string, help?: string) =>
+    new Slider({ label, ...ctx.range("effect.mottle.set", "value", key), step, format, help, reserveNote: key === "grain",
+      transaction: recipeTransaction<number>(ctx, `mottle-${key}`, (layer, value) => layer.effects?.mottle
+        ? { kind: "effect.mottle.set", layerId: layer.id, key, value } : undefined, "Pigment & edge") });
+  const enabled = new Toggle({ label: "Mottle", onChange: checked => {
+    const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "effect.mottle.enable", layerId: layer.id, enabled: checked });
+  } });
+  // The presets come from the facade's catalogue; the pressed one is the preset the layer's settings equal (seed aside).
+  const catalogue = ctx.facade.mottleCatalogue();
+  const same = (a: unknown, b: unknown) => JSON.stringify(a, Object.keys(a as object).sort()) === JSON.stringify(b, Object.keys(b as object).sort());
+  const matching = (m: ReadonlyDeep<Mottle>) => catalogue.find(({ look }) => look.amount === m.amount && look.grain === m.grain &&
+    look.clumping === m.clumping && look.where === m.where && (look.streaks && m.streaks ? same(look.streaks, m.streaks) : !look.streaks && !m.streaks))?.id;
+  const presets = new Segmented<MottlePresetId>({ label: "Preset", options: catalogue.map(({ id, label }) => ({ value: id, label })),
+    onSelect: preset => { const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "effect.mottle.preset", layerId: layer.id, preset }); } });
+  const amount = slider("amount", "Amount", .01, pct);
+  const grain = slider("grain", "Grain size", .01, value => `${value.toFixed(2)} mm`, "Measured on the skin, so pores are the same size wherever the layer sits.");
+  const clumping = slider("clumping", "Clumping", .01, value => value < .34 ? `${pct(value)} · pores` : value > .66 ? `${pct(value)} · clumps` : pct(value),
+    "Low values give small pits where product skips; high values give a patchy build-up.");
+  const where = new Segmented<Mottle["where"]>({ label: "Where", options: [
+    { value: "edges", label: "Edges", title: "Break up only the soft edge; the centre stays solid" },
+    { value: "everywhere", label: "Everywhere", title: "An uneven film across the whole shape" }], onSelect: value => set("where", value) });
+  const streaks = new Segmented<"off" | "angle" | "edge">({ label: "Streaks", options: [
+    { value: "off", label: "Off" }, { value: "angle", label: "Angle", title: "Strands at a fixed angle on the skin" },
+    { value: "edge", label: "Across edge", title: "Strands running out from the shape's edge, like mascara off the lash line" }],
+  onSelect: value => set("streaks", value) });
+  const angle = slider("angle", "Streak angle", 1, value => `${Math.round(value)}°`);
+  const length = slider("length", "Streak length", .1, value => `${value.toFixed(1)} × grain`);
+  const shuffle = button({ label: "Shuffle pattern", icon: "refresh", small: true, variant: "quiet", onClick: () => {
+    const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "effect.mottle.shuffle", layerId: layer.id });
+  } });
+  const details = h("div", { class: "stack" }, presets.element, amount.element, grain.element, clumping.element, where.element,
+    streaks.element, angle.element, length.element, h("div", { class: "row" }, shuffle));
+  const element = section({ title: "Mottle", help: ["Breaks the layer up the way powder, cream and mascara sit on skin close up: pores and clumps at skin scale.",
+    "It is part of the layer's texture, so your mod shows exactly what the preview shows, at no cost in game. Higher preview quality shows finer grain."] },
+  enabled.element, details);
+  return { element, update(layer: RLayer) {
+    const m = layer.effects?.mottle as ReadonlyDeep<Mottle> | undefined;
+    enabled.update(!!m);
+    details.hidden = !m;
+    if (!m) return;
+    presets.update(matching(m));
+    amount.update(m.amount); clumping.update(m.clumping);
+    // The grain is floored at two export texels; say so only when the floor applies.
+    grain.update(m.grain, { note: m.grain < .26 ? "Drawn at 0.26 mm: anything finer would vanish in the exported texture." : undefined });
+    where.update(m.where); streaks.update(m.streaks?.mode ?? "off");
+    angle.element.hidden = m.streaks?.mode !== "angle"; length.element.hidden = !m.streaks;
+    if (m.streaks?.mode === "angle") angle.update(m.streaks.angle);
+    if (m.streaks) length.update(m.streaks.length);
+  } };
 }
 
 export function warpPanel(ctx: EyeMakeupViewContext): PanelController {

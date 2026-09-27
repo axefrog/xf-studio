@@ -97,6 +97,7 @@ export type EyeMakeupFacade = FeatureFacade<EyeMakeupAction> & {
   layerExport: StudioApplication["layerExport"];
   finishCatalogue: StudioApplication["finishCatalogue"];
   glitterModelCatalogue: StudioApplication["glitterModelCatalogue"];
+  mottleCatalogue: StudioApplication["mottleCatalogue"];
 };
 /**
  * Any other feature's facade: its live part and editor memory for the selected look, detached, and its form-control transactions (a
@@ -338,7 +339,7 @@ export function createStudioPresentation<Slot>(sources: {
       controlBegin: (id, layerId) => a.controlBegin(id, layerId), controlEdit: (id, action) => a.controlEdit(id, action),
       controlCommit: id => a.controlCommit(id), controlCancel: id => a.controlCancel(id),
       layerExport: layerId => a.layerExport(layerId), finishCatalogue: () => a.finishCatalogue(),
-      glitterModelCatalogue: () => a.glitterModelCatalogue() };
+      glitterModelCatalogue: () => a.glitterModelCatalogue(), mottleCatalogue: () => a.mottleCatalogue() };
     return [info.id, Object.freeze(eye)];
   }));
   const feature = ((id: string) => facades.get(id)) as FeatureLookup;

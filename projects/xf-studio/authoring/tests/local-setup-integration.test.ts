@@ -93,3 +93,50 @@ test("a save from one view waits for another view's refresh instead of being ref
   expect((await saved).ok).toBe(true);
   expect(actions.snapshot().busy).toBe(false);
 });
+
+test("the saves folder: detected by default and only described; a chosen folder must be there; one gone since never blocks other fields (UI-109)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "xfs-setup-saves-"));
+  try {
+    const store = new LocalSettingsStore(dir);
+    const display = "Saved Games\\CD Projekt Red\\Cyberpunk 2077";
+    const detected = join(dir, "profile", "Saved Games", "CD Projekt Red", "Cyberpunk 2077");
+    const handler = createLocalSettingsHandler(store, {}, undefined, undefined,
+      { detected: async () => ({ path: detected, display }), developerOverride: () => false });
+    const request = async (method: "GET" | "PATCH", body?: unknown) => {
+      const response = await handler(new Request("http://127.0.0.1:4317/api/local-settings", { method,
+        headers: body ? { Origin: "http://127.0.0.1:4317", "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined }));
+      return { status: response.status, data: await response.json() };
+    };
+    let view = (await request("GET")).data;
+    expect(view.fields.savesDirectory).toBeNull();
+    expect(view.saves).toEqual({ source: "detected", detected: { display, found: false }, chosenFound: null });
+    // The detected folder's path, which holds the person's profile, never reaches the page.
+    expect(JSON.stringify(view)).not.toContain(join(dir, "profile"));
+    mkdirSync(detected, { recursive: true });
+    expect((await request("GET")).data.saves.detected).toEqual({ display, found: true });
+    // A chosen folder is checked before it is saved, with words that say what to do.
+    const missing = await request("PATCH", { revision: view.revision, fields: { savesDirectory: join(dir, "nowhere") } });
+    expect(missing).toMatchObject({ status: 400, data: { code: "saves_folder_missing", error: expect.stringMatching(/can't find that folder/) } });
+    const relative = await request("PATCH", { revision: view.revision, fields: { savesDirectory: "Saves" } });
+    expect(relative).toMatchObject({ status: 400, data: { code: "saves_folder_invalid", error: expect.stringMatching(/starting with its drive/) } });
+    const chosen = join(dir, "copies");
+    mkdirSync(chosen);
+    const saved = await request("PATCH", { revision: view.revision, fields: { savesDirectory: ` ${chosen} ` } });
+    expect(saved.status).toBe(200);
+    view = saved.data;
+    expect(view.fields.savesDirectory).toBe(chosen);
+    expect(view.saves).toMatchObject({ source: "chosen", chosenFound: true });
+    // The chosen folder goes away: it is reported, and saving another field still works.
+    rmSync(chosen, { recursive: true });
+    const other = await request("PATCH", { revision: view.revision, fields: { ...view.fields, launchRoute: "mo2" } });
+    expect(other.status).toBe(200);
+    expect(other.data.saves).toMatchObject({ source: "chosen", chosenFound: false });
+    const back = await request("PATCH", { revision: other.data.revision, fields: { savesDirectory: null } });
+    expect(back.data.saves).toMatchObject({ source: "detected", chosenFound: null });
+    // Settings saved before the choice existed read as the detected folder.
+    const { savesDirectory: _omit, ...earlier } = { ...defaultLocalSettings(), revision: 3 };
+    void _omit;
+    writeFileSync(join(dir, "settings.json"), JSON.stringify(earlier));
+    expect((await request("GET")).data.fields.savesDirectory).toBeNull();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

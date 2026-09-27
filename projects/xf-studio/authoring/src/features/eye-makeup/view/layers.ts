@@ -2,6 +2,7 @@ import { chordsLabel, keyBindingById, shortcutLabel } from "../../../input-bindi
 import { applyCapability, button, emptyState, note } from "../../../studio-ui/controls";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
 import { icon } from "../../../studio-ui/icons";
+import { EmptyState, iconButton } from "../../../studio-ui/components";
 import { ItemList } from "../../../studio-ui/item-list";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import { addLayer, addLayerCapability, catalogues, type EyeMakeupViewContext } from "./actions";
@@ -16,7 +17,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
   const duplicate = button({ label: "Duplicate selected layer", icon: "duplicate", iconOnly: true, small: true, variant: "ghost", onClick: () => {
     const layer = view.layer(); if (layer) ctx.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: layer.id } });
   } });
-  const more = button({ label: "Selected layer actions", icon: "more", iconOnly: true, small: true, variant: "ghost", onClick: event => {
+  const more = button({ label: "Selected layer actions", icon: "more", iconOnly: true, small: true, variant: "ghost", menu: true, onClick: event => {
     const layer = view.layer(); if (layer) openLayerMenu(ctx, layer.id, event.currentTarget as Element, event.currentTarget as Element);
   } });
   const toVisual = (index: number) => view.recipe().layers.length - 1 - index;
@@ -32,14 +33,13 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       const layer = view.recipe().layers.find(entry => entry.id === item.id);
       if (!layer) return;
       if (!row.lead.childElementCount) {
-        const eye = h("button", { class: "icon-btn small visibility", type: "button" });
-        eye.addEventListener("click", () => {
+        const eye = iconButton({ label: `Hide ${layer.name}`, icon: "eye", small: true, className: "visibility", pressed: layer.enabled, onClick: () => {
           const current = view.recipe().layers.find(entry => entry.id === item.id);
           if (current) ctx.dispatch({ kind: "layer.setEnabled", id: item.id, enabled: !current.enabled });
-        });
+        } });
         row.lead.append(eye, h("span", { class: "swatch", "aria-hidden": "true" }));
         row.trailing.append(h("span", { class: "finish-flag", "aria-hidden": "true" }),
-          button({ label: "Layer actions", icon: "more", iconOnly: true, variant: "ghost", small: true,
+          button({ label: "Layer actions", icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
             onClick: event => openLayerMenu(ctx, item.id, event.currentTarget as Element, event.currentTarget as Element) }));
       }
       const eye = row.lead.querySelector<HTMLButtonElement>(".visibility")!;
@@ -79,14 +79,12 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
   const noPreset = emptyState("No preset selected", "Layers belong to a preset. Add or select one to edit its layers.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => ctx.platform({ kind: "preset.edit", command: { kind: "add" } }) }));
   // A look made with a newer XF Studio: say what happened, that it is safe, and the one next step.
-  const newerBody = h("p", { class: "empty-body" });
-  const newer = h("div", { class: "empty", role: "status" }, h("p", { class: "empty-title", text: "This look needs a newer XF Studio" }), newerBody,
-    h("div", { class: "empty-actions" }, button({ label: "Get the latest version", icon: "export", variant: "primary", onClick: () => {
+  const newer = new EmptyState({ title: "This look needs a newer XF Studio", actions: [button({ label: "Get the latest version", icon: "export", variant: "primary", onClick: () => {
       void ctx.links.open("project-releases").then(result => { if (!result.ok) ctx.feedback.toast("info", "Layers", result.message); });
-    } })));
+    } })] });
   const element = h("div", { class: "panel-content" },
     h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Stack ", count), h("div", { class: "row gap-xs" }, add, duplicate, more)),
-    noPreset, newer, empty, list.element,
+    noPreset, newer.element, empty, list.element,
     note(`Top = front. Drag the grip or use ${chordsLabel(keyBindingById("rows.reorder"))} to reorder · ${shortcutLabel("rows.rename")} renames · ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`));
   ctx.anchors.register("layers.add", add);
   ctx.anchors.register("layers.list", list.element);
@@ -98,8 +96,8 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       const draft = frame.library.draft, hasPreset = !draft || !!draft.selected;
       const reason = hasPreset ? frame.locked : undefined, locked = reason !== undefined;
       noPreset.hidden = hasPreset;
-      newer.hidden = !locked;
-      if (locked) setText(newerBody, reason);
+      newer.element.hidden = !locked;
+      if (locked) newer.update("This look needs a newer XF Studio", reason);
       empty.hidden = !hasPreset || locked || layers.length > 0;
       setText(count, String(layers.length));
       // The layer limit is the recipe's rule: the count names it only when it stops Add (UI-93).

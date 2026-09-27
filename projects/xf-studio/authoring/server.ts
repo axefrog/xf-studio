@@ -17,7 +17,7 @@ import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
 import { createSavesHandler } from "./src/features/save-explorer/host/saves-server";
-import { savesHostSources } from "./src/saves-host-sources";
+import { savesFolderProbe, savesHostSources } from "./src/saves-host-sources";
 import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/desktop-app-host";
 import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
@@ -61,8 +61,10 @@ const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),
 const settingsFeatures = (settings: LocalSettings) => ({ updater: false, installer: true,
   wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
   eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) });
-const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable());
-const verificationSettingsRequest = createLocalSettingsHandler(verificationSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable());
+// Settings › Saves describes the detected saves folder; XFS_SAVES_DIR (a developer override) replaces the chosen or detected one.
+const savesProbe = savesFolderProbe({ allowOverride: true });
+const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
+const verificationSettingsRequest = createLocalSettingsHandler(verificationSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
 const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
 const detectionRequest = createInstallDetectionHandler(undefined, { settings: () => {
   const settings = localSettings.load().settings;
@@ -168,12 +170,17 @@ const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 /** Retired piercing intake payloads (vanilla and PRC manifests and their files), never served. */
 const RETIRED_ASSET_DIRS = /^(?:prc|piercings)(?:[\\/]|$)/i;
-// The Save Explorer's read-only endpoints: the player's saves and the installed scripts' names. XFS_SAVES_DIR points an isolated
-// server at a folder of copies instead; nothing here writes.
-const savesRequest = createSavesHandler(savesHostSources({ allowOverride: true, exists: existsSync, settings: () => {
-  const settings = localSettings.load().settings;
+// The Save Explorer's read-only endpoints: the player's saves (the folder chosen in Settings › Saves, else the detected one) and the
+// installed scripts' names. XFS_SAVES_DIR points an isolated server at a folder of copies instead; nothing here writes. A verification
+// workspace reads its own settings' folder (UI-98), so a folder chosen while testing stays there.
+const savesSettings = (store: LocalSettingsStore) => () => {
+  const settings = store.load().settings;
   return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
-} }), diagnostics.log.logger("saves"));
+};
+const savesRequest = createSavesHandler(savesHostSources({ allowOverride: true, exists: existsSync, settings: savesSettings(localSettings) }),
+  diagnostics.log.logger("saves"));
+const verificationSavesRequest = createSavesHandler(savesHostSources({ allowOverride: true, exists: existsSync, settings: savesSettings(verificationSettings) }),
+  diagnostics.log.logger("saves"), "/api/verification/saves");
 const build = await buildBrowser(resolve(root, "build"));
 if (!build.success) {
   console.error(build.logs);
@@ -196,6 +203,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/verification/local-settings") return verificationSettingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(request);
+    if (url.pathname === "/api/verification/saves" || url.pathname.startsWith("/api/verification/saves/")) return verificationSavesRequest(request);
     if (url.pathname === "/api/desktop-app") return desktopAppRequest(request);
     if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);

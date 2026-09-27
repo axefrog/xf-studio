@@ -238,7 +238,7 @@ export const STALE_TEMP_MS = 60 * 60_000;
 export const MAX_WAITING_CLIENTS = 8;
 
 const fingerprint = (path: string) => { try { const s = statSync(path); return `${path}|${s.size}|${s.mtimeMs}`; } catch { return path; } };
-const NOT_SET_UP = "Live expressions read your V's face from your game files: set your game folder and WolvenKit in Game & tools.";
+const NOT_SET_UP = "Live expressions read your V's face from your game files: set your game folder and WolvenKit in Settings.";
 /** The solver's program couldn't be started at all (no Python on this computer, CORE-99). */
 export const SOLVER_NOT_SET_UP = "The facial solver isn't set up on this computer, so the live face preview is off. You can still set every " +
   "control: your expression is saved with the look.";

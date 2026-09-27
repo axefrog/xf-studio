@@ -47,12 +47,16 @@ function colour(value: string) {
  * Warp order stays significant because floating-point accumulation is ordered. */
 export function maskAlphaKey(layer: ReadonlyDeep<Layer>, size: number, rasterVersion = MASK_RASTER_VERSION): AlphaKey {
   sizeWithin(size, 1);
+  const mottle = layer.effects?.mottle;
   const points: Value[] = layer.points.map(point => [point.u, point.v, point.weight, point.feather ?? null,
     point.handles ? [point.handles.mode, point.handles.in.u, point.handles.in.v, point.handles.out.u, point.handles.out.v] : null]);
   return key("alpha", [version(rasterVersion), "gltf-uv0-top-left", size, layer.enabled, layer.pathMode,
     points, [layer.strength.mode, layer.strength.mode === "smooth-boundary" ? layer.strength.blend : null],
     [layer.softness.mode, layer.softness.mode === "boundary" ? layer.softness.blend : null], layer.feather,
-    layer.fields.map(field => [field.u, field.v, field.du, field.dv, field.radius]), layer.symmetry, layer.opacity]);
+    layer.fields.map(field => [field.u, field.v, field.du, field.dv, field.radius]), layer.symmetry, layer.opacity,
+    // Mottle is appended only when present, so every unmottled layer keeps its exact key.
+    ...(mottle ? [["mottle", mottle.model, mottle.amount, mottle.grain, mottle.clumping, mottle.where, mottle.seed,
+      mottle.streaks ? [mottle.streaks.mode, mottle.streaks.mode === "angle" ? mottle.streaks.angle : null, mottle.streaks.length] : null] as Value] : [])]);
 }
 
 /** Complete unit-square catalogues only. Region-limited study outputs are
