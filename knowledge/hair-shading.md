@@ -1,6 +1,6 @@
 # Hair shading (`hair.mt` family, game 2.31)
 
-**Maturity: Draft.** The colour, coverage and G-buffer arithmetic of `base\materials\hair.mt` and the hair light (sun, local lights and environment) are decoded from compiled 2.31 programs. The CPU bake of `.hp` profiles and the default values of the lighting options, with the register each one feeds, are read from the 2.31 executable. The options are runtime GameOptions, so a CET mod can still change them in a session. So far the preview has been compared only with an uncontrolled in-game portrait ([calibration note](../research/eye-artistry/hair-calibration-2026-09-25.md)). That portrait was taken with a colour-grading ReShade preset active and a replacement grading LUT installed, so its colours are not raw game output. The fixed, repeatable light for future comparisons is the creator and mirror screen ([creator lighting](creator-lighting.md)). For what is still open, see the [open questions](#open-questions) and the [capture request](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request).
+**Maturity: Draft.** The colour, coverage and G-buffer arithmetic of `base\materials\hair.mt` and the hair light (sun, local lights and environment) are decoded from compiled 2.31 programs. The CPU bake of `.hp` profiles and the default values of the lighting options, with the register each one feeds, are read from the 2.31 executable. The options are runtime GameOptions, so a CET mod can still change them in a session. The preview has been compared with a four-colour ladder in the mirror, under fixed light ([§8](#creator-ladder-session-3)): its rungs keep the decoded bake's spread, and the game's are 1.5–1.8 times further apart. An earlier comparison used an uncontrolled in-game portrait taken with a grading ReShade preset and a replacement LUT ([calibration note](../research/eye-artistry/hair-calibration-2026-09-25.md)). The creator and mirror screen stays the reference light ([creator lighting](creator-lighting.md)). For what is still open, see the [open questions](#open-questions) and the [capture request](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request).
 
 This page covers hair cards, and lashes that use hair materials. How hair moves (its dangle joints and their simulation) is on [dangle physics](hair-physics.md). Every vanilla and inspected CCXL brow uses a post-G-buffer decal (`mesh_decal_double_diffuse.mt`), not `hair.mt` ([eyebrows](brows.md)). Lashes take one colour per profile (the [hair reference §9](../research/materials/shader-hair.md#9-lashes) has the sample positions). The last section covers that decal's colour blend. For material resources, G-buffer layout and other templates, see [materials and shaders](materials-and-shaders.md); the evidence-level [hair reference](../research/materials/shader-hair.md) lists every parameter, pass and program hash, the lash and cap specifics, and what still blocks correct hair and lash colour.
 
@@ -98,7 +98,7 @@ The `cb0` hair registers are runtime GameOptions (`Editor/Characters/Hair/…`).
 | cb0[19].x | `AdditionalAreaRoughness` (environment path) | 0.1 |
 | cb0[15].w | `Debug/DebugSwitch1` (enables a per-light factor) | false |
 
-The TT intensities, `AlphaShifts/TT`, the `ScatterDepth` options and `MultiScatter/ShadowFactorExp` are uploaded but no hair program reads them. CET mods can change these options at runtime. The reference install runs the Character Rendering Editor's "Arkhe Balanced" preset: AlbedoMultiplier 0.8091, RoughnessFactor 1.1968, Wrap 0.4364, EXP_BIAS 2.5795 [installed state]. The Studio uses the defaults as `HAIR_LIGHTING_VANILLA`. Karis's published defaults, used before, are kept as `HAIR_LIGHTING_KARIS`.
+The TT intensities, `AlphaShifts/TT`, the `ScatterDepth` options and `MultiScatter/ShadowFactorExp` are uploaded but no hair program reads them. CET mods can change these options at runtime. The reference install runs the Character Rendering Editor's "Arkhe Balanced" preset: AlbedoMultiplier 0.8091, RoughnessFactor 1.1968, Wrap 0.4364, EXP_BIAS 2.5795, AdditionalAreaRoughness 0.4 and ContactShadowClamp 0.4717. It also changes eye, skin and rim options: eye `DiffuseBoost` 0.2993 and `UseAOOnEyes` on, `SkinAmbientIntensity_Factor` 0.2062, `SubsurfaceSpecularTintWeight` 0.6955, `SubsurfaceSpecularTint_B` 0.375, `GlobalCharacterFresnel` 0.8086 and `LightBlockerInfluence` 1.0. Session 3 read every one of these options through the runtime bridge under both presets, and the tool's "Vanilla" preset reproduces the executable defaults exactly [runtime]. The Studio uses the defaults as `HAIR_LIGHTING_VANILLA`. Karis's published defaults, used before, are kept as `HAIR_LIGHTING_KARIS`.
 
 **Local lights.** The tiled local-light loop of the all-class program `m_shaderLightsComputeGlobalLocalShadows_Clustered_11111111` (`6606735909222169407`) has its own Hair branch, and it is the model above evaluated per light: the same frame, per-strand shift, R and TRT lobes, gates and wrapped diffuse, from the same `cb0[16..20]` registers. Only the intensity triple differs: **`cb0[13]`**, the `LocalLight` options (R 0.35, TRT 0.8, MultiScatter 0.47), instead of `cb0[12]` [source]. Local lights do not apply the per-light roughness shift that Standard and Subsurface local lights have. When `DebugSwitch1` is set, a light's colour is also scaled by a half-float from its record. The CPU fills that value from a "modified local-light intensity" hack curve, which brightens mid-strength lights and dims strong ones, but the switch is off by default, so vanilla ignores it [source: executable] ([hair reference §6.2](../research/materials/shader-hair.md#62-local-lights)). Every light of the creator and mirror screen is local, so this is the path that shades hair and lashes there.
 
@@ -175,9 +175,48 @@ The preview's faithful coverage (above) draws strands thinner and crisper than t
 
 Every strand of a scene reads one uniform, so moving the slider recompiles nothing, and each view keeps its own value (the view graph's display node). At 1920 × 1080 on an RTX 4070 (headless Chrome, ANGLE D3D11, the default masculine V, 27 September 2026, minimum of six alternations of 60 frames) a frame took 1.34 ms at Crisp and 1.37 ms at Game-like, within the timing's noise. The export is unaffected: the mod ships the game's own `hair.mt` data. A side-by-side capture against the creator's hair page in game would settle how far Game-like should go; until then its extent is a visual judgement.
 
+### Creator ladder (session 3)
+
+Session 3 photographed the mirror's hair page (2.0 m) with four of redacted-c01's hair colours on the `lm097_hair` style (LONG PAK #011). It used the Character Rendering Editor's Vanilla preset, with ReShade off and Nova LUT 3.0 as the grade. The Studio rendered the same V, hairstyle and colours under the Character creator preset at the matched framing, with the rig turned with V ([creator lighting §12.6](creator-lighting.md#126-refit-from-two-captures-28-september)).
+
+**Method.** The mask keeps hair only, with no background. A pixel counts as hair where:
+
+- the platinum frame is at least 1.8 times brighter than the ash-brown frame, and the ash-grey frame 1.3 times (display-linear);
+- it is not backdrop-coloured in any frame;
+- it lies outside the face.
+
+The mask is then eroded by 7 px at 3840 × 1600, leaving 81,000 pixels in the game frame and 115,000 in the Studio's. Each pixel is inverted through the Nova LUT's full display transform and averaged in scene-linear light. An earlier quick attempt sampled the backdrop. A mask built from a display-linear difference alone keeps only the lit strands and gives much flatter ratios (2.1, 2.6, 2.9), so it is not used.
+
+| Scene-linear luminance, ratio to `38_ash_brown` | `39_ash_grey` | `74_steel_smoke` | `66_platinum_blonde` |
+|---|---:|---:|---:|
+| Mean albedo, decoded bake ([calibration note](../research/eye-artistry/hair-calibration-2026-09-25.md#refined-capture-request)) | 3.1 | 4.2 | 6.6 |
+| Studio render (decoded bake), whole hair | 2.8 | 4.0 | 6.6 |
+| **Game**, whole hair | **4.7** | **7.2** | **9.8** |
+| Game / Studio: crown | 3.8 / 2.5 | 10.1 / 3.9 | 14.0 / 6.3 |
+| Game / Studio: lengths on the screen-left side | 5.2 / 2.7 | 9.6 / 4.2 | 13.4 / 6.8 |
+| Game / Studio: lengths on the screen-right side | 4.1 / 3.0 | 5.6 / 4.1 | 9.1 / 7.1 |
+
+At the adopted calibration the preview's ash brown is 1.25 times the game's level, and the lighter colours are 0.69–0.84 of it. The hue per colour, as scene-linear R/G for the game against the preview, is 1.14 against 1.36, 0.91 against 1.05, 0.87 against 0.98 and 0.94 against 1.18. The game's hair is cooler than the preview's in every colour.
+
+**Verdict** [runtime, one session]:
+
+- **The bake holds as far as the preview can test it.** The Studio bakes the profiles exactly as the executable does (§3), and it renders the table's spread under the creator light.
+- **The game's ladder is steeper, but the gap is not in the bake.** Its colours are 1.5–1.8 times further apart than the albedos predict. A bake that steepened the ladder, such as a second sRGB decode, would also saturate the colours. The game's colours are less saturated than the preview's, not more.
+- **The missing light grows with albedo and is cool.** It is largest at the crown and on the lengths away from the key. It lifts the cool `steel_smoke` most and the warm `platinum_blonde` least, and no single term proportional to albedo fits all three colours.
+- **Candidates** [hypothesis]:
+  - ray-traced diffuse light reaching the hair through its ambient path, which carries albedo twice (§5); the reference install runs ray-traced lighting at Ultra;
+  - the preview's Rim_Top fold, which under-lights the crown about twofold ([creator lighting §12.4](creator-lighting.md#124-what-remains));
+  - the TRT lobe's response to the cool rims.
+
+  The same ladder with ray-traced lighting off separates the first candidate from the others.
+
+**The usual preset** [runtime, one frame each; pose-independent means over every hair pixel]. Arkhe Balanced renders the same ash-brown hair at 0.72 of the Vanilla level on average (median 0.88; upper quartile 0.63, where the highlights sit). AlbedoMultiplier alone would give 0.81. The rest comes from the wider roughness and the weaker TRT (`EXP_BIAS` 2.58). The Vanilla frames span 0.0207–0.0220 over 18 frames, so the drop is well outside the pose's noise. Skin keeps its luminance under both presets and reads about 6/255 bluer under Arkhe Balanced, from its specular tint.
+
+The preview keeps `HAIR_LIGHTING_VANILLA`, because the calibration frames are Vanilla and the preview cannot read a session's options yet. The runtime bridge can read them (`game.options.read` produced the dumps), so a later step could pass a running game's hair options into the preview.
+
 ## Open questions
 
-1. Our own runtime dump of the hair options in a session, to confirm that no CET preset or other mod changes them (the defaults themselves are read from the executable).
+1. **Answered for session 3** [runtime]: the bridge's option dump under the Vanilla preset reproduces the executable defaults, and Arkhe Balanced changes the values listed in §5. Other CET mods were not isolated.
 2. Which `brown_liquorice.hp` the game binds for the saved lashes. NPC hair in game weakly favours the mod copy (§7); a controlled with/without comparison is [head CC rendering test ask 7](head-cc-rendering.md). Expected: base (172, 130, 15), Alliekat (59, 28, 0).
 3. Whether hair in ambient light really carries its albedo twice (§5): a ladder in the mirror (no ambient) against the same ladder lit only by ambient light should show roughly squared ratios ([hair reference test ask 3](../research/materials/shader-hair.md#13-in-game-test-asks-batch-into-the-prepared-session)).
 4. The global flag that multiplies coverage by 1.33, and whether the dither's per-frame register is a plain frame counter. The preview's [Hair look](#hair-look) applies the factor at its Game-like end without knowing whether the game sets the flag.
