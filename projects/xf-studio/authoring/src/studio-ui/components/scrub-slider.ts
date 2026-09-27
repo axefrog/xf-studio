@@ -1,8 +1,7 @@
 import { h, setAttr, setDisabled, setText, uid } from "../dom";
-import { NoteLine } from "../controls";
+import { NoteLine, Segmented } from "../controls";
 import { helpTip, type HelpText } from "../help-tip";
 import type { IconName } from "../icons";
-import { iconButton } from "./icon-button";
 
 /**
  * Scrub slider (style guide "Scrub slider"): a spring-loaded control for an operation on many values at once (the Expression panel's
@@ -14,12 +13,13 @@ import { iconButton } from "./icon-button";
  * - **Bleed area.** While the pointer is more than `bleed` px (default 32) away from the slider, the thumb snaps to the middle and the
  *   preview with it ("Release to cancel" shows under the track); coming back resumes the preview. Releasing out there applies nothing.
  * - **Keyboard.** Arrows, Page Up/Down, Home and End preview; Enter applies; Escape (or leaving the slider) cancels.
- * - **Curves** (optional): a row of icon toggles on the label line, one per easing curve (`curves`, `curve`, `onCurve`); the owner
- *   passes the position through the chosen curve. Choosing one is a preference, not an edit.
+ * - **Curves** (optional): a frameless icon-only Segmented on the label line, one segment per easing curve (`curves`, `curve`,
+ *   `onCurve`), chosen, focused and named exactly as the standalone curve strip is; the owner passes the position through the chosen
+ *   curve. Choosing one is a preference, not an edit.
  * - **Anatomy:** label (help tip) · curves · readout (the position, "50 %") · track with a centre mark, filled from the centre to the
  *   thumb · the ends' words small under the track, where the bleed hint appears in the middle (reserved, so nothing moves).
  * - **Access:** a native range labelled by the visible label, described by what a drag does; its value text is the readout's words;
- *   the curves are a labelled group of toggle buttons (`aria-pressed`).
+ *   the curves are a labelled group of toggle buttons (`aria-pressed`) with one Tab stop and arrow keys (Segmented).
  */
 export type ScrubCurve<T extends string> = { value: T; label: string; icon: IconName };
 export type ScrubSliderOptions<T extends string = string> = {
@@ -48,7 +48,7 @@ export class ScrubSlider<T extends string = string> {
   private readonly hint: HTMLElement;
   private readonly track: HTMLElement;
   private readonly note = new NoteLine(false);
-  private readonly curveButtons: { value: T; element: HTMLButtonElement }[] = [];
+  private readonly curves: Segmented<T> | null;
   /** A preview is open (begun and not yet applied or cancelled). */
   private active = false;
   private pointer = false;
@@ -63,12 +63,9 @@ export class ScrubSlider<T extends string = string> {
     this.readout = h("output", { class: "readout", for: id });
     this.hint = h("span", { class: "scrub-hint", "aria-hidden": "true", text: "Release to cancel" });
     this.track = h("span", { class: "scrub-track" }, this.input);
-    const curves = options.curves?.length ? h("span", { class: "scrub-curves", role: "group", "aria-label": `${options.label} curve` },
-      options.curves.map(curve => {
-        const element = iconButton({ label: curve.label, icon: curve.icon, small: true, mode: true, pressed: false, onClick: () => options.onCurve?.(curve.value) });
-        this.curveButtons.push({ value: curve.value, element });
-        return element;
-      })) : null;
+    this.curves = options.curves?.length ? new Segmented<T>({ label: `${options.label} curve`, showLabel: false, compact: true, iconOnly: true, frameless: true,
+      options: options.curves.map(curve => ({ value: curve.value, label: curve.label, icon: curve.icon })), onSelect: value => options.onCurve?.(value) }) : null;
+    const curves = this.curves?.element ?? null;
     this.element = h("div", { class: "control scrub-slider" },
       h("div", { class: "scrub-line" }, h("label", { class: "control-label-text", for: id }, h("span", { text: options.label })),
         options.help !== undefined ? helpTip(options.label, options.help) : null, h("span", { class: "grow" }), curves, this.readout),
@@ -142,10 +139,8 @@ export class ScrubSlider<T extends string = string> {
     if (state.disabled && this.active) this.finish(false);
     this.disabled = !!state.disabled;
     setDisabled(this.input, this.disabled, state.reason);
-    for (const button of this.curveButtons) {
-      setAttr(button.element, "aria-pressed", String(button.value === state.curve));
-      button.element.disabled = this.disabled;
-    }
+    this.curves?.update(state.curve, undefined, { disabled: this.disabled });
+    this.element.classList.toggle("disabled", this.disabled);
     this.note.update(this.input, this.disabled, state.reason, undefined);
   }
 }

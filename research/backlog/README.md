@@ -82,6 +82,13 @@ Later-domain research queue (below the body and appearance work): [world, termin
 
 - **Live posing through the bridge** (runtime R&D, requested 27 September 2026; nothing built): pose V from the Studio and see it in the running game. Recommended route: a reserved XF carrier pose whose constant keys the bridge overwrites in the loaded clip (whole body, next frame, no graph change or engine hook), with the photo-mode graph's own IK, look-at and head/chest channels (`IKTargetAddEvent`, `LookAtAddEvent`, `AnimFeature_PhotomodeBodyPartRotate`) alongside and hot reload as the fallback. First step: one supervised session with a test package and three bridge commands (`photo.pose.set`, read-only `pose.live.read`, `pose.live.apply` behind its own switch), about 3–4 days of preparation: [pose editor design §7](../animation/pose-editor-design.md#7-live-posing-route-survey). Facts: [poses §7–8](../../knowledge/poses.md#7-what-the-body-graph-does-after-the-pose-clip).
 
+### Animated preset changes
+
+Built: Expression › Transitions ([expression editor design §5.5](../animation/expression-editor-design.md#55-animated-transitions)): whole-face changes ease on the head, with a duration and a curve from the shared easing catalogue.
+
+- **Banked follow-up: Replay** (from the UI/UX review of 28 September 2026, banked under finish-before-widening). A Replay button in the Transitions heading that replays the last change with the current settings, so comparing curves is one click instead of switching to another expression and back. It needs the facial preview to keep the last change's start and target and a `transition.replay` action; no new curve drawing is needed.
+- **Poses** plug into the same value-transition node with a per-joint rotation blend and their own setting (design §5.5).
+
 ## Paused pending in-game evidence
 
 - **Expanded-plate clearance** ([Experiment 006](../../experiments/006-plate-clearance/README.md), [012](../../experiments/012-native-plate-bootstrap/README.md)). Many offline candidates were rejected; no correction is accepted. Pause until the smoke test shows whether residual eyelid contacts are visible in game. Any resumed candidate must be morph-aware and finite-contact-aware and preserve exact native skin bytes in mesh and morph base buffers.

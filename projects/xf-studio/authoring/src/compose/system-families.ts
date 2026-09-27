@@ -10,6 +10,7 @@ import type { StudioFileAction } from "../studio-file-operations";
 import type { CollectionStudioAction } from "../collection-actions";
 import type { HistoryAction } from "../authoring-history";
 import type { MotionAction } from "../motion-actions";
+import type { TransitionAction } from "../platform/core/transition-settings";
 import type { PreviewAction } from "../preview-actions";
 import type { QualityAction } from "../preview-quality-actions";
 import type { SavedAppearanceAction } from "../saved-appearance-actions";
@@ -24,6 +25,7 @@ const HISTORY_ID = familyId("history");
 const COLLECTION_ID = familyId("collection");
 const PREVIEW_ID = familyId("preview");
 const MOTION_ID = familyId("motion");
+const TRANSITIONS_ID = familyId("transitions");
 const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
 const VIEWS_ID = familyId("views");
@@ -81,6 +83,15 @@ export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTIO
   actions: actionTable<MotionAction, ActionScope>(ACTION_DESCRIPTORS, {
     "motion.setIdle": true, "motion.setIdleClip": true, "motion.setPaused": true, "motion.setContributions": true,
     "motion.setBlink": true, "motion.playBlink": true, "motion.setPhysics": true }, { "motion.setBlink": { value: "fraction" } }),
+});
+
+/**
+ * Animated transitions (platform/core/transition-settings.ts): how a held expression's changes animate on the head. Settings of the
+ * subject's motion kept in the workspace, available before the 3D head loads (the face then cuts until it shows).
+ */
+export const TRANSITIONS_FAMILY: SystemFamily<TransitionAction, ActionScope, typeof TRANSITIONS_ID> = Object.freeze({
+  owner: "system", id: TRANSITIONS_ID, label: "Transitions",
+  actions: actionTable<TransitionAction, ActionScope>(ACTION_DESCRIPTORS, { "transition.set": true }, { "transition.set": { seconds: "seconds" } }),
 });
 
 /** Preview quality works without the scene (it sizes generated textures), but its device failures are `unavailable`. */

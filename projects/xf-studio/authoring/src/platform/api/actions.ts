@@ -26,7 +26,7 @@ import type { FeatureResult, FeatureState } from "./document";
 import type { HistoryLabel } from "./history";
 
 /** The unit of a numeric or text input, for control labels, hints and scripts. */
-export type LimitUnit = "uv" | "fraction" | "count" | "degrees" | "pixels" | "characters" | "index" | "mm";
+export type LimitUnit = "uv" | "fraction" | "count" | "degrees" | "pixels" | "characters" | "index" | "mm" | "seconds";
 /**
  * Current limits for one input field of an action on a concrete target. `min`/`max`
  * include state-dependent bounds (for example irregular Glitter flake size depends on

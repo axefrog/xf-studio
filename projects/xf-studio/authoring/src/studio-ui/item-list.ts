@@ -6,8 +6,13 @@ import { icon } from "./icons";
  * Ordered, selectable rows with keyboard and pointer reordering and inline
  * rename. It emits intents; the owner dispatches application actions.
  */
-export type ListItem = { id: string; name: string; meta?: string };
-export type ListRow = { element: HTMLElement; trailing: HTMLElement; lead: HTMLElement; main: HTMLButtonElement; label: HTMLElement; meta: HTMLElement };
+/**
+ * `meta`: a short compared value at the row's end, in the mono face (a count, "3 layers"). `secondary`: a few words about the row in the
+ * UI face after its name, muted and cut short with an ellipsis when the row is narrow (a sentence such as “shows as ‘Sly smile’”).
+ */
+export type ListItem = { id: string; name: string; meta?: string; secondary?: string };
+export type ListRow = { element: HTMLElement; trailing: HTMLElement; lead: HTMLElement; main: HTMLButtonElement; label: HTMLElement; secondary: HTMLElement;
+  meta: HTMLElement };
 export type ItemListOptions<T extends ListItem> = {
   label: string;
   noun: string;
@@ -47,7 +52,9 @@ export class ItemList<T extends ListItem> {
       row.element.classList.toggle("selected", isSelected);
       if (this.editing !== item.id) setText(row.label, item.name);
       setText(row.meta, item.meta ?? "");
-      row.main.setAttribute("aria-label", `${item.name}${item.meta ? `, ${item.meta}` : ""}${isSelected ? ", selected" : ""}`);
+      setText(row.secondary, item.secondary ?? "");
+      row.secondary.hidden = !item.secondary;
+      row.main.setAttribute("aria-label", `${item.name}${item.secondary ? `, ${item.secondary}` : ""}${item.meta ? `, ${item.meta}` : ""}${isSelected ? ", selected" : ""}`);
       row.main.tabIndex = isSelected || (!selected && index === 0) ? 0 : -1;
       row.main.disabled = disabled;
       this.options.decorate?.(item, row, isSelected);
@@ -56,8 +63,8 @@ export class ItemList<T extends ListItem> {
     if (focused instanceof HTMLElement && !focused.isConnected) this.rows.get(selected ?? "")?.main.focus();
   }
   private createRow(id: string): ListRow {
-    const label = h("span", { class: "item-name" }), meta = h("span", { class: "item-meta" });
-    const main = h("button", { class: "item-main", type: "button" }, label, meta);
+    const label = h("span", { class: "item-name" }), meta = h("span", { class: "item-meta" }), secondary = h("span", { class: "item-secondary", hidden: true });
+    const main = h("button", { class: "item-main", type: "button" }, label, secondary, meta);
     const grip = h("span", { class: "item-grip", "aria-hidden": "true", title: `Drag to reorder · ${chordsLabel(keyBindingById("rows.reorder"))} with the keyboard` }, icon("grip"));
     const lead = h("span", { class: "item-lead" });
     const trailing = h("span", { class: "item-trailing" });
@@ -70,7 +77,7 @@ export class ItemList<T extends ListItem> {
       event.preventDefault(); this.options.onMenu(id, { x: event.clientX, y: event.clientY }, main);
     });
     grip.addEventListener("pointerdown", event => this.drag(event, id));
-    return { element, trailing, lead, main, label, meta };
+    return { element, trailing, lead, main, label, secondary, meta };
   }
   private key(event: KeyboardEvent, id: string) {
     const index = this.order.indexOf(id), command = keyBinding("rows", event)?.id;

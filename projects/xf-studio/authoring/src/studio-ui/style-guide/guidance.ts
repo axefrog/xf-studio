@@ -50,7 +50,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
   "c-switch": { combine: "Switches stack in a section with their notes; a switch that unlocks a slider sits directly above it (Smooth point gradients → Point blend).",
     adapt: "Full-width rows in every size class.", drives: "Recipe switches: control transactions (pigment/softness) or dispatch (layer.setSymmetry); preview switches: preview.* actions." },
   "c-segmented": { combine: "The selected choice's explanation appears as a note beneath (e.g. handle modes).",
-    adapt: "Segments keep their labels; the group wraps within its panel rather than scrolling." },
+    adapt: "The strip hugs its choices and never wraps or stretches. Choose icons or a Choice list where the labels wouldn't fit at 300 px." },
   "c-color": { combine: "Sits beside Opacity in the Pigment section; finish-specific facet colours reuse the same control.",
     adapt: "Fixed-width swatch and hex field.", drives: "layer.setColor and glitter.setIrregular/setDirect color via control transactions." },
   "c-finish": { adapt: "Tiles reflow from three columns to one; the export line wraps under the tiles." },

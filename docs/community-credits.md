@@ -96,9 +96,17 @@ By the Bun contributors. [GitHub](https://github.com/oven-sh/bun). Bun runs XF S
 
 By Nguyen Anh Quynh and contributors. [Website](https://www.capstone-engine.org), [GitHub](https://github.com/capstone-engine/capstone). Disassembling the game's executable with it showed where the hair lighting options get their default values and which shader constants they feed, and how the game bakes hair-colour profiles. Used as a research tool only; BSD-3-Clause-licensed.
 
+### CSS Easing Functions
+
+By the W3C CSS Working Group. [Specification](https://www.w3.org/TR/css-easing-1/). Its cubic Bézier timing function, two control points between (0, 0) and (1, 1) with x kept within 0–1, is the model of XF Studio's easing catalogue, which the animated expression transitions and the planned timeline editor share.
+
 ### dxil-spirv
 
 By Hans-Kristian Arntzen. [GitHub](https://github.com/HansKristian-Work/dxil-spirv). Translating the game's DXIL shader programs to SPIR-V made structured, decompiled listings of them possible in our shader research. Used as a research tool only; MIT-licensed.
+
+### Easing Functions Cheat Sheet (easings.net)
+
+By Andrey Sitnik and contributors. [Website](https://easings.net), [GitHub](https://github.com/ai/easings.net). Its cubic Bézier forms of the cubic easings are the control points of XF Studio's Strong ease in-out and Strong ease out curves.
 
 ### Electrobun and Hutch
 
@@ -187,6 +195,10 @@ By the SQLite project. [sqlite.org](https://sqlite.org/). SQLite stores XF Studi
 ### Three.js
 
 By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build. Its multiple-views examples (one renderer drawing several cameras into scissored regions of one canvas) framed how the planned view graph shares one GPU context across views.
+
+### WebKit
+
+By Apple and the WebKit contributors. [GitHub](https://github.com/WebKit/WebKit). Its `UnitBezier` solver, Newton's method for the curve parameter with bisection where it stalls, is the method XF Studio's easing curves use to evaluate a cubic Bézier at a point in time; reimplemented, no code copied.
 
 ### wgpu
 

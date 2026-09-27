@@ -4,7 +4,9 @@
  * step, and every unavailable state says why in plain words.
  */
 import { expect, test } from "bun:test";
-import { combineFacePoses, FacialPreview, SLOW_SOLVE_MS, type FacialDevicePort, type FacialMotion, type FacialSolved, type FacialTimer } from "../src/facial-preview";
+import { combineFacePoses, FacialPreview, FRAME_MS, SLOW_SOLVE_MS, type FacialDevicePort, type FacialMotion, type FacialSolved, type FacialTimer } from "../src/facial-preview";
+import type { TransitionSetting } from "../src/platform/core/transition-settings";
+import { f32 } from "../src/engines/facial-rig/vector";
 import { FACIAL_STATE_SCHEMA, type FacialHostState, type FacialSolveRequest } from "../src/platform/api/facial";
 
 const JOINTS = [{ name: "root", parent: -1, t: [0, 0, 0], r: [0, 0, 0, 1], s: [1, 1, 1] }, { name: "jaw", parent: 0, t: [0, 1, 0], r: [0, 0, 0, 1], s: [1, 1, 1] }];
@@ -26,10 +28,11 @@ function harness(state = readyState()) {
     state: async () => state, expressions: async () => ({ phase: "ready", items: [] }),
     solve: request => { requests.push(request); return new Promise(resolve => answers.push(resolve)); },
   };
-  const held: { frames: number; jaw?: number; rate?: number; repeat?: number }[] = [];
+  const held: { frames: number; jaw?: number; rate?: number; repeat?: number; continues?: boolean }[] = [];
   let released = 0;
-  const sink = { setRig: () => {}, hold: (pose: { frames: ReadonlyMap<number, { t: readonly number[] }>[]; rate?: number; repeat?: number }) =>
-    held.push({ frames: pose.frames.length, jaw: pose.frames[0]?.get(1)?.t[0], rate: pose.rate, repeat: pose.repeat }), release: () => { released++; } };
+  const sink = { setRig: () => {}, hold: (pose: { frames: ReadonlyMap<number, { t: readonly number[] }>[]; rate?: number; repeat?: number; continues?: boolean }) =>
+    held.push({ frames: pose.frames.length, jaw: pose.frames[0]?.get(1)?.t[0], rate: pose.rate, repeat: pose.repeat, ...(pose.continues ? { continues: true } : {}) }),
+    release: () => { released++; } };
   let pose: Record<string, number> | undefined, motion: FacialMotion = { idle: false, blink: 0, blinkPlaying: false, blinkRepeatSeconds: 2.45 };
   const preview = new FacialPreview(device, timer);
   preview.follow(() => pose, () => motion);
@@ -162,4 +165,104 @@ test("two-way controls: the names' proposals (marked proposed) until the solver 
   const after = preview.snapshot().axes!;
   expect(after.map(axis => [axis.key, !!axis.proposed])).toEqual([["eye_l_dir_out~eye_l_dir_in", false], ["eye_r_dir_in~eye_r_dir_out", false], ["nose_l_breathe_out~nose_l_breathe_in", false]]);
   preview.dispose();
+});
+
+/** A harness whose changes animate by `setting` (and follow at once while `continuous`); `frames(ms)` runs the clock, answering every solve. */
+async function animated(setting: TransitionSetting) {
+  const h = harness();
+  let continuous = false, current = setting;
+  h.preview.animate({ setting: () => current, continuous: () => continuous });
+  h.preview.start(); await settle();
+  h.preview.attachScene(h.sink);
+  let answered = 0;
+  const answer = async () => { while (answered < h.answers.length) { h.answers[answered++]!(solved(0.01)); await settle(); } };
+  return { ...h, answer, get released() { return h.released; },
+    async frames(ms: number) { for (let t = 0; t < ms; t += FRAME_MS) { h.advance(FRAME_MS); await answer(); } },
+    setContinuous(value: boolean) { continuous = value; },
+    setSetting(value: TransitionSetting) { current = value; h.preview.changed(); } };
+}
+const jawOf = (request: FacialSolveRequest | undefined) => request?.controls.jaw_mid_open ?? 0;
+
+test("with the transition on, a new expression eases from the face on screen, one solve a frame, and ends on its exact solve", async () => {
+  const h = await animated({ enabled: true, seconds: 1, easing: "linear" });
+  h.setPose({ jaw_mid_open: f32(0.4) });
+  // At the moment of the change the face is still at rest: nothing to solve yet, and no jump.
+  expect(h.requests.length).toBe(0);
+  await h.frames(500);
+  const halfway = h.requests.at(-1)!;
+  expect(jawOf(halfway)).toBeGreaterThan(0.18);
+  expect(jawOf(halfway)).toBeLessThan(0.21);
+  // About one solve a frame (not one per answer), each a little further along.
+  expect(h.requests.length).toBeGreaterThan(20);
+  expect(h.requests.length).toBeLessThan(35);
+  const values = h.requests.map(jawOf);
+  for (let i = 1; i < values.length; i++) expect(values[i]!).toBeGreaterThanOrEqual(values[i - 1]!);
+  await h.frames(600);
+  expect(h.requests.at(-1)!.controls).toEqual({ jaw_mid_open: f32(0.4) });
+  const count = h.requests.length;
+  await h.frames(200);
+  expect(h.requests.length).toBe(count);
+  expect(h.preview.snapshot()).toMatchObject({ phase: "ready", transition: { enabled: true, seconds: 1, easing: "linear" } });
+});
+
+test("a change mid-transition starts from the blended face, returning to rest ends released, and 0 s or off cuts", async () => {
+  const h = await animated({ enabled: true, seconds: 1, easing: "inOut" });
+  h.setPose({ jaw_mid_open: 1 });
+  await h.frames(400);
+  const before = jawOf(h.requests.at(-1));
+  h.setPose({ lips_l_corner_up: f32(0.5) });
+  await h.frames(FRAME_MS * 2);
+  // The next frames start where the face was: the jaw is still near its blended value, easing out.
+  const after = h.requests.at(-1)!;
+  expect(Math.abs(jawOf(after) - before)).toBeLessThan(0.05);
+  expect(after.controls.lips_l_corner_up ?? 0).toBeLessThan(0.05);
+  await h.frames(1100);
+  expect(h.requests.at(-1)!.controls).toEqual({ lips_l_corner_up: f32(0.5) });
+  // Back to rest eases down, then releases the face.
+  h.setPose(undefined);
+  expect(h.released).toBe(0);
+  await h.frames(1100);
+  expect(h.released).toBe(1);
+  // 0 s cuts: the target is asked for at once.
+  h.setSetting({ enabled: true, seconds: 0, easing: "linear" });
+  h.setPose({ jaw_mid_open: f32(0.3) });
+  expect(h.requests.at(-1)!.controls).toEqual({ jaw_mid_open: f32(0.3) });
+  // Turning it off mid-way cuts to the target.
+  h.setSetting({ enabled: true, seconds: 2, easing: "linear" });
+  h.setPose({ jaw_mid_open: f32(0.9) });
+  await h.frames(300);
+  expect(jawOf(h.requests.at(-1))).toBeLessThan(0.5);
+  h.setSetting({ enabled: false, seconds: 2, easing: "linear" });
+  await h.answer();
+  expect(h.requests.at(-1)!.controls).toEqual({ jaw_mid_open: f32(0.9) });
+});
+
+test("a change inside a form control follows at once; while the idle hides the face every change cuts", async () => {
+  const h = await animated({ enabled: true, seconds: 1, easing: "linear" });
+  h.setContinuous(true);
+  h.setPose({ jaw_mid_open: f32(0.2) });
+  expect(h.requests.at(-1)!.controls).toEqual({ jaw_mid_open: f32(0.2) });
+  h.setContinuous(false);
+  await h.answer();
+  h.setMotion({ idle: true });
+  const count = h.requests.length;
+  h.setPose({ jaw_mid_open: f32(0.7) });
+  await h.answer();
+  expect(h.requests.length).toBe(count + 1);
+  expect(h.requests.at(-1)!.controls).toEqual({ jaw_mid_open: f32(0.7) });
+  await h.frames(300);
+  expect(h.requests.length).toBe(count + 1);
+});
+
+test("the blink clip carries on through a transition instead of restarting at every frame", async () => {
+  const h = await animated({ enabled: true, seconds: 0.5, easing: "linear" });
+  h.setMotion({ blinkPlaying: true });
+  h.setPose({ jaw_mid_open: f32(0.5) });
+  const answerClip = async () => { for (let i = h.held.length; i < h.answers.length; i++) { h.answers[i]!(solved(0.01, 31)); await settle(); } };
+  for (let t = 0; t < 300; t += FRAME_MS) { h.advance(FRAME_MS); await answerClip(); }
+  expect(h.requests.every(request => request.blink && "play" in request.blink)).toBe(true);
+  expect(h.held.length).toBeGreaterThan(3);
+  // The first hold starts the clip; every later one over a changed face carries on.
+  expect(h.held[0]!.continues).toBeUndefined();
+  expect(h.held.slice(1).every(pose => pose.continues)).toBe(true);
 });

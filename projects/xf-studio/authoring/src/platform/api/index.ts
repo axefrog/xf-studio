@@ -8,3 +8,4 @@ export * from "./export";
 export * from "./view-graph";
 export * from "./module";
 export * from "./facial";
+export * from "./easing";

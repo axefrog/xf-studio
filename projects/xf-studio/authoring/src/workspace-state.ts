@@ -21,6 +21,7 @@ import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, re
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import { parseSetupLibrary, rigKindOf, type SetupLibrary } from "./lighting-setups";
 import type { ViewGraphData } from "./platform/api/view-graph";
+import { parseTransitions, type StoredTransitions } from "./platform/core/transition-settings";
 import { parseViewGraph } from "./platform/core/view-graph";
 import { EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, inRange, isDefaultViewGraph, STUDIO_VIEW_GRAPH_RULES, validCameraPose } from "./preview-view-graph";
 
@@ -103,6 +104,11 @@ export type PreviewState = {
    * TweakDB record and label. Present only while a pose is the body source.
    */
   pose?: { id: string; label: string };
+  /**
+   * How a held expression's changes animate (platform/core/transition-settings.ts, `transition.set`): per source, on or off, the
+   * duration and the curve. View state of the subject's motion, like the blink; present only while a source differs from the default.
+   */
+  transitions?: StoredTransitions;
 };
 export const WORKSPACE_1 = "xfas/workspace-1";
 export const WORKSPACE_2 = "xfs/workspace-2";
@@ -218,6 +224,8 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (typeof p.body === "boolean") state.preview.body = p.body;
     if (typeof p.uncensored === "boolean") state.preview.uncensored = p.uncensored;
     if (typeof p.physics === "boolean") state.preview.physics = p.physics;
+    const transitions = parseTransitions((p as { transitions?: unknown }).transitions);
+    if (transitions) state.preview.transitions = transitions;
     if (typeof p.skinScatter === "boolean") state.preview.skinScatter = p.skinScatter;
     if (typeof p.faceShadows === "boolean") state.preview.faceShadows = p.faceShadows;
     if (inRange(p.hairLook, HAIR_LOOK_RANGE.min, HAIR_LOOK_RANGE.max)) state.preview.hairLook = p.hairLook;

@@ -157,7 +157,7 @@ test("a mirrored edit is one Undo step in the Studio: a linked two-way drag sets
 
 test("intensity: toward full or rest from the drag's start, zeros and controls outside the start untouched, one Undo step, cancel restores", async () => {
   const { interpolateWeight } = await import("../src/engines/facial-rig/vector");
-  const { centredAmount, ease } = await import("../src/easing");
+  const { centredAmount, ease } = await import("../src/platform/api/easing");
   // The maths: above the middle toward full, below toward rest, 0 stays 0, the middle changes nothing.
   expect([interpolateWeight(0.4, 0.5), interpolateWeight(0.4, -0.5), interpolateWeight(0, 1), interpolateWeight(0.4, 0), interpolateWeight(0.4, 1), interpolateWeight(0.4, -1)])
     .toEqual([f32(0.7), f32(0.2), 0, f32(0.4), 1, 0]);

@@ -5,6 +5,8 @@
  * the service's snapshot (`FacialPreviewSnapshot`) through its view context.
  */
 
+import type { EasingId } from "./easing";
+
 export const FACIAL_STATE_SCHEMA = "xfs/facial-state-1";
 export const FACIAL_ENDPOINT = "/api/facial";
 export const FACIAL_SOLVE_ENDPOINT = "/api/facial/solve";
@@ -124,4 +126,9 @@ export type FacialPreviewSnapshot = {
   readonly gazeSameWay?: boolean | null;
   /** Round-trip time of recent solves (median and slowest of the last 20), for the drawer's footnote and evidence. */
   readonly latency?: { readonly median: number; readonly max: number; readonly solver: number; readonly count: number };
+  /**
+   * How the face's changes animate (the `transitions` family's expression setting, `transition.set`): on or off, the duration in
+   * seconds (0 cuts) and the curve. Absent where the host doesn't animate faces.
+   */
+  readonly transition?: { readonly enabled: boolean; readonly seconds: number; readonly easing: EasingId };
 };

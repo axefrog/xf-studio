@@ -1,5 +1,5 @@
 import { applyLayoutAction, isLayoutAction, layoutCapability, parseLayoutLibrary, type LayoutAction, type LayoutLibrary } from "./layout-library";
-import { isEasing, type EasingId } from "./easing";
+import { isEasing, type EasingId } from "./platform/api/easing";
 
 /** Workspace-only preferences. A dock implementation owns the meaning of `state`. */
 export type ThemePreference = "system" | "light" | "dark";

@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition)",
  "states": {
   "starter": {
    "modes": {
@@ -547,6 +547,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "layer/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "layer/quality.set": {
      "size": {}
@@ -1174,6 +1183,15 @@
       "unit": "fraction"
      }
     },
+    "point/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "point/quality.set": {
      "size": {}
     },
@@ -1796,6 +1814,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "viewport/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "viewport/quality.set": {
      "size": {}
@@ -2420,6 +2447,15 @@
       "unit": "fraction"
      }
     },
+    "collection/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "collection/quality.set": {
      "size": {}
     },
@@ -3042,6 +3078,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "preset/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "preset/quality.set": {
      "size": {}
@@ -3874,6 +3919,15 @@
       "unit": "fraction"
      }
     },
+    "layer/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "layer/quality.set": {
      "size": {}
     },
@@ -4507,6 +4561,15 @@
       "unit": "fraction"
      }
     },
+    "point/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "point/quality.set": {
      "size": {}
     },
@@ -5129,6 +5192,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "viewport/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "viewport/quality.set": {
      "size": {}
@@ -5753,6 +5825,15 @@
       "unit": "fraction"
      }
     },
+    "collection/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "collection/quality.set": {
      "size": {}
     },
@@ -6375,6 +6456,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "preset/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "preset/quality.set": {
      "size": {}
@@ -7208,6 +7298,15 @@
       "unit": "fraction"
      }
     },
+    "layer/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "layer/quality.set": {
      "size": {}
     },
@@ -7842,6 +7941,15 @@
       "unit": "fraction"
      }
     },
+    "point/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "point/quality.set": {
      "size": {}
     },
@@ -8464,6 +8572,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "viewport/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "viewport/quality.set": {
      "size": {}
@@ -9088,6 +9205,15 @@
       "unit": "fraction"
      }
     },
+    "collection/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "collection/quality.set": {
      "size": {}
     },
@@ -9710,6 +9836,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "preset/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "preset/quality.set": {
      "size": {}
@@ -10542,6 +10677,15 @@
       "unit": "fraction"
      }
     },
+    "layer/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "layer/quality.set": {
      "size": {}
     },
@@ -11175,6 +11319,15 @@
       "unit": "fraction"
      }
     },
+    "point/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "point/quality.set": {
      "size": {}
     },
@@ -11797,6 +11950,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "viewport/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "viewport/quality.set": {
      "size": {}
@@ -12421,6 +12583,15 @@
       "unit": "fraction"
      }
     },
+    "collection/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "collection/quality.set": {
      "size": {}
     },
@@ -13043,6 +13214,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "preset/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "preset/quality.set": {
      "size": {}
@@ -13875,6 +14055,15 @@
       "unit": "fraction"
      }
     },
+    "layer/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "layer/quality.set": {
      "size": {}
     },
@@ -14508,6 +14697,15 @@
       "unit": "fraction"
      }
     },
+    "point/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "point/quality.set": {
      "size": {}
     },
@@ -15130,6 +15328,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "viewport/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "viewport/quality.set": {
      "size": {}
@@ -15754,6 +15961,15 @@
       "unit": "fraction"
      }
     },
+    "collection/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "collection/quality.set": {
      "size": {}
     },
@@ -16376,6 +16592,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "preset/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "preset/quality.set": {
      "size": {}
@@ -17211,6 +17436,15 @@
       "unit": "fraction"
      }
     },
+    "layer/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "layer/quality.set": {
      "size": {}
     },
@@ -17847,6 +18081,15 @@
       "unit": "fraction"
      }
     },
+    "point/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "point/quality.set": {
      "size": {}
     },
@@ -18469,6 +18712,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "viewport/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "viewport/quality.set": {
      "size": {}
@@ -19093,6 +19345,15 @@
       "unit": "fraction"
      }
     },
+    "collection/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
+    },
     "collection/quality.set": {
      "size": {}
     },
@@ -19715,6 +19976,15 @@
       "max": 1,
       "unit": "fraction"
      }
+    },
+    "preset/transition.set": {
+     "source": {},
+     "seconds": {
+      "min": 0,
+      "max": 3,
+      "unit": "seconds"
+     },
+     "easing": {}
     },
     "preset/quality.set": {
      "size": {}
