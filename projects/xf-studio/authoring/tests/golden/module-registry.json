@@ -6,6 +6,13 @@
    "stage": "stable",
    "feature": "eye-makeup",
    "shownByDefault": true
+  },
+  {
+   "id": "save-explorer",
+   "group": "tools",
+   "stage": "preview",
+   "feature": null,
+   "shownByDefault": false
   }
  ],
  "tools": [
@@ -18,7 +25,9 @@
    ],
    "placement": "toolbar",
    "kind": "action",
-   "state": "camera"
+   "state": "camera",
+   "dispatches": "camera.front",
+   "editing": false
   },
   {
    "id": "camera.body",
@@ -29,7 +38,9 @@
    ],
    "placement": "toolbar",
    "kind": "action",
-   "state": "camera"
+   "state": "camera",
+   "dispatches": "camera.body",
+   "editing": false
   },
   {
    "id": "motion.idle",
@@ -40,7 +51,9 @@
    ],
    "placement": "toolbar",
    "kind": "toggle",
-   "state": "scene"
+   "state": "scene",
+   "dispatches": "motion.setIdle",
+   "editing": false
   },
   {
    "id": "eye-makeup.surface",
@@ -51,7 +64,9 @@
    ],
    "placement": "toolbar",
    "kind": "toggle",
-   "state": "tools"
+   "state": "tools",
+   "dispatches": "view.setTool",
+   "editing": true
   },
   {
    "id": "eye-makeup.wire",
@@ -62,7 +77,9 @@
    ],
    "placement": "research",
    "kind": "toggle",
-   "state": "tools"
+   "state": "tools",
+   "dispatches": "view.setTool",
+   "editing": false
   }
  ],
  "summaries": [

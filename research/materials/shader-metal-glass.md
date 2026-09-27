@@ -227,7 +227,7 @@ A depth-compare `discard` against a texture (`t63`) runs when `MaterialModifiers
 
 ## 6. How far the preview is
 
-**Update, 27 September 2026:** rank 1 below is built (`src/metal-base-material.ts`, the `metal_base` entry in `render-templates.ts`). It draws a CCXL hairstyle's built-in earrings and hair pin, the teeth's unreached `default` appearance and `metal_base` garments; the host reads the `.remt` template's own name (`metal_base`) and defaults like a `.mt`'s, and `BaseColorScale` reaches the record as four scalars. Not yet: the alpha test (the resolved chain doesn't carry `enableMask`; PREV-113) and emission. `glass_onesided` still has no adapter. The table below is the gap as it was before rank 1:
+**Update, 27 September 2026:** rank 1 below is built (`src/metal-base-material.ts`, the `metal_base` entry in `render-templates.ts`). It draws a CCXL hairstyle's built-in earrings and hair pin, the teeth's unreached `default` appearance and `metal_base` garments; the host reads the `.remt` template's own name (`metal_base`) and defaults like a `.mt`'s, and `BaseColorScale` reaches the record as four scalars. Not yet: the alpha test (the resolved chain doesn't carry `enableMask`; PREV-116) and emission. `glass_onesided` still has no adapter. The table below is the gap as it was before rank 1:
 
 | Engine behaviour | Nearest preview code | Gap |
 |---|---|---|
@@ -241,7 +241,7 @@ A depth-compare `discard` against a texture (`t63`) runs when `MaterialModifiers
 
 Effort: **S** under a day, **M** one to three days, each with unit tests of the channel arithmetic against the formulas above.
 
-1. **Done (27 September), less the alpha test (PREV-113). `metal_base` opaque adapter (S).** A `metal-base` entry in `render-templates.ts` (textures `BaseColor`, `Metalness`, `Roughness`, `Normal`, `Emissive`; none required, since every input has a neutral default) and a `MeshStandardMaterial` adapter:
+1. **Done (27 September), less the alpha test (PREV-116). `metal_base` opaque adapter (S).** A `metal-base` entry in `render-templates.ts` (textures `BaseColor`, `Metalness`, `Roughness`, `Normal`, `Emissive`; none required, since every input has a neutral default) and a `MeshStandardMaterial` adapter:
    - `map` = `BaseColor` (colour, honouring `isGamma`) × `BaseColorScale.rgb`, saturated in the shader;
    - roughness and metalness from their own maps' **R**, `saturate(x·scale + bias)`, by replacing `roughnessmap_fragment` and `metalnessmap_fragment` as the layered adapter does;
    - normal: RG with Z reconstructed, XY × `NormalStrength`, renormalised, orientation as the other adapters;

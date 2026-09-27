@@ -150,6 +150,35 @@ export class GlbWriter {
     this.accessors.push(accessor);
     return this.accessors.length - 1;
   }
+  /**
+   * Float accessor of `count` rows stored sparsely against zero from its non-zero rows given directly: `rows` (strictly increasing row
+   * indices) and `values` (`rows.length` rows of the type's width). Rows whose components are all zero are left out, as `addSparse`
+   * leaves them. Always records bounds (zero included).
+   */
+  addSparseRows(count: number, rows: Uint32Array, values: Float32Array, type: keyof typeof TYPE_WIDTH): number {
+    const width = TYPE_WIDTH[type]!;
+    if (values.length !== rows.length * width) throw Error("Sparse values do not match their rows.");
+    const keep: number[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i]! >= count || (i > 0 && rows[i]! <= rows[i - 1]!)) throw Error("Sparse rows must be increasing and inside the accessor.");
+      for (let k = 0; k < width; k++) if (values[i * width + k] !== 0) { keep.push(i); break; }
+    }
+    const min = Array(width).fill(0), max = Array(width).fill(0);
+    for (const i of keep) for (let k = 0; k < width; k++) {
+      const value = values[i * width + k]!;
+      if (value < min[k]) min[k] = value;
+      if (value > max[k]) max[k] = value;
+    }
+    const accessor: GltfJson = { componentType: COMPONENT.FLOAT, count, type, min, max };
+    if (keep.length) {
+      const indices = Uint32Array.from(keep, i => rows[i]!), kept = new Float32Array(keep.length * width);
+      keep.forEach((i, at) => kept.set(values.subarray(i * width, (i + 1) * width), at * width));
+      accessor.sparse = { count: keep.length, indices: { bufferView: this.view(indices), componentType: COMPONENT.UNSIGNED_INT },
+        values: { bufferView: this.view(kept) } };
+    }
+    this.accessors.push(accessor);
+    return this.accessors.length - 1;
+  }
   /** Serialize `json` (accessors, bufferViews and buffers are filled in here) with the collected binary data. */
   toGlb(json: GltfJson): Uint8Array {
     const document = { ...json, accessors: this.accessors, bufferViews: this.bufferViews, buffers: [{ byteLength: this.length }] };

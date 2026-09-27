@@ -29,6 +29,10 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["context-menu", ["allowsNativeTextMenu"]],
   ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
   ["mod-branding", ["EYE_MAKEUP_MOD"]],
+  // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
+  ["character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
+  // A creator choice's maker group, the groups' shown order and the pooled "Other mods" heading (cc-panel.ts, pure over the projection).
+  ["cc-panel", ["choiceGroup", "compareGroups", "OTHER_MODS_GROUP", "OTHER_MODS_INDEX"]],
   // The pure input binding catalogue: hint/cursor/label derivation and key matching.
   ["input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
     "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],
@@ -42,7 +46,7 @@ const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   ["studio-ui/controls", ["*"]], ["studio-ui/dom", ["*"]], ["studio-ui/icons", ["*"]], ["studio-ui/item-list", ["*"]],
   ["studio-ui/panels/viewports", ["contextMenuGate", "keyDescription"]],
   ["studio-ui/views/contribution", ["panelMeta"]],
-  ["studio-ui/views/feature-view", ["featureView"]],
+  ["studio-ui/views/feature-view", ["featureView", "moduleView"]],
 ]);
 /** Where a presentation module lives: the shell (all of studio-ui is its own) or a feature's view (only its folder). */
 type Scope = { own: readonly string[]; allow: ReadonlyMap<string, readonly string[]> };

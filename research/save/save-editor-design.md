@@ -1,6 +1,6 @@
 # A full save editor: design study
 
-**Status: R&D and design, 27 September 2026. Nothing is built beyond the read-only pieces the Studio already has.** How a Cyberpunk 2077 save holds everything beyond the creator data (life path, progression, quests and facts, inventory, world state, mod data), how an editor can read and change it generically enough that different mod setups don't break it, and how it fits beside the Studio's existing save reading. The durable facts are in [knowledge/save-files.md](../../knowledge/save-files.md); this page holds the evidence, the design and the plan.
+**Status: design accepted (§12); phase 1, the read-only Save Explorer, built on 27 September 2026 ([phase status](#phase-1-status)). Nothing writes a save.** How a Cyberpunk 2077 save holds everything beyond the creator data (life path, progression, quests and facts, inventory, world state, mod data), how an editor can read and change it generically enough that different mod setups don't break it, and how it fits beside the Studio's existing save reading. The durable facts are in [knowledge/save-files.md](../../knowledge/save-files.md); this page holds the evidence, the design and the plan.
 
 It builds on the [save import](../eye-artistry/save-import.md) note (the reader and the container), the [save write-back design](../character-customization/save-writeback-design.md) (minimal-diff rewrite, never overwrite, apply in game first), [worn clothing](../../knowledge/clothing.md) §2 (the object packages and EquipmentEx), [runtime access](../../knowledge/runtime-access.md) and the [clothing render](../backlog/clothing-render.md) decision on EquipmentEx.
 
@@ -240,6 +240,29 @@ Effort is agent time for one coordinated track, excluding review.
 | **5. Structural and in-game edits** | In-game actions over the bridge (add item, set fact, perk point) first; offline structural edits (inserting items and nodes, renumbering) only if a need remains, one kind per session | 1–2 weeks, later | One session per structural kind |
 
 Phases 1–2 are useful alone: an honest look inside any save, modded or not, and ground truth for the creator write-back.
+
+### Phase 1 status
+
+**Built** (claude/save-explorer, 27 September 2026), read-only throughout:
+
+- **Container codec** (`src/engines/save/`: `reader.ts`, `lz4.ts`, `container.ts`): header, chunk table, LZ4, node table and tree (sibling and child links; a damaged table still lists every node, with plain notes), and a `SaveImage` that keeps the original bytes and chunk table for the later writer. `readSavedV` keeps its signature and output (identical on five private saves before and after) and now reads through it.
+- **Type oracle** (`src/engines/red-object/`: `hash.ts`, `type-database.ts`, `type-oracle.ts`, `script-bundle.ts`): the save's `TypeDatabase_v2` first, then the engine type list the Studio ships (`native/rtti-type-source.ts` over `rtti-subset.json`), then names: the installed `final.redscripts` (read-only; the modded `final.redscripts.modded` first, resolved through MO2's overwrite and mod priorities) and the names the save's own packages spell out. Container types are named from their elements (`array:X`, `handle:X`, `[N]X`). The save loadout's enum hand list is now only a fallback for callers without a type database; `readSavedV` asks the save's own.
+- **One package reader** (`engines/red-object/package.ts`): the frame (the header in its `resource`, `save` and `save-plain` variants, sections, names, references, chunks and their bounds) is shared with `native/red-package.ts`, which keeps its RTTI value reader and refusal policy. The save's packages decode generically (`decodeChunk`: enums and bitfields from the oracle; unread values kept opaque and bounded). `save-package.ts` is a thin view kept for its callers.
+- **Persistency reader** (`engines/red-object/persistency.ts`): an index of every entry at once, and entries walked on demand from the save's own types. An entry the walker can't follow comes back raw, with its reason.
+- **The Save Explorer module** (`src/features/save-explorer/`): a Studio module without a document part (Tools, preview, hidden until switched on from the Modules menu), with one panel. It lists the player's saves automatically (`GET /api/saves` on both hosts: Saved Games from the registry's known folder or the profile; each save described only by game fields from its metadata, never the user name; the screenshot as a thumbnail; newest first), with **Open a save file…** for saves stored elsewhere. An open save shows its node tree (sizes, encoding, and decode status filled in one node at a time), each node's facts and contents (package objects; world objects paged and filtered by class; the schema table; raw bytes as hex), an object inspector (typed fields, handles as links, names resolved where a source knows them, and which source named each field) and a **Mod data** view: every namespaced script class in the save's packages and world objects, grouped by namespace, with whether the installed scripts still define it. The tree follows the tree keyboard pattern (`rows.focus`, `rows.expand`, Enter).
+
+**Measured on private saves** (five 2.31 saves copied to a scratch folder and opened read-only; counts only):
+
+| Save | Nodes | Package objects decoded | World-object entries read exactly | Property hashes named |
+|---|---|---|---|---|
+| Quick save (14 mod namespaces) | 336 | 472 of 472 (10 packages) | 62,730 of 63,100 (99.4 %) | 8,152 of 8,893 |
+| Check save | 169 | 100 of 100 | 55,818 of 55,996 (99.7 %) | 8,105 of 8,893 |
+| Reference save | 330 | all | 64,290 of 64,670 (99.4 %) | 8,151 of 8,893 |
+| Two older, larger saves | 5,410 and 6,658 | 16,177 and 18,805, all | 99.1 % and 99.3 % | about 92 % |
+
+What isn't read: static and native arrays in world objects (197–774 entries a save) and entries whose walk stops early (about 170 a save), all kept byte for byte. Two findings: some world-object entries end with a zero name hash as their last 8 bytes (without accepting that, only 97.4 % read), and a script field spelled `m_name` in the bundle is persisted as `name` (with that rule 92 % of property hashes resolve, 29 % without). EquipmentEx's `OutfitState` decodes generically (outfits, parts, mappings) with no knowledge of the mod. Opening the largest save (a 7.8 MB file, 32 MB expanded, 6,658 nodes) takes about 1.6 s end to end on the main thread, the status checks yielding between nodes.
+
+**Not built in phase 1:** a worker for decoding (the container expands on the main thread), the bespoke node codecs (inventory, facts, journal, wardrobe: shown as bytes), TweakDB names for item IDs, enum member names in world objects (values show as numbers), readable location names in the listing (a `LocKey#` location is left out), and the writer. The explorer's actions route through its own service rather than the action registry ([boundary exception 14](../authoring/ui-architecture-boundary.md)).
 
 ## 10. Risks
 

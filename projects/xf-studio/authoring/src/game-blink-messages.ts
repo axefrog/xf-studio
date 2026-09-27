@@ -10,6 +10,12 @@
  */
 export const BLINK_REPEAT_SECONDS = 2.45;
 /**
+ * The idle prepared today is the feminine V's (her body clip, and her face clip solved for her head); a masculine V has his own clips
+ * (`ui_male.anims`, `ui_male_face.anims`), not prepared yet (male V plan phase 2), so his head holds still rather than play hers.
+ * Here beside the blink's words so the scene's rig and the motion actions share it.
+ */
+export const IDLE_MASCULINE = "The character creator's idle for a masculine V isn't part of this version of XF Studio yet, so he holds still. Everything else works.";
+/**
  * The blink asset was never prepared on this computer (or can't be fetched). Preparing it needs developer tools, so a person is
  * told plainly that it isn't there, with nothing to do (UI-86).
  */

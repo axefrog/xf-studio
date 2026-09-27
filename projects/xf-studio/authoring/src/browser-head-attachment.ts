@@ -11,7 +11,8 @@ import { createBrowserCharacterDetailDevice } from "./browser-character-detail-d
 import { createBrowserCreatorDevice } from "./browser-cc-catalogue-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { CharacterDetailActions } from "./character-detail-actions";
-import { CharacterContextActions, type CreatorPort } from "./character-context-actions";
+import { CharacterContextActions, initialBodyGender, type ContextHistory, type CreatorPort } from "./character-context-actions";
+import type { CoreBody } from "./render-detail";
 import { followCharacter } from "./character-follow";
 import type { createBrowserPreviewDevice } from "./browser-preview-device";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
@@ -65,6 +66,20 @@ export type HeadAttachmentPorts = {
   changed(): void;
   /** The creator catalogue's host transport (default: the page's own host). */
   creator?: CreatorPort;
+  /**
+   * Make sure a body's core head is prepared before it loads (the masculine V's is prepared on first use); rejects when it can't
+   * be, and the feminine head is shown instead. Absent: the core is taken as prepared.
+   */
+  prepareCore?(body: CoreBody): Promise<void>;
+  /**
+   * The shown V now has the other body: load the head again (with the workspace as it is now), which re-attaches everything; the
+   * character panel's Undo history goes with it (`history` on the next attachment).
+   */
+  reload?(history: ContextHistory): void;
+  /** The character panel's Undo history from the head this one replaces (a V that changed body). */
+  history?: ContextHistory;
+  /** A plain notice for the person (the masculine head couldn't be prepared, so the feminine one shows). */
+  notice?(text: string): void;
 };
 
 export type AttachedHead = {
@@ -92,7 +107,16 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     // A load that fails releases what it made itself (createScene does), so there is nothing to
     // unload until it returns. The scene (with its surface editor) is released last, after
     // everything that uses it, and only if it is still the loaded head (UI-36).
-    const scene = await ports.viewport.loadHead();
+    // The head is the shown V's body's own core (the masculine V's head is prepared on first use). The body comes from the stored
+    // context and the restored save, as the character context below decides it. If the masculine head can't be prepared, the feminine
+    // head shows (with a notice) so the Character panel stays usable, and the other body is tried again when the V changes body.
+    const wanted = initialBodyGender(ports.workspace.preview.character, ports.workspace.savedV);
+    let body: CoreBody = wanted, unavailable: string | null = null;
+    if (wanted !== "female" && ports.prepareCore) {
+      try { await ports.prepareCore(wanted); }
+      catch (error) { body = "female"; unavailable = (error as Error)?.message || ""; }
+    }
+    const scene = await ports.viewport.loadHead(body);
     releases.push(() => ports.viewport.unloadHead(scene));
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
@@ -136,7 +160,8 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
       showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); },
       details: { failed: () => characterDetails.failed(), retry: () => void characterDetails.retry() } },
     { stored: retired.character, save: savedAppearance.snapshot().savedV,
-      legacy: retired.piercingStyle && retired.piercingDefinition ? { style: retired.piercingStyle, definition: retired.piercingDefinition } : undefined });
+      legacy: retired.piercingStyle && retired.piercingDefinition ? { style: retired.piercingStyle, definition: retired.piercingDefinition } : undefined,
+      history: ports.history });
     releases.push(() => characterContext.dispose());
     ports.attach({ characterContext });
     releases.push(() => ports.attach({ characterContext: undefined }));
@@ -149,10 +174,37 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     };
     followBody();
     releases.push(preview.subscribe(followBody));
+    // The creator's idles are authored for the creator puppet's lifted feet; while one plays, the request draws V's bare feet that way
+    // (knowledge/body-animation.md §4). The inventory's idle and Still stand on the feet her footwear gives her.
+    const followPuppet = () => {
+      const shown = motion.snapshot();
+      characterContext.setCreatorPuppet(shown.idle && shown.idles.find(entry => entry.id === shown.idleClip)?.puppet === "creator");
+    };
+    followPuppet();
+    releases.push(motion.subscribe(followPuppet));
     releases.push(savedAppearance.subscribe(() => characterContext.followSave(saved.snapshot().savedV)));
-    // The shown details and the head's facial shape follow the context's V and choices (character-follow.ts).
+    // The V's own makeup shows or hides at once: the prepared parts of the makeup rows are hidden in the view, nothing is prepared again.
+    let hiddenOptions: readonly string[] | null = null;
+    const followMakeup = () => {
+      const next = characterContext.hiddenOptions();
+      if (next !== hiddenOptions) { hiddenOptions = next; scene.setHiddenOptions(next); }
+    };
+    followMakeup();
+    releases.push(characterContext.subscribe(followMakeup));
+    // The shown details and the head's facial shape follow the context's V and choices (character-follow.ts), on a head of its body.
     releases.push(followCharacter({ context: characterContext, details: characterDetails, savedV: savedAppearance,
-      setFaceMorphs: morphs => scene.setFaceMorphs(morphs) }));
+      setFaceMorphs: morphs => scene.setFaceMorphs(morphs), headBody: scene.body }));
+    // A V of the other body (a masculine save loaded, the other Default V, a preset) needs that body's head: the head loads again.
+    // The reload runs after the change that asked for it has finished (it releases this context), and never for a released head.
+    let shownBody = wanted, released = false;
+    releases.push(() => { released = true; });
+    releases.push(characterContext.subscribe(() => {
+      const next = characterContext.shownBody();
+      if (next === shownBody) return;
+      shownBody = next;
+      if (next !== scene.body) setTimeout(() => { if (!released) ports.reload?.(characterContext.history()); }, 0);
+    }));
+    if (unavailable !== null) ports.notice?.(`The masculine V's head couldn't be prepared from your Cyberpunk 2077 files, so the feminine head is shown. ${unavailable}`.trim());
     releases.push(characterContext.subscribe(ports.changed), characterContext.subscribe(ports.persist));
     characterContext.start();
     const cameraMoved = () => ports.persist();

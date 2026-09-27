@@ -6,11 +6,15 @@
  * The preview setup service (`preview-setup.ts`) follows these actions for the card and the head.
  */
 import { PolledHostState, type HostConnection, type HostTimers } from "./host-state-poller";
+import { HeadLoadError } from "./head-load-error";
+import type { CoreBody } from "./render-detail";
 import { wolvenKitCard, type WolvenKitCardAction, type WolvenKitLink, type WolvenKitSetupState } from "./wolvenkit-setup";
 
 export type PreviewPhase = "ready" | "idle" | "needs-setup" | "preparing" | "failed" | "blocked";
 export type PreviewState = {
   schema: "xfs/preview-core-state-1";
+  /** Whose core the state describes (absent from hosts built before the masculine core: the feminine one). */
+  body?: CoreBody;
   phase: PreviewPhase;
   message: string;
   code: string | null;
@@ -22,7 +26,8 @@ export type PreviewState = {
 };
 /** `preview.rebuild` discards the prepared files and prepares them again (a damaged preview). */
 export type PreviewAction = { kind: "preview.refresh" } | { kind: "preview.prepare" } | { kind: "preview.cancel" } | { kind: "preview.rebuild" };
-export type PreviewTransport = (action: "refresh" | "prepare" | "cancel" | "rebuild") => Promise<{ ok: boolean; data: unknown }>;
+/** `body` names another body's core (the masculine V's); without it the feminine core, which the rest of this module follows. */
+export type PreviewTransport = (action: "refresh" | "prepare" | "cancel" | "rebuild", body?: CoreBody) => Promise<{ ok: boolean; data: unknown }>;
 export type PreviewOutcome = { ok: true } | { ok: false; message: string };
 
 export function isPreviewState(value: unknown): value is PreviewState {
@@ -112,7 +117,7 @@ export const shouldAutoStart = (state: PreviewState, alreadyAttempted: boolean) 
 
 export class PreviewPreparationActions {
   private readonly host: PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">;
-  constructor(transport: PreviewTransport, pollMs = 700, timers?: HostTimers) {
+  constructor(private readonly transport: PreviewTransport, private readonly pollMs = 700, private readonly timers?: HostTimers) {
     this.host = new PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">({ transport, isState: isPreviewState, working: state => state.phase === "preparing",
       refresh: "refresh", pollMs, timers, messages: {
         invalid: "The 3D preview state is unavailable. Restart XF Studio and try again.",
@@ -137,13 +142,50 @@ export class PreviewPreparationActions {
     return this.host.request(action.kind.slice("preview.".length) as "refresh" | "prepare" | "cancel" | "rebuild");
   }
   dispose() { this.host.dispose(); }
+
+  /**
+   * Make sure a body's core is prepared before its head loads: the feminine core is the one this service follows, so it is
+   * taken as ready; another body's (the masculine V's) is prepared on first use, reporting progress through `pending`.
+   * Rejects with a `HeadLoadError` (`body_unavailable`) when the host can't prepare it (a game version it doesn't support,
+   * a failed or cancelled preparation, or lost contact), so the caller can show the feminine head instead.
+   */
+  async ensureBody(body: CoreBody, pending: (message: string, progress: number | null) => void = () => {}): Promise<void> {
+    if (body === "female") return;
+    const wait = () => new Promise<void>(done => { (this.timers ?? { set: (run: () => void, ms: number) => setTimeout(run, ms) }).set(done, this.pollMs); });
+    const read = async (action: "refresh" | "prepare") => {
+      let reply: { ok: boolean; data: unknown };
+      try { reply = await this.transport(action, body); }
+      catch (error) { throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D preview service.", { cause: error }); }
+      if (!isPreviewState(reply.data)) throw new HeadLoadError("body_unavailable", "The 3D preview state is unavailable.");
+      return reply.data;
+    };
+    let state = await read("refresh"), asked = false;
+    for (let polls = 0; polls < 2000; polls++) {
+      if (state.phase === "ready") return;
+      if (state.phase === "preparing" || (!state.canPrepare && !asked && state.phase === "idle")) {
+        // Preparing this body, or waiting for another body's preparation to finish.
+        const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : null;
+        pending(state.message, progress);
+        await wait();
+        state = await read("refresh");
+        continue;
+      }
+      // A first ask prepares it; an earlier failure in this session is tried once more (as the card's Try again would).
+      if ((state.phase === "idle" || state.phase === "failed" || state.phase === "blocked") && state.canPrepare && !asked) {
+        asked = true; state = await read("prepare"); continue;
+      }
+      throw new HeadLoadError("body_unavailable", state.message);
+    }
+    throw new HeadLoadError("body_unavailable", "Preparing the head took too long.");
+  }
 }
 
 /** `endpoint` is the host's preparation service: `/api/preview-core` on localhost, `/api/desktop/preview` on desktop. */
 export function createBrowserPreviewPreparation(endpoint: string) {
-  return new PreviewPreparationActions(async action => {
-    const response = action === "refresh" ? await fetch(endpoint, { cache: "no-store" }) : await fetch(endpoint, { method: "POST",
-      credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+  return new PreviewPreparationActions(async (action, body) => {
+    const response = action === "refresh" ? await fetch(body ? `${endpoint}?body=${body}` : endpoint, { cache: "no-store" }) : await fetch(endpoint, {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ? { action, body } : { action }) });
     return { ok: response.ok, data: await response.json() };
   });
 }

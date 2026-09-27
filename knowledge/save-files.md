@@ -1,6 +1,6 @@
 # Save files
 
-**Maturity: Draft.** Consolidated on 27 September 2026 from WolvenKit's save code, the scripting RTTI dump, Codeware, EquipmentEx, Cyber Engine Tweaks and redscript source, the Modding Docs, and read-only structural probes of three private 2.31 saves (save version 269), which printed layout, class and field names, counts and sizes only. Nothing on this page has runtime evidence except where marked. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source; **[resource]** bytes of real saves or game files; **[wiki]** Modding Docs; **[runtime]** running game; **[offline]** measured by our own probes; **[hypothesis]** not yet established. The evidence, the node-by-node catalogue and the editor design are in the [save editor design](../research/save/save-editor-design.md).
+**Maturity: Draft.** Consolidated on 27 September 2026 (with the Save Explorer's measurements added the same day) from WolvenKit's save code, the scripting RTTI dump, Codeware, EquipmentEx, Cyber Engine Tweaks and redscript source, the Modding Docs, and read-only structural probes of three private 2.31 saves (save version 269), which printed layout, class and field names, counts and sizes only. Nothing on this page has runtime evidence except where marked. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source; **[resource]** bytes of real saves or game files; **[wiki]** Modding Docs; **[runtime]** running game; **[offline]** measured by our own probes; **[hypothesis]** not yet established. The evidence, the node-by-node catalogue and the editor design are in the [save editor design](../research/save/save-editor-design.md).
 
 This page answers four questions for XF Studio agents:
 
@@ -20,6 +20,8 @@ This page answers four questions for XF Studio agents:
 | Cyber Engine Tweaks | `9a8522f` (MIT), `src/scripting/LuaSandbox.cpp` | CET mods keep their state in their own `db.sqlite3` |
 | Modding Docs | `be2f44ee`: [CyberCAT page](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/modding-tools/savegame-editor-cybercat.md) (manavortex), [save file page](https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/be2f44eed8419342ec13f72ed9cab008e9f7b289/for-mod-creators-theory/files-and-what-they-do/file-formats/save-file-.dat.md) (darkcart) | Editor version dependence, the risk of editing quest facts, the header and tables |
 | Three private 2.31 saves | 169, 330 and 336 nodes | Everything marked [resource] or [offline] |
+| Two older private 2.31 saves | 5,410 and 6,658 nodes | The Save Explorer's measurements at scale (§3) |
+| redscript `scc` | `3ca666c` (MIT), `crates/scc/core/src/settings.rs` | The modded script bundle is written beside the game's `final.redscripts` |
 
 ## 1. The container [source] [resource]
 
@@ -74,10 +76,10 @@ It lists script-system classes, including mod classes (`EquipmentEx.OutfitState`
 
 - All objects of `ScriptableSystemsContainer`, about 60 mod classes among them, decode with enum information taken **only from the save itself**; without any enum information 26 of 451 fail.
 - The native-system packages decode once the vanilla RTTI's enum names are added: 472 of 472 objects in one save.
-- 99.4–99.7 % of non-empty `PersistencySystem2` entries walk exactly to their end from the type database alone; static and native arrays are the known gaps, and every entry stays preservable byte for byte through its size.
+- 99.4–99.7 % of non-empty `PersistencySystem2` entries walk exactly to their end from the type database alone (99.1–99.3 % in two larger, older saves); static and native arrays are the known gaps, and every entry stays preservable byte for byte through its size. A top-level entry may end with a zero name hash as its last 8 bytes, as a nested class does [offline: about 1,450 entries a save].
 - Opaque values that stay bounded and preservable: `NodeRef`, static arrays and `DataBuffer` (stat modifiers, which WolvenKit reads with a bespoke layout).
 
-A hash becomes a name by hashing candidate names (the vanilla RTTI, the installed script bundle) and looking them up.
+A hash becomes a name by hashing candidate names (the vanilla RTTI, the installed script bundle) and looking them up. A script field is spelled `m_name` in the bundle and persisted as `name`: counting that, the installed bundle names about 92 % of a save's property hashes and 95 % of its world-object classes [offline]. With redscript installed, the bundle the game runs is `r6/cache/final.redscripts.modded` (under MO2, the copy in the overwrite folder or in the highest-priority mod that has one) [source: redscript `scc`] [resource].
 
 ## 4. Where mods keep their data
 
@@ -102,9 +104,10 @@ So a save's mod data can be read with **no per-mod schema**: the package names e
 
 ## 6. What XF Studio reads today [source]
 
-- `save-reader.ts`: the container and the creator node, byte for byte ([save import](../research/eye-artistry/save-import.md)).
-- `save-package.ts` and `save-loadout.ts`: the vanilla equipment loadout from `ScriptableSystemsContainer` and the active wardrobe set ([worn clothing §2.6](clothing.md#26-what-the-studio-reads-source)). The package reader is told the enums by a hand list; the save's type database could replace it.
-- Nothing else: no inventory, facts, progression, persistency or mod data, and no writer. The design proposes one container codec, one generic object layer with a type oracle, bespoke node codecs and domain views, starting with a read-only Save Explorer.
+- **The container codec** (`engines/save/`): header, LZ4 chunks, node table and tree, read-only.
+- **The generic object layer** (`engines/red-object/`): the save's type database; the type oracle (the save's database, then the shipped engine type list, then names from the installed scripts and the save's own packages); one package reader, shared with the resource reader; and the persistency walker.
+- `save-reader.ts`: the creator node, byte for byte, over the container codec ([save import](../research/eye-artistry/save-import.md)). `save-loadout.ts`: the vanilla equipment loadout and the active wardrobe set ([worn clothing §2.6](clothing.md#26-what-the-studio-reads-source)), with its enums answered by the save's own type database.
+- **The Save Explorer** (a Studio module, read-only): the player's saves listed automatically, every node with its size and decode status, package objects and world objects inspected with names by source, and script mods' data grouped by namespace. Bespoke nodes (inventory, facts, journal, wardrobe) are shown as bytes, and nothing writes. Status and measurements: [save editor design, phase 1](../research/save/save-editor-design.md#phase-1-status).
 
 ## Open questions
 

@@ -39,7 +39,7 @@ export type ShellCommand = "palette" | "shortcuts" | "help" | "regions" | "regio
   "tour.next" | "tour.back" | "tour.skip" |
   "gesture.cancel" | "gesture.commit" |
   "tab.switch" | "tab.reorder" | "tab.close" | "tab.content" | "tab.float" |
-  "row.focus" | "row.reorder" | "row.rename" | "row.remove" | "row.duplicate";
+  "row.focus" | "row.reorder" | "row.rename" | "row.remove" | "row.duplicate" | "row.expand";
 /** The UV viewport's framing commands (viewport-attachment.ts `uvCommand`). */
 export type UVViewCommand = "both" | "single" | "other" | "fit";
 export type ViewCommandId = `uv.${UVViewCommand}` | "uv.pan" | "uv.zoom";
@@ -151,6 +151,11 @@ export const MODIFIER_SUMMARIES: Readonly<Record<ViewportScope, Partial<Record<M
   head: { shift: "shape tools", ctrl: "pan", alt: "orbit over makeup" },
   uv: { shift: "shape tools", ctrl: "pan" },
 };
+/** The "Hold …" hints of a viewport that offers no editing tool (its module is hidden, UI-102): camera input only. */
+export const CAMERA_MODIFIER_SUMMARIES: Readonly<Record<ViewportScope, Partial<Record<ModifierKey, string>>>> = {
+  head: { ctrl: "pan" },
+  uv: { ctrl: "pan" },
+};
 
 /** CSS keyword each cursor falls back to; custom SVG cursors live in studio.css under `[data-cursor]`. */
 export const CURSOR_FALLBACK: Readonly<Record<CursorKind, string>> = {
@@ -222,6 +227,7 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { id: "rows.rename", scope: "rows", chords: [k("F2")], action: shell("row.rename"), label: "Rename the focused row" },
   { id: "rows.remove", scope: "rows", chords: [k("Delete")], action: shell("row.remove"), label: "Remove the focused row" },
   { id: "rows.duplicate", scope: "rows", chords: [k("d", { ctrl: true })], action: shell("row.duplicate"), label: "Duplicate the focused row" },
+  { id: "rows.expand", scope: "rows", chords: [k("ArrowRight"), k("ArrowLeft")], action: shell("row.expand"), label: "Open or close the focused row of a tree (Save Explorer)" },
   { id: "tour.skip", scope: "tour", chords: [k("Escape")], action: shell("tour.skip"), label: "Stop the tour (it can be replayed from Help)" },
   { id: "tour.next", scope: "tour", chords: [k("ArrowRight"), k("Enter")], action: shell("tour.next"), label: "Next step (Enter on a button presses that button)" },
   { id: "tour.back", scope: "tour", chords: [k("ArrowLeft")], action: shell("tour.back"), label: "Previous step" },
@@ -315,6 +321,11 @@ export type ViewportInputContext = Readonly<{
   gesture?: GestureKind;
   modifiers: HeldModifiers;
   blocked?: BlockReason;
+  /**
+   * False when the viewport offers no editing tool (UI-102): the hints list camera input only, and nothing that is reserved for
+   * editing ("Shift: shape tools", Shift doing nothing off makeup). Absent means it does.
+   */
+  editing?: boolean;
 }>;
 export type HintItem = Readonly<{ input: string; label: string; ids: readonly string[] }>;
 export type ViewportHints = Readonly<{
@@ -351,11 +362,14 @@ export function viewportHints(context: ViewportInputContext): ViewportHints {
     return { scope, heading: gesture.label, items, hold: [], more: [], tone: "gesture" };
   }
   const mods = inside ? modifierKey(context.modifiers) : "";
+  const editing = context.editing !== false;
   const items = mergeItems(STRIP_INPUTS.flatMap(input => {
     const binding = pointerBinding(scope, input, target, mods);
+    // Without an editing tool, inputs reserved for editing (they do nothing here) aren't worth a hint.
+    if (!editing && binding?.effect === "none") return [];
     return binding && binding.strip !== false ? [{ input: pointerInputLabel(input), label: binding.label, ids: [binding.id] }] : [];
   }));
-  const heading = inside ? TARGET_LABELS[scope][target] : scope === "head" ? "Head" : "UV map";
+  const heading = inside ? TARGET_LABELS[scope][target] : scope === "head" ? "3D view" : "UV map";
   if (mods) {
     // Esc is offered once a held modifier arms an edit of the makeup under the pointer.
     const armed = MAKEUP_TARGETS.includes(target) && items.some(item => item.ids.some(id => EDIT_EFFECTS.includes(pointerBindingById(id).effect)));
@@ -363,7 +377,7 @@ export function viewportHints(context: ViewportInputContext): ViewportHints {
       items: items.length ? [...items, ...(armed ? [keyItem("gesture.cancel")] : [])] : [{ input: "", label: "no action here", ids: [] }],
       hold: [], more: [] };
   }
-  const summaries = MODIFIER_SUMMARIES[scope];
+  const summaries = (editing ? MODIFIER_SUMMARIES : CAMERA_MODIFIER_SUMMARIES)[scope];
   const hold = HOLD_ORDER.filter(key => summaries[key]).map(key =>
     ({ input: modifierLabel(key), label: summaries[key]!, ids: POINTER_BINDINGS.filter(binding => binding.scope === scope &&
       binding.mods !== ANY && binding.mods.includes(key)).map(binding => binding.id) }));
@@ -427,7 +441,7 @@ const keyRows = (scope: KeyScope): ReferenceRow[] => KEY_BINDINGS.filter(binding
 export function bindingReference(): ReferenceSection[] {
   return [
     { id: "global", title: "Anywhere", rows: keyRows("global") },
-    { id: "head", title: "Head viewport", detail: "Shift always means a shape tool; editing on the head needs Surface controls on.",
+    { id: "head", title: "3D view", detail: "Shift always means a shape tool; editing on the head needs Surface controls on.",
       rows: [...pointerRows("head"), ...keyRows("head").map(row => ({ ...row, where: "viewport focused" }))] },
     { id: "uv", title: "UV map", detail: "View changes (zoom, pan, eye modes) are never edits.",
       rows: [...pointerRows("uv"), ...keyRows("uv").map(row => ({ ...row, where: "UV map focused" }))] },

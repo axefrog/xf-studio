@@ -5,8 +5,11 @@
  * installed catalogue: the panel's options, their choices page by page, searches, and the view of every row's current choice.
  *
  * - **History** (CORE-59): creator changes have their own small Undo history, separate from the makeup look's. Each step is one
- *   whole context state; loading a save or a preset is one step, and so is "hide my V's own makeup" (`character.hideOwnMakeup`, whose
- *   rule lives here: the host's projection marks the makeup section; CORE-71). It lives in memory only.
+ *   whole context state; loading a save or a preset is one step. It lives in memory only.
+ * - **The V's own makeup** (`character.setOwnMakeup`, CORE-71): a viewing setting, not a creator choice. Hiding it hides, in the 3D view,
+ *   the parts every row of the makeup section brings (the host's projection marks the section; `hiddenOptions`), which are already
+ *   prepared, so it applies at once and nothing is prepared again. It joins the panel's one Undo, survives a change of V and is stored
+ *   with the workspace while hidden. Reset all leaves it alone.
  * - **One Undo for the Character panel** (UI-81): `character.undo` and `character.redo` step back and forward through every change
  *   made in the panel, creator choices and Clothing alike, in the order they were made (`order`); a new change of either kind clears
  *   what could be redone. `character.undoClothing` and `character.redoClothing` still step the Clothing setting's own steps alone.
@@ -41,12 +44,12 @@
  */
 import type { CcoPart } from "./cco-model";
 import type { BodyGender } from "./cc-catalogue";
-import { type CcChoicePage, type CcChoiceSearch, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView,
-  makeupOff, searchQuery } from "./cc-panel";
+import { type CcChoicePage, type CcChoiceSearch, type CcSwatches, type CcPanel, type CcPanelChoice, type CcPanelOption, CC_PAGE_SIZE, type CreatorNext, type CreatorState, type CreatorView,
+  searchQuery } from "./cc-panel";
 import { type CcPreset, parseCcPreset, serializeCcPreset, serializeCcPresetEntry } from "./cc-preset";
 import { carryPreset, type CharacterChange, type CharacterChoice, characterChoiceOf, type CharacterContextAction, type MissingChoice,
   type SavedDescriptors, savedDescriptorsOf, summariseMissing } from "./character-context";
-import { characterRequestOf, DEFAULT_CHARACTER, type CharacterRequest } from "./character-detail-request";
+import { characterRequestOf, type CharacterRequest } from "./character-detail-request";
 import { CREATOR_LIMITS, isPresetName } from "./creator-names";
 import { refusal, type Capability } from "./platform/api";
 import type { SavedV } from "./save-reader";
@@ -71,6 +74,10 @@ export type CreatorPort = {
   prefetch?(request: CharacterRequest, option: string, positions: readonly number[], focus: number | null, signal: AbortSignal): Promise<PrefetchReply>;
   /** Stop preparing ahead (the row closed). */
   stopPrefetch?(): Promise<void>;
+  /** A colour row's swatches and icons by position (`pending` while the host is still working them out). */
+  swatches?(gender: BodyGender, option: string, signal: AbortSignal): Promise<CcSwatches>;
+  /** Where the page fetches an icon sheet. */
+  sheetUrl?(gender: BodyGender, id: number, key: string): string;
   /** The prepared game files' size on this computer, and clearing them. */
   preparedFiles?(signal?: AbortSignal): Promise<{ bytes: number }>;
   clearPrepared?(): Promise<{ freed: number }>;
@@ -103,9 +110,17 @@ type State = {
   /** A loaded preset's entries the page couldn't carry to the host (PIPE-79): reported, never sent. */
   readonly notCarried: readonly MissingChoice[];
 };
+/**
+ * The panel's Undo history, carried from one head to the next when the V changes body (each body has its own head, so the head
+ * attachment is made again; browser-head-attachment.ts). Opaque to everyone but this service.
+ */
+export type ContextHistory = { readonly kind: "xfs/character-history"; readonly history: unknown };
+type HistoryParts = { past: { label: string; state: State }[]; future: { label: string; state: State }[]; order: StepKind[];
+  undone: StepKind[]; clothingPast: { label: string; setting: ClothingSetting }[]; clothingFuture: { label: string; setting: ClothingSetting }[];
+  makeupPast: { label: string; shown: boolean }[]; makeupFuture: { label: string; shown: boolean }[] };
 /** The workspace's form (preview state `character`): what was set and where the V came from, and the Clothing setting when not the default. */
 export type StoredCharacter = { origin: "default" | "save" | "preset"; name?: string; bodyGender?: BodyGender; choices: CharacterChoice[];
-  kept?: Record<string, unknown>; clothing?: ClothingSetting };
+  kept?: Record<string, unknown>; clothing?: ClothingSetting; ownMakeup?: "hidden" };
 /**
  * The Clothing setting as the presentation reads it: the state, the areas `custom` shows, the areas the save dresses (what can be picked),
  * where the clothes come from, one plain line when there is something to say, and the setting's own Undo and Redo labels.
@@ -114,6 +129,11 @@ export type ClothingSnapshot = { state: ClothingState; custom: ClothingArea[]; w
   /** The areas the current state shows, and the states and areas as the control words them (so the presentation derives nothing). */
   shown: ClothingArea[]; states: { value: ClothingState; label: string }[]; areas: { area: ClothingArea; label: string }[];
   source: "save" | "none" | "unread" | "older"; note: string; undo: string | null; redo: string | null };
+/** An icon sheet as the panel draws from it: its URL and `columns` × `rows` cells. */
+export type CharacterIconSheet = { readonly url: string; readonly columns: number; readonly rows: number };
+/** A colour row's swatches and icons by choice position ("" for none), as loaded so far. */
+export type CharacterSwatchState = { readonly swatches: readonly string[]; readonly icons: readonly string[];
+  readonly sheets: ReadonlyMap<number, CharacterIconSheet>; readonly pending: boolean };
 export type CharacterChoicesState = { readonly choices: readonly CcPanelChoice[]; readonly total: number; readonly loading: boolean; readonly error: string | null };
 export type CharacterSearchState = { readonly query: string; readonly options: ReadonlySet<string> | null; readonly more: boolean; readonly loading: boolean;
   readonly error: string | null };
@@ -144,15 +164,21 @@ export type CharacterContextSnapshot = {
   prepared: { bytes: number | null; clearing: boolean; freed: number | null };
   /** Which of V's clothes the preview shows (clothing-dressing.ts). */
   clothing: ClothingSnapshot;
+  /** Whether the 3D view shows the V's own makeup (`character.setOwnMakeup`). */
+  ownMakeup: boolean;
   /** Bumps on every change of state, panel, view or pages. */
   revision: number;
 };
 
 const HISTORY_LIMIT = 100;
+/** Which of the panel's histories a step is in: the V and its choices, Clothing, or the V's own makeup. */
+type StepKind = "v" | "clothing" | "makeup";
 /** Most positions one question about a row's choices names. */
 const CHOICE_PREFETCH_POSITIONS = 512;
 /** Polling the catalogue's build: while the panel is being looked at, and otherwise (PIPE-78). */
 const POLL_MS = 800, POLL_IDLE_MS = 4000, WATCHED_MS = 3000;
+/** How often an open colour row asks again while the host is still working out its swatches. */
+const SWATCH_POLL_MS = 1500;
 const LOADING = "The creator options are still loading.";
 const plainStep = (option: CcPanelOption | undefined, choice: string, label?: string) =>
   label ? label : option ? `Change ${option.label}` : `Change ${choice || "an option"}`;
@@ -185,7 +211,21 @@ export function storedCharacterOf(value: unknown): StoredCharacter | null {
   const clothing = v.clothing === undefined ? undefined : clothingSettingOf(v.clothing);
   return { origin: v.origin as StoredCharacter["origin"], ...(isPresetName(v.name) ? { name: v.name } : {}),
     ...(v.bodyGender === "female" || v.bodyGender === "male" ? { bodyGender: v.bodyGender } : {}), choices, ...(kept ? { kept } : {}),
-    ...(clothing && !sameClothing(clothing, DEFAULT_CLOTHING) ? { clothing } : {}) };
+    ...(clothing && !sameClothing(clothing, DEFAULT_CLOTHING) ? { clothing } : {}), ...(v.ownMakeup === "hidden" ? { ownMakeup: "hidden" as const } : {}) };
+}
+
+/** Where a context starts: the stored origin, else the shown save, else the default V. */
+function originOf(stored: StoredCharacter | null, hasSave: boolean): ContextOrigin {
+  return stored?.origin === "preset" ? { kind: "preset", name: stored.name ?? null }
+    : stored?.origin === "default" || !hasSave ? { kind: "default" } : { kind: "save" };
+}
+/**
+ * The body a context starts with, from the stored context and the shown save (as the constructor decides it): the head
+ * attachment loads that body's core head before the context exists (browser-head-attachment.ts).
+ */
+export function initialBodyGender(stored: unknown, save: SavedV | undefined): BodyGender {
+  const context = storedCharacterOf(stored);
+  return originOf(context, !!save).kind === "save" ? save!.isMale ? "male" : "female" : context?.bodyGender ?? "female";
 }
 
 export class CharacterContextActions {
@@ -199,6 +239,9 @@ export class CharacterContextActions {
   private byId = new Map<string, CcPanelOption>();
   /** Pages by option and search (`pageKey`). */
   private pages = new Map<string, { choices: CcPanelChoice[]; total: number; loading: boolean; error: string | null }>();
+  /** Colour rows' swatches by option, and the rows being asked about now. */
+  private swatchRows = new Map<string, CharacterSwatchState>();
+  private swatchLoading = new Set<string>();
   private searching: (CharacterSearchState & { controller: AbortController | null }) | null = null;
   private currentView: CreatorView | null = null;
   private viewKey: string | null = null;
@@ -229,27 +272,45 @@ export class CharacterContextActions {
   private clothing: ClothingSetting = DEFAULT_CLOTHING;
   private clothingPast: { label: string; setting: ClothingSetting }[] = [];
   private clothingFuture: { label: string; setting: ClothingSetting }[] = [];
+  /** Whether the V's own makeup shows, and its steps (a viewing setting like Clothing; they join the panel's one Undo). */
+  private ownMakeup = true;
+  private makeupPast: { label: string; shown: boolean }[] = [];
+  private makeupFuture: { label: string; shown: boolean }[] = [];
   /** Which history each of the panel's steps is in, oldest first, and the undone ones (newest last): one order for Undo (UI-81). */
-  private order: ("v" | "clothing")[] = [];
-  private undone: ("v" | "clothing")[] = [];
+  private order: StepKind[] = [];
+  private undone: StepKind[] = [];
 
-  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string } } = {}) {
+  constructor(private readonly ports: CharacterContextPorts, initial: { stored?: unknown; save?: SavedV; legacy?: { style: string; definition: string };
+    history?: ContextHistory } = {}) {
     const stored = storedCharacterOf(initial.stored);
     const save = initial.save ? this.saveOf(initial.save) : null;
-    const origin: ContextOrigin = stored?.origin === "preset" ? { kind: "preset", name: stored.name ?? null }
-      : stored?.origin === "default" || !save ? { kind: "default" } : { kind: "save" };
+    const origin = originOf(stored, !!save);
     let kept: CcPreset | null = null;
     if (stored?.kept) { try { kept = parseCcPreset(stored.kept); } catch { kept = null; } }
-    this.state = { origin, bodyGender: origin.kind === "save" ? save!.value.isMale ? "male" : "female" : stored?.bodyGender ?? "female",
+    this.state = { origin, bodyGender: initialBodyGender(initial.stored, initial.save),
       save: origin.kind === "save" ? save : null, choices: stored?.choices ?? [], kept, notCarried: [] };
     this.knownSave = saveKey(initial.save);
     this.legacy = !stored && initial.legacy?.style && initial.legacy.definition ? { ...initial.legacy } : null;
     this.clothing = stored?.clothing ?? DEFAULT_CLOTHING;
+    this.ownMakeup = stored?.ownMakeup !== "hidden";
+    if (initial.history?.kind === "xfs/character-history") {
+      const carried = structuredClone(initial.history.history) as HistoryParts;
+      ({ past: this.past, future: this.future, order: this.order, undone: this.undone, clothingPast: this.clothingPast,
+        clothingFuture: this.clothingFuture, makeupPast: this.makeupPast, makeupFuture: this.makeupFuture } = carried);
+    }
+  }
+  /** The panel's Undo history, for the head made next when the V changes body (`initial.history`). */
+  history(): ContextHistory {
+    const parts: HistoryParts = { past: this.past, future: this.future, order: this.order, undone: this.undone,
+      clothingPast: this.clothingPast, clothingFuture: this.clothingFuture, makeupPast: this.makeupPast, makeupFuture: this.makeupFuture };
+    return { kind: "xfs/character-history", history: structuredClone(parts) };
   }
   /** The save the saved-V service shows now (its content key), as this service last saw it: a change it didn't make is a new V. */
   private knownSave: string;
 
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  /** The shown V's body (a cheap read of what `snapshot().bodyGender` says): the head shows that body's core. */
+  shownBody(): BodyGender { return this.state.bodyGender; }
   private publish() { this.revision++; for (const listener of this.listeners) listener(); }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -258,11 +319,25 @@ export class CharacterContextActions {
   snapshot(): CharacterContextSnapshot {
     const notes = summariseMissing(this.state.notCarried).summary.map(item => item.message);
     return structuredClone({ phase: this.catalogue.phase, message: this.catalogue.message, next: this.catalogue.next ?? null, origin: this.state.origin, bodyGender: this.state.bodyGender,
-      set: this.state.choices.length, undo: this.stepLabel(this.order, this.past, this.clothingPast), redo: this.stepLabel(this.undone, this.future, this.clothingFuture),
+      set: this.state.choices.length, undo: this.stepLabel(this.order, "past"), redo: this.stepLabel(this.undone, "future"),
       keepable: this.cleared.length, viewing: !!this.viewing, viewError: this.viewError, notes,
       retry: this.capability({ kind: "character.retry" }).available, firstTime: this.firstTime,
       prepared: { bytes: this.prepared.bytes, clearing: this.prepared.clearing, freed: this.prepared.freed }, clothing: this.clothingSnapshot(),
-      revision: this.revision });
+      ownMakeup: this.ownMakeup, revision: this.revision });
+  }
+  /**
+   * The head's creator options whose parts the 3D view hides: every option of the makeup section's rows while the V's own makeup is hidden
+   * (the host's projection marks the section, so no name is written here), else none. Same array while nothing changed.
+   */
+  hiddenOptions(): readonly string[] {
+    const panel = this.panel();
+    const key = this.ownMakeup || !panel ? "" : panel.identity;
+    if (key !== this.hiddenKey) {
+      this.hiddenKey = key;
+      this.hidden = key ? Object.freeze([...new Set(panel!.sections.filter(section => section.makeup)
+        .flatMap(section => section.rows.filter(row => row.part === "head").flatMap(row => row.options.map(at => panel!.options[at]!.name))))]) : Object.freeze([]);
+    }
+    return this.hidden;
   }
   /** The Clothing setting's read (see `ClothingSnapshot`). */
   private clothingSnapshot(): ClothingSnapshot {
@@ -349,6 +424,33 @@ export class CharacterContextActions {
     if (!page || (!page.loading && !page.error && page.choices.length < Math.min(want, page.total))) void this.loadPage(option, wanted);
     return this.pages.get(key) ?? { choices: [], total: this.byId.get(option)?.count ?? 0, loading: true, error: null };
   }
+  /**
+   * A colour row's swatches and icons (derived on the host from what wins for each choice; cc-swatch.ts), or null before they arrive or
+   * when the host doesn't offer them. Asking loads them, and asks again while the host is still working them out.
+   */
+  swatches(option: string): CharacterSwatchState | null {
+    if (!this.swatchRows.has(option) || this.swatchRows.get(option)!.pending) void this.loadSwatches(option);
+    return this.swatchRows.get(option) ?? null;
+  }
+  private async loadSwatches(option: string) {
+    const port = this.ports.creator;
+    if (!port.swatches || this.swatchLoading.has(option) || this.catalogue.phase !== "ready" || !this.session) return;
+    const generation = this.generation, gender = this.state.bodyGender, signal = this.session.signal;
+    this.swatchLoading.add(option);
+    try {
+      // A row asked about again while its swatches are pending waits a moment first.
+      if (this.swatchRows.get(option)?.pending) await port.wait(SWATCH_POLL_MS, signal);
+      if (generation !== this.generation || this.disposed) return;
+      const answer = await port.swatches(gender, option, signal);
+      if (generation !== this.generation || this.disposed || this.stale(answer.identity)) return;
+      const sheets = new Map(answer.sheets.map(sheet => [sheet.id, { url: port.sheetUrl?.(gender, sheet.id, sheet.key) ?? "", columns: sheet.columns, rows: sheet.rows }]));
+      this.swatchRows.set(option, deepFreeze({ swatches: [...answer.swatches], icons: [...answer.icons], sheets, pending: answer.pending }));
+    } catch {
+      // Swatches are a nicety: without them the row shows the definitions' own colours.
+      if (generation === this.generation && !this.disposed) this.swatchRows.set(option, { swatches: [], icons: [], sheets: new Map(), pending: false });
+    } finally { this.swatchLoading.delete(option); }
+    if (generation === this.generation && !this.disposed) this.publish();
+  }
   /** The options with a choice matching `query` (the host searches every choice, not only those loaded; UI-72). */
   search(query: string): CharacterSearchState {
     const wanted = searchQuery(query);
@@ -360,10 +462,10 @@ export class CharacterContextActions {
   /**
    * A row's choices prepared ahead: asks the host to prepare `positions` (visible ones first) in the background and returns their
    * states so far (frozen; a new object when they change). `focus` (a hovered or focused choice) goes to the front. Null when the host
-   * can't prepare ahead, the catalogue isn't ready, or the shown V is one the preview doesn't draw (a masculine V shows the default V).
+   * can't prepare ahead or the catalogue isn't ready.
    */
   prefetch(option: string, positions: readonly number[], focus: number | null = null): CharacterFetchState | null {
-    if (!this.ports.creator.prefetch || !this.ready() || this.state.bodyGender !== "female" || !positions.length) return null;
+    if (!this.ports.creator.prefetch || !this.ready() || !positions.length) return null;
     // Keyed by the V without the row's own choice, so choosing in the row keeps the states it has.
     const request = this.detailRequest();
     const key = JSON.stringify([{ ...request, choices: (request.choices ?? []).filter(choice => `${choice.part}/${choice.option}` !== option) }, option]);
@@ -429,13 +531,12 @@ export class CharacterContextActions {
   }
 
   /**
-   * The request the preview prepares: the shown V (head, body and arms) with the choices set on it (a masculine V shows the default V).
-   * The host keeps the body parts its third-person consumers read (character-detail-plan.ts `previewInput`).
+   * The request the preview prepares: the shown V (head, body and arms, either body) with the choices set on it. The host keeps the
+   * body parts its third-person consumers read (character-detail-plan.ts `previewInput`).
    */
   detailRequest(): CharacterRequest {
-    if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing(),
-      this.bodyShown, this.uncensored);
+      this.bodyShown, this.uncensored, this.creatorPuppet);
   }
   /**
    * Whether the viewer shows V's body (the preview's Body switch): with it off, the request asks for the head alone, so the host neither
@@ -458,18 +559,36 @@ export class CharacterContextActions {
     this.publish();
   }
   private uncensored = false;
+  /**
+   * Whether V stands as the character creator's puppet (the body source is one of the creator's idles, which are authored for the
+   * creator's lifted feet; knowledge/body-animation.md §4): the request says so and the host draws her bare feet that way. A composition
+   * root keeps it in step with the motion; off, the feet follow her footwear (flat when barefoot).
+   */
+  setCreatorPuppet(creator: boolean): void {
+    if (creator === this.creatorPuppet) return;
+    this.creatorPuppet = creator;
+    this.publish();
+  }
+  private creatorPuppet = false;
+  private hiddenKey = "";
+  private hidden: readonly string[] = Object.freeze([]);
   /** The whole state as the host interprets it (every part). */
   request(): CharacterRequest {
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices);
   }
-  /** The workspace's form; undefined when nothing needs storing (the V as loaded, nothing set). */
+  /**
+   * The workspace's form; undefined when nothing needs storing (the V as loaded, nothing set). The masculine default V is always
+   * stored: without it a reload would show the feminine one.
+   */
   stored(): StoredCharacter | undefined {
     const { origin, choices, kept } = this.state;
     const clothing = sameClothing(this.clothing, DEFAULT_CLOTHING) ? null : this.clothing;
-    if (!choices.length && !clothing && origin.kind !== "preset" && !(origin.kind === "default" && this.knownSave)) return undefined;
+    if (!choices.length && !clothing && this.ownMakeup && origin.kind !== "preset" &&
+      !(origin.kind === "default" && (this.knownSave || this.state.bodyGender !== "female"))) return undefined;
     return { origin: origin.kind, ...(origin.kind === "preset" && origin.name ? { name: origin.name } : {}),
       ...(origin.kind !== "save" ? { bodyGender: this.state.bodyGender } : {}), choices: choices.map(choice => ({ ...choice })),
-      ...(kept ? { kept: serializeCcPreset(kept) } : {}), ...(clothing ? { clothing: { state: clothing.state, custom: [...clothing.custom] } } : {}) };
+      ...(kept ? { kept: serializeCcPreset(kept) } : {}), ...(clothing ? { clothing: { state: clothing.state, custom: [...clothing.custom] } } : {}),
+      ...(this.ownMakeup ? {} : { ownMakeup: "hidden" as const }) };
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -495,7 +614,7 @@ export class CharacterContextActions {
     this.session = controller;
     this.loading = true;
     this.catalogue = { phase: "preparing", message: "", panel: null, gender };
-    this.byId.clear(); this.pages.clear();
+    this.byId.clear(); this.pages.clear(); this.swatchRows.clear(); this.swatchLoading.clear();
     this.publish();
     const live = () => !controller.signal.aborted && generation === this.generation && !this.disposed;
     void (async () => {
@@ -669,10 +788,6 @@ export class CharacterContextActions {
     this.presets.set(value, parsed);
     return parsed;
   }
-  private hideChanges(): CharacterChoice[] {
-    const panel = this.panel();
-    return panel ? makeupOff(panel, this.viewCurrent() ? this.currentView : null) : [];
-  }
 
   capability(action: CharacterContextAction): Capability {
     switch (action.kind) {
@@ -682,12 +797,10 @@ export class CharacterContextActions {
       case "character.setOptions":
         if (!this.ready()) return this.notReady();
         return this.changesCheck(action.changes).capability;
-      case "character.hideOwnMakeup": {
-        if (!this.ready()) return this.notReady();
-        if (!this.viewCurrent()) return refusal("not_ready", "Your V's current choices are still loading.");
-        const changes = this.hideChanges();
-        return changes.length ? this.changesCheck(changes).capability : refusal("invalid_value", "Every makeup row on your V is already Off.");
-      }
+      case "character.setOwnMakeup":
+        if (this.ownMakeup === action.shown) return refusal("invalid_value", action.shown ? "Your V's own makeup is already shown." : "Your V's own makeup is already hidden.");
+        // Showing it again never waits; hiding it needs the creator options, which say which rows are makeup.
+        return action.shown || this.ready() ? { available: true } : this.notReady();
       case "character.reset": {
         if (!this.ready()) return this.notReady();
         const option = this.option(action.part, action.option);
@@ -756,18 +869,27 @@ export class CharacterContextActions {
     this.publish();
   }
   /** A new step of one kind: it joins the panel's order, the oldest step past the limit goes, and nothing can be redone any more. */
-  private ordered(kind: "v" | "clothing", past: unknown[]) {
+  private ordered(kind: StepKind, past: unknown[]) {
     this.order.push(kind);
     if (past.length > HISTORY_LIMIT) { past.shift(); this.order.splice(this.order.indexOf(kind), 1); }
-    this.future = []; this.clothingFuture = []; this.undone = [];
+    this.future = []; this.clothingFuture = []; this.makeupFuture = []; this.undone = [];
   }
   /** The label of the step the panel's Undo (or Redo) would take next. */
-  private stepLabel(order: ("v" | "clothing")[], choices: { label: string }[], clothing: { label: string }[]) {
+  private stepLabel(order: StepKind[], side: "past" | "future") {
     const kind = order.at(-1);
-    return (kind === "v" ? choices.at(-1)?.label : kind === "clothing" ? clothing.at(-1)?.label : undefined) ?? null;
+    const steps = kind === "v" ? side === "past" ? this.past : this.future : kind === "clothing" ? side === "past" ? this.clothingPast : this.clothingFuture
+      : kind === "makeup" ? side === "past" ? this.makeupPast : this.makeupFuture : [];
+    return steps.at(-1)?.label ?? null;
+  }
+  /** Step the V's own makeup setting back or forward. */
+  private makeupTravel(from: { label: string; shown: boolean }[], to: { label: string; shown: boolean }[]) {
+    const entry = from.pop()!;
+    to.push({ label: entry.label, shown: this.ownMakeup });
+    this.ownMakeup = entry.shown;
+    this.publish();
   }
   /** Move the newest step of `kind` from one order to the other (the Clothing setting's own Undo and Redo). */
-  private reorder(kind: "v" | "clothing", from: ("v" | "clothing")[], to: ("v" | "clothing")[]) {
+  private reorder(kind: StepKind, from: StepKind[], to: StepKind[]) {
     const at = from.lastIndexOf(kind);
     if (at >= 0) from.splice(at, 1);
     to.push(kind);
@@ -798,8 +920,11 @@ export class CharacterContextActions {
         this.step(action.label || `Change ${choices.length} options`, this.withChoices(choices));
         break;
       }
-      case "character.hideOwnMakeup":
-        this.step("Hide my V's own makeup", this.withChoices(this.hideChanges()));
+      case "character.setOwnMakeup":
+        this.makeupPast.push({ label: action.shown ? "Show my V's own makeup" : "Hide my V's own makeup", shown: this.ownMakeup });
+        this.ordered("makeup", this.makeupPast);
+        this.ownMakeup = action.shown;
+        this.publish();
         break;
       case "character.reset": {
         const family = this.option(action.part, action.option)?.link?.key;
@@ -857,13 +982,17 @@ export class CharacterContextActions {
       case "character.undo": {
         const kind = this.order.pop()!;
         this.undone.push(kind);
-        if (kind === "v") this.travel(this.past, this.future); else this.clothingTravel(this.clothingPast, this.clothingFuture);
+        if (kind === "v") this.travel(this.past, this.future);
+        else if (kind === "makeup") this.makeupTravel(this.makeupPast, this.makeupFuture);
+        else this.clothingTravel(this.clothingPast, this.clothingFuture);
         break;
       }
       case "character.redo": {
         const kind = this.undone.pop()!;
         this.order.push(kind);
-        if (kind === "v") this.travel(this.future, this.past); else this.clothingTravel(this.clothingFuture, this.clothingPast);
+        if (kind === "v") this.travel(this.future, this.past);
+        else if (kind === "makeup") this.makeupTravel(this.makeupFuture, this.makeupPast);
+        else this.clothingTravel(this.clothingFuture, this.clothingPast);
         break;
       }
       case "character.setClothing":

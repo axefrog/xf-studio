@@ -14,7 +14,7 @@ import type { CharacterContextActions } from "./character-context-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
-import type { ViewId } from "./platform/api/view-graph";
+import { type ViewId, viewTitles } from "./platform/api/view-graph";
 import type { ViewGraph } from "./platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
 import type { StudioModule, ViewSummaryContribution, ViewToolContribution, ViewToolFilter } from "./platform/api";
@@ -416,6 +416,8 @@ export class StudioApplication {
   characterPanel() { return this.services.characterContext?.panel() ?? null; }
   characterView() { return this.services.characterContext?.view() ?? null; }
   characterChoices(option: string, want?: number, query?: string) { return this.services.characterContext?.choices(option, want, query) ?? null; }
+  /** A colour row's swatches and icons derived from what wins for each choice (asking loads them); null until they arrive. */
+  characterSwatches(option: string) { return this.services.characterContext?.swatches(option) ?? null; }
   /** The creator options with a choice matching a search (the host searches every choice; UI-72); null before the 3D preview is ready. */
   characterSearch(query: string) { return this.services.characterContext?.search(query) ?? null; }
   /** A row's choices prepared ahead (visible ones first, `focus` first of all), and their states; `characterStopPrefetch` when it closes. */
@@ -487,6 +489,19 @@ export class StudioApplication {
   /** The views, what each shares, the focus and the View and lighting history (view-graph-design.md §3). Detached. */
   views() { return this.services.viewActions?.snapshot() ?? null; }
   /**
+   * Each view's title and what it shows, for its panel's tab (view-graph.ts `viewTitles`): the view's own name, else "3D view",
+   * numbered when there are several; its scene's subject (for the character scene, which V: "V (your saved V)") as context.
+   */
+  viewTitles(): { view: string; panel: string; title: string; subject: string }[] {
+    const snapshot = this.services.viewActions?.snapshot();
+    if (!snapshot) return [];
+    const titles = viewTitles(snapshot.views), origin = this.services.characterContext?.snapshot().origin;
+    const who = origin?.kind === "save" ? "your saved V" : origin?.kind === "preset" ? origin.name ? `the preset "${origin.name}"` : "a preset"
+      : "the character creator's default V";
+    return snapshot.views.map((view, index) => ({ view: view.id, panel: view.panel, title: titles[index]!,
+      subject: view.sceneKind === "character" ? `V (${who})` : "" }));
+  }
+  /**
    * A view's tools (design §3.9): the platform's and the shown modules' tools for its scene kind, each with its current state, the
    * action it dispatches and that action's capability. `filter` is the presentation's module visibility and research preference,
    * which the application is given, never reads. Every toolbar, view menu, palette entry and Display toggle renders this one list.
@@ -501,24 +516,35 @@ export class StudioApplication {
   viewSummaries(view: string | undefined, filter: Pick<ViewToolFilter, "modules">): ViewSummaryContribution[] {
     return structuredClone(this.services.viewActions?.summaries(view, filter) ?? []);
   }
+  /**
+   * A tool's current state and the action it dispatches on a view, from the action kind it names (`dispatches`), never its ID: any
+   * tool naming the same action resolves the same way.
+   */
   private resolveTool(view: string, tool: ViewToolContribution): ViewToolEntry {
     const entry = (action: StudioAction, extra: Partial<ViewToolEntry> = {}): ViewToolEntry =>
       ({ ...structuredClone(tool), shown: true, action, capability: this.capability(action), ...extra });
-    // A module's toggle lives in the view's tools node.
-    if (tool.state === "tools") {
-      const on = this.services.viewActions!.toolOn(view, tool.id);
-      return entry({ kind: "view.setTool", view, tool: tool.id, enabled: !on }, { on });
+    switch (tool.dispatches) {
+      // A toggle held in the view's tools node.
+      case "view.setTool": {
+        const on = this.services.viewActions!.toolOn(view, tool.id);
+        return entry({ kind: "view.setTool", view, tool: tool.id, enabled: !on }, { on });
+      }
+      // The subject's motion: play the idle, then pause and resume it; hidden where the head has no idle.
+      case "motion.setIdle": {
+        const motion = this.services.motion?.snapshot();
+        const playing = !!motion?.idle && !motion.idlePaused;
+        return entry(!motion?.idle ? { kind: "motion.setIdle", enabled: true, view } : { kind: "motion.setPaused", paused: !motion.idlePaused, view },
+          { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play the game idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
+      }
+      // A command on the view (a camera framing): the action it names, on this view.
+      default: return entry({ kind: tool.dispatches, view } as StudioAction);
     }
-    // The character's motion: play, pause and resume the idle; hidden where the head has no idle.
-    if (tool.id === "motion.idle") {
-      const motion = this.services.motion?.snapshot();
-      const playing = !!motion?.idle && !motion.idlePaused;
-      return entry(!motion?.idle ? { kind: "motion.setIdle", enabled: true, view } : { kind: "motion.setPaused", paused: !motion.idlePaused, view },
-        { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
-    }
-    // The camera's framing commands: the tool's ID is the action it dispatches on this view.
-    return entry({ kind: tool.id, view } as StudioAction);
   }
+  /**
+   * Withdraw the tools the presentation no longer offers (UI-102; `ViewActions.withdraw`): their state is kept, and no device acts
+   * on them until they are offered again. Given tool IDs, never module visibility (design §6.3 rule 6).
+   */
+  withdrawViewTools(tools: readonly string[]) { this.services.viewActions?.withdraw(tools); }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);
@@ -701,7 +727,9 @@ export class StudioApplication {
         dispatch: action => app.services.savedV!.dispatch(action),
       },
       views: {
-        capability: action => app.services.viewActions?.capability(action) ?? missing("Views are still loading."),
+        // A tool's state reaches the 3D view only once it is ready: before that a toggle would show nowhere and not be saved (UI-106).
+        capability: action => action.kind === "view.setTool" && !app.services.preview ? missing("The 3D view is still loading.")
+          : app.services.viewActions?.capability(action) ?? missing("Views are still loading."),
         dispatch: action => app.services.viewActions!.dispatch(action),
       },
       // Before the 3D preview is ready there is no context yet: a creator change is refused as `not_ready` (CORE-64).

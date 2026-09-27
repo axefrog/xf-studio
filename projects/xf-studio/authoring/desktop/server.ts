@@ -1,10 +1,12 @@
-import { mkdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
+import { createSavesHandler } from "../src/features/save-explorer/host/saves-server";
+import { savesHostSources } from "../src/saves-host-sources";
 import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, systemAnsiCodePage,
   windowsRunningApps } from "../src/mod-install-host";
 import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
@@ -23,11 +25,13 @@ import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
 import type { GameAssetExporter } from "../src/game-asset-export";
-import { PREVIEW_CORE_FILES } from "../src/preview-core-recipe";
-import { CharacterDetailHost } from "../src/character-detail-host";
+import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview-core-recipe";
+import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character-detail-host";
 import { installations } from "../src/installation-registry";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
+import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server";
+import { PoseCatalogueHost } from "../src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
 import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
@@ -136,6 +140,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationLocalSettings = createLocalSettingsHandler(verificationSettings, {}, settingsFeatures, () => wolvenKit.managedExecutable());
   const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
   const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
+  // The Save Explorer's read-only endpoints (the player's saves, installed scripts' names); a packaged app takes no folder override.
+  const savesRequest = createSavesHandler(savesHostSources({ allowOverride: false, exists: existsSync, settings: () => settingsStore.load().settings }),
+    diagnostics.log.logger("saves"));
   const token = randomBytes(32).toString("hex");
   // The core preview has one source: the derivation from the player's own game files.
   const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
@@ -154,6 +161,15 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
+  // Photo-mode poses (pose-library-design.md P1), from the same launch route and resolver cache as the creator options.
+  const poseSettings = () => {
+    const settings = savedSettings();
+    return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct" as const, mo2Root: settings?.mo2Root ?? null,
+      mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
+  };
+  const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+    resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), log: logTo("poses") });
+  const poseRequest = createPoseHandler(poses);
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
   const gradingLut = new GradingLutHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
     settings: () => {
@@ -190,7 +206,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     } }), installLog);
   const verificationModInstallRequest = createModInstallHandler(() => new ModInstallHost({ ...installPorts,
     receiptsRoot: verificationInstallReceipts(dataRoot), settings: () => verificationSettings.load().settings, readOnly: READ_ONLY_VERIFICATION }), installLog);
-  const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
+  const coreFiles = new Set<string>(PREVIEW_CORE_ASSET_NAMES);
   let server: ReturnType<typeof Bun.serve>;
   server = Bun.serve({
     hostname: "127.0.0.1", port: 0, maxRequestBodySize: 16_000_000,
@@ -225,6 +241,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
+      if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
       if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(routedRequest);
       if (url.pathname === "/api/desktop/wolvenkit") return wolvenKitRequest(routedRequest);
       if (url.pathname === "/api/desktop/open-link") {
@@ -311,6 +328,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         catch { return Response.json({ code: "picker_failed", error: "The folder picker couldn't open. Type the folder instead." }, { status: 500 }); }
       }
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
+      if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)

@@ -54,7 +54,7 @@ describe("the request (xfs/character-request-7 `nudity`)", () => {
   const context = () => new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: undefined, stored: undefined });
 
   test("the character context asks for the uncensored body only while the setting is on and the body shown; the same V either way", () => {
-    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-7");
+    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-8");
     const ctx = context();
     let published = 0;
     ctx.subscribe(() => published++);
@@ -89,7 +89,7 @@ describe("the request (xfs/character-request-7 `nudity`)", () => {
     expect(v6).toEqual({ schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female", body: false });
     expect(censorshipOf(v6)).toBe("censored");
     // A later page than this host is a version skew, said as such.
-    expect(() => parseCharacterRequest({ ...request, schema: "xfs/character-request-8" })).toThrow(CharacterRequestVersionError);
+    expect(() => parseCharacterRequest({ ...request, schema: "xfs/character-request-9" })).toThrow(CharacterRequestVersionError);
   });
 });
 
@@ -99,16 +99,42 @@ describe("the creator rows' coverage (cc-render-coverage.ts)", () => {
   const nudity = (action: "activate" | "deactivate") => ({ flag: "Censor_Nudity", action });
 
   test("what the underwear covers reads `uncensored` (drawn only in the uncensored look); another rule's hidden option is not drawn", () => {
-    expect(CC_PANEL_SCHEMA).toBe("xfs/cc-panel-3");
+    expect(CC_PANEL_SCHEMA).toBe("xfs/cc-panel-5");
     const options = [option("skin", "body_color", nudity("deactivate"), { link: { key: "skin color", controller: false } }),
       option("skin_censored", "body_color", nudity("activate"), { link: { key: "skin color", controller: false } }),
       option("cover", "underpants", nudity("activate")), option("nipples_02", "nipples", nudity("deactivate")),
       option("wound", "scars", { flag: "Censor_Gore", action: "deactivate" }),
       option("nipples", "nipples", undefined, { type: "switcher", hasResource: false, targets: ["nipples_02"], uiSlots: ["nipples"] })];
-    const coverage = renderCoverage(options, "female");
+    const coverage = renderCoverage(options);
     expect(["skin", "skin_censored", "cover", "nipples_02", "wound", "nipples"].map(id => coverage.get(id)!.status))
       .toEqual(["rendered", "not-rendered", "rendered", "uncensored", "not-rendered", "uncensored"]);
     expect(coverage.get("nipples_02")!.note).toBe(UNDER_COVER);
     expect(UNDER_COVER).toContain("uncensored");
+  });
+});
+
+describe("the request (xfs/character-request-8 `puppet`)", () => {
+  const context = () => new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: undefined, stored: undefined });
+
+  test("the context asks for the creator puppet's feet only while a creator idle plays and the body shows; the same V either way", () => {
+    const ctx = context();
+    const plain = ctx.detailRequest();
+    expect(plain.puppet).toBeUndefined();
+    ctx.setCreatorPuppet(true);
+    const creator = ctx.detailRequest();
+    expect(creator).toMatchObject({ puppet: "creator" });
+    expect(sameCharacter(plain, creator)).toBe(true);
+    ctx.setBodyShown(false);
+    expect(ctx.detailRequest().puppet).toBeUndefined();
+  });
+
+  test("the host reads it strictly, and a v7 request stands on the feet its footwear gives it", () => {
+    const request = { schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female", puppet: "creator" };
+    expect(parseCharacterRequest(request)).toEqual(request as never);
+    expect(() => parseCharacterRequest({ ...request, puppet: "inventory" })).toThrow("puppet is invalid");
+    expect(() => parseCharacterRequest({ ...request, body: false })).toThrow("no feet");
+    expect(() => parseCharacterRequest({ ...request, schema: "xfs/character-request-7" })).toThrow("unknown fields");
+    const v7 = parseCharacterRequest({ schema: "xfs/character-request-7", source: "default", bodyGender: "female", nudity: true });
+    expect(v7).toEqual({ schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female", nudity: true });
   });
 });

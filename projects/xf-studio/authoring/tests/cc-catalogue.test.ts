@@ -4,7 +4,8 @@ import type { CcoResource } from "../src/cco-model";
 import { catalogueCoverage, refineCoverage, renderCoverage, type CoverageInput } from "../src/cc-render-coverage";
 import { CC_PAGE_SIZE, choicePage, panelProjection, readCcPanel, readChoicePage } from "../src/cc-panel";
 import { loadMergedCco } from "../src/character-resolver";
-import { appearance, BASE_CCO, creator, fixtureSource, MOD_CCO, MOD_NAME, PRESENTATION, vanillaCreator } from "./cc-fixtures";
+import { appearance, BASE_CCO, creator, fixtureSource, MOD_CCO, MOD_NAME, PRESENTATION, switcher, TEXTS, vanillaCreator } from "./cc-fixtures";
+import { TextTable } from "../src/game-text";
 import { fixtureInstallation } from "./resolver-fixtures";
 
 describe("creator catalogue from the merged resource", () => {
@@ -61,6 +62,29 @@ describe("creator catalogue from the merged resource", () => {
     const row = catalogue.sections.flatMap(s => s.rows).find(r => r.slot === "piercings_color")!;
     expect(row.options).toEqual(["head/piercings_00", "head/piercings_01", "head/xl_ring"]);
     expect(catalogue.counts).toMatchObject({ modOptions: 1, modChoices: 5, modChoicesOnVanillaOptions: 3 });
+  });
+
+  test("Off is what the creator labels Off, never a choice inferred from adding nothing: the vanilla nipples row reads 01, 02, 03, Off", async () => {
+    // As in 2.31: the first nipples are in the skin's albedo (their option names no `.app`), 02–04 add the nipple `.app`, and only the
+    // last carries the game's Off label. The base face shape (a morph's None) adds nothing and is "01" too.
+    const body = [
+      switcher("nipples", [["01", ["nipples_01"]], ["02", ["nipples_02"]], ["03", ["nipples_03"]], ["Common-Off", ["nipples_04"]]],
+        { uiSlot: "nipples_switcher", slots: ["nipples"], index: 1020, category: "Body", loc: "UI-CharacterCreation-nipples" }),
+      appearance("nipples_01", null, ["None"], { uiSlot: "nipples", index: 1021, category: "Body" }),
+      ...["02", "03", "04"].map(n => appearance(`nipples_${n}`, "base\nipple.app", [`nipple_${n}`], { uiSlot: "nipples", enabled: false, index: 1021, category: "Body" })),
+    ];
+    const { graph } = fixtureInstallation([{ virtualPath: "archive/pc/content/basegame_4_gamedata.archive", files: { [BASE_CCO]: creator([], {}, body, { TPP_Body: ["nipples_02"] }) } }]);
+    const merged = await loadMergedCco(graph, "female", readCcoWithPresentation);
+    const catalogue = buildCatalogue({ bodyGender: "female", cco: merged.merged.cco, text: new TextTable("en-us").add(TEXTS, { id: "base", kind: "game", declaredBy: null }),
+      presentation: PRESENTATION, customs: [] });
+    const nipples = new CatalogueIndex(catalogue).option("body", "nipples")!;
+    // Structurally the first adds nothing (the save stores no entry for it); the creator calls it 01.
+    expect(nipples.choices.map(choice => [choice.label.text, choice.off, choice.labelledOff])).toEqual([["01", true, false], ["02", false, false], ["03", false, false],
+      ["OFF", false, true]]);
+    const { panel, mods } = panelProjection(catalogue, catalogueCoverage(catalogue), "t");
+    expect(panel.options.find(option => option.id === "body/nipples")!.off).toBe("Common-Off");
+    const page = choicePage(new CatalogueIndex(catalogue), mods, "body/nipples", 0)!;
+    expect(page.choices.map(choice => [choice.label, choice.off])).toEqual([["01", false], ["02", false], ["03", false], ["OFF", true]]);
   });
 
   test("links: the hidden followers are catalogued with their link and never get a row", async () => {
@@ -187,7 +211,7 @@ describe("hair coverage follows the hairstyle controller's group (PREV-109)", ()
       option("part_01", "mch_hair_part_01", ["hairs", "character_customization"]), option("part_02", "mch_hair_part_02", ["hairs", "character_customization"]),
       option("part_fpp", "mch_hair_fpp", ["character_customization", "FPP_hairs"]),
       option("mch", "None", [], { type: "switcher", hasResource: false, targets: ["part_01", "part_02", "part_fpp"], uiSlots: ["mch_hair_part_01", "mch_hair_fpp"] })];
-    const coverage = renderCoverage(options, "female");
+    const coverage = renderCoverage(options);
     expect(["hair_color1", "part_01", "part_02", "part_fpp", "mch"].map(id => [coverage.get(id)!.status, coverage.get(id)!.detail])).toEqual([
       ["rendered", "hair"], ["rendered", "hair"], ["rendered", "hair"], ["not-rendered", null], ["rendered", "hair"]]);
   });

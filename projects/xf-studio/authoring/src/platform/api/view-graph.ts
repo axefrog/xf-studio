@@ -25,6 +25,12 @@ export type RigKind = "studio" | "creator" | (string & {});
 export type GraphNode = { readonly id: string; readonly kind?: string; readonly state: Readonly<Record<string, unknown>> };
 /** One view: one node reference per slot. `title` is the name a person gave it (absent: derived from its scene). */
 export type ViewRecord = { readonly id: ViewId; readonly kind: "3d"; readonly title?: string } & { readonly [S in ViewSlot]: string };
+/**
+ * A view this build can't show, kept as stored: a newer build's view kind (a `map2d`), or a 3D view whose scene, camera or rig kind
+ * this build doesn't know (a World `location`). The graph writes it back unchanged and keeps the nodes it references alive; it is
+ * never drawn, listed or edited here, so opening a workspace in an older build never erases a newer build's views.
+ */
+export type KeptView = { readonly id: ViewId; readonly kind: string } & Readonly<Record<string, unknown>>;
 
 export const VIEW_GRAPH_1 = "xfs/view-graph-1";
 /** Where each slot's nodes are stored in `xfs/view-graph-1`. */
@@ -35,7 +41,8 @@ export const SLOT_COLLECTIONS = { scene: "scenes", camera: "cameras", lights: "l
  */
 export type ViewGraphData = {
   readonly schema: typeof VIEW_GRAPH_1;
-  readonly views: readonly ViewRecord[];
+  /** The views, in their stored order: those this build shows, and any it keeps unchanged (`KeptView`). */
+  readonly views: readonly (ViewRecord | KeptView)[];
   readonly scenes: readonly StoredNode[]; readonly cameras: readonly StoredNode[]; readonly lights: readonly StoredNode[];
   readonly display: readonly StoredNode[]; readonly tools: readonly StoredNode[];
   readonly focused: ViewId;
@@ -68,7 +75,10 @@ export type ViewGraphChange = {
   readonly views: readonly ViewId[];
   /** Views were added, removed or relinked, or the focus moved. */
   readonly structure: boolean;
-  /** `edit`: an action changed it; `history`: Undo, Redo or a camera Back/Forward; `seed`: restore-time state that records nothing. */
+  /**
+   * `edit`: an action changed it; `history`: Undo, Redo or a camera Back/Forward; `seed`: state that records nothing and marks no
+   * edit (restore-time state, or tools the presentation withdrew).
+   */
   readonly origin: "edit" | "history" | "seed";
   /** Whatever made the change already applied it to the device (a camera jump the device computed): readers must not apply it again. */
   readonly applied: boolean;
@@ -77,7 +87,22 @@ export type ViewGraphChange = {
 /** The View and lighting history's state (design §3.6): what Undo and Redo would change next. Session-only. */
 export type ViewHistoryState = { readonly undo?: string; readonly redo?: string; readonly depth: number; readonly redoDepth: number };
 
-/** A view ID a person or a file may give: short, lowercase letters, digits and dashes. */
-export const validViewId = (id: unknown): id is ViewId => typeof id === "string" && /^[a-z0-9][a-z0-9-]{0,31}$/.test(id);
+/**
+ * IDs no view may take (CORE-98): `uv` and `surface` are gesture sources (the flat UV editor, and the on-head editor's earlier name
+ * for the main view, `authoring-gestures.ts`), and `head` is the main view's panel and the viewport port's alias for it.
+ */
+export const RESERVED_VIEW_IDS: readonly string[] = Object.freeze(["uv", "surface", "head"]);
+/** A view ID a person or a file may give: short, lowercase letters, digits and dashes, and not reserved. */
+export const validViewId = (id: unknown): id is ViewId => typeof id === "string" && /^[a-z0-9][a-z0-9-]{0,31}$/.test(id) &&
+  !RESERVED_VIEW_IDS.includes(id);
 /** The dock panel that shows a view: `head` for the main view (kept so saved layouts restore), `view.<id>` for the others. */
 export const viewPanelId = (view: ViewId) => view === MAIN_VIEW ? "head" : `view.${view}`;
+/** A view's name when it has none of its own. */
+export const DEFAULT_VIEW_TITLE = "3D view";
+/**
+ * Each view's title, in graph order: its own name, else "3D view", numbered ("3D view 1", "3D view 2") when there are several.
+ * Derived, never stored, so the panel's ID and the saved layouts never depend on it. Pure.
+ */
+export function viewTitles(views: readonly Pick<ViewRecord, "id" | "title">[]): string[] {
+  return views.map((view, index) => view.title || (views.length > 1 ? `${DEFAULT_VIEW_TITLE} ${index + 1}` : DEFAULT_VIEW_TITLE));
+}

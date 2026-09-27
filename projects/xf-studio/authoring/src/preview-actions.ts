@@ -1,7 +1,8 @@
 import type { CameraState, PreviewState } from "./workspace-state";
 import { MAIN_VIEW, type ViewGraphChange, type ViewId } from "./platform/api/view-graph";
 import type { ViewGraph } from "./platform/core/view-graph";
-import { createStudioViewGraph, LEGACY_TOOL_FIELDS, previewFields, previewMirror, type DisplayState, type LightsState, type SceneState } from "./preview-view-graph";
+import { createStudioViewGraph, EYE_SHAPE_RANGE, LEGACY_TOOL_FIELDS, previewFields, previewMirror, type DisplayState, type LightsState,
+  type SceneState } from "./preview-view-graph";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
 import type { FaceMorphChoice } from "./face-morphs";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
@@ -52,7 +53,7 @@ export type LightingStatus = { preset: LightingPreset; sex: BodySex; defaultExpo
 /** The studio stage's named setups and the one the current lights match exactly (null once adjusted). Read-only; not persisted. */
 export type StudioSetupsView = { active: StudioSetupId | null; setups: { id: StudioSetupId; label: string; title: string }[] };
 /** Persisted workspace bounds before a head is loaded (the female creator's 22 choices). */
-export const MAX_EYE_SHAPE_INDEX = 21;
+export const MAX_EYE_SHAPE_INDEX = EYE_SHAPE_RANGE.max;
 export type PreviewPort = {
   cameraState(): CameraState; front(): boolean; setFov(degrees: number): boolean | undefined; endFovGesture(): void;
   restoreCamera(camera: CameraState): void;
@@ -96,7 +97,7 @@ type Shown = ReturnType<typeof previewFields>;
 export class PreviewActions {
   private listeners = new Set<() => void>();
   private readonly graph: ViewGraph;
-  /** What the device shows now, per graph field: a graph change applies only the difference. */
+  /** What the device shows now, per graph field (tools as applied: withdrawn tools off, UI-102): a change applies only the difference. */
   private applied: Shown;
   private dispatching = false;
   private readonly unsubscribe: () => void;
@@ -107,7 +108,9 @@ export class PreviewActions {
    */
   constructor(initial: PreviewState, private port: PreviewPort, graph?: ViewGraph, private readonly shown: ViewId = MAIN_VIEW) {
     this.graph = graph ?? createStudioViewGraph(initial);
+    // The device shows the stored state; a tool the presentation already withdrew goes off at once (UI-102).
     this.applied = previewFields(this.graph, shown);
+    this.apply(false);
     // The LUT arrives from the host after the preset turns on; readers learn of it like any other change.
     port.onLightingStatus?.(() => this.notify());
     this.unsubscribe = this.graph.subscribe(change => this.follow(change));
@@ -118,13 +121,15 @@ export class PreviewActions {
   /** The graph changed: the device applies what changed for the view it draws (Undo, Redo, a shared node edited elsewhere). */
   private follow(change: ViewGraphChange) {
     if (!change.views.includes(this.shown) && !change.structure) return;
-    if (change.applied) this.applied = previewFields(this.graph, this.shown);
+    if (change.applied) this.applied = this.shownFields();
     else this.apply(change.origin === "history");
     if (!this.dispatching) this.notify();
   }
+  /** What the device should show for the view it draws: its graph state, with the tools the presentation withdrew off. */
+  private shownFields() { return previewFields(this.graph, this.shown, { active: true }); }
   /** Push the shown view's graph state to the device, field by field, in the order the controls always set them. */
   private apply(camera: boolean) {
-    const next = previewFields(this.graph, this.shown), was = this.applied, port = this.port;
+    const next = this.shownFields(), was = this.applied, port = this.port;
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     this.applied = next;
     if (next.rig !== was.rig) port.setLightingPreset?.(next.rig);

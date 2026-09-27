@@ -94,8 +94,9 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
     strength: new Slider({ label: "Shift strength", ...ctx.range("layer.setShift", "value", "strength"), step: .01, format: pct,
       transaction: recipeTransaction<number>(ctx, "shift-strength", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "strength", value })) }),
   };
-  const shiftSection = section("Colour shift", h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element),
-    note("The shift colour is added toward the edges of the lid as the view angle grows, the way the game's gradient-recolour decal adds its Fresnel colour. One shift colour per preset exports; it is not thin-film or multichrome."));
+  // What the shift is, in the heading's help tip (help-tip.ts).
+  const shiftSection = section({ title: "Colour shift", help: ["The shift colour is added toward the edges of the lid as the view angle grows, the way the game's gradient-recolour decal adds its Fresnel colour.",
+    "One shift colour per preset exports; it is not thin-film or multichrome."] }, h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element));
 
   // Glitter preview suite and flake studies.
   const model = new SelectField<GlitterModel>({ label: "Glitter preview model", onChange: value => {
@@ -142,8 +143,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   const modelChoice = h("div", { class: "research-only" }, model.element, modelSummary);
   const glitterSection = section("Glitter", modelChoice,
     note("Preview only: Glitter can't be built into a mod yet, so it is left out of your mod files. Layer colour sets the base colour; facet colour is separate.", "warning"));
-  const classicSection = section("Flakes", classic.cells.element, classic.density.element, classic.tilt.element,
-    note("Turn the head to see the flakes catch the light. Experimental: may look different in game."));
+  const classicSection = section({ title: "Flakes", help: ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."] },
+    classic.cells.element, classic.density.element, classic.tilt.element);
   const irregularSection = section("Irregular flakes", irregular.count.element, measurement, irregular.radius.element, irregular.spread.element, irregular.tilt.element, irregular.color.element);
   const directSection = section("Glint facets", direct.density.element, direct.fineShare.element, direct.strength.element, direct.color.element);
   const body = h("div", { class: "stack" },
@@ -201,7 +202,9 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         setText(modelSummary, catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
       }
       if (!classicSection.hidden) {
-        setText(classicSection.querySelector(".section-title")!, glitter ? "Classic reflective flakes" : "Shimmer flakes");
+        const flakesTitle = glitter ? "Classic reflective flakes" : "Shimmer flakes";
+        setText(classicSection.querySelector(".section-title")!, flakesTitle);
+        setAttr(classicSection.querySelector(".help-tip")!, "aria-label", `About ${flakesTitle}`);
         // A layer without stored flakes shows the classic model's defaults from the catalogue (UI-93).
         const legacy = flakes && !("model" in flakes) ? flakes as ReadonlyDeep<LegacyFlakes> : glitterModel.defaults as { cells: number; density: number; tilt: number };
         classic.cells.update(legacy.cells); classic.density.update(legacy.density); classic.tilt.update(legacy.tilt);
@@ -367,8 +370,8 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
   let signature = "";
   const selected = section("Selected warp", reach.element, h("div", { class: "row wrap gap-s" }, clear, remove));
   const body = h("div", { class: "stack" },
-    section("Warps", h("div", { class: "row between" }, chips, add), fieldNote), selected,
-    note("A warp bends the makeup mask, not the face. Its pull fades smoothly beyond the reach ring; overlapping warps add together."));
+    section({ title: "Warps", help: "A warp bends the makeup mask, not the face. Its pull fades smoothly beyond the reach ring; overlapping warps add together." },
+      h("div", { class: "row between" }, chips, add), fieldNote), selected);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "warp", ...EYE_MAKEUP_PANEL_META.warp, element },
