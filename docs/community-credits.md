@@ -80,6 +80,10 @@ By the WolvenKit team and contributors. [GitHub](https://github.com/WolvenKit/Wo
 
 ## Libraries, runtimes and general tools
 
+### Apple ARKit face tracking
+
+By Apple. [Blend shape documentation](https://developer.apple.com/documentation/arkit/arfaceanchor/blendshapelocation). Its 52 named facial blend shapes, which MediaPipe and many face tools share, are the vocabulary our face-capture prototype maps onto V's face controls. Only the names and their descriptions were used.
+
 ### Blender
 
 By the Blender Foundation and contributors. [blender.org](https://www.blender.org/). Blender powers our offline mesh work, eye-plate clearance studies and diagnostic renders; its BVH ray-casting API made it possible to tell visible intersections from hidden ones. Its status bar, which shows what the mouse and held modifier keys do in the current context, is the model for the Studio's viewport input hints. Its workspaces, saved sets of editors and layout switched from header tabs, are the model for the Studio's planned named workspaces over combinable modules.
@@ -99,6 +103,10 @@ By Hans-Kristian Arntzen. [GitHub](https://github.com/HansKristian-Work/dxil-spi
 ### Electrobun and Hutch
 
 By Blackboard Technologies Inc. and contributors. [Electrobun](https://github.com/blackboardsh/electrobun), [Hutch](https://github.com/blackboardsh/hutch). Electrobun's documentation shaped XF Studio's desktop packaging, update, shutdown and uninstall design, and it is the framework for our desktop packaging trial. Electrobun is MIT-licensed and its notice must accompany any distributed build, together with the notices of its bundled dependencies.
+
+### ICT-FaceKit
+
+By the USC Institute for Creative Technologies. [GitHub](https://github.com/ICT-VGL/ICT-FaceKit). Surveyed as an open (MIT) face model whose expression shapes follow the ARKit names split by side; it confirmed that convention for our blendshape mapping. Nothing from it is used.
 
 ### Inno Setup
 
@@ -127,6 +135,10 @@ By Oskar Schöldström and contributors. [GitHub](https://github.com/fstirlitz/l
 ### MCP TypeScript SDK
 
 By Anthropic and the Model Context Protocol contributors. [GitHub](https://github.com/modelcontextprotocol/typescript-sdk). The XF Runtime Bridge's MCP server, which lets an AI client drive in-game tests through the bridge, is built on it, and its client runs our end-to-end tests. It is a development dependency (MIT) of the bridge's tools.
+
+### MediaPipe Face Landmarker
+
+By Google (model cards by Ivan Grishchenko, Geng Yan, Andrei Zanfir and Eduard Gabriel Bazavan). [Guide](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker). Its web library and face model, which estimate 52 blendshape scores from a face image on the user's own computer, drive V's face in our face-capture prototype. Both are Apache-2.0 and run locally from the official downloads; the library's usage-metrics upload is blocked by the page. Nothing from it ships in XF Studio.
 
 ### Fengari
 
@@ -415,6 +427,30 @@ Fábio Policarpo, Manuel M. Oliveira and João L. D. Comba, "Real-Time Relief Ma
 
 Michael Toksvig, "Mipmapping Normal Maps" (Journal of Graphics Tools), and Marc Olano and Dan Baker, [LEAN Mapping](https://www.csee.umbc.edu/~olano/papers/lean/). Their idea of turning normal variance lost to mipmapping into wider roughness shapes the Shimmer export's lower mip levels.
 
+### Ekman and Friesen: the Facial Action Coding System
+
+Paul Ekman and Wallace V. Friesen, *Facial Action Coding System* (1978; manual with Joseph C. Hager, 2002), and their EMFACS emotion prototypes. The action units and intensity scale are the language our natural-expression recipes and the mapping onto V's face controls are written in.
+
+### Ekman, Davidson and Friesen (1990)
+
+Paul Ekman, Richard J. Davidson and Wallace V. Friesen, "The Duchenne smile: emotional expression and brain physiology II" (*Journal of Personality and Social Psychology*). With Duchenne's own work, it established that felt smiles involve the muscle around the eyes, which is why our warm smile narrows the eyes and why the vanilla smiles look posed.
+
+### Ekman, Hager and Friesen (1981)
+
+Paul Ekman, Joseph C. Hager and Wallace V. Friesen, "The symmetry of emotional and deliberate facial actions" (*Psychophysiology*). Its finding that asymmetric smiles are more typical of deliberate expressions shaped how much asymmetry our samples use.
+
+### Rozin and Cohen (2003)
+
+Paul Rozin and Adam B. Cohen, "High frequency of facial expressions corresponding to confusion, concentration, and worry in an analysis of naturally occurring facial expressions of Americans" (*Emotion*). It informed our confusion expression: knitted brows and a one-sided face.
+
+### Glenberg, Schroeder and Robertson (1998)
+
+Arthur M. Glenberg, Jennifer L. Schroeder and David A. Robertson, "Averting the gaze disengages the environment and facilitates remembering" (*Memory & Cognition*). The reason our thinking expression looks away.
+
+### Casiez, Roussel and Vogel (2012)
+
+Géry Casiez, Nicolas Roussel and Daniel Vogel, "1€ Filter: a simple speed-based low-pass filter for noisy input in interactive systems" (CHI 2012). The face-capture prototype smooths blendshape scores with this filter, implemented from the paper.
+
 ## Reference imagery
 
 ### Jewellery form and fit references
@@ -424,6 +460,10 @@ The Association of Professional Piercers' [jewellery](https://safepiercing.org/w
 ### Nail polish finish references
 
 Product and guide pages from [OPI](https://www.opi.com/collections/shimmer-nail-polish), [ILNP](https://www.ilnp.com/mega-l-100-pure-linear-holographic-nail-polish/), [Holo Taco](https://www.holotaco.com/pages/magnetics), [Ready Ready](https://www.thereadyready.com/blogs/nail-trends/cat-eye-nails-explained), [Beetles](https://www.beetlesgel.com/blogs/guides/chrome-nail-powder) and [Cirque Colors](https://www.cirquecolors.com/blogs/blog/jelly-is-our-jam). They taught us the vocabulary and intended looks of nail finishes (crème, shimmer, glitter, linear and scattered holographic, magnetic cat-eye, chrome powder and jelly) behind the proposed nail finish families. Viewed as references only.
+
+### Duchenne de Boulogne's photographs
+
+Guillaume-Benjamin-Amand Duchenne (de Boulogne), photographs for *Mécanisme de la physionomie humaine* (about 1856–1862), Figures 7, 32, 45, 51 and 54 in the [Cleveland Museum of Art](https://clevelandart.org/art/2018.9)'s open-access collection (CC0), via Wikimedia Commons. His study of the smile is the origin of the Duchenne marker, and these photographs were real-face test inputs for the face-capture prototype. Used locally; not redistributed.
 
 ## Community members we are still identifying
 

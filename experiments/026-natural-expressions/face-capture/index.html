@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face capture prototype</title>
+<style>
+  :root { --bg: #f4f4f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #676760; --line: #d9d9d4; --accent: #0f766e; --live: #c62828; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1b1b1a; --panel: #242423; --ink: #ecece8; --muted: #a3a39c; --line: #3a3a38; --accent: #2dd4bf; --live: #ef5350; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--ink); display: grid; grid-template-columns: 380px 1fr; height: 100vh; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 14px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  h1 { font-size: 15px; margin: 0; }
+  p { margin: 0; color: var(--muted); }
+  button { font: inherit; padding: 6px 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 4px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .video { position: relative; background: #000; aspect-ratio: 4 / 3; border-radius: 4px; overflow: hidden; }
+  .video video, .video img { width: 100%; height: 100%; object-fit: contain; }
+  .video.mirrored video { transform: scaleX(-1); }
+  /* The camera indicator never shifts layout: it is always there, and only its state changes. */
+  .indicator { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 10px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; visibility: hidden; }
+  .indicator.on { visibility: visible; }
+  .indicator::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--live); margin-right: 6px; vertical-align: 0; }
+  .consent { border: 1px solid var(--line); border-radius: 4px; padding: 10px; display: grid; gap: 8px; }
+  label { display: grid; grid-template-columns: 110px 1fr 42px; gap: 8px; align-items: center; }
+  label span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bars { display: grid; grid-template-columns: 150px 1fr; gap: 2px 8px; font-size: 11px; }
+  .bar { height: 10px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .metrics { font: 11px/1.5 ui-monospace, monospace; white-space: pre; color: var(--muted); min-height: 7.5em; }
+  main { position: relative; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Face capture (prototype)</h1>
+  <p>Drives V's face in the Studio beside it from a camera or a test file, through MediaPipe Face Landmarker's 52 blendshapes and the experiment 026 mapping.</p>
+  <div class="consent" id="consent">
+    <strong>Use your camera?</strong>
+    <p>Your camera picture stays on this computer. It is read here, frame by frame, and never uploaded or saved. Only the expression numbers you choose to capture are saved, to your expression library.</p>
+    <div class="row"><button class="primary" id="camera">Turn camera on</button><button id="stop" disabled>Turn camera off</button></div>
+  </div>
+  <div class="row"><select id="media" aria-label="Test file"></select><button id="play">Use test file</button></div>
+  <div class="video" id="stage"><span class="indicator" id="indicator">Camera on</span><video id="video" playsinline muted></video></div>
+  <div class="row"><button id="neutral">Set my neutral face</button><button id="clearNeutral">Clear</button><label style="display:flex;gap:6px"><input type="checkbox" id="swap"> Swap left and right</label></div>
+  <label>Strength <input type="range" id="gain" min="0.3" max="2" step="0.05" value="1"><span id="gainv">1.00</span></label>
+  <label>Upper face <input type="range" id="upper" min="0.3" max="2" step="0.05" value="1"><span id="upperv">1.00</span></label>
+  <label>Smoothing <input type="range" id="smooth" min="0.2" max="5" step="0.1" value="1.5"><span id="smoothv">1.5</span></label>
+  <div class="row"><input id="name" placeholder="Name this expression" aria-label="Expression name"><button id="capture">Capture this expression</button></div>
+  <p id="status" role="status"></p>
+  <div class="metrics" id="metrics"></div>
+  <div class="bars" id="bars"></div>
+</aside>
+<main><iframe id="studio" title="XF Studio (verification workspace)" src="/?verify=1"></iframe></main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

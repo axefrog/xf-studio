@@ -11,7 +11,7 @@ Research notes, contracts and evidence for XF Studio and related Cyberpunk 2077 
 | [materials/](materials/) | Makeup finish taxonomy, REDengine shader/material studies, preset compiler contract, glitter/glossy/colour-shift studies. |
 | [eye-artistry/](eye-artistry/) | Saved-V import and resource resolution (eyes, brows, lashes, hair, skin), preview fidelity audits, Eye Artistry lineage. |
 | [character-customization/](character-customization/) | CC file-chain map, CCXL merge boundary, read-only catalogue probe, portable mod-source resolution. |
-| [animation/](animation/) | Character-creator idle playback, idle control design, brow idle gap. |
+| [animation/](animation/) | Character-creator idle playback, idle control design, brow idle gap, expressions (editor design, natural FACS expressions, face capture). |
 | [brows/](brows/brow-editor-design.md) | Brow editor design: field-driven groom into the brow texture set, platform fit and phased plan. |
 | [jewellery/](jewellery/) | Vanilla piercing preview, PRC inventory/preview/catalogue audit, jewellery construction-set proposal, earring references. |
 | [nails/](nails/nail-salon-design.md) | Nail Salon design: how V's nails render, a nail-board vector editor, nail finishes and an additive export to the game's Nails row. |
