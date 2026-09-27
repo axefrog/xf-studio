@@ -103,7 +103,16 @@ In order:
 
    Feasibility, editor options, export plan and runtime questions: [expressions and idles brief](expressions-and-idles-brief.md). Phased design for static photo-mode expressions (the decided first scope): [expression editor design](../animation/expression-editor-design.md).
 
-   **Pose editor** (requested 27 September 2026; design ready, needs discussion): design poses in the Studio (FK gizmos on the 71-joint body rig, limb IK with pins, grounding and the game's foot snap, mirroring, hands, start from any installed pose, a linked expression) and export them as photo-mode poses in the XF mod or split as XF Poses (a 2-frame `.anims` set, TweakXL records and a category, an ArchiveXL `animations:` entry on the photo-mode scope). Phases E1–E5, about four weeks after the pose library's P0–P2; twelve questions with proposed defaults; in-game checks PE1–PE7: [pose editor design](../animation/pose-editor-design.md).
+   **Pose editor** (requested 27 September 2026; design ready, needs discussion): design poses in the Studio (FK gizmos on the 71-joint body rig, limb IK with pins, grounding and the game's foot snap, mirroring, hands, start from any installed pose, a linked expression) and export them as photo-mode poses in the XF mod or split as XF Poses (a 2-frame `.anims` set, TweakXL records and a category, an ArchiveXL `animations:` entry on the photo-mode scope). Phases E1–E5, about four weeks after the pose library's P0–P2; twelve questions with proposed defaults; in-game checks PE1–PE7: [pose editor design](../animation/pose-editor-design.md). Photo mode's Customization head and body angle controls come to the Studio as part of its first phase (requested 28 September 2026), shaped so the runtime bridge can drive them later.
+
+   **Animated preset changes** (requested 28 September 2026; in progress): an option to ease between expression presets over 0–3 s instead of cutting, to judge how natural a transition looks. Poses follow. Its easings are the shared catalogue the timeline editor will use.
+
+   **Timeline animation editor** (R&D requested 28 September 2026; not started): author animated expressions, poses and idles on a timeline. The requested features:
+   - keyframes, with tweakable easing between them;
+   - several tracks, with each animatable element in only one track at a time;
+   - preset animations such as a blink or a subtle gaze shift, triggered at chosen times or intervals.
+
+   The R&D covers the technical unknowns (clip authoring and export to `.anims`, how the game layers idles, blinks and look-at) and the best UI/UX.
 6. Tattoos
 
    How vanilla and modded tattoos work, a proposed XF Tattoos design (decal canvases cut from the V's own skin, placed stencils, per-look atlases), a phased plan and questions for the maintainer: [tattoos brief](../character-customization/tattoos-brief.md).

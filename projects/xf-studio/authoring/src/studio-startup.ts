@@ -227,6 +227,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     selected: () => core.presentation.selected, ...fieldHooks,
     canvases: () => previewDevice.canvases,
     albedo: () => scene?.albedo.image as HTMLImageElement | undefined,
+    surfaceEdge: () => core.app.surfaceEdge(core.presentation.layer()?.id),
     begin: () => { const layer = core.presentation.layer(); if (layer) core.app.beginGesture("uv", layer.id); },
     apply: proposal => core.app.applyGesture("uv", proposal),
     cancel: () => core.app.endGesture("uv", true), finish: () => core.app.endGesture("uv"),
@@ -283,6 +284,9 @@ async function start(host: StudioHost, root: HTMLElement) {
       // The skin scatter (platform/scene/skin-scatter.ts): switch it off for the wrap stand-in and on again (A/B evidence), and its state.
       scatter: (mode: boolean | "bare") => { scene?.lighting.setScatter(mode); scene?.requestRender(); },
       scatterEvidence: () => scene ? scene.lighting.scatter.evidence() : null,
+      // Character contact shadows (platform/scene/contact-shadow.ts): off and on again for A/B captures, and what the last frame marched toward.
+      contact: (on: boolean) => { scene?.lighting.setContactShadows(on); scene?.requestRender(); },
+      contactEvidence: () => scene ? scene.lighting.contact.evidence() : null,
       scatterScale: (scale: number | null) => { scene?.lighting.setScatterScale(scale); scene?.requestRender(); },
       // The scatter's own passes (input, both blurs), `passes` times back to back after one frame, the GPU finished at both ends.
       scatterPassMs: (passes: number) => {

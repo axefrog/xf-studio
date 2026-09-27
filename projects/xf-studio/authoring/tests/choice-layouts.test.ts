@@ -13,7 +13,7 @@ afterAll(() => uninstallLightDom());
 const LABELS = ["Afro", "Bob", "Braids", "Bun", "Curly", "Dreads", "Émile", "Fringe", "Mohawk", "Pixie", "Ponytail", "Quiff", "Topknot", "Undercut"];
 const choices: CcPanelChoice[] = LABELS.map((label, position) => ({ key: `k${position}`, position, label, off: false, color: null, mod: position % 2 ? 0 : -1 }));
 const row = (over: Partial<ChoicePreviewRow> = {}): ChoicePreviewRow => ({ kind: "hair", urls: new Map([[1, "blob:still-1"], [3, "blob:still-3"]]),
-  spins: new Map([[3, "blob:spin-3"]]), frames: 24, none: new Set(), busy: false, live: null, ...over });
+  spins: new Map([[3, "blob:spin-3"]]), frames: 24, none: new Set(), busy: false, live: null, notice: null, ...over });
 const input = (layout: "grid" | "list" | "details", size: "s" | "m" | "l" = "m", extra = {}) => ({ option: "head/hair", query: "", label: "Hairstyle", grid: false,
   choices, selected: 1, mods: ["Sample Hair Pack"], loading: false, error: null, groups: null,
   fetch: new Map([[0, "r" as const], [1, "r" as const], [2, "n" as const]]), previews: { size, layout, row: row() }, ...extra });

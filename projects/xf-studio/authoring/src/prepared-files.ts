@@ -5,22 +5,42 @@
  * - `resolver`: the resolver's extracted JSON (`json/`), one file per resource, archive identity and WolvenKit identity, and the empty
  *   markers of resources the native reader answered (`native/`, resolver-host.ts `NativeAnswerFiles`);
  * - `store`: the content-addressed files and records the preview loads (`files/`, `records/`, `chunks/`);
- * - `manifests`: what each prepared request depended on (choice-manifest.ts).
+ * - `manifests`: what each prepared request depended on (choice-manifest.ts);
+ * - `previews`: choice preview images and sources (choice-preview-host.ts), counted by their store and removed by Clear with it.
  *
  * **Budget.** Exports and extracted JSON are kept within a byte budget by evicting the least recently used first (their use time is the
  * modification time of an export's `entry.json` or a JSON file, set when a cache hit uses it: game-asset-export.ts `touchUsed`).
- * Anything used by this process is never evicted, so a V on screen, its tried choices and a running preparation keep their files; the
- * budget can be exceeded by what this session uses, and eviction then stops. The resolver's failure markers, archive indexes and
- * creator texts are small and kept. The store and manifests are removed only by Clear.
+ * Choice preview images and sources are evicted the same way (PREV-157; their use time is set when the store serves or keeps one), so
+ * pictures a style or turntable version bump orphaned go first once the budget is reached. Anything used by this process is never
+ * evicted, so a V on screen, its tried choices, the pictures shown and a running preparation keep their files; the budget can be
+ * exceeded by what this session uses, and eviction then stops. The resolver's failure markers, archive indexes and creator texts are
+ * small and kept. The store and manifests are removed only by Clear.
  */
 import { lstat, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { usedThisSession } from "./game-asset-export";
 
-export type PreparedRoots = { exports: string; resolver: string; store: string; manifests: string };
+export type PreparedRoots = { exports: string; resolver: string; store: string; manifests: string;
+  /** Choice previews (`images/*.webp`, `sources/*.json`): evicted with the budget; their size is counted and cleared by their store. */
+  previews?: string };
 /** Default budget for exports and extracted JSON together. */
 export const PREPARED_BUDGET_BYTES = 8 * 1024 ** 3;
 export type PreparedSize = { bytes: number; exports: number; resolver: number; store: number; manifests: number };
+
+/**
+ * The prepared files' budget from `XFS_PREPARED_BUDGET_GB` (CORE-113): `off` (or `0`, the older spelling) never evicts, which a
+ * verification server borrowing another checkout's warm caches relies on; a positive number of gigabytes sets it. Unset gives the
+ * default (undefined); anything else is reported through `warn` and ignored, so a typo never silently turns eviction off.
+ */
+export function preparedBudgetFrom(value: string | undefined, warn: (message: string) => void = () => {}): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const text = value.trim().toLowerCase();
+  if (text === "off" || text === "0") return Infinity;
+  const gigabytes = Number(text);
+  if (Number.isFinite(gigabytes) && gigabytes > 0) return gigabytes * 1024 ** 3;
+  warn(`XFS_PREPARED_BUDGET_GB must be "off" or a positive number of gigabytes; "${value}" is ignored and the default budget is used.`);
+  return undefined;
+}
 
 /**
  * How many file-system calls the prepared files' checks keep in flight, all of them together (PREV-125): a size count walks every
@@ -118,12 +138,17 @@ async function exportEntries(root: string): Promise<Evictable[]> {
   });
   return out;
 }
-async function jsonEntries(root: string): Promise<Evictable[]> {
-  const folder = join(root, "json");
+async function jsonEntries(root: string): Promise<Evictable[]> { return fileEntries(join(root, "json"), ".json"); }
+/** Choice preview images and sources, file by file. */
+async function previewEntries(root: string | undefined): Promise<Evictable[]> {
+  if (!root) return [];
+  return [...await fileEntries(join(root, "images"), ".webp"), ...await fileEntries(join(root, "sources"), ".json")];
+}
+async function fileEntries(folder: string, suffix: string): Promise<Evictable[]> {
   let names: string[];
   try { names = await limited(() => readdir(folder)); } catch { return []; }
   const out: Evictable[] = [];
-  await eachBounded(names.filter(name => name.endsWith(".json")), async name => {
+  await eachBounded(names.filter(name => name.endsWith(suffix)), async name => {
     const path = join(folder, name);
     try { const info = await limited(() => stat(path)); out.push({ path, usedMs: info.mtimeMs, bytes: info.size, folder: false }); } catch { /* Gone. */ }
   });
@@ -131,14 +156,15 @@ async function jsonEntries(root: string): Promise<Evictable[]> {
 }
 
 /**
- * Keep exports and extracted JSON within `budget` bytes: the least recently used go first, never one this process used. Returns what was
+ * Keep exports, extracted JSON and choice previews within `budget` bytes: the least recently used go first, never one this process used. Returns what was
  * removed and the size after. Under budget (the usual case) it only counts their size: nothing is listed entry by entry (PREV-125).
  */
 export async function evictPrepared(roots: PreparedRoots, budget = PREPARED_BUDGET_BYTES): Promise<{ removed: number; freed: number; bytes: number }> {
-  const counted = (await Promise.all([folderBytes(roots.exports, exportsSkip), folderBytes(join(roots.resolver, "json"), name => !name.endsWith(".json"))]))
+  const counted = (await Promise.all([folderBytes(roots.exports, exportsSkip), folderBytes(join(roots.resolver, "json"), name => !name.endsWith(".json")),
+    roots.previews ? folderBytes(roots.previews, name => name.endsWith(".tmp")) : 0]))
     .reduce((sum, bytes) => sum + bytes, 0);
   if (counted <= budget) return { removed: 0, freed: 0, bytes: counted };
-  const entries = [...await exportEntries(roots.exports), ...await jsonEntries(roots.resolver)];
+  const entries = [...await exportEntries(roots.exports), ...await jsonEntries(roots.resolver), ...await previewEntries(roots.previews)];
   let bytes = entries.reduce((sum, entry) => sum + entry.bytes, 0), removed = 0, freed = 0;
   if (bytes <= budget) return { removed, freed, bytes };
   entries.sort((a, b) => a.usedMs - b.usedMs);

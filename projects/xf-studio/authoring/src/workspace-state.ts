@@ -246,7 +246,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     const lights = (p as { studioLights?: unknown }).studioLights;
     if (validStudioLights(lights)) state.preview.studioLights = { environment: lights.environment, key: lights.key,
       elevation: lights.elevation, fill: lights.fill, rim: lights.rim, neutral: lights.neutral };
-    // The person's own setups, all or nothing; they decide the preset (the legacy fields only approximate them for older builds).
+    // The person's own setups (a damaged one is dropped alone, PREV-161); they decide the preset (the legacy fields only approximate them for older builds).
     const setups = parseSetupLibrary((p as { lightingSetups?: unknown }).lightingSetups);
     if (setups?.setups.length) { state.preview.lightingSetups = setups; state.preview.lightingPreset = rigKindOf(setups); }
     if (state.preview.idle) { state.preview.blinkPlaying = false; state.preview.blink = 0; }

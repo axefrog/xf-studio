@@ -30,6 +30,7 @@ import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "./src/choice-preview-server";
+import { preparedBudgetFrom } from "./src/prepared-files";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
@@ -116,11 +117,10 @@ const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // Brows, lashes and hair: resolved from the launch route Build uses and exported from the winning archives.
 // The resolver's JSON cache is shared with `tools/resolve-character.ts`; `XFS_RESOLVER_CACHE` relocates it.
 // Choice previews live in `choice-previews/` beside it; `XFS_CHOICE_PREVIEW_CACHE` relocates them (a verification server keeps its own).
-// `XFS_PREPARED_BUDGET_GB` sets the prepared files' disk budget (prepared-files.ts; `off` never evicts): a verification server borrowing
+// `XFS_PREPARED_BUDGET_GB` sets the prepared files' disk budget (prepared-files.ts `preparedBudgetFrom`; `off` never evicts): a verification server borrowing
 // another server's warm caches turns eviction off so it never trims them.
-const preparedBudget = process.env.XFS_PREPARED_BUDGET_GB === "off" ? Infinity
-  : Number(process.env.XFS_PREPARED_BUDGET_GB) > 0 ? Number(process.env.XFS_PREPARED_BUDGET_GB) * 1024 ** 3 : undefined;
-const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, ...(preparedBudget ? { preparedBudget } : {}),
+const preparedBudget = preparedBudgetFrom(process.env.XFS_PREPARED_BUDGET_GB, message => { hostFailure("character", "prepared_budget_setting", message, undefined, "warn"); });
+const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, ...(preparedBudget !== undefined ? { preparedBudget } : {}),
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
     const settings = localSettings.load().settings;

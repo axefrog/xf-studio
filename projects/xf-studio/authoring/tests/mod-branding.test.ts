@@ -90,4 +90,4 @@ test("no TypeScript module outside mod-branding spells the mod name", () => {
     .filter(file => /XF Eye Artistry(?! CCXL - Dev)/.test(sourceText(file)))
     .map(file => relative(authoring, file));
   expect(offenders).toEqual([]);
-});
+}, 30_000); // A whole-tree walk: the default 5 s is too short while other suites load the machine.

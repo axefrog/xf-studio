@@ -39,6 +39,7 @@ import { contextCandidates, contextScope, geometryHit,
 import { finishCatalogue, glitterModelCatalogue } from "./engines/layered-makeup/finish-catalogue";
 import { mottleCatalogue } from "./engines/layered-makeup/mottle";
 import { layerExport, planPresetExport, type LayerExport } from "./engines/layered-makeup/finish-export";
+import { layerEdgeReach, type SurfaceOutline } from "./engines/layered-makeup/surface-edge";
 
 /**
  * Each owner this application binds a handler for, with its action union, keyed by owner ID. The
@@ -121,7 +122,9 @@ type Services = { document: AuthoringDocument;
   /** Part presets in the library (part-presets.ts), for every feature's favourites. */
   presets?: PartPresetService;
   /** The live facial preview (facial-preview.ts): the held expression on the head, and what a feature's drawer shows. */
-  facial?: FacialPreview };
+  facial?: FacialPreview;
+  /** The edited layered surface's outer boundary in UV, once the head is loaded (surface-edge.ts). */
+  surfaceOutline?: SurfaceOutline };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -503,6 +506,20 @@ export class StudioApplication {
     const plan = planPresetExport({ layers: layers.map(item => item === layer ? shown : item) });
     const excluded = plan.excluded.find(item => item.layer === shown);
     return excluded ? { exportable: false, reason: excluded.reason, blockedBy: "preset" } : alone;
+  }
+  /**
+   * Where one layer of the current preset is cut off by the edge of the surface it is drawn on (PREV-146): the outer-boundary segments
+   * (`u0, v0, u1, v1` each) at which it still has coverage, judged as if shown; empty when it fades out inside the surface, and undefined
+   * before the head is loaded or for an unknown layer. Output is unchanged: this only lets the editor say so.
+   */
+  layerSurfaceEdge(layerId: string): Float64Array | undefined {
+    const outline = this.services.surfaceOutline, layer = this.services.document.recipe.layers.find(item => item.id === layerId);
+    return outline && layer ? layerEdgeReach(layer, outline, this.services.eyeMakeup.region.mirror) : undefined;
+  }
+  /** The edited surface's outline and the cut segments of one layer (none without it), for the UV editor's overlay; undefined before the head. */
+  surfaceEdge(layerId: string | undefined): { outline: Float64Array; cut: Float64Array } | undefined {
+    const outline = this.services.surfaceOutline;
+    return outline ? { outline: outline.segments, cut: (layerId && this.layerSurfaceEdge(layerId)) || new Float64Array() } : undefined;
   }
   glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup.region.wording); }
   /** Mottle's presets (ID, label and every setting but the seed): the inspector's preset row and which one a layer matches. */

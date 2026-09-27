@@ -6,6 +6,8 @@ import { createLinearDisplay } from "./linear-display";
 import type { GradingLut, GradingLutSource } from "./grading-lut";
 import { installShadowFilter } from "./shadow-filter";
 import { createSkinScatter } from "./platform/scene/skin-scatter";
+import { createContactShadows, setContactShadows } from "./platform/scene/contact-shadow";
+import { contactShadowUniforms } from "./skin-material";
 import type { ScatterQuality } from "./platform/scene/skin-scatter-kernel";
 import { createStudioEnvironment, type StudioEnvironment } from "./studio-environment";
 import { DEFAULT_STUDIO_STAGE } from "./studio-lighting";
@@ -64,6 +66,8 @@ export function createLightListRig() {
     if (isSpot(light)) { light.distance = spec.distance; light.angle = spec.angle; light.penumbra = spec.penumbra; light.decay = spec.decay; }
     const was = light.castShadow;
     light.castShadow = spec.shadows;
+    // The game's character contact shadows (platform/scene/contact-shadow.ts), on a light that shadows at all: the shadow switch turns both off.
+    setContactShadows(light, spec.shadows && !!spec.game && spec.game.contactShadows !== "none");
     if (!spec.shadows) return;
     if (!isSpot(light)) {
       const d = Math.hypot(spec.position[0] - spec.target[0], spec.position[1] - spec.target[1], spec.position[2] - spec.target[2]);
@@ -152,6 +156,8 @@ export function createLightingSetupStage(options: {
   // The prefiltered room (null with the light probe instead); a setup with room light shows it, one without has no environment.
   const room = scene.environment;
   const rig = createLightListRig(), display = createLinearDisplay(renderer), scatter = createSkinScatter(renderer);
+  const contact = createContactShadows(renderer, contactShadowUniforms);
+  let contactOn = true;
   scene.add(rig.group);
   // Shadow maps render only for lights that cast; soft PCF with a per-light radius. They are drawn again only when what casts or
   // lights them changed (`shadowState`), not for a camera move: a static V orbited keeps its maps.
@@ -254,6 +260,8 @@ export function createLightingSetupStage(options: {
         const key = shadowState(scene);
         if (key !== shadowKey) { renderer.shadowMap.needsUpdate = true; shadowKey = key; }
       }
+      // Contact shadows' caster depth first: the forward skin, its scatter input and the plate all read it (PREV-148).
+      if (contactOn) contact.prepare(scene, camera); else contact.off();
       // The scatter decides first, so the forward skin lights with the same irradiance it blurs (the wrap off while it runs).
       const scattering = scatter.prepare(scene, display.scatterPossible);
       display.render(scene, camera, game() ? "creator" : "studio", scattering ? () => scatter.render(scene, camera) : undefined);
@@ -272,6 +280,8 @@ export function createLightingSetupStage(options: {
      * may also ask for `bare` (the wrap off and no Δ: the direct light alone), for A/B captures.
      */
     setScatter(mode: boolean | "bare") { scatter.setEnabled(mode !== false); scatter.setBare(mode === "bare"); },
+    /** Developer evidence (verification only): switch the character contact shadows off or on again, for A/B captures (PREV-148). */
+    setContactShadows(on: boolean) { contactOn = on; },
     /** Developer evidence (verification only): a trial scatter screen scale (null: the default), for fitting it from captures. */
     setScatterScale(scale: number | null) { scatter.setScale(scale); },
     /** Developer evidence (verification only): show one light alone by its setup ID, or all of them again with null. */
@@ -295,8 +305,9 @@ export function createLightingSetupStage(options: {
     display,
     environment,
     scatter,
+    contact,
     dispose() {
-      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose(); scatter.dispose();
+      disposed = true; stopRecheck(); listeners.clear(); rig.dispose(); display.dispose(); environment.dispose(); scatter.dispose(); contact.dispose();
     },
   };
 }
@@ -311,14 +322,21 @@ export const scatterQualityFor = (_textureSize: number): ScatterQuality => "high
 /**
  * A fingerprint of everything a shadow map depends on, so the maps are redrawn only when it changes: each visible shadow-casting
  * light (identity, placement, map size) and each visible caster (identity, placement, its bones' local poses and its morph weights).
- * The camera is not in it. Cheap: a few hundred bones per frame drawn.
+ * The camera is not in it. Every affine element of each matrix and every bone's rotation, position and scale go into a 64-bit hash
+ * (two 32-bit lanes), quantised to 1e-5, so opposite yaws or moves along different axes never collide (PREV-159). Cheap: a few hundred
+ * bones per frame drawn.
  */
 export function shadowState(scene: THREE.Scene): string {
   // Placements as this frame will draw them (the renderer updates the world matrices again; the cost is small).
   scene.updateMatrixWorld();
-  let lights = "", casters = 0, pose = 0;
+  let lights = "", casters = 0, a = 0x811c9dc5 | 0, b = 0x2545f491 | 0;
+  const word = (part: number) => {
+    a = Math.imul(a ^ part, 0x85ebca6b); a ^= a >>> 13;
+    b = Math.imul(b ^ part, 0xc2b2ae35) + 0x9e3779b9 | 0; b ^= b >>> 16;
+  };
+  const mix = (value: number) => { const q = Math.round(value * 1e5); word(q | 0); word((q / 4294967296) | 0); };
+  const affine = (e: ArrayLike<number>) => { for (let i = 0; i < 15; i++) if ((i & 3) !== 3) mix(e[i]!); };
   const seenSkeletons = new Set<THREE.Skeleton>();
-  const mix = (value: number, weight: number) => { pose = (pose + value * weight) % 1e9; };
   scene.traverseVisible(object => {
     const light = object as THREE.Light & { shadow?: THREE.LightShadow };
     if (light.isLight && light.castShadow && light.shadow) {
@@ -326,23 +344,26 @@ export function shadowState(scene: THREE.Scene): string {
       const t = (light as THREE.DirectionalLight).target?.matrixWorld.elements;
       lights += `${light.uuid}:${light.shadow.mapSize.x}:${e[12]!.toFixed(4)},${e[13]!.toFixed(4)},${e[14]!.toFixed(4)}` +
         (t ? `>${t[12]!.toFixed(4)},${t[13]!.toFixed(4)},${t[14]!.toFixed(4)};` : ";");
+      // A spot light's cone follows its rotation too.
+      affine(e);
       return;
     }
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || !mesh.castShadow) return;
     casters++;
-    const e = mesh.matrixWorld.elements;
-    for (let i = 0; i < 16; i += 5) mix(e[i]! + e[12]! + e[13]! + e[14]!, i + casters);
-    mesh.morphTargetInfluences?.forEach((w, i) => mix(w, i + 17));
+    word(mesh.id);
+    affine(mesh.matrixWorld.elements);
+    const weights = mesh.morphTargetInfluences;
+    if (weights) { word(weights.length); for (const weight of weights) mix(weight); }
     const skeleton = (mesh as THREE.SkinnedMesh).skeleton;
     if (skeleton && !seenSkeletons.has(skeleton)) {
       seenSkeletons.add(skeleton);
-      skeleton.bones.forEach((bone, i) => {
-        const q = bone.quaternion, p = bone.position;
-        mix(q.x + 2 * q.y + 3 * q.z + 5 * q.w + 7 * p.x + 11 * p.y + 13 * p.z, i + 31);
-      });
+      word(skeleton.bones.length);
+      for (const bone of skeleton.bones) {
+        const q = bone.quaternion, p = bone.position, k = bone.scale;
+        mix(q.x); mix(q.y); mix(q.z); mix(q.w); mix(p.x); mix(p.y); mix(p.z); mix(k.x); mix(k.y); mix(k.z);
+      }
     }
-    casters += mesh.id * 1e-6;
   });
-  return `${lights}|${casters}|${pose.toFixed(6)}`;
+  return `${lights}|${casters}|${(a >>> 0).toString(16)}${(b >>> 0).toString(16).padStart(8, "0")}`;
 }

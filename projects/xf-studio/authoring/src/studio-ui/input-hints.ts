@@ -18,7 +18,7 @@ export function hintStripMarkup(hints: ViewportHints): string {
     : hints.held ? `<span class="hint-state held"><kbd class="hint-key">${esc(hints.held)}</kbd>held</span>` : "";
   const hold = hints.hold.length ? `<span class="hint-group hint-more"><span class="hint-hold">Hold</span>${hints.hold.map(item).join("")}</span>` : "";
   const more = hints.more.length ? `<span class="hint-group hint-more">${hints.more.map(item).join("")}</span>` : "";
-  const note = hints.note ? `<span class="hint-note">${esc(hints.note)}</span>` : "";
+  const note = hints.note ? `<span class="hint-note" data-tone="${hints.noteTone ?? "warning"}">${esc(hints.note)}</span>` : "";
   return `${lead}${note}<span class="hint-group">${hints.items.map(item).join("")}</span>${hold}${more}`;
 }
 /** Tooltip body for a hovered makeup target. */

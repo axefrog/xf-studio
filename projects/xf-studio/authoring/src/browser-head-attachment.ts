@@ -25,6 +25,7 @@ import { createTrustedPreviewServices } from "./trusted-preview-services";
 import type { WorkspaceState } from "./workspace-state";
 import type { ViewGraph } from "./platform/core/view-graph";
 import type { LayeredMakeupSurface } from "./engines/layered-makeup/render/makeup-stack";
+import { surfaceOutline, type SurfaceOutline } from "./engines/layered-makeup/surface-edge";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
 type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
@@ -32,7 +33,9 @@ type Scene = Awaited<ReturnType<ViewportDevice["loadHead"]>>;
 
 /** The head-bound services the application holds; `undefined` disconnects one. */
 export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions;
-  characterContext?: CharacterContextActions };
+  characterContext?: CharacterContextActions;
+  /** The edited layered surface's outer boundary in UV, where its makeup is cut off (surface-edge.ts, PREV-146). */
+  surfaceOutline?: SurfaceOutline };
 
 /**
  * One layered-makeup surface on the loaded head and the devices that drive it (UI-76): the preview device that fills its layers, and
@@ -148,7 +151,18 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
       if (!makeup) throw Error(`The ${wiring.feature} renderer is not composed.`);
       wiring.preview.connectScene(makeup);
       releases.push(() => wiring.preview.disconnectScene(makeup));
-      if (wiring.editor) surface = ports.viewport.mountSurface(makeup.surface, wiring.editor);
+      if (wiring.editor) {
+        surface = ports.viewport.mountSurface(makeup.surface, wiring.editor);
+        // The anchor's rest positions and UVs, read per element (glTF attributes may be interleaved).
+        const geometry = makeup.surface.geometry, uv = geometry?.getAttribute("uv"), position = geometry?.getAttribute("position");
+        if (uv && position) {
+          const uvs = new Float64Array(uv.count * 2), positions = new Float64Array(position.count * 3);
+          for (let i = 0; i < uv.count; i++) { uvs[2 * i] = uv.getX(i); uvs[2 * i + 1] = uv.getY(i); }
+          for (let i = 0; i < position.count; i++) { positions[3 * i] = position.getX(i); positions[3 * i + 1] = position.getY(i); positions[3 * i + 2] = position.getZ(i); }
+          ports.attach({ surfaceOutline: surfaceOutline({ positions, uvs, index: geometry!.index?.array ?? null }) });
+          releases.push(() => ports.attach({ surfaceOutline: undefined }));
+        }
+      }
     }
     const { preview, motion } = services.finish();
     releases.push(() => preview.dispose());

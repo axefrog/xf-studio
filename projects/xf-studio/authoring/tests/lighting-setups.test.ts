@@ -480,12 +480,17 @@ test("creator lights carry the game's own values, kept through the edits they st
   expect(face().game).toMatchObject({ localShadows: false, contactShadows: "none" });
   actions.dispatch({ kind: "preview.setLightType", light: "Main_Face", type: "directional" });
   expect(face().game).toBeUndefined();
-  // Stored and read back exactly; a damaged block drops the setups as a whole.
+  // Stored and read back exactly; a damaged setup is dropped alone (PREV-161; the shown one falls back to its built-in base).
   const library = parseSetupLibrary(JSON.parse(JSON.stringify({ setup: "u1", setups: actions.views().state<SetupLibrary>(MAIN_VIEW, "lights").setups })))!;
   expect(library.setups[0]!.setup.lights.find(light => light.id === "Rim_Top")!.game).toEqual(built.lights.find(light => light.id === "Rim_Top")!.game);
   const damaged = JSON.parse(JSON.stringify(library));
   damaged.setups[0].setup.lights[1].game.unit = "candela";
-  expect(parseSetupLibrary(damaged)).toBeUndefined();
+  expect(parseSetupLibrary(damaged)).toEqual({ setup: library.setups[0]!.base, setups: [] });
+  const two = JSON.parse(JSON.stringify({ setup: "u1", setups: [library.setups[0], { ...library.setups[0], id: "u2", name: "Second" }] }));
+  two.setups[1].setup.exposure = 1e9;
+  expect(parseSetupLibrary(two)).toEqual({ setup: "u1", setups: [library.setups[0]] });
+  expect(parseSetupLibrary({ setup: "u9", setups: [library.setups[0]] })).toBeUndefined();
+  expect(parseSetupLibrary({ setup: "u1", setups: "nope" })).toBeUndefined();
 });
 
 test("lights can be reordered and duplicated (the copy casts no shadow until asked)", () => {

@@ -337,8 +337,11 @@ test("the scene host imports the platform, Three and its listed device modules o
   expect([...SCENE_SUPPORT_MODULES].filter(name => !reached.has(name))).toEqual([]);
 });
 
-/** Pure shared helpers any engine or feature core may use. */
-const PURE_HELPERS = new Set(["read-only", "validation-issues"]);
+/**
+ * Pure shared helpers any engine or feature core may use (no imports of their own). `request-body` reads a host request's body within
+ * a byte limit with the standard Request API; a feature's host endpoint uses it (CORE-114).
+ */
+const PURE_HELPERS = new Set(["read-only", "validation-issues", "request-body"]);
 /** The scene's shared material modules an engine renderer may build on (they move under `platform/scene` in step 9). */
 const SCENE_MATERIALS = new Set(["skin", "skin-material", "face-decal-material", "linear-display"]);
 /** What those materials build on in turn, reached only through them: record types, template priorities and the display's grading (CORE-86). */
