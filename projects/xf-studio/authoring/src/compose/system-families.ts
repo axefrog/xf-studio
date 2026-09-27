@@ -14,7 +14,8 @@ import type { PreviewAction } from "../preview-actions";
 import type { QualityAction } from "../preview-quality-actions";
 import type { SavedAppearanceAction } from "../saved-appearance-actions";
 import type { ViewAction } from "../view-actions";
-import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
+import type { PartPresetRequest } from "../part-presets";
+import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS, type ActionScope, type FileDescriptor,
   type RequestDescriptor } from "../studio-action-descriptors";
 
 export type { CollectionStudioAction, HistoryAction };
@@ -28,6 +29,7 @@ const SAVED_V_ID = familyId("savedV");
 const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
 const FILES_ID = familyId("files");
+const PRESETS_ID = familyId("presets");
 
 export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HISTORY_ID> = Object.freeze({
   owner: "system", id: HISTORY_ID, label: "History",
@@ -104,4 +106,9 @@ export const LIBRARY_FAMILY: AsyncSystemFamily<CollectionRequest, RequestDescrip
 export const FILES_FAMILY: AsyncSystemFamily<StudioFileAction, FileDescriptor, typeof FILES_ID> = Object.freeze({
   owner: "system", async: true, id: FILES_ID, label: "Files",
   actions: asyncActionTable<StudioFileAction, FileDescriptor>(FILE_DESCRIPTORS),
+});
+/** Part presets (part-presets.ts): save, rename and delete a feature's part in the library, and list them (never Undo). */
+export const PRESETS_FAMILY: AsyncSystemFamily<PartPresetRequest, RequestDescriptor, typeof PRESETS_ID> = Object.freeze({
+  owner: "system", async: true, id: PRESETS_ID, label: "Presets",
+  actions: asyncActionTable<PartPresetRequest, RequestDescriptor>(PART_PRESET_DESCRIPTORS),
 });

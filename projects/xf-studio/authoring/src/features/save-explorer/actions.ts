@@ -8,7 +8,7 @@
  * checked one at a time so the tree's decode status fills in without holding the page.
  *
  * A listing that fails is tried again after a short wait (`retryDelays`), saying "Reconnecting…" meanwhile: the host may be restarting.
- * Only when every try fails is the failure shown, in plain words (UI-108). Refresh during the waits tries again at once.
+ * Only when every try fails is the failure shown, in plain words (UI-109). Refresh during the waits tries again at once.
  */
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
 import { openExplorer, type EntryPage, type ModDataView, type NodeInspection, type ObjectInspection, type ObjectRef, type SaveExplorer, type SaveSummary,

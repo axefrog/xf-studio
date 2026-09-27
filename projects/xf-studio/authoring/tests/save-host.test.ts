@@ -108,7 +108,7 @@ describe("saves host sources", () => {
   });
 });
 
-describe("where saves are read from (UI-108)", () => {
+describe("where saves are read from (UI-109)", () => {
   test("the listing names where it looked; the detected folder is only described; each missing folder says what to do", async () => {
     const display = "Saved Games\\CD Projekt Red\\Cyberpunk 2077";
     const at = (value: { path: string | null; source: "chosen" | "detected" | "developer"; display: string }, prefix?: string) =>

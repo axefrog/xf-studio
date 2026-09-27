@@ -220,7 +220,7 @@ test("a detected game folder is saved over the other settings, and setup opens w
   await until(() => h.setup.snapshot().card.primary?.action.kind === "previewSetup.useDetectedGame");
   expect(await h.setup.dispatch({ kind: "previewSetup.useDetectedGame" })).toEqual({ ok: true });
   expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Games\\Cyberpunk 2077", manualModRoot: "D:\\Mods" });
-  // Localhost has no setup form of its own: the Studio opens Settings › Game (UI-29, UI-108).
+  // Localhost has no setup form of its own: the Studio opens Settings › Game (UI-29, UI-109).
   expect(h.setup.snapshot().setupRequests).toBe(0);
   await h.setup.dispatch({ kind: "previewSetup.openSetup" });
   expect(h.setup.snapshot().setupRequests).toBe(1);

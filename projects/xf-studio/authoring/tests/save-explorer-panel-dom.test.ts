@@ -119,7 +119,7 @@ describe("Save Explorer panel", () => {
     expect(lightDocument.body).toBeDefined();
   });
 
-  test("no saves in the folder, or no folder: says where it looked and opens Settings › Saves (UI-108)", async () => {
+  test("no saves in the folder, or no folder: says where it looked and opens Settings › Saves (UI-109)", async () => {
     const display = "Saved Games\\CD Projekt Red\\Cyberpunk 2077";
     const empty = harness({ list: async () => ({ available: true, saves: [], folder: { source: "detected", display } }) });
     empty.panel.spec.visibility?.(true);

@@ -333,6 +333,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     idle,
     /** The game's blink (game-blink.ts); undefined with `evidence.blink.error` when it isn't prepared. */
     blink,
+    /** The facial pose sink (head-rig.ts `face`): a held expression's solved pose on the head; every change draws a frame. */
+    face: { ...rig.face, setRig: (joints: Parameters<typeof rig.face.setRig>[0]) => { try { rig.face.setRig(joints); } finally { invalidate(); } },
+      get ready() { return rig.face.ready; }, get holding() { return rig.face.holding; } },
     // Store the orbit in neutral head space; enabling idle adds its framing offset once.
     cameraState: (): SceneCameraState => ({ position: camera.position.clone().sub(idleFrameOffset).toArray(),
       target: controls.target.clone().sub(idleFrameOffset).toArray(), fov: camera.fov }),

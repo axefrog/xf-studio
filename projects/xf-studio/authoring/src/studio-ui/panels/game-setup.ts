@@ -24,7 +24,7 @@ export function setupStatus(frame: Frame): { text: string; tone: "warning" | "re
 }
 
 /**
- * The game, saves and tools settings (UI-83, UI-03, UI-108): the one setup form both hosts use, shown in the Settings panel's Game, Saves
+ * The game, saves and tools settings (UI-83, UI-03, UI-109): the one setup form both hosts use, shown in the Settings panel's Game, Saves
  * and Tools groups (the desktop's Build setup and every "Open Settings" opens it). Every choice is saved the moment it is made
  * (`setup.update` merges only that field over the saved settings), so there is no second copy of the settings to go stale and no Save
  * button. Folders XF Studio found are offered as choices (`detect.gameInstalls`, `detect.mo2Instances`, with each instance's profiles);
@@ -217,7 +217,7 @@ export function gameSetupForm(rt: StudioRuntime) {
 }
 
 /**
- * Settings › Saves (UI-108): where the Save Explorer reads saves. The detected Saved Games folder is the default and is only described
+ * Settings › Saves (UI-109): where the Save Explorer reads saves. The detected Saved Games folder is the default and is only described
  * ("Detected: Saved Games › CD Projekt Red › Cyberpunk 2077" in words), never shown as a path with the person's profile in it. "Choose another
  * folder…" opens the desktop's folder picker, or a text box where there is none (localhost), whose refusals say what to do; "Use the
  * detected folder" goes back to the default.

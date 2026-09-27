@@ -11,7 +11,7 @@ import { gameSetupForm } from "./game-setup";
 type Theme = "system" | "light" | "dark";
 
 /**
- * Settings (UI-108): everything a person configures, in one panel with plain groups: Game (game folder, mod manager and profile, the eye
+ * Settings (UI-109): everything a person configures, in one panel with plain groups: Game (game folder, mod manager and profile, the eye
  * plate head), Saves (where the Save Explorer reads saves), Tools (WolvenKit), Appearance (theme, input hints, research tools) and
  * Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
  * made, through its own typed port (local settings, UI preferences, diagnostics). Opened from the header's Settings button, the command

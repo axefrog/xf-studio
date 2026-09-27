@@ -2,6 +2,7 @@ import { resolve, sep } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
+import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { createPackageHandler, localCandidateStore, localEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/package-server";
@@ -28,6 +29,7 @@ import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
+import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
 import { PoseCatalogueHost } from "./src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
@@ -47,6 +49,9 @@ const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
 const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
 const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
 const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
+// Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
+const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
+const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
 const localSettings = new LocalSettingsStore(state.settingsDirectory);
 // A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
 const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
@@ -130,6 +135,19 @@ const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
   },
   log: diagnostics.log.logger("lut") });
 const gradingLutRequest = createGradingLutHandler(gradingLut);
+// The live facial preview: V's face rig, the installed photo-mode expressions and the external facial solver kept warm (facial-host.ts).
+// The solver is the pinned IO Suite checkout, found through XFS_FACIAL_SOLVER, XF Studio's tools folder or beside the repository.
+const facial = new FacialHost({ cacheRoot: previewCacheRoot,
+  resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
+  settings: () => {
+    const settings = localSettings.load().settings;
+    return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+      mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
+  },
+  solver: () => locateFacialSolver({ env: process.env, toolsRoot: localToolsRoot(), repoRoot: resolve(import.meta.dir, "..", "..", ".."),
+    script: resolve(import.meta.dir, "tools", "facial_solver_server.py"), pythonDefault: "python" }),
+  log: diagnostics.log.logger("facial") });
+const facialRequest = createFacialHandler(facial);
 // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
 const commit = (() => {
   try { const run = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: import.meta.dir, stdout: "pipe", stderr: "ignore" });
@@ -191,9 +209,12 @@ const server = Bun.serve({
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
     if (url.pathname === POSES_ENDPOINT) return poseRequest(request);
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
+    if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
+    for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
+      if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/"))
         return libraryRequest(request, store, prefix);

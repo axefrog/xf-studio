@@ -94,7 +94,7 @@ test("a save from one view waits for another view's refresh instead of being ref
   expect(actions.snapshot().busy).toBe(false);
 });
 
-test("the saves folder: detected by default and only described; a chosen folder must be there; one gone since never blocks other fields (UI-108)", async () => {
+test("the saves folder: detected by default and only described; a chosen folder must be there; one gone since never blocks other fields (UI-109)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-setup-saves-"));
   try {
     const store = new LocalSettingsStore(dir);

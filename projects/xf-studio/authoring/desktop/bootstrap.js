@@ -2,7 +2,7 @@
 // It adds the desktop first-run welcome, About (version, licences, updates; opened
 // from the Studio's Help panel and command palette), the host-owned workspace storage,
 // and then starts the shared Studio composition root (`src/studio-startup.ts`) with
-// those desktop host services. Settings have one form, the Studio's Settings panel (UI-03, UI-108).
+// those desktop host services. Settings have one form, the Studio's Settings panel (UI-03, UI-109).
 import { createBrowserLocalSetup, desktopFolderPicker } from "../src/browser-local-setup-device";
 import { createBrowserPreviewPreparation } from "../src/preview-preparation";
 import { createBrowserWolvenKitSetup } from "../src/wolvenkit-setup";
@@ -238,7 +238,7 @@ welcome.id = "desktop-welcome";
 welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Once the 3D preview is set up, you can also build your ' + EYE_MAKEUP_MOD.modName + ' mod files and add them to your mod manager. XF Studio asks before it downloads or installs anything.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Settings</button></div></div>';
 document.body.append(welcome);
 const aboutReadiness = about.querySelector("#desktop-setup-readiness");
-// One settings service and one form (the Studio's Settings, UI-03, UI-108), with the desktop's own folder picker (UI-83).
+// One settings service and one form (the Studio's Settings, UI-03, UI-109), with the desktop's own folder picker (UI-83).
 const setupActions = createBrowserLocalSetup({ pickFolder: desktopFolderPicker, verification });
 let setupView;
 function showSetup(view) {

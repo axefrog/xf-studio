@@ -243,7 +243,7 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
   });
 });
 
-describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-03, UI-108)", () => {
+describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-03, UI-109)", () => {
   test("detected folders and profiles are choices, and choosing one saves it", async () => {
     const h = await settingsHarness();
     const game = h.root.querySelector("[data-settings-section=game]")!;

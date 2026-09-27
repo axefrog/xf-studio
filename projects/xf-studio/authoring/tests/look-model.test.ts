@@ -348,7 +348,7 @@ test("the registry carries eye makeup's pure capability and apply for every one 
   }
   for (const kind of [...STUDIO_REGISTRY.kinds("collection"), ...STUDIO_REGISTRY.kinds("history")])
     expect((STUDIO_REGISTRY.route(kind) as { spec: object }).spec).not.toHaveProperty("apply");
-  expect(STUDIO_PARTS.features()).toEqual([EYE]);
+  expect(STUDIO_PARTS.features()).toEqual([EYE, "expressions"]);
   expect(LIVE_FEATURE as string).toBe(EYE); expect(EYE_MAKEUP_FEATURE as string).toBe(EYE);
 });
 

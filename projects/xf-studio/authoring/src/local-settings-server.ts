@@ -41,7 +41,7 @@ const overrideNames = ["XFS_PACKAGE_GAMEPATH", "XFS_PACKAGE_PLATE", "XFS_PACKAGE
 const isDirectory = (path: string) => { try { return statSync(path).isDirectory(); } catch { return false; } };
 /**
  * A newly chosen saves folder, checked before it is saved: a whole path to a folder that is there. The words say what to do
- * (UI-108); other folder settings are only checked for form here, and readiness says what is missing.
+ * (UI-109); other folder settings are only checked for form here, and readiness says what is missing.
  */
 function savesFolderRefusal(value: unknown): { code: string; error: string } | null {
   if (value === null) return null;

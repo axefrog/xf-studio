@@ -96,7 +96,7 @@ export class StudioRuntime {
   modules: { list: readonly StudioModule[]; panels(module: StudioModule): string[]; set(id: string, shown: boolean): void } =
     { list: [], panels: () => [], set: () => {} };
   /**
-   * Open the Settings panel at a group (UI-108): floating when it was closed (it has no home among the docked groups), otherwise brought
+   * Open the Settings panel at a group (UI-109): floating when it was closed (it has no home among the docked groups), otherwise brought
    * forward and expanded where it is, then the group is shown and focused. The shell sets this once the dock exists.
    */
   settings: { open(section?: SettingsSection): void } = { open: () => {} };

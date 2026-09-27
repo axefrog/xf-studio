@@ -1,5 +1,5 @@
 /**
- * The groups of the Settings panel (UI-108), in order: what "open Settings › Saves" names. Data only, so a feature's or module's view can
+ * The groups of the Settings panel (UI-109), in order: what "open Settings › Saves" names. Data only, so a feature's or module's view can
  * ask the shell to open a group without loading the panel.
  */
 export const SETTINGS_SECTIONS = ["game", "saves", "tools", "appearance", "privacy"] as const;

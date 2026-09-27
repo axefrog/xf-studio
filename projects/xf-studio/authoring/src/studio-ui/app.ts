@@ -167,7 +167,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   /**
-   * Settings (UI-108) has no obvious home among the docked groups, so a closed Settings opens floating; one already open is brought
+   * Settings (UI-109) has no obvious home among the docked groups, so a closed Settings opens floating; one already open is brought
    * forward where it is, its group expanded if collapsed (`reveal`). Then the group asked for is shown and focused.
    */
   const settingsPanel = byId.get(SETTINGS_PANEL);
@@ -360,7 +360,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
-  // One place for everything configured (UI-108): the game and mod manager, the saves folder, WolvenKit, appearance and diagnostics.
+  // One place for everything configured (UI-109): the game and mod manager, the saves folder, WolvenKit, appearance and diagnostics.
   const settingsButton = button({ label: "Settings", icon: "settings", iconOnly: true, variant: "ghost",
     title: "Settings: your game and mod manager, saves folder, WolvenKit and appearance", onClick: () => rt.settings.open() });
   for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton],
@@ -630,7 +630,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("idle", motion?.idle ? "Stop the game idle" : "Play the game idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),
     act("idle.pause", motion?.idlePaused ? "Resume idle" : "Pause idle", "Motion", { kind: "motion.setPaused", paused: !motion?.idlePaused }, { icon: "pause" }),
     act("blink.play", motion?.blinkPlaying ? "Stop blink" : "Play blink", "Motion", { kind: "motion.playBlink", playing: !motion?.blinkPlaying }, { icon: "play", keywords: "blink eyes lids" }),
-    // Settings (UI-108): opened by name, and by what people look for in it. Its generic "Open Settings" entry is left out below.
+    // Settings (UI-109): opened by name, and by what people look for in it. Its generic "Open Settings" entry is left out below.
     { id: "settings.open", title: "Settings", group: "Settings", icon: "settings",
       keywords: "preferences options configure setup game folder mod manager wolvenkit saves theme appearance diagnostics privacy", ...always, run: () => rt.settings.open() },
     { id: "settings.game", title: "Game & tools (Settings › Game)", group: "Settings", icon: "settings",

@@ -29,7 +29,7 @@ export const SHELL_VIEW = {
       description: "Resolution of generated preview textures, readiness and resource use." },
     { id: "activity", title: "Activity", icon: "activity", order: 160, slot: "closed",
       description: "Session log of results, warnings and errors." },
-    // Settings has no home among the docked groups: it opens floating, and where it was once placed (UI-108).
+    // Settings has no home among the docked groups: it opens floating, and where it was once placed (UI-109).
     { id: "settings", title: "Settings", icon: "settings", order: 165, slot: "closed",
       description: "Your game and mod manager, where your saves are, WolvenKit, appearance and diagnostics." },
     // Help reads beside the inspectors rather than covering the head or the collection.

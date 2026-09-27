@@ -261,7 +261,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
 
 export function packagePanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  // The game and mod manager are chosen in Settings (UI-108); here, one line says whether Build and Add are ready, with the way there.
+  // The game and mod manager are chosen in Settings (UI-109); here, one line says whether Build and Add are ready, with the way there.
   const showSetup = () => rt.settings.open("game");
   const setupLine = h("p", { class: "setup-status", role: "status" });
   const setup = section({ title: "Game & tools", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game and Settings › Tools." },

@@ -22,7 +22,7 @@ let browser: Awaited<ReturnType<typeof launch>> | undefined;
 try {
   browser = await launch(server.url + "&verify=1", { width: 900, height: 650, debugPort: 9438, scheme: "dark" });
   await browser.waitFor("document.querySelector('#desktop-welcome')?.open");
-  // Settings have one form, the Studio's Settings panel (UI-03, UI-108): no desktop setup dialog opens over the welcome.
+  // Settings have one form, the Studio's Settings panel (UI-03, UI-109): no desktop setup dialog opens over the welcome.
   const firstRun = await browser.evaluate(`({ setupOpen: !!document.querySelector('#desktop-setup'),
     welcome: document.querySelector('#desktop-welcome').textContent })`);
   if (firstRun.setupOpen || !firstRun.welcome.includes("3D head preview is built from your own Cyberpunk 2077 files"))
@@ -94,7 +94,7 @@ try {
   // The preview card names the missing game folder: it offers a detected install, or Settings › Game.
   await browser.waitFor("document.querySelector('#preview-card')?.hidden === false && ['previewSetup.openSetup', 'previewSetup.useDetectedGame'].includes(document.querySelector('#preview-card-primary')?.dataset.action)");
   await browser.screenshot(resolve(screenshots, "desktop-first-run.png"));
-  // About's Settings opens the Studio's one setup form at Game (UI-03, UI-108); a typed folder saves as it is entered.
+  // About's Settings opens the Studio's one setup form at Game (UI-03, UI-109); a typed folder saves as it is entered.
   await browser.evaluate("window.xfDesktopOpenAbout(); document.querySelector('#desktop-setup-open').click()");
   await browser.waitFor("document.querySelector('.settings-panel')?.isConnected && document.querySelector('.setup-game')?.closest('section')?.querySelector('.setup-status')?.textContent.includes('Cyberpunk 2077 folder')");
   await browser.screenshot(resolve(screenshots, "desktop-build-setup.png"));

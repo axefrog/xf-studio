@@ -22,7 +22,7 @@ import { STUDIO_MODULES } from "../src/compose/modules";
  * The composition before any module without a document part existed: the shell's view and eye makeup's. Panels of modules hidden by
  * default (the Save Explorer) are parked at startup, so the factory layouts a person gets are still exactly these.
  */
-/** Closed-by-default shell panels added since (Settings, UI-108): they change no factory arrangement, only the closed list. */
+/** Closed-by-default shell panels added since (Settings, UI-109): they change no factory arrangement, only the closed list. */
 const ADDED_CLOSED = ["settings"];
 const HISTORICAL = viewCatalogue([{ ...SHELL_VIEW, panels: SHELL_VIEW.panels.filter(panel => !ADDED_CLOSED.includes(panel.id)) }, EYE_MAKEUP_VIEW]);
 /** A tree's closed list with the closed panels added since, in catalogue order (before Help). */
@@ -56,7 +56,7 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   // The Studio's catalogue adds only panels of modules hidden by default, which it parks, and closed-by-default panels: the arrangement
   // a person gets is unchanged.
   expect(([...PANEL_IDS] as string[]).filter(id => !GRANDFATHERED.includes(id)).sort()).toEqual([...HIDDEN_BY_DEFAULT, ...ADDED_CLOSED].sort());
-  expect(HIDDEN_BY_DEFAULT).toEqual(["save-explorer.explorer"]);
+  expect(HIDDEN_BY_DEFAULT).toEqual(["save-explorer.explorer", "expressions.controls"]);
   const parked = defaultDockStateFor(STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
   expect([parked.wide.root, parked.wide.floating, parked.wide.closed]).toEqual([BEFORE.wide().root, BEFORE.wide().floating, withAddedClosed(BEFORE.wide()).closed]);
   expect([parked.compact.root, parked.compact.closed]).toEqual([BEFORE.compact().root, withAddedClosed(BEFORE.compact()).closed]);
@@ -66,7 +66,7 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   expect(PANEL_META["package"].title).toBe("Mod package");
   // Eye makeup's view contributes its six panels; the shell the rest.
   expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["layers", "uv", "finish", "shape", "edge", "warp"]);
-  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "save-explorer"]);
+  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "save-explorer", "expressions"]);
 });
 
 test("a dock layout saved before step 5 restores unchanged", () => {

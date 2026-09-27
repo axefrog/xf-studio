@@ -38,7 +38,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const listCount = h("span", { class: "count" });
   const listNote = note("", "info");
   const saveList = h("ul", { class: "save-list", "aria-label": "Your saves, newest first" });
-  // No saves where XF Studio looked, or no saves folder there: what to do, with Settings › Saves one press away (UI-108).
+  // No saves where XF Studio looked, or no saves folder there: what to do, with Settings › Saves one press away (UI-109).
   const listEmpty = h("div", { class: "save-explorer-empty" });
   const openSettings = () => ctx.openSettings("saves");
   const listView = h("div", { class: "save-explorer-list" },

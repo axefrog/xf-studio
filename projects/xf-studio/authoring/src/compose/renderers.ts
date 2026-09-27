@@ -7,6 +7,7 @@
 import type { FeatureRendererFactory } from "../platform/api/scene";
 import type { LayeredSurfaceRenderer } from "../engines/layered-makeup/render/makeup-stack";
 import { EYE_MAKEUP_RENDERER } from "../features/eye-makeup/render";
+import { EXPRESSIONS_ID, expressionPose } from "../features/expressions";
 
 export const STUDIO_RENDERERS: readonly FeatureRendererFactory[] = Object.freeze([EYE_MAKEUP_RENDERER]);
 
@@ -17,3 +18,10 @@ export const STUDIO_RENDERERS: readonly FeatureRendererFactory[] = Object.freeze
  */
 export const STUDIO_LAYERED_SURFACES: ReadonlyMap<string, FeatureRendererFactory<LayeredSurfaceRenderer>> =
   new Map<string, FeatureRendererFactory<LayeredSurfaceRenderer>>([[EYE_MAKEUP_RENDERER.feature, EYE_MAKEUP_RENDERER]]);
+
+/**
+ * The features that pose V's face (research/animation/expression-editor-design.md §4): each reads the pose its part holds, and the
+ * platform's facial preview solves them together on the head. The root names none of them.
+ */
+export const STUDIO_FACE_POSES: readonly { readonly feature: string; pose(part: unknown): Readonly<Record<string, number>> | undefined }[] =
+  Object.freeze([{ feature: EXPRESSIONS_ID, pose: expressionPose }]);

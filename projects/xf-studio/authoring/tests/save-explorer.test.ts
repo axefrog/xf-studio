@@ -168,7 +168,7 @@ describe("explorer service", () => {
     expect(service.snapshot().open.source).toEqual({ kind: "file", name: "sav.dat" });
   });
 
-  test("a listing that fails is tried again after short waits, saying Reconnecting…, and only then says it failed (UI-108)", async () => {
+  test("a listing that fails is tried again after short waits, saying Reconnecting…, and only then says it failed (UI-109)", async () => {
     // The host restarting: two tries fail, the third answers.
     let calls = 0;
     const waits: number[] = [], seen: { phase: string; reconnecting?: boolean }[] = [];
@@ -207,7 +207,7 @@ describe("explorer service", () => {
     expect(service.snapshot().listing.phase).toBe("ready");
   });
 
-  test("a saves folder chosen in Settings reads the list again, once it has been read (UI-108)", async () => {
+  test("a saves folder chosen in Settings reads the list again, once it has been read (UI-109)", async () => {
     let notify!: () => void, calls = 0;
     const service = new SaveExplorerActions(device({ list: async () => { calls++; return { available: true, saves: listing }; },
       locationChanged: listener => { notify = listener; return () => {}; } }), now);

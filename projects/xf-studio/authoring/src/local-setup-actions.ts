@@ -8,7 +8,7 @@ import type { LocalSetupFields, LocalSetupView } from "./local-settings-server";
 export type LocalSetupAction = { kind: "setup.refresh" } | { kind: "setup.save"; fields: LocalSetupFields } |
   { kind: "setup.update"; fields: Partial<LocalSetupFields> } | { kind: "setup.restorePrevious" } |
   { kind: "setup.pickFolder"; field: FolderField };
-/** The folders a person may choose with the host's own folder picker (UI-83; the saves folder, UI-108). */
+/** The folders a person may choose with the host's own folder picker (UI-83; the saves folder, UI-109). */
 export type FolderField = "gameRoot" | "mo2Root" | "manualModRoot" | "savesDirectory";
 export const FOLDER_FIELDS: readonly FolderField[] = ["gameRoot", "mo2Root", "manualModRoot", "savesDirectory"];
 /** The host's native folder picker: the folder chosen, or null when the person cancelled. */

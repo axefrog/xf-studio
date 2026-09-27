@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { STUDIO_OWNERS, STUDIO_REGISTRY, STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
+import { EXPRESSIONS } from "../src/features/expressions";
 import { IDLE_UNAVAILABLE, MotionActions } from "../src/motion-actions";
 import { actionTable, familyId, featureId, type SystemFamily } from "../src/platform/api";
 import { Registry } from "../src/platform/core/registry";
@@ -10,6 +11,9 @@ import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { StudioApplication } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { freshWorkspace } from "./fixtures/eye-region";
+
+/** Actions of features the application binds generically (no bespoke handler, not in the hand-kept `ACTION_DESCRIPTORS`). */
+const GENERIC_KINDS = new Set(Object.keys(EXPRESSIONS.actions));
 
 function fixture() {
   const workspace = freshWorkspace();
@@ -22,7 +26,9 @@ test("the registry reproduces the pre-platform catalogue exactly (golden snapsho
   const { app } = fixture();
   expect({ actionKinds: app.actionKinds(), actionDescriptors: app.actionDescriptors(), registry: app.registry() })
     .toEqual(golden);
-  expect(JSON.stringify(app.actionDescriptors())).toBe(JSON.stringify(ACTION_DESCRIPTORS));
+  // The hand-kept list covers the owners with bespoke handlers; generically bound features register their own descriptors only.
+  const bespoke = Object.fromEntries(Object.entries(app.actionDescriptors()).filter(([kind]) => !GENERIC_KINDS.has(kind)));
+  expect(JSON.stringify(bespoke)).toBe(JSON.stringify(ACTION_DESCRIPTORS));
 });
 
 test("every action is owned by exactly one registered owner", () => {
@@ -30,7 +36,8 @@ test("every action is owned by exactly one registered owner", () => {
   const owned = STUDIO_OWNERS.filter(owner => !("async" in owner)).flatMap(owner => Object.keys(owner.actions));
   const all = STUDIO_OWNERS.flatMap(owner => Object.keys(owner.actions));
   expect(new Set(all).size).toBe(all.length);
-  expect(owned).toEqual(Object.keys(ACTION_DESCRIPTORS));
+  expect(owned.filter(kind => !GENERIC_KINDS.has(kind))).toEqual(Object.keys(ACTION_DESCRIPTORS));
+  expect(owned.filter(kind => GENERIC_KINDS.has(kind))).toEqual(Object.keys(EXPRESSIONS.actions));
   for (const kind of owned) {
     const route = STUDIO_REGISTRY.route(kind);
     expect(route.ok).toBe(true);
@@ -41,7 +48,7 @@ test("every action is owned by exactly one registered owner", () => {
   expect(STUDIO_REGISTRY.route("hair.setColor")).toEqual({ ok: false, code: "unknown_action", kind: "hair.setColor" });
   expect(EYE_MAKEUP).toMatchObject({ owner: "feature", id: "eye-makeup", api: 1, stage: "stable" });
   expect(STUDIO_REGISTRY.entries().filter(entry => entry.ownerKind === "feature").map(entry => entry.owner))
-    .toEqual(Object.keys(EYE_MAKEUP.actions).map(() => "eye-makeup"));
+    .toEqual([...Object.keys(EYE_MAKEUP.actions).map(() => "eye-makeup"), ...Object.keys(EXPRESSIONS.actions).map(() => "expressions")]);
 });
 
 test("derived kind sets equal the sets StudioApplication used to keep by hand", () => {
