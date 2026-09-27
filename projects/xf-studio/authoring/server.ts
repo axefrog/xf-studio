@@ -22,9 +22,11 @@ import { buildBrowser } from "./browser-build";
 import { PreviewCoreHost } from "./src/preview-core-host";
 import { createPreviewCoreHandler } from "./src/preview-core-server";
 import { PREVIEW_CORE_FILES } from "./src/preview-core-recipe";
-import { CharacterDetailHost } from "./src/character-detail-host";
+import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
+import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
+import { PoseCatalogueHost } from "./src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
 import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
 import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
@@ -98,6 +100,15 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
+// Photo-mode poses (pose-library-design.md P1): listed from the same launch route and resolver cache as the creator options.
+const poseSettings = () => {
+  const settings = localSettings.load().settings;
+  return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
+};
+const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+  resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")), log: diagnostics.log.logger("poses") });
+const poseRequest = createPoseHandler(poses);
 // The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
 const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
@@ -151,6 +162,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
+    if (url.pathname === POSES_ENDPOINT) return poseRequest(request);
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
     for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
