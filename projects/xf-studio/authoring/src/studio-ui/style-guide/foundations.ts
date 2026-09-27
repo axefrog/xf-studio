@@ -46,6 +46,7 @@ export function foundations(css: string) {
         <div class="token" data-kind="number"><span class="token-swatch" style="--sample:color-mix(in srgb, var(--pv-ink) calc(var(--pv-shade) * 100%), black)"></span><code>--pv-shade</code><small>How much shadow darkens ink and subject: a number the colour matrix reads (<code>--pv-shade-light</code> .72, <code>--pv-shade-dark</code> .62)</small></div></div>`,
       what: "The four tokens every choice preview is coloured from (lib-choice-preview). A preview is stored as channels (feature and subject coverage, light), and one SVG colour matrix per theme (built from these tokens) turns them into colours, so a theme change needs no new picture.",
       when: "Only for previews. A preview uses these tokens and nothing else (later: the V's own colour for the ink, when tinted).",
+      combine: "Inside the Choice preview tile (lib-choice-preview), never on other surfaces: the ground sits in a choice item whose border and states are the choice list's.",
       adapt: "Light and dark values come from the theme (the colours are light-dark pairs; the shade switches with the theme). Forced colours drop the matrix.",
       drives: `The page's filter (${code("installPreviewFilter()")}) reads them through a probe element and rebuilds its matrix when the theme changes.` }),
     pattern({ id: "f-contrast", title: "Contrast", status: "implemented", wide: true, specimen: contrast.html,

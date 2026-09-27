@@ -235,3 +235,15 @@ describe("the preview service's scheduling", () => {
     expect(h.service.row("head/hairstyle")!.urls.has(1)).toBe(true);
   });
 });
+
+describe("the boundary", () => {
+  test("no preview module names an option, a mod, a resource or an archive: producers key on the detail slot and the template table", () => {
+    const modules = ["choice-preview.ts", "choice-preview-render.ts", "choice-preview-worker.ts", "choice-preview-service.ts", "choice-preview-host.ts",
+      "choice-preview-server.ts", "browser-choice-preview-device.ts", "studio-ui/components/choice-preview.ts"];
+    // Option and mod words, and any resource or archive named in a string literal.
+    const named = /hairstyle|hair_color|\bhh_|\bccxl\b|\bprc\b|archivexl|["'`][^"'`]*\.(archive|mesh|xbm|mt|app|ent)["'`]/i;
+    const found = modules.flatMap(module => readFileSync(join(import.meta.dir, "..", "src", module), "utf8").split("\n")
+      .filter(line => !/^\s*(\*|\/\/|\/\*)/.test(line) && named.test(line)).map(line => `${module}: ${line.trim()}`));
+    expect(found).toEqual([]);
+  });
+});
