@@ -149,6 +149,9 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   // A module's panel (the Save Explorer's, restored here as if its module were shown) joins beside the UV map the same way.
   locate(expected.wide, "uv")!.group.panels.push("save-explorer.explorer");
   locate(expected.compact, "uv")!.group.panels.push("save-explorer.explorer");
+  // The Expressions panel (a module hidden by default, which the shell parks) joins its default group too.
+  locate(expected.wide, "finish")!.group.panels.push("expressions.controls");
+  locate(expected.compact, "finish")!.group.panels.push("expressions.controls");
   // Panels closed by default (Help) stay closed until someone opens them.
   expected.wide.closed.push("help"); expected.compact.closed.push("help");
   expect(restored.state).toEqual(expected);

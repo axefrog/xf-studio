@@ -132,7 +132,8 @@ test("with two exporting features: split into its own mod, rename, assign back a
   const model: DocumentModel = { parts: new PartRegistry([EYE_MAKEUP, hair]), live: STUDIO_DOCUMENTS.live };
   const value = { schema: COLLECTION_2, id: ID, name: "Looks", presets: [{ id: "f25f8eb1-8a83-4f65-a111-b83086382c18", name: "One", revision: 1,
     parts: { "eye-makeup": { schema: "xfs/eye-makeup-part-1", body: recipeFile(recipe())! }, hair: { schema: "xfs/hair-part-1", body: { colour: "#112233", strands: [1] } } } }] };
-  let editor: EditorSnapshot = { recipe: recipe(), ...emptyMemory() };
+  // The editor carries the look's other live parts (sparse: a feature absent here has no part), as the live document exports them.
+  let editor: EditorSnapshot = { recipe: recipe(), ...emptyMemory(), liveFeatures: { hair: { part: { colour: "#112233", strands: [1] }, editor: { strand: 0 } } } };
   const ids = [NEW];
   const actions = new CollectionActions(model, collectionDraft(value, model), () => editor, next => { editor = next; }, () => ids.shift()!);
   const products = () => actions.productSummary().map(p => [p.modName, p.features.map(f => f.id)]);

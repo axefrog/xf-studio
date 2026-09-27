@@ -13,7 +13,8 @@ import { freshWorkspace } from "./fixtures/eye-region";
 
 test("the port lists the registered features and eye makeup's facade owns exactly its actions", () => {
   const { shell } = trustedFixture();
-  expect(shell.features()).toEqual([{ id: "eye-makeup", label: "Eye makeup", stage: "stable" }]);
+  expect(shell.features()).toEqual([{ id: "eye-makeup", label: "Eye makeup", stage: "stable" },
+    { id: "expressions", label: "Expressions", stage: "preview" }]);
   const eye = shell.feature("eye-makeup");
   expect(eye.kinds() as readonly string[]).toEqual([...STUDIO_REGISTRY.kinds("eye-makeup")]);
   expect(shell.feature("hair")).toBeUndefined();
@@ -44,7 +45,7 @@ test("a second feature gets a generic facade with a detached view of its live do
   const port = createStudioPresentation({ authoring: core.app, editor: core.presentation,
     library: {} as never, files: {} as never, viewport: {} as never, preferences: {} as never,
     previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} } });
-  expect(port.features().map(feature => feature.id)).toEqual(["eye-makeup", "hair"]);
+  expect(port.features().map(feature => feature.id)).toEqual(["eye-makeup", "expressions", "hair"]);
   const hair = port.feature("hair")!;
   expect(hair.kinds()).toEqual(["hair.setColour", "hair.addStrand", "hair.selectStrand"]);
   expect(hair.dispatch({ kind: "layer.setOpacity" })).toMatchObject({ ok: false, code: "invalid_value" });

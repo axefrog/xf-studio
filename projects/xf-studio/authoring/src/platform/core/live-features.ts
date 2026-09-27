@@ -32,6 +32,11 @@ export class FeatureDocument {
   }
   /** Replace the whole state (a preset switch or a restore). */
   load(state: LiveFeatureState = {}) { this.livePart = state.part; this.liveEditor = this.parseEditor(state.editor, state.part); }
+  /** The look lacks the part and the editor state is the codec's default. */
+  isBlank(): boolean {
+    return this.livePart === undefined &&
+      JSON.stringify(this.module.editor.serialize(this.liveEditor)) === JSON.stringify(this.module.editor.serialize(this.module.editor.empty()));
+  }
   /** A detached copy of the state (the editor as its codec parsed it, as a look's in-memory memory holds it). */
   export(): LiveFeatureState {
     return { ...(this.livePart === undefined ? {} : { part: structuredClone(this.livePart) }),
@@ -66,11 +71,15 @@ export class LiveFeatures {
   }
   /** A fingerprint of the listed features' parts (all by default): equal text, equal content. */
   content(features: readonly string[] = this.features()): string {
-    return JSON.stringify(features.filter(feature => this.documents.has(feature)).map(feature => [feature, this.documents.get(feature)!.part ?? null]));
+    return JSON.stringify(features.filter(feature => this.documents.get(feature)?.part !== undefined)
+      .map(feature => [feature, this.documents.get(feature)!.part]));
   }
-  /** Every document's state, detached (only features with a part or a non-default editor state matter to a caller). */
+  /**
+   * Every document's state that holds something, detached: a feature the look lacks whose editor state is its default is left out
+   * (looks are sparse), so a look that never used a feature exports nothing for it.
+   */
   export(): Record<string, LiveFeatureState> {
-    return Object.fromEntries([...this.documents].map(([feature, document]) => [feature, document.export()]));
+    return Object.fromEntries([...this.documents].filter(([, document]) => !document.isBlank()).map(([feature, document]) => [feature, document.export()]));
   }
   /** Load every document from `states` (a missing feature starts empty: the look lacks it). */
   load(states: Readonly<Record<string, LiveFeatureState>> | undefined) {

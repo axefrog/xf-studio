@@ -4,7 +4,6 @@
  * through the same `FeatureModule` shape as eye makeup and is composed beside it only in tests.
  */
 import { LIVE_REGION, STUDIO_OWNERS } from "../../src/compose/studio-registry";
-import { EYE_MAKEUP } from "../../src/features/eye-makeup";
 import type { DocumentModel } from "../../src/collection-workspace";
 import { featureActionTable, featureId, refusal, type ActionDescriptor, type EditorCodec, type FeatureModule,
   type PartCodec } from "../../src/platform/api";
@@ -71,6 +70,7 @@ export const HAIR: FeatureModule<HairAction, "workspace", typeof HAIR_ID, Hair, 
 /** The Studio's composition with the synthetic hair feature registered beside eye makeup (hair is not in `StudioOwnerActions`). */
 export function withHair(): StudioComposition & { documents: DocumentModel } {
   const owners = [...STUDIO_OWNERS, HAIR];
-  const parts = new PartRegistry([EYE_MAKEUP, HAIR]);
+  // Every feature the production composition registers (eye makeup first, the live one), then hair.
+  const parts = new PartRegistry([...STUDIO_OWNERS.filter(owner => owner.owner === "feature"), HAIR]);
   return { registry: new Registry(owners), documents: Object.freeze({ parts, live: "eye-makeup" }), region: LIVE_REGION };
 }

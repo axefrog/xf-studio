@@ -3,6 +3,7 @@ import { resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
+import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
 import { createSavesHandler } from "../src/features/save-explorer/host/saves-server";
@@ -30,6 +31,7 @@ import { CharacterDetailHost, characterRoute, installationFingerprint } from "..
 import { installations } from "../src/installation-registry";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
+import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server";
 import { PoseCatalogueHost } from "../src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
@@ -90,6 +92,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
   const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
   const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
+  // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
+  const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
+  const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
@@ -179,6 +184,17 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: logTo("lut") });
   const gradingLutRequest = createGradingLutHandler(gradingLut);
+  // The live facial preview (facial-host.ts). The desktop has no Python and never reads developer environment paths: its preview shows
+  // why the solver isn't available until a consented setup exists; the face rig and installed expressions still load for editing.
+  const facial = new FacialHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+    settings: () => {
+      const settings = savedSettings();
+      return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,
+        mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
+    },
+    solver: () => locateFacialSolver({ toolsRoot: resolve(dataRoot, "tools"), script: resolve(import.meta.dir, "facial_solver_server.py") }),
+    log: logTo("facial") });
+  const facialRequest = createFacialHandler(facial);
   // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
   const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
     app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,
@@ -243,6 +259,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
       if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
       if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(routedRequest);
+      if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(routedRequest);
       if (url.pathname === "/api/desktop/wolvenkit") return wolvenKitRequest(routedRequest);
       if (url.pathname === "/api/desktop/open-link") {
         // Only named official pages from the host's own state; the view never supplies a URL.
@@ -331,6 +348,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(routedRequest);
       for (const [prefix, store] of [["/api/collections", collections], ["/api/verification/collections", verificationCollections]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
+      for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
+        if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
@@ -383,6 +402,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); collections.close(); verificationCollections.close(); library.close(); verificationLibrary.close(); },
+    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); library.close(); verificationLibrary.close(); },
   };
 }

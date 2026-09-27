@@ -26,11 +26,14 @@ import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceStat
 import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
   type ValueSchema } from "./studio-action-descriptors";
 import { coded, refusal, undoPolicyOf, type ActionDescriptor as PlatformDescriptor, type ActionHandler, type AsyncActionHandler,
-  type Capability, type FeatureActionSpec, type FeatureModule, type FieldLimit, inputLimits, type FeatureState, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
+  type Capability, type FeatureActionSpec, type PartEnvelope, type FeatureModule, type FieldLimit, inputLimits, type FeatureState, type HistoryEntryId, type HistoryLabel, type ReasonCode, type UndoPolicy,
   type ValidationIssue } from "./platform/api";
 import type { AnyOwner, Registry } from "./platform/core/registry";
 import { CONTROL_TRANSACTION, HistoryTransaction, type TransactionHost } from "./platform/core/history-transaction";
 import type { StudioFileAction, StudioFileOperations, StudioFileOutcome } from "./studio-file-operations";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetService } from "./part-presets";
+import type { FacialPreview } from "./facial-preview";
+import type { FacialPreviewSnapshot } from "./platform/api/facial";
 import { contextCandidates, contextScope, geometryHit,
   type StudioBoundContext, type StudioContextHit } from "./studio-context-targets";
 import { finishCatalogue, glitterModelCatalogue } from "./engines/layered-makeup/finish-catalogue";
@@ -60,6 +63,7 @@ export type StudioOwnerId = keyof StudioOwnerActions;
 export type StudioOwnerRequests = {
   library: CollectionRequest;
   files: StudioFileAction;
+  presets: PartPresetRequest;
 };
 export type StudioRequestOwnerId = keyof StudioOwnerRequests;
 /** Every action a presentation may dispatch: the union of the registered owners' actions. */
@@ -93,6 +97,7 @@ type Handlers = { readonly [O in StudioOwnerId]: ActionHandler<StudioOwnerAction
 type AsyncHandlers = {
   readonly library: AsyncActionHandler<CollectionRequest, Awaited<ReturnType<CollectionService["execute"]>>>;
   readonly files: AsyncActionHandler<StudioFileAction, StudioFileOutcome>;
+  readonly presets: AsyncActionHandler<PartPresetRequest, PartPresetOutcome>;
 };
 type Services = { document: AuthoringDocument;
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
@@ -111,7 +116,11 @@ type Services = { document: AuthoringDocument;
   /** The view graph (view-graph-design.md §3.3): which views exist, for actions that name one. */
   views?: ViewGraph;
   /** The views family over the graph and the composition's modules and view tools (view-actions.ts). */
-  viewActions?: ViewActions };
+  viewActions?: ViewActions;
+  /** Part presets in the library (part-presets.ts), for every feature's favourites. */
+  presets?: PartPresetService;
+  /** The live facial preview (facial-preview.ts): the held expression on the head, and what a feature's drawer shows. */
+  facial?: FacialPreview };
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
@@ -133,6 +142,8 @@ export class StudioApplication {
    * documents (`document.others`), bound generically, so a feature module needs no handler of its own.
    */
   private readonly featureHandlers = new Map<string, ActionHandler<{ kind: string }>>();
+  /** The open generic feature control (`featureControlBegin`): one Undo step over its feature's part for a run of edits. */
+  private featureControl?: { feature: string; id: string; transaction: HistoryTransaction<HistoryEntryId> };
   /** The open look transaction (`transaction`): its actions record no steps of their own. */
   private look?: { features: readonly string[] };
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
@@ -141,7 +152,9 @@ export class StudioApplication {
     this.asyncHandlers = this.bindAsyncHandlers();
     for (const owner of registry.owners())
       if (owner.owner === "feature" && !(owner.id in this.handlers)) {
-        if (!services.document.others?.has(owner.id)) throw Error(`Feature ${owner.id} has no live document.`);
+        // A document with live documents must have one per feature; a bare single-feature document (fixtures, tools) binds the
+        // feature anyway and its capability refuses with `not_ready`.
+        if (services.document.others && !services.document.others.has(owner.id)) throw Error(`Feature ${owner.id} has no live document.`);
         this.featureHandlers.set(owner.id, this.featureHandler(owner.id));
       }
     // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
@@ -169,7 +182,7 @@ export class StudioApplication {
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));
-    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions])
+    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions, s.presets, s.facial])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -558,7 +571,7 @@ export class StudioApplication {
       return { available: false, code: "missing_target", reason: NO_PRESET };
     if (this.previewUnavailable && route.owner.owner === "system" && route.owner.needsScene)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot()))
+    if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot() || this.featureControl))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
     // A look holding a newer build's data is kept exactly as it came: no feature edits it here (step 5).
     if (route.owner.owner === "feature" && s.document.locked) return refusal("unavailable", s.document.locked);
@@ -622,7 +635,7 @@ export class StudioApplication {
    */
   transaction<T>(label: HistoryLabel, features: readonly string[], fn: () => NotThenable<T>): StudioDispatchResult {
     const s = this.services;
-    if (this.look || this.gesture || s.controls.snapshot())
+    if (this.look || this.gesture || s.controls.snapshot() || this.featureControl)
       return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
     if (this.unowned()) return { ok: false, code: "missing_target", message: NO_PRESET };
     if (s.document.locked) return { ok: false, code: "unavailable", message: s.document.locked };
@@ -751,6 +764,11 @@ export class StudioApplication {
         execute: async request => app.services.collection?.execute(request)
           ?? { ok: false as const, code: "unavailable", message: "Collection is still loading." },
       },
+      presets: {
+        capability: request => coded(app.services.presets?.capability(request) ?? missing("Saved presets are still loading.")),
+        execute: async request => app.services.presets?.execute(request)
+          ?? { ok: false as const, code: "unavailable", message: "Saved presets are still loading." },
+      },
       files: {
         capability: action => app.lockedExport(action) ?? app.services.files?.capability(action) ?? missing("Files are still loading."),
         execute: async action => {
@@ -813,7 +831,7 @@ export class StudioApplication {
   }
   /** A pointer gesture owns the Undo transaction while it runs; a form control cannot start inside it. */
   controlBegin(id: string, layerId: string) {
-    if (this.gesture || this.look || this.unowned() || this.services.document.locked) return false;
+    if (this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
     const begun = this.services.controls.begin(id, layerId); if (begun) this.notify(); return begun;
   }
   /**
@@ -839,6 +857,84 @@ export class StudioApplication {
   }
   controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
   controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
+  /**
+   * A form control's run of edits on a feature bound by the generic handler (a slider drag), as one Undo step (feature-module platform
+   * section 3): the platform's `HistoryTransaction` with the form-control policy over that feature's part. Refused inside a gesture,
+   * another control or a look transaction. Its edits pass the same capability gate as dispatch; `featureControlCancel` (Escape)
+   * restores the start.
+   */
+  featureControlBegin(feature: string, id: string): boolean {
+    const open = this.featureControl;
+    if (open?.feature === feature && open.id === id) return true;
+    if (open) this.featureControlCommit(open.id);
+    if (this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
+      || !this.featureHandlers.has(feature)) return false;
+    const document = this.services.document, history = this.services.history, features = [feature];
+    const host: TransactionHost<HistoryEntryId> = {
+      checkpoint: () => document.checkpointFeature(feature), top: () => document.historyTop,
+      relabel: (step, name) => document.relabelCheckpoint(step, name), discard: step => document.discardCheckpoint(step),
+      revert: step => { if (history) history.revertTransaction(step); },
+      content: () => document.contentKey(features),
+    };
+    this.featureControl = { feature, id, transaction: HistoryTransaction.open(host, CONTROL_TRANSACTION, () => true) };
+    this.notify();
+    return true;
+  }
+  featureControlEdit(feature: string, id: string, action: { kind: string }): StudioDispatchResult {
+    if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
+    if (this.ownerOf(action.kind) !== feature) return { ok: false, code: "invalid_value", message: "That command belongs to another part of the look." };
+    const allowed = this.capability(action as StudioAction);
+    if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
+    const owned = this.featureControl?.feature === feature && this.featureControl.id === id;
+    if (!owned && !this.featureControlBegin(feature, id)) return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
+    const control = this.featureControl!;
+    const before = this.services.document.contentKey([feature]);
+    // Inside the transaction the action records no step of its own (the transaction's checkpoint is the step).
+    this.look = { features: [feature] };
+    try {
+      this.featureHandlers.get(feature)!.dispatch(action);
+      const changed = this.services.document.contentKey([feature]) !== before;
+      const route = this.routes.route(action.kind);
+      control.transaction.applied(changed, () => route.ok ? (route.spec as FeatureActionSpec<unknown, unknown>).label(action)
+        : { label: action.kind, actionKind: action.kind });
+      return { ok: true, result: changed };
+    } catch (error) { return { ok: false, ...failure(undefined, error) }; }
+    finally {
+      this.look = undefined;
+      if (!owned) this.featureControlCommit(id);
+      this.notify();
+    }
+  }
+  featureControlCommit(id: string) {
+    if (this.featureControl?.id !== id) return;
+    const control = this.featureControl; this.featureControl = undefined;
+    control.transaction.commit(); this.notify();
+  }
+  featureControlCancel(id: string) {
+    if (this.featureControl?.id !== id) return;
+    const control = this.featureControl; this.featureControl = undefined;
+    control.transaction.cancel(); this.notify();
+  }
+  /** The open generic feature control, if any. */
+  featureControlSnapshot() { return this.featureControl ? { feature: this.featureControl.feature, id: this.featureControl.id } : undefined; }
+  /** A part preset request's capability, routed by the registry to the `presets` family. */
+  presetCapability(request: PartPresetRequest): StudioCapability {
+    return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.capability(request) : unknownCommand();
+  }
+  async executePreset(request: PartPresetRequest): Promise<PartPresetOutcome> {
+    return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.execute(request)
+      : { ok: false, code: "invalid_value", message: "Unknown command." };
+  }
+  /** A feature's live part in its current schema (its empty part when the look lacks it), for saving it as a preset. */
+  featureEnvelope(feature: string): PartEnvelope | undefined {
+    const document = this.services.document.others?.document(feature);
+    return document ? document.module.part.serialize(document.part ?? document.module.part.empty()) : undefined;
+  }
+  /** A feature's saved presets (loaded on first ask). */
+  presetList(feature: string): PartPresetList { return this.services.presets?.snapshot(feature) ?? { phase: "loading", items: [] }; }
+  /** The facial preview as a feature's drawer shows it (undefined until the root connects one). */
+  facialPreview(): FacialPreviewSnapshot | undefined { return this.services.facial?.snapshot(); }
+  facialRetry() { this.services.facial?.retry(); }
   /** A library request's capability, routed by the registry to the `library` family. */
   requestCapability(request: CollectionRequest): StudioCapability {
     return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.capability(request) : unknownCommand();

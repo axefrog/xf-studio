@@ -11,7 +11,8 @@ import { menuFromSections, openMenu, type MenuItem, type MenuSection } from "../
 import { Frame, type StudioRuntime } from "../runtime";
 import { readinessText } from "../readiness-text";
 import { contextItems, viewportMenu } from "../target-menus";
-import type { FacadeOf, FeatureMenuItem, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
+import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
+import type { PartPresetRequest } from "../../part-presets";
 
 type Action = { kind: string };
 /** Only the keys that carry a value, so a rendered entry has exactly the fields its contribution gave. */
@@ -66,6 +67,12 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       hints: (slot: HTMLElement, host: HTMLElement) => new ViewportInputHints(port.viewport, "uv", slot, host),
     }),
     readiness: () => readinessText(new Frame(port)),
+    facial: Object.freeze({ snapshot: () => port.facial.snapshot(), retry: () => port.facial.retry() }),
+    presets: Object.freeze({
+      list: () => port.presets.list(owner),
+      capability: (request: FeaturePresetRequest) => port.presets.capability({ ...request, feature: owner } as PartPresetRequest),
+      execute: (request: FeaturePresetRequest) => port.presets.execute({ ...request, feature: owner } as PartPresetRequest),
+    }),
   } satisfies FeatureViewContext);
 }
 

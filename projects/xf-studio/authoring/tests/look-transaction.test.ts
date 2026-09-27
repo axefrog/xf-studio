@@ -11,7 +11,6 @@ import { collectionDraft } from "../src/collection-workspace";
 import { COLLECTION_2, featureActionTable, featureId } from "../src/platform/api";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
-import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { PartRegistry } from "../src/platform/core/document";
 import { Registry } from "../src/platform/core/registry";
 import { hairCodec, withHair, type Hair } from "./fixtures/hair-feature";
@@ -28,10 +27,10 @@ const opacity = (c: ReturnType<typeof core>) => c.document.recipe.layers[0].opac
 const setOpacity = (c: ReturnType<typeof core>, value: number) =>
   c.app.dispatch({ kind: "layer.setOpacity", layerId: c.document.recipe.layers[0].id, opacity: value });
 
-test("the production composition has no other live documents and exports exactly what it did", () => {
+test("the production composition's other live documents stay silent until used, so it exports exactly what it did", () => {
   const c = core(STUDIO_COMPOSITION);
-  expect(c.document.others).toBeUndefined();
-  expect(c.document.otherParts()).toBeUndefined();
+  expect(c.document.others?.features()).toEqual(["expressions"]);
+  expect(c.document.otherParts()?.parts).toEqual({ expressions: undefined });
   expect("liveFeatures" in c.document.export()).toBe(false);
   expect(c.document.contentKey()).toBe(JSON.stringify(c.document.recipe));
 });
@@ -189,7 +188,7 @@ function withTint() {
       }),
   });
   return { registry: new Registry([...STUDIO_OWNERS, TINT as never]),
-    documents: Object.freeze({ parts: new PartRegistry([EYE_MAKEUP, TINT as never]), live: "eye-makeup" }), region: STUDIO_COMPOSITION.region };
+    documents: Object.freeze({ parts: new PartRegistry([...STUDIO_OWNERS.filter(owner => owner.owner === "feature"), TINT as never]), live: "eye-makeup" }), region: STUDIO_COMPOSITION.region };
 }
 
 test("a change that records no step hides Redo, which would overwrite it (CORE-46)", () => {

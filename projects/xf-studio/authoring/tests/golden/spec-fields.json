@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1)",
  "states": {
   "starter": {
    "modes": {
@@ -467,6 +467,38 @@
     "layer/character.setClothingArea": {
      "area": {}
     },
+    "layer/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "layer/expression.mirror": {
+     "from": {}
+    },
+    "layer/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "layer/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -925,6 +957,38 @@
     "point/character.setClothingArea": {
      "area": {}
     },
+    "point/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "point/expression.mirror": {
+     "from": {}
+    },
+    "point/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "point/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -1379,6 +1443,38 @@
     },
     "viewport/character.setClothingArea": {
      "area": {}
+    },
+    "viewport/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.mirror": {
+     "from": {}
+    },
+    "viewport/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -1835,6 +1931,38 @@
     "collection/character.setClothingArea": {
      "area": {}
     },
+    "collection/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "collection/expression.mirror": {
+     "from": {}
+    },
+    "collection/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "collection/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -2289,6 +2417,38 @@
     },
     "preset/character.setClothingArea": {
      "area": {}
+    },
+    "preset/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "preset/expression.mirror": {
+     "from": {}
+    },
+    "preset/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "preset/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     }
    },
    "consequences": {
@@ -2953,6 +3113,38 @@
     "layer/character.setClothingArea": {
      "area": {}
     },
+    "layer/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "layer/expression.mirror": {
+     "from": {}
+    },
+    "layer/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "layer/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -3418,6 +3610,38 @@
     "point/character.setClothingArea": {
      "area": {}
     },
+    "point/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "point/expression.mirror": {
+     "from": {}
+    },
+    "point/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "point/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -3872,6 +4096,38 @@
     },
     "viewport/character.setClothingArea": {
      "area": {}
+    },
+    "viewport/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.mirror": {
+     "from": {}
+    },
+    "viewport/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -4328,6 +4584,38 @@
     "collection/character.setClothingArea": {
      "area": {}
     },
+    "collection/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "collection/expression.mirror": {
+     "from": {}
+    },
+    "collection/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "collection/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -4782,6 +5070,38 @@
     },
     "preset/character.setClothingArea": {
      "area": {}
+    },
+    "preset/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "preset/expression.mirror": {
+     "from": {}
+    },
+    "preset/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "preset/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     }
    },
    "consequences": {
@@ -5447,6 +5767,38 @@
     "layer/character.setClothingArea": {
      "area": {}
     },
+    "layer/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "layer/expression.mirror": {
+     "from": {}
+    },
+    "layer/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "layer/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -5913,6 +6265,38 @@
     "point/character.setClothingArea": {
      "area": {}
     },
+    "point/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "point/expression.mirror": {
+     "from": {}
+    },
+    "point/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "point/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -6367,6 +6751,38 @@
     },
     "viewport/character.setClothingArea": {
      "area": {}
+    },
+    "viewport/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.mirror": {
+     "from": {}
+    },
+    "viewport/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -6823,6 +7239,38 @@
     "collection/character.setClothingArea": {
      "area": {}
     },
+    "collection/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "collection/expression.mirror": {
+     "from": {}
+    },
+    "collection/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "collection/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -7277,6 +7725,38 @@
     },
     "preset/character.setClothingArea": {
      "area": {}
+    },
+    "preset/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "preset/expression.mirror": {
+     "from": {}
+    },
+    "preset/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "preset/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     }
    },
    "consequences": {
@@ -7941,6 +8421,38 @@
     "layer/character.setClothingArea": {
      "area": {}
     },
+    "layer/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "layer/expression.mirror": {
+     "from": {}
+    },
+    "layer/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "layer/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -8406,6 +8918,38 @@
     "point/character.setClothingArea": {
      "area": {}
     },
+    "point/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "point/expression.mirror": {
+     "from": {}
+    },
+    "point/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "point/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -8860,6 +9404,38 @@
     },
     "viewport/character.setClothingArea": {
      "area": {}
+    },
+    "viewport/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.mirror": {
+     "from": {}
+    },
+    "viewport/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -9316,6 +9892,38 @@
     "collection/character.setClothingArea": {
      "area": {}
     },
+    "collection/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "collection/expression.mirror": {
+     "from": {}
+    },
+    "collection/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "collection/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -9770,6 +10378,38 @@
     },
     "preset/character.setClothingArea": {
      "area": {}
+    },
+    "preset/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "preset/expression.mirror": {
+     "from": {}
+    },
+    "preset/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "preset/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     }
    },
    "consequences": {
@@ -10434,6 +11074,38 @@
     "layer/character.setClothingArea": {
      "area": {}
     },
+    "layer/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "layer/expression.mirror": {
+     "from": {}
+    },
+    "layer/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "layer/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -10899,6 +11571,38 @@
     "point/character.setClothingArea": {
      "area": {}
     },
+    "point/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "point/expression.mirror": {
+     "from": {}
+    },
+    "point/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "point/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -11353,6 +12057,38 @@
     },
     "viewport/character.setClothingArea": {
      "area": {}
+    },
+    "viewport/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.mirror": {
+     "from": {}
+    },
+    "viewport/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -11809,6 +12545,38 @@
     "collection/character.setClothingArea": {
      "area": {}
     },
+    "collection/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "collection/expression.mirror": {
+     "from": {}
+    },
+    "collection/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "collection/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -12263,6 +13031,38 @@
     },
     "preset/character.setClothingArea": {
      "area": {}
+    },
+    "preset/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "preset/expression.mirror": {
+     "from": {}
+    },
+    "preset/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "preset/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     }
    },
    "consequences": {
@@ -12930,6 +13730,38 @@
     "layer/character.setClothingArea": {
      "area": {}
     },
+    "layer/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "layer/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "layer/expression.mirror": {
+     "from": {}
+    },
+    "layer/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "layer/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -13398,6 +14230,38 @@
     "point/character.setClothingArea": {
      "area": {}
     },
+    "point/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "point/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "point/expression.mirror": {
+     "from": {}
+    },
+    "point/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "point/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -13852,6 +14716,38 @@
     },
     "viewport/character.setClothingArea": {
      "area": {}
+    },
+    "viewport/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "viewport/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.mirror": {
+     "from": {}
+    },
+    "viewport/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "viewport/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     },
     "collection/history.jumpTo": {
      "entryId": {}
@@ -14308,6 +15204,38 @@
     "collection/character.setClothingArea": {
      "area": {}
     },
+    "collection/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "collection/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "collection/expression.mirror": {
+     "from": {}
+    },
+    "collection/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "collection/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -14762,6 +15690,38 @@
     },
     "preset/character.setClothingArea": {
      "area": {}
+    },
+    "preset/expression.setControl": {
+     "name": {
+      "minLength": 1,
+      "maxLength": 96
+     },
+     "value": {
+      "min": 0,
+      "max": 1,
+      "unit": "fraction"
+     }
+    },
+    "preset/expression.linkPair": {
+     "pair": {
+      "minLength": 1,
+      "maxLength": 96
+     }
+    },
+    "preset/expression.mirror": {
+     "from": {}
+    },
+    "preset/expression.reset": {
+     "scope": {},
+     "target": {
+      "maxLength": 96
+     }
+    },
+    "preset/expression.setLabel": {
+     "label": {
+      "maxLength": 64,
+      "unit": "characters"
+     }
     }
    },
    "consequences": {

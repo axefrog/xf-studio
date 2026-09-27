@@ -280,6 +280,29 @@ Localhost only. `DesktopAppActions` (`src/desktop-app.ts`; descriptors `DESKTOP_
 
 The report window (`studio-ui/diagnostics/report-dialog.ts`), Help's **Report a problem…** and the palette's **Report a problem…** and **Turn diagnostic mode on/off** use only these. App services report a failure a person may see with `pageFailure(area, code, message, error, options)` on the page and `hostFailure(area, code, message, error)` on a host: one line at the catch site, with no logger to hold.
 
+## Part presets and expressions
+
+The Expressions feature (module #2, [expression editor design](../animation/expression-editor-design.md#phase-1-status)) is bound by the application's generic feature handler: its actions go through its facade (`port.feature("expressions")`), are refused with structured codes, and record `part` steps in the look history. Slider drags use the facade's form-control transaction (`controlBegin(id)`, `controlEdit(id, action)` per change, `controlCommit(id)`, or `controlCancel(id)` on Escape): one Undo step per drag, refused inside a gesture, another control or a look transaction, and Undo is refused while one is open. Control names are the rig's track names; the feature decides pairs, mirrors and groups from the names alone, so a name the head lacks is kept verbatim.
+
+| Exact action/payload | Target, effect and refusals |
+|---|---|
+| `expression.setControl` `{name,value}` | One main-pose control, weight `0..1` (float32). A linked mirror pair (the default for left/right pairs; direction pairs such as jaw shift or gaze start unlinked) sets both sides. `invalid_value` for a non-control name or a weight outside `0..1`. Setting the value it already has records nothing. |
+| `expression.linkPair` `{pair,linked}` | Link or separate a left/right pair (`pair` is the name without its side words, `lips_corner_up`). |
+| `expression.mirror` `{from:"left"|"right"}` | Copy every mirror pair's named side onto the other; centre controls and direction pairs are left alone. |
+| `expression.reset` `{scope:"all"|"group"|"control",target?}` | Clear every control, a drawer group (`brows`, `lids`, `gaze`, `nose`, `cheeks`, `mouth`, `jaw`, `neck`, `ears`, `advanced`, `other`) or one control (with its linked partner). |
+| `expression.startFrom` `{origin,controls}` | Replace the vector with a start point's; `origin` is `{kind:"rest"}`, `{kind:"installed",clip,set,row?,provider?}` (an installed photo-mode expression, from the facial preview's start points) or `{kind:"preset",id,name}` (a saved expression). The label and links are kept. |
+| `expression.setLabel` `{label}` | The photo-mode menu text (up to 64 characters; empty uses the preset's name). Export comes in phase 3. |
+
+Part presets are the async `presets` family (never Undo; [editor invariants](editor-invariants.md#part-presets)):
+
+| Exact request/payload | Effect and refusals |
+|---|---|
+| `partPreset.list` `{feature}` | The feature's saved presets from the library, by name (loaded on a view's first ask). |
+| `partPreset.save` `{feature,name,part?}` | Save a part under a name (1–120 characters; `needs_input` when blank). Without `part` the presentation saves the feature's live part, serialized with its own codec. |
+| `partPreset.rename` `{feature,id,name,revision}`; `partPreset.delete` `{feature,id,revision}` | Revision-guarded: a stale window gets a plain conflict; `missing_target` when the preset is gone. Delete removes it from the library for good. |
+
+Read-only: `port.facial.snapshot()` (the live face's readiness in plain words with its one next step: `game-setup`, `guide`, `stop-idle` or `retry`; the rig's controls and drawer groups; the installed start points; recent solve latency) and `port.facial.retry()`. A feature view reaches both, and its own part presets, only through its view context (`ctx.facial`, `ctx.presets`).
+
 ## Persistence, async boundaries and truthful state
 
 | Kind of state | Current owner and safe read | Persistence/Undo rule |
