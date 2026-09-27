@@ -325,6 +325,15 @@ Built on 27 September 2026 in `claude/expressions-p1`. Nothing here has been com
 
 **Left for later phases:** region handles (phase 2), export (phase 3), in-game proof (phase 4), the in-app solver (phase 5), the male head, eye-shape seats for expressions, a consented solver download for the desktop, and the component-library versions of four drawer pieces (a slider with numeric entry, a left/right pair control, a group expander, a search field).
 
+## Phase 3 status
+
+Built on 28 September 2026 in `claude/expression-export`. Nothing has been loaded in game; the session ask is in [next-sessions plan](../runtime/next-sessions-plan.md).
+
+- **Sets** (`part-preset-sets.ts`, `part-preset-store.ts` `part_preset_sets`, `part-presets.ts` `partPresetSet.*`) and the **Expression sets** panel (`features/expressions/view/sets.ts`, from the component library): create, rename, delete; add, remove and reorder saved expressions; the mod's name and table choice; Check, Build and Show in folder; results per set with what was left out and why. The drawer's More menu opens it (it replaced the "Export to game" placeholder). Awaiting the UI/UX gate.
+- **Exporter** `features/expressions/export/` (plan, writers) with the engine's clip writer `engines/facial-rig/clip.ts`, the **verifier** `features/expressions/verify/` (imports neither), and the host prerequisite `src/expressions-game-prerequisite.ts` on both hosts. Platform extensions: product extras (TweakXL files, overlay archives) and `resource: patch:` in `.xl` fragments ([pipeline](../authoring/studio-to-mod-pipeline.md#expression-sets-photo-mode-expression-mods)).
+- **Measured** on the reference setup: a five-expression set builds and verifies in about 84 s; the clips round-trip through WolvenKit 9.0.1 and the Studio's decoder exactly; the table carried the Mega Pack's 217 rows.
+- **Not done:** "Add to my mod manager" for products with TweakXL files (refused with a plain next step), the stale-table watch (§6.3), per-expression body genders, NPC puppets.
+
 ## 10. Open questions
 
 The brief's remaining questions, with proposed defaults:
