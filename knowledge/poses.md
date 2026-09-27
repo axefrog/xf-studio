@@ -75,7 +75,7 @@ No field names an icon, an `.anims` file or a workspot [resource]: the menu is a
   | `TwistConstraint` | 10 |
   | `TranslationLimit` | 8 |
 
-  The shadow component has its own rig (`shadow_rig_wa`) [resource]. The Studio's preview approximates these joints rigidly ([body rendering §4](body-rendering.md#4-how-the-studio-draws-the-body)).
+  The shadow component has its own rig (`shadow_rig_wa`) [resource]. The graph is one linear chain of 420 nodes over `woman_base_deformations.rig` (181 joints); the Studio evaluates it from the game's files with inferred semantics that reproduce the rig's A pose for 179 of 181 joints ([body animation §3](body-animation.md#3-the-deformation-rig)).
 
 ## 5. How mods add poses
 
@@ -139,7 +139,7 @@ How the Studio plans to use these levers is in the [pose editor design](../resea
 3. Is a pose whose `filterOutForGarmentTags` matches V's outfit hidden from the menu, or only disabled?
 4. In which axes and space do `positionOffset` and `rotation` apply?
 5. Does a game without Phantom Liberty use the base `player_wa_photomode.ent` for V, and does a pack that targets only one of the two entities show in the other?
-6. What does the deformation graph compute for each helper joint, and how far is the Studio's rigid approximation from it in strong poses?
+6. ~~What does the deformation graph compute for each helper joint?~~ **Mostly answered [offline]:** each node kind's semantics, checked at the A pose ([body animation §3](body-animation.md#3-the-deformation-rig)). Still open: the same checked against the game in strong poses.
 7. Does the engine sample a loaded clip's constant keys every frame, so that writing them changes a held pose live, or does it copy or cache them per selection or per load?
 8. Do `IKTargetAddEvent` targets and `LookAtAddEvent` hand targets act on the photo-mode puppet while it holds a pose?
 9. After a hot reload, does re-selecting a pose pick up a reloaded set, or only a newly created puppet?

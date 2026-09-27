@@ -1,6 +1,6 @@
 # Pose library for the full-body view: design study
 
-**Status: design ready, 27 September 2026; nothing built.** It answers the [backlog entry](../backlog/README.md) asking for the full-body V in any photo-mode pose, vanilla or modded, from its own searchable panel with starred favourites. The facts it rests on are consolidated in [poses](../../knowledge/poses.md); this page adds the design, the phases, the risks and the questions. Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]**, **[resource]**, **[wiki]**, **[runtime]**, **[offline]** and **[hypothesis]**. No game session was run for this study. The evidence and its provenance are in the last section.
+**Status: design ready, 27 September 2026; P4's evaluator built early (claude/body-fidelity), P0–P3 and P5 not started.** It answers the [backlog entry](../backlog/README.md) asking for the full-body V in any photo-mode pose, vanilla or modded, from its own searchable panel with starred favourites. The facts it rests on are consolidated in [poses](../../knowledge/poses.md); this page adds the design, the phases, the risks and the questions. Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]**, **[resource]**, **[wiki]**, **[runtime]**, **[offline]** and **[hypothesis]**. No game session was run for this study. The evidence and its provenance are in the last section.
 
 ## 1. Summary
 
@@ -106,7 +106,7 @@ A record whose clip isn't found in the puppet's sets gets `clip: null`. It is no
 
 - **Same composition as the idle.** The body clip's joints are the creator idle's joints: the same 71-joint `woman_base.rig`, with main joints matching the body meshes within 0.001 ([body rendering §4](../../knowledge/body-rendering.md#4-how-the-studio-draws-the-body)). So a pose is a **body source** for the idle's composition: a world delta per rig joint, then each target bone's world bind, parent first. Helper joints follow `nearestDriver` until phase 4.
 - **One motion compositor** (lifting `preview-motion.ts`):
-  - **Body source**, one of three: *Still* (bind pose), *Creator idle* (today's clip), or *Pose*.
+  - **Body source**, one of: *Still* (bind pose), one of the game's preview idles (built: the Motion panel's Body field, [body animation §2](../../knowledge/body-animation.md#2-the-preview-idles)), or *Pose*.
   - **Face source**, one of: *rest*, the idle's face, the game blink, and later an expression (the expression design's facial pose port).
   - Choosing a pose sets the body source to *Pose*; the Preview panel's idle switch becomes the body source choice.
   - The face keeps whatever it had. With the idle's face on, V blinks and glances while holding the pose. That is more alive than photo mode, where only look-at blinks move the face (question Q5).
@@ -116,7 +116,7 @@ A record whose clip isn't found in the puppet's sets gets `clip: null`. It is no
   - The record's `positionOffset` and `rotation` move the whole character, converted from game axes (Z up) the way the idle export already converts.
   - `Trajectory` and any motion extraction are ignored, so V stays in place. Photo mode likewise keeps the puppet at its spot [hypothesis].
 - **Feet.** Pose clips carry foot IK tracks (`allowFeetIk`, `enableLeftFootIk`, …), and the game's graph has IK nodes that plant feet on terrain [resource]. The Studio has no terrain: feet stay where the clip puts them relative to `Root`, and the floor is `Root`'s height. A pose authored for stairs or a slope floats or sinks, as it would on flat ground in game.
-- **Helper joints (phase 4).** Evaluate `woman_base_deformations.animgraph` itself: its point, orient, aim, twist and spline nodes are data. `SimpleBounce` is left at rest in a static pose. Parity: the in-game check G5 and captured shoulder and hip close-ups.
+- **Helper joints (phase 4).** Evaluate `woman_base_deformations.animgraph` itself: its point, orient, aim, twist and spline nodes are data. `SimpleBounce` is left at rest in a static pose. Parity: the in-game check G5 and captured shoulder and hip close-ups. The evaluator exists (it poses the idles' helper joints), so a pose gets it for free: the Pose body source feeds the same idle composition.
 - **Clothing** is skinned to the same joints, so it follows the pose. Garment support (pushing cloth out over the body) is not implemented ([worn clothing](../../knowledge/clothing.md)), so crossed legs and folded arms may show the body through clothes where the game hides it.
 - **Hair and dangles.**
   - Hair dangle joints follow the head rigidly in the preview. Hair keeps its rest shape relative to the head, and gravity is not simulated.
@@ -172,7 +172,7 @@ It is not a feature module: nothing is authored or exported. Authoring **new** p
 | **P1 Catalogue** | Puppet entity, sets, clip index and cache, pose entries, labels, provenance, diagnostics; an opt-in asset-backed test on the local install (142 vanilla, all resolve) | P0 | 2–3 days |
 | **P2 Playback** | Body source *Pose* in the compositor, placement offsets, posed-bounds framing and clip planes, face over pose | P1 | 2–3 days |
 | **P3 Panel** | Poses panel, search, categories, favourites store, recent, keyboard, outfit filter, badges, actions and capabilities, boundary tests, `?verify=1` acceptance | P2 | 3–4 days |
-| **P4 Deformation rig** | Evaluate `woman_base_deformations.animgraph` for the helper joints (constraints and splines; bounce at rest), replacing `nearestDriver` for the body; parity against in-game captures | P2, in-game G5 | 4–6 days (R&D) |
+| **P4 Deformation rig** | Evaluate `woman_base_deformations.animgraph` for the helper joints (constraints and splines; bounce at rest), replacing `nearestDriver` for the body; parity against in-game captures | P2, in-game G5 | 4–6 days (R&D). **Built for the idles** (27 September, `deformation-rig.ts`, [body animation §3](../../knowledge/body-animation.md#3-the-deformation-rig)): every node kind of the chain, read natively from the winning rig and graph, A-pose check 179/181 within 0.5 mm and 1°. Left: parity in strong poses (G5), bounce dynamics, the breasts simulation |
 | **P5 Extras** | Animated poses (loop, pause), look-at preset (head to camera), skeleton silhouettes, SIMD clips | P3 | 3–5 days |
 
 P0 to P3 is the first usable release: about two and a half weeks for one agent, or less with the TweakXL reader in parallel. P4 is the fidelity track.
