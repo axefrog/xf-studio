@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createModInstallTransport, declaredResources, installedDuplicates } from "../src/mod-install-transport";
+import { createModInstallTransport, declaredResources, extraFileKind, installedDuplicates } from "../src/mod-install-transport";
 import { defaultLocalSettings } from "../src/local-settings";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
 
@@ -432,4 +432,140 @@ test("a receipt from another receipts folder is adopted once, without its rollba
     expect(shared.adopt(earlier)).toBe(false);
     expect(shared.preflight("first").replacingOwned).toBe(true);
   } finally { f.cleanup(); }
+});
+
+// ---- Extra files: an expression set's table overlay archive and TweakXL file (placed where the game and TweakXL read them) ----
+
+const EXPR = "XF Expressions - Smiles", NS = "xfs_mexpr";
+/** A local-package-2 expressions product: the pair, then (optionally) the table overlay and the TweakXL file, as the builder lists them. */
+function extrasCandidate(store: string, candidateId: string, version: string, extras: { overlay?: boolean; tweak?: boolean } = { overlay: true, tweak: true }) {
+  const folder = join(store, candidateId);
+  const paths = [`archive/pc/mod/${NS}.archive`, `archive/pc/mod/${NS}.archive.xl`,
+    ...(extras.overlay ? [`archive/pc/mod/0${NS}_table.archive`] : []), ...(extras.tweak ? [`r6/tweaks/${NS}/${NS}.yaml`] : [])];
+  const files = paths.map(path => {
+    const body = `${version}:${path.split("/").at(-1)}`;
+    mkdirSync(join(folder, ...path.split("/").slice(0, -1)), { recursive: true });
+    writeFileSync(join(folder, ...path.split("/")), body);
+    return { path, sha256: digest(body), bytes: Buffer.byteLength(body) };
+  });
+  writeFileSync(join(folder, "manifest.json"), JSON.stringify({ schema: "xfs/local-package-2", productId: "11111111-2222-4333-8444-555555555555",
+    modName: EXPR, nameSource: "derived", archive: NS, features: [{ feature: "expressions", namespace: NS }], files, verifiedUnpackedFiles: 4,
+    installed: false, gameRenderingVerified: false }));
+}
+function extrasFixture(route: "direct" | "mo2") {
+  const f = fixture(route);
+  const root = route === "direct" ? f.game : join(f.mo2, "mods", EXPR);
+  const transport = createModInstallTransport({ candidateStore: f.store, receiptsRoot: f.receiptsRoot, settings: f.settings, modName: EXPR });
+  const at = (path: string) => join(root, ...path.split("/"));
+  const read = (path: string) => existsSync(at(path)) ? readFileSync(at(path), "utf8") : null;
+  return { ...f, root, target: join(root, "archive", "pc", "mod"), transport, at, read };
+}
+
+test("extra file kinds: overlay archives beside the main one, TweakXL files in the product's own r6/tweaks folder, nothing else", () => {
+  expect(extraFileKind(`archive/pc/mod/0${NS}_table.archive`, NS)).toBe("overlay-archive");
+  expect(extraFileKind(`r6/tweaks/${NS}/${NS}.yaml`, NS)).toBe("tweakxl");
+  for (const path of [`archive/pc/mod/${NS}.archive`, `archive/pc/mod/${NS}.archive.xl`, "archive/pc/mod/other.xl", `r6/tweaks/xfs_other/${NS}.yaml`,
+    `r6/tweaks/${NS}.yaml`, `r6/tweaks/${NS}/sub/${NS}.yaml`, `r6/scripts/${NS}/${NS}.reds`, `bin/x64/plugins/${NS}.dll`, `r6/tweaks/${NS}/../x.yaml`])
+    expect(extraFileKind(path, NS)).toBeNull();
+});
+
+for (const route of ["direct", "mo2"] as const) {
+  test(`${route}: an expressions product's extra files go where the game and TweakXL read them, and uninstall removes exactly those`, () => {
+    const f = extrasFixture(route);
+    try {
+      extrasCandidate(f.store, "set", "one");
+      // Other files in the shared folders are never touched. The game's folder is shared by every mod; an MO2 mod's folder is
+      // its own (a folder holding files XF Studio didn't put there is refused), so there the other file arrives later.
+      const other = () => { mkdirSync(f.at("r6/tweaks"), { recursive: true }); writeFileSync(f.at("r6/tweaks/other_mod.yaml"), "keep me"); };
+      if (route === "direct") other();
+      const preview = f.transport.preflight("set");
+      expect(preview.root).toBe(f.root);
+      expect(preview.removing).toEqual([]);
+      const receipt = f.transport.install("set");
+      expect(receipt.files.map(file => file.path)).toEqual([`archive/pc/mod/${NS}.archive`, `archive/pc/mod/${NS}.archive.xl`,
+        `archive/pc/mod/0${NS}_table.archive`, `r6/tweaks/${NS}/${NS}.yaml`]);
+      for (const file of receipt.files) expect(f.read(file.path)).toBe(`one:${file.path.split("/").at(-1)}`);
+      expect(receipt.target).toBe(f.target);
+      expect(f.transport.receipt()!.files).toHaveLength(4);
+      if (route === "mo2") other();
+      f.transport.uninstall();
+      for (const file of receipt.files) expect(existsSync(f.at(file.path))).toBe(false);
+      // The product's own TweakXL folder goes once empty; r6/tweaks and the other mod's file stay.
+      expect(existsSync(f.at(`r6/tweaks/${NS}`))).toBe(false);
+      expect(f.read("r6/tweaks/other_mod.yaml")).toBe("keep me");
+      expect(f.transport.record()).toBeNull();
+    } finally { f.cleanup(); }
+  });
+}
+
+test("an update replaces the extra files, removes one the new build no longer has, and rolls back to the earlier set", () => {
+  const f = extrasFixture("mo2");
+  try {
+    extrasCandidate(f.store, "first", "one");
+    extrasCandidate(f.store, "second", "two", { tweak: true });
+    f.transport.install("first");
+    expect(f.transport.preflight("second")).toMatchObject({ replacingOwned: true, removing: [expect.objectContaining({ path: `archive/pc/mod/0${NS}_table.archive` })] });
+    const receipt = f.transport.install("second");
+    expect(receipt.files).toHaveLength(3);
+    expect(f.read(`r6/tweaks/${NS}/${NS}.yaml`)).toBe(`two:${NS}.yaml`);
+    expect(existsSync(f.at(`archive/pc/mod/0${NS}_table.archive`))).toBe(false);
+    expect(f.transport.rollback().candidateId).toBe("first");
+    expect(f.read(`archive/pc/mod/0${NS}_table.archive`)).toBe(`one:0${NS}_table.archive`);
+    expect(f.read(`r6/tweaks/${NS}/${NS}.yaml`)).toBe(`one:${NS}.yaml`);
+    expect(f.transport.receipt()!.files).toHaveLength(4);
+  } finally { f.cleanup(); }
+});
+
+test("a hash mismatch is refused: a changed build file, an extra file edited after install, or another file where one goes", () => {
+  const f = extrasFixture("direct");
+  try {
+    extrasCandidate(f.store, "first", "one"); extrasCandidate(f.store, "second", "two");
+    // The build's TweakXL file changed after it was verified: nothing is placed.
+    const built = join(f.store, "second", "r6", "tweaks", NS, `${NS}.yaml`), original = readFileSync(built);
+    writeFileSync(built, "tampered");
+    expect(() => f.transport.install("second")).toThrow("Candidate payload differs");
+    expect(existsSync(f.at(`archive/pc/mod/${NS}.archive`))).toBe(false);
+    expect(existsSync(f.at(`r6/tweaks/${NS}`))).toBe(false);
+    writeFileSync(built, original);
+    // A file already where the TweakXL file goes that XF Studio didn't put there.
+    mkdirSync(f.at(`r6/tweaks/${NS}`), { recursive: true }); writeFileSync(f.at(`r6/tweaks/${NS}/${NS}.yaml`), "another tool's records");
+    expect(() => f.transport.preflight("first")).toThrow("unowned or changed");
+    rmSync(f.at(`r6/tweaks/${NS}/${NS}.yaml`));
+    f.transport.install("first");
+    // The installed TweakXL file edited by hand: update and uninstall refuse, and it stays as it is.
+    writeFileSync(f.at(`r6/tweaks/${NS}/${NS}.yaml`), "edited by hand");
+    expect(() => f.transport.install("second")).toThrow("unowned or changed");
+    expect(() => f.transport.uninstall()).toThrow("unowned or changed");
+    expect(f.read(`r6/tweaks/${NS}/${NS}.yaml`)).toBe("edited by hand");
+    expect(f.read(`archive/pc/mod/${NS}.archive`)).toBe(`one:${NS}.archive`);
+  } finally { f.cleanup(); }
+});
+
+test("an interrupted install with extra files is finished or undone by its journal, the extras included (INSTALL-02)", () => {
+  for (const [done, direction] of [[3, "forward"], [1, "back"]] as const) {
+    const f = extrasFixture("mo2");
+    try {
+      extrasCandidate(f.store, "first", "one"); extrasCandidate(f.store, "second", "two", { tweak: true });
+      f.transport.install("first");
+      const prior = f.transport.receipt()!;
+      const backup = join(f.receiptsRoot, `${prior.targetId}-test-backup`); mkdirSync(backup);
+      for (const entry of prior.files) writeFileSync(join(backup, entry.path.split("/").at(-1)!), readFileSync(f.at(entry.path)));
+      const files = JSON.parse(readFileSync(join(f.store, "second", "manifest.json"), "utf8")).files as { path: string }[];
+      const pending = { ...prior, candidateId: "second", files, installedAt: new Date().toISOString(), rollback: { prior: { ...prior, rollback: null }, backup } };
+      writeFileSync(join(f.receiptsRoot, `${prior.targetId}.journal.json`), JSON.stringify({ schema: "xfs/install-journal-1", targetId: prior.targetId,
+        target: prior.target, names: files.map(x => x.path.split("/").at(-1)), next: files, prior, backup, pending }));
+      // The install stopped after `done` of its files were in place (the TweakXL file first).
+      for (const entry of [...files.slice(2), ...files.slice(0, 2)].slice(0, done))
+        writeFileSync(f.at(entry.path), readFileSync(join(f.store, "second", ...entry.path.split("/"))));
+      expect(f.transport.recover()).toEqual({ recovered: true, conflicts: [], direction });
+      if (direction === "forward") {
+        expect(f.transport.receipt()!.candidateId).toBe("second");
+        expect(existsSync(f.at(`archive/pc/mod/0${NS}_table.archive`))).toBe(false);
+        expect(f.read(`r6/tweaks/${NS}/${NS}.yaml`)).toBe(`two:${NS}.yaml`);
+      } else {
+        expect(f.transport.receipt()!.candidateId).toBe("first");
+        for (const entry of prior.files) expect(f.read(entry.path)).toBe(`one:${entry.path.split("/").at(-1)}`);
+      }
+    } finally { f.cleanup(); }
+  }
 });

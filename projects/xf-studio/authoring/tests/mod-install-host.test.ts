@@ -527,3 +527,126 @@ test("Show in folder opens the build's archive folder; the endpoint takes only a
     expect((await (await post({ action: "reveal", candidateId: "first" })).json())).toEqual({ ok: true });
   } finally { f.cleanup(); }
 });
+
+// ---- A product with extra files: an expression set's table overlay archive and TweakXL file ----
+
+const SET_MOD = "XF Expressions - Smiles", NS = "xfs_mexpr";
+/** An expressions product as the builder writes it: the pair, then the table overlay and the TweakXL file (optionally left out). */
+function setCandidate(store: string, id: string, version: string, extras: { overlay?: boolean } = { overlay: true }) {
+  const folder = join(store, id);
+  const paths = [`archive/pc/mod/${NS}.archive`, `archive/pc/mod/${NS}.archive.xl`,
+    ...(extras.overlay ? [`archive/pc/mod/0${NS}_table.archive`] : []), `r6/tweaks/${NS}/${NS}.yaml`];
+  const files = paths.map(path => {
+    const body = `${version}:${path.split("/").at(-1)}`;
+    mkdirSync(join(folder, ...path.split("/").slice(0, -1)), { recursive: true });
+    writeFileSync(join(folder, ...path.split("/")), body);
+    return { path, sha256: digest(body), bytes: Buffer.byteLength(body) };
+  });
+  writeFileSync(join(folder, "manifest.json"), JSON.stringify({ schema: "xfs/local-package-2", productId: "11111111-2222-4333-8444-555555555555",
+    modName: SET_MOD, nameSource: "plan", archive: NS, features: [{ feature: "expressions", namespace: NS }], files, verifiedUnpackedFiles: 4,
+    installed: false, gameRenderingVerified: false }));
+}
+const receiptFiles = (receipts: string) => {
+  const name = readdirSync(receipts).find(file => /^[a-f0-9]{24}\.json$/.test(file))!;
+  return (JSON.parse(readFileSync(join(receipts, name), "utf8")) as { files: { path: string }[] }).files.map(file => file.path);
+};
+
+test("MO2: a mod with extra files is added with every file in its own folder, named in the plan; the row goes where it always does", async () => {
+  const f = fixture("mo2");
+  try {
+    setCandidate(f.store, "set", "one");
+    const folder = join(f.mo2, "mods", SET_MOD), archives = join(folder, "archive", "pc", "mod"), tweaks = join(folder, "r6", "tweaks", NS);
+    const plan = await f.host.plan("set");
+    expect(plan).toMatchObject({ modName: SET_MOD, blocked: null, replacing: false });
+    expect(plan.changes).toEqual([
+      `Add the mod “${SET_MOD}” to Mod Organizer 2, with its 4 files in its own folder, ${folder}.`,
+      `In ${archives}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”), and an extra archive it loads (“0${NS}_table.archive”).`,
+      `In ${tweaks}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
+      // Separator placement is unchanged: the bottom of the first section without frameworks.
+      `Add “${SET_MOD}” to the profile “Main (2026)”, switched on. At the bottom of the "Looks" section, where Mod Organizer puts newly installed mods.`,
+      "Nothing else in your mod list changes.",
+    ]);
+    const before = f.lines();
+    const result = await f.host.install("set", plan.token);
+    expect(result.message).toBe(`“${SET_MOD}” is in Mod Organizer 2 and switched on in the profile “Main (2026)”. ` +
+      "Start the game from Mod Organizer 2 to see its expressions in photo mode.");
+    expect(tree(folder)).toEqual([join("archive", "pc", "mod", `0${NS}_table.archive`), join("archive", "pc", "mod", `${NS}.archive`),
+      join("archive", "pc", "mod", `${NS}.archive.xl`), join("r6", "tweaks", NS, `${NS}.yaml`)]);
+    expect(readFileSync(join(tweaks, `${NS}.yaml`), "utf8")).toBe(`one:${NS}.yaml`);
+    expect(f.lines()).toEqual([before[0], `+${SET_MOD}`, ...before.slice(1)]);
+    // The receipt records every file, so a replace or uninstall changes exactly these.
+    expect(receiptFiles(f.receipts)).toEqual([`archive/pc/mod/${NS}.archive`, `archive/pc/mod/${NS}.archive.xl`,
+      `archive/pc/mod/0${NS}_table.archive`, `r6/tweaks/${NS}/${NS}.yaml`]);
+    // Nothing went into the game folder.
+    expect(tree(f.game)).toEqual([join("bin", "x64", "Cyberpunk2077.exe")]);
+  } finally { f.cleanup(); }
+});
+
+test("direct: a mod with extra files goes into the game's archive\\pc\\mod and r6\\tweaks folders, beside other mods' files", async () => {
+  const f = fixture("direct");
+  try {
+    setCandidate(f.store, "set", "one");
+    const archives = join(f.game, "archive", "pc", "mod"), tweaks = join(f.game, "r6", "tweaks", NS);
+    mkdirSync(join(f.game, "r6", "tweaks"), { recursive: true }); writeFileSync(join(f.game, "r6", "tweaks", "other_mod.yaml"), "another mod's records");
+    const modlist = readFileSync(f.modlistFile);
+    const plan = await f.host.plan("set");
+    expect(plan.changes).toEqual([
+      `Copy 4 files into your game folder, ${f.game}.`,
+      `In ${archives}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”), and an extra archive it loads (“0${NS}_table.archive”).`,
+      `In ${tweaks}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
+    ]);
+    const result = await f.host.install("set", plan.token);
+    expect(result.message).toBe(`“${SET_MOD}” is in your game folder (its archive\\pc\\mod and r6\\tweaks folders). Start the game to see its expressions in photo mode.`);
+    expect(tree(join(f.game, "r6"))).toEqual([join("tweaks", "other_mod.yaml"), join("tweaks", NS, `${NS}.yaml`)]);
+    expect(readdirSync(archives).sort()).toEqual([`0${NS}_table.archive`, `${NS}.archive`, `${NS}.archive.xl`]);
+    expect(readFileSync(join(f.game, "r6", "tweaks", "other_mod.yaml"), "utf8")).toBe("another mod's records");
+    expect(readFileSync(f.modlistFile)).toEqual(modlist);
+    expect(existsSync(join(f.mo2, "mods", SET_MOD))).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test("replacing a mod with extra files names every file, and removes one the new build no longer has", async () => {
+  const f = fixture("mo2");
+  try {
+    setCandidate(f.store, "first", "one"); setCandidate(f.store, "second", "two", { overlay: false });
+    const folder = join(f.mo2, "mods", SET_MOD);
+    await f.host.install("first", (await f.host.plan("first")).token);
+    const listed = readFileSync(f.modlistFile);
+    const plan = await f.host.plan("second");
+    expect(plan.replacing).toBe(true);
+    expect(plan.changes.slice(0, 4)).toEqual([
+      `Replace the 3 files of the mod “${SET_MOD}” that XF Studio added before, in ${folder}.`,
+      `In ${join(folder, "archive", "pc", "mod")}: the mod's archive and its ArchiveXL file (“${NS}.archive”, “${NS}.archive.xl”).`,
+      `In ${join(folder, "r6", "tweaks", NS)}: its TweakXL file (“${NS}.yaml”), which TweakXL reads when the game starts.`,
+      `Remove “0${NS}_table.archive”, which XF Studio added for “${SET_MOD}” before: this build no longer has it.`,
+    ]);
+    await f.host.install("second", plan.token);
+    expect(tree(folder)).toEqual([join("archive", "pc", "mod", `${NS}.archive`), join("archive", "pc", "mod", `${NS}.archive.xl`),
+      join("r6", "tweaks", NS, `${NS}.yaml`)]);
+    expect(readFileSync(join(folder, "r6", "tweaks", NS, `${NS}.yaml`), "utf8")).toBe(`two:${NS}.yaml`);
+    expect(receiptFiles(f.receipts)).toHaveLength(3);
+    // The row was already there and switched on: the list is left exactly as it was.
+    expect(readFileSync(f.modlistFile)).toEqual(listed);
+  } finally { f.cleanup(); }
+});
+
+test("a changed file in a build with extra files, or an edited TweakXL file, is refused and nothing is written", async () => {
+  const f = fixture("mo2");
+  try {
+    setCandidate(f.store, "set", "one"); setCandidate(f.store, "again", "two");
+    const built = join(f.store, "set", "r6", "tweaks", NS, `${NS}.yaml`);
+    writeFileSync(built, "changed after the build was verified");
+    expect(await refusal(() => f.host.plan("set"))).toMatchObject({ code: "candidate_missing" });
+    expect(existsSync(join(f.mo2, "mods", SET_MOD))).toBe(false);
+    expect(readFileSync(f.modlistFile, "utf8")).toBe(MODLIST);
+    // Installed, then its TweakXL file edited by hand: the update is refused in plain words and the file is left alone.
+    await f.host.install("again", (await f.host.plan("again")).token);
+    const installed = join(f.mo2, "mods", SET_MOD, "r6", "tweaks", NS, `${NS}.yaml`);
+    writeFileSync(installed, "edited by hand");
+    setCandidate(f.store, "third", "three");
+    const plan = await f.host.plan("third");
+    expect(plan).toMatchObject({ next: "rename" });
+    expect(plan.blocked).toContain("XF Studio didn't put there");
+    expect(readFileSync(installed, "utf8")).toBe("edited by hand");
+  } finally { f.cleanup(); }
+});

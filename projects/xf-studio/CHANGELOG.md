@@ -16,6 +16,8 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### Fixes and under the hood
 
+- **Add to my mod manager can place mods with TweakXL files.** XF Studio used to refuse to add a mod that carries extra files (an expression set's expression-table archive and TweakXL file) and asked you to copy it in by hand. It now puts each file where the game and TweakXL read it: in the mod's own Mod Organizer 2 folder, or in your game's archive\pc\mod and r6\tweaks folders. The plan names every file and where it goes before anything changes, each file is checked after copying, and updating or removing the mod changes exactly the files XF Studio added. The expression set panel doesn't offer the button yet. Checked with tests on stand-in Mod Organizer 2 and game folders; not yet tried on a real setup or in game.
+
 ## 0.1.0-alpha.2
 
 ### New and improved
