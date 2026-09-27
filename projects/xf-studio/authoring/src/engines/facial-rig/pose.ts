@@ -83,3 +83,17 @@ export function posedLocals(rest: RigRest, pose: SolvedPose, frame = 0): Map<num
   }
   return out;
 }
+
+/** Every joint's world position (glTF axes, metres) at rest, or with the posed locals of `posedLocals` over the rest. */
+export function worldPositions(rest: RigRest, locals?: ReadonlyMap<number, LocalTransform>): Vec3[] {
+  const positions: Vec3[] = [], rotations: Quat[] = [];
+  rest.joints.forEach((joint, index) => {
+    const local = locals?.get(index) ?? { t: joint.t, r: joint.r };
+    if (joint.parent < 0) { positions[index] = [...local.t]; rotations[index] = [...local.r]; return; }
+    const parentScale = rest.joints[joint.parent]!.s, parentRotation = rotations[joint.parent]!, parent = positions[joint.parent]!;
+    const offset = rotate(parentRotation, [local.t[0] * parentScale[0], local.t[1] * parentScale[1], local.t[2] * parentScale[2]]);
+    positions[index] = [parent[0] + offset[0], parent[1] + offset[1], parent[2] + offset[2]];
+    rotations[index] = multiply(parentRotation, local.r);
+  });
+  return positions;
+}

@@ -29,7 +29,7 @@ test("the part codec validates, normalises and keeps unknown controls; it refuse
   expect(expressionPose({ controls: {}, links: {} })).toBeUndefined();
 });
 
-test("a linked mirror pair moves both sides; a direction pair starts unlinked; links are stored per pair", () => {
+test("a linked mirror pair moves both sides; a lateral direction pair has no counterpart; links are stored per pair", () => {
   expect(apply({ kind: "expression.setControl", name: "lips_l_corner_up", value: 0.4 }).part.controls)
     .toEqual({ lips_l_corner_up: f32(0.4), lips_r_corner_up: f32(0.4) });
   expect(apply({ kind: "expression.setControl", name: "jaw_mid_shift_l", value: 0.4 }).part.controls).toEqual({ jaw_mid_shift_l: f32(0.4) });
@@ -115,4 +115,42 @@ test("the stored workspace keeps the expression; a workspace that never used it 
   expect(part(core(again))?.controls).toEqual({ eye_l_brows_lower: f32(0.25), eye_r_brows_lower: f32(0.25) });
   // Saving the look's part as a preset uses the feature's own codec.
   expect(c.app.featureEnvelope("expressions")).toEqual({ schema: "xfs/expression-part-1", body: { controls: { eye_l_brows_lower: f32(0.25), eye_r_brows_lower: f32(0.25) }, links: {} } });
+});
+
+test("symmetry is one rule: linked gaze keeps both eyes looking the same way, Mirror copies by the rule, Flip gives the mirror image", () => {
+  // A two-way gaze edit: the left eye looks toward V's left (out); linked, the right eye does too (in), never crossed.
+  const look = apply({ kind: "expression.setAxis", negative: "eye_l_dir_out", positive: "eye_l_dir_in", value: -0.5 });
+  expect(look.part.controls).toEqual({ eye_l_dir_out: 0.5, eye_r_dir_in: 0.5 });
+  // Moving it the other way clears the first end: an eye can't look both ways.
+  expect(apply({ kind: "expression.setAxis", negative: "eye_l_dir_out", positive: "eye_l_dir_in", value: 0.25 }, look).part.controls)
+    .toEqual({ eye_l_dir_in: 0.25, eye_r_dir_out: 0.25 });
+  // Separate eyes (the gaze link off) move alone; a centre axis (jaw) has no counterpart.
+  const separate = apply({ kind: "expression.setLinks", links: { eye_dir_h: false } });
+  expect(apply({ kind: "expression.setAxis", negative: "eye_l_dir_out", positive: "eye_l_dir_in", value: -0.5 }, separate).part.controls).toEqual({ eye_l_dir_out: 0.5 });
+  expect(apply({ kind: "expression.setAxis", negative: "jaw_mid_shift_l", positive: "jaw_mid_shift_r", value: 0.3 }).part.controls).toEqual({ jaw_mid_shift_r: f32(0.3) });
+  expect(expressionCapability(state(), { kind: "expression.setAxis", negative: "eye_l_dir_out", positive: "jaw_mid_open", value: 0.3 })).toMatchObject({ available: false });
+  // Mirror left → right: skin as a mirror image, gaze in the same direction, the lateral jaw left alone.
+  const face = state({ eye_l_dir_out: f32(0.4), eye_l_brows_lower: f32(0.3), jaw_mid_shift_l: f32(0.2), eye_r_dir_out: f32(0.1) });
+  expect(apply({ kind: "expression.mirror", from: "left" }, face).part.controls).toEqual({ eye_l_brows_lower: f32(0.3), eye_r_brows_lower: f32(0.3),
+    eye_l_dir_out: f32(0.4), eye_r_dir_in: f32(0.4), jaw_mid_shift_l: f32(0.2) });
+  // Flip: the mirror image (the brows swap sides, the jaw shifts the other way, the look turns to the other side).
+  expect(apply({ kind: "expression.mirror", from: "flip" }, state({ eye_l_brows_lower: f32(0.3), jaw_mid_shift_l: f32(0.2), eye_l_dir_out: f32(0.4), eye_r_dir_in: f32(0.4) })).part.controls)
+    .toEqual({ eye_r_brows_lower: f32(0.3), jaw_mid_shift_r: f32(0.2), eye_r_dir_out: f32(0.4), eye_l_dir_in: f32(0.4) });
+  // Symmetric for the whole face or a group is one setLinks step.
+  expect(apply({ kind: "expression.setLinks", links: { eye_brows_lower: false, lips_corner_up: false } }).part.links).toEqual({ eye_brows_lower: false, lips_corner_up: false });
+});
+
+test("a mirrored edit is one Undo step in the Studio: a linked two-way drag sets both eyes and undoes at once", () => {
+  const c = core();
+  c.app.featureControlBegin("expressions", "gaze");
+  for (const value of [-0.1, -0.3, -0.45]) c.app.featureControlEdit("expressions", "gaze", { kind: "expression.setAxis", negative: "eye_l_dir_out", positive: "eye_l_dir_in", value } as { kind: string });
+  c.app.featureControlCommit("gaze");
+  expect(part(c)?.controls).toEqual({ eye_l_dir_out: f32(0.45), eye_r_dir_in: f32(0.45) });
+  c.app.dispatch({ kind: "expression.mirror", from: "flip" } as never);
+  expect(part(c)?.controls).toEqual({ eye_r_dir_out: f32(0.45), eye_l_dir_in: f32(0.45) });
+  expect(c.app.historyTimeline().steps.map(step => step.label)).toEqual(["Face control", "Flip face"]);
+  c.app.dispatch({ kind: "history.undo" });
+  expect(part(c)?.controls).toEqual({ eye_l_dir_out: f32(0.45), eye_r_dir_in: f32(0.45) });
+  c.app.dispatch({ kind: "history.undo" });
+  expect(part(c)).toBeUndefined();
 });

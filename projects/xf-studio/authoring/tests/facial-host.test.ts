@@ -113,6 +113,8 @@ test("the face rig, blink and installed expressions come from the winning files;
     expect(state.solver).toEqual({ phase: "ready", compileMs: 12 });
     // Checked by the solver before it is ready: a control that acts only with another, or feeds a wrinkle output, is not inert.
     expect(state.rig.inert).toEqual(["lips_tighten_up"]);
+    // No proposed opposites on this toy face: no two-way controls, and no gaze to check.
+    expect([state.rig.axes, state.rig.gazeSameWay]).toEqual([[], null]);
     const points = host.expressions();
     expect(points.table).toEqual({ provider: "Some expression pack", rows: 3 });
     expect(points.items.map(item => [item.row, item.label, item.provider, item.controls])).toEqual([

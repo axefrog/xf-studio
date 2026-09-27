@@ -52,6 +52,13 @@ export function wrinkleSourceTracks(setup: unknown): number[] {
   return [...found].sort((a, b) => a - b);
 }
 
+/** The main-pose tracks of the facial setup's Eyes part (`bakedData.Data.Eyes.AllMainPoses[].Track`): gaze and pupils. */
+export function eyeTracks(setup: unknown): number[] {
+  const root = cr2wRoot(setup).root, baked = isObject(root.bakedData) ? root.bakedData.Data : null;
+  const eyes = isObject(baked) && isObject(baked.Eyes) ? baked.Eyes : null;
+  return eyes ? asArray(eyes.AllMainPoses).flatMap(pose => isObject(pose) && Number.isInteger(pose.Track) ? [pose.Track as number] : []) : [];
+}
+
 /** One clip of an animation set, with its float tracks decoded (joint keys are not read). */
 export type SetClip = { name: string; type: string; duration: number; frames: number; tracks: ClipTracks; jointKeys: number };
 

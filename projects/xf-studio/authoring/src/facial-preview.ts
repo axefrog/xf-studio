@@ -15,7 +15,8 @@
  *   the posed body (pose-library-design.md decision Q5; preview-motion.ts).
  */
 import { posedLocals, type RigRest, type SolvedPose } from "./engines/facial-rig/pose";
-import type { FacialBlink, FacialControl, FacialHostState, FacialPreviewSnapshot, FacialSolveRequest, FacialStartPoints } from "./platform/api/facial";
+import type { FacialAxisControl, FacialAxisPair, FacialBlink, FacialControl, FacialHostState, FacialPreviewSnapshot, FacialSolveRequest, FacialStartPoints } from "./platform/api/facial";
+import { buildAxes, counterpartName, linkedByDefault, linkKey } from "./engines/facial-rig/symmetry";
 
 /** A solve's answer with its buffers decoded (the device does the transport). */
 export type FacialSolved = { ok: true; frames: number; rate?: number; pose: SolvedPose; ms: number; skipped: readonly string[] } |
@@ -168,7 +169,9 @@ export class FacialPreview {
       const totals = this.latencies.map(entry => entry.total).sort((a, b) => a - b), solver = this.latencies.map(entry => entry.solver).sort((a, b) => a - b);
       return { median: round(totals[Math.floor(totals.length / 2)]!), max: round(totals.at(-1)!), solver: round(solver[Math.floor(solver.length / 2)]!), count: totals.length };
     })() : undefined;
-    const base = { ...(controls ? { controls } : {}), ...(groups ? { groups } : {}), startPoints, samples: host?.samples ?? [], ...(latency ? { latency } : {}) };
+    const axes = this.axes();
+    const base = { ...(controls ? { controls } : {}), ...(groups ? { groups } : {}), startPoints, samples: host?.samples ?? [],
+      ...(axes ? { axes, gazeSameWay: host?.rig.gazeSameWay ?? null } : {}), ...(latency ? { latency } : {}) };
     if (this.hostError) return { ...base, phase: "failed", reason: this.hostError, next: "retry" };
     if (!host || host.rig.phase === "preparing") return { ...base, phase: "preparing", reason: "Reading your V's face from your game files…" };
     if (host.rig.phase !== "ready") return { ...base, phase: "unavailable", reason: host.rig.reason, next: host.rig.phase === "unconfigured" ? "game-setup" : "retry" };
@@ -182,17 +185,40 @@ export class FacialPreview {
     if (!this.sink) return { ...base, phase: "unavailable", reason: "Your expression shows on the 3D head once it's ready." };
     return { ...base, phase: "ready" };
   }
-  /** The rig's controls, each marked `inert` when the host found it moves nothing (kept until the host's list changes). */
+  /**
+   * The rig's controls with their symmetry (`link`), each marked `inert` when the host found it moves nothing (kept until the host's
+   * lists change).
+   */
   private controls(): readonly FacialControl[] | undefined {
     const rig = this.host?.rig, controls = rig?.controls;
-    if (!controls || !rig.inert?.length) return controls;
+    if (!controls) return controls;
     if (this.marked?.source !== controls || this.marked.inert !== rig.inert) {
-      const inert = new Set(rig.inert);
-      this.marked = { source: controls, inert: rig.inert, controls: controls.map(control => inert.has(control.name) ? { ...control, inert: true } : control) };
+      const inert = new Set(rig.inert ?? []);
+      this.marked = { source: controls, inert: rig.inert, controls: controls.map(control => {
+        const key = linkKey(control.name), counterpart = counterpartName(control.name);
+        return { ...control, ...(inert.has(control.name) ? { inert: true } : {}),
+          ...(key && counterpart ? { link: { key, counterpart, byDefault: linkedByDefault(control.name) } } : {}) };
+      }) };
     }
     return this.marked.controls;
   }
-  private marked: { source: readonly FacialControl[]; inert: readonly string[]; controls: readonly FacialControl[] } | undefined;
+  private marked: { source: readonly FacialControl[]; inert: readonly string[] | undefined; controls: readonly FacialControl[] } | undefined;
+  /** The two-way controls over the host's confirmed pairs (kept until the host's list changes). */
+  private axes(): readonly FacialAxisControl[] | undefined {
+    const pairs = this.host?.rig.axes;
+    if (!pairs) return undefined;
+    if (this.builtAxes?.source !== pairs) {
+      const axes = buildAxes(pairs), byEnds = new Map(axes.map(axis => [`${axis.negative}~${axis.positive}`, axis]));
+      this.builtAxes = { source: pairs, axes: axes.map(axis => {
+        const negative = counterpartName(axis.negative), positive = counterpartName(axis.positive);
+        const other = negative && positive ? byEnds.get(`${negative}~${positive}`) : undefined;
+        const keys = [linkKey(axis.negative), linkKey(axis.positive)].filter((key, i, all): key is string => !!key && all.indexOf(key) === i);
+        return other && keys.length ? { ...axis, link: { keys, counterpart: other.key, byDefault: linkedByDefault(axis.negative) } } : axis;
+      }) };
+    }
+    return this.builtAxes.axes;
+  }
+  private builtAxes: { source: readonly FacialAxisPair[]; axes: readonly FacialAxisControl[] } | undefined;
   /** Solve again after a failure (the drawer's Try again). */
   retry() {
     // The host's state is asked for again: a solver that stopped or was stuck is started again there (CORE-101), and the solve follows.

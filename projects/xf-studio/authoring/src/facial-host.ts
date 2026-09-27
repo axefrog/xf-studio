@@ -25,11 +25,14 @@ import { runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunErro
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
 import { EXPRESSION_SAMPLES } from "./expression-samples";
 import { BLINK_CLIP, EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readAnimSet, readBlink,
-  readFaceRig, readFaceRigSets, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "./facial-catalogue";
+  eyeTracks, readFaceRig, readFaceRigSets, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "./facial-catalogue";
+import { findRelations } from "./engines/facial-rig/relations";
+import { posedLocals, worldPositions, type Vec3 } from "./engines/facial-rig/pose";
 import { clipValuesAt, type ClipTracks } from "./engines/facial-rig/anim-tracks";
 import { denseTracks, vectorIssue } from "./engines/facial-rig/vector";
 import { CONTROL_GROUPS, type FacialVocabulary } from "./engines/facial-rig/vocabulary";
 import type { RigRest } from "./engines/facial-rig/pose";
+import type { AxisPair } from "./engines/facial-rig/symmetry";
 import { FACIAL_ENDPOINT, FACIAL_EXPRESSIONS_ENDPOINT, FACIAL_SOLVE_ENDPOINT, FACIAL_STATE_SCHEMA, type FacialBlink, type FacialHostState,
   type FacialSolveAnswer, type FacialSolveRequest, type FacialStartPoints } from "./platform/api/facial";
 
@@ -218,6 +221,11 @@ export type FacialHostOptions = {
 type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTracks; closedTime: number } | null; rigJson: string; setupJson: string;
   /** Tracks the setup's wrinkle outputs read (they show in game even without joint motion). */
   wrinkleSources: readonly number[];
+  /** Tracks of the setup's Eyes part (gaze and pupils). */
+  eyeTracks: readonly number[];
+  /** Opposing pairs the solver confirmed (`findRelations`), and whether gaze counterparts look the same way. */
+  axes?: readonly AxisPair[];
+  gazeSameWay?: boolean | null;
   /** Controls that move nothing on this face, found by the solver once it is ready (`findInert`); undefined until then or if it failed. */
   inert?: readonly string[];
   /** The check ran (once per face; a restarted solver doesn't repeat it). */
@@ -285,7 +293,7 @@ export class FacialHost {
     return { schema: FACIAL_STATE_SCHEMA,
       rig: rig ? { ...entry.rig, skeleton: rig.vocabulary.rig, setup: rig.vocabulary.setup, tracks: rig.vocabulary.tracks, reference: rig.vocabulary.reference,
         main: rig.vocabulary.main, controls: rig.vocabulary.controls, groups: CONTROL_GROUPS, joints: rig.rest.joints,
-        ...(rig.inert ? { inert: rig.inert } : {}) } : entry.rig,
+        ...(rig.inert ? { inert: rig.inert } : {}), ...(rig.axes ? { axes: rig.axes, gazeSameWay: rig.gazeSameWay ?? null } : {}) } : entry.rig,
       solver: { ...entry.solver },
       blink: rig?.blink ? { available: true, closedTime: rig.blink.closedTime, duration: rig.blink.clip.duration, rate: BLINK_RATE } : { available: false },
       expressions: { phase: entry.expressions.phase, ...(entry.expressions.reason ? { reason: entry.expressions.reason } : {}), count: entry.expressions.items.length },
@@ -358,11 +366,11 @@ export class FacialHost {
     if (!skeleton || !setup) throw Error("The face skeleton or facial setup is missing from the game files.");
     const setupDocument = readDocument(setup.file);
     const { vocabulary, rest } = readFaceRig(readDocument(skeleton.file), setupDocument);
-    const wrinkleSources = wrinkleSourceTracks(setupDocument);
+    const wrinkleSources = wrinkleSourceTracks(setupDocument), eyes = eyeTracks(setupDocument);
     let blink: Rig["blink"] = null;
     try { const additives = files.get(additivesRef.hash); if (additives) blink = readBlink(readAnimSet(readDocument(additives.file)).clips, vocabulary); }
     catch (error) { hostFailure("facial", "blink_unreadable", `The game's blink (${BLINK_CLIP}) couldn't be read; expressions show without it.`, error, "warn"); }
-    entry.rigData = { vocabulary, rest, blink, rigJson: skeleton.file, setupJson: setup.file, wrinkleSources };
+    entry.rigData = { vocabulary, rest, blink, rigJson: skeleton.file, setupJson: setup.file, wrinkleSources, eyeTracks: eyes };
     entry.rig = { phase: "ready" };
     this.startSolver(entry);
     // The installed expressions, after the face (the editor works without them).
@@ -436,6 +444,15 @@ export class FacialHost {
       rig.inert = controls.filter((control, index) => !wrinkles.has(control.track) && !moved(2 + index, 0) && !moved(2 + controls.length + index, 1))
         .map(control => control.name);
       hostTrace().event("facial", "inert", { count: rig.inert.length });
+      // Opposing pairs and gaze counterparts, from the same solves (each control alone at full weight) in world space.
+      const rest = worldPositions(rig.rest), pose = { q, t };
+      const displacement = controls.map((control, index): Vec3[] | undefined => {
+        if (!moved(2 + index, 0)) return undefined;
+        return worldPositions(rig.rest, posedLocals(rig.rest, pose, 2 + index)).map((p, j) => [p[0] - rest[j]![0], p[1] - rest[j]![1], p[2] - rest[j]![2]] as Vec3);
+      });
+      const relations = findRelations({ rest: rig.rest, controls, displacement, eyeTracks: new Set(rig.eyeTracks) });
+      rig.axes = relations.axes; rig.gazeSameWay = relations.gazeSameWay;
+      hostTrace().event("facial", "relations", { axes: relations.axes.length, gazeSameWay: relations.gazeSameWay });
     } catch (error) { hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; all are shown.", error, "warn"); }
   }
   /**

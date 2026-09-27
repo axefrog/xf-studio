@@ -21,12 +21,12 @@
  * the facial preview's snapshot (the rig's controls, the installed expressions and the built-in samples) and its part presets.
  */
 import { applyCapability, button, GroupSection, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, SearchField,
-  SliderWithValue, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
+  SliderWithValue, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
 import type { GenericFeatureFacade } from "../../../studio-presentation";
-import type { FacialControl, FacialPreviewSnapshot, FacialStartPoint } from "../../../platform/api/facial";
+import type { FacialAxisControl, FacialControl, FacialPreviewSnapshot, FacialStartPoint } from "../../../platform/api/facial";
 import type { ExpressionPart } from "../part";
 import type { ExpressionAction } from "../core";
 import { EXPRESSIONS_PANEL_META } from "./contribution";
@@ -34,8 +34,17 @@ import { EXPRESSIONS_PANEL_META } from "./contribution";
 type Ctx = FeatureViewContext<GenericFeatureFacade>;
 type Availability = { disabled: boolean; reason?: string };
 const EMPTY: ExpressionPart = Object.freeze({ controls: {}, links: {} });
-/** Whether a pair edits both sides: its stored link, else linked for a mirror pair (the feature's rule, core.ts `pairLinked`). */
-const linkedPair = (part: ExpressionPart, control: FacialControl) => !!control.pair && (part.links[control.pair] ?? !control.direction);
+/** Whether a pair edits both sides: its stored link, else its default (the feature's rule, core.ts `pairLinked`, read from the snapshot). */
+const linkedPair = (part: ExpressionPart, control: FacialControl) => !!control.link && (part.links[control.link.key] ?? control.link.byDefault);
+const linkedAxis = (part: ExpressionPart, axis: FacialAxisControl) => !!axis.link && axis.link.keys.every(key => part.links[key] ?? axis.link!.byDefault);
+/** Two-way controls show −100 to 100 %, the end's word after the number ("35 % left"). */
+const AXIS = (axis: FacialAxisControl) => ({ min: -100, max: 100, step: 1, unit: "%", defaultValue: 0, reset: true,
+  format: (value: number) => value === 0 ? "centre" : `${Math.abs(Math.round(value))} % ${value < 0 ? axis.ends[0] : axis.ends[1]}` });
+/** The note a mixed axis carries: both ends are set (a game expression can do this); the raw weights stay until the axis is moved. */
+const mixedNote = (axis: FacialAxisControl, part: ExpressionPart) => {
+  const negative = part.controls[axis.negative] ?? 0, positive = part.controls[axis.positive] ?? 0;
+  return negative > 0 && positive > 0 ? `Both ends set (${percent(negative)} % ${axis.ends[0]}, ${percent(positive)} % ${axis.ends[1]}); moving it keeps one.` : undefined;
+};
 /** Controls show their weight as a percentage (0.35 → 35 %), with whole-percent steps; the part stores 0–1. */
 const SLIDER = { min: 0, max: 100, step: 1, unit: "%", format: (percent: number) => `${Math.round(percent)} %`, defaultValue: 0, reset: true } as const;
 const percent = (weight: number | undefined) => Math.round((weight ?? 0) * 1000) / 10;
@@ -69,10 +78,47 @@ function pairEntry(ctx: Ctx, left: FacialControl, right: FacialControl): Entry {
   const pair = new PairControl({ ...SLIDER, label: left.label, help: left.note,
     transaction: { begin: sides => { active = sides === "right" ? tx.right : tx.left; active.begin(); }, edit: ({ value }) => active.edit(value),
       commit: () => active.commit(), cancel: () => active.cancel() },
-    onLinkChange: linked => ctx.dispatch({ kind: "expression.linkPair", pair: left.pair!, linked } as ExpressionAction) });
+    onLinkChange: linked => ctx.dispatch({ kind: "expression.linkPair", pair: left.link?.key ?? left.pair!, linked } as ExpressionAction) });
   pair.element.dataset.pair = left.pair ?? "";
   return { element: pair.element, group: left.group, search: `${left.text} ${right.text} ${left.name} ${right.name}`.toLowerCase(), names: [left.name, right.name],
     update: (part, state) => pair.update({ left: percent(part.controls[left.name]), right: percent(part.controls[right.name]) }, { linked: linkedPair(part, left), ...state }) };
+}
+
+/** The form-control transaction of a two-way control: its value from −100 to 100 % sets both ends (one Undo step per drag). */
+function axisTransaction(ctx: Ctx, axis: FacialAxisControl) {
+  const id = `expr:${axis.key}`;
+  return {
+    begin: () => { ctx.facade.controlBegin(id); },
+    edit: (percentValue: number) => {
+      const value = Math.min(1, Math.max(-1, percentValue / 100));
+      const outcome = ctx.facade.controlEdit(id, { kind: "expression.setAxis", negative: axis.negative, positive: axis.positive, value } as ExpressionAction);
+      if (!outcome.ok) ctx.feedback.toast("warning", "Expression", outcome.message);
+    },
+    commit: () => ctx.facade.controlCommit(id),
+    cancel: () => ctx.facade.controlCancel(id),
+  };
+}
+const axisPercent = (part: ExpressionPart, axis: FacialAxisControl) => percent(part.controls[axis.positive]) - percent(part.controls[axis.negative]);
+function axisEntry(ctx: Ctx, axis: FacialAxisControl, group: string): Entry {
+  const slider = new SliderWithValue({ ...AXIS(axis), label: axis.label, reserveNote: true, transaction: axisTransaction(ctx, axis) });
+  slider.element.dataset.axis = axis.key;
+  return { element: slider.element, group, search: `${axis.label} ${axis.negative} ${axis.positive}`.toLowerCase(), names: [axis.negative, axis.positive],
+    update: (part, state) => slider.update(axisPercent(part, axis), { ...state, note: mixedNote(axis, part) }) };
+}
+/** A left/right pair of two-way controls (gaze per eye, the nostrils): linked, one value moves both the way the rule says. */
+function axisPairEntry(ctx: Ctx, left: FacialAxisControl, right: FacialAxisControl, group: string): Entry {
+  const tx = { left: axisTransaction(ctx, left), right: axisTransaction(ctx, right) };
+  let active = tx.left;
+  const label = left.gaze ? `Gaze: look ${left.ends[0]} ↔ ${left.ends[1]}` : left.label.replace(/, left:/, ":");
+  const pair = new PairControl({ ...AXIS(left), label, sideLabels: left.gaze ? { left: "left eye", right: "right eye" } : undefined,
+    help: left.gaze ? "Linked, both eyes look the same way (never crossed). Separate, each eye has its own value." : undefined,
+    transaction: { begin: sides => { active = sides === "right" ? tx.right : tx.left; active.begin(); }, edit: ({ value }) => active.edit(value),
+      commit: () => active.commit(), cancel: () => active.cancel() },
+    onLinkChange: linked => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(left.link!.keys.map(key => [key, linked])) } as ExpressionAction) });
+  pair.element.dataset.axis = left.key;
+  return { element: pair.element, group, search: `${label} ${left.label} ${right.label} ${left.negative} ${left.positive}`.toLowerCase(),
+    names: [left.negative, left.positive, right.negative, right.positive],
+    update: (part, state) => pair.update({ left: axisPercent(part, left), right: axisPercent(part, right) }, { linked: linkedAxis(part, left), ...state }) };
 }
 
 /** Rows of the Start from tree: what one starts from. */
@@ -125,6 +171,11 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     onClick: () => ctx.dispatch({ kind: "expression.mirror", from: "right" } as ExpressionAction) });
   const resetAll = button({ label: "Reset all", icon: "reset", small: true, variant: "quiet",
     onClick: () => ctx.dispatch({ kind: "expression.reset", scope: "all" } as ExpressionAction) });
+  const flip = button({ label: "Flip face", icon: "mirror", small: true, variant: "quiet", title: "Swap the face for its mirror image: left and right trade places, a look to one side becomes a look to the other",
+    onClick: () => ctx.dispatch({ kind: "expression.mirror", from: "flip" } as ExpressionAction) });
+  // Symmetric: every left/right pair linked (one Undo step), so a change on one side follows on the other by its rule.
+  const symmetric = new Toggle({ label: "Symmetric", help: "Linked pairs follow each other: skin as a mirror image, the eyes looking the same way. Turn it off to set each side on its own.",
+    onChange: on => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(allLinkKeys().map(key => [key, on])) } as ExpressionAction) });
   const groupsHost = h("div", { class: "expr-groups" });
   const waiting = note("", "muted");
   const noControls = h("div", { class: "expr-no-match" });
@@ -138,7 +189,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       h("div", { class: "expr-bar" }, save), presetsNote),
     h("section", { class: "expr-section", "aria-label": "Face controls" },
       h("div", { class: "expr-section-head" }, h("h3", { class: "section-title", text: "Face controls" })),
-      controlSearch.element, h("div", { class: "expr-bar expr-tools" }, mirrorLeft, mirrorRight, resetAll),
+      controlSearch.element, symmetric.element, h("div", { class: "expr-bar expr-tools" }, mirrorLeft, mirrorRight, flip, resetAll),
       waiting, noControls, groupsHost),
     footnote);
 
@@ -266,15 +317,34 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     noControls.replaceChildren(...(query && entries.length && !shown ? [controlSearch.noMatches("controls")] : []));
   }
   const setCount = (list: readonly Entry[]) => list.reduce((sum, entry) => sum + entry.names.filter(name => (current.controls[name] ?? 0) > 0).length, 0);
-  function build(controls: readonly FacialControl[]) {
+  /** Every link key on this face: the pairs' and the paired axes'. */
+  function allLinkKeys(): string[] {
+    const keys = new Set<string>();
+    for (const control of preview?.controls ?? []) if (control.link && !control.inert) keys.add(control.link.key);
+    for (const axis of preview?.axes ?? []) for (const key of axis.link?.keys ?? []) keys.add(key);
+    return [...keys];
+  }
+  function build(controls: readonly FacialControl[], axes: readonly FacialAxisControl[]) {
     const offered = controls.filter(control => !control.inert);
-    const key = offered.map(control => control.name).join(",");
+    const key = offered.map(control => control.name).join(",") + "|" + axes.map(axis => axis.key).join(",");
     if (key === built) return;
     built = key;
     const byName = new Map(offered.map(control => [control.name, control])), done = new Set<string>();
+    // A confirmed opposing pair is one two-way control, placed where its first end sits; a left axis with a counterpart pairs with it.
+    const axisOf = new Map<string, FacialAxisControl>(), byKey = new Map(axes.map(axis => [axis.key, axis]));
+    for (const axis of axes) if (byName.has(axis.negative) && byName.has(axis.positive)) { axisOf.set(axis.negative, axis); axisOf.set(axis.positive, axis); }
     entries = [];
     for (const control of offered) {
       if (done.has(control.name)) continue;
+      const axis = axisOf.get(control.name);
+      if (axis) {
+        const other = axis.link ? byKey.get(axis.link.counterpart) : undefined;
+        for (const name of [axis.negative, axis.positive, ...(other ? [other.negative, other.positive] : [])]) done.add(name);
+        if (other && axis.side === "left") entries.push(axisPairEntry(ctx, axis, other, control.group));
+        else if (other && axis.side === "right") entries.push(axisPairEntry(ctx, other, axis, control.group));
+        else entries.push(axisEntry(ctx, axis, control.group));
+        continue;
+      }
       done.add(control.name);
       const partner = control.partner ? byName.get(control.partner) : undefined;
       // A mirror pair is one entry (left first); a direction pair is two, each with its own direction word.
@@ -323,7 +393,10 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       startPoints = new Map((preview?.startPoints.items ?? []).map(point => [point.id, point]));
       paintStart(); updatePresetsNote();
       const controls = preview?.controls;
-      if (controls?.length) build(controls);
+      if (controls?.length) build(controls, preview?.axes ?? []);
+      const keys = allLinkKeys();
+      symmetric.update(keys.length > 0 && keys.every(key => current.links[key] ?? true), { ...availability, note: keys.length ? undefined : "" });
+      applyCapability(flip, editable);
       waiting.hidden = !!controls?.length;
       setText(waiting, controls?.length ? "" : preview?.phase === "preparing" ? "The face's controls appear once your V's face is read from your game files."
         : "The face's controls come from your V's own face rig in your game files; they appear once it can be read.");

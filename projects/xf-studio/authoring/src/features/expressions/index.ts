@@ -17,7 +17,7 @@ export { EXPRESSION_PART_1, expressionPart } from "./part";
 
 /** Registration order is the catalogue order. */
 const KINDS: Record<ExpressionAction["kind"], true> = {
-  "expression.setControl": true, "expression.linkPair": true, "expression.mirror": true, "expression.reset": true,
+  "expression.setControl": true, "expression.setAxis": true, "expression.linkPair": true, "expression.setLinks": true, "expression.mirror": true, "expression.reset": true,
   "expression.startFrom": true, "expression.setLabel": true,
 };
 
@@ -27,7 +27,7 @@ export const EXPRESSIONS: FeatureModule<ExpressionAction, ExpressionScope, typeo
   part: expressionPart, editor: expressionEditor as never,
   actions: featureActionTable<ExpressionPart, ExpressionEditor, ExpressionAction, ExpressionScope, ExpressionEffect>(EXPRESSION_DESCRIPTORS, KINDS, {
     capability: expressionCapability, apply: applyExpression, label: expressionLabel,
-    units: { "expression.setControl": { value: "fraction" }, "expression.setLabel": { label: "characters" } } }),
+    units: { "expression.setControl": { value: "fraction" }, "expression.setAxis": { value: "fraction" }, "expression.setLabel": { label: "characters" } } }),
 });
 
 /** The vector the platform's facial preview holds for a look's expressions part (undefined: nothing to hold). */
