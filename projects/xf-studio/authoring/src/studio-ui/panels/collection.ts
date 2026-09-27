@@ -17,7 +17,7 @@ import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { setupStatus } from "./game-setup";
-import { openModInstallSheet } from "./mod-install-sheet";
+import { modInstallLabel, openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
 
@@ -380,7 +380,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       // The install rows follow every paint: availability, and what happened last.
       const installs = frame.modInstall, route = frame.localSetup.view?.fields.launchRoute;
       for (const [product, row] of installRows) {
-        setText(row.add.querySelector("span")!, route === "mo2" ? "Add to Mod Organizer 2…" : route === "direct" ? "Add to the game folder…" : "Add to my mod manager…");
+        setText(row.add.querySelector("span")!, modInstallLabel(route));
         applyCapability(row.add, port.modInstall.capability({ kind: "modInstall.review", product }));
         applyCapability(row.show, port.modInstall.capability({ kind: "modInstall.reveal", product }));
         const outcome = installs.outcomes[product];

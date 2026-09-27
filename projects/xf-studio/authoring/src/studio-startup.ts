@@ -18,7 +18,7 @@ import { createModuleServices } from "./compose/module-services";
 import { createBrowserPoseLibraryDevice } from "./browser-pose-device";
 import { PoseStageHub } from "./pose-stage";
 import { createBrowserModInstall } from "./browser-mod-install-device";
-import { builtModsOf } from "./mod-install-actions";
+import { builtModsOf, type BuiltMod } from "./mod-install-actions";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "./browser-head-attachment";
 import type { ContextHistory } from "./character-context-actions";
@@ -132,8 +132,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
     { verification, locationChanged: savesLocationSignal(localSetup) }),
     poses: { device: createBrowserPoseLibraryDevice({ verification }), stage: poseStage } });
-  // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
-  const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
+  // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists) and of each expression
+  // set's latest Build (the part preset service, made below).
+  let setBuilds: () => readonly BuiltMod[] = () => [];
+  const modInstall = createBrowserModInstall(() => [...builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]), ...setBuilds()],
     verification ? "/api/verification/mod-install" : "/api/mod-install");
   // Whether the 3D preview may start preparing by itself; a workspace preference (per verification scope).
   let autostart = workspace.previewSetup?.autostart ?? legacyAutostart(storage, verification);
@@ -215,6 +217,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A set of saved expressions exports as one mod through the same package route a collection uses (never installed by Build).
   const presets = new PartPresetService(partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets"),
     setExportTransport(verification ? "/api/verification/mod-install" : "/api/mod-install"));
+  setBuilds = () => presets.builtMods();
   core.app.attach({ facial, presets, transitions });
   facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
     () => motionActions?.snapshot());

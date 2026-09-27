@@ -223,13 +223,15 @@ test("a set's Check and Build go through the package route with its package-only
     updateSet: async (id, input) => { Object.assign(sets[0]!, input, { revision: sets[0]!.revision + 1 }); return structuredClone(sets[0]!); },
   }, {
     package: async (action, collection) => { sent.push({ action, collection }); return { schema: action === "build" ? "xfs/package-build-2" : "xfs/package-check-2",
-      products: [{ package: "C:/dist/xfs_c00-1", features: [] }], omissions: [], originalPresetCount: 1 } as never; },
+      products: [{ productId: setId, modName: "XF Expressions - Moody", package: "C:/dist/xfs_c00-1", features: [] }], omissions: [], originalPresetCount: 1 } as never; },
     reveal: async id => { revealed.push(id); return { ok: true }; },
   });
   service.snapshot("expressions"); service.sets("expressions");
   await Bun.sleep(0);
   expect(service.capability({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toMatchObject({ available: false, code: "needs_input" });
   expect(service.capability({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toMatchObject({ available: false, code: "missing_target" });
+  // Nothing to add to a mod manager before a verified Build.
+  expect(service.builtMods()).toEqual([]);
   expect(await service.execute({ kind: "partPresetSet.setMembers", feature: "expressions", id: setId, members: [presetId], revision: 1 })).toMatchObject({ ok: true });
   expect(service.capability({ kind: "partPresetSet.setExport", feature: "expressions", id: setId, revision: 2, modName: "XF: bad" }))
     .toMatchObject({ available: false, code: "invalid_value" });
@@ -240,6 +242,11 @@ test("a set's Check and Build go through the package route with its package-only
   expect(service.exportState().results[setId]).toMatchObject({ kind: "build", revision: 2, missing: 0 });
   expect(await service.execute({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toEqual({ ok: true });
   expect(revealed).toEqual(["xfs_c00-1"]);
+  // The verified Build is offered to "Add to my mod manager" by its product and candidate (mod-install-actions.ts).
+  expect(service.builtMods()).toEqual([{ product: setId, candidateId: "xfs_c00-1", modName: "XF Expressions - Moody" }]);
+  // A Check after it replaces the Build: nothing to add until the next Build.
+  expect(await service.execute({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toEqual({ ok: true });
+  expect(service.builtMods()).toEqual([]);
 });
 
 test("a set's provisional Check runs again by itself, and Build says why while a current Check found nothing to package", async () => {

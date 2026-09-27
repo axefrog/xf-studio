@@ -650,3 +650,25 @@ test("a changed file in a build with extra files, or an edited TweakXL file, is 
     expect(readFileSync(installed, "utf8")).toBe("edited by hand");
   } finally { f.cleanup(); }
 });
+
+test("a build with a file of a kind XF Studio doesn't know where to put is refused in plain words, and Show in folder still opens it", async () => {
+  const f = fixture("mo2");
+  try {
+    setCandidate(f.store, "newer", "one");
+    // A newer XF Studio's build: an extra file of a kind this version can't place (and its manifest reader doesn't read).
+    const manifestFile = join(f.store, "newer", "manifest.json"), manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
+    const body = "native code", path = `r6/scripts/${NS}/${NS}.reds`;
+    mkdirSync(join(f.store, "newer", "r6", "scripts", NS), { recursive: true }); writeFileSync(join(f.store, "newer", ...path.split("/")), body);
+    manifest.files.push({ path, sha256: digest(body), bytes: Buffer.byteLength(body) });
+    writeFileSync(manifestFile, JSON.stringify(manifest));
+    const plan = await f.host.plan("newer");
+    expect(plan).toMatchObject({ modName: SET_MOD, next: null, changes: [] });
+    expect(plan.blocked).toBe(`XF Studio doesn't know where the file “${NS}.reds” of “${SET_MOD}” goes, so it can't add this mod for you. ` +
+      "Show it in its folder, then copy its folders into your game folder or mod manager.");
+    expect(await refusal(() => f.host.install("newer", plan.token))).toMatchObject({ code: "install_blocked" });
+    expect(existsSync(join(f.mo2, "mods", SET_MOD))).toBe(false);
+    expect(readFileSync(f.modlistFile, "utf8")).toBe(MODLIST);
+    f.host.reveal("newer");
+    expect(f.revealed).toEqual([join(f.store, "newer", "archive")]);
+  } finally { f.cleanup(); }
+});

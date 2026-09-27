@@ -6,13 +6,19 @@ import type { StudioRuntime } from "../runtime";
 
 let current: { close(): void } | null = null;
 
+/** "Add to my mod manager" in the words of the saved launch route, for every panel that offers it. */
+export const modInstallLabel = (route: string | null | undefined) =>
+  route === "mo2" ? "Add to Mod Organizer 2…" : route === "direct" ? "Add to the game folder…" : "Add to my mod manager…";
+
 /**
  * "Add to my mod manager" (UI-82): the review before consent. It asks the host for the plan, shows in plain words exactly what
  * would be added and where (the mod's folder, the one mod-list row and its section, or the game folder), anything to know first
  * and, when it can't be done now, why with the one next step (a button where there is one). The primary button is the consent
  * to that plan; nothing is added until it is pressed. Acts only through `port.modInstall`.
  */
-export function openModInstallSheet(rt: StudioRuntime, product: string, options: { openSetup(): void; rename?(): void }) {
+export function openModInstallSheet(rt: StudioRuntime, product: string, options: { openSetup(): void; rename?(): void;
+  /** The panel the success toast names (default Mod package). */
+  source?: string }) {
   current?.close();
   const port = rt.port, install = port.modInstall;
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -44,7 +50,7 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     const outcome = await install.dispatch({ kind: "modInstall.apply", product });
     if (outcome.ok) {
       close();
-      rt.feedback.toast("success", "Mod package", outcome.message);
+      rt.feedback.toast("success", options.source ?? "Mod package", outcome.message);
       return;
     }
     // The plan no longer matches what is there now: review again, and say why this one wasn't used.

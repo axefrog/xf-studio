@@ -183,7 +183,8 @@ export class ModInstallHost {
 
   /** Show a build's files in the file manager (its `archive` folder, selected), for a manual install. */
   reveal(candidateId: string): void {
-    const { root } = this.candidate(candidateId);
+    // A build with a file of a kind this version can't place is still shown, for copying by hand.
+    const root = this.unknownKinds(candidateId) ? this.candidateFolder(candidateId) : this.candidate(candidateId).root;
     if (!this.ports.reveal) throw new ModInstallError("install_unavailable", "This version of XF Studio can't open a folder for you.");
     if (!this.ports.reveal(join(root, "archive"))) throw new ModInstallError("install_failed", "XF Studio couldn't open that folder. Try again.");
   }
@@ -204,11 +205,40 @@ export class ModInstallHost {
     catch { throw new ModInstallError("candidate_missing", "This build's files are no longer there, or were changed. Build your mod again."); }
   }
 
+  /** The build's own folder in the store, refused when it isn't a real folder there. */
+  private candidateFolder(candidateId: string): string {
+    const store = resolve(this.ports.candidateStore), root = resolve(store, candidateId);
+    try { if (safeCandidate(candidateId) && dirname(root) === store && lstatSync(root).isDirectory() && !lstatSync(root).isSymbolicLink()) return root; }
+    catch { /* Gone. */ }
+    throw new ModInstallError("candidate_missing", "This build's files are no longer there, or were changed. Build your mod again.");
+  }
+
+  /**
+   * A build whose manifest lists a file of a kind this version doesn't know where to put (a newer XF Studio's): its mod name and
+   * those files' names, read from the manifest as written, before the manifest reader (which refuses such a build as unreadable).
+   */
+  private unknownKinds(candidateId: string): { modName: string | null; names: string[] } | null {
+    if (!safeCandidate(candidateId)) return null;
+    try {
+      const file = join(resolve(this.ports.candidateStore), candidateId, "manifest.json"), stat = lstatSync(file);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1_000_000) return null;
+      const value = JSON.parse(readFileSync(file, "utf8")) as { archive?: unknown; namespace?: unknown; modName?: unknown; files?: unknown };
+      const archive = typeof value.archive === "string" ? value.archive : typeof value.namespace === "string" ? value.namespace : null;
+      if (!archive || !Array.isArray(value.files)) return null;
+      const names = value.files.slice(2).map(entry => (entry as { path?: unknown } | null)?.path)
+        .filter(path => extraFileKind(path, archive) === null).map(path => typeof path === "string" ? basename(path) : "?");
+      return names.length ? { modName: typeof value.modName === "string" ? value.modName : null, names } : null;
+    } catch { return null; }
+  }
+
   private prepare(candidateId: string, running: RunningApps): { plan: ModInstallPlan; transport?: ReturnType<typeof createModInstallTransport>; modlist?: ModlistChange;
     /** How the success message says where the mod went and where to see it. */
     outcome?: { seeIt: string; gameFolders: string } } {
-    const { root, manifest } = this.candidate(candidateId);
-    const modName = manifest.modName ?? EYE_MAKEUP_MOD.modName;
+    // A file of a kind the install doesn't know where to put is refused in plain words before the build is read (the manifest
+    // reader would call such a build unreadable), with copying by hand as the way on.
+    const unknownKinds = this.unknownKinds(candidateId);
+    const inspected = unknownKinds ? null : this.candidate(candidateId);
+    const modName = inspected?.manifest.modName ?? unknownKinds?.modName ?? EYE_MAKEUP_MOD.modName;
     const settings = this.ports.settings(), route: ModInstallRoute = settings.launchRoute;
     const profile = settings.mo2ProfileId ?? "";
     const readOnly = this.ports.readOnly;
@@ -218,13 +248,13 @@ export class ModInstallHost {
     const blocked = (why: string, next: ModInstallNextStep = "retry", changes: string[] = []): { plan: ModInstallPlan } =>
       ({ plan: { ...base, changes, blocked: readOnly ?? why, next: readOnly !== undefined ? null : next,
         token: sha(JSON.stringify([candidateId, route, why])) } });
-    // Files beside the archive are placed where the game and frameworks read them (extraFileKind); a kind the install doesn't
-    // know where to put is refused, with copying by hand as the way on.
-    const unknown = manifest.files.slice(2).filter(file => extraFileKind(file.path, manifest.archive) === null).map(file => quoted(basename(file.path)));
-    if (unknown.length)
+    // Files beside the archive are placed where the game and frameworks read them (extraFileKind).
+    const unknown = (unknownKinds?.names ?? []).map(quoted);
+    if (unknown.length || !inspected)
       return blocked(`XF Studio doesn't know where ${unknown.length === 1 ? `the file ${unknown[0]}` : `the files ${unknown.join(", ")}`} of ` +
         `${quoted(modName)} ${unknown.length === 1 ? "goes" : "go"}, so it can't add this mod for you. Show it in its folder, then copy its folders ` +
         "into your game folder or mod manager.", null);
+    const { root, manifest } = inspected;
     if (modName !== modName.trim() || modNameIssue(modName) !== undefined)
       return blocked("This mod's name can't be used as a folder name. Rename it in Mod package, then build it again.", "rename");
     if (route === "mo2" && /_separator$/i.test(modName))
