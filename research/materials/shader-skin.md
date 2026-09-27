@@ -197,7 +197,7 @@ for track i < MaterialModifiersConsts[2].y:                    // per-draw count
 squash, stretch = saturate(...)
 ```
 
-`ramp` is a trapezoid in UV0: 1 inside the inner rectangle, falling linearly to 0 at the outer one. So each **animation float track** switches on the stretch or squash normal map (and its blood flush) inside a few UV rectangles of the face. The 33 wrinkle outputs of the facial solver ([facial expressions](../../knowledge/facial-expressions.md)) are the likely track source [hypothesis]; the region rectangles are CPU data not found in any resource yet [hypothesis].
+`ramp` is a trapezoid in UV0: 1 inside the inner rectangle, falling linearly to 0 at the outer one. So each **animation float track** switches on the stretch or squash normal map (and its blood flush) inside a few UV rectangles of the face. The 33 wrinkle outputs of the facial solver ([facial expressions](../../knowledge/facial-expressions.md)) are the track source [hypothesis, strongly supported by the names below]. The rectangles are in `engine\materials\defaults\defaultfaceregions.regionset` (`CTextureRegionSet`, the only region set in the base game): 33 `rendTextureRegion`s whose names are exactly the facial setup's 33 wrinkle outputs (`eye_l_oculi_squint_outer_lowerWrnkl` …), each with `isStretch` and one to three `regionParts` of `innerRegion`/`outerRegion` [resource]. No serialized property references it, so the engine loads it natively [hypothesis]. Placed on the head's UV0 they land where their names say when a rectangle's Y/W bound U and X/Z bound V ([natural expressions §9.3](../animation/natural-expressions.md#93-where-the-stiffness-comes-from)); confirm that order against this listing before rendering them. A preview plan is in [natural expressions §9.5](../animation/natural-expressions.md#95-plan-wrinkles-in-the-preview-scoped-not-built).
 
 The vertex program also passes vertex colour R/G/B/A straight through (G ends in GBuffer2.z) and the view depth used by the wetness LOD.
 
@@ -420,7 +420,7 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 2. **Which blur runs.** Separable or stochastic, under which setting (`CharacterSubsurfaceStochastic`, the upscaler, ray tracing), and whether the separable passes run horizontal first.
 3. **The combine's tinted term.** Whether the `A` input (`t6`) is the environment specular or the ambient diffuse, and where `SkinAmbientIntensity_Factor` and `SkinAmbientMix_Factor` act.
 4. Which setting selects the `UseTranslucency` setup, and what `cb1[41]` and the transmission's `t3.y` are.
-5. The source of the wrinkle regions (`TextureRegionsCB`) and float tracks, and whether they come from the facial setup's wrinkle outputs.
+5. Whether the engine fills `TextureRegionsCB` and `FloatTracksDataCB` from `defaultfaceregions.regionset` and the facial solver's wrinkle outputs for photo-mode and creator faces (§5.6: the names match one to one), and the rectangles' axis order.
 6. `TintColor` encoding (byte/255 or sRGB-decoded): [materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions).
 7. What happens with more than 8 skin profiles on screen.
 8. The three siblings (`skin_blendable`, `skin_morph`, `blackwall_blendable_skin`) are not decompiled.

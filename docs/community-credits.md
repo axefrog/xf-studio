@@ -467,6 +467,10 @@ Arthur M. Glenberg, Jennifer L. Schroeder and David A. Robertson, "Averting the 
 
 Géry Casiez, Nicolas Roussel and Daniel Vogel, "1€ Filter: a simple speed-based low-pass filter for noisy input in interactive systems" (CHI 2012). The face-capture prototype smooths blendshape scores with this filter, implemented from the paper.
 
+### Fishman, Kiss, Zuker, Fialkov and Whyne (2022)
+
+Zachary Fishman, Alex Kiss, Ronald M. Zuker, Jeffrey A. Fialkov and Cari M. Whyne, [Measuring 3D facial displacement of increasing smile expressions](https://doi.org/10.1016/j.bjps.2022.08.024) (*Journal of Plastic, Reconstructive & Aesthetic Surgery*, 2022), measured on the Binghamton University 3D Facial Expression database. Their cheek and mouth-corner displacements at four smile intensities are the real-face yardstick for how far V's cheeks can and should move.
+
 ## Reference imagery
 
 ### Jewellery form and fit references

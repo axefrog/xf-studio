@@ -1,6 +1,6 @@
 # Natural expressions: FACS on V's face rig
 
-**Status: R&D, 27 September 2026 ([experiment 026](../../experiments/026-natural-expressions/README.md)).** Nothing here has been seen in the game. Every render is the Studio's solved preview of the game's facial rig on the female head's own facial setup, which is not proven to be the setup the engine uses for V ([facial expressions, open question 1](../../knowledge/facial-expressions.md#open-questions)). The wrinkle outputs are not rendered.
+**Status: R&D, 27 September 2026 ([experiment 026](../../experiments/026-natural-expressions/README.md); the cheek range study of §9 is its follow-up).** Nothing here has been seen in the game. Every render is the Studio's solved preview of the game's facial rig on the female head's own facial setup, which is not proven to be the setup the engine uses for V ([facial expressions, open question 1](../../knowledge/facial-expressions.md#open-questions)). The wrinkle outputs are not rendered.
 
 Evidence grades follow the [knowledge rules](../../knowledge/README.md), plus two used here: **[observed]** seen in the Studio's live preview while driving the control; **[literature]** a published finding, cited, not re-tested. **[offline]** marks numbers measured here with the pinned solver and the face skeleton's forward kinematics.
 
@@ -9,8 +9,9 @@ This note answers one question from the maintainer: vanilla photo-mode faces loo
 ## 1. Summary
 
 - **Why vanilla looks fake** (§5). The smiles leave the eyes almost open: `facial_happy` narrows the eye opening to 85 % and lifts the lower lid 0.8 mm, while the mouth corners rise 5.5 to 8.2 mm. Our warm smile has about the same mouth (6 mm) with the eyes at 62 to 65 % and the lower lid up 2.4 mm, which is what the Duchenne marker (AU6) looks like. The other vanilla faces drive many controls near their limits at once (`facial_furious` has 10 controls at 0.7 or more, `facial_whistling` 19), mix action units that contradict each other (surprise with lip purse, funnel and cheek suck; disgust with an open jaw), and lean on controls that move nothing in a still pose (neck correctives, `lips_tighten_*`) [offline].
-- **The mapping** (§3). Most FACS action units have a clear counterpart among V's controls. Several control names describe their motion poorly, and seven controls move no joint at all in this setup. The ten neck and head turn and tilt controls deform the neck and jaw-line skin but never turn or tilt the head, so they are correctives for body-driven head motion and don't belong in a still expression [offline] [observed].
+- **The mapping** (§3). Most FACS action units have a clear counterpart among V's controls. Several control names describe their motion poorly, and seven controls move no joint on their own; four of those only modify a partner control, and three move nothing in any combination. The ten neck and head turn and tilt controls deform the neck and jaw-line skin but never turn or tilt the head, so they are correctives for body-driven head motion and don't belong in a still expression [offline] [observed].
 - **Five samples** (§4), committed under [`data/expression-samples/`](../../projects/xf-studio/authoring/data/expression-samples/) in the editor's preset format: a warm smile, confusion, disgust, mild surprise, and thinking. Each is an FACS recipe at low to moderate intensity, with the upper face involved and slight asymmetry (strong asymmetry only where the expression is naturally one-sided). No control goes above 0.9, and only the smile's cheek raise goes above 0.6.
+- **Cheek range** (§9). The rig can lift the malar cheek 9 to 10 mm, more than a broad real smile, but only by stacking the sneer and nasolabial deepener on the cheek raiser: AU6 alone lifts it 2.6 mm and mostly pushes it forward. `facial_happy` lifts it 3.4 mm under a mouth that, on a real face, comes with 4.4 to 5.6 mm (Fishman et al. 2022). The stiffness is vanilla under-driving AU6 plus the preview's missing wrinkles: the game has crow's-feet, nasolabial and nose wrinkle regions (`defaultfaceregions.regionset`) driven by the same controls, and no region for the lower-lid bulge. A cheek-lift recipe raises the warm smile's cheek rise by 29 % [offline] [literature] [resource].
 - **MediaPipe** (§6) is feasible and fast. Detection takes 7 to 12 ms a frame on the GPU and the warm solver's round trip 6 to 8 ms, so the estimated face-to-V latency is about 32 ms plus the camera's own delay. On V's own renders it recovers gaze, blinks, brow raises and smiles well (cosine 0.82 to 0.97 against the true vector), but it misses brow lowering, the nose wrinkle, the upper-lip raise and one-sided mouth movements (0.3 to 0.6). It is a good way to rough in a face, not a faithful copy. The web library uploads usage metrics to Google every minute; the prototype's Content Security Policy blocks that, and no request left the machine in the test.
 
 ## 2. Sources and licences
@@ -28,6 +29,7 @@ This note answers one question from the maintainer: vanilla photo-mode faces loo
 | [ICT-FaceKit](https://github.com/ICT-VGL/ICT-FaceKit) (USC Institute for Creative Technologies) | Surveyed: an open face model with ARKit-style, left/right-split expression shapes | MIT (copyright 2020 USC ICT); the full ICT Face Model is under a separate licence | Not used |
 | Casiez, Roussel and Vogel, "1€ Filter" (CHI 2012) | The adaptive low-pass filter used to smooth blendshapes | Published algorithm | Reimplemented in the prototype |
 | Duchenne's photographs, Figures 7, 32, 45, 51 and 54 (Cleveland Museum of Art 2018.7–2018.11, via Wikimedia Commons) | Real-face test inputs for MediaPipe | CC0 | Local test input only, never committed |
+| Fishman, Kiss, Zuker, Fialkov and Whyne, ["Measuring 3D facial displacement of increasing smile expressions"](https://doi.org/10.1016/j.bjps.2022.08.024) (*JPRAS*, 2022), on the Binghamton University 3D Facial Expression database | Cheek and mouth-corner displacement at four smile intensities (abstract only) | Published findings | Cited in §9.2 [literature] |
 | DISFA, BP4D/BP4D+, CK+, AffectNet, FLAME, EMOCA | Nothing | Research-only or non-commercial licence agreements | Not downloaded or used |
 
 ## 3. FACS action units on V's controls
@@ -82,8 +84,8 @@ General behaviour [offline]:
 
 Other findings:
 
-- **Controls that move nothing in this setup** [offline]: `lips_tighten_up`, `lips_tighten_dn`, `jaw_mid_clench`, `lips_corner_sticky`, `eye_[lr]_pupil_narrow`, `neck_throat_adamsApple_up` and `jaw_mid_close` (which only cancels `jaw_mid_open`). They may drive wrinkle outputs or do their work in the male player setup; neither is established.
-- **Labels the drawer should correct** (they come from the control names, which mislead): `nose_[lr]_breathe_in` is the flare and `…breathe_out` the narrowing (the drawer says the reverse); `lips_[lr]_lower_raise` lowers that side of the lower lip; `lips_[lr]_pull` raises the inner upper lip; `lips_[lr]_corner_wide` pulls the corner back (a dimple) more than it widens; `lips_together_*` seal an open mouth rather than press closed lips; the neck and head group should say it deforms the neck only [offline] [observed]. This is a proposal for the expressions feature, not changed here.
+- **Controls that move nothing alone** [offline]: `lips_tighten_up`, `lips_tighten_dn`, `jaw_mid_clench`, `lips_corner_sticky`, `eye_[lr]_pupil_narrow`, `neck_throat_adamsApple_up`, and `jaw_mid_close`, `lips_together_*` (which act only with an open jaw). Solved on top of each other control at 0.5, four of the first seven turn out to be **modifiers**: `lips_tighten_up`/`dn` change the same lip's seal or puff (2 mm), `jaw_mid_clench` changes `jaw_mid_close` (0.3 mm) and `neck_throat_adamsApple_up` works against `…adamsApple_dn` (1 mm). Only **`lips_corner_sticky` and both `eye_[lr]_pupil_narrow` move nothing in any combination**, in both the female and the male player setup, and none of the seven feeds a wrinkle output. The Expression drawer finds these with the solver when it starts (every control alone and on top of all the others at 0.25) and doesn't offer them.
+- **Labels the drawer corrected** (the control names mislead): `nose_[lr]_breathe_in` is "Nostril flare (breathe in)" and `…breathe_out` the narrowing; `lips_[lr]_lower_raise` "Lower lip down"; `lips_[lr]_pull` "Upper lip raise, inner"; `lips_[lr]_corner_wide` "Mouth corner back (dimple)"; `lips_together_*` "lip seal", with a note that closed lips don't change; the AU6 control reads "Cheek raise (squint, lower outer)". The ten neck and head turn and tilt correctives moved to the folded Advanced group, each noting that the head itself doesn't move [offline] [observed].
 - `sculp_mid_slide` lifts the glabella 4.3 mm and draws it back 3.1 mm; `face_gravity_*` shift the cheek and mouth mass 3 to 5 mm; neither has an FACS counterpart [offline].
 
 ### 3.3 ARKit and MediaPipe blendshapes to V
@@ -292,10 +294,84 @@ Private renders of the maintainer's V (game assets), kept in the worktree's igno
 ## 8. Next steps
 
 1. **An AU layer in the editor.** FACS-style sliders (about 30 AUs, per side where FACS has sides) as a view over the stored vector: each AU is a profile of control weights from §3.2, with intensity presets A to E. The part keeps storing controls, so preview and export are unchanged. AUs that share a control combine by clamped sum, the rig's own behaviour. Starting points: "Duchenne smile", "surprise", and the five samples as AU settings.
-2. **Fix the drawer labels** listed in §3.2 and move the neck and head correctives (and the controls that move nothing) under Advanced with a plain note. This belongs to the expressions feature's owner.
+2. **Wrinkles in the preview** (§9.5), then the in-game close-up comparison. (The drawer labels, the Advanced group and the controls that move nothing are done.)
 3. **In-game check** once export exists (phase 3): the warm smile against `facial_happy` in photo mode with look-at off, to see whether wrinkles render and whether the male player facial setup (R1) changes the look. Also check the thinking gaze with look-at off.
 4. **Face capture**: a live-camera session with the maintainer (the prototype runs on a normal browser tab), then the feature in §6.4 if it feels right. Tune gains on real faces, not only V renders.
 5. **Correctives and nonlinearity**: probe more AU pairs for non-additive correctives before an AU layer assumes they add up.
+
+## 9. Cheek range: how far the upper cheek can move
+
+The question: the cheeks look as if they can't move much ("over-injected with botox"). How much upper-cheek movement does the rig allow, how does that compare with real faces, and is the stiffness the rig's range, vanilla presets under-driving the cheek, or missing wrinkle shading?
+
+**Method.** [`cheek-range.py`](../../experiments/026-natural-expressions/cheek-range.py) loads the face skeleton and facial setup and the pinned, unmodified solver directly (as the idle bake does), solves each cheek-related control at 0.25, 0.5, 0.75 and 1, combinations, the samples and five vanilla faces, poses the skeleton and measures the left side in the face's own frame. Regions are chosen by rest position, not by joint name, because the names mislead: several `jaw_nosabial` joints sit on the cheekbone and the `eye_check` rows run from the outer orbit down over it. The **malar cheek** (the "apple" over the cheekbone) is the cheek joints 7 to 47 mm below the eye centre; **rise** is the largest upward motion of any of them. It runs on the female head's own setup (the preview's) and on the male player setup that every vanilla player face rig references ([facial expressions §1](../../knowledge/facial-expressions.md#which-facial-setup-v-actually-uses)); the male setup's numbers are 5 to 15 % smaller and tell the same story [offline]. Skin follows joints through skin weights, so these are joint motions, a close proxy for the surface but not the surface itself.
+
+### 9.1 What each control does to the cheek
+
+At weight 1, left side, female setup [offline]:
+
+| Control (AU) | Malar cheek: total / rise (mm) | Other regions (mm) | Notes |
+|---|---|---|---|
+| `eye_l_oculi_squint_outer_lower` (AU6) | 4.5 / 2.6 | lower lid 3.9 (rise 3.3), lateral orbit 2.7 | Rise is linear (0.65, 1.31, 1.96, 2.62 at the four weights); the total bends upward near 1. Mostly **forward**: its elevation is about 35°, where real cheeks rise at 51 to 59° (§9.2) |
+| `nose_l_snear` (AU9) | 7.2 / **5.6** | nasolabial cheek 6.0, lower lid 2.0 | The strongest cheek raiser in the rig, but it also wrinkles the nose and lifts the lip |
+| `lips_l_corner_up` (AU12) | 8.4 / 3.9 | mouth corner 21.5, lower mid-cheek 16.1 | Pulls the cheek out and back more than up |
+| `lips_l_nasolabialDeepener` (AU11) | 4.9 / 2.8 | lower mid-cheek 7.1 | |
+| `lips_l_upper_raise` (AU10) | 4.1 / 2.4 | lower mid-cheek 3.1 | |
+| `lips_l_corner_sharp_up` (AU13), `eye_l_oculi_squint_inner` (AU7) | 1.2 / 1.0; 1.0 / 0.9 | | |
+| `cheek_l_puff`, `face_gravity_*` | up to 2.8 / 0.8 at most | | Outward or sideways, not up |
+| `eye_l_oculi_squint_outer_upper`, `sculp_mid_slide`, blink, widen | 0.6 or less / 0 | | No cheek lift |
+
+**Combinations** [offline]:
+
+- **Additive where they don't share correctives.** AU6 with AU12 at 1 solves to exactly the sum (8.6 mm, rise 4.2); AU6 with AU9 at 0.5 or AU11 at 0.5 too.
+- **A corrective caps the full stack.** AU6, AU12, AU11 and AU9 all at 1 give 10.8 mm (rise 9.5) against 14.1 (rise 12.3) for the sum of the parts: a corrective takes back about 2.8 mm of rise (7 mm at one joint). Smaller correctives act on AU6 + AU7 + outer-upper (0.4 mm) and AU12 + AU13 (0.7 mm).
+- **Weights clamp at 1.** AU6 at 2 solves exactly like AU6 at 1, so the ceiling of one control is its weight-1 pose.
+
+So the rig *can* lift the malar cheek by 9 to 10 mm, but only by stacking the sneer, the nasolabial deepener and the smile on AU6; AU6 alone gives 2.6 mm of rise.
+
+### 9.2 Real faces
+
+Fishman, Kiss, Zuker, Fialkov and Whyne, ["Measuring 3D facial displacement of increasing smile expressions"](https://doi.org/10.1016/j.bjps.2022.08.024) (*JPRAS* 75(11), 2022), measured 100 adults of the Binghamton University 3D Facial Expression database at a neutral face and four smile intensities. From the abstract [literature]: the **maximum cheek displacement was 4.5, 5.7, 6.8 and 7.9 mm** for smile levels 1 to 4, moving outward and **upward at 51 to 59°**; the mouth corner moved 9.2, 11.4, 13.5 and 16.0 mm. The paper's exact cheek point was not read (the full text is paywalled), and its rise is our estimate from the stated angle: about 3.6 to 6.6 mm (total × sin 51–59°).
+
+| Face | Mouth corner (mm) | Malar cheek total / rise (mm) | Real smile level with that mouth, and its cheek |
+|---|---|---|---|
+| `facial_happy` | 12.1 | 6.3 / **3.4** (mean rise 1.9) | Level 2 to 3: cheek 5.7 to 6.8, rise about 4.4 to 5.6 |
+| XF warm smile | 13.4 | 7.8 / 4.3 (mean 3.0) | Level 3: cheek 6.8, rise about 5.3 to 5.8 |
+| Warm smile, lifted cheeks (§9.4) | 13.5 | 8.3 / **5.5** (mean 3.7) | Level 3, on target |
+
+The vanilla smile's cheek *total* is in range, but most of it is AU12 dragging the cheek outward and back; its **rise is about a third short** of a real smile with the same mouth [offline] [literature, our estimate].
+
+### 9.3 Where the stiffness comes from
+
+A mix, in this order for the preview:
+
+1. **Vanilla presets under-drive AU6** [offline]. `facial_happy` sets the cheek raiser to 0.33 while its mouth controls sit at 0.5 to 0.86, and a third of its upper-face motion is the outer brow coming down (`…outer_upper` 0.34). The cheek rises like a level-1 smile under a level-2-to-3 mouth.
+2. **Missing wrinkle shading** [resource] [hypothesis for the runtime link]. The game's skin shader bends the normal toward a stretch or squash wrinkle map inside UV rectangles, weighted by animation float tracks ([skin shader §5.6](../materials/shader-skin.md#56-the-wrinkle-driver-vertex-program)). The rectangles are in **`engine\materials\defaults\defaultfaceregions.regionset`** (the only `.regionset` in the base game): 33 regions whose names are exactly the facial setup's 33 wrinkle outputs (`eye_l_oculi_squint_outer_lowerWrnkl` …), each flagged stretch or squash, one to three rectangles each. Each wrinkle output is `1 − (1 − w)²` of one control, so it saturates early: `facial_happy` drives the crow's-feet regions (`…squint_outer_lower/upper`, squash, beside the eye) at 0.55 and the nasolabial fold (`lips_*_corner_up`, squash) at 0.76 to 0.82; the warm smile drives crow's feet at 0.98. The preview draws none of it, so a smiling V there has no crow's feet, no deepened fold and no nose lines. **No region covers the lower lid or the infraorbital bulge**, which is where a real AU6 bunches the skin, so even in game that part rests on geometry alone.
+3. **The rig's range is not the limit for a natural smile, but AU6 alone is weak and forward-biased** [offline]. Reachable rise (9.5 mm) exceeds a broad real smile (about 6.6), yet a Duchenne lift needs AU6 plus a little AU9 and AU11, which vanilla faces don't combine.
+
+Placing the 33 rectangles on the head's UV0 puts every region where its name says and left/right mirrored when the rectangle's Y/W bound U and X/Z bound V (crow's feet 52 mm either side of the midline at eye height, the nasolabial regions beside the mouth corners, the nose regions on the bridge); the other reading scatters them [offline, head mesh UVs]. The skin shader's listing names the axes the other way round, so a renderer must confirm the order against the vertex program before relying on it.
+
+### 9.4 A better cheek lift
+
+On top of the warm smile, per side (left / right), everything at 0.9 or below:
+
+| AU | Control | Warm smile | Lifted cheeks |
+|---|---|---|---|
+| 6 | `eye_S_oculi_squint_outer_lower` | 0.9 / 0.85 | 0.9 / 0.88 |
+| 9 | `nose_S_snear` | – | 0.25 / 0.2 |
+| 11 | `lips_S_nasolabialDeepener` | 0.35 / 0.3 | 0.55 / 0.5 |
+| 13 | `lips_S_corner_sharp_up` | 0.36 / 0.3 | 0.45 / 0.4 |
+
+It raises the malar cheek's rise from 4.3 to 5.5 mm (+29 %; mean rise 3.0 to 3.7), the lower lid from 4.2 to 4.4 mm and the nasolabial cheek from 1.3 to 2.6 mm, with the mouth corner unchanged (13.4 to 13.5 mm) [offline]. A sneer of 0.3 gives 5.8 mm but starts to read as a nose wrinkle; 0.2 to 0.25 stays a smile. In the before and after renders the lifted cheek is fuller over the cheekbone and the fold beside the nose deeper, and neither shows a crease, which is the wrinkle gap of §9.3 [observed]. Renders (private, the default V in an isolated `?verify=1` workspace): `projects/xf-studio/authoring/evidence/screenshots/cheek-range/` (`facial_happy`, `warm-smile`, `warm-smile-lifted`, front and three-quarter, and `sheet-front.png`, `sheet-tq.png`).
+
+### 9.5 Plan: wrinkles in the preview (scoped, not built)
+
+Wrinkles are the largest missing visual cue in the preview, and everything they need is now located:
+
+1. **Solver outputs.** `facial_solver_server.py` answers the 33 wrinkle outputs beside the joint deltas (the solver already computes them: `output_tracks` from the setup's wrinkle start); the host passes them with each solve.
+2. **Regions.** The host reads `defaultfaceregions.regionset` through the resolver (a small CR2W: `regions[{name, isStretch, regionParts[{innerRegion, outerRegion}]}]`), matches regions to outputs by name, and sends them with the rig state; no region or rectangle is written into the Studio.
+3. **Maps.** The head's resolved skin chain already names `Detailmap_Stretch`, `Detailmap_Squash`, `Bloodflow` and `BloodColor` ([saved-skin resource chain](../eye-artistry/saved-skin-resource-chain.md)); the character record exports them with the other skin textures.
+4. **Shader.** `skin-material.ts` ports the vertex driver (per vertex: stretch and squash weights from the rectangles' trapezoid ramps times the outputs) and the pixel steps §5.1 step 2 (normal lerp) and §5.4 (blood flush, weight cubed). 33 regions of up to 3 rectangles fit in a uniform array; nothing changes at rest.
+5. **Checks.** The UV axis order (§9.3) against the vertex listing; the warm smile and `facial_happy` close up with and without wrinkles; then an in-game photo-mode close-up of the same faces as the runtime comparison (whether the engine feeds these outputs to that shader for photo-mode faces is the [hypothesis](../../knowledge/facial-expressions.md#open-questions) the comparison settles).
 
 ## Related pages
 
