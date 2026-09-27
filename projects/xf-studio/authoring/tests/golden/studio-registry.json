@@ -58,6 +58,7 @@
   "preview.setLightingPreset",
   "preview.setCreatorLighting",
   "preview.resetCreatorLighting",
+  "preview.setCreatorShadows",
   "preview.setExposure",
   "preview.setKeyAngle",
   "preview.setStudioLight",
@@ -1957,6 +1958,25 @@
     }
    }
   },
+  "preview.setCreatorShadows": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "preview.setExposure": {
    "scope": [
     "viewport"
@@ -3508,6 +3528,15 @@
   },
   {
    "id": "preview.resetCreatorLighting",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setCreatorShadows",
    "family": "action",
    "scope": [
     "viewport"

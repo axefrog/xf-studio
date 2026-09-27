@@ -87,14 +87,17 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     format: value => (10 ** value).toPrecision(3),
     transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); },
       commit: endEdit, cancel: endEdit } });
+  const creatorShadows = new Toggle({ label: "Shadows from the flagged lights",
+    help: "The lights the game flags for shadows cast them onto the V: the key light's nose shadow, and no rim light through the head.",
+    onChange: enabled => rt.dispatch({ kind: "preview.setCreatorShadows", enabled }) });
   const resetCalibration = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
-    title: "Put the intensity reading, cone angles and creator exposure back to their defaults",
+    title: "Put the intensity reading, cone angles, creator exposure and shadows back to their defaults",
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
   // A research tool (UI-85): shown only with View preferences › Show research tools.
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
     h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
       helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
-    intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
+    intensity.element, cone.element, creatorExposure.element, creatorShadows.element, h("div", { class: "row" }, resetCalibration));
   const fovNote = note("");
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
     transaction: {
@@ -200,6 +203,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       cone.update(creator?.cone, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
       creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
         note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
+      creatorShadows.update(creator?.shadows ?? true, studioOnly({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
       applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       // The panel's loading reason is said once, in the line that is always there (UI-90).
       if (!ready) setText(fovNote, loading.reason);

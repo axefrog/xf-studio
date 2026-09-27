@@ -58,6 +58,8 @@ export type HeadAttachmentPorts = {
   /** The UI theme preference and the OS colour scheme the stage backdrop follows. */
   preferences: Parameters<typeof bindStageTheme>[1];
   colourScheme: SystemColourScheme;
+  /** The preview quality (generated-texture size) the creator rig's shadow maps follow; 1K when absent. */
+  quality?: { snapshot(): { size: number }; subscribe(listener: () => void): () => void };
   /** Connects head services to the application (and disconnects them with `undefined`). */
   attach(services: HeadServices): void;
   /** Requests an autosave. */
@@ -119,6 +121,11 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     const scene = await ports.viewport.loadHead(body);
     releases.push(() => ports.viewport.unloadHead(scene));
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
+    if (ports.quality) {
+      const quality = ports.quality, follow = () => { scene.lighting.setShadowQuality(quality.snapshot().size); scene.requestRender(); };
+      follow();
+      releases.push(quality.subscribe(follow));
+    }
     let surface: ReturnType<ViewportDevice["mountSurface"]> | undefined;
     let savedAppearance: SavedAppearanceActions | undefined;
     // Skin, face details, eyes, brows, lashes, hair, piercings and body follow the character context: the restored or newly loaded save, else

@@ -405,7 +405,7 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 | Wetness | Not drawn | Faithful when dry |
 | Emissive | Not drawn; reported when a mask would glow | Gap |
 | Dual-lobe GGX, F0 0.04, Burley diffuse | Same | Faithful to the direct light |
-| SSS | Per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1 | Approximation: the game blurs irradiance in screen space with a decoded kernel and multiplies albedo afterwards (§6.3); a wrap softens the terminator but not texture-scale shading. The port is planned in §11 |
+| SSS | Per-channel diffuse **wrap** from `falloff` and `blurSize`, off above metalness 0.1. It is scaled by the surface's curvature (`min(1, 5 mm × κ)`, κ from screen-space derivatives of the interpolated normal), so each channel wraps over its scatter distance (blur size × falloff, read as millimetres [hypothesis]) rather than a fixed angle. The diffuse light uses the **macro normal** (normal and detail maps, without the tiled microdetail); specular keeps the full normal | Approximation. The game blurs irradiance in screen space with a decoded kernel and multiplies albedo afterwards (§6.3). That softens the terminator by millimetres and removes diffuse shading finer than its kernel, which is what the two stand-ins mimic. The earlier fixed-angle wrap spread a broad, saturated red band across gently curved cheeks under a strong side key (the 27 September Rim / dramatic capture). The port is planned in §11 |
 | Translucency | Not drawn | Gap for thin, back-lit parts |
 | Ambient and reflections | Three's image-based light through both lobes | Approximation; the game adds one ambient term (probably the reflections) outside the scatter, tinted by `SubsurfaceSpecularTint` (§6.3.5) |
 
@@ -531,5 +531,6 @@ Total **M–L**, as the coverage audit ranks it. Ranks 1–3 alone give a correc
   - Low, Medium and High differ.
 - **Parity**: test ask 4 fits the scale (§11.6), then the terminator's red fringe on cheek, nose wing and ear is compared per region with the [parity metrics](../authoring/game-parity-measurement.md#32-measures).
 - **In game**: test asks 2 and 4 (closed mouth; terminator at two qualities) are the acceptance frames.
+- **Skin hue under the creator rig** (acceptance metric from the 27 September matched pair, [creator lighting §12](../../knowledge/creator-lighting.md#12-calibration-against-a-matched-pair)): lit forehead R/G in scene-linear light, after inverting the installed grade, is 0.97 in the game and 1.17 in the Studio, while hair hue already matches (1.10 against 1.12). The scatter port should close most of that gap without retuning the wrap. The same pair's shadow-side nose flank, 0.075 × forehead in game and SSS bleed only (sRGB 46, 23, 17), is the second check. [runtime, one matched pair]
 
 Related: [materials and shaders](../../knowledge/materials-and-shaders.md) · [head CC rendering](../../knowledge/head-cc-rendering.md) · [shader-system evidence](shader-system/README.md) · [annotation results](shader-system/annotation-results.md#basematerialsskinmt) · [hair reference](shader-hair.md) · [fact index](shader-fact-index.md).
