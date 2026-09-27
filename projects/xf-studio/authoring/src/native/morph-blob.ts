@@ -23,6 +23,11 @@ import { RedBuffer, type RedObject } from "./red-model";
 
 const f = Math.fround;
 const DIFF_BYTES = 12;
+/**
+ * What the targets read together, over what the diffs and mapping buffers hold (NATIVE-66: every target can name one range, and a small
+ * file then has it walked once a target). Over 54 reference morph targets, each read exactly its buffers.
+ */
+const MAX_SHARED_DIFF_READS = 2;
 
 export interface MorphTargetInfo {
   readonly name: string;
@@ -97,6 +102,7 @@ export function morphTargetLayout(root: RedObject, limits: MeshLimits = DEFAULT_
   if (count * chunks > limits.maxTargetChunks)
     throw new NativeBudgetError(`The morph target's ${count} targets on ${chunks} chunks are more than the reader writes (at most ${limits.maxTargetChunks}).`);
   const targets: MorphTargetInfo[] = [];
+  let diffsRead = 0, mappingRead = 0;
   for (let t = 0; t < count; t++) {
     const entry = objectAt(entries[t]);
     const perChunk = countList(diffCounts[t], `target ${t} diff counts`), perChunkMapping = countList(mappingCounts[t], `target ${t} mapping counts`);
@@ -116,6 +122,10 @@ export function morphTargetLayout(root: RedObject, limits: MeshLimits = DEFAULT_
     }
     if (diffEnd * DIFF_BYTES > diffs.size || mappingEnd * 2 > mapping.size)
       throw new NativeMalformedError(`Target ${t}'s diffs or mapping lie outside their buffers.`);
+    diffsRead += diffEnd - starts[t]!;
+    mappingRead += (mappingEnd - mappingStarts[t]! * 2) * 2;
+    if (diffsRead * DIFF_BYTES > diffs.size * MAX_SHARED_DIFF_READS || mappingRead > mapping.size * MAX_SHARED_DIFF_READS)
+      throw new NativeMalformedError(`The morph target's targets read ${diffsRead} diffs of a ${diffs.size / DIFF_BYTES}-diff buffer, or overlap in their mapping.`);
     targets.push({ name: nameText(fieldOf(entry, "name")), region: nameText(fieldOf(entry, "regionName")),
       faceRegion: String(fieldOf(entry, "faceRegion") ?? "FACE_REGION_NONE"), start: starts[t]!, mappingStart: mappingStarts[t]!,
       scale: vector4(scales[t]), offset: vector4(offsets[t]), diffs: perChunk.slice(0, chunks), mappings: perChunkMapping.slice(0, chunks),

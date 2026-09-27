@@ -16,6 +16,10 @@ import { icon } from "../icons";
  * - **Scale:** only the items in view (plus a margin, plus the focused one) are in the page, and they follow the tree's own size (a
  *   ResizeObserver) as well as scrolling and updates; items are reused by ID and updated in place, so focus and the scroll position
  *   survive updates. Every item is one row high (28 px).
+ * - **Height:** by default the owner sizes the frame. With `maxRows` the frame fits its content: as tall as its visible items, up to
+ *   that many rows, then the tree scrolls; `minRows` (default 1) keeps a floor so a search that shrinks the list doesn't pull what
+ *   follows up and down as the person types. An empty tree is as tall as its message (at least the floor). Opening or closing a group
+ *   changes the height, which the person asked for.
  * - **Identity:** a group and a row are told apart by their kind, so a row may share its ID with a group; within a kind, IDs are
  *   unique (a row listed in several groups, such as Favourites and its category, carries its group in its ID).
  * - **Focus** stays in the tree when the focused item leaves it (a row unstarred out of Favourites, a search that no longer matches):
@@ -47,6 +51,10 @@ export type TreeViewOptions = {
   trailing?(row: TreeRowData, group: TreeGroupData): HTMLElement | null | undefined;
   /** Shown when there are no groups. */
   emptyText?: string;
+  /** Fit the frame to the visible items, at most this many rows tall (then it scrolls). */
+  maxRows?: number;
+  /** With `maxRows`: never shorter than this many rows (default 1). */
+  minRows?: number;
 };
 export const TREE_ROW_HEIGHT = 28;
 const OVERSCAN = 8;
@@ -106,6 +114,14 @@ export class TreeView {
       refocus = hadFocus;
     }
     this.spacer.style.height = `${this.flat.length * TREE_ROW_HEIGHT}px`;
+    if (this.options.maxRows) {
+      // The frame fits its content: as tall as its items up to maxRows (then the tree scrolls), never under the floor; empty, as tall
+      // as its message (at least the floor). The frame's 1 px border on each side is outside the rows.
+      const floor = (this.options.minRows ?? 1) * TREE_ROW_HEIGHT + 2;
+      this.element.style.minHeight = `${floor}px`;
+      this.element.style.height = this.flat.length
+        ? `${Math.max(this.options.minRows ?? 1, Math.min(this.options.maxRows, this.flat.length)) * TREE_ROW_HEIGHT + 2}px` : "";
+    }
     this.empty.hidden = this.flat.length > 0;
     setText(this.status, typeof state.loading === "string" ? state.loading : state.loading ? "Loading…" : "");
     this.status.hidden = !state.loading;

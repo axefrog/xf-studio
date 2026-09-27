@@ -114,6 +114,21 @@ export class DockView {
     for (const id of known) { this.panels.get(id)!.element.remove(); this.panels.delete(id); }
     this.options.save(this.dockState);
   }
+  /**
+   * Load a whole arrangement at once (a saved layout was chosen): the panels the dock holds from now on and both size classes' trees,
+   * already restored through the recovery gate. Panels not listed leave the page (their places are in the trees' parked records); new
+   * ones join. Renders, persists and announces once.
+   */
+  load(state: DockState, panels: readonly PanelSpec[], message?: string) {
+    const ids = new Set(panels.map(spec => spec.id));
+    for (const spec of panels) if (!this.panels.has(spec.id)) { this.panels.set(spec.id, spec); this.parking.append(spec.element); }
+    const next = structuredClone(state), area = this.area(), fit = (tree: DockTree) => keepDockExpanded(area.w > 40 && area.h > 40 ? recoverWindows(tree, area) : tree);
+    this.state = { wide: fit(next.wide), compact: fit(next.compact) };
+    this.render();
+    for (const [id, spec] of [...this.panels]) if (!ids.has(id)) { spec.element.remove(); this.panels.delete(id); }
+    this.options.save(this.dockState);
+    if (message) this.options.announce(message);
+  }
   /** Collapse or expand a panel's tab group (its tab bar stays; its neighbours take the space). Saved with the layout. */
   toggleCollapse(id: PanelId) {
     const at = locate(this.tree, id);

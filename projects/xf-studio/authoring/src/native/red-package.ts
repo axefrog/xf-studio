@@ -65,8 +65,8 @@ class PackageDecoder implements ValueContext {
         this.references.push({ path: utf8.decode(data), hash: null, sync });
       }
     }
-    session.nodes(frame.chunks.length);
-    for (const chunk of frame.chunks) this.chunks.push({ type: chunk.type, offset: chunk.start - frame.base, end: chunk.end - frame.base });
+    session.nodes(frame.chunkCount);
+    for (let i = 0; i < frame.chunkCount; i++) this.chunks.push({ type: frame.chunkType(i), offset: frame.chunkStart(i) - frame.base, end: frame.chunkEnd(i) - frame.base });
   }
 
   name(index: number): string {
