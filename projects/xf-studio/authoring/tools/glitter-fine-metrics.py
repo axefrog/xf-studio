@@ -56,7 +56,7 @@ def main():
                   'import {EYE_MAKEUP_REGION,initialRecipe} from "./src/features/eye-makeup/region";'
                   'const layer=initialRecipe().layers[0];'
                   'layer.color="#592640";layer.opacity=1;layer.enabled=true;'
-                  f'process.stdout.write(Buffer.from(raster(layer,{size},EYE_MAKEUP_REGION.mirror)));')
+                  f'process.stdout.write(Buffer.from(raster(layer,{size},EYE_MAKEUP_REGION.mirror,EYE_MAKEUP_REGION.skin)));')
         data = subprocess.run([args.bun, '-e', script], cwd=authoring,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True).stdout
         if len(data) != size * size * 4:

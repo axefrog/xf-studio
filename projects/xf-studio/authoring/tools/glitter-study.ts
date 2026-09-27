@@ -31,7 +31,7 @@ const covered:Spec[]=[{...fine[1]!,name:"fine350k-covered",normalMode:"covered-a
 const specs=coveredOnly?covered:fineOnly?fine:original;
 const fixed=initialRecipe().layers[0]!;fixed.color=base;fixed.opacity=1;fixed.enabled=true;
 const regionMaskEvidence=Object.fromEntries([1024,2048].map(size=>{
-  const mask=raster(fixed, size, EYE_MAKEUP_REGION.mirror);let nonzeroPixels=0,unsupportedPixels=0;
+  const mask=raster(fixed, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin);let nonzeroPixels=0,unsupportedPixels=0;
   for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(mask[(y*size+x)*4+3]){
     nonzeroPixels++;
     // Require the full pixel footprint, not only its centre, to lie in the ROI.

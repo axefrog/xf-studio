@@ -120,7 +120,7 @@ async function selectVariant(variant:Variant,alpha:Uint8ClampedArray<ArrayBuffer
 async function main(){
   const sizeInput=element<HTMLSelectElement>("size");sizeInput.value=String(SIZE);
   sizeInput.addEventListener("change",()=>{const url=new URL(location.href);url.searchParams.set("size",sizeInput.value);location.assign(url);});
-  const job=createRasterJob(fixed, SIZE, EYE_MAKEUP_REGION.mirror);
+  const job=createRasterJob(fixed, SIZE, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin);
   while(!job.done){const end=performance.now()+8;do{job.advance(16);}while(!job.done&&performance.now()<end);if(!job.done)await wait();}
   maskHash=await sha(new Uint8Array(job.data));
   const canvas=document.createElement("canvas");canvas.width=canvas.height=SIZE;canvas.getContext("2d")!.putImageData(new ImageData(job.data,SIZE,SIZE),0,0);

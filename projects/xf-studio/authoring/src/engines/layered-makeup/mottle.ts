@@ -22,7 +22,8 @@
  *   on the skin, or across the nearest contour edge (strands off a lash line, the mascara smudge). A symmetric
  *   layer's mirrored copy mirrors its streak direction.
  * - **Deterministic.** The tile is built from integer hashing and + − × ÷ √ only, so a seed gives the same tile in
- *   every engine. Tiles and their mips are cached per seed (and mixed per clumping) in each worker or process.
+ *   every engine. Tiles and their mips are cached per seed, and mixed per clumping for up to a look's 32 layers, in
+ *   each worker or process.
  *
  * "Version the model whenever appearance changes": any change to this arithmetic, the tile or its constants
  * registers a new model ID (`mottle-2`); `mottle-1` layers keep this look.
@@ -218,7 +219,16 @@ function clumps(seed: number): Float32Array {
   return normalise(out);
 }
 
-const tiles = new Map<number, { pores: Pyramid; clumps: Pyramid }>(), mixed = new Map<string, Pyramid>();
+/**
+ * Caches. A seed's pores and clumps (about 2.8 MB with mips, 64 ms to build) are kept for the four most recent
+ * seeds; they are read only to mix a new clumping. The mixtures (about 1.4 MB each) are what rasters sample, so
+ * they are kept for as many layers as a look can hold (`MAX_LAYERS`, 32): a look re-rastering all its mottled
+ * layers in turn never rebuilds a tile, and memory follows the look's own mottled layers (CORE-109). Each seed
+ * keeps its two most recent clumpings, so dragging one layer's clumping replaces that layer's own mixture instead
+ * of evicting other layers'.
+ */
+const TILE_SEEDS = 4, MIXES = 32, MIXES_PER_SEED = 2;
+const tiles = new Map<number, { pores: Pyramid; clumps: Pyramid }>(), mixed = new Map<string, { seed: number; levels: Pyramid }>();
 const remember = <K, V>(cache: Map<K, V>, key: K, value: V, cap: number) => {
   cache.set(key, value);
   while (cache.size > cap) cache.delete(cache.keys().next().value!);
@@ -227,18 +237,33 @@ const remember = <K, V>(cache: Map<K, V>, key: K, value: V, cap: number) => {
 function tile(seed: number) {
   const hit = tiles.get(seed);
   if (hit) { tiles.delete(seed); tiles.set(seed, hit); return hit; }
-  return remember(tiles, seed, { pores: pyramid(pores(seed)), clumps: pyramid(clumps(seed)) }, 4);
+  return remember(tiles, seed, { pores: pyramid(pores(seed)), clumps: pyramid(clumps(seed)) }, TILE_SEEDS);
 }
 /** The tile a layer samples: its seed's pores and clumps mixed by `clumping`, with its mip chain. */
 export function mottleTile(seed: number, clumping: number): readonly Float32Array[] {
   const key = `${seed}:${clumping}`, hit = mixed.get(key);
-  if (hit) { mixed.delete(key); mixed.set(key, hit); return hit; }
+  if (hit) { mixed.delete(key); mixed.set(key, hit); return hit.levels; }
   const source = tile(seed), k = clumping;
-  return remember(mixed, key, source.pores.map((level, l) => {
+  const levels = source.pores.map((level, l) => {
     const other = source.clumps[l], out = new Float32Array(level.length);
     for (let i = 0; i < level.length; i++) out[i] = level[i] * (1 - k) + other[i] * k;
     return out;
-  }), 8);
+  });
+  const count = (seed: number) => { let n = 0; for (const entry of mixed.values()) if (entry.seed === seed) n++; return n; };
+  // This seed's older clumpings beyond the most recent MIXES_PER_SEED − 1 go first (the map is oldest first).
+  let own = count(seed);
+  for (const [other, entry] of mixed) {
+    if (own < MIXES_PER_SEED) break;
+    if (entry.seed === seed) { mixed.delete(other); own--; }
+  }
+  mixed.set(key, { seed, levels });
+  // Over the cap, a seed's second clumping goes before any seed's only one, so no other layer loses its mixture.
+  while (mixed.size > MIXES) {
+    let victim: string | undefined;
+    for (const [other, entry] of mixed) if (other !== key && count(entry.seed) > 1) { victim = other; break; }
+    mixed.delete(victim ?? mixed.keys().next().value!);
+  }
+  return levels;
 }
 
 // ---- Evaluation ---------------------------------------------------------------------------------------------------

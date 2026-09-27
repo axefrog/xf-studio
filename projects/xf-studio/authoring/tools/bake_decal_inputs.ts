@@ -6,5 +6,5 @@ const out = resolve(import.meta.dir, "../../../../experiments/003-decal-material
 mkdirSync(out, { recursive: true });
 const layer = initialRecipe().layers[0];
 // Include opacity in the shape mask exactly once; material scalar stays one.
-writeFileSync(resolve(out, "shape.rgba"), raster(layer, 1024, EYE_MAKEUP_REGION.mirror));
+writeFileSync(resolve(out, "shape.rgba"), raster(layer, 1024, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin));
 console.log("Wrote deterministic 1024-square coverage for the decal fixture.");

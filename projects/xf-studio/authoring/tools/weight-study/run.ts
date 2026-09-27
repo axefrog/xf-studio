@@ -116,7 +116,7 @@ function bakedField(polygon:Point[],cells:number,field:Field) {
 }
 const layer=studyLayer(); layer.strength={mode:"legacy-nearest"};layer.points=layer.points.map((p,i)=>({...p,weight:[0,.15,.4,.8,1,.4][i]}));
 const methods:Record<string,(size:number)=>Uint8ClampedArray>={
-  legacy:size=>raster(layer, size, EYE_MAKEUP_REGION.mirror),
+  legacy:size=>raster(layer, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin),
   point:size=>candidateRaster(layer,size,poly=>pointKernel(poly,epsilon)),
   boundary:size=>candidateRaster(layer,size,poly=>boundaryKernel(poly,epsilon)),
   boundaryLimit:size=>candidateRaster(layer,size,poly=>boundaryKernel(poly,0)),
@@ -139,7 +139,7 @@ for(const size of [1024,2048]) {
 results.uniformRasterDiffs={};
 for(const value of [0,.37,1]) {
   const uniform=structuredClone(layer);uniform.points.forEach(p=>p.weight=value);
-  const old=raster(uniform, 1024, EYE_MAKEUP_REGION.mirror),next=candidateRaster(uniform,1024,poly=>boundaryKernel(poly,.0005));
+  const old=raster(uniform, 1024, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin),next=candidateRaster(uniform,1024,poly=>boundaryKernel(poly,.0005));
   let changed=0;for(let i=3;i<old.length;i+=4)changed+=Number(old[i]!==next[i]);
   results.uniformRasterDiffs[value]=changed;
 }
@@ -149,7 +149,7 @@ const dense=structuredClone(layer);dense.points=Array.from({length:24},(_,i)=>({
 results.dense24Knots={};
 for(const size of [1024,2048]) {
   const row:any={};
-  for(const [name,run] of Object.entries({legacy:()=>raster(dense, size, EYE_MAKEUP_REGION.mirror),boundary:()=>candidateRaster(dense,size,poly=>boundaryKernel(poly,.0005))})) {
+  for(const [name,run] of Object.entries({legacy:()=>raster(dense, size, EYE_MAKEUP_REGION.mirror, EYE_MAKEUP_REGION.skin),boundary:()=>candidateRaster(dense,size,poly=>boundaryKernel(poly,.0005))})) {
     run();const times=[];for(let i=0;i<3;i++){const t=performance.now();run();times.push(performance.now()-t);}
     row[name]=times.sort((a,b)=>a-b)[1];
   }

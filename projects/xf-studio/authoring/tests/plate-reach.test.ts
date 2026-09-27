@@ -218,3 +218,46 @@ test("PIPE-34: a bake without a window plans every preset on head UV, as its map
     expect([windowed.plan.presets[0].uvSpace, windowed.records[0].uvSpace]).toEqual(["plate-window", "plate-window"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }, 60_000);
+
+/**
+ * A plate footprint at realistic density over the built-in plate's rectangle (a 90 × 30 vertex grid, two triangles
+ * a cell: about 33,700 sample points) and the verifier's samples restated from it (stored V).
+ */
+const DENSE: PlateUvFootprint = (() => {
+  const nx = 90, ny = 30, uv: number[] = [], triangles: number[] = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++)
+    uv.push(BUILT_IN.uMin + (BUILT_IN.uMax - BUILT_IN.uMin) * i / (nx - 1), BUILT_IN.vMin + (BUILT_IN.vMax - BUILT_IN.vMin) * j / (ny - 1));
+  for (let j = 0; j + 1 < ny; j++) for (let i = 0; i + 1 < nx; i++) { const a = j * nx + i; triangles.push(a, a + 1, a + nx, a + 1, a + nx + 1, a + nx); }
+  return { schema: PLATE_UV_FOOTPRINT_SCHEMA, bounds: BUILT_IN, window: WINDOW, uv, triangles };
+})();
+const DENSE_SAMPLES: PlateUvSamples = (() => {
+  const points = plateSamplePoints(DENSE);
+  return { uv: Float64Array.from(points, (x, k) => k % 2 ? 1 - x : x), bounds: BUILT_IN };
+})();
+
+test("PIPE-113: mottled layers reach the plate only where the verifier's coverage reference does, so Check and Build omit a contact that mottles away", async () => {
+  // The lid moved up until one plate sample keeps its soft edge at 2/255 or more, unmottled.
+  const edge = moved(0, -.0795), plate = plateReachInput(DENSE);
+  const lost: Layer = { ...edge, effects: { mottle: { ...mottlePreset("powder", 26), amount: 1 } } };
+  const kept: Layer = { ...moved(0, -.0786), effects: { mottle: mottlePreset("mascara", 37) } };
+  // Unmottled, the edge reaches; mottled, that soft edge is broken up to nothing where the verifier samples it
+  // (the old test judged the unmottled shape and kept it).
+  expect(presetReachesPlate(recipe(edge), DENSE)).toBe(true);
+  expect(presetReachesPlate(recipe(lost), DENSE)).toBe(false);
+  expect(presetReachesPlate(recipe(kept), DENSE)).toBe(true);
+  // Check and Build agree: the same omission, the same packaged presets.
+  const value = collection(recipe(lid()), recipe(lost), recipe(kept));
+  const planned = preparePackageCollection(value, plate), check = preflightPackageCollection(value, plate);
+  expect(planned.omissions).toEqual([{ kind: "preset", presetId: id(2), presetName: "Preset 2", reason: OFF_PLATE_REASON }]);
+  expect(check.omissions).toEqual(planned.omissions);
+  expect(planned.packaged.presets.map(p => p.id)).toEqual([id(1), id(3)]);
+  // Why: built, the lost preset's window map and reference are both empty at the plate, which the verifier refuses;
+  // the kept one passes.
+  const verify = (baked: Awaited<ReturnType<typeof bakeLid>>) =>
+    checkMapping("Lid", baked.coverage, baked.record, UV, baked.reference, baked.record.reference!, DENSE_SAMPLES);
+  const bakedLost = await bakeLid(false, lost);
+  expect(() => verify(bakedLost)).toThrow("has no content at the plate's UVs");
+  const passed = verify(await bakeLid(false, kept));
+  expect(passed.authored).toBeGreaterThan(0);
+  expect(passed.drawn).toBeGreaterThan(0);
+}, 120_000);
