@@ -114,12 +114,20 @@ export type CharacterDetailHostOptions = {
   previewRoot?: string;
 };
 /** One question about a row's choice previews (choice-preview-server.ts): the V, the row, the positions to look up, and the one to derive. */
-export type PreviewSourcesInput = { base: CharacterRequest; option: string; kind: PreviewKind; positions: readonly number[]; derive: number | null };
+export type PreviewSourcesInput = { base: CharacterRequest; option: string; kind: PreviewKind; positions: readonly number[]; derive: number | null;
+  /** The page's request: aborted when it goes away, and a derivation still waiting for the background lane then answers at once. */
+  signal?: AbortSignal };
 /**
  * Per position: `ready` with its source, `none` (the choice draws nothing for this detail), or `unprepared` (not prepared yet, or its
- * derivation waits or failed this time).
+ * derivation failed this time). `busy`: the derivation didn't get the background lane within `PREVIEW_DERIVE_WAIT_MS` (a person's
+ * change, a batch prepared ahead or another derivation held it), so the page asks again later without counting a try.
  */
-export type PreviewSourceItem = { position: number; state: "ready" | "none" | "unprepared"; source?: ChoicePreviewSource };
+export type PreviewSourceItem = { position: number; state: "ready" | "none" | "unprepared"; source?: ChoicePreviewSource; busy?: true };
+/**
+ * The longest a derivation waits for the background lane before answering `busy` (PREV-153): the HTTP request is never held for
+ * minutes, and the page's lookups and pictures go on meanwhile.
+ */
+export const PREVIEW_DERIVE_WAIT_MS = 3000;
 /**
  * While the page is asking for preview sources (within this long of its last question), a batch prepared ahead doesn't start: deriving a
  * ready choice's source takes a fraction of a second and shows at once, while a batch takes a minute. A batch already running finishes
@@ -237,7 +245,8 @@ export class CharacterDetailHost {
   private get resolverCache() { return this.options.resolverCache ?? join(this.options.cacheRoot, "resolver"); }
   /** Where the prepared game files live (prepared-files.ts). */
   get preparedRoots(): PreparedRoots {
-    return { exports: join(this.options.cacheRoot, "exports"), resolver: this.resolverCache, store: this.storeRoot, manifests: join(this.options.cacheRoot, "choices") };
+    return { exports: join(this.options.cacheRoot, "exports"), resolver: this.resolverCache, store: this.storeRoot, manifests: join(this.options.cacheRoot, "choices"),
+      previews: this.previews.root };
   }
   /** The route's name for manifests: its settings, WolvenKit and WolvenKit's identity (never the process-local generation). */
   private manifests(route: CharacterRoute) {
@@ -498,20 +507,29 @@ export class CharacterDetailHost {
       if (!request) { items.push({ position, state: "none" }); continue; }
       const key = manifests.key(request), stamp = manifestStamp(manifests.dir, key);
       let source = stamp ? this.previews.source(key, stamp) : undefined;
-      if (source === undefined && position === input.derive && stamp && this.prefetch.stateOf(input.base, input.option, position) === "r")
-        source = await this.derivePreview(request, input.kind, route, key, stamp);
+      if (source === undefined && position === input.derive && stamp && this.prefetch.stateOf(input.base, input.option, position) === "r") {
+        const derived = await this.derivePreview(request, input.kind, route, key, stamp, input.signal);
+        if (derived === "busy") { items.push({ position, state: "unprepared", busy: true }); continue; }
+        source = derived;
+      }
       items.push(source === undefined ? { position, state: "unprepared" } : source === null ? { position, state: "none" } : { position, state: "ready", source });
     }
     return items;
   }
-  /** Plan and write a ready choice's record from the caches and keep its source (undefined: stopped, degraded or failed this time). */
-  private async derivePreview(request: CharacterRequest, kind: PreviewKind, route: CharacterRoute, key: string, stamp: string): Promise<ChoicePreviewSource | null | undefined> {
+  /**
+   * Plan and write a ready choice's record from the caches and keep its source (undefined: stopped, degraded or failed this time;
+   * `busy`: the background lane wasn't free within `PREVIEW_DERIVE_WAIT_MS`, or the page went away while waiting). Once started, a
+   * derivation finishes and is kept even if the page goes away (its source serves the next question).
+   */
+  private async derivePreview(request: CharacterRequest, kind: PreviewKind, route: CharacterRoute, key: string, stamp: string,
+    signal?: AbortSignal): Promise<ChoicePreviewSource | null | undefined | "busy"> {
     // Wait for the background lane: no person's change, no batch prepared ahead, no other derivation, and the page quiet a moment.
-    for (let waited = 0; ; waited++) {
+    for (const began = Date.now(); ;) {
+      if (signal?.aborted) return "busy";
       this.previewAskedAt = Date.now();
       const busy = this.running.size || this.asking || this.previewing || this.prefetch.preparing || this.warming.size || Date.now() - this.askedAt < QUIET_MS;
       if (!busy) break;
-      if (waited > 6000) return undefined;
+      if (Date.now() - began >= PREVIEW_DERIVE_WAIT_MS) return "busy";
       await new Promise(done => setTimeout(done, 100));
     }
     const settings = this.options.settings(), fingerprint = installationFingerprint(settings);

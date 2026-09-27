@@ -5,7 +5,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CharacterDetailHost, QUIET_MS, type CharacterDetailSettings } from "../src/character-detail-host";
+import { CharacterDetailHost, PREVIEW_DERIVE_WAIT_MS, QUIET_MS, type CharacterDetailSettings } from "../src/character-detail-host";
 import { DEFAULT_CHARACTER, type CharacterRequest } from "../src/character-detail-request";
 import { CHOICE_MANIFEST_SCHEMA, manifestProblemSliced, type ChoiceManifest, type ManifestCheck } from "../src/choice-manifest";
 import { ChoicePrefetcher, type PrefetchDeps } from "../src/choice-prefetch";
@@ -122,6 +122,30 @@ describe("the character-detail host puts a person first", () => {
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   const settings: CharacterDetailSettings = { gameRoot: join(root, "game"), launchRoute: "direct", mo2Root: null, mo2ProfileId: null,
     manualModRoot: null, wolvenKitCli: process.execPath };
+
+  test("a preview derivation waits a few seconds at most for the background lane, and not at all once the page went away (PREV-153)", async () => {
+    let prepared = 0;
+    const host = new CharacterDetailHost({ cacheRoot: join(root, "derive"), settings: () => settings,
+      prepare: async () => { prepared++; return { record: {} as never, recordFile: `${"d".repeat(64)}.json`, degraded: false }; } });
+    // A person's request is being answered the whole time: the lane never frees.
+    (host as unknown as { asking: number }).asking = 1;
+    const derive = (signal?: AbortSignal) => (host as unknown as { derivePreview(...args: unknown[]): Promise<unknown> })
+      .derivePreview(REQUEST_A, "hair", {}, "k".repeat(40), "1:1", signal);
+    const gone = new AbortController();
+    gone.abort();
+    let began = performance.now();
+    expect(await derive(gone.signal)).toBe("busy");
+    expect(performance.now() - began).toBeLessThan(50);
+    began = performance.now();
+    const leaving = new AbortController();
+    setTimeout(() => leaving.abort(), 150);
+    expect(await derive(leaving.signal)).toBe("busy");
+    expect(performance.now() - began).toBeLessThan(600);
+    began = performance.now();
+    expect(await derive()).toBe("busy");
+    expect(performance.now() - began).toBeLessThan(PREVIEW_DERIVE_WAIT_MS + 500);
+    expect(prepared).toBe(0);
+  }, 10_000);
 
   test("a request stops the batch prepared ahead, even when its answer is ready, and the next batch waits until the page is quiet", async () => {
     const host = new CharacterDetailHost({ cacheRoot: join(root, "host"), settings: () => settings,

@@ -119,7 +119,7 @@ const groupedKey = (input: ChoiceListInput) => `${input.groups ? `g:${(input.gro
 const makerKey = (option: string, maker: string | null) =>
   `character:maker:${option.slice(0, 80)}/${maker === null ? "(other mods)" : maker.toLocaleLowerCase().slice(0, 100)}`;
 export class ChoiceList {
-  /** The list and its one status line (loading, a failure, nothing matching). */
+  /** The list and its one status line (loading, a failure, nothing matching, or why pictures are waiting). */
   readonly element: HTMLElement;
   readonly list: HTMLElement;
   private readonly status: HTMLElement;
@@ -190,7 +190,9 @@ export class ChoiceList {
     this.paintStage();
     this.markChosen();
     this.revealChosen();
-    const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches." : "");
+    // The row's pictures say so in place when they can't be made now (another host version, or the host failing; PREV-150).
+    const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches."
+      : input.previews?.row?.notice ?? "");
     setText(this.status, line);
     this.status.hidden = !line;
     this.status.classList.toggle("warning", !!input.error);
