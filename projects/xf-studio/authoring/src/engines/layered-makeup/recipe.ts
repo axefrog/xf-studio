@@ -103,9 +103,12 @@ export function parseRecipe(value: unknown, models: LayerModelRegistry, invalid 
 export type RecipeForms = Readonly<{ fields: boolean; strength: boolean; path: boolean; softness: boolean }>;
 export const CURRENT_FORMS: RecipeForms = Object.freeze({ fields: true, strength: true, path: true, softness: true });
 
-/** Every layer key a build has written: the current fields, and `field` (one unnamed warp field, before recipe-3). */
-const LAYER_KEYS: ReadonlySet<string> = new Set(["id", "name", "enabled", "color", "finish", "flakes", "optics", "opacity", "feather",
-  "symmetry", "pathMode", "points", "fields", "field", "strength", "softness", "effects"] satisfies (keyof Layer | "field")[]);
+/**
+ * Every layer key a build has written: the current fields, and `field` (one unnamed warp field, before recipe-3).
+ * A record over `keyof Layer`, so a new layer field does not compile until it is listed here.
+ */
+const LAYER_KEYS: ReadonlySet<string> = new Set(Object.keys({ id: 1, name: 1, enabled: 1, color: 1, finish: 1, flakes: 1, optics: 1,
+  opacity: 1, feather: 1, symmetry: 1, pathMode: 1, points: 1, fields: 1, field: 1, strength: 1, softness: 1, effects: 1 } satisfies Record<keyof Layer | "field", 1>));
 /**
  * Validate and copy a recipe's layers, bounding imported work before it reaches raster loops (imports are
  * atomic). `holds` limits which registered models the layers may hold (an older form's gate); without it every
