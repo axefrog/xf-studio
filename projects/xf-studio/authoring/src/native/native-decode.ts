@@ -12,6 +12,7 @@ import type { Decompress } from "./kark";
 import { DecodeSession, DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";
 import { classifyNativeFailure, type NativeFailureKind } from "./native-errors";
 import { readResourceJson } from "./resource-document";
+import { decodeGeometryFromPool, type NativeGeometryOutcome, type NativeGeometryRequest } from "./mesh-decode";
 import { decodeTextureFromPool, type NativeTextureOutcome, type NativeTextureRequest } from "./texture-decode";
 import { decodeAnimFromPool, type NativeAnimOutcome, type NativeAnimRequest } from "./anim-decode";
 
@@ -63,6 +64,8 @@ export interface NativeDecoder {
   decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome>;
   /** One `.xbm`'s served mip as PNG (texture-decode.ts); absent on a decoder that can't. */
   decodeTexture?(request: NativeTextureRequest): Promise<NativeTextureOutcome>;
+  /** One `.mesh` or `.morphtarget` as the preview's GLB (mesh-decode.ts); absent on a decoder that can't. */
+  decodeGeometry?(request: NativeGeometryRequest): Promise<NativeGeometryOutcome>;
   /** An animation set's clip index, one clip's keys, or a rig (anim-decode.ts); absent on a decoder that can't. */
   decodeAnim?(request: NativeAnimRequest): Promise<NativeAnimOutcome>;
   /**
@@ -133,6 +136,10 @@ export class InProcessDecoder implements NativeDecoder {
     if (this.closed) return { ok: false, kind: "unavailable", message: CLOSED };
     return await decodeTextureFromPool(this.pool, this.decompress, request);
   }
+  async decodeGeometry(request: NativeGeometryRequest): Promise<NativeGeometryOutcome> {
+    if (this.closed) return { ok: false, kind: "unavailable", message: CLOSED };
+    return decodeGeometryFromPool(this.pool, this.decompress, request);
+  }
   async decodeAnim(request: NativeAnimRequest): Promise<NativeAnimOutcome> {
     if (this.closed) return { ok: false, kind: "unavailable", message: CLOSED };
     return decodeAnimFromPool(this.pool, this.decompress, request, this.options.limits);
@@ -159,18 +166,23 @@ export interface WorkerInit {
 export interface WorkerDecodeMessage { readonly type: "decode"; readonly id: number; readonly request: NativeDecodeRequest }
 /** One texture to decode to its served PNG; the worker echoes `id` with its outcome (the PNG's buffer transferred). */
 export interface WorkerTextureMessage { readonly type: "texture"; readonly id: number; readonly request: NativeTextureRequest }
+/** One mesh or morph target to decode to its GLB; the worker echoes `id` with its outcome (the GLB's and raw file's buffers transferred). */
+export interface WorkerGeometryMessage { readonly type: "geometry"; readonly id: number; readonly request: NativeGeometryRequest }
 /** One animation request (a set's index, a clip, a rig); the worker echoes `id` with its outcome. */
 export interface WorkerAnimMessage { readonly type: "anim"; readonly id: number; readonly request: NativeAnimRequest }
+
+/** Every outcome a worker answers with. */
+type AnyOutcome = NativeDecodeOutcome | NativeTextureOutcome | NativeGeometryOutcome | NativeAnimOutcome;
 
 /** What a worker sends: whether it started, and one outcome per decode message, carrying that message's id. */
 export type WorkerReply =
   | { readonly type: "ready" }
   | { readonly type: "init-failed"; readonly message: string }
-  | { readonly type: "outcome"; readonly id: number; readonly outcome: NativeDecodeOutcome | NativeTextureOutcome | NativeAnimOutcome };
+  | { readonly type: "outcome"; readonly id: number; readonly outcome: AnyOutcome };
 
 /** The part of a `Worker` the decoder uses, so a test can drive one by hand. */
 export interface DecodeWorker {
-  postMessage(message: WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerAnimMessage | WorkerCloseMessage): void;
+  postMessage(message: WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerGeometryMessage | WorkerAnimMessage | WorkerCloseMessage): void;
   addEventListener(type: "message" | "error" | "close", listener: (event: any) => void): void;
   terminate(): unknown;
 }
@@ -211,10 +223,11 @@ const CLOSE_GRACE_MS = 5_000;
 /** Let a timer not keep the process alive. */
 const unref = (timer: ReturnType<typeof setTimeout>) => { (timer as { unref?: () => void }).unref?.(); return timer; };
 
-/** A queued request: a resource's document, or a texture's served PNG, answered by an outcome of its kind. */
+/** A queued request: a resource's document, a texture's served PNG or a mesh's GLB, answered by an outcome of its kind. */
 type Pending =
   | { kind: "decode"; request: NativeDecodeRequest; resolve: (outcome: NativeDecodeOutcome) => void }
   | { kind: "texture"; request: NativeTextureRequest; resolve: (outcome: NativeTextureOutcome) => void }
+  | { kind: "geometry"; request: NativeGeometryRequest; resolve: (outcome: NativeGeometryOutcome) => void }
   | { kind: "anim"; request: NativeAnimRequest; resolve: (outcome: NativeAnimOutcome) => void };
 
 /**
@@ -261,6 +274,12 @@ export class WorkerDecoder implements NativeDecoder {
   decodeTexture(request: NativeTextureRequest): Promise<NativeTextureOutcome> {
     if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
     return new Promise(resolve => { this.queue.push({ kind: "texture", request, resolve }); this.pump(); });
+  }
+
+  /** A mesh's or morph target's GLB, queued like any request (its own `timeoutMs`, else the decoder's). */
+  decodeGeometry(request: NativeGeometryRequest): Promise<NativeGeometryOutcome> {
+    if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
+    return new Promise(resolve => { this.queue.push({ kind: "geometry", request, resolve }); this.pump(); });
   }
 
   /** An animation request, queued like any request (`background` ones wait until no other does). */
@@ -371,16 +390,17 @@ export class WorkerDecoder implements NativeDecoder {
     busy.sent = true;
     busy.timer = setTimeout(() => this.timeout(worker, id), this.budget(busy.pending.request));
     const pending = busy.pending;
-    worker.postMessage(pending.kind === "texture" ? { type: "texture", id, request: pending.request } : pending.kind === "anim" ? { type: "anim", id, request: pending.request }
-      : { type: "decode", id, request: pending.request });
+    worker.postMessage(pending.kind === "texture" ? { type: "texture", id, request: pending.request }
+      : pending.kind === "geometry" ? { type: "geometry", id, request: pending.request }
+      : pending.kind === "anim" ? { type: "anim", id, request: pending.request } : { type: "decode", id, request: pending.request });
   }
 
-  private finish(outcome: NativeDecodeOutcome | NativeTextureOutcome | NativeAnimOutcome): void {
+  private finish(outcome: AnyOutcome): void {
     const busy = this.busy!;
     if (busy.timer) clearTimeout(busy.timer);
     this.busy = null;
     // The worker answers each message with an outcome of that message's kind; a failure has the same shape for both.
-    (busy.pending.resolve as (outcome: NativeDecodeOutcome | NativeTextureOutcome | NativeAnimOutcome) => void)(outcome);
+    (busy.pending.resolve as (outcome: AnyOutcome) => void)(outcome);
     this.pump();
     this.idleLater();
   }
@@ -394,7 +414,7 @@ export class WorkerDecoder implements NativeDecoder {
   }
 
   /** A request's time budget: its own, else the decoder's. */
-  private budget(request: NativeDecodeRequest | NativeTextureRequest | NativeAnimRequest): number { return request.timeoutMs ?? this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS; }
+  private budget(request: NativeDecodeRequest | NativeTextureRequest | NativeGeometryRequest | NativeAnimRequest): number { return request.timeoutMs ?? this.options.timeoutMs ?? DEFAULT_DECODE_TIMEOUT_MS; }
 
   private timeout(worker: DecodeWorker, id: number): void {
     if (this.current?.worker !== worker || this.busy?.id !== id) return;

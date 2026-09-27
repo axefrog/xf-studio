@@ -96,7 +96,14 @@ export type ExportRequest = { readonly source: ExportSource; readonly geometry: 
    * every texture its materials name [resource: a CCXL hair mesh and a vanilla morph target, WolvenKit 9.0.1], seconds sooner. A GLB
    * that doesn't come out that way is exported again with the game folder.
    */
-  readonly materials?: boolean };
+  readonly materials?: boolean;
+  /**
+   * Morph targets among `geometry` whose base mesh a resolver located (by depot path, lower case): that mesh's depot path and winning
+   * archive. A reader that builds the skin from the base mesh reads it there (native-geometry-export.ts); WolvenKit ignores it.
+   */
+  readonly bases?: Readonly<Record<string, ExportBase>> };
+/** Where a morph target's base mesh is read from: its depot path and the archive that wins it. */
+export type ExportBase = { readonly depotPath: string; readonly archivePath: string };
 export type ExportAnswer = { geometry: Map<string, ExportedGeometry>; textures: Map<string, ExportedTexture>; masks: Map<string, ExportedMask>;
   /** The tool failed on this source (its launch, retried alone when it shared one); what the cache already had is still answered. */
   failed?: GameAssetExportError };

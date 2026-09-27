@@ -109,6 +109,11 @@ export type PlannedComponent = {
   skippedChunks: number;
   /** Morph components: the effective `baseTexture` rule (already applied to `materials`). */
   morphTexture: { morph: Provenance; texture: Provenance | null; parameter: string } | null;
+  /**
+   * Morph components: the morph target's effective base mesh (after ArchiveXL patches), whose bones its shapes move with. The game finds
+   * it by archive precedence like any resource, so its winning archive, not the morph target's own, gives the exported skin.
+   */
+  baseMesh?: Provenance;
   /** Body components: the morph targets the resolver applied (`<target>_<region>`); absent on head parts, which follow the facial shapes. */
   morphs?: string[];
   /** Garment components: the clothing area and item record that brought it, and its layer score. */
@@ -251,6 +256,7 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
   return { slot, option: entry.option, definition: entry.definition, component: component.name, drawnFrom: geometry.drawnFrom,
     morphTargets: component.type === "entMorphTargetSkinnedMeshComponent", renderChunks: geometry.renderChunks,
     chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture,
+    ...(component.type === "entMorphTargetSkinnedMeshComponent" && geometry.morphTarget && geometry.mesh?.status === "archive" ? { baseMesh: geometry.mesh } : {}),
     ...(slot === "body" ? { morphs: [...new Set(component.appliedMorphs.map(morph => `${morph.target}_${morph.region}`))].slice(0, 16) } : {}),
     ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}) };
 }

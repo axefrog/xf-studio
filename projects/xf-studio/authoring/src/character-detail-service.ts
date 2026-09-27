@@ -40,7 +40,7 @@ import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, res
 import { type ClothingFailure, resolveClothing, type ResolvedClothing } from "./clothing-resolver";
 import { clothingPorts } from "./clothing-host";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
-import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
+import { archiveExportSource, type ExportBase, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
 import { decodePngHalved, encodePngAsync, type RgbaImage } from "./png";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
@@ -439,7 +439,9 @@ export class CharacterPreparationCache {
   readonly layerTemplates = new RunMap<string, { values: TemplateValues; source: RenderSourceRef } | null>();
   readonly gamma = new RunMap<string, boolean | null>();
   /** Exports by `archive id|depot path` (lower case). A tool failure is never kept, so the next preparation tries again. */
-  readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null }>();
+  readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null;
+    /** A plain line from XF Studio's mesh reader (native-geometry-export.ts), when it read the shape differently from the file as it stands. */
+    readerNote?: string | null }>();
   /** A texture's PNG, and mip 0's size in the game files when the PNG is a smaller mip of it (XF Studio's texture reader). */
   readonly textures = new RunMap<string, { png: string; gameSize?: { width: number; height: number } }>();
   readonly masks = new RunMap<string, { layers: string[] }>();
@@ -587,9 +589,15 @@ type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<str
   toolFailures: Set<string>; toolLabel: string | undefined;
   /** Where the time went, for the preparation's log line (PIPE-103): the first exports, the reads beside them, the layer maps after. */
   stages: string[] };
+type NativeCounts = { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number };
 /** The native texture reader's counts of an exporter that has one (native-texture-export.ts), copied. */
 const nativeTextureCounts = (exporter: GameAssetExporter) => {
-  const stats = (exporter as { nativeTextures?: { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number } }).nativeTextures;
+  const stats = (exporter as { nativeTextures?: NativeCounts }).nativeTextures;
+  return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
+};
+/** The native mesh reader's counts of an exporter that has one (native-geometry-export.ts), copied. */
+const nativeGeometryCounts = (exporter: GameAssetExporter) => {
+  const stats = (exporter as { nativeGeometry?: NativeCounts }).nativeGeometry;
   return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
 };
 /** Exports asked of the exporter, and how many of them its own disk cache answered (the rest ran WolvenKit). */
@@ -603,14 +611,15 @@ const cancelledError = () => new CharacterDetailError("character_cancelled", "Pr
  * per archive and kind for an exporter without it. What is kept never points into an exporter's work folder: a partial geometry export
  * the exporter did not cache is kept in the content-addressed store.
  */
-async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located }[], toolFailures: Set<string>, tally?: ExportTally): Promise<string | undefined> {
+async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located; base?: Located }[], toolFailures: Set<string>, tally?: ExportTally): Promise<string | undefined> {
   const { cache, exporter, signal, log } = ctx;
   const into = (kind: ExportKind) => (kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks) as Map<string, unknown>;
-  const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string> }>();
-  for (const { kind, at } of items) {
+  const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string>; bases: Record<string, ExportBase> }>();
+  for (const { kind, at, base } of items) {
     if (into(kind).has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) continue;
-    const group = groups.get(at.archive.id) ?? { archive: at.archive, geometry: new Set<string>(), textures: new Set<string>(), masks: new Set<string>() };
+    const group = groups.get(at.archive.id) ?? { archive: at.archive, geometry: new Set<string>(), textures: new Set<string>(), masks: new Set<string>(), bases: {} };
     group[kind].add(at.depotPath);
+    if (kind === "geometry" && base) group.bases[at.depotPath.toLowerCase()] = { depotPath: base.depotPath, archivePath: base.archive.id };
     groups.set(at.archive.id, group);
   }
   if (!groups.size) return undefined;
@@ -635,7 +644,8 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
   if (exporter.exportAll) {
     try {
       const answers = await exporter.exportAll(list.map(group => ({ source: archiveExportSource(group.archive.id, ctx.gameRoot),
-        geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks] })), signal, { lowPriority: ctx.lowPriority });
+        geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks], ...(Object.keys(group.bases).length ? { bases: group.bases } : {}) })),
+        signal, { lowPriority: ctx.lowPriority });
       answers.forEach((answer, index) => {
         const archive = list[index]!.archive;
         // What the archive's launches did answer is kept even when one of them failed: a texture both readers refuse (its WolvenKit
@@ -669,10 +679,13 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
 async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[]): Promise<Gathered> {
   const { graph, cache, signal } = ctx;
   const toolFailures = new Set<string>();
-  const geometryAt = new Map<PlannedComponent, Located>();
+  const geometryAt = new Map<PlannedComponent, Located>(), baseAt = new Map<PlannedComponent, Located>();
   for (const component of fresh) {
     const located = locate(graph, component.drawnFrom.ref);
     if (located) geometryAt.set(component, located);
+    // A morph target's base mesh, where the game finds it (its winning archive), for the skin the mesh reader builds.
+    const base = component.baseMesh ? locate(graph, component.baseMesh.ref) : null;
+    if (base) baseAt.set(component, base);
   }
   const textureAt = new Map<string, Located>(), maskAt = new Map<string, Located>();
   for (const component of fresh) for (const material of component.materials) {
@@ -689,8 +702,8 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   const settle = <T>(work: Promise<T>) => work.then(value => ({ value }), (error: unknown) => ({ error }));
   const began = performance.now(), seconds = (from: number) => `${((performance.now() - from) / 1000).toFixed(2)} s`;
   const tally: ExportTally = { asked: 0, cached: 0 }, stages: string[] = [];
-  const texturesBefore = nativeTextureCounts(ctx.exporter);
-  const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt.values()].map(at => ({ kind: "geometry" as const, at })),
+  const texturesBefore = nativeTextureCounts(ctx.exporter), geometryBefore = nativeGeometryCounts(ctx.exporter);
+  const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt].map(([component, at]) => ({ kind: "geometry" as const, at, base: baseAt.get(component) })),
     ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures, tally)
     .finally(() => { stages.push(`exports ${seconds(began)}`); }));
 
@@ -771,6 +784,11 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   if (textures && texturesBefore) {
     const decoded = textures.decoded - texturesBefore.decoded, cachedNative = textures.cached - texturesBefore.cached, fellBack = textures.fellBack - texturesBefore.fellBack;
     if (decoded || cachedNative || fellBack) stages.push(`textures read natively: ${decoded} decoded in ${((textures.decodeMs - texturesBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit; WolvenKit exports ${((textures.innerMs - texturesBefore.innerMs) / 1000).toFixed(2)} s beside them`);
+  }
+  const geometry = nativeGeometryCounts(ctx.exporter);
+  if (geometry && geometryBefore) {
+    const decoded = geometry.decoded - geometryBefore.decoded, cachedNative = geometry.cached - geometryBefore.cached, fellBack = geometry.fellBack - geometryBefore.fellBack;
+    if (decoded || cachedNative || fellBack) stages.push(`meshes read natively: ${decoded} decoded in ${((geometry.decodeMs - geometryBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit`);
   }
   for (const outcome of [first, exportedLater, readsDone, laterReads]) if ("error" in outcome) throw outcome.error;
   const toolLabel = ("value" in first ? first.value : undefined) ?? ("value" in exportedLater ? exportedLater.value : undefined);
@@ -1078,6 +1096,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       return tool ? "tool" : "export";
     }
     if (exported.repair) note(`${component.component}: WolvenKit couldn't export its shape as it is, so it was exported from a repaired copy: ${exported.repair}.`);
+    if (exported.readerNote) note(`${component.component}: ${exported.readerNote}.`);
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
       const chunkTextures: Record<string, RenderTexture> = {};
