@@ -84,6 +84,19 @@ describe("Poses panel", () => {
     expect(facade.snapshot().preferences.favourites.map(item => item.id)).toEqual(["PhotoModePoses.sera_02"]);
   });
 
+  test("the held pose is marked where it shows (a collapsed Favourites doesn't take the mark); a pack name that repeats its label is left out", async () => {
+    const { root, facade } = harness();
+    await settle();
+    await facade.dispatch({ kind: "pose.select", id: "PhotoModePoses.sera_01" });
+    await facade.dispatch({ kind: "pose.favourite", id: "PhotoModePoses.sera_01", on: true });
+    await facade.dispatch({ kind: "pose.openGroup", group: "xfs:favourites", open: false });
+    await settle();
+    const current = root.querySelectorAll(".tree-row").filter(row => row.getAttribute("aria-current") === "true");
+    expect(current.map(row => row.dataset.id!.split("")[0])).toEqual(["xfs:recent"]);
+    // "bv_serene_f" isn't in "Serene Poses", so the pack shows beside it.
+    expect(groups(root).find(group => label(group) === "bv_serene_f")!.querySelector(".tree-secondary")?.textContent).toBe("Serene Poses");
+  });
+
   test("keyboard: Down from search enters the tree, arrows move, Right opens, Enter applies, F stars", async () => {
     const { root, calls, facade } = harness();
     await settle();

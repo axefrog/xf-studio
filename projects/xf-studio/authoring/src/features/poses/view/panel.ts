@@ -21,6 +21,18 @@ const plural = (count: number, singular: string, many = `${singular}s`) => `${co
 /** Plain words for the garment tags that hid poses. */
 const TAG_WORDS: Readonly<Record<string, string>> = { Coat: "a coat", HeadCover: "a head cover", Collar: "a high collar", HelmetFull: "a full helmet", Mask: "a mask" };
 const tagWords = (tags: readonly string[]) => tags.map(tag => TAG_WORDS[tag] ?? tag).join(" or ");
+/** Letters and digits only, lower case: for telling whether a category's pack name only repeats its label. */
+const squash = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+/** The pack beside a category, unless it only repeats the label ("HEXED" in "HEXED - Pose Pack"): space goes to what tells them apart. */
+function packBeside(label: string, pack: string | null): string | undefined {
+  if (!pack) return undefined;
+  const a = squash(label), b = squash(pack);
+  if (a && b && (b.includes(a) || a.includes(b))) return undefined;
+  // Every word of the label is in the pack's name ("Climbing Jumping Falling" in "Climbing Jumping and Falling Poses").
+  const words = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const packWords = new Set(words(pack)), labelWords = words(label);
+  return labelWords.length && labelWords.every(word => packWords.has(word)) ? undefined : pack;
+}
 /** A pose can be in Favourites, Recent and its category at once, and the tree keys items by ID: each row's ID carries its group. */
 const SEP = "\u001f";
 const rowKey = (group: string, pose: string) => `${group}${SEP}${pose}`;
@@ -65,7 +77,7 @@ export function posesPanel(ctx: Ctx): PanelController {
   /** The tree's groups as the library draws them. */
   const groupsOf = (poseTree: PoseTree): TreeGroupData[] => {
     return poseTree.groups.map(group => ({
-      id: group.id, label: group.label, secondary: group.pack ?? undefined, count: group.rows.length, highlight: group.matches,
+      id: group.id, label: group.label, secondary: packBeside(group.label, group.pack), count: group.rows.length, highlight: group.matches,
       rows: group.rows.map((row): TreeRowData => ({ id: rowKey(group.id, row.id), label: row.label,
         secondary: group.kind === "category" ? undefined : row.category || undefined, badges: row.badges.map(badge => ({ text: BADGES[badge] })),
         disabled: !!row.unavailable, reason: row.unavailable ?? undefined, highlight: row.matches, trailingState: row.favourite })),
@@ -108,8 +120,10 @@ export function posesPanel(ctx: Ctx): PanelController {
       if (tKey !== treeKey || poseTree !== lastTree) {
         treeKey = tKey; lastTree = poseTree;
         const shownGroups = groupsOf(poseTree);
-        // The current pose is marked in the first group that lists it.
-        const currentKey = held ? shownGroups.flatMap(group => group.rows.filter(row => poseOf(row.id) === held.id).map(row => row.id))[0] : undefined;
+        // The current pose is marked where it shows: the first open group that lists it (a collapsed Favourites mustn't hide the mark).
+        const holders = held ? shownGroups.filter(group => group.rows.some(row => poseOf(row.id) === held.id)) : [];
+        const holder = holders.find(group => open.has(group.id)) ?? holders[0];
+        const currentKey = holder && held ? rowKey(holder.id, held.id) : undefined;
         tree.update({ groups: shownGroups, expanded: open, current: currentKey, loading: held?.loading ? `Loading ${held.label}…` : false });
       }
     },
