@@ -21,7 +21,7 @@
  * the facial preview's snapshot (the rig's controls, the installed expressions and the built-in samples) and its part presets.
  */
 import { applyCapability, button, GroupSection, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, SearchField,
-  SliderWithValue, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
+  SliderWithValue, BipolarSlider, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
@@ -99,11 +99,13 @@ function axisTransaction(ctx: Ctx, axis: FacialAxisControl) {
   };
 }
 const axisPercent = (part: ExpressionPart, axis: FacialAxisControl) => percent(part.controls[axis.positive]) - percent(part.controls[axis.negative]);
+const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 function axisEntry(ctx: Ctx, axis: FacialAxisControl, group: string): Entry {
-  const slider = new SliderWithValue({ ...AXIS(axis), label: axis.label, reserveNote: true, transaction: axisTransaction(ctx, axis) });
+  const slider = new BipolarSlider({ label: axis.label.replace(/: [^:]*↔.*$/, ""), min: -100, max: 100, step: 1, unit: "%",
+    ends: { negative: capital(axis.ends[0]), positive: capital(axis.ends[1]) }, transaction: axisTransaction(ctx, axis) });
   slider.element.dataset.axis = axis.key;
   return { element: slider.element, group, search: `${axis.label} ${axis.negative} ${axis.positive}`.toLowerCase(), names: [axis.negative, axis.positive],
-    update: (part, state) => slider.update(axisPercent(part, axis), { ...state, note: mixedNote(axis, part) }) };
+    update: (part, state) => slider.update(axisPercent(part, axis), { ...state, mixed: !!mixedNote(axis, part) }) };
 }
 /** A left/right pair of two-way controls (gaze per eye, the nostrils): linked, one value moves both the way the rule says. */
 function axisPairEntry(ctx: Ctx, left: FacialAxisControl, right: FacialAxisControl, group: string): Entry {
