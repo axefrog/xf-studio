@@ -148,7 +148,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
 
   // ----- Lighting setups (lighting-setups.ts): one flat list, the built-ins first, then the person's own. -----
   let shownId = "soft";
-  const setupList = new ChoiceList<string>({ label: "Setup", layout: "rows", reserveNote: true, quietReason: true,
+  const setupList = new ChoiceList<string>({ label: "Lighting setup", showLabel: false, layout: "chips", quietReason: true,
     onSelect: setup => rt.dispatch({ kind: "preview.selectLightingSetup", setup }) });
   const shown = () => port.authoring.previewState().lightingSetups?.shown;
   const newSetup = button({ label: "New setup", icon: "plus", small: true, onClick: () => rt.dispatch({ kind: "preview.createLightingSetup", from: shownId }) });
@@ -215,7 +215,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const softness = lightSlider("softness", "Cone softness", { min: 0, max: 100, step: 1 }, "%", value => value / 100, value => `${Math.round(value)} %`);
   const colour = new ColorField({ label: "Colour", transaction: {
     edit: value => { edit({ kind: "preview.setLightColour", light: lightId(), colour: value }); }, commit: endEdit, cancel: endEdit } });
-  const kind = new Segmented<LightType>({ label: "Kind", options: [{ value: "directional", label: "Directional" }, { value: "spot", label: "Spot" }],
+  const kind = new Segmented<LightType>({ label: "Kind", reserveNote: true, options: [{ value: "directional", label: "Directional" }, { value: "spot", label: "Spot" }],
     onSelect: type => rt.dispatch({ kind: "preview.setLightType", light: lightId(), type }) });
   const shadows = new Toggle({ label: "Casts shadows", reserveNote: true, onChange: enabled => rt.dispatch({ kind: "preview.setLightShadows", light: lightId(), enabled }) });
   const lightControls = h("div", { class: "light-editor" }, kind.element, direction.element, distance.element, strength.element, colour.element,
@@ -237,7 +237,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       if (!ready) return { disabled: true, reason: "The preview is still loading." };
       const allowed = capability(action); return { disabled: !allowed.available, reason: allowed.reason };
     };
-    kind.update(light.type, type => ready ? capability({ kind: "preview.setLightType", light: light.id, type }) : { available: false, reason: "The preview is still loading." });
+    kind.update(light.type, type => ready ? capability({ kind: "preview.setLightType", light: light.id, type }) : { available: false, reason: "The preview is still loading." },
+      { note: light.type === "directional" ? "Cone and softness apply to spot lights." : "" });
     direction.update({ azimuth: light.azimuth, elevation: light.elevation }, { colour: light.colour,
       others: list.filter(item => item.id !== light.id).map(item => ({ azimuth: item.azimuth, elevation: item.elevation, colour: item.colour })),
       ...gate({ kind: "preview.setLight", light: light.id, key: "azimuth", value: light.azimuth }) });
@@ -292,7 +293,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       newSetup.title = current ? `A new setup of your own, starting from ${current.label}` : "";
       applyCapability(newSetup, ready ? capability({ kind: "preview.createLightingSetup", from: shownId }) : { available: false, reason: loading.reason });
       applyCapability(renameSetup, ready ? capability({ kind: "preview.renameLightingSetup", setup: shownId, name: current?.label ?? "" }) : { available: false, reason: loading.reason });
-      setText(resetSetup.querySelector("span")!, current && !current.builtIn ? `Reset to ${current.baseLabel}` : "Reset");
+      resetSetup.title = current && !current.builtIn ? `Put ${current.label} back to ${current.baseLabel}` : "";
       applyCapability(resetSetup, ready ? capability({ kind: "preview.resetLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
       applyCapability(deleteSetup, ready ? capability({ kind: "preview.deleteLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
       setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
