@@ -13,6 +13,7 @@
 import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../studio-application";
 import type { StudioContextHit } from "../../studio-context-targets";
 import type { FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
+import type { ModuleService } from "../../platform/api";
 import type { Command } from "../commands";
 import type { Feedback, FeedbackAction } from "../feedback";
 import type { AnchorRegistry } from "../guidance/anchors";
@@ -129,4 +130,36 @@ export function featureView<V extends ViewContribution,
 }): FeatureViewBinding & { readonly owner: V["owner"]; readonly panels: P } {
   return Object.freeze({ owner: view.owner, panels: parts.panels, ...(parts.commands ? { commands: parts.commands } : {}),
     ...(parts.summary ? { summary: parts.summary } : {}), ...(parts.readiness ? { readiness: parts.readiness } : {}) });
+}
+
+/**
+ * What a module without a document part gets in its view (view-graph-design.md §5; the Save Explorer): its own service's facade (from
+ * `port.module(owner)`, typed by the view, which knows its module) and the shell's presentation services. No port, runtime or other
+ * module's service, as for feature views.
+ */
+export type ModuleViewContext<F extends ModuleService = ModuleService> = {
+  readonly facade: F;
+  /** The facade's dispatch, awaited, with the shell's feedback (a refusal or failure toasts its reason unless quiet). */
+  dispatch(action: Parameters<F["dispatch"]>[0], options?: DispatchFeedback): Promise<boolean>;
+  readonly feedback: Pick<Feedback, "toast" | "announce" | "record">;
+  readonly anchors: Pick<AnchorRegistry, "register">;
+  /** Open (or bring forward) a panel. */
+  reveal(panel: string, focus?: boolean): void;
+  readonly links: ProjectLinkPort;
+  /** Presentation-local changes that need a repaint. */
+  changed(): void;
+};
+export type ModuleViewFactory<F extends ModuleService> = (ctx: ModuleViewContext<F>) => PanelController;
+/** A module's bound view: its owner (the module ID) and its panel factories keyed by its panel IDs. */
+export type ModuleViewBinding = {
+  readonly owner: string;
+  readonly panels: Readonly<Record<string, (ctx: never) => PanelController>>;
+};
+/**
+ * Bind a module's view contribution to its panel factories, keyed by exactly its panel IDs. Each factory names its module's facade type
+ * (`ModuleViewFactory<F>`); the shell hands it `port.module(owner)`, which the composition registered for that module.
+ */
+export function moduleView<V extends ViewContribution, P extends { readonly [Id in V["panels"][number]["id"]]: (ctx: never) => PanelController }>(
+  view: V, panels: P): ModuleViewBinding & { readonly owner: V["owner"]; readonly panels: P } {
+  return Object.freeze({ owner: view.owner, panels });
 }

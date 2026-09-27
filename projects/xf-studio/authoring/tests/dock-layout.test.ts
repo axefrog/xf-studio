@@ -146,6 +146,9 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   const expected = structuredClone(saved.state) as { wide: DockTree; compact: DockTree };
   locate(expected.wide, "layers")!.group.panels.push("history");
   locate(expected.compact, "layers")!.group.panels.push("history");
+  // A module's panel (the Save Explorer's, restored here as if its module were shown) joins beside the UV map the same way.
+  locate(expected.wide, "uv")!.group.panels.push("save-explorer.explorer");
+  locate(expected.compact, "uv")!.group.panels.push("save-explorer.explorer");
   // Panels closed by default (Help) stay closed until someone opens them.
   expected.wide.closed.push("help"); expected.compact.closed.push("help");
   expect(restored.state).toEqual(expected);

@@ -230,6 +230,22 @@ The snapshot holds the latest `xfs/game-install-detection-1`, `xfs/mo2-instance-
 
 These results are private host metadata. Detection changes no setting: Game & tools offers the candidates, the MO2 instances (the configured one too, so a portable copy chosen by hand keeps its profiles) and their profiles as choices, and saving a choice goes through `setup.update`. The browser device calls the fixed GET endpoint `/api/install-detection?target=games|mo2|frameworks`, and the browser supplies no path, key or command. [Detection and precedence](source-discovery-foundation.md), [actions](../../projects/xf-studio/authoring/src/install-detection-actions.ts).
 
+### Save Explorer (a module without a document part)
+
+The Save Explorer's service ([`src/features/save-explorer/actions.ts`](../../projects/xf-studio/authoring/src/features/save-explorer/actions.ts); [design phase 1](../save/save-editor-design.md#9-phased-plan)) is reached through its facade, `port.module("save-explorer")`, which only the module's view receives (a `ModuleViewContext`; [boundary exception 14](ui-architecture-boundary.md)). It has `snapshot()`, `capability(action)`, `dispatch(action)` (async), `descriptors()` (`SAVE_EXPLORER_DESCRIPTORS`) and detached reads: `tree()`, `node(id)`, `entries(offset, limit, filter)`, `object(ref)`, `modData()` and `thumbnail(folder)`. Every action is read-only and records no Undo; nothing is persisted, and an open save lives only in memory.
+
+| Action | Payload | Effect |
+|---|---|---|
+| `saves.refresh` | none | Lists the player's saves (`GET /api/saves`): folder, kind, time, location, level, life path, patch, size, screenshot. Refused without a host device or while listing |
+| `saves.open` | `{folder}` (a listed folder) | Reads that save's `sav.dat` (`GET /api/saves/file?save=&part=data`), then the name sources once (`GET /api/saves/types`), and opens it; the tree's decode status fills in one node at a time. Refused for a folder not in the list or while a save opens |
+| `saves.openFile` | none | The file picker for a save stored elsewhere; a cancelled pick changes nothing |
+| `saves.close` | none | Back to the list |
+| `saves.selectNode` | `{node}` | Shows a node (its facts and contents) |
+| `saves.inspect` | `{ref: {node, kind: "chunk" \| "entry", index} \| null}` | Shows one object (a package chunk or a world object) in the inspector |
+| `saves.setView` | `{view: "nodes" \| "mods"}` | Nodes or Mod data |
+
+A later or cancelled open never publishes over a newer one (a generation check), a host answer is validated before use (`parseSaveListing`, `parseSaveTypeNames`), and without name sources a save still opens with hashes where names would be. Tests: `tests/save-explorer.test.ts`, `tests/save-explorer-panel-dom.test.ts`, `tests/save-host.test.ts`.
+
 ### Get the desktop app (`port.desktopApp`)
 
 Localhost only. `DesktopAppActions` (`src/desktop-app.ts`; descriptors `DESKTOP_APP_DESCRIPTORS`, scope `host`, no Undo, no recipe or library effect) is published as `port.desktopApp`; `offered()` is false where the host has no offer (the desktop app itself and fixtures), and a presentation then shows nothing about it. The host (`src/desktop-app-host.ts`, `GET/POST /api/desktop-app`; `/api/verification/desktop-app` for `?verify`, which never starts anything) decides every path; the browser never sends one.

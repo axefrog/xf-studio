@@ -13,6 +13,8 @@ import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from
 import { PROJECT_LINKS, type ProjectLink } from "./project-links";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
+import { createBrowserSaveExplorerDevice } from "./browser-save-explorer-device";
+import { createModuleServices } from "./compose/module-services";
 import { createBrowserModInstall } from "./browser-mod-install-device";
 import { builtModsOf } from "./mod-install-actions";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
@@ -111,6 +113,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
+  // Part-less modules' services (the Save Explorer), over their browser devices.
+  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document) });
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
   const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
     verification ? "/api/verification/mod-install" : "/api/mod-install");
@@ -228,7 +232,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice, diagnostics,
+    fileDevice, diagnostics, modules: moduleServices,
   });
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, STUDIO_VIEW_COMPOSITION); });

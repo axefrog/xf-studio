@@ -1,6 +1,8 @@
 /**
  * Embedded object packages (`compiledData` of `.ent` templates and `.app` appearance definitions). Pure. Layout and sources:
- * knowledge/archive-format.md §5.3.
+ * knowledge/archive-format.md §5.3. The frame (header, sections, names, references, chunks and their bounds) is the one package reader's
+ * (engines/red-object/package.ts, `resource` variant), shared with the save's packages; this module adds the resource values, read with
+ * the RTTI and the CR2W value reader, and the resource refusal policy.
  *
  * Header, byte-packed: u8 version (4), u8 (2), u16 section count (7 with a reference pool, else 6), u32 root count, [u32 reference
  * descriptor offset, u32 reference data offset], u32 name descriptor offset, u32 name data offset, u32 chunk descriptor offset,
@@ -26,13 +28,12 @@ import { NativeMalformedError, NativeUnsupportedError } from "./native-errors";
 import { type ParsedBuffer, RedBuffer, RedHandle, RedObject } from "./red-model";
 import { cname, Cursor, emptyReference, normalizedPath, noteStoredType, readValue, type ValueContext } from "./red-values";
 import { kindOf, propertyTypes } from "./rtti";
+import { PackageFrameError, readPackageFrame, type PackageFrame } from "../engines/red-object/package";
 
 const utf8 = new TextDecoder();
 
 /** Owners whose packages store references as u64 path hashes; every other owner stores path text. */
 const HASH_REFERENCE_OWNERS = new Set(["appearanceAppearanceDefinition.compiledData"]);
-
-interface Sections { refDesc: number; refData: number; nameDesc: number; nameData: number; chunkDesc: number; chunkData: number }
 
 class PackageDecoder implements ValueContext {
   readonly names: string[] = [];
@@ -42,28 +43,20 @@ class PackageDecoder implements ValueContext {
   readonly referenced = new Set<number>();
   private readonly view: DataView;
 
-  constructor(private readonly bytes: Uint8Array, private readonly base: number, header: Sections, hashReferences: boolean,
+  private readonly bytes: Uint8Array;
+  private readonly base: number;
+
+  constructor(frame: PackageFrame, hashReferences: boolean,
     /** The header's second byte (2 in game 2.x packages): with 2, compiled effect infos keep their arrays in memory layout. */
     readonly layout: number, readonly session: DecodeSession) {
-    const view = this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const size = bytes.length - base;
-    const region = (offset: number, length: number, what: string) => {
-      if (offset + length > size) throw new NativeMalformedError(`Package ${what} lies outside the package.`);
-      return bytes.subarray(base + offset, base + offset + length);
-    };
-    const table = (from: number, to: number, stride: number, what: string) => {
-      if ((to - from) % stride) throw new NativeMalformedError(`Package ${what} table is not a whole number of entries.`);
-      return (to - from) / stride;
-    };
-    for (let i = 0, count = table(header.nameDesc, header.nameData, 4, "name"); i < count; i++) {
-      const d = view.getUint32(base + header.nameDesc + i * 4, true), offset = d & 0xffffff, length = d >>> 24;
-      const data = region(offset, Math.max(0, length - 1), "name");
-      session.name(data.length);
-      this.names.push(utf8.decode(data));
+    this.bytes = frame.bytes; this.base = frame.base; this.view = frame.view;
+    // Every name and reference is decoded up front, each counted against the session's budget.
+    for (let i = 0; i < frame.nameCount; i++) {
+      session.name(frame.nameLength(i));
+      this.names.push(frame.name(i));
     }
-    for (let i = 0, count = table(header.refDesc, header.refData, 4, "reference"); i < count; i++) {
-      const d = view.getUint32(base + header.refDesc + i * 4, true), offset = d & 0x7fffff, length = (d >>> 23) & 0xff, sync = (d >>> 31) === 1;
-      const data = region(offset, length, "reference");
+    for (let i = 0; i < frame.referenceCount; i++) {
+      const { length, sync, data } = frame.reference(i);
       if (hashReferences) {
         if (length !== 8) throw new NativeUnsupportedError(`Package reference ${i} holds ${length} bytes where a path hash (8) is expected.`);
         this.references.push({ path: null, hash: new DataView(data.buffer, data.byteOffset, 8).getBigUint64(0, true).toString(), sync });
@@ -72,18 +65,8 @@ class PackageDecoder implements ValueContext {
         this.references.push({ path: utf8.decode(data), hash: null, sync });
       }
     }
-    const chunkCount = table(header.chunkDesc, header.chunkData, 8, "chunk");
-    session.nodes(chunkCount);
-    for (let i = 0; i < chunkCount; i++) {
-      const at = base + header.chunkDesc + i * 8;
-      this.chunks.push({ type: this.name(view.getUint32(at, true)), offset: view.getUint32(at + 4, true), end: size });
-    }
-    // Chunks lie in order inside the chunk data: each ends at or before the next one's start.
-    for (let i = 0; i < this.chunks.length; i++) {
-      const chunk = this.chunks[i]!, next = this.chunks[i + 1];
-      if (chunk.offset < header.chunkData || chunk.offset >= size) throw new NativeMalformedError(`Package chunk ${i} starts outside the chunk data.`);
-      if (next) { if (next.offset <= chunk.offset) throw new NativeMalformedError(`Package chunk ${i + 1} does not follow chunk ${i}.`); chunk.end = next.offset; }
-    }
+    session.nodes(frame.chunks.length);
+    for (const chunk of frame.chunks) this.chunks.push({ type: chunk.type, offset: chunk.start - frame.base, end: chunk.end - frame.base });
   }
 
   name(index: number): string {
@@ -216,29 +199,20 @@ function readCompiledEffectField(ctx: PackageDecoder, cursor: Cursor, name: stri
 
 /** Decode a package buffer. `owner` names the property that holds it: it decides how references are stored, and names messages. */
 export function readPackage(bytes: Uint8Array, owner: string, session = new DecodeSession()): ParsedBuffer {
-  const cursor = new Cursor(bytes);
-  const version = cursor.u8();
-  if (version !== 4) throw new NativeUnsupportedError(`${owner}: package version ${version} is not decoded.`);
-  const layout = cursor.u8();
-  const sections = cursor.u16();
-  cursor.u32(); // root count
-  let refDesc = 0, refData = 0;
-  if (sections === 7) { refDesc = cursor.u32(); refData = cursor.u32(); }
-  else if (sections !== 6) throw new NativeUnsupportedError(`${owner}: a package with ${sections} sections is not decoded.`);
-  const nameDesc = cursor.u32(), nameData = cursor.u32(), chunkDesc = cursor.u32(), chunkData = cursor.u32();
-  const rootIndex = cursor.i16();
-  const cruidCount = cursor.u16();
-  if (cruidCount * 8 > cursor.remaining) throw new NativeMalformedError(`${owner}: ${cruidCount} CRUIDs cannot fit in the package.`);
-  const cruids: string[] = [];
-  for (let i = 0; i < cruidCount; i++) cruids.push(cursor.u64().toString());
-  const order = [refDesc, refData, nameDesc, nameData, chunkDesc, chunkData];
-  for (let i = 1; i < order.length; i++) if (order[i]! < order[i - 1]!) throw new NativeMalformedError(`${owner}: package sections are out of order.`);
-  if (chunkData > bytes.length - cursor.pos) throw new NativeMalformedError(`${owner}: package sections lie outside the package.`);
-  const decoder = new PackageDecoder(bytes, cursor.pos, { refDesc, refData, nameDesc, nameData, chunkDesc, chunkData }, HASH_REFERENCE_OWNERS.has(owner), layout, session);
+  // The shared frame's refusals, as the native reader's errors.
+  const framed = <T>(read: () => T): T => {
+    try { return read(); }
+    catch (error) {
+      if (!(error instanceof PackageFrameError)) throw error;
+      throw error.kind === "unsupported" ? new NativeUnsupportedError(`${owner}: ${error.message}`) : new NativeMalformedError(`${owner}: ${error.message}`);
+    }
+  };
+  const frame = framed(() => readPackageFrame(bytes, "resource"));
+  const decoder = framed(() => new PackageDecoder(frame, HASH_REFERENCE_OWNERS.has(owner), frame.layout, session));
   for (let i = 0; i < decoder.chunks.length; i++) decoder.chunk(i);
   const roots: RedObject[] = [];
   for (let i = 0; i < decoder.chunks.length; i++) if (!decoder.referenced.has(i)) roots.push(decoder.chunk(i));
   const cruidDict: Record<string, string> = {};
-  roots.forEach((_, i) => { if (i < cruids.length) cruidDict[String(i)] = cruids[i]!; });
-  return { kind: "package", version, sections, cruidIndex: rootIndex, cruidDict, chunks: roots };
+  roots.forEach((_, i) => { if (i < frame.cruids.length) cruidDict[String(i)] = frame.cruids[i]!.toString(); });
+  return { kind: "package", version: frame.version, sections: frame.sections, cruidIndex: frame.rootIndex, cruidDict, chunks: roots };
 }

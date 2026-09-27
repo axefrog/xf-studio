@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { extendSkin } from "../../skin";
-import type { SavedV } from "../../save-reader";
+import type { SavedV } from "../../saved-v";
 import { IdleAnimation } from "../../idle-animation";
 import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_ASSET, parseIdleCatalogue, type IdleCatalogue } from "../../idle-catalogue";
 import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "../../game-blink";
