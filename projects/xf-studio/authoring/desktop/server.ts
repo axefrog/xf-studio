@@ -34,6 +34,8 @@ import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetai
 import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server";
+import { createPosePreferencesHandler, PosePreferencesStore } from "../src/features/poses/host/preferences-store";
+import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../src/pose-endpoint";
 import { PoseCatalogueHost } from "../src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "../src/grading-lut-host";
 import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions } from "../src/wolvenkit-setup-host";
@@ -101,6 +103,11 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const settingsStore = new LocalSettingsStore(dataRoot);
   // A verification workspace (?verify) edits its own copy of the settings, starting from these, and never adds a mod (UI-98).
   const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => settingsStore.load().settings });
+  // The Poses panel's favourites and recent poses, per user in the user-data folder; a verification workspace keeps its own copy.
+  const posePreferences = new PosePreferencesStore(dataRoot);
+  const posePreferencesRequest = createPosePreferencesHandler(posePreferences);
+  const verificationPosePreferencesRequest = createPosePreferencesHandler(new PosePreferencesStore(verificationSettingsDirectory(dataRoot),
+    { seed: () => posePreferences.load().preferences }));
   const workspaceStore = new DesktopWorkspaceStore(dataRoot, STUDIO_DOCUMENTS);
   let closeAck: ((nonce: string, status: "saved" | "failed") => boolean) | undefined;
   // Renderer progress for the host's blank-window watchdog and close handling.
@@ -266,6 +273,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
       if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
+      if (url.pathname === POSE_PREFERENCES_ENDPOINT) return posePreferencesRequest(routedRequest);
+      if (url.pathname === VERIFICATION_POSE_PREFERENCES_ENDPOINT) return verificationPosePreferencesRequest(routedRequest);
       if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(routedRequest);
       if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(routedRequest);
       if (url.pathname === "/api/desktop/wolvenkit") return wolvenKitRequest(routedRequest);

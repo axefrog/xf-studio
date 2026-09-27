@@ -292,6 +292,8 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   "detail-limits", "head-load-error", "scene-evidence",
   // The rig's motion (the dangle adapter included) and facial shapes.
   "idle-animation", "idle-catalogue", "game-blink", "preview-motion", "face-morphs", "dangle-motion",
+  // A photo-mode pose as a body clip for the idle's rig, and the sampled pose record it reads (types only).
+  "pose-clip", "pose-sample",
   // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the saved V record.
   "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "saved-v",
 ]);
@@ -301,7 +303,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
  */
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material", "metal-base-material", "mouth-occlusion",
-  "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
+  "creator-lighting", "creator-lighting-rig", "shadow-filter", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
   "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig", "dangle-spec", "dangle-solver",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */

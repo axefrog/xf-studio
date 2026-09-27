@@ -31,6 +31,7 @@ type PreviewActionBody =
   | { kind: "preview.setCreatorLighting"; key: "intensity"; value: IntensityForm }
   | { kind: "preview.setCreatorLighting"; key: "cone"; value: ConeReading }
   | { kind: "preview.setCreatorLighting"; key: "exposure"; value: number }
+  | { kind: "preview.setCreatorShadows"; enabled: boolean }
   | { kind: "preview.resetCreatorLighting" }
   | { kind: "preview.setExposure"; value: number }
   | { kind: "preview.setKeyAngle"; degrees: number }
@@ -236,11 +237,15 @@ export class PreviewActions {
       if (!valid) return refusal("invalid_value", action.key === "exposure"
         ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist.");
     }
+    if (action.kind === "preview.setCreatorShadows") {
+      if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
+      if (typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
+    }
     if (action.kind === "preview.resetCreatorLighting") {
       if (!this.port.setCreatorLighting) return refusal("unavailable", NO_CREATOR);
       const current = state.lights.creatorLighting;
       if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
-        && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure) return refusal("unavailable", "The calibration is already at its defaults.");
+        && current.exposure === DEFAULT_CREATOR_LIGHTING.exposure && current.shadows === DEFAULT_CREATOR_LIGHTING.shadows) return refusal("unavailable", "The calibration is already at its defaults.");
     }
     if ((action.kind === "camera.body" && !this.port.frameBody) || ((action.kind === "preview.setBody" || action.kind === "preview.setUncensored") && !this.port.setBody))
       return refusal("unavailable", NO_BODY);
@@ -289,6 +294,8 @@ export class PreviewActions {
         case "preview.setCreatorLighting":
           lights({ creatorLighting: { ...state.lights.creatorLighting, [action.key]: action.value } }, "Creator lighting calibration",
             `creator.${action.key}`); break;
+        case "preview.setCreatorShadows":
+          lights({ creatorLighting: { ...state.lights.creatorLighting, shadows: action.enabled } }, action.enabled ? "Creator shadows on" : "Creator shadows off"); break;
         case "preview.resetCreatorLighting": lights({ creatorLighting: { ...DEFAULT_CREATOR_LIGHTING } }, "Restore creator calibration"); break;
         case "preview.setExposure": lights({ exposure: action.value }, "Exposure", "exposure"); break;
         case "preview.setKeyAngle": lights({ lightAngle: action.degrees }, "Key light direction", "angle"); break;

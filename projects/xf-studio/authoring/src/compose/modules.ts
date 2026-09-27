@@ -8,8 +8,9 @@ import { PLATFORM_VIEW_TOOLS } from "../platform/core/view-tools";
 import { EYE_MAKEUP_MODULE, EYE_MAKEUP_SUMMARY, EYE_MAKEUP_VIEW_TOOLS } from "../features/eye-makeup";
 import { SAVE_EXPLORER_MODULE } from "../features/save-explorer/module";
 import { EXPRESSIONS_MODULE } from "../features/expressions";
+import { POSES_MODULE } from "../features/poses/module";
 
-export const STUDIO_MODULES = [EYE_MAKEUP_MODULE, SAVE_EXPLORER_MODULE, EXPRESSIONS_MODULE] as const;
+export const STUDIO_MODULES = [EYE_MAKEUP_MODULE, SAVE_EXPLORER_MODULE, EXPRESSIONS_MODULE, POSES_MODULE] as const;
 
 /**
  * Modules on the roadmap with an agreed design (ui-copy-and-layout-review.md §6), listed as Planned in the Modules menu. The module

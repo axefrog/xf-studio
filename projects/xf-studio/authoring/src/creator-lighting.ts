@@ -8,6 +8,9 @@
  * falloff forms. What is a hypothesis: the lumens-to-intensity conversion, whether cone angles are full
  * or half angles, unset colour = white, the rig's yaw (−125°) and "zoom = distance in metres". The two
  * switches in `CreatorLightingOptions` exist so a capture can choose between the leading readings.
+ *
+ * Every factor fitted to a capture lives in `CREATOR_CALIBRATION` (knowledge §12), never in the rig table: the table keeps the
+ * resource's values, and a new capture refits that one object.
  */
 
 export type Vec3 = readonly [number, number, number];
@@ -108,24 +111,73 @@ export function creatorCamera(sex: BodySex, page: CreatorCameraPage): { position
 export type IntensityForm = "isotropic" | "cone";
 /** The stored angles are full cone angles (Three half-angle = outer/2) or already half angles. */
 export type ConeReading = "full" | "half";
-export type CreatorLightingOptions = { readonly intensity: IntensityForm; readonly cone: ConeReading; readonly exposure: number };
+/** `shadows`: the flagged lights cast shadow maps onto the V (knowledge §12); off only to compare, or on a GPU that can't afford them. */
+export type CreatorLightingOptions = { readonly intensity: IntensityForm; readonly cone: ConeReading; readonly exposure: number; readonly shadows: boolean };
 export const INTENSITY_FORMS: readonly IntensityForm[] = Object.freeze(["isotropic", "cone"]);
 export const CONE_READINGS: readonly ConeReading[] = Object.freeze(["full", "half"]);
 /** Exposure bounds for the diagnostic control; the scalar multiplies scene-linear colour before the LUT. */
 export const CREATOR_EXPOSURE_RANGE = Object.freeze({ min: 0.01, max: 20 });
+
 /**
- * Default exposure `k`. Not measured: chosen so a front-facing forehead of linear albedo 0.35 under the
- * default rig reads about scene grey 0.18 (see `defaultCreatorExposure`, pinned by a test). The capture
- * fits the real value (tools/calibrate-creator-capture.ts).
+ * The creator preset's calibration: every factor that comes from matching a capture rather than from the game's data, in one place.
+ * Grade [runtime, one matched pair]: fitted on 27 September 2026 to one matched Studio/game pair of the face page (same V, makeup,
+ * hair and framing), region by region in scene-linear light after inverting the installed grade, with the shadow casters on
+ * (knowledge/creator-lighting.md §12). One capture cannot separate a light's lumens conversion from its cone, colour or occlusion, so
+ * these are provisional: refit them from the next matched captures and change nothing else.
+ *
+ * - `gains`: a multiplier per rig light on top of its data-derived intensity (a light not named keeps 1). A gain far from 1 says the
+ *   data-to-intensity conversion for that light is unknown, not that the light is misplaced.
+ * - `exposure`: the scalar k before the grade, fitted on the forehead.
  */
-export const DEFAULT_CREATOR_EXPOSURE = 0.46;
-export const DEFAULT_CREATOR_LIGHTING: CreatorLightingOptions = Object.freeze({ intensity: "isotropic", cone: "full", exposure: DEFAULT_CREATOR_EXPOSURE });
+export const CREATOR_CALIBRATION: Readonly<{ fitted: string; gains: Readonly<Record<string, number>>; exposure: number; yawOffset: number }> = Object.freeze({
+  fitted: "2026-09-27, one matched face-page pair",
+  // The pair's shading is carried mostly by Main_Face, the designers' key with character contact shadows (its nose shadow runs up
+  // toward V's right inner eye). A luminance-only fit also wants the cyan floor fills far weaker, but that turns the skin redder, away
+  // from the game, so the fills keep their data strength until the skin's scatter is ported (knowledge §12).
+  gains: Object.freeze({ Main_Face: 3 }),
+  exposure: 0.53,
+  // V's world yaw: the table assumes the controller's yawDefault (−125°); the spawner nodes use −135°. Turning the rig by +10° (front
+  // lights toward V's left) fits the matched pair better than 0° or −10° (rms of the ten region ratios 0.31 against 0.37 and 0.47).
+  yawOffset: 10,
+});
+/** A light's calibration gain (1 when the calibration doesn't name it). */
+export const calibrationGain = (name: string) => CREATOR_CALIBRATION.gains[name] ?? 1;
+
+/** Default exposure `k`: the calibration's fitted value (`defaultCreatorExposure` gives the earlier synthetic forehead reading). */
+export const DEFAULT_CREATOR_EXPOSURE = CREATOR_CALIBRATION.exposure;
+export const DEFAULT_CREATOR_LIGHTING: CreatorLightingOptions = Object.freeze({ intensity: "isotropic", cone: "full", exposure: DEFAULT_CREATOR_EXPOSURE,
+  shadows: true });
 
 export function validCreatorLighting(value: unknown): value is CreatorLightingOptions {
   const v = value as CreatorLightingOptions;
   return !!v && typeof v === "object" && INTENSITY_FORMS.includes(v.intensity) && CONE_READINGS.includes(v.cone) &&
     typeof v.exposure === "number" && Number.isFinite(v.exposure) &&
-    v.exposure >= CREATOR_EXPOSURE_RANGE.min && v.exposure <= CREATOR_EXPOSURE_RANGE.max;
+    v.exposure >= CREATOR_EXPOSURE_RANGE.min && v.exposure <= CREATOR_EXPOSURE_RANGE.max && typeof v.shadows === "boolean";
+}
+/**
+ * The stored token for "the calibration untouched": the defaults as builds before the calibration wrote them. A workspace that never
+ * touched the calibration keeps its bytes, and follows the calibration when it is refitted.
+ */
+const UNTOUCHED_CREATOR_LIGHTING = Object.freeze({ intensity: "isotropic", cone: "full", exposure: 0.46 });
+const untouched = (v: Partial<CreatorLightingOptions>) => v.intensity === UNTOUCHED_CREATOR_LIGHTING.intensity &&
+  v.cone === UNTOUCHED_CREATOR_LIGHTING.cone && v.exposure === UNTOUCHED_CREATOR_LIGHTING.exposure && v.shadows !== false;
+/**
+ * Stored options, or null. Options saved before the shadow switch existed read with shadows on, and the untouched defaults (as every
+ * build stores them) read as the current calibration's.
+ */
+export function readCreatorLighting(value: unknown): CreatorLightingOptions | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<CreatorLightingOptions>;
+  if (untouched(v)) return { ...DEFAULT_CREATOR_LIGHTING };
+  const options = { intensity: v.intensity, cone: v.cone, exposure: v.exposure, shadows: v.shadows === undefined ? true : v.shadows };
+  return validCreatorLighting(options) ? options : null;
+}
+/** The stored form: the untouched token for the defaults; `shadows` only when off. `readCreatorLighting` reads it back exactly. */
+export function storedCreatorLighting(options: CreatorLightingOptions): Record<string, unknown> {
+  const d = DEFAULT_CREATOR_LIGHTING;
+  if (options.intensity === d.intensity && options.cone === d.cone && options.exposure === d.exposure && options.shadows) return { ...UNTOUCHED_CREATOR_LIGHTING };
+  const { shadows, ...rest } = options;
+  return shadows ? rest : options;
 }
 
 const RAD = Math.PI / 180;
@@ -171,6 +223,26 @@ export function coneFactor(l: Pick<CreatorLight, "outer" | "inner" | "softness">
   return saturate((cosAngle - co) / Math.max(ci - co, 1e-4)) ** l.softness;
 }
 
+/** Three's spot cone for the same angles: smoothstep from the outer to the inner half-angle (`penumbra` = 1 − inner/outer). */
+export function threeConeFactor(l: Pick<CreatorLight, "outer" | "inner">, cone: ConeReading, cosAngle: number): number {
+  const h = halfAngles(l, cone);
+  const co = Math.cos(h.outer * RAD), ci = Math.cos(h.inner * RAD);
+  if (ci <= co) return cosAngle >= co ? 1 : 0;
+  const t = saturate((cosAngle - co) / (ci - co));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * The cone fold: the engine's cone (`coneFactor`) over Three's smoothstep at the head point, as an intensity factor, so each preview
+ * light has the engine form's strength at the face (like the linear-falloff fold). 1 where Three's cone misses the head. Within a
+ * few degrees of the head the two shapes agree; this corrects the lights aimed 10–25° off it.
+ */
+export function coneFold(l: CreatorLight, cone: ConeReading, head: Vec3): number {
+  const cos = dot(normalise(sub(head, l.position)), normalise(l.axis));
+  const three = threeConeFactor(l, cone, cos);
+  return three > 1e-3 ? coneFactor(l, cone, cos) / three : 1;
+}
+
 /** sRGB 8-bit to linear (unset colour = white). */
 export function lightColourLinear(colour: Rgb8 | null): Vec3 {
   if (!colour) return [1, 1, 1];
@@ -185,7 +257,7 @@ export type SpotLightSpec = {
   readonly target: Vec3;
   /** Linear-light colour. */
   readonly colour: Vec3;
-  /** Candela, including the linear-falloff fold for linear lights. */
+  /** Candela, including the linear-falloff and cone folds and the calibration gain. */
   readonly intensity: number;
   readonly decay: number;
   readonly distance: number;
@@ -193,15 +265,18 @@ export type SpotLightSpec = {
   readonly angle: number;
   readonly penumbra: number;
   readonly falloff: LightFalloff;
+  /** Whether it casts a shadow map onto the V (`creatorShadowCasters`). */
+  readonly castShadow: boolean;
 };
 
 /**
- * Three parameters for a rig light (knowledge §7). Inverse-square lights are Three's physical falloff
+ * Three parameters for a rig light (knowledge §7, §12). Inverse-square lights are Three's physical falloff
  * (`decay` 2, `distance` = radius), which matches the decoded form exactly. Three has no linear falloff, so
  * a linear light gets `decay` 0, `distance` 0 and its intensity multiplied by `1 − d/r` measured to the
- * head point (within a few percent across the head for these distances).
+ * head point (within a few percent across the head for these distances). The cone fold does the same for the engine's cone shape,
+ * and the calibration gain comes last.
  */
-export function spotLightSpec(l: CreatorLight, options: Pick<CreatorLightingOptions, "intensity" | "cone">, head: Vec3): SpotLightSpec {
+export function spotLightSpec(l: CreatorLight, options: Pick<CreatorLightingOptions, "intensity" | "cone">, head: Vec3, castShadow = false): SpotLightSpec {
   const h = halfAngles(l, options.cone);
   const candela = lumensToCandela(l, options.intensity, options.cone);
   const linear = l.falloff === "linear";
@@ -209,16 +284,58 @@ export function spotLightSpec(l: CreatorLight, options: Pick<CreatorLightingOpti
   return Object.freeze({
     name: l.name, position: l.position,
     target: [l.position[0] + l.axis[0], l.position[1] + l.axis[1], l.position[2] + l.axis[2]] as Vec3,
-    colour: lightColourLinear(l.colour), intensity: candela * fold,
+    colour: lightColourLinear(l.colour), intensity: candela * fold * coneFold(l, options.cone, head) * calibrationGain(l.name),
     decay: linear ? 0 : 2, distance: linear ? 0 : l.radius,
-    angle: h.outer * RAD, penumbra: h.outer > 0 ? saturate(1 - h.inner / h.outer) : 0, falloff: l.falloff,
+    angle: h.outer * RAD, penumbra: h.outer > 0 ? saturate(1 - h.inner / h.outer) : 0, falloff: l.falloff, castShadow,
   });
 }
 
-export function creatorRigSpecs(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone">): SpotLightSpec[] {
-  const head = CREATOR_HEAD_SLOT[sex];
-  return CREATOR_RIGS[sex].map(l => spotLightSpec(l, options, head));
+export function creatorRigSpecs(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone"> & { shadows?: boolean; yawOffset?: number }): SpotLightSpec[] {
+  const head = CREATOR_HEAD_SLOT[sex], casters = new Set(options.shadows ? creatorShadowCasters(sex, options) : []);
+  const yaw = options.yawOffset ?? CREATOR_CALIBRATION.yawOffset;
+  return CREATOR_RIGS[sex].map(l => spotLightSpec(yaw ? rotateLight(l, yaw) : l, options, head, casters.has(l.name)));
 }
+
+/**
+ * The rig turned about the vertical axis through V's feet by `degrees` (positive turns a light at V's front toward V's left, the
+ * Studio's −X). The table assumes V's world yaw is the controller's `yawDefault` −125°; the spawner nodes say −135°, and a turn
+ * between the two is what `CREATOR_CALIBRATION.yawOffset` fits (knowledge §2, §12).
+ */
+export function rotateLight(l: CreatorLight, degrees: number): CreatorLight {
+  const a = degrees * RAD, c = Math.cos(a), s = Math.sin(a);
+  const turn = (v: Vec3): Vec3 => [v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c];
+  return Object.freeze({ ...l, position: turn(l.position), axis: turn(l.axis) });
+}
+
+/**
+ * Shadows (knowledge §12). The resource flags which lights shadow: `enableLocalShadows` (shadow maps) and `contactShadows`
+ * (`CSR_CharacterOnly`: screen-space, character only). The preview gives both kinds one shadow map each, scoped to the V's head and
+ * shoulders. Each map costs a texture unit in every lit material, so at most `budget` lights cast: the character-only contact lights
+ * first (the designers flagged them for the character), then the shadow-map lights by their strength at the head.
+ */
+export const CREATOR_SHADOW = Object.freeze({
+  budget: 6,
+  /** Radius (m) around the head slot that each shadow map covers: head, neck and the tops of the shoulders. */
+  focusRadius: 0.45,
+  /** Penumbra width (m) at the receiver: source radius 0.1 m at about 1 m over a nose-to-cheek gap of 2–3 cm [hypothesis]. */
+  penumbra: 0.003,
+  /** Depth bias, and normal bias in metres, against acne on skin at these map densities. */
+  bias: -0.0002,
+  normalBias: 0.0015,
+});
+export function creatorShadowCasters(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone">): string[] {
+  const head = CREATOR_HEAD_SLOT[sex], strength = (l: CreatorLight) => contribution(l, options, head).illuminance;
+  const flagged = CREATOR_RIGS[sex].filter(l => (l.shadows || l.contactShadows) && strength(l) > 0);
+  const contact = flagged.filter(l => l.contactShadows).sort((a, b) => strength(b) - strength(a));
+  const maps = flagged.filter(l => !l.contactShadows).sort((a, b) => strength(b) - strength(a));
+  return [...contact, ...maps].slice(0, CREATOR_SHADOW.budget).map(l => l.name);
+}
+/** Shadow-map size for a preview quality (the generated-texture size): the map follows it, from 512 up to 2048. */
+export function creatorShadowMapSize(textureSize: number): number {
+  return Math.min(2048, Math.max(512, 2 ** Math.round(Math.log2(Math.max(1, textureSize)))));
+}
+/** PCF filter radius in shadow-map texels that gives `CREATOR_SHADOW.penumbra` at the head. */
+export const creatorShadowRadius = (mapSize: number) => CREATOR_SHADOW.penumbra * mapSize / (2 * CREATOR_SHADOW.focusRadius);
 
 /** One light's illuminance at a point (no Lambert term), under the engine-form cone and the decoded falloff. */
 export function contribution(l: CreatorLight, options: Pick<CreatorLightingOptions, "intensity" | "cone">, point: Vec3): { illuminance: number; falloff: number; cone: number } {

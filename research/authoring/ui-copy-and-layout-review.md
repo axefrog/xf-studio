@@ -482,7 +482,6 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 | Tattoos | Modules menu › Character, Planned | `module:tattoos` | [Tattoos brief](../character-customization/tattoos-brief.md) |
 | New view | Panels flyout › Views | `action:view.create` | [View graph design](view-graph-design.md) P4 |
 | Duplicate view (shared camera) | Panels flyout › Views | `action:view.duplicate` | [View graph design](view-graph-design.md) P4 |
-| Pose (body source) | Motion › Body, a disabled choice | `module:poses` | [Pose library design](../animation/pose-library-design.md), [view graph §5.1](view-graph-design.md#51-poses-v-centric-no-document-part). In the catalogue (`motionPose`), not placed yet: the Poses module (`claude/pose-panel`) decides how a pose joins Body |
 | Skin scattering quality | Camera & light › Display | `action:preview.setSubsurfaceQuality` | [Skin shader §11](../materials/shader-skin.md) ("a viewing preference beside the lighting presets") |
 | Face handles | Expression, a disabled button | `tool:expressions.handles` | [Expression editor design](../animation/expression-editor-design.md) phase 2 |
 | Sculpt | Expression, a disabled button | `tool:expressions.sculpt` | [Expression editor design](../animation/expression-editor-design.md), "sculpt mode (Option 3)", confirmed as a later mode |
@@ -490,6 +489,7 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 | Edit values | Save Explorer › object inspector, a disabled button | `action:saves.setValue` | [Save editor design](../save/save-editor-design.md) §7.2 (the writer's phase 1: scalar values) |
 
 **Not placed, and why:**
+- **Pose (body source)**: the Poses module landed with a real "Pose: …" choice in Motion › Body, so no placeholder is needed.
 - **Hair physics**: being built for real on `claude/hair-physics` (the Motion panel's switch and `motion.setPhysics`), so a placeholder would be dead on arrival.
 - **Selectors panel, "Add selector"**: waits for the Selectors panel ([selectors design](selectors-design.md) S1). A panel holding only a disabled button would be an empty section.
 - **Shadows (key light)**: no agreed design. The [creator lighting](../../knowledge/creator-lighting.md) page says the first release goes without shadow maps. The Light tip says shadows aren't drawn yet.
@@ -526,7 +526,7 @@ Phase 2 applied §3–§6a with the component library's help tips, sections, pro
 | Library, Mod package, History | Done (L3, L4: the buttons already share a row and wrap only in a narrow panel; L8 not done) |
 | Shell, Settings, Help, Expression, Save Explorer | Done (Save Explorer's tree keys note kept: the tree has no heading to hold a tip) |
 | Toasts and reasons (§3.20) | Done |
-| Coming soon placeholders (§6) | Done, except the Pose choice (left to the Poses module) |
+| Coming soon placeholders (§6) | Done |
 | Dropdowns (§6a) | Done except the MO2 profile (kept) and Expression › Start from (the drawer follow-up). The library's `ChoiceList` (chips, rows, tiles) is the single-select control for more than four options or long labels, in the Character panel's choice look (the creator choices are built from the same `choiceItem`); `Segmented` is for two to four short options |
 
 **Still open:** L6 (studio slider sub-groups), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and Expression › Start from (§6a).

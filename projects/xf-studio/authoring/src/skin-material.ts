@@ -6,9 +6,11 @@
  * knowledge/materials-and-shaders.md §4.1) [source]. The lighting is an approximation:
  * - specular: the two GGX lobes of the skin profile, at roughness × `roughness0` and × `roughness1`,
  *   summed and scaled by (1 + `lobeMix`) / 2, with the engine's fixed dielectric F0 of 0.04 [source];
- * - diffuse: renormalised Burley at the surface roughness [source], with a per-channel wrap from the
- *   profile's falloff colour and blur size standing in for the screen-space subsurface blur, which is
- *   not reproduced [approximation];
+ * - diffuse: renormalised Burley at the surface roughness [source], standing in for the screen-space subsurface
+ *   blur (not reproduced) in two ways [approximation]: a per-channel wrap from the profile's falloff colour and blur
+ *   size, scaled by the surface's curvature so it spans the scatter distance rather than a fixed angle (a flat cheek
+ *   barely wraps, a nose wing does), and the macro normal (without the tiled microdetail) for diffuse, because the
+ *   game's blur of the diffuse irradiance removes shading detail finer than its kernel while specular keeps it;
  * - image-based light uses the same two lobes (the creator scene has no probe term; the ordinary stage does).
  * Not drawn: the wrinkle maps and blood flow (animation-driven, neutral at rest) and the emissive mask
  * (no emissive path yet; the adapter says so when a mask would glow).
@@ -41,6 +43,12 @@ export const VANILLA_SKIN_PROFILE: Omit<RenderSkinProfile, "depotPath" | "archiv
 export const SKIN_WRAP_SCALE = 0.5;
 /** Blur size at which the wrap reaches full strength (the base game's profile uses 1.4, the reference complexion mod 2.5). */
 export const SKIN_WRAP_FULL_BLUR = 2.5;
+/**
+ * Scatter length (m) per unit of wrap: the shader's wrap is `wrap · min(1, length · curvature)`, so a channel's wrap is its scatter
+ * distance (blur size × falloff, read as millimetres [hypothesis], knowledge/materials-and-shaders.md §2) times the curvature, the
+ * angle the surface turns over that distance. It reaches the full wrap only where the surface turns through a radius of 5 mm or less.
+ */
+export const SKIN_SCATTER_LENGTH = SKIN_WRAP_FULL_BLUR / SKIN_WRAP_SCALE / 1000;
 
 export type SkinParameters = {
   /** Tone tint colour in the program's units, and `TintScale` (negative: overlay). */
@@ -202,6 +210,9 @@ uniform vec2 xfsMicroScale;
 uniform vec2 xfsRoughnessBias;
 uniform vec2 xfsSecondaryParams;
 uniform float xfsNormalFlipY;
+// The diffuse light's normal: the macro surface (normal and detail maps, no microdetail); see the header.
+#define XFS_SKIN_DIFFUSE_NORMAL
+vec3 xfsDiffuseNormal;
 vec3 xfsUnpackRG( const in vec4 texel ) {
 	vec2 xy = texel.xy * 2.0 - 1.0;
 	return vec3( xy, sqrt( max( 1.0 - dot( xy, xy ), 0.0 ) ) );
@@ -221,6 +232,7 @@ vec2 xfsUv = vMapUv;
 vec3 xfsN = xfsUnpackRG( texture2D( normalMap, xfsUv ) );
 vec3 xfsD = xfsUnpackRG( texture2D( xfsDetailNormal, xfsUv ) );
 xfsN = normalize( xfsBlendNormal( xfsN, xfsD, xfsSkinScalars.x ) );
+vec3 xfsMacroN = xfsN;
 vec4 xfsR = texture2D( xfsSkinRoughness, xfsUv );
 vec4 xfsM = texture2D( xfsTintMask, xfsUv );
 float xfsQb = xfsHermite( clamp( floor( xfsM.z * 5.0 ) * 0.2, 0.0, 1.0 ) );
@@ -253,12 +265,22 @@ diffuseColor.rgb = xfsClamped + xfsSecondaryParams.x * xfsS.a * ( xfsSecondaryTi
 float xfsBiasValue = ( max( xfsRoughnessBias.x, xfsRoughnessBias.y ) - min( xfsRoughnessBias.x, xfsRoughnessBias.y ) ) * xfsMicroTerm + min( xfsRoughnessBias.x, xfsRoughnessBias.y );
 float xfsRoughnessValue = clamp( ( xfsBiasValue * xfsR.x - xfsR.x ) * xfsR.z + xfsR.x, 0.0, 1.0 );
 vec3 xfsTangentNormal = normalize( mix( vec3( 0.0, 0.0, 1.0 ), vec3( xfsN.x, xfsN.y * xfsNormalFlipY, xfsN.z ), xfsSkinScalars.w ) );
+vec3 xfsTangentMacro = normalize( mix( vec3( 0.0, 0.0, 1.0 ), vec3( xfsMacroN.x, xfsMacroN.y * xfsNormalFlipY, xfsMacroN.z ), xfsSkinScalars.w ) );
 `;
 
 /** The skin light: two specular lobes and a wrapped Burley diffuse (appended after `lights_physical_pars_fragment`). */
 const LIGHT = /* glsl */`
 uniform vec3 xfsLobes;
 uniform vec3 xfsWrap;
+// Curvature (1/m) of the interpolated surface normal, from screen-space derivatives in view space; 0 when flat-shaded.
+float xfsSurfaceCurvature() {
+#ifndef FLAT_SHADED
+	vec3 n = normalize( vNormal );
+	return length( fwidth( n ) ) / max( length( fwidth( vViewPosition ) ), 1e-6 );
+#else
+	return 0.0;
+#endif
+}
 #ifdef USE_ENVMAP
 vec3 xfsSkinIBL( const in vec3 viewDir, const in vec3 normal, const in float roughness ) {
 	return ( getIBLRadiance( viewDir, normal, clamp( roughness * xfsLobes.x, 0.0525, 1.0 ) ) +
@@ -268,6 +290,11 @@ vec3 xfsSkinIBL( const in vec3 viewDir, const in vec3 normal, const in float rou
 void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
 	float xfsNoL = dot( geometryNormal, directLight.direction );
 	vec3 irradiance = saturate( xfsNoL ) * directLight.color;
+#ifdef XFS_SKIN_DIFFUSE_NORMAL
+	float xfsDiffuseNoL = dot( xfsDiffuseNormal, directLight.direction );
+#else
+	float xfsDiffuseNoL = xfsNoL;
+#endif
 	PhysicalMaterial lobe0 = material;
 	PhysicalMaterial lobe1 = material;
 	lobe0.roughness = clamp( material.roughness * xfsLobes.x, 0.04, 1.0 );
@@ -280,10 +307,11 @@ void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geomet
 	float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
 	float r = material.roughness;
 	float fd90 = 0.5 * r + 2.0 * dotLH * dotLH * r;
-	float burley = ( 1.0 + ( fd90 - 1.0 ) * pow( 1.0 - saturate( xfsNoL ), 5.0 ) ) * ( 1.0 + ( fd90 - 1.0 ) * pow( 1.0 - dotNV, 5.0 ) ) * ( 1.0 - 0.338 * r );
-	// Subsurface stand-in: the profile's falloff wraps light past the terminator per channel (metal skips it, as the engine's SSS does).
-	vec3 wrap = material.metalness > 0.1 ? vec3( 0.0 ) : xfsWrap;
-	vec3 wrapped = saturate( ( xfsNoL + wrap ) / ( 1.0 + wrap ) ) / ( 1.0 + wrap );
+	float burley = ( 1.0 + ( fd90 - 1.0 ) * pow( 1.0 - saturate( xfsDiffuseNoL ), 5.0 ) ) * ( 1.0 + ( fd90 - 1.0 ) * pow( 1.0 - dotNV, 5.0 ) ) * ( 1.0 - 0.338 * r );
+	// Subsurface stand-in: the profile's falloff wraps light past the terminator per channel over the scatter distance, so by the
+	// angle the surface turns across it (metal skips it, as the engine's SSS does).
+	vec3 wrap = material.metalness > 0.1 ? vec3( 0.0 ) : xfsWrap * min( 1.0, ${SKIN_SCATTER_LENGTH.toFixed(6)} * xfsSurfaceCurvature() );
+	vec3 wrapped = saturate( ( xfsDiffuseNoL + wrap ) / ( 1.0 + wrap ) ) / ( 1.0 + wrap );
 	reflectedLight.directDiffuse += directLight.color * wrapped * burley * BRDF_Lambert( material.diffuseContribution );
 }
 #undef RE_Direct
@@ -338,7 +366,8 @@ export function patchSkinShader(shader: { vertexShader: string; fragmentShader: 
   fragment = replace(fragment, "#include <map_fragment>", SURFACE);
   fragment = replace(fragment, "#include <roughnessmap_fragment>", "float roughnessFactor = xfsRoughnessValue;");
   fragment = replace(fragment, "#include <metalnessmap_fragment>", "float metalnessFactor = xfsR.y;");
-  fragment = replace(fragment, "#include <normal_fragment_maps>", "normal = normalize( tbn * xfsTangentNormal );");
+  fragment = replace(fragment, "#include <normal_fragment_maps>",
+    "normal = normalize( tbn * xfsTangentNormal );\nxfsDiffuseNormal = normalize( tbn * xfsTangentMacro );");
   shader.fragmentShader = fragment;
   return shader;
 }

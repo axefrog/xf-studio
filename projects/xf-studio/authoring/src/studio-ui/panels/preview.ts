@@ -73,7 +73,7 @@ export function lightingPresetLine(preset: LightingPreset | undefined, status: L
 }
 /** What the two lighting presets are (the Light heading's help tip). */
 const LIGHT_HELP = ["Studio: soft authoring light you can adjust. Character creator: the game's creator lights for your V's body, on black, with fixed exposure.",
-  "Shadows aren't drawn yet, and the creator's light strengths are still being calibrated."];
+  "The lights the game flags for shadows cast them onto your V; the creator's light strengths are still being calibrated."];
 
 export function lightingPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -107,14 +107,17 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     format: value => (10 ** value).toPrecision(3),
     transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); },
       commit: endEdit, cancel: endEdit } });
+  const creatorShadows = new Toggle({ label: "Shadows from the flagged lights",
+    help: "The lights the game flags for shadows cast them onto the V: the key light's nose shadow, and no rim light through the head.",
+    onChange: enabled => rt.dispatch({ kind: "preview.setCreatorShadows", enabled }) });
   const resetCalibration = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
-    title: "Put the intensity reading, cone angles and creator exposure back to their defaults",
+    title: "Put the intensity reading, cone angles, creator exposure and shadows back to their defaults",
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
   // A research tool (UI-85): shown only with View preferences › Show research tools.
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
     h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
       helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
-    intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
+    intensity.element, cone.element, creatorExposure.element, creatorShadows.element, h("div", { class: "row" }, resetCalibration));
   // The line under the slider (reserved, UI-90): only a framing limit or why the camera can't move yet.
   const fovNote = h("small", { class: "control-note info empty" });
   const fovLine = (text: string) => { setText(fovNote, text); fovNote.classList.toggle("empty", !text); };
@@ -230,6 +233,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       cone.update(creator?.cone, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
       creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
         note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
+      creatorShadows.update(creator?.shadows ?? true, studioOnly({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
       applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       // The panel's loading reason is said once, in the line that is always there (UI-90).
       if (!ready) fovLine(loading.reason);
@@ -259,11 +263,13 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
 
 export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
-  const STILL = "still";
-  // One choice per idle prepared on this computer (the list can change), all shown, in the Character panel's choice look (ChoiceList).
-  // The chosen one moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
+  // The body source: Still (the bind pose), one of the game's own preview idles (the creator's close-up and full body, the inventory…), or
+  // the photo-mode pose chosen in Poses (its own chosen choice while one is held; choosing another source leaves it).
+  const STILL = "still", POSE = "pose";
+  // One choice per source (the list can change), all shown, in the Character panel's choice look (ChoiceList). The chosen one moves at
+  // once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
   const source = new ChoiceList<string>({ label: "Body", reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
+    if (value === POSE) return;
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
     if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
@@ -304,9 +310,11 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
       // The Body buttons' reserved line says the one thing that matters now: loading, or why motion is off.
       source.setOptions([{ value: STILL, label: "Still", title: "V stands in her bind pose." },
-        ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") }))]);
-      source.update(motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
-        : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready." : "" });
+        ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") })),
+        ...(motion?.pose ? [{ value: POSE, label: `Pose: ${motion.pose.label}`, title: "The photo-mode pose chosen in Poses. Choose Still or an idle to leave it." }] : [])]);
+      source.update(motion?.pose ? POSE : motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
+        : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready."
+          : motion?.pose && motion.poseLoading ? `Loading ${motion.pose.label}; V keeps her current pose until it's ready.` : "" });
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");

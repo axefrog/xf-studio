@@ -79,6 +79,9 @@ const newerSchema = (schema: unknown) => {
 
 /** The longest CName a layer's value names are kept to in a record (the host cuts longer ones before writing; PIPE-40). */
 export const CHOICE_NAME_MAX = 127;
+/** A garment's visual tags as the record carries them: at most this many, each a CName of letters, digits and `_`. */
+export const GARMENT_TAGS_MAX = 64;
+export const isVisualTag = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_]{1,64}$/.test(value);
 /** A plain label the host words for the presentation: 1 to 127 characters, no control characters. */
 export const isChoiceLabel = (value: unknown): value is string => typeof value === "string" && /^[^\u0000-\u001f\u007f]{1,127}$/.test(value);
 export const CORE_DETAIL_URL = "/assets/preview-core.json";
@@ -323,7 +326,11 @@ export type RenderComponent = {
    * Garment components (the `clothing` slot): the clothing area and item record (the save's decimal TweakDB record ID) that brought it,
    * and its layer score (component prefix and size tag; null when its prefix has none), which orders coincident layers.
    */
-  garment?: { area: string; item: string; layer: number | null };
+  /**
+   * `tags`: the worn item's visual tags (clothing-resolver.ts: record, cooked preset, root entity and definition), which the game's
+   * photo mode matches against a pose's `filterOutForGarmentTags` (knowledge/poses.md §2). Optional: an older record carries none.
+   */
+  garment?: { area: string; item: string; layer: number | null; tags?: string[] };
   /**
    * Body components in the censorship policy (character-detail-plan.ts `censorRole`): a `cover` is the game's underwear; a `covered` part
    * (the uncensored skin) is drawn only while every cover of the record is (`withdrawUncoveredBody`).
@@ -557,6 +564,9 @@ function component(value: unknown, index: number): RenderComponent {
   if (garment !== undefined && (!garment || typeof garment !== "object" || item.slot !== "clothing" || !/^[A-Za-z]{1,32}$/.test(String(garment.area)) ||
     !/^[1-9][0-9]{0,19}$/.test(String(garment.item)) || !(garment.layer === null || (Number.isInteger(garment.layer) && Math.abs(garment.layer) <= 100_000))))
     fail(`${what} garment is invalid.`);
+  const garmentTags = garment?.tags;
+  if (garmentTags !== undefined && (!Array.isArray(garmentTags) || garmentTags.length > GARMENT_TAGS_MAX || garmentTags.some(tag => !isVisualTag(tag))))
+    fail(`${what} garment tags are invalid.`);
   // A malformed dangle entry is left out on its own: the part is still drawn, its joints following V's skeleton.
   const dangle = item.dangle, d = dangle as Partial<RenderDangle> | undefined;
   const dangleOk = !!d && typeof d === "object" && [d.component, d.rig, d.graph].every(value => typeof value === "string" && value.length > 0 && value.length <= 512) &&
@@ -570,7 +580,7 @@ function component(value: unknown, index: number): RenderComponent {
     ...(rule ? { morphTexture: { morph: text(rule.morph, `${what} morph`), texture: rule.texture === null ? null : text(rule.texture, `${what} morph texture`),
       parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}),
     ...(morphs ? { morphs: morphs.map((name, k) => paramName(name, `${what} morph ${k}`)) } : {}),
-    ...(garment ? { garment: { area: garment.area, item: garment.item, layer: garment.layer } } : {}), ...(censor ? { censor } : {}),
+    ...(garment ? { garment: { area: garment.area, item: garment.item, layer: garment.layer, ...(garmentTags?.length ? { tags: [...garmentTags] } : {}) } } : {}), ...(censor ? { censor } : {}),
     ...(dangleOk ? { dangle: { component: d!.component!, rig: d!.rig!, graph: d!.graph!, file: d!.file!, sha256: d!.sha256! } } : {}) };
 }
 /** A record entry that says it is a cover (before it is parsed: a cover the parser drops still counts, so its covered parts go too). */
