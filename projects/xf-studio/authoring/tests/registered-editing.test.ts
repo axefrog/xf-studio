@@ -7,6 +7,7 @@
  * - CORE-33: apply is pure and deterministic for every one of the 29 kinds: the host supplies the
  *   IDs of new items, so the same state and action always give the same result.
  */
+import { mottlePreset } from "../src/engines/layered-makeup/mottle";
 import { expect, test } from "bun:test";
 import { STUDIO_COMPOSITION, STUDIO_OWNERS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { EYE_MAKEUP, assignEyeMakeupIds } from "../src/features/eye-makeup";
@@ -101,10 +102,12 @@ test("context-menu input options report the Undo policy of the variant they edit
   expect(checked).toBeGreaterThan(5);
 });
 
-test("apply is pure and deterministic for all 29 eye-makeup kinds once the host supplies new IDs (CORE-33)", () => {
+test("apply is pure and deterministic for all 33 eye-makeup kinds once the host supplies new IDs (CORE-33)", () => {
   const part = mixedRecipe();
   const [gloss, shift, glit, earlier, irr, dir] = part.layers.map(layer => layer.id);
   const field = part.layers[0].fields[0].id;
+  // A mottled layer, so the mottle settings and Shuffle apply.
+  part.layers[0].effects = { mottle: mottlePreset("powder", 3) };
   const actions: EyeMakeupAction[] = [
     { kind: "layer.select", layerId: glit }, { kind: "point.select", layerId: gloss, index: 1 }, { kind: "point.remove", layerId: gloss, index: 1 },
     { kind: "path.edit", layerId: gloss, command: { kind: "enable-bezier" } },
@@ -126,6 +129,8 @@ test("apply is pure and deterministic for all 29 eye-makeup kinds once the host 
     { kind: "field.setVector", layerId: gloss, fieldId: field, du: 0.001, dv: 0 },
     { kind: "layer.edit", command: { kind: "add" } }, { kind: "layer.edit", command: { kind: "duplicate", id: gloss } },
     { kind: "layer.setEnabled", id: gloss, enabled: false },
+    { kind: "effect.mottle.enable", layerId: gloss, enabled: false }, { kind: "effect.mottle.set", layerId: gloss, key: "amount", value: 0.3 },
+    { kind: "effect.mottle.shuffle", layerId: gloss }, { kind: "effect.mottle.preset", layerId: shift, preset: "mascara" },
   ];
   const kinds = new Set<string>();
   for (const action of actions) {
@@ -143,7 +148,7 @@ test("apply is pure and deterministic for all 29 eye-makeup kinds once the host 
     kinds.add(action.kind);
   }
   expect([...kinds].sort()).toEqual([...STUDIO_REGISTRY.kinds(EYE_MAKEUP.id)].sort());
-  expect(kinds.size).toBe(29);
+  expect(kinds.size).toBe(33);
   // Without its host-supplied ID an action that creates an item is refused by apply, never given a random one.
   const state: EyeMakeupState = { part, editor: { active: 0, selected: 0, fieldSelection: {}, choices: {} } };
   expect(() => (EYE_MAKEUP.actions["field.add"] as unknown as Spec).apply(state, { kind: "field.add", layerId: gloss })).toThrow("needs the new item's ID");
