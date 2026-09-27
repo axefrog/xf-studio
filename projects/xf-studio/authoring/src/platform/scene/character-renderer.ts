@@ -369,6 +369,8 @@ export function createCharacterRenderer(input: {
     /** Meshes of the drawn V that follow the facial shapes with the head (the body has its own shapes: `RenderComponent.morphs`). */
     drawnMeshes: () => drawnDetails().filter(item => item.component.slot !== "body" && item.component.slot !== "clothing").flatMap(item => item.meshes),
     /** Whether the V's resolved body shows now (the viewer hasn't hidden it and it loaded): the scene's depth range then covers it. */
+    /** Whether a V's details are shown (none while the first V is still being prepared). */
+    hasDetails: () => !!characterDetails,
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
     /** Release the V and every kept part (the scene is going away). */

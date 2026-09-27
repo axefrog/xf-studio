@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { dangleOf } from "../src/character-detail-plan";
 import type { ResolvedComponent } from "../src/character-resolver";
-import { MotionActions, PHYSICS_NO_DANGLES, PHYSICS_NO_RIG, PHYSICS_UNSUPPORTED, type MotionPort } from "../src/motion-actions";
+import { MotionActions, PHYSICS_NO_DANGLES, PHYSICS_NO_RIG, PHYSICS_UNSUPPORTED, PHYSICS_WAITING, type MotionPort } from "../src/motion-actions";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { createStudioViewGraph, previewMirror, workspaceViewGraph } from "../src/preview-view-graph";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
@@ -30,7 +30,7 @@ describe("which dangle component a part's mesh reads", () => {
 });
 
 describe("hair physics: one setting per scene", () => {
-  const port = (dangles?: { parts: number; simulated: boolean }, available = true): MotionPort => ({ available, blink: { available: false },
+  const port = (dangles?: { parts: number; simulated: boolean; loaded?: boolean }, available = true): MotionPort => ({ available, blink: { available: false },
     setIdle() {}, setIdlePaused() {}, setIdleContributions() {}, setBlink() {}, animateBlink() {}, ...(dangles ? { dangles: () => dangles } : {}) });
   const scene = () => { let on = false; return { physics: () => on, setPhysics: (enabled: boolean) => { on = enabled; } }; };
 
@@ -39,6 +39,8 @@ describe("hair physics: one setting per scene", () => {
     expect(new MotionActions(initial, port({ parts: 1, simulated: true }), scene()).snapshot().physics).toBe(false);
     expect(new MotionActions(initial, port(), scene()).capability({ kind: "motion.setPhysics", enabled: true }).reason).toBe(PHYSICS_NO_RIG);
     expect(new MotionActions(initial, port({ parts: 0, simulated: false }), scene()).capability({ kind: "motion.setPhysics", enabled: true }).reason).toBe(PHYSICS_NO_DANGLES);
+    // While the V's details are still on their way, it says so rather than that the hair has no physics.
+    expect(new MotionActions(initial, port({ parts: 0, simulated: false, loaded: false }), scene()).capability({ kind: "motion.setPhysics", enabled: true }).reason).toBe(PHYSICS_WAITING);
     expect(new MotionActions(initial, port({ parts: 2, simulated: false }), scene()).capability({ kind: "motion.setPhysics", enabled: true }).reason).toBe(PHYSICS_UNSUPPORTED);
     // Turning it off always works.
     expect(new MotionActions(initial, port({ parts: 0, simulated: false }), scene()).capability({ kind: "motion.setPhysics", enabled: false }).available).toBe(true);

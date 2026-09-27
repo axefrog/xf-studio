@@ -44,7 +44,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       setIdle: scene.setIdle, setIdlePaused: scene.setIdlePaused,
       setIdleContributions: scene.setIdleContributions, setBlink: scene.setBlink,
       animateBlink: scene.animateBlink,
-      dangles: () => scene.dangles() ?? { parts: 0, simulated: false },
+      dangles: () => scene.dangles() ?? { parts: 0, simulated: false, loaded: true },
     },
   };
 }

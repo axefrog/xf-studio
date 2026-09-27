@@ -14,6 +14,7 @@ export const IDLE_UNAVAILABLE = "The character creator's idle couldn't be prepar
 export const PHYSICS_NO_DANGLES = "Your V's hair doesn't move on its own: this hairstyle has no physics in the game.";
 export const PHYSICS_UNSUPPORTED = "Your V's hair has physics XF Studio can't run yet, so it hangs still.";
 export const PHYSICS_NO_RIG = "Hair physics needs your V's idle, which couldn't be prepared from your game files.";
+export const PHYSICS_WAITING = "Hair physics can be turned on once your V's hair has loaded.";
 export { IDLE_MASCULINE };
 
 /** One of the game's preview idles as the Motion controls offer it. */
@@ -56,7 +57,7 @@ export type MotionPort = {
   setIdleContributions(body: boolean, face: boolean): void;
   setBlink(value: number): void; animateBlink(playing: boolean): void;
   /** The drawn parts' dangle components (idle-animation.ts): how many, and whether any of them simulates. Absent: no idle rig. */
-  dangles?(): { parts: number; simulated: boolean };
+  dangles?(): { parts: number; simulated: boolean; loaded?: boolean };
 };
 /** Where the motion service reads and edits the scene's motion settings (the view graph's scene node, through the preview service). */
 export type MotionScene = { physics(view?: ViewId): boolean; setPhysics(enabled: boolean, view?: ViewId): void };
@@ -113,6 +114,7 @@ export class MotionActions {
   private physicsStatus(): { physicsAvailable: boolean; physicsReason?: string; physicsParts: number } {
     const dangles = this.port.dangles?.();
     if (!dangles || !this.port.available) return { physicsAvailable: false, physicsReason: PHYSICS_NO_RIG, physicsParts: 0 };
+    if (dangles.loaded === false) return { physicsAvailable: false, physicsReason: PHYSICS_WAITING, physicsParts: 0 };
     if (!dangles.parts) return { physicsAvailable: false, physicsReason: PHYSICS_NO_DANGLES, physicsParts: 0 };
     if (!dangles.simulated) return { physicsAvailable: false, physicsReason: PHYSICS_UNSUPPORTED, physicsParts: dangles.parts };
     return { physicsAvailable: true, physicsParts: dangles.parts };

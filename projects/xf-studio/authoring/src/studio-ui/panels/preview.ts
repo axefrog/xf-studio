@@ -1,5 +1,5 @@
 import type { PreviewTextureSize } from "../../preview-quality";
-import { applyCapability, badge, button, emptyState, note, section, Segmented, SelectField, Slider, Toggle } from "../controls";
+import { applyCapability, badge, button, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { helpTip } from "../help-tip";
 import { icon } from "../icons";
@@ -231,11 +231,13 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
   const STILL = "still";
-  const source = new SelectField<string>({ label: "Body", onChange: value => {
+  // Mutually exclusive buttons, one per idle prepared on this computer (the list can change), wrapping onto more rows as needed. The
+  // pressed button moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
+  const source = new Segmented<string>({ label: "Body", wrap: true, reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
     if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
-  }, help: "Still, or one of the idles the game plays on V in its creator and inventory screens." });
+  } });
   const pause = button({ label: "Pause idle", icon: "pause", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.setPaused", paused: !motion?.idlePaused });
   } });
@@ -269,14 +271,15 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
-      source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label }))],
-        motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
+      source.setOptions([{ value: STILL, label: "Still", title: "V stands in her bind pose." },
+        ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") }))]);
+      source.update(motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
+        : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready." : "" });
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
-      setText(idleNote, !motion?.available ? unavailable.reason : motion.idleLoading ? "Loading that idle; the previous one plays until it's ready."
-        : motion.idle
+      setText(idleNote, !motion?.available ? unavailable.reason : motion.idle
         ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
         : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
@@ -296,6 +299,9 @@ export function physicsNoteLine(motion: Pick<MotionState, "physics" | "physicsAv
   if (!motion?.physics || !motion.physicsAvailable) return undefined;
   return motion.idle && !motion.idlePaused ? "The hair swings as your V moves." : "The hair hangs as it would at rest in this pose.";
 }
+
+/** A body-source button's tooltip: where the game plays that idle. */
+const idleTitle = (screen: string) => `The idle the game plays on V in its ${screen === "creator" ? "character creator" : screen === "inventory" ? "inventory" : "gender selection"}.`;
 
 /** The Motion panel's blink note: why the blink is off, or what it plays and how often. */
 export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError" | "blinkRepeatSeconds"> | undefined): string {

@@ -385,7 +385,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     /** The scene's dangle simulation (hair with physics; the scene node's setting, off until calibrated). */
     setPhysics: (enabled: boolean) => idle?.setPhysics(enabled),
     /** The drawn parts with a dangle component, and whether any simulates (absent without the idle's rig). */
-    dangles: () => idle ? { parts: idle.dangleParts, simulated: idle.simulatedDangles } : undefined,
+    dangles: () => idle ? { parts: idle.dangleParts, simulated: idle.simulatedDangles, loaded: character.hasDetails() } : undefined,
     setIdleContributions: (body: boolean, face: boolean) => {
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;
       idle.setContributions({ body, face }); frameIdle();

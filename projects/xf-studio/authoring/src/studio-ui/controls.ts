@@ -128,25 +128,59 @@ export class Toggle {
 }
 
 export type SegmentOption<T extends string | number> = { value: T; label: string; icon?: IconName; title?: string };
+/**
+ * Mutually exclusive choices shown together (style guide `c-segmented`). The choices may change after construction (`setOptions`: a
+ * data-driven list such as the game's idles prepared on this computer): the buttons are rebuilt only when the list differs, and focus
+ * stays on the same choice. `wrap` lays the choices out as even tiles that flow onto more rows instead of overflowing, one per row when
+ * a label can't fit two a row; without it the control is the one-row strip every fixed call site uses; `update` can disable the whole group
+ * with one reason (the reason stays visible in the note line, which keeps its height when `reserveNote` is set).
+ */
 export class Segmented<T extends string | number> {
   readonly element: HTMLElement;
-  private readonly buttons: { value: T; button: HTMLButtonElement }[];
-  constructor(options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean }) {
+  private buttons: { value: T; button: HTMLButtonElement }[] = [];
+  private readonly group: HTMLElement;
+  private readonly note: NoteLine;
+  private signature = "";
+  constructor(private readonly options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean;
+    wrap?: boolean; reserveNote?: boolean }) {
     const labelId = uid("seg");
-    this.buttons = options.options.map(option => ({ value: option.value, button: h("button", { class: "segment", type: "button",
-      "aria-pressed": "false", title: option.title, "data-title": option.title,
-      onclick: () => options.onSelect(option.value) }, option.icon ? icon(option.icon) : null, h("span", { text: option.label })) }));
+    this.group = h("div", { class: `segmented${options.wrap ? " wrap" : ""}`, role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
+      "aria-labelledby": options.showLabel === false ? undefined : labelId });
+    this.note = new NoteLine(options.reserveNote);
     this.element = h("div", { class: `control${options.compact ? " compact" : ""}` },
-      options.showLabel === false ? null : h("span", { class: "control-label", id: labelId }, h("span", { text: options.label })),
-      h("div", { class: "segmented", role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
-        "aria-labelledby": options.showLabel === false ? undefined : labelId }, this.buttons.map(item => item.button)));
+      options.showLabel === false ? null : h("span", { class: "control-label", id: labelId }, h("span", { text: options.label })), this.group, this.note.element);
+    this.setOptions(options.options);
   }
-  update(selected: T | undefined, capability: (value: T) => { available: boolean; reason?: string } = () => ({ available: true })) {
+  /** Replace the choices (a no-op when they are the same); focus stays on the same choice when it is still offered. */
+  setOptions(options: readonly SegmentOption<T>[]) {
+    const signature = JSON.stringify(options.map(option => [option.value, option.label, option.icon ?? "", option.title ?? ""]));
+    if (signature === this.signature) return;
+    this.signature = signature;
+    const focused = this.buttons.find(item => item.button === document.activeElement)?.value;
+    this.buttons = options.map(option => ({ value: option.value, button: h("button", { class: "segment", type: "button",
+      "aria-pressed": "false", title: option.title, "data-title": option.title,
+      onclick: () => this.options.onSelect(option.value) }, option.icon ? icon(option.icon) : null, h("span", { text: option.label })) }));
+    this.group.replaceChildren(...this.buttons.map(item => item.button));
+    // A wrapping group lays its choices out as even tiles as wide as its longest label: numbered sets fill each row evenly, and labels
+    // too long for two a row stack one per row (studio.css `.segmented.wrap`).
+    if (this.options.wrap) {
+      const longest = Math.max(1, ...options.map(option => option.label.length + (option.icon ? 3 : 0)));
+      this.group.style.setProperty("--segment-min", `calc(${longest}ch + 2 * var(--sp-4) + 2px)`);
+    }
+    if (focused !== undefined) this.buttons.find(item => item.value === focused)?.button.focus();
+  }
+  /**
+   * The selected choice, each choice's capability, and optionally the whole group's state: `disabled` with its `reason`, or a `note`
+   * under the choices (shown in the same line, so the layout never shifts between them when `reserveNote` is set).
+   */
+  update(selected: T | undefined, capability: (value: T) => { available: boolean; reason?: string } = () => ({ available: true }),
+    state: { disabled?: boolean; reason?: string; note?: string } = {}) {
     for (const { value, button } of this.buttons) {
       setAttr(button, "aria-pressed", String(value === selected));
-      const allowed = capability(value);
-      setDisabled(button, !allowed.available && value !== selected, allowed.reason);
+      const allowed = state.disabled ? { available: false, reason: state.reason } : capability(value);
+      setDisabled(button, !allowed.available && (state.disabled || value !== selected), allowed.reason);
     }
+    this.note.update(this.group, !!state.disabled, state.reason, state.note);
   }
 }
 
