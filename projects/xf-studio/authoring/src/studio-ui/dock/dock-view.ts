@@ -462,7 +462,7 @@ export class DockView {
   float(id: PanelId) {
     const at = locate(this.tree, id);
     this.update(applyDrop(this.tree, { kind: "panel", panelId: id }, { kind: "float", ...this.floatRect(this.groupRect(at?.group.id)) }),
-      `${this.title(id)} is floating. Use Move window from its menu to reposition it with the keyboard.`);
+      `${this.title(id)} is floating. Use Move or resize window from its menu to move it with the keyboard.`);
   }
   moveTo(id: PanelId, target: DropTarget, message: string) {
     this.update(showPanelDocked(applyDrop(this.tree, { kind: "panel", panelId: id }, target, this.groupRect(locate(this.tree, id)?.group.id)), id), message);

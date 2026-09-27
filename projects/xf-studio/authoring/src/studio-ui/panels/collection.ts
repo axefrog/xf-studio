@@ -36,21 +36,21 @@ export function libraryState(frame: Frame) {
   if (library.busy && library.progress?.phase === "working") return { tone: "info" as const, label: "Working…", detail: library.progress.message };
   // Plain chip labels; version numbers live in the tooltip/detail line.
   if (draft.revision === undefined) return { tone: "warning" as const, label: "Not saved yet",
-    detail: "This collection hasn't been saved to your library yet. Your draft autosaves on this computer; Save to library keeps a version you can return to." };
+    detail: "Not in your library yet. Save to keep a version you can return to." };
   if (stored && stored.revision > draft.revision) return { tone: "warning" as const, label: "Newer version saved",
-    detail: `Your library has a newer version of this collection (version ${stored.revision}) saved elsewhere; your draft started from version ${draft.revision}. Saving will report a conflict — save a copy or reopen it.` };
+    detail: `Version ${stored.revision} was saved elsewhere; your draft is from version ${draft.revision}. Save as a new collection, or reopen it.` };
   const persistence = frame.persistence;
   if (persistence?.baseline === "known" && !persistence.dirty) return { tone: "neutral" as const, label: "Saved",
     detail: `Matches version ${draft.revision} in your library.` };
   if (persistence?.baseline === "known") {
     const presets = persistence.dirtyPresets.length;
-    const what = [persistence.structureDirty ? "the collection name or preset order" : "",
+    const what = [persistence.structureDirty ? "the collection's name or order" : "",
       presets ? `${presets} ${presets === 1 ? "preset" : "presets"}` : ""].filter(Boolean).join(" and ");
     return { tone: "info" as const, label: "Unsaved changes",
-      detail: `Last saved as version ${draft.revision} in your library; saving creates version ${draft.revision + 1}. Changed since then: ${what}. Your draft autosaves on this computer.` };
+      detail: `Changed since version ${draft.revision}: ${what}. Saving makes version ${draft.revision + 1}.` };
   }
   return { tone: "neutral" as const, label: "Autosaved draft",
-    detail: `Started from version ${draft.revision} in your library. Your draft autosaves on this computer; Save to library keeps a new version.` };
+    detail: `Started from version ${draft.revision}. Save to keep a new version.` };
 }
 
 export function presetsPanel(rt: StudioRuntime): PanelController {
@@ -108,7 +108,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
     onClick: () => { if (rt.dispatch({ kind: "preset.edit", command: { kind: "restore" } })) rt.feedback.announce("Preset restored"); } });
   const importRecipe = button({ label: "Import recipe as preset…", icon: "import", small: true, variant: "quiet",
     onClick: () => void rt.file({ kind: "recipe.import" }) });
-  const failed = emptyState("Library unavailable", "The local library could not be read. Your draft layers are still editable; retry once the studio server is running.",
+  const failed = emptyState("Library unavailable", "Your library couldn't be read. Your draft still works. Try again, or restart XF Studio.",
     button({ label: "Retry", icon: "refresh", onClick: () => void rt.request({ kind: "initialize" }) }));
   const empty = emptyState("No presets yet", "A preset is one complete look — one choice in the in-game selector.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
@@ -215,9 +215,10 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     fileButtons.exportPlan, fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask));
   const filesTip = filesSection.querySelector<HTMLElement>(".help-tip")!;
   const element = h("div", { class: "panel-content" },
-    section({ title: "Local library", help: "Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft." },
+    section({ title: "Local library", help: ["Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.",
+      "Your draft also saves itself on this computer as you work."] },
       stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy)),
-    section("Saved collections", h("div", { class: "row between" }, h("span", { class: "muted small", text: "Opening keeps your current draft recoverable." }), refresh),
+    section({ title: "Saved collections", help: "Opening one keeps your current draft: Recover previous draft brings it back." }, h("div", { class: "row between" }, h("span"), refresh),
       savedEmpty, saved, h("div", { class: "row wrap gap-s" }, recover), recoverNote),
     filesSection);
   return {
@@ -346,15 +347,13 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
       finish.exportAdapter === "flat-provisional" ? "success" : "warning"))));
   const element = h("div", { class: "panel-content" },
-    section({ title: "Mod package", help: [`Builds your own copy of your XF mods from the current draft (including unsaved edits), ready for your mod manager.`,
-      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off.`,
-      "Your collection and library are never changed."] },
+    section({ title: "Mod package", help: [`Builds your own copy of your XF mods from your current draft, unsaved edits included.`,
+      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`] },
       mods, h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
     setup,
-    section({ title: "What can be packaged", help: ["Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole.",
-      "Experimental finishes are built from the game's own decal materials, but they may look different in game: nobody has checked them there yet.",
-      "Check decides; this list is a guide."] }, finishList));
+    section({ title: "What can be packaged", help: ["Check decides what is built; this list is a guide.",
+      "Preview-only layers are left out and named in the result. Experimental finishes may look different in game."] }, finishList));
   rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
@@ -367,7 +366,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
-      setText(progressText, working ? `${library.progress!.message} A started build can't be cancelled, and closing XF Studio doesn't stop it.` : "");
+      setText(progressText, working ? `${library.progress!.message} It can't be cancelled once started.` : "");
       const lastError = files.last && !files.last.ok && (files.last.kind === "package.check" || files.last.kind === "package.build") ? files.last : undefined;
       const signature = JSON.stringify([files.package, lastError, library.draft?.presets.map(p => [p.id, p.name])]);
       if (signature !== resultSignature) {
@@ -465,7 +464,7 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
       [`“${name(preset.id)}” in game`, String(preset.appearance ?? "")] as [string, string]))) : []),
     ["Collection fingerprint (SHA-256)", r.collectionSha256],
     ...r.products.flatMap(product => product.features.map(feature => [`${feature.label} fingerprint (SHA-256)`, feature.packagedSha256] as [string, string]))]));
-  if (pkg.freshness === "stale") card.append(note("This result describes an earlier snapshot of the draft. Run Check again before relying on it.", "warning"));
+  if (pkg.freshness === "stale") card.append(note("Your draft changed after this result. Run Check again.", "warning"));
   setAttr(card, "data-freshness", pkg.freshness);
   return card;
 }
