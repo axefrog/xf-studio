@@ -1,5 +1,5 @@
 {
- "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults",
+ "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only)",
  "recipes": {
   "eye-artistry/recipe-1": {
    "recipe": "bec95166e1104aeaccba8465585abc6b204848a14aae7bb2721f47049b573fc1",
@@ -551,7 +551,7 @@
      ]
     }
    ],
-   "plan": "2aecc3fba6d31347c276fb80694aac91d2e21e14b148c174f42de7df1730cb14",
+   "plan": "313d11f2c2dfb65647b366d24dae9cac6b6d507fd46d7f8f8b10330730c1a574",
    "compiled": {
     "route": "flat",
     "maps": {
@@ -598,7 +598,7 @@
       ]
      }
     ],
-    "plan": "e63944fe1443e120796087c9102fb758f4c890109d774864c93a784faff5ae88",
+    "plan": "80d4ba0bb57f637027138f54b44dc18828c5643a1975e66e19640f441aceae80",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -644,7 +644,7 @@
       ]
      }
     ],
-    "plan": "fc7e0083c1724956640060a80677a0933c9607ae090fb4d635b5b770a62e0045",
+    "plan": "05f9d322be2465db7141fb05e8558057b73ddeca085f4b03f5e3b99d2660d2cb",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -690,7 +690,7 @@
       ]
      }
     ],
-    "plan": "309df38cd6920ca1df55172ced230f070eebab792aa10560ce949633aa65c444",
+    "plan": "0479cbbe956f4994447a36ed70d140b94a4efa683f244e8993427babc035ca0a",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -736,7 +736,7 @@
       ]
      }
     ],
-    "plan": "c6f012f8d73ab67c01482d54d2ca99edf6cf3261a729d8884b949cfd27499a14",
+    "plan": "6278112b1f253d6f3e5e82b8800f0961e7820a206e54631074ea9efbd5837950",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -782,7 +782,7 @@
       ]
      }
     ],
-    "plan": "1281163bef18da2858247ef3206fc3ddb017dcba85489ff065e8627e272f050f",
+    "plan": "e7bf75e287583e3782dc5036312403441f11db351ecb761515891e081c203e88",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -828,7 +828,7 @@
       ]
      }
     ],
-    "plan": "9694e748121069de6e0a344c5e23c94c7b897ddeadc8f48095c598b668672efe",
+    "plan": "db354808fb0e3361a7397667c978fb0e0aafc6b8b73108b1a855d754c2b1b036",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -874,7 +874,7 @@
       ]
      }
     ],
-    "plan": "5fd086bd5f698b6b0dbd6f9fa4d710d7ee5b77ec3f5988990afa642a75053711",
+    "plan": "b0137f634f299e81967cbaea1f3eb67b3534fb4fb7fd3433b435a500fad2ae15",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -920,7 +920,7 @@
       ]
      }
     ],
-    "plan": "e63944fe1443e120796087c9102fb758f4c890109d774864c93a784faff5ae88",
+    "plan": "80d4ba0bb57f637027138f54b44dc18828c5643a1975e66e19640f441aceae80",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -966,7 +966,7 @@
       ]
      }
     ],
-    "plan": "28acc02ae8e7ec4d80149ec420c1c5309cb2ee670481bf3ce060756762e19132",
+    "plan": "1282e889ebf18114a473b4f46bc64d19032e0637ae8b70414d94c10035e4b2d0",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1012,7 +1012,7 @@
       ]
      }
     ],
-    "plan": "309df38cd6920ca1df55172ced230f070eebab792aa10560ce949633aa65c444",
+    "plan": "0479cbbe956f4994447a36ed70d140b94a4efa683f244e8993427babc035ca0a",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1058,7 +1058,7 @@
       ]
      }
     ],
-    "plan": "952cf56437fa2a8c2524ed4bc52ea1674e5307254776032222afcb45c1f16dce",
+    "plan": "680018953cf5ab1273be48db060ae00c0b97e2e7f15bf9bbcd09d79d8f6720de",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1104,7 +1104,7 @@
       ]
      }
     ],
-    "plan": "0b0ce5191562fa5824e98e655e1e825c115c8d671fe4ad03b69cbf195382e682",
+    "plan": "ecc33d6e57ac831ce44e0d2d2937edde4f741045ec98391a338bc2b3696960ae",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1150,7 +1150,7 @@
       ]
      }
     ],
-    "plan": "c25eef85b7dd7b3ae83342a90110c61b5600aa51fc39c52b940a10a53d6fe4c2",
+    "plan": "94e9482d335d7afb053f439cfb8d87fd3dcda404ac2138fafdb723567bb2eb10",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1196,7 +1196,7 @@
       ]
      }
     ],
-    "plan": "952cf56437fa2a8c2524ed4bc52ea1674e5307254776032222afcb45c1f16dce",
+    "plan": "680018953cf5ab1273be48db060ae00c0b97e2e7f15bf9bbcd09d79d8f6720de",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1235,7 +1235,7 @@
       ]
      }
     ],
-    "plan": "0fbc718e3db532caf9a877319658e8683a1bd72f2a156afe79e6974e34dc7306",
+    "plan": "f7c9abbb1fe1abc743f42101b8073612923bbeef913305ab31fac83e5e705ee8",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1274,7 +1274,7 @@
       ]
      }
     ],
-    "plan": "bf0a8086d8b6f888cfc1ff4f78afbdb7a6bee1c63e98113fab006505d160ba59",
+    "plan": "24ca4b5f770eb68c0f7d1c2d15e3b1dfd80863b1e85a4fd1f676ad3955cd28b1",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1469,7 +1469,7 @@
       ]
      }
     ],
-    "plan": "74a2157d57bcd8b643fad667b21f53b295a3b7d781100ef51ce76412f5a7b77e",
+    "plan": "82d8700de04a9961c384e4a421970ff15d0bd3275052c33f9495df93d0200130",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1508,7 +1508,7 @@
       ]
      }
     ],
-    "plan": "005fe9167af7b38f62cde89d55b1dce13bbc40e67eb356141549cbf862f78559",
+    "plan": "29547079ae689323a03a19be8e638a8ac82f1570bf14e93f869caecc577dbd27",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1547,7 +1547,7 @@
       ]
      }
     ],
-    "plan": "c912ae7cc0dfd564c0b031d587f9032c67d2264b51869cd67db4db6dfe3d2ce7",
+    "plan": "0ef569f26601676d858c761fd9966e866b9b1f31af119ce61352f80ffaedacef",
     "compiled": {
      "route": "flat",
      "maps": {
@@ -1921,24 +1921,24 @@
    "direct": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
     "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
-    "packaged": "5ea7ac5e02510335379219bde4f316a36c6b48302468f4f1fc758fd0d7e2322c"
+    "packaged": "5908f67ccf3961c254ce32884a6a02da2a1c75251b15dce6325894940ab28d20"
    },
    "minimal": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
     "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
-    "packaged": "5ea7ac5e02510335379219bde4f316a36c6b48302468f4f1fc758fd0d7e2322c"
+    "packaged": "5908f67ccf3961c254ce32884a6a02da2a1c75251b15dce6325894940ab28d20"
    },
    "collection-2": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
     "plan": "076624111a9a40aec4676ee2353980fea48941712f89597b5b307c584669d137",
-    "packaged": "5ea7ac5e02510335379219bde4f316a36c6b48302468f4f1fc758fd0d7e2322c"
+    "packaged": "5908f67ccf3961c254ce32884a6a02da2a1c75251b15dce6325894940ab28d20"
    }
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "direct": {
     "parsed": "f8375741933c8f24281b06d64d7ccdb5b6a2fea4d257d449fa07ba1236c34f56",
     "plan": "0f9406ce6ed08da528f95acda469f253b15aa782ca5dab72abcea1ec8466f748",
-    "packaged": "eeff614cb3596d2b9a9b95a5be597d348c5b1e9e2448fe2c32ced0a4c1f38411"
+    "packaged": "90fcf97932e366764ae3c69d950e19ac6330aed51da0b1ffb0f0f86a95b6c284"
    },
    "minimal": {
     "parsed": "f8375741933c8f24281b06d64d7ccdb5b6a2fea4d257d449fa07ba1236c34f56"
@@ -1951,7 +1951,7 @@
    "direct": {
     "parsed": "304fe2356856dac4fa0e52a18b2bec7e1f1a12413d8fab4a2820262f846a17e4",
     "plan": "34469f4214edeb50dd235a438f8459e63752e8fd971b346fa3d64fe368e96433",
-    "packaged": "2b11a905500ac8e3bbe6a55685e973e2044ba3bdb72f0dff2f6f096e2d34e36a"
+    "packaged": "aa9c80cdb1ea2e3abb161533a1f09a6112842e8429f4e270fa1fd693dfe8d28d"
    },
    "minimal": {
     "parsed": "304fe2356856dac4fa0e52a18b2bec7e1f1a12413d8fab4a2820262f846a17e4"
@@ -1964,7 +1964,7 @@
    "direct": {
     "parsed": "2827a08f547a7f3b741f9803879f53e40578674572b3dc44a8e2e40ead0840ee",
     "plan": "830b3596e4accb8239908a76c1fcce96ca742493242b8f443d313ca354e15dc5",
-    "packaged": "ff72b162de4e300571f804c3fe94340aea4656ebfe148067dcf216d253924a53"
+    "packaged": "0af680c90d5b93bf7becb15743319d7a5139acd52cf415775b8781c564d2bdc3"
    },
    "minimal": {
     "parsed": "2827a08f547a7f3b741f9803879f53e40578674572b3dc44a8e2e40ead0840ee"

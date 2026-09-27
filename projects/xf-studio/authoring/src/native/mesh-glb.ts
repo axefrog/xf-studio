@@ -318,12 +318,17 @@ function materialNames(mesh: RedObject, chunkCount: number): string[][] {
 
 /**
  * What a decode holds at its peak (NATIVE-58), estimated before anything is allocated: per vertex its decoded streams, their glTF form,
- * the writer's copies and the GLB (540–640 bytes measured for the character layout); per index its decoded, swapped, copied and written
- * forms; per morph delta row its decoded and written forms; per target on a chunk its sparse accessors' bytes and JSON.
+ * the writer's copies and the GLB (540–640 bytes measured for the character layout, with up to eight influences); per index its decoded,
+ * swapped, copied and written forms; per morph delta row its decoded and written forms; per target on a chunk its sparse accessors' bytes
+ * and JSON. What a vertex decodes grows with its layout only through its skin (every other usage decodes one element, UVs two): each
+ * influence past eight adds its index and weight bytes (NATIVE-65).
  */
-const PEAK_PER_VERTEX = 640, PEAK_PER_INDEX = 8, PEAK_PER_DELTA = 128, PEAK_PER_TARGET_CHUNK = 1024;
-function estimateBytes(chunks: readonly { numVertices: number; numIndices: number }[]): number {
-  return chunks.reduce((sum, chunk) => sum + chunk.numVertices * PEAK_PER_VERTEX + chunk.numIndices * PEAK_PER_INDEX, 0);
+const PEAK_PER_VERTEX = 640, PEAK_PER_INDEX = 8, PEAK_PER_DELTA = 128, PEAK_PER_TARGET_CHUNK = 1024, PEAK_PER_EXTRA_INFLUENCE = 2;
+function estimateBytes(chunks: readonly MeshChunk[]): number {
+  return chunks.reduce((sum, chunk) => {
+    const influences = 4 * chunk.elements.filter(element => element.usage === "PS_SkinIndices").length;
+    return sum + chunk.numVertices * (PEAK_PER_VERTEX + Math.max(0, influences - 8) * PEAK_PER_EXTRA_INFLUENCE) + chunk.numIndices * PEAK_PER_INDEX;
+  }, 0);
 }
 
 /** Write `chunks` as glTF meshes and nodes into `json` (after the rig's nodes). Returns the vertices written. */

@@ -96,7 +96,7 @@ export function openInputReference(options: { hints?: { enabled: boolean; set(en
     section.detail ? h("p", { class: "muted small", text: section.detail }) : null,
     h("dl", { class: "shortcut-list wide" }, section.rows.flatMap(row => [h("dt", {}, h("kbd", { text: row.input })),
       h("dd", {}, row.label, row.where ? h("span", { class: "reference-where", text: ` · ${row.where}` }) : null)]))));
-  const hints = options.hints ? new Toggle({ label: "Show input hints in the viewports", help: "A corner strip and target tooltips that follow the pointer and held keys.",
+  const hints = options.hints ? new Toggle({ label: "Show input hints", help: "Hints in the 3D view and UV map that follow the pointer and the keys you hold.",
     onChange: checked => options.hints!.set(checked) }) : undefined;
   hints?.update(options.hints!.enabled);
   const dialog = h("dialog", { class: "sheet reference-sheet", "aria-labelledby": "shortcuts-title" },

@@ -1,3 +1,5 @@
+import { applyLayoutAction, isLayoutAction, layoutCapability, parseLayoutLibrary, type LayoutAction, type LayoutLibrary } from "./layout-library";
+
 /** Workspace-only preferences. A dock implementation owns the meaning of `state`. */
 export type ThemePreference = "system" | "light" | "dark";
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -13,9 +15,11 @@ export type TourRecord = "completed" | "skipped" | "declined";
  * follows its manifest's default. Presentation state: the application never reads it, and a hidden module's actions stay dispatchable.
  * `folded`: the headings a panel shows folded (expander.ts), by the panel's own key for them (e.g. `character:head/Hair`); absent means
  * open. Presentation state, remembered so a folded section stays folded; stored only while something is folded.
+ * `layouts`: the saved layouts (layout-library.ts, view-graph-design.md §4.5); `layout` is the active one's live arrangement. Absent until
+ * the person first saves, renames or otherwise changes a layout.
  */
 export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout;
-  tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean>; folded?: string[] };
+  tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean>; folded?: string[]; layouts?: LayoutLibrary };
 export type UIPreferenceAction =
   | { kind: "theme.set"; theme: ThemePreference }
   | { kind: "inputHints.set"; enabled: boolean }
@@ -23,7 +27,8 @@ export type UIPreferenceAction =
   | { kind: "modules.set"; module: string; shown: boolean }
   | { kind: "layout.set"; layout?: DockLayout }
   | { kind: "folded.set"; keys: readonly string[]; folded: boolean }
-  | { kind: "tours.record"; tourId: string; outcome: TourRecord };
+  | { kind: "tours.record"; tourId: string; outcome: TourRecord }
+  | LayoutAction;
 export type UIPreferenceCapability = { available: boolean; reason?: string };
 
 const MAX_LAYOUT_BYTES = 128 * 1024;
@@ -123,6 +128,8 @@ export function parseUIPreferences(value: unknown): UIPreferences {
     if (candidate.researchTools === true) result.researchTools = true;
     const layout = parseDockLayout(candidate.layout);
     if (layout) result.layout = layout;
+    const layouts = parseLayoutLibrary(candidate.layouts, parseDockLayout);
+    if (layouts) result.layouts = layouts;
     if (candidate.modules && typeof candidate.modules === "object" && !Array.isArray(candidate.modules)) {
       const modules = Object.entries(candidate.modules).filter(([id, shown]) => moduleId(id) && typeof shown === "boolean").slice(0, MAX_MODULES);
       if (modules.length) result.modules = Object.fromEntries(modules) as Record<string, boolean>;
@@ -147,6 +154,7 @@ export class UIPreferenceActions {
   snapshot(): Readonly<UIPreferences> { return structuredClone(this.value); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   capability(action: UIPreferenceAction): UIPreferenceCapability {
+    if (isLayoutAction(action)) return layoutCapability(this.value, action, parseDockLayout);
     if (action.kind === "theme.set" && !theme(action.theme))
       return { available: false, reason: "Choose System, Light or Dark." };
     if (action.kind === "inputHints.set" && typeof action.enabled !== "boolean")
@@ -178,7 +186,8 @@ export class UIPreferenceActions {
   dispatch(action: UIPreferenceAction) {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
-    if (action.kind === "theme.set") this.value.theme = action.theme;
+    if (isLayoutAction(action)) this.value = applyLayoutAction(this.value, action, parseDockLayout);
+    else if (action.kind === "theme.set") this.value.theme = action.theme;
     else if (action.kind === "inputHints.set") this.value.inputHints = action.enabled;
     else if (action.kind === "researchTools.set") { if (action.enabled) this.value.researchTools = true; else delete this.value.researchTools; }
     else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };

@@ -1,7 +1,7 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, type TabItem } from "../components";
+  Toggle, ColorField, applyCapability, openMenu, openValuePopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ChoiceList, type TabItem } from "../components";
 import { h } from "../dom";
 
 type Mount = () => HTMLElement;
@@ -32,7 +32,8 @@ const MOUNTS: Record<string, Mount> = {
       button({ label: "More actions", icon: "more", iconOnly: true, variant: "ghost", menu: true, onClick: event => openMenu([{ kind: "action", label: "Duplicate", icon: "duplicate", run: () => {} }], event.currentTarget as Element, { label: "More actions" }) }),
       unavailable); },
   "lib-icon-button": () => h("div", { class: "row gap-s" }, iconButton({ label: "Close", icon: "close" }), iconButton({ label: "Hide Petal wash", icon: "eye", pressed: true, small: true }),
-    iconButton({ label: "Layout options", icon: "more", menu: true }), iconButton({ label: "Reset brows", icon: "reset", small: true })),
+    iconButton({ label: "Layout options", icon: "more", menu: true }), iconButton({ label: "Reset brows", icon: "reset", small: true }),
+    iconButton({ label: "Mirror sides: Brows", icon: "mirror", small: true, mode: true, pressed: true })),
   "lib-switch": () => { const t = new Toggle({ label: "Show my V's own makeup", help: "Draws the makeup saved with your V under your layers.", onChange: checked => t.update(checked) }); t.update(true); return t.element; },
   "lib-slider": () => { const s = new Slider({ label: "Opacity", min: 0, max: 1, step: .01, format: v => `${Math.round(v * 100)}%`, transaction: { edit: v => s.update(v) } }); s.update(.85); return s.element; },
   "lib-slider-value": () => { let value = .4; const s: SliderWithValue = new SliderWithValue({ label: "Brow raise", min: 0, max: 1, step: .05, format: v => `${Math.round(v * 100)} %`,
@@ -46,6 +47,16 @@ const MOUNTS: Record<string, Mount> = {
       onLinkChange: next => { linked = next; pair.update(values, { linked }); },
       transaction: { edit: edit => { if (edit.sides === "both") { values.left = values.right = edit.value; } else values[edit.sides] = edit.value; pair.update(values, { linked }); } } });
     pair.update(values, { linked }); return pair.element; },
+  "lib-bipolar": () => {
+    const make = (label: string, ends: { negative: string; positive: string }, start: number, mixed = false) => {
+      let value = start, isMixed = mixed;
+      const s: BipolarSlider = new BipolarSlider({ label, min: -100, max: 100, step: 1, unit: "%", ends,
+        transaction: { edit: v => { value = v; isMixed = false; s.update(value); } } });
+      s.update(value, { mixed: isMixed }); return s; };
+    const off = new BipolarSlider({ label: "Jaw sideways", min: -100, max: 100, step: 1, unit: "%", ends: { negative: "Left", positive: "Right" }, transaction: { edit: () => {} } });
+    off.update(0, { disabled: true, reason: "Your V's face isn't read yet." });
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, make("Look sideways", { negative: "Left", positive: "Right" }, 20).element,
+      make("Look up or down", { negative: "Down", positive: "Up" }, 0).element, make("Brow height", { negative: "Lower", positive: "Raise" }, -15, true).element, off.element)); },
   "lib-segmented": () => { const s: Segmented<string> = new Segmented({ label: "Show", options: [{ value: "both", label: "Both eyes" }, { value: "one", label: "Single eye" }], onSelect: v => s.update(v), compact: true });
     s.update("both"); return s.element; },
   "lib-color": () => { const c: ColorField = new ColorField({ label: "Colour", transaction: { edit: v => c.update(v) } }); c.update("#b0587a"); return c.element; },
@@ -73,6 +84,9 @@ const MOUNTS: Record<string, Mount> = {
   "lib-reason-tip": () => { const b = button({ label: "Build mod files", icon: "package", onClick: () => {} }); applyCapability(b, { available: false, reason: "Choose your game folder first." }); return b; },
   "lib-menu": () => button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },
     { kind: "action", label: "Duplicate", icon: "duplicate", shortcut: "Ctrl+D", run: () => {} }, { kind: "action", label: "Merge down", icon: "layers", capability: { available: false, reason: "The bottom layer has nothing below it." }, run: () => {} },
+    { kind: "action", label: "Save as new layout…", icon: "plus", run: () => openValuePopover({ kind: "text", label: "Name", value: "Layout 2", maxLength: 48 },
+      { x: 120, y: 120 }, { title: "Save layout", apply: "Save", options: [{ label: "Remember shown modules", checked: true }, { label: "Switch to it in wide windows", checked: false }],
+        commit: () => {} }) },
     { kind: "separator" }, { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => {} }], event.currentTarget as Element, { label: "Layer actions" }) }),
   "lib-item-list": () => { let items = [{ id: "a", name: "Petal wash", meta: "Matte" }, { id: "b", name: "Liner", meta: "Glossy" }]; let selected = "a";
     const list: ItemList<{ id: string; name: string; meta: string }> = new ItemList({ label: "Sample layers", noun: "layer", maxLength: 40,
@@ -99,15 +113,32 @@ const MOUNTS: Record<string, Mount> = {
       { id: "pack-b", label: "Photo poses", secondary: "Photo Mode Unlocker", rows: Array.from({ length: 12 }, (_, i) => ({ id: `q-${i}`, label: `Portrait ${i + 1}` })) },
       { id: "pack-c", label: "Empty pack", rows: [] }];
     const toggle = (id: string) => { if (favourites.has(id)) favourites.delete(id); else favourites.add(id); paint(); };
-    const tree: TreeView = new TreeView({ label: "Sample poses", onActivate: id => { current = id; paint(); },
+    const tree: TreeView = new TreeView({ label: "Sample poses", maxRows: 8, minRows: 3, onActivate: id => { current = id; paint(); },
       onToggle: (id, open) => { if (open) expanded.add(id); else expanded.delete(id); paint(); },
       onKey: (event, item) => { if (item.kind === "row" && event.key.toLowerCase() === "f" && !event.ctrlKey) { toggle(item.id); return true; } },
       trailing: row => favouriteToggle({ on: favourites.has(row.id), what: row.label, onToggle: () => toggle(row.id) }) });
     const paint = () => tree.update({ groups: groups(), expanded, current });
     paint();
-    tree.element.style.height = "220px";
     const search = new SearchField({ label: "Search sample poses", placeholder: "Search poses (Down moves into the list)", onFilter: () => {}, onArrowDown: () => tree.focus() });
     return h("div", { style: "max-width:420px" }, stack({ gap: "normal" }, search.element, tree.element)); },
+  "lib-choice-list": () => {
+    const body: ChoiceList<string> = new ChoiceList<string>({ label: "Body", reserveNote: true, onSelect: value => body.update(value, undefined, { note: value === "still" ? "" : "Loading that idle; the previous one plays until it's ready." }),
+      options: [["still", "Still"], ["closeup", "Creator close-up"], ["eyes", "Creator close-up eyes section"], ["full", "Creator full body"], ["inventory", "Inventory"],
+        ["nails", "Creator nails"], ["gender", "Gender selection"]].map(([value, label]) => ({ value: value!, label: label! })) });
+    // One choice unavailable, with its reason (focus or hover it for the reason tip).
+    const unprepared = (value: string) => value === "nails" ? { available: false, reason: "That idle isn't prepared on this computer." } : { available: true };
+    body.update("closeup", unprepared);
+    // The whole list unavailable: one reason, on its reserved line.
+    const waiting: ChoiceList<string> = new ChoiceList<string>({ label: "Body (before the 3D preview is ready)", reserveNote: true, quietReason: true, onSelect: () => {},
+      options: [{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "full", label: "Creator full body" }] });
+    waiting.update("still", undefined, { disabled: true, reason: "Your V's motion appears once the 3D preview is ready." });
+    const eyes: ChoiceList<string> = new ChoiceList<string>({ label: "Eye shape in the 3D view", layout: "tiles", onSelect: value => eyes.update(value),
+      options: Array.from({ length: 22 }, (_, k) => ({ value: String(k), label: String(k + 1), name: `Eye shape ${k + 1}` })) });
+    eyes.update("6");
+    const head: ChoiceList<string> = new ChoiceList<string>({ label: "Head used for the eye plate", layout: "rows", onSelect: value => head.update(value),
+      options: [{ value: "installed", label: "The head your game loads (recommended)" }, { value: "base-game", label: "The unmodified game head" }] });
+    head.update("installed");
+    return h("div", { style: "max-width:420px" }, stack({ gap: "loose" }, body.element, waiting.element, eyes.element, head.element)); },
   "lib-folder-setting": () => {
     let chosen: string | null = null;
     const folder: FolderSetting = new FolderSetting({ label: "Saves folder", help: "Where the game keeps your saves.", placeholder: "e.g. %USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077",
@@ -117,7 +148,14 @@ const MOUNTS: Record<string, Mount> = {
       onUseDetected: async () => { chosen = null; folder.update({ chosen, detected }); return { ok: true }; } });
     const detected = "%USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077";
     folder.update({ chosen, detected });
-    return h("div", { style: "max-width:520px" }, folder.element); },
+    // Several folders found (the game through Steam and GOG): all shown as choices, the one in use pressed.
+    const found = [{ path: "D:\Steam\steamapps\common\Cyberpunk 2077", source: "Steam" }, { path: "E:\GOG Games\Cyberpunk 2077", source: "GOG, Mod Organizer 2" }];
+    let game: string | null = found[0]!.path;
+    const games: FolderSetting = new FolderSetting({ label: "Cyberpunk 2077 folder", help: "The folder the game is installed in.",
+      onChoose: async path => { game = path; games.update({ chosen: game, found }); return { ok: true }; },
+      onSelect: async path => { game = path; games.update({ chosen: game, found }); return { ok: true }; } });
+    games.update({ chosen: game, found });
+    return h("div", { style: "max-width:520px" }, stack({ gap: "loose" }, folder.element, games.element)); },
   "lib-split-view": () => { const tree = h("ul", { class: "save-tree" }, ...["GameSessionDesc", "DynamicEntityIDSystem", "TypeDatabase_v2"].map(name => h("li", { class: "save-tree-row" }, h("span", { class: "save-tree-name", text: name }))));
     return new SplitView({ label: "the sample tree and inspector", key: "guide.split", initial: .45, min: 140, start: tree,
       end: blockSection({ title: "GameSessionDesc" }, propertyList([["Kind", "Holds child nodes"], ["Size", "58 B"]])) }).element; },

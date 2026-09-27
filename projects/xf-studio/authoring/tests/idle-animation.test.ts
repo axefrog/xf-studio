@@ -40,9 +40,14 @@ test("a face with a one-shot showcase plays it once from when it is chosen, then
   // Past the first pass only the loop part repeats: 11 s is 4 + (11 - 4) % 6 = 5.
   idle.seek(11); expect(idle.faceTime()).toBeCloseTo(5, 6); expect(target.position.x).toBeCloseTo(5, 5);
   idle.seek(16); expect(idle.faceTime()).toBeCloseTo(4, 6);
-  // Chosen again later (another idle, then this one): its showcase starts from that moment.
+  // Chosen again later during playback (another idle, then this one): its showcase starts from that moment.
   idle.setClips(bodyClip, faceClip, 4);
-  idle.seek(18); expect(idle.faceTime()).toBeCloseTo(2, 6);
+  for (let i = 0; i < 20; i++) idle.update(0.1);
+  expect(idle.faceTime()).toBeCloseTo(2, 6);
+  // A seek counts the showcase from motion zero, whenever it was chosen (PREV-134): before the choice's moment it used to hold the
+  // showcase's first frame, and after it the pose depended on when the idle was chosen.
+  idle.seek(2); expect(idle.faceTime()).toBeCloseTo(2, 6); expect(target.position.x).toBeCloseTo(2, 5);
+  idle.seek(11); expect(idle.faceTime()).toBeCloseTo(5, 6);
   // Without a loop start the whole clip loops, as before.
   idle.setClips(bodyClip, faceClip);
   idle.seek(12); expect(idle.faceTime()).toBeCloseTo(2, 6);
@@ -267,4 +272,24 @@ test("with the puppet's deformation rig, a helper joint follows the joint the ri
   // Without the rig it goes back to its nearest segment (the arm, which doesn't move here).
   idle.setDeformations([]); idle.seek(1); armature.updateMatrixWorld(true);
   expect(helper.getWorldPosition(new THREE.Vector3()).toArray().map(x => +x.toFixed(6))).toEqual([0.2, 1.25, 0.02]);
+});
+
+test("a bound bone's offset at a motion time is measured without moving anything (PREV-133)", () => {
+  const body = new THREE.Group(), head = new THREE.Bone(); head.name = "Head"; body.add(head);
+  const preview = new THREE.Group(), target = new THREE.Bone(); target.name = "Head"; preview.add(target); preview.updateMatrixWorld(true);
+  // The head rises 1 cm by 1 s and back by 2 s.
+  const bodyClip = new THREE.AnimationClip("body", 2, [new THREE.VectorKeyframeTrack("Head.position", [0, 1, 2], [0, 0.02, 0, 0, 0.03, 0, 0, 0.02, 0])]);
+  const idle = new IdleAnimation(body, bodyClip, [target], {});
+  expect(idle.offsetAt("Head", 0).toArray()).toEqual([0, 0, 0]); // the idle off
+  idle.setEnabled(true);
+  for (let i = 0; i < 5; i++) idle.update(0.1);
+  const pose = target.position.toArray(), time = idle.time;
+  // At phase zero the head sits 2 cm up from its bind (the clip's first key), at 1 s 3 cm.
+  expect(idle.offsetAt("Head", 0).y).toBeCloseTo(0.02, 7);
+  expect(idle.offsetAt("Head", 1).y).toBeCloseTo(0.03, 7);
+  expect(target.position.toArray()).toEqual(pose);
+  expect(idle.time).toBe(time);
+  idle.update(0);
+  expect(target.position.toArray()).toEqual(pose);
+  expect(idle.offsetAt("Nowhere", 0).toArray()).toEqual([0, 0, 0]);
 });

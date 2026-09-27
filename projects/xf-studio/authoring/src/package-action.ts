@@ -29,7 +29,7 @@ export async function requestPackage(action: PackageAction, collection: unknown)
   const response = await fetch("/api/package", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, collection }) });
   if (!(response.headers.get("Content-Type") ?? "").includes("application/json"))
-    throw new PackageRequestError("transport", "Restart the studio server to enable local package builds.");
+    throw new PackageRequestError("transport", "Restart XF Studio to build mod files.");
   const result = await response.json();
   if (!response.ok) throw new PackageRequestError(result.code ?? "package_failed", result.error ?? "Package request failed.");
   return result;

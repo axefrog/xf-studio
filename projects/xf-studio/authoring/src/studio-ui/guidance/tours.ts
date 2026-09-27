@@ -32,7 +32,7 @@ export const TOURS: readonly Tour[] = [
       { anchor: "header.save", content: { title: "Keep your work in the library",
         body: "**Save** ([[key:shell.save]]) keeps your collection in the local library, with its earlier versions. Your draft also saves itself between sessions, so closing the app never loses work." } },
       { anchor: "header.package", content: { title: "Make your mod",
-        body: "When your looks are ready, open **Mod package**.\n\n- **Check** lists which looks can become mod files, and names anything that would be left out and why. It needs no game files.\n- **Build** makes the mod files. Nothing is installed in your game for you." },
+        body: "When your looks are ready, open **Mod package**.\n\n- **Check** lists which looks can become mod files, and names anything that would be left out and why. It needs no game files.\n- **Build** makes the mod files. **Add to my mod manager** adds them to your game when you choose to." },
         buttons: [{ label: "Open Mod package", action: { kind: "panel", panel: "package" } }] },
       { anchor: "header.help", content: { title: "Help is always here",
         body: "Open **Help** with [[key:shell.help]] for tours, answers and every keyboard and mouse shortcut. [[key:shell.palette]] finds any command by name." } },

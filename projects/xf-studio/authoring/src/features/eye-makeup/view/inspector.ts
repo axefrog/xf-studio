@@ -10,6 +10,7 @@ import type { MottleKey, RecipeAction } from "../../../engines/layered-makeup/re
 import type { ReadonlyDeep } from "../../../read-only";
 import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../../../studio-ui/controls";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
+import { ChoiceList, setHelp } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import type { Frame } from "../../../studio-ui/runtime";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -63,7 +64,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   // Finishes are grouped by export status, so each row's length is intentional and every group
   // heading is the one status line its cards share. Cards show the short name only; synonyms and
   // the full name are in the tooltip and the description line.
-  const statusText = { "flat-provisional": "Exports", experimental: "Experimental", none: "Preview only" } as const;
+  const statusText = { "flat-provisional": "Can be built", experimental: "Experimental", none: "Preview only" } as const;
   const finishButtons = catalogues(ctx).finishes.map(finish => {
     const element = h("button", { class: "finish-option", type: "button", "aria-pressed": "false", "data-finish": finish.id,
       "aria-label": `${finish.shortLabel}, ${statusText[finish.exportAdapter].toLowerCase()}` },
@@ -97,11 +98,12 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       transaction: recipeTransaction<number>(ctx, "shift-strength", (layer, value) => ({ kind: "layer.setShift", layerId: layer.id, key: "strength", value })) }),
   };
   // What the shift is, in the heading's help tip (help-tip.ts).
-  const shiftSection = section({ title: "Colour shift", help: ["The shift colour is added toward the edges of the lid as the view angle grows, the way the game's gradient-recolour decal adds its Fresnel colour.",
-    "One shift colour per preset exports; it is not thin-film or multichrome."] }, h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element));
+  const shiftSection = section({ title: "Colour shift", help: ["The shift colour shows toward the lid's edges as the view angle grows.",
+    "One shift colour per preset is built into your mod."] }, h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element));
 
   // Glitter preview suite and flake studies.
-  const model = new SelectField<GlitterModel>({ label: "Glitter preview model", onChange: value => {
+  // Five models with long names, all shown (ChoiceList `rows`); a research tool.
+  const model = new ChoiceList<GlitterModel>({ label: "Glitter preview model", layout: "rows", onSelect: value => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
   } });
   const modelSummary = note("");
@@ -143,8 +145,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   };
   // Choosing among the Glitter model studies is a research tool (UI-85); everyone edits the layer's own model.
   const modelChoice = h("div", { class: "research-only" }, model.element, modelSummary);
-  const glitterSection = section("Glitter", modelChoice,
-    note("Preview only: Glitter can't be built into a mod yet, so it is left out of your mod files. Layer colour sets the base colour; facet colour is separate.", "warning"));
+  // That Glitter isn't built into mods is said once, by the finish's export line; the section says only how its colours work.
+  const glitterSection = section({ title: "Glitter", help: "Layer colour is the base; the flakes have their own colour." }, modelChoice);
   const classicSection = section({ title: "Flakes", help: ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."] },
     classic.cells.element, classic.density.element, classic.tilt.element);
   const irregularSection = section("Irregular flakes", irregular.count.element, measurement, irregular.radius.element, irregular.spread.element, irregular.tilt.element, irregular.color.element);
@@ -170,7 +172,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         setAttr(element, "aria-pressed", String(finish.id === current));
         const choice = choices.find(item => item.value === finish.id);
         element.disabled = !!choice && !choice.capability.available && finish.id !== current;
-        element.title = `${finish.label} — ${statusText[finish.exportAdapter]}. ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
+        element.title = `${finish.label}. ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
       }
       const descriptor = catalogues(ctx).finishes.find(finish => finish.id === current);
       setText(description, descriptor ? `${descriptor.aliases.length ? `${descriptor.shortLabel} (also ${descriptor.aliases.join(", ")}). ` : ""}${descriptor.description}` : "");
@@ -180,8 +182,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         exportLine.dataset.finish = key;
         const earlier = !!status && !status.exportable && status.blockedBy === "layer" && descriptor?.exportAdapter === "experimental";
         const byPreset = !!status && !status.exportable && status.blockedBy === "preset";
-        exportLine.replaceChildren(!status?.exportable ? badge(earlier ? "Earlier preview model" : byPreset ? "Left out of this preset" : "Preview only", "warning")
-          : status.experimental ? badge("Experimental", "warning") : badge("Can be built", "success"),
+        // The finish's group heading already says Can be built, Experimental or Preview only: a badge shows only a state that differs from it.
+        exportLine.replaceChildren(...(earlier || byPreset ? [badge(earlier ? "Earlier preview model" : "Left out of this preset", "warning")] : []),
           h("span", { class: "small", text: status ? (status.exportable ? status.note : status.reason) : descriptor?.exportNote ?? "" }),
           ...(earlier ? [useGame] : []), openPackage);
       }
@@ -199,14 +201,17 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       directSection.hidden = !(glitter && ["direct", "clustered", "fine"].includes(modelId));
       if (glitter) {
         const modelChoices = ctx.facade.choicesFor(target, "glitter.selectModel", "model");
-        model.update(catalogues(ctx).glitterModels.map(item => ({ value: item.id, label: item.label,
-          disabled: modelChoices.find(choice => choice.value === item.id)?.capability.available === false && item.id !== modelId })), modelId);
+        model.setOptions(catalogues(ctx).glitterModels.map(item => ({ value: item.id, label: item.label })));
+        model.update(modelId, value => modelChoices.find(choice => choice.value === value)?.capability ?? { available: true });
         setText(modelSummary, catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
       }
       if (!classicSection.hidden) {
         const flakesTitle = glitter ? "Classic reflective flakes" : "Shimmer flakes";
         setText(classicSection.querySelector(".section-title")!, flakesTitle);
         setAttr(classicSection.querySelector(".help-tip")!, "aria-label", `About ${flakesTitle}`);
+        // Shimmer is an experimental export; classic Glitter is preview only, so its tip doesn't call it experimental.
+        setHelp(classicSection.querySelector<HTMLElement>(".help-tip")!, glitter ? "Turn the head to see the flakes catch the light."
+          : ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."]);
         // A layer without stored flakes shows the classic model's defaults from the catalogue (UI-93).
         const legacy = flakes && !("model" in flakes) ? flakes as ReadonlyDeep<LegacyFlakes> : glitterModel.defaults as { cells: number; density: number; tilt: number };
         classic.cells.update(legacy.cells); classic.density.update(legacy.density); classic.tilt.update(legacy.tilt);
@@ -226,7 +231,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       }
       if (!directSection.hidden && flakes && "model" in flakes && flakes.model !== "irregular-planar-1") {
         const f = flakes as ReadonlyDeep<DirectGlintFlakes>;
-        setText(direct.density.element.querySelector(".control-label span")!, f.model === "uv-cell-direct-1" ? "Facet density" : "Maximum facet density");
+        setText(direct.density.element.querySelector(".control-label-text > span")!, f.model === "uv-cell-direct-1" ? "Facet density" : "Maximum facet density");
         direct.density.update(f.density); direct.fineShare.update(f.fineShare); direct.strength.update(f.strength); direct.color.update(f.color);
       }
     },
@@ -250,9 +255,9 @@ export function shapePanel(ctx: EyeMakeupViewContext): PanelController {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "enable-bezier" } });
   } });
   const modes = new Segmented<"aligned" | "symmetric" | "corner">({ label: "Selected point handles", options: [
-    { value: "aligned", label: "Smooth", title: "Aligned arms with independent lengths" },
-    { value: "symmetric", label: "Symmetric", title: "Opposite arms with equal lengths" },
-    { value: "corner", label: "Corner", title: "Independent arms" }],
+    { value: "aligned", label: "Smooth", title: "Handles in line, lengths free" },
+    { value: "symmetric", label: "Symmetric", title: "Handles in line, same length" },
+    { value: "corner", label: "Corner", title: "Each handle free" }],
   onSelect: mode => { const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "path.edit", layerId: layer.id, command: { kind: "point-mode", index: ctx.facade.view().selected(), mode } }); } });
   const pathNote = note("");
   const mirror = new Toggle({ label: "Mirror across the face", onChange: checked => {
@@ -265,7 +270,8 @@ export function shapePanel(ctx: EyeMakeupViewContext): PanelController {
     h("p", { class: "muted small", text: "The same gestures work in the UV map and on the head. Press ? for every binding." }));
   const body = h("div", { class: "stack" },
     section("Contour point", h("div", { class: "row between" }, h("div", { class: "row gap-xs" }, prev, pointLabel, next), remove)),
-    section("Curve", enable, modes.element, pathNote),
+    section({ title: "Curve", help: ["Smooth keeps a point's two handles in line. Symmetric also keeps them the same length. Corner moves each on its own.",
+      "Drag the gold handles in the UV map or on the head. They are guides, so they may cross the eye opening."] }, enable, modes.element, pathNote),
     section("Symmetry", mirror.element),
     gestures);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
@@ -282,9 +288,9 @@ export function shapePanel(ctx: EyeMakeupViewContext): PanelController {
       const bezier = layer.pathMode === "bezier";
       enable.hidden = bezier; modes.element.hidden = !bezier;
       modes.update(point?.handles?.mode);
-      setText(pathNote, bezier
-        ? "Drag the gold tangent handles in the UV map or on the head. Smooth keeps arms aligned; Symmetric also matches lengths; Corner moves each independently. Handles may cross the eye opening — they are guides, not surface anchors."
-        : "This saved shape uses automatic curves. Enable Bézier handles to edit tangents; the curve is preserved, though finer sampling can change edge pixels slightly. Undo restores it.");
+      // How the handles work is the Curve heading's help tip; the line says only what to do with an automatic curve.
+      setText(pathNote, bezier ? "" : "This shape uses automatic curves. Choose Enable Bézier handles to edit them; Undo takes it back.");
+      pathNote.hidden = bezier;
       mirror.update(layer.symmetry);
     },
   };
@@ -294,18 +300,19 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
   const strip = layerStrip(ctx), empty = noLayer(ctx);
   const weight = new Slider({ label: "Selected point pigment", ...ctx.range("pigment.edit", "value", "point-strength"), step: .01, format: pct,
     transaction: recipeTransaction<number>(ctx, "weight", (layer, value) => ({ kind: "pigment.edit", layerId: layer.id, command: { kind: "point-strength", index: ctx.facade.view().selected(), value } })) });
-  const smooth = new Toggle({ label: "Smooth point gradients", onChange: enabled => {
+  const smooth = new Toggle({ label: "Smooth point gradients", help: "Blends pigment smoothly between points. Off keeps this layer's original blending.", onChange: enabled => {
     const layer = ctx.facade.view().layer(); if (!layer) return;
     ctx.facade.controlBegin("smooth-strength", layer.id);
     const outcome = ctx.facade.controlEdit("smooth-strength", { kind: "pigment.edit", layerId: layer.id, command: { kind: "smooth-strength", enabled } });
     if (!outcome.ok) ctx.feedback.toast("warning", "Pigment & edge", outcome.message);
     ctx.facade.controlCommit("smooth-strength");
   } });
+  // Its reason line is reserved (UI-90), so the one thing to do shows while it is unavailable.
   const blend = new Slider({ label: "Point blend", ...ctx.range("pigment.edit", "value", "strength-blend"), step: ctx.range("pigment.edit", "value", "strength-blend").min, format: uvPct,
+    reserveNote: true, help: "How far pigment blends between neighbouring points. More blend softens the differences; a point at 0% may keep a little pigment.",
     transaction: recipeTransaction<number>(ctx, "strength-blend", (layer, value) => layer.strength.mode === "smooth-boundary"
       ? { kind: "pigment.edit", layerId: layer.id, command: { kind: "strength-blend", value } } : undefined) });
-  const pigmentNote = note("");
-  const variable = new Toggle({ label: "Per-point edge softness", onChange: enabled => {
+  const variable = new Toggle({ label: "Per-point edge softness", help: "Give each point its own edge width; widths blend between points. Turning this off keeps your point settings.", onChange: enabled => {
     const layer = ctx.facade.view().layer(); if (!layer) return;
     ctx.facade.controlBegin("variable-softness", layer.id);
     const outcome = ctx.facade.controlEdit("variable-softness", { kind: "softness.edit", layerId: layer.id, command: { kind: "variable-softness", enabled } });
@@ -313,14 +320,14 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
     ctx.facade.controlCommit("variable-softness");
   } });
   const width = new Slider({ label: "Edge softness", ...ctx.range("softness.edit", "value", "uniform-softness"), step: .0005, format: uvPct,
+    help: "How far the edge fades out. Very soft edges can reach nearby sharp edges in narrow shapes.",
     transaction: recipeTransaction<number>(ctx, "feather", (layer, value) => ({ kind: "softness.edit", layerId: layer.id,
       command: layer.softness.mode === "boundary" ? { kind: "point-softness", index: ctx.facade.view().selected(), value } : { kind: "uniform-softness", value } })) });
-  const softnessNote = note("");
   const pointLabel = h("span", { class: "muted small" });
   const mottle = mottleSection(ctx);
   const body = h("div", { class: "stack" },
-    section("Pigment strength", pointLabel, weight.element, smooth.element, blend.element, pigmentNote),
-    section("Edge softness", variable.element, width.element, softnessNote), mottle.element);
+    section({ title: "Pigment strength", help: "Select points in the UV map or on the head to set each one's pigment." }, pointLabel, weight.element, smooth.element, blend.element),
+    section("Edge softness", variable.element, width.element), mottle.element);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
     spec: { id: "edge", ...EYE_MAKEUP_PANEL_META.edge, element },
@@ -329,22 +336,16 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
       const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       const point = layer.points[frame.selected];
-      setText(pointLabel, `Editing point ${frame.selected + 1} of ${layer.points.length} · select points in the UV map or on the head`);
+      setText(pointLabel, `Point ${frame.selected + 1} of ${layer.points.length}`);
       weight.update(point?.weight);
       const smoothMode = layer.strength.mode === "smooth-boundary";
       smooth.update(smoothMode);
       blend.update(smoothMode ? (layer.strength as { blend: number }).blend : undefined,
-        { disabled: !smoothMode, reason: "Enable smooth point gradients to adjust blending." });
-      setText(pigmentNote, smoothMode
-        ? "Point strength blends pigment across the shape. More blend softens differences between nearby points; a zero point may retain some pigment. Edge softness controls the outline separately."
-        : "Original point blending is preserved for this layer. Enable smooth gradients to remove internal strength seams; Undo restores the previous look.");
+        { disabled: !smoothMode, reason: "Turn on Smooth point gradients to blend points." });
       const perPoint = layer.softness.mode === "boundary";
       variable.update(perPoint);
-      setText(width.element.querySelector(".control-label span")!, perPoint ? "Selected point softness" : "Edge softness");
+      setText(width.element.querySelector(".control-label-text > span")!, perPoint ? "Selected point softness" : "Edge softness");
       width.update(perPoint ? point?.feather ?? layer.feather : layer.feather);
-      setText(softnessNote, perPoint
-        ? "Widths blend between points; very soft edges can influence nearby sharp edges in narrow shapes. Turning this off keeps your point settings."
-        : "One fade width around the whole shape. Enable per-point softness to vary the edge independently of pigment strength.");
       mottle.update(layer);
     },
   };
@@ -433,7 +434,8 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
   let signature = "";
   const selected = section("Selected warp", reach.element, h("div", { class: "row wrap gap-s" }, clear, remove));
   const body = h("div", { class: "stack" },
-    section({ title: "Warps", help: "A warp bends the makeup mask, not the face. Its pull fades smoothly beyond the reach ring; overlapping warps add together." },
+    section({ title: "Warps", help: ["A warp bends the makeup, not the face. Overlapping warps add together.",
+      "On the map: the circle is its position, the square its pull and the dashed ring its reach."] },
       h("div", { class: "row between" }, chips, add), fieldNote), selected);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
@@ -461,9 +463,9 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
         applyCapability(clear, ctx.facade.contextCapability(target, { kind: "field.clear", layerId: layer.id, fieldId: field.id }));
         applyCapability(remove, ctx.facade.contextCapability(target, { kind: "field.remove", layerId: layer.id, fieldId: field.id }));
       }
-      setText(fieldNote, field
-        ? `Circle: position · square: pull · dashed ring: reach. ${layer.fields.length} warp${layer.fields.length === 1 ? "" : "s"} on this layer.`
-        : "No warps. Add a warp, then drag its square in the UV map or on the head to pull the makeup.");
+      // The legend lives in the Warps help tip and the chips show the count; the line only helps with the first warp.
+      setText(fieldNote, layer.fields.length ? "" : "No warps yet. Add one, then drag its square to pull the makeup.");
+      fieldNote.hidden = layer.fields.length > 0;
     },
   };
 }

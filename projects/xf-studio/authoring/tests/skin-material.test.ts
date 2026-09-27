@@ -6,6 +6,7 @@ import type { RenderChunkMaterial, RenderSkinProfile, RenderTexture } from "../s
 import { createSkinMaterial, imageTexels, patchSkinShader, SKIN_TEMPLATE_DEFAULTS, skinBaseColour, skinBaseImage, skinBaseTexels, skinLobes, skinParameters,
   skinRoughness, tintChannel, tintUnits, VANILLA_SKIN_PROFILE } from "../src/skin-material";
 import { sampleUnderlayAlbedo } from "../src/brow-material";
+import { passParticipation } from "../src/platform/api/scene";
 
 const close = (a: readonly number[], b: readonly number[], digits = 6) => a.forEach((value, k) => expect(value).toBeCloseTo(b[k]!, digits));
 const profile = (values: Partial<RenderSkinProfile> = {}): RenderSkinProfile => ({ depotPath: "engine\\materials\\defaults\\default.sp", archive: "x.archive",
@@ -141,7 +142,7 @@ describe("skin shader", () => {
   const program = () => ({ vertexShader: "#include <common>", fragmentShader: ["#include <common>", "#include <lights_physical_pars_fragment>",
     "void main() {", "#include <map_fragment>", "#include <roughnessmap_fragment>", "#include <metalnessmap_fragment>",
     "#include <normal_fragment_begin>", "#include <normal_fragment_maps>", "#include <lights_physical_fragment>", "#include <lights_fragment_begin>",
-    "#include <lights_fragment_maps>", "#include <lights_fragment_end>", "}"].join("\n") });
+    "#include <lights_fragment_maps>", "#include <lights_fragment_end>", "#include <dithering_fragment>", "}"].join("\n") });
 
   test("the patch finds every chunk it needs in this Three.js build and replaces the lighting with the skin's", () => {
     const shader = patchSkinShader(program());
@@ -157,6 +158,14 @@ describe("skin shader", () => {
     expect(f).toContain("float xfsTintWeight = abs( xfsTint.w ) * xfsM.x;");
     expect(f).toContain("xfsTint.w >= 0.0 ? xfsTint.rgb * xfsA : xfsOverlay( xfsA, xfsTint.rgb )");
     expect(f).toContain("xfsA + xfsTintWeight * ( clamp( xfsTinted, 0.0, 1.0 ) - xfsA )");
+    // The wrap is gated by the host (off while the screen-space scatter runs), and the scatter-input variant writes E, class depth,
+    // √albedo with the slot, and the metalness (research/materials/shader-skin.md §11.3).
+    expect(f).toContain("xfsWrapGate * xfsWrap");
+    expect(f).toContain("xfsScatterE += directLight.color * wrapped * burley * BRDF_Lambert( vec3( 1.0 - material.metalness ) );");
+    expect(f).toContain("gl_FragColor = vec4( xfsScatterE, vViewPosition.z );");
+    expect(f).toContain("( xfsScatterSlot + 1.0 ) / 8.0");
+    expect(f).toContain("layout( location = 2 ) out highp vec4 xfsScatterOut2;");
+    expect(f.indexOf("#include <dithering_fragment>")).toBeLessThan(f.indexOf("gl_FragColor = vec4( xfsScatterE"));
   });
 
   test("a Three.js build without an expected chunk fails loudly instead of drawing a wrong skin", () => {
@@ -177,7 +186,11 @@ describe("skin shader", () => {
     expect((shader.uniforms.xfsSkinScalars!.value as THREE.Vector4).w).toBe(1);
     handle.setNormals(false);
     expect((shader.uniforms.xfsSkinScalars!.value as THREE.Vector4).w).toBe(0);
-    expect(material.customProgramCacheKey()).toBe("xfs-skin-1");
+    expect(material.customProgramCacheKey()).toBe("xfs-skin-2");
+    // A Subsurface surface for the host's scatter: its profile, its slot uniform and its wrap gate.
+    expect(passParticipation(material)).toMatchObject({ role: "skin", profile: { blurSize: 2.5, falloff: [255, 155, 119] } });
+    expect(passParticipation(material)!.slot).toBe(shader.uniforms.xfsScatterSlot as never);
+    expect(passParticipation(material)!.wrapGate).toBe(shader.uniforms.xfsWrapGate as never);
   });
 });
 
