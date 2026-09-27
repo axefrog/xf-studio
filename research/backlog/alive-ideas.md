@@ -26,6 +26,20 @@
 
 ### The world
 
+- **NPCs who notice V (appearance and context awareness).** NPCs react to how V looks and what V drives, relative to where V is:
+  - naked: shock or amusement;
+  - clownish or out-of-place outfits: stares and comments;
+  - a knockout: compliments;
+  - a cool car in a poor district: "hey, cool car, man!";
+  - a wreck in a rich one: snickers.
+
+  Layers, cheapest first:
+  - (1) **Appearance facts from data:** what V wears and its tags (TweakDB item tags, visual tags, iconic/rarity), empty slots, the car's record (class, price, condition), the district and subdistrict. The Studio already resolves most of this.
+  - (2) **An assessment layer:** a rule-based "how does V read here" score (fancy, shabby, bizarre, revealing, out of place), with thresholds per district. It could later be learned from tagged examples, but rules first.
+  - (3) **Reactions through the game's own systems:** stims and the NPC reaction manager, crowd barks and look-at, driven by redscript.
+  - (4) **Lines:** reuse the game's existing crowd voice lines chosen by context, or text-only barks (subtitles or chat bubbles) from a pre-generated library. Generative AI can help author the library offline. Cloning the original voice actors' voices isn't an option (their rights); new voiced lines would need consenting voices.
+
+  First step when the time comes: research what reaction and bark systems already exist and how NPCs pick crowd lines.
 - **Ambient life:** new ambient NPC behaviours and scenes at chosen places (workspots, community spawns), authored in the Studio's world tools (phases W4–W5 in [world ideas](world-and-interactive-ideas.md)).
 - **Reactive surroundings:** NPCs noticing V's look, weather-reactive crowds, and time-of-day routines.
 - **Places that remember:** persistent, player-driven changes to locations (decor, props left behind), stored in the save generically, as the [save editor study](../save/save-editor-design.md) shows the save can describe mod data.
