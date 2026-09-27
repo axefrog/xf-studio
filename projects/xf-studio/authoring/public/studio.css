@@ -207,10 +207,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .control-note { color: var(--warning); }
 .control-note.info { color: var(--text-muted); }
 /* A control's note line keeps its place once it has one (UI-90): an empty note keeps its height. */
-/* A note line is one 16 px line: longer text is clamped (its whole text is the line's tooltip), so a note appearing never moves anything. */
-.control-note:not([hidden]) { display: block; min-height: 16px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* A folder's refusal answers what the person typed, inside the open text box: it wraps in full. */
-.folder-note:not([hidden]) { white-space: normal; line-height: 1.35; }
+/* A reserved note line is at least one 16 px line; a reason or limit wraps in full, never truncated. Normal-state notes are kept to one line at 300 px. */
+.control-note:not([hidden]) { display: block; min-height: 16px; line-height: 16px; }
 /* Hidden but in place; the empty-state box (`.empty`) shares the class name, so its padding and border are taken off (UI-115). */
 .control-note.empty { visibility: hidden; padding: 0; border: 0; }
 /* A note whose text changes length as it counts keeps room for its longer form. */
@@ -230,6 +228,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .slider:hover::-webkit-slider-thumb { background: var(--signal); }
 .slider::-moz-range-track { height: 4px; background: var(--line); }
 .slider::-moz-range-progress { height: 4px; background: var(--signal); }
+.slider.unknown::-webkit-slider-thumb { visibility: hidden; }
+.slider.unknown::-moz-range-thumb { visibility: hidden; }
+.slider.unknown { --fill: 0% !important; }
 .slider::-moz-range-thumb { width: 10px; height: 14px; background: var(--bg-panel); border: 2px solid var(--signal); border-radius: 1px; }
 .slider:disabled { cursor: not-allowed; opacity: .45; }
 .slider:focus-visible { outline-offset: 1px; }

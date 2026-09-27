@@ -318,7 +318,9 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
-      blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
+      // Before motion is ready its reason is said once, on the Body line; Blink and Hair physics carry it only as their description.
+      const saidOnce = !motion?.available;
+      blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason, reasonOnLine: !saidOnce });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
       blinkControls.hidden = !!motion && !motion.blinkAvailable;
@@ -326,7 +328,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       blinkNote.hidden = !blinkNote.textContent;
       setHelp(blinkTip, blinkHelp(motion));
       const physicsAllowed = port.authoring.capability({ kind: "motion.setPhysics", enabled: !motion?.physics });
-      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion) });
+      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion), reasonOnLine: !saidOnce });
     },
   };
 }

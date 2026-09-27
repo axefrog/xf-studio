@@ -22,16 +22,15 @@ export class NoteLine {
   private reserved: boolean;
   /** `quiet`: a reason that is a wait or information, not a problem, keeps the muted note tone instead of the warning tone. */
   constructor(reserve = false, private readonly quiet = false) { this.reserved = reserve; this.element.hidden = !reserve; }
-  update(control: HTMLElement, disabled: boolean, reason: string | undefined, note: string | undefined) {
+  /** `onLine: false`: the reason is the control's description and tooltip only (a panel that says it once elsewhere); the line stays empty. */
+  update(control: HTMLElement, disabled: boolean, reason: string | undefined, note: string | undefined, onLine = true) {
     if (note) this.reserved = true;
     const why = disabled && reason ? reason : undefined;
-    const text = why && this.reserved ? why : note ?? "";
+    const text = why && this.reserved && onLine ? why : note ?? "";
     setText(this.element, text);
     this.element.hidden = !this.reserved;
     this.element.classList.toggle("empty", !text);
-    this.element.classList.toggle("info", this.quiet || !(why && this.reserved));
-    // One line: a longer note is clamped (studio.css), its whole text in the tooltip.
-    this.element.title = text;
+    this.element.classList.toggle("info", this.quiet || !(why && this.reserved && onLine));
     setAttr(control, "aria-description", why);
   }
 }
@@ -103,15 +102,17 @@ export class Slider {
       this.input, this.note.element);
     this.edit = bindRangeTransaction(this.input, options.transaction, value => { fillRange(this.input); this.output.textContent = options.format(value); });
   }
-  update(value: number | undefined, state: { disabled?: boolean; reason?: string; min?: number; max?: number; note?: string } = {}) {
+  update(value: number | undefined, state: { disabled?: boolean; reason?: string; min?: number; max?: number; note?: string; reasonOnLine?: boolean } = {}) {
     if (state.min !== undefined) setAttr(this.input, "min", String(state.min));
     if (state.max !== undefined) setAttr(this.input, "max", String(state.max));
     const active = this.edit.active();
     if (!active && value !== undefined) setValue(this.input, String(value));
+    // An unknown value shows no thumb and no fill (its readout says "—"), never a position that reads as a value.
+    this.input.classList.toggle("unknown", value === undefined && !active);
     fillRange(this.input);
     setText(this.output, value === undefined ? "—" : this.options.format(active ? Number(this.input.value) : value));
     setDisabled(this.input, !!state.disabled, state.reason);
-    this.note.update(this.input, !!state.disabled, state.reason, state.note);
+    this.note.update(this.input, !!state.disabled, state.reason, state.note, state.reasonOnLine ?? true);
   }
 }
 
@@ -134,10 +135,10 @@ export class Toggle {
         h("span", { class: "toggle-label", text: options.label })), this.tip), this.note.element);
     this.input.addEventListener("change", () => options.onChange(this.input.checked));
   }
-  update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string } = {}) {
+  update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string; reasonOnLine?: boolean } = {}) {
     if (this.input.checked !== checked) this.input.checked = checked;
     setDisabled(this.input, !!state.disabled, state.reason);
-    this.note.update(this.input, !!state.disabled, state.reason, state.note);
+    this.note.update(this.input, !!state.disabled, state.reason, state.note, state.reasonOnLine ?? true);
   }
   /** Change the help tip's text (a toggle made with `help` only). */
   setHelp(text: HelpText) { if (this.tip) setHelp(this.tip, text); }
