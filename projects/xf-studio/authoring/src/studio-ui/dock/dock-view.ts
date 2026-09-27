@@ -2,8 +2,9 @@ import { keyBinding, panelModifiersHeld } from "../../input-bindings";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
-import { activate, allGroups, applyDrop, closePanel, findGroup, locate, openPanel, openShares, parkPanels, raiseWindow, recoverWindows,
-  setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
+import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate, openPanel,
+  openShares, parkPanels, raiseWindow, recoverWindows, revealPanel, setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, splitShares, splitterPair,
+  unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
 
@@ -47,10 +48,13 @@ export class DockView {
   private visible = new Set<PanelId>();
   private drag?: DragSession;
   private moveMode?: { windowId: string; cleanup(): void };
+  /** The folded nodes of the tree being rendered and the axis each folded along (`foldAxes`). */
+  private folds = new Map<string, "row" | "column">();
 
   constructor(private options: DockViewOptions) {
     for (const panel of options.panels) this.panels.set(panel.id, panel);
-    this.state = structuredClone(options.state);
+    const state = structuredClone(options.state);
+    this.state = { wide: keepDockExpanded(state.wide), compact: keepDockExpanded(state.compact) };
     this.surface = h("div", { class: "dock-surface" });
     this.floatingLayer = h("div", { class: "dock-floating" });
     this.overlay = h("div", { class: "dock-overlay", "aria-hidden": "true" });
@@ -85,8 +89,8 @@ export class DockView {
     if (!fresh.length) return;
     for (const spec of fresh) { this.panels.set(spec.id, spec); this.parking.append(spec.element); }
     const ids = fresh.map(spec => spec.id), area = this.area();
-    this.state = { wide: unparkPanels(this.state.wide, ids, this.options.defaults("wide"), area),
-      compact: unparkPanels(this.state.compact, ids, this.options.defaults("compact"), area) };
+    this.state = { wide: keepDockExpanded(unparkPanels(this.state.wide, ids, this.options.defaults("wide"), area)),
+      compact: keepDockExpanded(unparkPanels(this.state.compact, ids, this.options.defaults("compact"), area)) };
     this.render();
     this.options.save(this.dockState);
   }
@@ -97,7 +101,7 @@ export class DockView {
   removePanels(ids: readonly PanelId[]) {
     const known = ids.filter(id => this.panels.has(id));
     if (!known.length) return;
-    this.state = { wide: parkPanels(this.state.wide, known), compact: parkPanels(this.state.compact, known) };
+    this.state = { wide: keepDockExpanded(parkPanels(this.state.wide, known)), compact: keepDockExpanded(parkPanels(this.state.compact, known)) };
     this.render();
     for (const id of known) { this.panels.get(id)!.element.remove(); this.panels.delete(id); }
     this.options.save(this.dockState);
@@ -115,7 +119,7 @@ export class DockView {
     const at = locate(this.tree, id);
     if (!at) return "Open the panel first.";
     if (this.tree.maximized === at.group.id) return "Restore the group's size first.";
-    if (!at.windowId && this.tree.root?.kind === "group" && !at.group.collapsed) return "Nothing else is docked to take its space.";
+    if (!at.windowId && lastExpandedDocked(this.tree, at.group.id)) return "Nothing else is docked to take its space.";
     return undefined;
   }
 
@@ -123,6 +127,7 @@ export class DockView {
   update(tree: DockTree, message?: string, persist = true) {
     const area = this.area();
     if (area.w > 40 && area.h > 40) tree = recoverWindows(tree, area);
+    tree = keepDockExpanded(tree);
     this.state = { ...this.state, [this.sizeClass]: tree };
     this.render();
     if (persist) this.options.save(this.dockState);
@@ -148,6 +153,7 @@ export class DockView {
     const shown = new Set<PanelId>();
     this.surface.replaceChildren();
     this.floatingLayer.replaceChildren();
+    this.folds = new Map([...foldAxes(tree.root), ...tree.floating.flatMap(window => [...foldAxes(window.node)])]);
     const maximized = tree.maximized ? findGroup(tree, tree.maximized)?.group : undefined;
     if (maximized) this.surface.append(this.renderGroup(maximized, false, shown, true));
     else if (tree.root) this.surface.append(this.renderNode(tree.root, false, shown));
@@ -168,25 +174,29 @@ export class DockView {
     if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   }
 
-  /** Inactive tabs shorten their labels when a strip overflows (never to bare icons, UI-96); the active label stays whole. */
+  /**
+   * Inactive tabs shorten their labels when a strip overflows (never to bare icons, UI-96); the active label stays whole. A group
+   * folded to a vertical strip measures along its height.
+   */
   condenseTabs() {
     for (const strip of this.element.querySelectorAll<HTMLElement>(".dock-tabs")) {
       strip.classList.remove("condensed");
-      const bar = strip.parentElement!, available = bar.clientWidth - 64;
-      if (strip.scrollWidth > available) strip.classList.add("condensed");
+      const bar = strip.parentElement!, vertical = strip.closest<HTMLElement>(".dock-group")?.dataset.fold === "row";
+      if (vertical ? strip.scrollHeight > bar.clientHeight - 64 : strip.scrollWidth > bar.clientWidth - 64) strip.classList.add("condensed");
     }
   }
   private renderNode(node: DockNode, floating: boolean, shown: Set<PanelId>): HTMLElement {
     if (node.kind === "group") return this.renderGroup(node, floating, shown);
     const element = h("div", { class: "dock-split", "data-axis": node.axis, "data-split": node.id });
-    const folded = node.children.map(child => child.kind === "group" && !!child.collapsed), shares = openShares(node.sizes, folded);
+    // A child folded along this split's axis (a collapsed group, or a split whose groups are all collapsed) keeps only its bars:
+    // its cell takes no share, and the others share the whole split (never shifting inside).
+    // A stack of vertical strips sizes its strips by their tabs, and has nothing to resize.
+    const { folded, shares } = splitShares(node, this.folds), strips = isStripStack(node, this.folds);
     node.children.forEach((child, index) => {
-      if (index > 0) element.append(this.splitter(node.id, node.axis, index));
+      if (index > 0) element.append(this.splitter(node.id, node.axis, index, strips ? node.children.map(() => true) : folded));
       const cell = h("div", { class: "dock-cell" });
-      // A collapsed group keeps only its tab bar: its cell takes no share, so its neighbours fill the space (never shifting inside).
-      const collapsed = folded[index]!;
-      cell.style.flex = collapsed ? "0 0 auto" : `${shares[index]} 1 0`;
-      if (collapsed) cell.dataset.collapsed = node.axis;
+      cell.style.flex = folded[index] ? "0 0 auto" : strips ? "1 1 auto" : `${shares[index]} 1 0`;
+      if (folded[index]) cell.dataset.collapsed = node.axis;
       cell.append(this.renderNode(child, floating, shown));
       element.append(cell);
     });
@@ -206,7 +216,11 @@ export class DockView {
         h("span", { class: "dock-tab-close", "aria-hidden": "true", title: `Close ${spec.title}`,
           onpointerdown: (event: PointerEvent) => event.stopPropagation(),
           onclick: (event: MouseEvent) => { event.stopPropagation(); this.close(id); } }, icon("close")));
-      tab.addEventListener("click", () => { if (!active) this.update(activate(this.tree, id), undefined); });
+      // A tab of a collapsed group expands it (showing that tab): the strip is the whole group, so any of it opens it.
+      tab.addEventListener("click", () => {
+        if (group.collapsed) this.update(revealPanel(this.tree, id), `${this.describeGroup(group)} expanded`);
+        else if (!active) this.update(activate(this.tree, id), undefined);
+      });
       tab.addEventListener("auxclick", event => { if (event.button === 1) { event.preventDefault(); this.close(id); } });
       tab.addEventListener("keydown", event => this.tabKey(event, group, id));
       tab.addEventListener("contextmenu", event => { event.preventDefault(); this.openPanelMenu(id, { x: event.clientX, y: event.clientY }, tab); });
@@ -236,7 +250,9 @@ export class DockView {
     if (active && !group.collapsed) { body.append(active.element); shown.add(active.id); }
     body.hidden = !!group.collapsed;
     const element = h("section", { class: `dock-group${floating ? " floating" : ""}${maximized ? " maximized" : ""}${group.collapsed ? " collapsed" : ""}`,
-      "data-group": group.id, "aria-label": `${titles.join(", ")} group` },
+      "data-group": group.id, "aria-label": `${titles.join(", ")} group`,
+      // How it folds (view-graph-design.md §4.4): along a column a full-width header row, along a row a vertical strip.
+      ...(group.collapsed && !maximized ? { "data-fold": this.folds.get(group.id) ?? "column" } : {}) },
       h("div", { class: "dock-tabbar" }, tablist, fill, restore, collapse, menuButton), body);
     element.addEventListener("focusin", () => element.classList.add("focus-within"));
     element.addEventListener("focusout", () => element.classList.remove("focus-within"));
@@ -249,8 +265,8 @@ export class DockView {
       .map(id => this.panels.get(id)?.title ?? id);
     const element = h("div", { class: `dock-window${composite ? " composite" : ""}`, "data-window": window.id,
       role: "group", "aria-label": `Floating ${composite ? "composite" : "panel"}: ${titles.join(", ")}` });
-    // A floating panel that is collapsed shows only its bar; its saved height comes back when it expands.
-    if (window.node.kind === "group" && window.node.collapsed) element.classList.add("collapsed");
+    // A floating window whose groups are all collapsed shows only their bars; its saved height comes back when one expands.
+    if (allCollapsed(window.node)) element.classList.add("collapsed");
     Object.assign(element.style, { left: `${window.x}px`, top: `${window.y}px`, width: `${window.w}px`, height: `${window.h}px`,
       zIndex: String(10 + index) });
     element.addEventListener("pointerdown", () => {
@@ -280,7 +296,14 @@ export class DockView {
     return element;
   }
 
-  private splitter(splitId: string, axis: "row" | "column", index: number) {
+  /**
+   * The splitter between children `index - 1` and `index`. It resizes the nearest children on each side that aren't folded along
+   * the split's axis (`splitterPair`); with none on one side it stays as spacing but is inert, so a folded cell never takes a size.
+   */
+  private splitter(splitId: string, axis: "row" | "column", index: number, folded: readonly boolean[]) {
+    const resized = splitterPair(folded, index);
+    if (!resized) return h("div", { class: "dock-splitter inert", "aria-hidden": "true" });
+    const [a, b] = resized;
     const element = h("div", { class: "dock-splitter", role: "separator", tabindex: "0",
       "aria-orientation": axis === "row" ? "vertical" : "horizontal",
       "aria-label": `Resize ${axis === "row" ? "columns" : "rows"}`,
@@ -296,7 +319,7 @@ export class DockView {
       return node?.kind === "split" ? [...node.sizes] : [];
     };
     const setValue = (values: number[]) => {
-      const pct = Math.round(values[index - 1] / (values[index - 1] + values[index]) * 100);
+      const pct = Math.round(values[a] / (values[a] + values[b]) * 100);
       setAttr(element, "aria-valuenow", String(pct)); setAttr(element, "aria-valuemin", "0"); setAttr(element, "aria-valuemax", "100");
     };
     setValue(sizes());
@@ -306,29 +329,29 @@ export class DockView {
       const step = grow[event.key];
       if (step) {
         event.preventDefault();
-        const values = sizes(), pair = values[index - 1] + values[index], delta = pair * .04 * step;
-        values[index - 1] = clamp(values[index - 1] + delta, pair * .08, pair * .92);
-        values[index] = pair - values[index - 1];
+        const values = sizes(), pair = values[a] + values[b], delta = pair * .04 * step;
+        values[a] = clamp(values[a] + delta, pair * .08, pair * .92);
+        values[b] = pair - values[a];
         commit(values);
         this.focusSplitter(splitId, index);
       } else if (event.key === "Enter") {
         event.preventDefault();
-        const values = sizes(), pair = values[index - 1] + values[index];
-        values[index - 1] = values[index] = pair / 2; commit(values); this.focusSplitter(splitId, index);
+        const values = sizes(), pair = values[a] + values[b];
+        values[a] = values[b] = pair / 2; commit(values); this.focusSplitter(splitId, index);
       }
     });
     element.addEventListener("dblclick", () => {
-      const values = sizes(), pair = values[index - 1] + values[index];
-      values[index - 1] = values[index] = pair / 2; commit(values);
+      const values = sizes(), pair = values[a] + values[b];
+      values[a] = values[b] = pair / 2; commit(values);
     });
     element.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;
       event.preventDefault();
       element.setPointerCapture(event.pointerId);
       const parent = element.parentElement!, cells = [...parent.children].filter(child => child.classList.contains("dock-cell")) as HTMLElement[];
-      const before = cells[index - 1], after = cells[index];
+      const before = cells[a], after = cells[b];
       const rect = parent.getBoundingClientRect(), total = axis === "row" ? rect.width : rect.height;
-      const values = sizes(), pair = values[index - 1] + values[index];
+      const values = sizes(), pair = values[a] + values[b];
       const pairPx = (axis === "row" ? before.getBoundingClientRect().width + after.getBoundingClientRect().width :
         before.getBoundingClientRect().height + after.getBoundingClientRect().height) || total;
       const start = axis === "row" ? event.clientX : event.clientY;
@@ -339,8 +362,10 @@ export class DockView {
       const move = (e: PointerEvent) => {
         const px = clamp(firstPx + (axis === "row" ? e.clientX : e.clientY) - start, Math.min(min, pairPx / 2), Math.max(pairPx - min, pairPx / 2));
         const next = [...values];
-        next[index - 1] = pair * px / pairPx; next[index] = pair - next[index - 1];
-        before.style.flex = `${next[index - 1]} 1 0`; after.style.flex = `${next[index]} 1 0`;
+        next[a] = pair * px / pairPx; next[b] = pair - next[a];
+        // The cells grow by their shares of the unfolded children, as rendered (the pair's total, and so the others', is unchanged).
+        const shares = openShares(next, folded);
+        before.style.flex = `${shares[a]} 1 0`; after.style.flex = `${shares[b]} 1 0`;
         latest = next; setValue(next);
         this.options.afterLayout?.();
       };
@@ -408,7 +433,8 @@ export class DockView {
   // ----- Commands usable from menus, shortcuts and the command palette -----
   reveal(id: PanelId, focus = true) {
     if (!this.panels.has(id)) { this.options.withdrawn?.(id); return; }
-    const tree = showPanelDocked(this.isOpen(id) ? activate(this.tree, id) : openPanel(this.tree, id, this.siblingsInDefault(id), this.area()), id);
+    const opened = this.isOpen(id) ? this.tree : openPanel(this.tree, id, this.siblingsInDefault(id), this.area());
+    const tree = showPanelDocked(revealPanel(opened, id), id);
     this.update(tree, this.isOpen(id) ? undefined : `${this.title(id)} opened`);
     if (focus) requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
   }
@@ -487,7 +513,7 @@ export class DockView {
     );
     if (at.group.panels.length > 1) items.splice(1, 0, { kind: "submenu", label: "Show tab", icon: "chevronRight",
       items: () => at.group.panels.map(panel => ({ kind: "action", label: this.title(panel), checked: panel === at.group.active,
-        run: () => { this.update(activate(this.tree, panel)); this.element.querySelector<HTMLElement>(`[id="dock-tab-${panel}"]`)?.focus(); } })) });
+        run: () => { this.update(revealPanel(this.tree, panel)); this.element.querySelector<HTMLElement>(`[id="dock-tab-${panel}"]`)?.focus(); } })) });
     return items;
   }
   openPanelMenu(id: PanelId, anchor: Element | { x: number; y: number }, invoker?: Element) {
