@@ -275,6 +275,18 @@ bool Dispatcher::WritesPaused() const
     return m_writesPaused.load();
 }
 
+void Dispatcher::RequireWritesOpen() const
+{
+    if (m_killed.load())
+    {
+        throw MethodError("killed", "the kill switch stopped the bridge part-way; the next step wasn't taken (" + KillReason() + ")");
+    }
+    if (m_writesPaused.load())
+    {
+        throw MethodError("writes_paused", "changes were paused in the game's XF bridge panel part-way; the next step wasn't taken");
+    }
+}
+
 std::string Dispatcher::KillReason() const
 {
     std::scoped_lock _(m_mutex);

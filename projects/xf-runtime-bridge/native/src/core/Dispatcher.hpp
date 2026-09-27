@@ -129,6 +129,10 @@ public:
     void SetWritesPaused(bool aPaused);
     bool WritesPaused() const;
 
+    // For multi-step writes, before each step that changes the game (RB-53): throws MethodError killed
+    // or writes_paused when the kill switch or the panel's pause came after the request was accepted.
+    void RequireWritesOpen() const;
+
     nlohmann::json Describe() const;
     uint64_t RequestCount() const;
 

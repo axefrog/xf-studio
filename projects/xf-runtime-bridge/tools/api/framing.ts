@@ -441,8 +441,9 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
         [dh, dud] = limit((J[1][1] * ex - J[0][1] * ey) / det, (-J[1][0] * ex + J[0][0] * ey) / det);
       } else {
         // Vertical only: the up/down change that best removes the error along up/down's own screen direction.
-        const u = { x: J[0][1], y: J[1][1] };
-        dud = limit(0, (ex * u.x + ey * u.y) / (u.x * u.x + u.y * u.y))[1];
+        const step = verticalOnlyStep({ x: J[0][1], y: J[1][1] }, ex, ey);
+        if (step === null) throw new FramingError("Moving V up and down no longer moves V on screen as expected, so framing stopped.", "no_response", steps);
+        dud = limit(0, step)[1];
       }
       budget--;
       const prev = m;
@@ -734,4 +735,16 @@ export async function frame(adapter: FramingAdapter, options: FrameOptions): Pro
   if (options.face_camera !== false || options.yaw_offset) result.notes.push("The capture route can't turn V to face the camera; V's rotation was left as it was (set subject.yaw with photo_camera_set if needed).");
   if (why) result.notes.unshift(`The projection route wasn't available (${why}), so the capture route was used.`);
   return result;
+}
+
+/**
+ * The vertical-only route's up/down step: the least-squares change along up/down's screen response u that
+ * removes the error (ex, ey). Null when u has shrunk toward zero (Broyden can shrink it) or the step isn't
+ * finite, so no NaN or huge step reaches photo.camera.set (RB-61).
+ */
+export function verticalOnlyStep(u: { x: number; y: number }, ex: number, ey: number): number | null {
+  const squared = u.x * u.x + u.y * u.y;
+  if (!Number.isFinite(squared) || squared < 1e-10) return null;
+  const step = (ex * u.x + ey * u.y) / squared;
+  return Number.isFinite(step) ? step : null;
 }

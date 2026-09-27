@@ -2,9 +2,21 @@
 // native plugin in step with it. No game and no bridge host involved.
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CATALOGUE, findCommand, PERMISSIONS, toolName } from "../api/catalogue.ts";
+import {
+  CATALOGUE,
+  findCommand,
+  loadClientTimeoutMs,
+  PERMISSIONS,
+  SAVE_LIST_WAIT_MS,
+  SAVE_UNLOCK_WAIT_MS,
+  saveClientTimeoutMs,
+  SERVER_STEP_MS,
+  toolName,
+} from "../api/catalogue.ts";
+import type { BridgeResponse } from "../bridge-lib.ts";
+import { verticalOnlyStep } from "../api/framing.ts";
 import { CommandApi } from "../api/command-api.ts";
 import { CAMERA_PRESETS, expandCamera } from "../api/presets.ts";
 import { validate, type JsonSchema } from "../api/schema.ts";
@@ -149,5 +161,75 @@ describe("command API without a game", () => {
       expect(outcome.error.code).toBe("no_bridge");
       expect(outcome.error.message).toMatch(/Start the game/);
     }
+  });
+});
+
+describe("bridge 0.4.1 review fixes (tools side)", () => {
+  test("RB-55: the client's save and load waits are derived from the server's worst case, with the server's own constants", () => {
+    const writes = readFileSync(join(projectDir, "native/src/core/Writes.hpp"), "utf8");
+    const queue = readFileSync(join(projectDir, "native/src/core/GameThreadQueue.hpp"), "utf8");
+    const config = readFileSync(join(projectDir, "native/src/core/Config.hpp"), "utf8");
+    expect(writes).toContain(`kSaveUnlockWaitMs = ${SAVE_UNLOCK_WAIT_MS};`);
+    expect(writes).toContain(`kSaveListWaitMs = ${SAVE_LIST_WAIT_MS};`);
+    const grace = Number(/kDefaultRunningGrace\{(\d+)\}/.exec(queue)?.[1]);
+    const timeout = Number(/requestTimeoutMs\s*=\s*(\d+)/.exec(config)?.[1]);
+    expect(SERVER_STEP_MS).toBe(timeout + grace);
+    // game.save: timeout + unlock wait + 5 steps; game.load: list wait + 3 steps; each plus slack.
+    expect(saveClientTimeoutMs(20000)).toBeGreaterThanOrEqual(20000 + SAVE_UNLOCK_WAIT_MS + 5 * SERVER_STEP_MS);
+    expect(loadClientTimeoutMs()).toBeGreaterThanOrEqual(SAVE_LIST_WAIT_MS + 3 * SERVER_STEP_MS);
+    expect(findCommand("game.save")!.bridge!.timeoutMs!({ timeout_ms: 60000 })).toBe(saveClientTimeoutMs(60000));
+    expect(findCommand("game.load")!.bridge!.timeoutMs!({})).toBe(loadClientTimeoutMs());
+  });
+
+  test("RB-56: game.load's schema requires discard_unsaved", () => {
+    const load = findCommand("game.load")!;
+    expect(validate(load.input, { latest: true }).join(" ")).toContain("discard_unsaved");
+    expect(validate(load.input, { latest: true, discard_unsaved: true })).toEqual([]);
+  });
+
+  test("RB-61: the vertical-only step refuses a vanishing or non-finite response instead of dividing by it", () => {
+    expect(verticalOnlyStep({ x: 0, y: 0.2 }, 0, 0.1)).toBeCloseTo(0.5);
+    expect(verticalOnlyStep({ x: 0, y: 1e-7 }, 0, 0.1)).toBeNull();
+    expect(verticalOnlyStep({ x: 0, y: 0 }, 0, 0.1)).toBeNull();
+    expect(verticalOnlyStep({ x: Number.NaN, y: 0.2 }, 0, 0.1)).toBeNull();
+    expect(verticalOnlyStep({ x: 0, y: 0.2 }, Number.POSITIVE_INFINITY, 0.1)).toBeNull();
+  });
+
+  test("RB-62: the idle timer never closes the pipe under a call still in flight, and restarts after a rejected call", async () => {
+    const dir = tempDir("xfb-rb62-");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "session.json"), JSON.stringify({ protocol: 1, sid: "s1", pid: process.pid, pipe: "unused", token: "t" }));
+    let closes = 0;
+    const pending: ((r: BridgeResponse) => void)[] = [];
+    const api = new CommandApi({
+      runtimeDir: dir,
+      auditDir: tempDir("xfb-rb62-audit-"),
+      idleCloseMs: 40,
+      transport: async () => ({
+        call: (method) =>
+          method === "throws"
+            ? Promise.reject(new Error("pipe broke"))
+            : method === "slow"
+              ? new Promise<BridgeResponse>((resolve) => pending.push(resolve))
+              : Promise.resolve({ v: 1, id: 1, cid: "c", ok: true, result: {} }),
+        close: () => {
+          closes++;
+        },
+      }),
+    });
+    const slow = api.callBridge("slow", {}, "c1");
+    await Bun.sleep(5);
+    await api.callBridge("fast", {}, "c2"); // finishes while the slow call still waits
+    await Bun.sleep(120);
+    expect(closes).toBe(0); // the fast call's end didn't start the timer under the slow one
+    pending[0]!({ v: 1, id: 1, cid: "c1", ok: true, result: {} });
+    await slow;
+    await Bun.sleep(120);
+    expect(closes).toBe(1); // idle after the last call
+    const rejected = await api.callBridge("throws", {}, "c3");
+    expect(rejected.ok).toBe(false);
+    await Bun.sleep(120);
+    expect(closes).toBeGreaterThanOrEqual(2); // a rejected call doesn't leave a connection open for good
+    api.close();
   });
 });

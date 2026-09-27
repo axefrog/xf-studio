@@ -69,6 +69,8 @@ export class CommandApi {
   private readonly idleCloseMs: number;
   private connection: { transport: BridgeTransport; sid: string } | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Bridge calls waiting for an answer; the idle timer runs only when this is 0 (RB-62). */
+  private inFlight = 0;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly options: CommandApiOptions = {}) {
@@ -189,13 +191,23 @@ export class CommandApi {
         return { ok: false, error: connectError(kind, (error as Error).message) };
       }
     }
-    // No idle close while a call is in flight: a single call can take longer than the idle time (game.save
-    // waits up to 20 s for the game), and closing the pipe under it would cut the answer off.
+    // No idle close while any call is in flight (RB-62): a single call can take longer than the idle time
+    // (game.save waits up to 20 s for the game), and closing the pipe under it would cut the answer off.
+    // The timer restarts only when the last call in flight ends, however it ends (answered or thrown).
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
-    const response = await this.connection.transport.call(method, params, cid, timeoutMs);
-    if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout")) this.disconnect();
-    if (this.connection) this.touch();
+    const connection = this.connection;
+    this.inFlight++;
+    let response: BridgeResponse;
+    try {
+      response = await connection.transport.call(method, params, cid, timeoutMs);
+    } catch (error) {
+      response = { v: 1, id: 0, cid, ok: false, error: { code: "disconnected", message: (error as Error)?.message ?? String(error) } };
+    } finally {
+      this.inFlight--;
+    }
+    if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout") && this.connection === connection) this.disconnect();
+    if (this.connection && this.inFlight === 0) this.touch();
     if (response.ok) return { ok: true, result: response.result };
     return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message) };
   }

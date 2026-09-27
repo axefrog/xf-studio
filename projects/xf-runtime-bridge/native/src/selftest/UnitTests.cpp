@@ -1622,6 +1622,7 @@ struct FakeWardrobe
     std::string pendingSlot;
     std::string pendingItem;
     bool never = false;
+    bool debugNames = false;
     xfb::writes::InventoryOps Ops(const std::string& aItem, const std::string& aSlot, bool aAdd)
     {
         xfb::writes::InventoryOps ops;
@@ -1645,9 +1646,12 @@ struct FakeWardrobe
             pendingItem.clear();
             return json{{"slot", aSlot}, {"previous", previous}, {"was_empty", previous.empty()}};
         };
-        ops.slot = [this, aSlot](const std::string&, const std::string&) {
+        ops.slot = [this, aSlot](const std::string&, const std::string& aAsked) {
             const auto item = worn.count(aSlot) ? worn[aSlot] : std::string();
-            return json{{"slot", aSlot}, {"item", item}, {"empty", item.empty()}};
+            // The script compares record IDs; a debug name that differs from the record's name (debugNames)
+            // must not matter (RB-63).
+            const auto shown = debugNames && !item.empty() ? "<TDBID:" + item + ">" : item;
+            return json{{"slot", aSlot}, {"item", shown}, {"empty", item.empty()}, {"matches", !aAsked.empty() && item == aAsked}};
         };
         ops.removeAdded = [this](const std::string& aName) {
             calls.push_back("remove " + aName);
@@ -1684,10 +1688,25 @@ void InventoryAndSaveTests()
               ParamsCode([] { p::ParseInventoryUnequip(json{{"slot", "Head"}, {"remove_added", true}}); }) == "bad_params" &&
               ParamsCode([] { p::ParseInventoryUnequip(json{{"slot", "Head"}}); }) == "ok");
     Check("game.load takes latest or a name, not both",
-          ParamsCode([] { p::ParseGameLoad(json::object()); }) == "bad_params" &&
-              ParamsCode([] { p::ParseGameLoad(json{{"latest", true}, {"name", "ManualSave-1"}}); }) == "bad_params" &&
-              ParamsCode([] { p::ParseGameLoad(json{{"name", "../../x"}}); }) == "bad_params" &&
-              ParamsCode([] { p::ParseGameLoad(json{{"name", "ManualSave-12"}}); }) == "ok");
+          ParamsCode([] { p::ParseGameLoad(json{{"discard_unsaved", true}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameLoad(json{{"latest", true}, {"name", "ManualSave-1"}, {"discard_unsaved", true}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameLoad(json{{"name", "../../x"}, {"discard_unsaved", true}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameLoad(json{{"name", "ManualSave-12"}, {"discard_unsaved", true}}); }) == "ok");
+    {
+        std::string message;
+        try
+        {
+            p::ParseGameLoad(json{{"latest", true}});
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + " " + e.what();
+        }
+        Check("RB-56: game.load without discard_unsaved: true is refused in plain words",
+              message.find("bad_params") == 0 && message.find("discard_unsaved: true") != std::string::npos &&
+                  ParamsCode([] { p::ParseGameLoad(json{{"latest", true}, {"discard_unsaved", false}}); }) == "bad_params",
+              message);
+    }
     Check("game.save's name is a plain label", ParamsCode([] { p::ParseGameSave(json{{"name", "before \"x\""}}); }) == "bad_params" &&
                                                    ParamsCode([] { p::ParseGameSave(json{{"name", "session 4 start"}}); }) == "ok");
     {
@@ -1710,11 +1729,30 @@ void InventoryAndSaveTests()
     }
     {
         FakeWardrobe wardrobe;
+        wardrobe.debugNames = true;
+        const auto out = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}, {"add_if_missing", true}}),
+                                           wardrobe.Ops("Items.Helmet_01", "Head", true));
+        const auto undo = w::InventoryUnequip(p::ParseInventoryUnequip(out["undo"]["params"]), wardrobe.Ops("Items.Helmet_01", "Head", false));
+        Check("RB-63: equip and remove decide by the script's record-ID match, not the debug name it reports",
+              out["equipped"] == true && undo["unequipped"] == true && undo["removed"] == true, out.dump() + undo.dump());
+    }
+    {
+        FakeWardrobe wardrobe;
         wardrobe.never = true;
         const auto out = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}}), wardrobe.Ops("Items.Helmet_01", "Head", false));
         Check("an equip the slot never shows says so (equipped false, a note)", out["equipped"] == false && out.contains("note"), out.dump());
     }
 
+    // A fake clock the fakes' sleep (and each game step's cost) advances, for the steady-clock waits (RB-55).
+    struct FakeClock
+    {
+        std::chrono::steady_clock::time_point at{};
+        w::Clock Now()
+        {
+            return [this] { return at; };
+        }
+        void Advance(std::chrono::milliseconds aFor) { at += aFor; }
+    };
     struct FakeSaves
     {
         bool bridgeLock = true;
@@ -1723,10 +1761,24 @@ void InventoryAndSaveTests()
         std::string state = "none";
         int saveAfter = 2;
         bool fail = false;
-        bool relocked = false;
+        int relocks = 0;
+        int statusCalls = 0;
+        int saves = 0;
+        std::chrono::milliseconds statusCost{0}; // how long each status step takes (a hitching game)
+        std::string throwAt;                      // "status", "save" or "guard2": that step throws
+        bool killed = false;                      // the guard refuses from the start
+        int guards = 0;
+        FakeClock clock;
         w::SaveOps Ops(bool aOverride)
         {
             w::SaveOps ops;
+            ops.guard = [this] {
+                ++guards;
+                if (killed || (throwAt == "guard2" && guards == 2))
+                {
+                    throw xfb::MethodError("killed", "the kill switch stopped the bridge part-way");
+                }
+            };
             ops.prepare = [this, aOverride] {
                 if (bridgeLock && !aOverride)
                 {
@@ -1735,6 +1787,12 @@ void InventoryAndSaveTests()
                 return json{{"lock_released", bridgeLock}};
             };
             ops.status = [this] {
+                ++statusCalls;
+                clock.Advance(statusCost);
+                if (throwAt == "status" && state == "pending")
+                {
+                    throw xfb::MethodError("timeout_after_start", "a game-thread step started but did not finish in time");
+                }
                 if (locked && --unlockAfter <= 0)
                 {
                     locked = false;
@@ -1746,11 +1804,17 @@ void InventoryAndSaveTests()
                 return json{{"locked", locked}, {"state", state}};
             };
             ops.save = [this] {
+                ++saves;
+                if (throwAt == "save")
+                {
+                    throw xfb::MethodError("failed", "save() threw");
+                }
                 state = "pending";
                 return json{{"requested", true}};
             };
-            ops.relock = [this] { relocked = true; };
-            ops.sleep = [](std::chrono::milliseconds) {};
+            ops.relock = [this] { ++relocks; };
+            ops.sleep = [this](std::chrono::milliseconds aFor) { clock.Advance(aFor); };
+            ops.now = clock.Now();
             return ops;
         }
     };
@@ -1765,26 +1829,67 @@ void InventoryAndSaveTests()
             return e.code;
         }
     };
+    const json overrideLock{{"override_lock", true}};
     {
         FakeSaves fake;
-        Check("game.save refuses while the bridge's save lock is held", saveCode(fake, json::object()) == "bridge_save_lock");
-        Check("with override_lock it waits for the lock to go, then saves", saveCode(fake, json{{"override_lock", true}}) == "saved");
+        Check("game.save refuses while the bridge's save lock is held", saveCode(fake, json::object()) == "bridge_save_lock" && fake.relocks == 0);
+        Check("with override_lock it waits for the lock to go, saves, and takes the lock back (RB-52: success)",
+              saveCode(fake, overrideLock) == "saved" && fake.relocks == 1);
+    }
+    {
+        FakeSaves fake;
+        fake.bridgeLock = false;
+        fake.locked = false;
+        Check("a save that released nothing doesn't touch the lock", saveCode(fake, json::object()) == "saved" && fake.relocks == 0);
     }
     {
         FakeSaves fake;
         fake.unlockAfter = 1000;
         Check("a lock that doesn't go: nothing saved, the bridge's lock back on",
-              saveCode(fake, json{{"override_lock", true}}) == "saving_locked" && fake.relocked);
+              saveCode(fake, overrideLock) == "saving_locked" && fake.relocks == 1 && fake.saves == 0);
     }
     {
         FakeSaves fake;
         fake.fail = true;
-        Check("the game's failed answer is save_failed", saveCode(fake, json{{"override_lock", true}}) == "save_failed");
+        Check("the game's failed answer is save_failed, and the lock is back on (RB-52)", saveCode(fake, overrideLock) == "save_failed" && fake.relocks == 1);
     }
     {
         FakeSaves fake;
         fake.saveAfter = 1000000;
-        Check("no answer within the wait is save_uncertain", saveCode(fake, json{{"override_lock", true}, {"timeout_ms", 2000}}) == "save_uncertain");
+        Check("no answer within the wait is save_uncertain, and the lock is back on (RB-52)",
+              saveCode(fake, json{{"override_lock", true}, {"timeout_ms", 2000}}) == "save_uncertain" && fake.relocks == 1);
+    }
+    {
+        FakeSaves fake;
+        fake.throwAt = "save";
+        Check("save() throwing takes the lock back (RB-52)", saveCode(fake, overrideLock) == "failed" && fake.relocks == 1);
+    }
+    {
+        FakeSaves fake;
+        fake.throwAt = "status";
+        Check("a game-thread timeout while waiting for the answer takes the lock back (RB-52)",
+              saveCode(fake, overrideLock) == "timeout_after_start" && fake.relocks == 1);
+    }
+    {
+        FakeSaves fake;
+        fake.throwAt = "guard2";
+        Check("RB-53: the kill switch after the lock was released: no save asked, the lock back on (RB-52)",
+              saveCode(fake, overrideLock) == "killed" && fake.saves == 0 && fake.relocks == 1);
+    }
+    {
+        FakeSaves fake;
+        fake.killed = true;
+        Check("RB-53: killed or paused before the first step: nothing released, nothing saved",
+              saveCode(fake, overrideLock) == "killed" && fake.saves == 0 && fake.relocks == 0 && fake.statusCalls == 0);
+    }
+    {
+        FakeSaves fake;
+        fake.saveAfter = 1000000;
+        fake.statusCost = std::chrono::milliseconds(900);
+        const auto code = saveCode(fake, json{{"override_lock", true}, {"timeout_ms", 2000}});
+        // Counting loop turns would poll 11 times (2000 / 200 + 1), about 12 s of game time here.
+        Check("RB-55: the answer wait is a steady-clock deadline: a hitching game (0.9 s a step) stops near 2 s, not after 11 polls",
+              code == "save_uncertain" && fake.statusCalls <= 6, std::to_string(fake.statusCalls) + " status calls");
     }
 
     const std::vector<std::string> saves{"ManualSave-3", "AutoSave-1", "manualsave-9", "ManualSave-9"};
@@ -1793,23 +1898,48 @@ void InventoryAndSaveTests()
               w::FindSave(saves, "MANUALSAVE-9") == -2 && w::FindSave(saves, "ManualSave-9") == 3);
     {
         int polls = 0;
+        int lists = 0;
+        bool killed = false;
         std::string loaded;
+        FakeClock clock;
         w::LoadOps ops;
-        ops.latest = [] { return json{{"requested", true}, {"route", "latest"}}; };
-        ops.list = [] { return json{{"requested", true}}; };
+        ops.guard = [&killed] {
+            if (killed)
+            {
+                throw xfb::MethodError("writes_paused", "changes were paused part-way");
+            }
+        };
+        ops.latest = [&loaded] {
+            loaded = "latest";
+            return json{{"requested", true}, {"route", "latest"}};
+        };
+        ops.list = [&lists, &polls] {
+            ++lists;
+            polls = 0;
+            return json{{"requested", true}};
+        };
         ops.saves = [&polls, &saves] { return ++polls < 3 ? json{{"ready", false}} : json{{"ready", true}, {"saves", saves}}; };
-        ops.load = [&loaded](int32_t aIndex, const std::string& aName) {
-            loaded = std::to_string(aIndex) + ":" + aName;
+        ops.load = [&loaded](const std::string& aName) {
+            loaded = aName;
             return json{{"requested", true}, {"route", "name"}};
         };
-        ops.sleep = [](std::chrono::milliseconds) {};
-        const auto out = w::GameLoad(p::ParseGameLoad(json{{"name", "AutoSave-1"}}), ops);
-        Check("game.load by name waits for the game's list and loads that position",
-              loaded == "1:AutoSave-1" && out["undo"].is_null() && out.contains("undo_note"), out.dump());
+        ops.sleep = [&clock](std::chrono::milliseconds aFor) { clock.Advance(aFor); };
+        ops.now = clock.Now();
+        const json discard{{"discard_unsaved", true}};
+        const auto withName = [&discard](const char* aName) {
+            auto params = discard;
+            params["name"] = aName;
+            return p::ParseGameLoad(params);
+        };
+        const auto out = w::GameLoad(withName("autosave-1"), ops);
+        Check("game.load by name waits for the game's list and hands the load step the exact name to look up (RB-58)",
+              loaded == "AutoSave-1" && lists == 1 && out["undo"].is_null() && out.contains("undo_note"), out.dump());
+        w::GameLoad(withName("ManualSave-3"), ops);
+        Check("RB-58: every load by name fetches the game's list again", lists == 2 && loaded == "ManualSave-3");
         std::string message;
         try
         {
-            w::GameLoad(p::ParseGameLoad(json{{"name", "Missing-1"}}), ops);
+            w::GameLoad(withName("Missing-1"), ops);
         }
         catch (const xfb::MethodError& e)
         {
@@ -1817,7 +1947,151 @@ void InventoryAndSaveTests()
         }
         Check("a name that isn't there: save_not_found, listing some names", message.find("save_not_found") == 0 && message.find("ManualSave-3") != std::string::npos,
               message);
-        Check("latest takes the quick-load path", w::GameLoad(p::ParseGameLoad(json{{"latest", true}}), ops)["route"] == "latest");
+        auto latest = discard;
+        latest["latest"] = true;
+        Check("latest takes the quick-load path", w::GameLoad(p::ParseGameLoad(latest), ops)["route"] == "latest");
+        killed = true;
+        loaded.clear();
+        std::string code;
+        try
+        {
+            w::GameLoad(withName("AutoSave-1"), ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            code = e.code;
+        }
+        Check("RB-53: paused or killed part-way, nothing is loaded", code == "writes_paused" && loaded.empty());
+        killed = false;
+        ops.saves = [] { return json{{"ready", false}}; };
+        const auto started = clock.at;
+        code.clear();
+        try
+        {
+            w::GameLoad(withName("AutoSave-1"), ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            code = e.code;
+        }
+        Check("RB-55: the list wait is a steady-clock deadline (kSaveListWaitMs)",
+              code == "timeout" && clock.at - started >= std::chrono::milliseconds(w::kSaveListWaitMs) &&
+                  clock.at - started < std::chrono::milliseconds(w::kSaveListWaitMs + 500));
+    }
+}
+
+void Rb51To60Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    // RB-51: cc.confirm closes with Back only when certainly nothing changed.
+    Check("RB-51: cc.confirm with no change event and every option as at open: nothing to confirm (Back, nothing discarded)",
+          w::ChooseLeave(true, json{{"changes", 0}, {"unchanged", true}}) == w::LeaveRoute::NothingToConfirm);
+    Check("RB-51: any change event confirms, even with the options back as they were",
+          w::ChooseLeave(true, json{{"changes", 1}, {"unchanged", true}}) == w::LeaveRoute::Confirm);
+    Check("RB-51: options differing from the open-time snapshot (a preset, randomize, the system route) confirm",
+          w::ChooseLeave(true, json{{"changes", 0}, {"unchanged", false}}) == w::LeaveRoute::Confirm);
+    Check("RB-51: unsure (no snapshot, a missing or odd value) confirms, never Back",
+          w::ChooseLeave(true, json::object()) == w::LeaveRoute::Confirm && w::ChooseLeave(true, json{{"changes", "0"}, {"unchanged", true}}) == w::LeaveRoute::Confirm &&
+              w::ChooseLeave(true, json{{"changes", 0}, {"unchanged", "true"}}) == w::LeaveRoute::Confirm &&
+              w::ChooseLeave(true, json{{"changes", 0}}) == w::LeaveRoute::Confirm);
+    Check("cc.back is always Back, and the script's mode codes", w::ChooseLeave(false, json{{"changes", 0}, {"unchanged", true}}) == w::LeaveRoute::Back &&
+                                                                 w::LeaveRouteCode(w::LeaveRoute::Back) == 0 && w::LeaveRouteCode(w::LeaveRoute::Confirm) == 1 &&
+                                                                 w::LeaveRouteCode(w::LeaveRoute::NothingToConfirm) == 2);
+
+    // RB-53: the dispatcher's check for multi-step writes.
+    {
+        xfb::Config config;
+        config.allowWrites = true;
+        xfb::Session session;
+        std::string error;
+        wchar_t temp[MAX_PATH]{};
+        GetTempPathW(MAX_PATH, temp);
+        xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-rb53-not-created");
+        xfb::GameThreadQueue queue;
+        xfb::Dispatcher dispatcher(config, session, queue);
+        const auto code = [&dispatcher] {
+            return ParamsCode([&dispatcher] { dispatcher.RequireWritesOpen(); });
+        };
+        const auto open = code();
+        dispatcher.SetWritesPaused(true);
+        const auto paused = code();
+        dispatcher.SetWritesPaused(false);
+        dispatcher.Kill("unit");
+        const auto killed = code();
+        Check("RB-53: RequireWritesOpen passes, then refuses writes_paused and killed", open == "ok" && paused == "writes_paused" && killed == "killed",
+              open + " " + paused + " " + killed);
+    }
+
+    // RB-59 and RB-60: light placement undo and errors.
+    struct Fake : FakePhoto
+    {
+        std::array<double, 3> at{4.0, 5.0, 6.0};
+        bool failSettleAfterPlace = false;
+        bool failPosition = false;
+        bool placed = false;
+        xfb::writes::LightOps Ops()
+        {
+            auto ops = FakePhoto::Ops();
+            const auto baseSettle = ops.settle;
+            ops.settle = [this, baseSettle] {
+                if (failSettleAfterPlace && placed)
+                {
+                    throw xfb::MethodError("timeout", "photo mode didn't tick");
+                }
+                baseSettle();
+            };
+            ops.place = [this](int32_t, const p::LightPlacement&) {
+                placed = true;
+                const auto before = at;
+                at = {1.0, 2.0, 3.0};
+                return json{{"before", {{"x", before[0]}, {"y", before[1]}, {"z", before[2]}}}, {"after", {{"x", 1.0}, {"y", 2.0}, {"z", 3.0}}}};
+            };
+            ops.position = [this](int32_t) {
+                if (failPosition)
+                {
+                    throw xfb::MethodError("unavailable", "the light's entity wasn't found");
+                }
+                return json{{"position", {{"x", at[0]}, {"y", at[1]}, {"z", at[2]}}}};
+            };
+            return ops;
+        }
+    };
+    {
+        Fake fake;
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 1;
+        const auto out = w::LightSet(p::ParseLight(json::parse(R"({"light":1,"place":"camera"})")), fake.Ops());
+        Check("RB-59: place camera records the light's earlier position, and its undo puts it back there",
+              out["undo"]["params"]["place"] == json{{"world", {4.0, 5.0, 6.0}}} && out["placement"]["before"]["x"] == 4.0, out.dump());
+    }
+    {
+        Fake fake;
+        fake.values[p::key::kLightSelect] = 0;
+        fake.failPosition = true;
+        const auto out = w::LightSet(p::ParseLight(json::parse(R"({"light":1,"place":{"distance":1.2}})")), fake.Ops());
+        Check("RB-60: a failed read-back after a move is reported (now_unknown), with the undo, not a failure",
+              out["placement"]["route"] == "moved" && out["placement"].contains("now_unknown") && !out["placement"].contains("held") &&
+                  out["undo"]["params"]["place"] == json{{"world", {4.0, 5.0, 6.0}}},
+              out.dump());
+    }
+    {
+        Fake fake;
+        fake.values[p::key::kLightSelect] = 0;
+        fake.failSettleAfterPlace = true;
+        std::string message;
+        try
+        {
+            w::LightSet(p::ParseLight(json::parse(R"({"light":1,"place":{"distance":1.2}})")), fake.Ops());
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = e.what();
+        }
+        Check("RB-60: a failure after the light moved says so and names the undo that puts it back",
+              message.find("the light was moved") != std::string::npos && message.find("\"world\":[4.0,5.0,6.0]") != std::string::npos &&
+                  message.find("no light value was changed; the light was moved") != std::string::npos,
+              message);
     }
 }
 
@@ -1842,6 +2116,7 @@ int RunUnitTests()
     Batch5ClassTests();
     LightPlacementTests();
     InventoryAndSaveTests();
+    Rb51To60Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

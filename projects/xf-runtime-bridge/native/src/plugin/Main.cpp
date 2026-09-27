@@ -193,6 +193,16 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         state.restore.Tick(state.bridge && state.bridge->RestoreReady(), &RestoreAfterKill, [](const std::string& aWhat) {
             log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
         });
+        // A save lock game.save released and couldn't retake through the queue (RB-52). Runs even after
+        // the kill switch: the lock is the one thing the kill switch keeps.
+        try
+        {
+            RetakeOwedSaveLock();
+        }
+        catch (const std::exception& e)
+        {
+            log::Warn("game.save_relock_failed", std::string("what=") + e.what(), "save-relock");
+        }
         HandleRearm(state);
         // A client dropped for idleness can't be driving photo mode any more: give the cursor back
         // (RB-34). Only after a write, since only a write hides it.

@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { PANEL_FILE, PLUGIN_DIR, PRESETS_FILE, stageVariant, variantConfig, VARIANTS, type Variant } from "../packaging.ts";
+import { OLD_PRESETS_FILE, PANEL_FILE, PLUGIN_DIR, PRESETS_FILE, stageVariant, variantConfig, VARIANTS, type Variant } from "../packaging.ts";
 
 const projectDir = resolve(import.meta.dir, "..", "..");
 
@@ -90,6 +90,16 @@ describe("packages", () => {
   test("the camera presets are staged so TweakXL reads them last (after another mod's .tweak presets)", () => {
     expect(PRESETS_FILE).toMatch(/\/\^xf_photo_mode_presets\.yaml$/);
     expect(existsSync(join(staged.writes.stageDir, PRESETS_FILE))).toBe(true);
+  });
+
+  test("RB-65: the packages with presets tell whoever stages them to remove 0.3.x's presets file, and what the ^ file overrides", () => {
+    for (const variant of ["diagnostic", "writes"] as const) {
+      const notes = staged[variant].manifest.staging_notes.join(" ");
+      expect(notes).toContain(OLD_PRESETS_FILE);
+      expect(notes).toContain("std_preset_6..9");
+      expect(existsSync(join(staged[variant].stageDir, OLD_PRESETS_FILE))).toBe(false);
+    }
+    expect(staged.default.manifest.staging_notes).toEqual([]);
   });
 
   test("every package carries the same plugin, scripts and notices, and a manifest hashing each file", () => {

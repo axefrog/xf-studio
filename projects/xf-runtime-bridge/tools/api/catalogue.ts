@@ -369,12 +369,28 @@ export function lightParams(input: Record<string, unknown>): Record<string, unkn
   return place.camera === true ? { ...input, place: "camera" } : input;
 }
 
-/** game.load: exactly one of latest and name. */
+/** game.load: exactly one of latest and name, and discard_unsaved: true (RB-56). */
 function loadParams(input: Record<string, unknown>): Record<string, unknown> {
   if ((input.latest === true) === (input.name !== undefined)) throw planError("bad_input", "Give latest: true or a save's name (one of them).");
   if (input.latest === false) throw planError("bad_input", "latest takes true (the most recent save); give a name instead to load another.");
+  if (input.discard_unsaved !== true)
+    throw planError("bad_input", "Loading a save discards everything since it, unsaved progress included, and the game won't ask first. Pass discard_unsaved: true to load anyway.");
   return input;
 }
+
+// The client's wait for game.save and game.load, derived from the server's worst case (RB-55; the
+// formulas are in native/src/core/Writes.hpp, and tools/test/catalogue.test.ts checks these constants
+// against that header and GameThreadQueue.hpp).
+/** The longest game-thread step: request_timeout_ms (default 2000) plus the queue's running grace (1000). */
+export const SERVER_STEP_MS = 2000 + 1000;
+export const SAVE_UNLOCK_WAIT_MS = 3000; // writes::kSaveUnlockWaitMs
+export const SAVE_LIST_WAIT_MS = 5000; // writes::kSaveListWaitMs
+/** The pipe's round trip and the bridge thread's own work, on top of the server's worst case. */
+export const CLIENT_SLACK_MS = 2000;
+/** game.save: timeout_ms + the unlock wait + 5 steps (prepare, a status overshoot twice, save, relock). */
+export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOCK_WAIT_MS + 5 * SERVER_STEP_MS + CLIENT_SLACK_MS;
+/** game.load: the list wait + 3 steps (list, a status overshoot, load). */
+export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + 3 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 
 /** cc.apply: exactly one of index and value (the schema can't say "one of", so the tools check it too). */
 function characterApplyParams(input: Record<string, unknown>): Record<string, unknown> {
@@ -977,20 +993,24 @@ export const CATALOGUE: readonly CommandDef[] = [
       timeout_ms: int("How long to wait for the game to confirm the save, in milliseconds (default 20000).", 2000, 60000),
     }),
     undo: "None: a save can't be unsaved. Delete it in the game's Load menu if it isn't wanted.",
-    bridge: { method: "game.save", timeoutMs: (input) => ((input.timeout_ms as number | undefined) ?? 20000) + 8000 },
+    bridge: { method: "game.save", timeoutMs: (input) => saveClientTimeoutMs((input.timeout_ms as number | undefined) ?? 20000) },
   },
   {
     name: "game.load",
     title: "Load a save",
     description:
-      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. Everything since that save is discarded, the bridge's save lock with it. From normal play or the pause menu, not photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.",
+      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. From normal play or the pause menu, not photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.",
     permission: "write-save",
-    input: obj({
-      latest: bool("true: load the most recent save of this playthrough."),
-      name: str("A save's name as the game lists it (for example ManualSave-12).", { pattern: "^[A-Za-z0-9 ._-]{1,64}$", maxLength: 64 }),
-    }),
+    input: obj(
+      {
+        latest: bool("true: load the most recent save of this playthrough."),
+        name: str("A save's name as the game lists it (for example ManualSave-12).", { pattern: "^[A-Za-z0-9 ._-]{1,64}$", maxLength: 64 }),
+        discard_unsaved: bool("Must be true: everything since that save, unsaved progress included, is discarded."),
+      },
+      ["discard_unsaved"],
+    ),
     undo: "None: loading discards everything since that save.",
-    bridge: { method: "game.load", params: loadParams, timeoutMs: () => 15000 },
+    bridge: { method: "game.load", params: loadParams, timeoutMs: () => loadClientTimeoutMs() },
   },
 
   // The player's view

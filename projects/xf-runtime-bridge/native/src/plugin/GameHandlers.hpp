@@ -17,4 +17,8 @@ void RestoreAfterKill();
 // Game thread, after the pipe dropped a client for idleness: gives the mouse cursor back if a bridge
 // write hid it (RB-34). Throws on failure; the caller logs it.
 void ReleaseCursorAfterIdle();
+
+// Game thread, each Running tick: takes the bridge's save lock back when a game.save with override_lock
+// couldn't retake it through the queue (State::relockOwed; RB-52). Throws on a failed script call.
+void RetakeOwedSaveLock();
 } // namespace xfb::plugin

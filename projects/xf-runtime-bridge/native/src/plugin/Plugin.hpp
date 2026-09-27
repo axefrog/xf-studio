@@ -61,6 +61,10 @@ struct State
     // freeze, hidden photo UI; not the save lock) once, from a game-thread tick (core/Writes.hpp).
     writes::RestoreOnce restore;
 
+    // game.save with override_lock: set when the save lock couldn't be taken back through the queue
+    // (the kill switch closed it, a timeout); the next Running tick retakes it directly (RB-52).
+    std::atomic<bool> relockOwed{false};
+
     // game.options.read's render options: requested by the bridge, answered by the CET layer
     // (XFBridge_OptionsWanted / XFBridge_OptionsReport). Cancelled by the kill switch.
     OptionsExchange options;

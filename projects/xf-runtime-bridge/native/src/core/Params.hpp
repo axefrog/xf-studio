@@ -361,11 +361,13 @@ struct GameSaveRequest
 };
 GameSaveRequest ParseGameSave(const json& aParams);
 
-// game.load: {latest: true} or {name: a save's name in the game's list (ManualSave-12)}.
+// game.load: {latest: true} or {name: a save's name in the game's list (ManualSave-12)}, and always
+// discard_unsaved: true (refused without it, RB-56).
 struct GameLoadRequest
 {
     bool latest = false;
     std::string name;
+    bool discardUnsaved = false;
 };
 GameLoadRequest ParseGameLoad(const json& aParams);
 
