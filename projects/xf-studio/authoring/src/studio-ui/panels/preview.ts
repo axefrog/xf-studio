@@ -1,5 +1,5 @@
 import type { PreviewTextureSize } from "../../preview-quality";
-import { applyCapability, badge, button, emptyState, note, section, Segmented, SelectField, Slider, Toggle } from "../controls";
+import { applyCapability, badge, button, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { helpTip } from "../help-tip";
 import { icon } from "../icons";
@@ -87,14 +87,17 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     format: value => (10 ** value).toPrecision(3),
     transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); },
       commit: endEdit, cancel: endEdit } });
+  const creatorShadows = new Toggle({ label: "Shadows from the flagged lights",
+    help: "The lights the game flags for shadows cast them onto the V: the key light's nose shadow, and no rim light through the head.",
+    onChange: enabled => rt.dispatch({ kind: "preview.setCreatorShadows", enabled }) });
   const resetCalibration = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
-    title: "Put the intensity reading, cone angles and creator exposure back to their defaults",
+    title: "Put the intensity reading, cone angles, creator exposure and shadows back to their defaults",
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
   // A research tool (UI-85): shown only with View preferences › Show research tools.
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
     h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
       helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
-    intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
+    intensity.element, cone.element, creatorExposure.element, creatorShadows.element, h("div", { class: "row" }, resetCalibration));
   const fovNote = note("");
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
     transaction: {
@@ -200,6 +203,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       cone.update(creator?.cone, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
       creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
         note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
+      creatorShadows.update(creator?.shadows ?? true, studioOnly({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
       applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       // The panel's loading reason is said once, in the line that is always there (UI-90).
       if (!ready) setText(fovNote, loading.reason);
@@ -231,11 +235,13 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
   const STILL = "still";
-  const source = new SelectField<string>({ label: "Body", onChange: value => {
+  // Mutually exclusive buttons, one per idle prepared on this computer (the list can change), wrapping onto more rows as needed. The
+  // pressed button moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
+  const source = new Segmented<string>({ label: "Body", wrap: true, reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
     if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
-  }, help: "Still, or one of the idles the game plays on V in its creator and inventory screens." });
+  } });
   const pause = button({ label: "Pause idle", icon: "pause", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.setPaused", paused: !motion?.idlePaused });
   } });
@@ -255,8 +261,12 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   // person is never sent to a developer guide.
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
+  // Hair physics: the scene's dangle simulation, one setting per scene (hair-physics-plan.md §3.6); off until it is calibrated in game.
+  const physics = new Toggle({ label: "Hair physics", reserveNote: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
+    help: "Hair that has physics in the game swings and hangs with gravity here too, worked out from the hairstyle's own files." });
   const element = h("div", { class: "panel-content" },
     section("Game idle", source.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
+    section("Hair", physics.element),
     section("Blink", blinkControls, blinkNote));
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
@@ -265,14 +275,15 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
-      source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label }))],
-        motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
+      source.setOptions([{ value: STILL, label: "Still", title: "V stands in her bind pose." },
+        ...idles.map(entry => ({ value: entry.id, label: entry.label, title: idleTitle("screen" in entry ? entry.screen : "creator") }))]);
+      source.update(motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
+        : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready." : "" });
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
-      setText(idleNote, !motion?.available ? unavailable.reason : motion.idleLoading ? "Loading that idle; the previous one plays until it's ready."
-        : motion.idle
+      setText(idleNote, !motion?.available ? unavailable.reason : motion.idle
         ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
         : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
@@ -281,9 +292,20 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
       blinkControls.hidden = !!motion && !motion.blinkAvailable;
       setText(blinkNote, blinkNoteLine(motion));
+      const physicsAllowed = port.authoring.capability({ kind: "motion.setPhysics", enabled: !motion?.physics });
+      physics.update(motion?.physics ?? false, { disabled: !physicsAllowed.available, reason: physicsAllowed.reason, note: physicsNoteLine(motion) });
     },
   };
 }
+
+/** The hair physics note: what it does now (a held pose settles; the idle swings it). */
+export function physicsNoteLine(motion: Pick<MotionState, "physics" | "physicsAvailable" | "idle" | "idlePaused"> | undefined): string | undefined {
+  if (!motion?.physics || !motion.physicsAvailable) return undefined;
+  return motion.idle && !motion.idlePaused ? "The hair swings as your V moves." : "The hair hangs as it would at rest in this pose.";
+}
+
+/** A body-source button's tooltip: where the game plays that idle. */
+const idleTitle = (screen: string) => `The idle the game plays on V in its ${screen === "creator" ? "character creator" : screen === "inventory" ? "inventory" : "gender selection"}.`;
 
 /** The Motion panel's blink note: why the blink is off, or what it plays and how often. */
 export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError" | "blinkRepeatSeconds"> | undefined): string {

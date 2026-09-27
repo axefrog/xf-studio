@@ -110,3 +110,31 @@ export function extendSkin(
   }
   mesh.applyBoneTransform = apply;
 }
+
+/**
+ * A shadow depth material for a skinned mesh that skins with all its influence sets, as `extendSkin` does for its colour material:
+ * Three's stock depth material uses only the first four influences, which pulls the V's vertices toward the origin in the shadow map
+ * and offsets every shadow. Morph targets need nothing extra (the depth material applies the mesh's own). One per mesh, cached on it.
+ */
+export function fullSkinDepthMaterial(mesh: THREE.SkinnedMesh, options: { strandAlpha?: boolean } = {}): THREE.MeshDepthMaterial {
+  const cached = mesh.userData.xfsFullSkinDepth as THREE.MeshDepthMaterial | undefined;
+  if (cached) return cached;
+  const sets = skinSets(mesh.geometry);
+  let sum = "mat4 fullSkin = mat4(0.0);\n";
+  for (const { j, w } of sets) for (const c of ["x", "y", "z", "w"]) sum += `fullSkin += getBoneMatrix(${j}.${c}) * ${w}.${c};\n`;
+  const declarations = sets.slice(1).map(s => `attribute vec4 ${s.j}; attribute vec4 ${s.w};`).join("\n");
+  const material = new THREE.MeshDepthMaterial();
+  material.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", `#include <common>\n${declarations}`)
+      .replace("#include <skinbase_vertex>", `#ifdef USE_SKINNING\n${sum}\n#endif`)
+      .replace("#include <skinning_vertex>", "#ifdef USE_SKINNING\ntransformed = (bindMatrixInverse * fullSkin * bindMatrix * vec4(transformed,1.0)).xyz;\n#endif");
+    // Hair strands keep their coverage in the alpha map's red channel (hair-shading.ts); the renderer copies the map and, for an
+    // alpha-to-coverage material, an alpha test of 0.5 onto this material, so strands cast strand-shaped shadows.
+    if (options.strandAlpha) shader.fragmentShader = shader.fragmentShader.replace("#include <alphamap_fragment>",
+      "#ifdef USE_ALPHAMAP\n\tdiffuseColor.a *= texture2D( alphaMap, vAlphaMapUv ).r;\n#endif");
+  };
+  material.customProgramCacheKey = () => `full-skin-depth-${sets.length}-${options.strandAlpha ? "strand" : "solid"}`;
+  mesh.userData.xfsFullSkinDepth = material;
+  return material;
+}

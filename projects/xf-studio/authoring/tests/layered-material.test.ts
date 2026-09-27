@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { accumulateLayer, bakeOrder, BAKE_SIZE, bakeSurface, colourMaskLevels, createLayeredMaterial, EMPTY_ACCUMULATOR, globalNormal, layerBakeParameters,
-  layeredBakeExtent, layeredBakeSize, layeredContextRestored, layeredGlobals, layerMapUv, levels, microblendContrastFactor, NEUTRAL_BASE_COLOUR, reorientedNormal,
+  layeredBakeExtent, layeredBakeSize, layeredContextRestored, layeredGlobals, layerMapUv, levels, microblendContrastFactor, MIN_MICROBLEND_CONTRAST, NEUTRAL_BASE_COLOUR, reorientedNormal,
   resolveSurface, stackProblems, uvDomain,
   type LayerAccumulator, type LayerBakeParameters, type LayerSamples } from "../src/layered-material";
 import { MAX_SETUP_LAYERS, MAX_TABLE_ENTRIES, readSetup, readTemplate } from "../src/layered-setup";
@@ -84,15 +84,38 @@ describe("front-to-back coverage", () => {
 });
 
 describe("microblend and normals", () => {
-  test("contrast crossfades the mask with the microblend's 1 − alpha; contrast 1 keeps the mask, 0 keeps the microblend", () => {
-    expect(microblendContrastFactor(0.69)).toBe(0.69);
+  test("the program's factor is the reciprocal of the contrast: contrast 1 keeps the mask, a low contrast steepens it about 1 − alpha", () => {
+    expect(microblendContrastFactor(0.5)).toBe(2);
+    expect(microblendContrastFactor(1)).toBe(1);
+    // A contrast of 0 is a finite step, never an infinite or NaN factor.
+    expect(microblendContrastFactor(0)).toBe(1 / MIN_MICROBLEND_CONTRAST);
+    expect(microblendContrastFactor(Number.NaN)).toBe(1);
     const at = (contrast: number, mask: number, alpha: number) =>
       accumulateLayer(EMPTY_ACCUMULATOR, params(1, { microblendContrast: contrast }), samples({ mask, microblend: [0.5, 0.5, 1, alpha] }), false).sumA;
     expect(at(1, 0.3, 0.2)).toBeCloseTo(0.3, 9);
-    expect(at(0, 0.3, 0.2)).toBeCloseTo(0.8, 9);
-    expect(at(0.5, 0.3, 0.2)).toBeCloseTo(0.55, 9);
-    // An opaque microblend at contrast 0 hides the layer (the community guide's warning).
-    expect(at(0, 0.9, 1)).toBe(0);
+    // k = 0.8: 0.8 + (0.3 − 0.8)·2 < 0, and 0.8 + (0.9 − 0.8)·2 = 1.
+    expect(at(0.5, 0.3, 0.2)).toBe(0);
+    expect(at(0.5, 0.9, 0.2)).toBeCloseTo(1, 9);
+    expect(at(0.5, 0.85, 0.2)).toBeCloseTo(0.9, 9);
+    // At contrast 0 the mask becomes a step at the threshold.
+    expect(at(0, 0.79, 0.2)).toBe(0);
+    expect(at(0, 0.81, 0.2)).toBe(1);
+  });
+
+  test("a graphic eye design's ring (contrast 0.49 over default.xbm's alpha 104/255) is solid and leaves the masked centre clean", () => {
+    // The vanilla `ring_eye.mlsetup` layer 8 over `eye_ml.mlmask` layer 8: the ring's texels are 1, the disc inside it 0.11.
+    const alpha = 104 / 255, ring = params(8, { microblendContrast: 0.49, colorScale: [0.167, 0.001, 0.001] });
+    const base = params(0, { colorScale: [0.3736, 0.3736, 0.3736] });
+    const draw = (mask: number) => {
+      let acc = accumulateLayer(EMPTY_ACCUMULATOR, ring, samples({ mask, microblend: [0.5, 0.5, 1, alpha], colour: [1, 1, 1] }), false);
+      acc = accumulateLayer(acc, base, samples({ microblend: [0.5, 0.5, 1, alpha], colour: [1, 1, 1] }), true);
+      return acc.colour;
+    };
+    close(draw(1), [0.167, 0.001, 0.001]);
+    close(draw(0.11), [0.3736, 0.3736, 0.3736]);
+    // Taking the stored value itself as the factor laid 36 % of the ring's red over the centre and left the ring 21 % grey.
+    const k = 1 - alpha;
+    expect(k + (0.11 - k) * 0.49).toBeGreaterThan(0.35);
   });
 
   test("microblend normals blend in at the mask's edges, weighted by what the layers above already covered", () => {
