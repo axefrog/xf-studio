@@ -13,7 +13,7 @@ import { previewColourMatrix, type PreviewTokens } from "../../choice-preview";
  * - **States.** `waiting`: the frame with a faint glyph for the kind (never a spinner: the corner mark already says the choice is being
  *   prepared); `ready`: the picture fades in (at once under reduced motion); `none`: no picture is possible, the glyph stays and the tile
  *   shows no error. Selected, focused and hovered come from the choice item.
- * - **Turntable** (`PreviewSpin`, where the layout allows it: grid L and details): resting the pointer on the picture turns it slowly after
+ * - **Turntable** (`PreviewSpin`, where the layout allows it: every grid size and details): resting the pointer on the picture turns it slowly after
  *   a short dwell, and pressing and dragging across it turns it by hand at once (a drag never chooses; a click still does). The turntable
  *   strip is loaded only while it turns, and the still comes back when the pointer leaves.
  * - **Theming.** Pictures are theme-free channel images; one SVG colour matrix (`installPreviewFilter`) colours every tile from the
@@ -26,13 +26,17 @@ export type PreviewTile = {
   set(url: string | null, none?: boolean): void;
   /** The turntable strip (`frames` pictures side by side, frame 0 the still), or null while there is none. */
   setSpin(url: string | null, frames: number): void;
-  /** Whether the picture turns on hover and drag (the grid's L size and details). */
+  /** Whether the picture turns on hover and drag (every grid size and details). */
   spinnable(on: boolean): void;
   /** The text the list and details layouts show beside the label: the choice's source and its prepared state (either may be empty). */
   setMeta(source: string, state: string): void;
   /** The picture's turntable. */
   readonly spin: PreviewSpin;
+  /** The live turn's frames for this picture (the one being turned), or null: the strip then turns it. */
+  setLive(frames: LiveFrames | null): void;
 };
+/** Frames of a live turn: the picture drawn at `turn` degrees from the still, or null when it can't be drawn now. */
+export type LiveFrames = (turn: number) => Promise<ImageBitmap | null>;
 
 /** A preview tile for a choice item's content: the frame with its glyph, the label, and the list and details text. */
 export function previewTile(options: { label: string; glyph: IconName }): PreviewTile {
@@ -58,6 +62,7 @@ export function previewTile(options: { label: string; glyph: IconName }): Previe
     },
     spin,
     setSpin: (url, frames) => spin.setStrip(url, frames),
+    setLive: frames => spin.setLive(frames),
     spinnable: on => spin.enable(on),
     setMeta(text, words) { if (source.textContent !== text) source.textContent = text; if (state.textContent !== words) state.textContent = words; },
   };
@@ -68,15 +73,25 @@ export const SPIN = Object.freeze({ dwellMs: 400, turnMs: 8000, dragWidths: 1.5,
 /** Measurement (tools and `?verify=1` sessions read it from the page as `xfsSpinMeasures`): ms from the pointer arriving to the first turn shown. */
 export const spinMeasures: number[] = [];
 (globalThis as { xfsSpinMeasures?: number[] }).xfsSpinMeasures = spinMeasures;
+/** Measurement (`xfsLiveMeasures`): the main thread's ms to show each live frame (handing the bitmap to its canvas). */
+export const liveMeasures: number[] = [];
+(globalThis as { xfsLiveMeasures?: number[] }).xfsLiveMeasures = liveMeasures;
+/** Live frames are asked for at most this often (about 30 a second), one at a time. */
+const LIVE_INTERVAL_MS = 33;
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * The turntable on a preview frame (`.pv-frame`): two copies of the strip over the still, the frame the angle falls in and the next one
  * blended by how far between them it is, so a 24-frame strip turns smoothly. It turns slowly while the pointer rests on the frame (after
  * `SPIN.dwellMs`; never under reduced motion) or while `setHover` says the picture is being looked at elsewhere (the details stage follows
- * the choice under the pointer), and by hand while dragged. A drag past `SPIN.dragThreshold` pixels swallows the click that ends it, so
+ * the choice under the pointer), and by hand while dragged. While it should be turning but its strip isn't there yet (drawn on first
+ * look), a small progress tick in the frame's corner says it is on its way (`data-spin-wait`). A drag past `SPIN.dragThreshold` pixels swallows the click that ends it, so
  * the choice isn't chosen; a click without a drag passes through untouched and at once. The strip is set as an image source only while
  * it shows, so a row of tiles never holds decoded strips it isn't turning.
+ *
+ * **Live turns** (`setLive`): for the one picture being turned, frames drawn at the exact angle by the preview worker replace the strip as
+ * soon as the first arrives, at up to 30 a second, one request at a time (the worker's pace sets the rate); the strip stays the instant
+ * fallback until then and whenever the live turn is paused (a person's change being prepared).
  */
 export class PreviewSpin {
   private readonly layer: HTMLElement;
@@ -98,11 +113,21 @@ export class PreviewSpin {
   private swallow = false;
   /** When the pointer arrived (0 once the first turn showed): hover-to-first-turn is measured from it (`spinMeasures`). */
   private arrived = 0;
+  private live: LiveFrames | null = null;
+  private readonly canvas: HTMLCanvasElement;
+  private context: ImageBitmapRenderingContext | null = null;
+  /** A live frame is shown (the strips are hidden), at this angle; one request at a time, no more often than the interval. */
+  private liveShown = false;
+  private liveAngle = NaN;
+  private liveBusy = false;
+  private liveAt = 0;
+  private liveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly host: HTMLElement, options: { enabled?: boolean } = {}) {
     const strip = () => h("img", { class: "pv-strip", alt: "", draggable: "false", decoding: "async" });
     this.strips = [strip(), strip()];
-    this.layer = h("span", { class: "pv-spin", hidden: true }, ...this.strips);
+    this.canvas = h("canvas", { class: "pv-live", hidden: true, width: "256", height: "256" });
+    this.layer = h("span", { class: "pv-spin", hidden: true }, ...this.strips, this.canvas);
     host.append(this.layer);
     this.strips[0].addEventListener("load", () => { this.loaded = true; if (this.due && this.active() && !this.drag) this.play(); this.paint(); });
     this.strips[0].addEventListener("error", () => { this.loaded = false; this.paint(); });
@@ -124,6 +149,41 @@ export class PreviewSpin {
     for (const image of this.strips) { image.removeAttribute("src"); image.style.width = `${this.frames * 100}%`; }
     if (this.active()) this.load();
     this.paint();
+  }
+  /** The live turn's frames (this picture is the one turned live), or null: back to the strip. */
+  setLive(frames: LiveFrames | null) {
+    if (frames === this.live) return;
+    this.live = frames;
+    this.hideLive();
+    this.paint();
+  }
+  private hideLive() {
+    this.liveShown = false; this.liveAngle = NaN;
+    if (this.liveTimer) { clearTimeout(this.liveTimer); this.liveTimer = null; }
+    this.canvas.hidden = true;
+    for (const image of this.strips) image.hidden = false;
+  }
+  /** Ask for the live frame at the current angle (one at a time, no more often than the interval). */
+  private pumpLive() {
+    const frames = this.live;
+    if (!frames || this.liveBusy || this.liveTimer || Math.abs(this.angle - this.liveAngle) < 0.05) return;
+    const wait = this.liveAt + LIVE_INTERVAL_MS - performance.now();
+    if (wait > 0) { this.liveTimer = setTimeout(() => { this.liveTimer = null; this.pumpLive(); }, wait); return; }
+    const angle = this.angle;
+    this.liveBusy = true; this.liveAt = performance.now();
+    frames(angle).then(bitmap => {
+      this.liveBusy = false;
+      if (!bitmap) return;
+      if (frames !== this.live || !this.showing()) { bitmap.close(); return; }
+      const at = performance.now();
+      this.context ??= this.canvas.getContext("bitmaprenderer");
+      if (!this.context) { bitmap.close(); return; }
+      this.context.transferFromImageBitmap(bitmap);
+      if (liveMeasures.length < 2000) liveMeasures.push(performance.now() - at);
+      this.liveAngle = angle;
+      if (!this.liveShown) { this.liveShown = true; this.canvas.hidden = false; for (const image of this.strips) image.hidden = true; }
+      this.pumpLive();
+    }, () => { this.liveBusy = false; });
   }
   /** Allow turning (off: the still only, and any turn in progress ends). */
   enable(on: boolean) {
@@ -156,7 +216,7 @@ export class PreviewSpin {
       this.dwell = null;
       if (!this.active() || this.drag || reducedMotion()) return;
       this.due = true;
-      if (this.loaded) this.play();
+      if (this.loaded) this.play(); else this.paint();
     }, SPIN.dwellMs);
   }
   private down(event: PointerEvent) {
@@ -183,9 +243,8 @@ export class PreviewSpin {
     if (!drag || event.pointerId !== drag.id) return;
     this.drag = null;
     if (drag.moved) {
-      // Held still, it rests on the nearest frame (a blend of two frames 15° apart shows ghost strands).
-      const step = 360 / this.frames;
-      this.angle = Math.round(this.angle / step) * step;
+      // Held still on the strip, it rests on the nearest frame (a blend of two frames 15° apart shows ghost strands); a live turn needs no snap.
+      if (!this.liveShown) { const step = 360 / this.frames; this.angle = Math.round(this.angle / step) * step; }
       this.paint();
       this.swallow = true;
       // The click that ends a drag follows at once; if none comes (released outside), nothing waits for it.
@@ -220,15 +279,25 @@ export class PreviewSpin {
   private reset() {
     this.angle = 0;
     this.loaded = false;
+    this.hideLive();
+    this.context?.transferFromImageBitmap(null);
     for (const image of this.strips) image.removeAttribute("src");
     this.paint();
   }
+  private showing() {
+    return this.enabled && ((!!this.url && this.loaded) || this.liveShown) && this.active() && (this.playing || !!this.drag?.moved || this.angle !== 0);
+  }
   private paint() {
-    const showing = this.enabled && !!this.url && this.loaded && this.active() && (this.playing || !!this.drag?.moved || this.angle !== 0);
+    const showing = this.showing();
+    // Wanted turning (the dwell passed, or a drag) but the strip isn't there yet: the corner tick.
+    setAttr(this.host, "data-spin-wait", this.enabled && this.active() && (this.due || !!this.drag?.moved) && !(this.url && this.loaded));
     if (this.layer.hidden === showing) this.layer.hidden = !showing;
     setAttr(this.host, "data-spin", showing);
     if (!showing) return;
     if (this.arrived) { if (spinMeasures.length < 200) spinMeasures.push(performance.now() - this.arrived); this.arrived = 0; }
+    this.pumpLive();
+    if (this.liveShown) return;
+
     const step = 360 / this.frames, turn = ((this.angle % 360) + 360) % 360, at = turn / step;
     const k = Math.floor(at) % this.frames, next = (k + 1) % this.frames, blend = at - Math.floor(at);
     this.strips[0].style.transform = `translateX(${(-k * 100) / this.frames}%)`;
@@ -244,7 +313,7 @@ export class PreviewSpin {
  */
 export type PreviewStage = {
   readonly element: HTMLElement;
-  show(input: { label: string; source: string; url: string | null; none: boolean; spin: string | null; frames: number; looking: boolean }): void;
+  show(input: { label: string; source: string; url: string | null; none: boolean; spin: string | null; frames: number; looking: boolean; live?: LiveFrames | null }): void;
   /** The stage's turntable (measurement hooks). */
   readonly spin: PreviewSpin;
 };
@@ -263,6 +332,7 @@ export function previewStage(options: { glyph: IconName }): PreviewStage {
       tile.setMeta(input.source, "");
       tile.set(input.url, input.none);
       tile.setSpin(input.spin, input.frames);
+      tile.setLive(input.live ?? null);
       if (input.looking !== looking) { looking = input.looking; spin.setHover(looking); }
     },
   };

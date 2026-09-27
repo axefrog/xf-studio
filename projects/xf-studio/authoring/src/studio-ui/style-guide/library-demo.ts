@@ -285,7 +285,7 @@ function turning(pictures: string[]) {
     item.tabIndex = n === 0 ? 0 : -1;
     return item;
   });
-  return stack({ gap: "tight" }, h("span", { class: "small muted", text: "Size L (turns on hover and drag)" }),
+  return stack({ gap: "tight" }, h("span", { class: "small muted", text: "Size L (every size turns on hover and drag)" }),
     h("div", { class: "choices cc-choices previews", "data-size": "l", "data-layout": "grid", role: "listbox", "aria-label": "Hairstyle choices, size L", style: "max-width:560px;padding:0" }, ...tiles));
 }
 /** The three layouts of one sample row (lib-choice-layouts): the row's controls, then grid, list and details with its large picture. */

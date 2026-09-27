@@ -62,5 +62,18 @@ export function createBrowserChoicePreviewDevice(options: { fetch?: Fetch; worke
       void fetcher(`${CHOICE_PREVIEW_ENDPOINT}/${key}`, { method: "POST", headers: { "Content-Type": "image/webp" }, body: reply.webp }).catch(() => {});
       return { url: URL.createObjectURL(reply.webp), timings: { ...(reply.timings as object ?? {}), bytesOut: reply.webp.size, ...(reply.heap ? { heap: reply.heap } : {}) } };
     },
+    // The live turn: one source kept in the worker, drawn at any angle as an ImageBitmap (transferred, never copied).
+    live: {
+      async start(source) {
+        const reply = await post({ type: "live", source, fileBase: CHARACTER_DETAIL_ASSETS });
+        if (!reply.ok) throw Error(reply.error);
+      },
+      async frame(turn, measure) {
+        const reply = await post({ type: "live-frame", turn, ...(measure ? { measure } : {}) });
+        if (!reply.ok || !reply.bitmap) throw Error(reply.ok ? "No live frame." : reply.error);
+        return { bitmap: reply.bitmap, ms: reply.ms, gpuMs: reply.gpuMs };
+      },
+      stop() { void post({ type: "live-stop" }); },
+    },
   };
 }

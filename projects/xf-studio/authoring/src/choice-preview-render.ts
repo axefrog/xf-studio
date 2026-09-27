@@ -10,6 +10,8 @@
  * - **One soft light**, both faces lit alike, no specular or shadow.
  * - **Turntable strips.** Asked for `frames`, the same uploaded source is drawn at that many yaws one full turn apart
  *   (choice-preview.ts `turntableYaw`) and the frames are laid side by side in one image: the upload, the costly part, is paid once.
+ * - **Live turns.** For the one picture being turned, `load` keeps a source uploaded and `present` draws a frame at any angle straight
+ *   to the renderer's canvas as an ImageBitmap (no readback), so a turn is smooth rather than stepping through the strip's frames.
  * - **One source at a time.** The subject head is loaded once; a source's geometry and textures are uploaded, drawn and disposed within
  *   its job. A lost context fails the job (the caller recreates the renderer once).
  */
@@ -27,6 +29,8 @@ export type PreviewFetch = (url: string) => Promise<ArrayBuffer>;
 /** The subject: the core head GLB and the names of its head and eye nodes (render-detail.ts `CoreDetail.geometry.nodes`). */
 export type PreviewSubject = { glb: ArrayBuffer; head: string; eyes: string | null };
 
+/** A source uploaded for drawing (`load`), released with `release`. */
+export type LoadedSource = { style: PreviewStyle; meshes: Mesh[]; drawn: { mesh: Mesh; coverage: PreviewCoverage | null }[]; textures: Map<string, WebGLTexture> };
 type Mesh = { vao: WebGLVertexArrayObject; buffers: WebGLBuffer[]; count: number; indexType: number; model: Float32Array; normal: Float32Array; chunk: number | null };
 
 const VERTEX = `#version 300 es
@@ -163,51 +167,17 @@ export class PreviewRenderer {
 
   /** Draw one source into its channel image and encode it (WebP). */
   async render(source: ChoicePreviewSource, options: { keepPixels?: boolean; urlOf: (file: string) => string; frames?: number }): Promise<RenderedPreview> {
-    if (!this.headBounds) throw Error("The preview subject isn't loaded.");
-    const gl = this.gl, style = PREVIEW_STYLES[source.kind];
+    const style = PREVIEW_STYLES[source.kind];
     const frames = Math.max(1, Math.min(TURNTABLE.frames, Math.trunc(options.frames ?? 1)));
     const timings: PreviewTimings = { fetchMs: 0, parseMs: 0, decodeMs: 0, drawMs: 0, readMs: 0, encodeMs: 0, bytesIn: 0, triangles: 0, frames };
-    const meshes: Mesh[] = [], textures = new Map<string, WebGLTexture>();
+    const loaded = await this.load(source, options.urlOf, timings);
     try {
-      // Fetch every file first (geometry and coverage), one source at a time.
       let at = now();
-      const files = new Map<string, ArrayBuffer>();
-      for (const file of new Set(source.parts.flatMap(part => [part.file, ...part.chunks.flatMap(chunk => chunk.coverage ? [chunk.coverage.file] : [])]))) {
-        const bytes = await this.fetchFile(options.urlOf(file));
-        files.set(file, bytes);
-        timings.bytesIn += bytes.byteLength;
-      }
-      timings.fetchMs = now() - at;
-      at = now();
-      const drawn: { mesh: Mesh; coverage: PreviewCoverage | null }[] = [];
-      for (const part of source.parts) {
-        const glb = parseGlb(new Uint8Array(files.get(part.file)!));
-        const wanted = new Map(part.chunks.map(chunk => [chunk.chunk, chunk.coverage]));
-        // The lowest LOD of each wanted chunk.
-        const nodes = meshNodes(glb).map(node => ({ node, id: chunkLod(node.name) ?? chunkLod(glb.json.meshes?.[node.mesh]?.name) }))
-          .filter(entry => entry.id && wanted.has(entry.id.chunk));
-        const lod = new Map<number, number>();
-        for (const { id } of nodes) lod.set(id!.chunk, Math.min(lod.get(id!.chunk) ?? Infinity, id!.lod));
-        for (const { node, id } of nodes) {
-          if (id!.lod !== lod.get(id!.chunk)) continue;
-          for (const mesh of this.upload(glb, node, id!.chunk)) { meshes.push(mesh); drawn.push({ mesh, coverage: wanted.get(id!.chunk) ?? null }); timings.triangles += mesh.count / 3; }
-        }
-      }
-      timings.parseMs = now() - at;
-      at = now();
-      for (const coverage of new Set(drawn.flatMap(entry => entry.coverage ? [entry.coverage.file] : []))) {
-        const bitmap = await decodeCoverage(files.get(coverage)!, style.size * style.supersample);
-        textures.set(coverage, this.uploadTexture(bitmap));
-        bitmap.close();
-      }
-      timings.decodeMs = now() - at;
-      files.clear();
-      at = now();
       const size = style.size, width = size * frames;
       // One frame, or the strip: frame k's rows go to columns k × size onwards.
-      const pixels = frames === 1 ? this.draw(style, drawn, textures, 0) : new Uint8ClampedArray(width * size * 4);
+      const pixels = frames === 1 ? this.draw(loaded, 0) : new Uint8ClampedArray(width * size * 4);
       for (let k = 0; frames > 1 && k < frames; k++) {
-        const frame = this.draw(style, drawn, textures, turntableYaw(k, frames));
+        const frame = this.draw(loaded, turntableYaw(k, frames));
         for (let y = 0; y < size; y++) pixels.set(frame.subarray(y * size * 4, (y + 1) * size * 4), (y * width + k * size) * 4);
       }
       timings.drawMs = now() - at;
@@ -221,14 +191,82 @@ export class PreviewRenderer {
       const webp = await canvas.convertToBlob({ type: "image/webp", quality: frames === 1 ? 0.92 : TURNTABLE.quality });
       timings.encodeMs = now() - at;
       return { webp, width, height: size, timings, ...(options.keepPixels ? { pixels } : {}) };
-    } finally {
-      for (const mesh of meshes) this.disposeMesh(mesh);
-      for (const texture of textures.values()) gl.deleteTexture(texture);
-    }
+    } finally { this.release(loaded); }
   }
 
-  private draw(style: PreviewStyle, drawn: { mesh: Mesh; coverage: PreviewCoverage | null }[], textures: Map<string, WebGLTexture>, turn: number): Uint8ClampedArray<ArrayBuffer> {
-    const gl = this.gl, big = style.size * style.supersample, t = this.targetsFor(style);
+  /**
+   * Upload a source (its geometry and coverage) and keep it: a still or strip job releases it at once; a live turn keeps it while it shows
+   * (`present`). Each GL step is synchronous, so a live frame may run between a job's awaits without touching its state.
+   */
+  async load(source: ChoicePreviewSource, urlOf: (file: string) => string, timings?: PreviewTimings): Promise<LoadedSource> {
+    if (!this.headBounds) throw Error("The preview subject isn't loaded.");
+    const style = PREVIEW_STYLES[source.kind];
+    const t = timings ?? { fetchMs: 0, parseMs: 0, decodeMs: 0, drawMs: 0, readMs: 0, encodeMs: 0, bytesIn: 0, triangles: 0, frames: 1 };
+    const loaded: LoadedSource = { style, meshes: [], drawn: [], textures: new Map() };
+    try {
+      // Fetch every file first (geometry and coverage), one source at a time.
+      let at = now();
+      const files = new Map<string, ArrayBuffer>();
+      for (const file of new Set(source.parts.flatMap(part => [part.file, ...part.chunks.flatMap(chunk => chunk.coverage ? [chunk.coverage.file] : [])]))) {
+        const bytes = await this.fetchFile(urlOf(file));
+        files.set(file, bytes);
+        t.bytesIn += bytes.byteLength;
+      }
+      t.fetchMs = now() - at;
+      at = now();
+      for (const part of source.parts) {
+        const glb = parseGlb(new Uint8Array(files.get(part.file)!));
+        const wanted = new Map(part.chunks.map(chunk => [chunk.chunk, chunk.coverage]));
+        // The lowest LOD of each wanted chunk.
+        const nodes = meshNodes(glb).map(node => ({ node, id: chunkLod(node.name) ?? chunkLod(glb.json.meshes?.[node.mesh]?.name) }))
+          .filter(entry => entry.id && wanted.has(entry.id.chunk));
+        const lod = new Map<number, number>();
+        for (const { id } of nodes) lod.set(id!.chunk, Math.min(lod.get(id!.chunk) ?? Infinity, id!.lod));
+        for (const { node, id } of nodes) {
+          if (id!.lod !== lod.get(id!.chunk)) continue;
+          for (const mesh of this.upload(glb, node, id!.chunk)) {
+            loaded.meshes.push(mesh); loaded.drawn.push({ mesh, coverage: wanted.get(id!.chunk) ?? null }); t.triangles += mesh.count / 3;
+          }
+        }
+      }
+      t.parseMs = now() - at;
+      at = now();
+      for (const coverage of new Set(loaded.drawn.flatMap(entry => entry.coverage ? [entry.coverage.file] : []))) {
+        const bitmap = await decodeCoverage(files.get(coverage)!, style.size * style.supersample);
+        loaded.textures.set(coverage, this.uploadTexture(bitmap));
+        bitmap.close();
+      }
+      t.decodeMs = now() - at;
+      return loaded;
+    } catch (error) { this.release(loaded); throw error; }
+  }
+  /** Free a loaded source's GL objects. */
+  release(loaded: LoadedSource): void {
+    for (const mesh of loaded.meshes) this.disposeMesh(mesh);
+    for (const texture of loaded.textures.values()) this.gl.deleteTexture(texture);
+    loaded.meshes = []; loaded.drawn = []; loaded.textures.clear();
+  }
+  /**
+   * One live frame of a loaded source at `turn` degrees, straight from the GPU: resolved as a still is, blitted to the renderer's own
+   * canvas and handed over as an ImageBitmap (premultiplied, as a canvas shows it), with no readback.
+   */
+  present(loaded: LoadedSource): (turn: number) => ImageBitmap {
+    const gl = this.gl, size = loaded.style.size;
+    return turn => {
+      if (this.canvas.width !== size || this.canvas.height !== size) { this.canvas.width = size; this.canvas.height = size; }
+      const t = this.resolve(loaded, turn);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, t.small); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.blitFramebuffer(0, 0, size, size, 0, 0, size, size, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return this.canvas.transferToImageBitmap();
+    };
+  }
+  /** Wait for the GPU (measurement only: how long a live frame's work takes when waited for). */
+  finish(): void { this.gl.finish(); }
+
+  /** Draw a loaded source at `turn` into the small target (resolved, averaged 2:1); answers the targets. */
+  private resolve(loaded: LoadedSource, turn: number) {
+    const gl = this.gl, style = loaded.style, big = style.size * style.supersample, t = this.targetsFor(style), textures = loaded.textures;
     const camera = previewCamera(this.headBounds!, this.eyeBounds, style, turn);
     const viewProjection = multiplyColumn(camera.projection, camera.view);
     gl.bindFramebuffer(gl.FRAMEBUFFER, t.ms);
@@ -262,7 +300,7 @@ export class PreviewRenderer {
     for (const mesh of this.subject) drawMesh(mesh, false, null);
     // The feature wins where it lies on the subject (a cap over the scalp).
     gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);
-    for (const { mesh, coverage } of drawn) drawMesh(mesh, true, coverage);
+    for (const { mesh, coverage } of loaded.drawn) drawMesh(mesh, true, coverage);
     gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.bindVertexArray(null);
     // Resolve the samples, then average 2:1 (a linear blit samples between four texels).
@@ -270,8 +308,14 @@ export class PreviewRenderer {
     gl.blitFramebuffer(0, 0, big, big, 0, 0, big, big, gl.COLOR_BUFFER_BIT, gl.NEAREST);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, t.big); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, t.small);
     gl.blitFramebuffer(0, 0, big, big, 0, 0, style.size, style.size, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    return t;
+  }
+
+  /** Draw at `turn` and read the channel image back (rows top-down, unpremultiplied). */
+  private draw(loaded: LoadedSource, turn: number): Uint8ClampedArray<ArrayBuffer> {
+    const gl = this.gl, t = this.resolve(loaded, turn);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, t.small);
-    const size = style.size, raw = new Uint8Array(size * size * 4);
+    const size = loaded.style.size, raw = new Uint8Array(size * size * 4);
     gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, raw);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     // Rows bottom-up and premultiplied by coverage: flip and unpremultiply.

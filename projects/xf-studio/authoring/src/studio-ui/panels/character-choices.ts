@@ -35,7 +35,7 @@
  *   **details** (the same small rows with the prepared state where it isn't ready yet, and the large picture of the choice under the pointer, else the focused one, else
  *   the V's, which never scrolls away: beside the list from a 440 px row, a compact block kept under the row's top edge below that). A picture arriving fills its tile in place and never moves the layout; the label stays the tile's accessible name,
  *   tooltip and (except at size S) visible caption. Switching layout keeps focus on the same choice and brings it into view.
- * - **Turntables** (grid L and details): the picture under the pointer turns slowly after a dwell and turns by hand when dragged (a drag
+ * - **Turntables** (every grid size and details; not the list's small rows): the picture under the pointer turns slowly after a dwell and turns by hand when dragged (a drag
  *   never chooses). The list says which choice it wants turning (`onSpin`: the hovered tile in L; in details the one the large picture
  *   shows), so only that choice's strip is drawn.
  * - **PageUp and PageDown** move focus by a screenful, and **typing** a label's first letters moves to it (components/listbox-keys.ts).
@@ -209,13 +209,14 @@ export class ChoiceList {
     entry.tile.set(row?.urls.get(position) ?? null, entry.choice.off || !!row?.none.has(position));
     entry.tile.spinnable(!entry.choice.off && this.turns());
     entry.tile.setSpin(row?.spins.get(position) ?? null, row?.frames ?? 1);
+    entry.tile.setLive(row?.live?.position === position ? row.live.frame : null);
     const state = this.layout === "details" ? FETCH_STATE[input.preparing && position === input.selected ? "f" : input.fetch?.get(position) ?? "r"] ?? "" : "";
     // A choice's source only where its heading doesn't already say it (the pooled "Other mods"; a row with one maker has its source in the row).
     const source = this.layout !== "grid" && entry.group?.index === OTHER_MODS_INDEX ? entry.from : "";
     entry.tile.setMeta(source, entry.choice.off ? "" : state);
   }
-  /** Whether pictures turn in this layout (the large grid and details). */
-  private turns() { return this.layout === "details" || (this.layout === "grid" && this.pictures?.size === "l"); }
+  /** Whether pictures turn in this layout: every grid size (one strip serves them all) and details. */
+  private turns() { return this.layout === "details" || this.layout === "grid"; }
   /** Another layout: the large picture comes or goes, and a focused choice stays focused and in view. */
   private relayout(layout: ChoiceLayout | null, input: ChoiceListInput) {
     this.layout = layout;
@@ -241,7 +242,7 @@ export class ChoiceList {
     if (!entry) { this.stage.show({ label: "", source: "", url: null, none: false, spin: null, frames: 1, looking: false }); return; }
     this.stage.show({ label: entry.choice.off ? "Off" : entry.choice.label, source: entry.from, url: row?.urls.get(entry.choice.position) ?? null,
       none: entry.choice.off || !!row?.none.has(entry.choice.position), spin: entry.choice.off ? null : row?.spins.get(entry.choice.position) ?? null,
-      frames: row?.frames ?? 1, looking: this.hovered === entry.choice.position });
+      frames: row?.frames ?? 1, looking: this.hovered === entry.choice.position, live: row?.live?.position === entry.choice.position ? row.live.frame : null });
   }
   private hover(position: number | null) {
     if (position === this.hovered) return;

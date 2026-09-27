@@ -13,7 +13,7 @@ afterAll(() => uninstallLightDom());
 const LABELS = ["Afro", "Bob", "Braids", "Bun", "Curly", "Dreads", "Émile", "Fringe", "Mohawk", "Pixie", "Ponytail", "Quiff", "Topknot", "Undercut"];
 const choices: CcPanelChoice[] = LABELS.map((label, position) => ({ key: `k${position}`, position, label, off: false, color: null, mod: position % 2 ? 0 : -1 }));
 const row = (over: Partial<ChoicePreviewRow> = {}): ChoicePreviewRow => ({ kind: "hair", urls: new Map([[1, "blob:still-1"], [3, "blob:still-3"]]),
-  spins: new Map([[3, "blob:spin-3"]]), frames: 24, none: new Set(), busy: false, ...over });
+  spins: new Map([[3, "blob:spin-3"]]), frames: 24, none: new Set(), busy: false, live: null, ...over });
 const input = (layout: "grid" | "list" | "details", size: "s" | "m" | "l" = "m", extra = {}) => ({ option: "head/hair", query: "", label: "Hairstyle", grid: false,
   choices, selected: 1, mods: ["Sample Hair Pack"], loading: false, error: null, groups: null,
   fetch: new Map([[0, "r" as const], [1, "r" as const], [2, "n" as const]]), previews: { size, layout, row: row() }, ...extra });
@@ -83,10 +83,15 @@ describe("layouts", () => {
     expect(element.querySelector(".pv-stage")).toBeNull();
   });
 
-  test("the turntable wanted: the hovered tile in the large grid, none in the smaller sizes, the shown choice in details", async () => {
-    const small = await list("grid", "m");
-    pointer(small.item(3), "pointerover");
-    expect(small.spins).toEqual([]);
+  test("the turntable wanted: the hovered tile in every grid size, none in the list, the shown choice in details", async () => {
+    for (const size of ["s", "m"] as const) {
+      const grid = await list("grid", size);
+      pointer(grid.item(3), "pointerover");
+      expect(grid.spins).toEqual([3]);
+    }
+    const rows = await list("list");
+    pointer(rows.item(3), "pointerover");
+    expect(rows.spins).toEqual([]);
     const large = await list("grid", "l");
     pointer(large.item(3), "pointerover");
     pointer(large.listbox, "pointerleave");
@@ -126,7 +131,7 @@ describe("the turntable", () => {
     expect(chosen.map(choice => choice.position)).toEqual([3]);
   });
 
-  test("resting the pointer turns it after the dwell; the medium grid never turns", async () => {
+  test("resting the pointer turns it after the dwell, in every grid size; list rows never turn", async () => {
     const { SPIN } = await import("../src/studio-ui/components/choice-preview");
     const { item } = await list("grid", "l");
     const frame = item(3).querySelector(".pv-frame")!;
@@ -137,8 +142,71 @@ describe("the turntable", () => {
     expect(frame.hasAttribute("data-spin")).toBe(true);
     pointer(frame, "pointerleave");
     expect(frame.hasAttribute("data-spin")).toBe(false);
-    const medium = await list("grid", "m");
-    expect(medium.item(3).querySelector(".pv-frame")!.hasAttribute("data-spinnable")).toBe(false);
+    for (const size of ["s", "m"] as const) {
+      const grid = await list("grid", size);
+      const small = grid.item(3).querySelector(".pv-frame")!;
+      expect(small.hasAttribute("data-spinnable")).toBe(true);
+      pointer(small, "pointerenter");
+      small.querySelector(".pv-strip")!.dispatchEvent(lightEvent("load"));
+      await new Promise(resolve => setTimeout(resolve, SPIN.dwellMs + 30));
+      expect(small.hasAttribute("data-spin")).toBe(true);
+      pointer(small, "pointerleave");
+    }
+    const rows = await list("list");
+    expect(rows.item(3).querySelector(".pv-frame")!.hasAttribute("data-spinnable")).toBe(false);
+  });
+
+  test("while the strip is still being drawn, a hover past the dwell or a drag shows the wait tick; a drag still never chooses", async () => {
+    const { SPIN } = await import("../src/studio-ui/components/choice-preview");
+    const { item, chosen } = await list("grid", "m");
+    // Choice 4 has a still but no strip yet.
+    const frame = item(4).querySelector(".pv-frame")!;
+    pointer(frame, "pointerenter");
+    expect(frame.hasAttribute("data-spin-wait")).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, SPIN.dwellMs + 30));
+    expect(frame.hasAttribute("data-spin-wait")).toBe(true);
+    pointer(frame, "pointerleave");
+    expect(frame.hasAttribute("data-spin-wait")).toBe(false);
+    pointer(frame, "pointerenter");
+    pointer(frame, "pointerdown", { clientX: 0 });
+    pointer(frame, "pointermove", { clientX: 30 });
+    expect(frame.hasAttribute("data-spin-wait")).toBe(true);
+    pointer(frame, "pointerup", { clientX: 30 });
+    frame.dispatchEvent(lightEvent("click"));
+    expect(chosen).toEqual([]);
+    pointer(frame, "pointerleave");
+    await new Promise(resolve => setTimeout(resolve, 0));
+    item(4).click();
+    expect(chosen.map(choice => choice.position)).toEqual([4]);
+  });
+
+  test("a live turn replaces the strip once its first frame arrives, one request at a time, and goes when the pointer leaves", async () => {
+    const { SPIN } = await import("../src/studio-ui/components/choice-preview");
+    let asked = 0, pending: ((bitmap: ImageBitmap | null) => void) | null = null;
+    const frames = (turn: number) => { asked++; expect(Number.isFinite(turn)).toBe(true); return new Promise<ImageBitmap | null>(resolve => { pending = resolve; }); };
+    const { view, item } = await list("grid", "m");
+    view.update(input("grid", "m", { previews: { size: "m", layout: "grid", row: row({ live: { position: 3, frame: frames } }) } }));
+    const frame = item(3).querySelector(".pv-frame")!, canvas = frame.querySelector(".pv-live")!;
+    const shown: unknown[] = [];
+    (canvas as unknown as { getContext(): unknown }).getContext = () => ({ transferFromImageBitmap: (bitmap: unknown) => shown.push(bitmap) });
+    pointer(frame, "pointerenter");
+    frame.querySelector(".pv-strip")!.dispatchEvent(lightEvent("load"));
+    await new Promise(resolve => setTimeout(resolve, SPIN.dwellMs + 60));
+    // Turning on the strip while the first live frame is drawn; only one is asked for.
+    expect(frame.hasAttribute("data-spin")).toBe(true);
+    expect(asked).toBe(1);
+    expect(canvas.hidden).toBe(true);
+    const bitmap = { close() {} };
+    pending!(bitmap as unknown as ImageBitmap);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(shown).toEqual([bitmap]);
+    expect(canvas.hidden).toBe(false);
+    expect(frame.querySelector(".pv-strip")!.hidden).toBe(true);
+    pointer(frame, "pointerleave");
+    expect(canvas.hidden).toBe(true);
+    expect(frame.hasAttribute("data-spin")).toBe(false);
+    // Another tile isn't live.
+    expect(item(1).querySelector(".pv-frame")!.querySelector(".pv-live")!.hidden).toBe(true);
   });
 
   test("under reduced motion nothing turns by itself, but a drag still turns it", async () => {
