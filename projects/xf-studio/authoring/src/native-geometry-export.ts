@@ -28,11 +28,15 @@ import { hostFailure } from "./diagnostics/host-log";
 import { archiveExportSource, type ExportAnswer, type ExportBase, type ExportedGeometry, GameAssetExportCache, GameAssetExportError, type ExportKind, type ExportOptions, type ExportRequest,
   type ExportSource, type GameAssetExporter, type GameAssetExportSession } from "./game-asset-export";
 import { NATIVE_MESH_VERSION, type NativeGeometryOutcome, type NativeGeometryRequest } from "./native/mesh-decode";
+import { NATIVE_READER_DATA } from "./native/native-fetch-port";
 import type { NativeDecoder } from "./native/native-decode";
 import type { NativeFailureKind } from "./native/native-errors";
 
-/** The mesh reader's identity in cache keys: its output rules (mesh-decode.ts `NATIVE_MESH_VERSION`). */
-export const NATIVE_MESH_IDENTITY = `xfs-native-mesh:${NATIVE_MESH_VERSION}`;
+/**
+ * The mesh reader's identity in cache keys: its output rules (mesh-decode.ts `NATIVE_MESH_VERSION`) and the resource reader's version and
+ * data hash, which decide how the mesh resource reads (NATIVE-61).
+ */
+export const NATIVE_MESH_IDENTITY = `xfs-native-mesh:${NATIVE_MESH_VERSION}:${NATIVE_READER_DATA}`;
 /** Time budget per mesh in the worker: the slowest real one (a CCXL lash's morph target) takes about half a second. */
 export const NATIVE_GEOMETRY_TIMEOUT_MS = 60_000;
 
@@ -94,6 +98,14 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
   const answerOf = (depotPath: string, files: Record<string, string>, cachedHit: boolean, meta: GeometryMeta): NativeExportedGeometry => ({
     depotPath, hash: depotHash(depotPath), raw: files.raw!, rawSha256: meta.rawSha256, glb: files["export.glb"]!, glbSha256: meta.glbSha256,
     materials: null, materialsSha256: null, complete: true, cached: cachedHit, repair: null, readerNote: meta.notes.length ? meta.notes.join("; ") : null });
+  /** Whether a cached morph target's skin came from `base` (a mesh has no base to match); read from the entry's small record. */
+  const sameBase = (depotPath: string, source: ExportSource, base: ExportBase | undefined, metaFile?: string): boolean => {
+    if (!/\.morphtarget$/i.test(depotPath)) return true;
+    try {
+      const meta = JSON.parse(readFileSync(metaFile ?? join(cache.entryDirectory(depotPath, source), "geometry.json"), "utf8")) as GeometryMeta;
+      return (meta.baseKey ?? "own") === baseKeyOf(base, source.gameRoot);
+    } catch { return false; }
+  };
   const cached = (depotPath: string, source: ExportSource, base?: ExportBase): NativeExportedGeometry | null => {
     const files = cache.read(depotPath, source);
     if (!files || !GEOMETRY_FILES.every(name => files[name])) return null;
@@ -176,9 +188,10 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
   const exporter: NativeGeometryExporter = {
     tool: inner.tool,
     nativeGeometry: stats,
-    has(kind: ExportKind, depotPath: string, source: ExportSource) {
-      if (kind === "geometry" && isGeometry(depotPath) && singleArchive(source) && cache.present(depotPath, source, GEOMETRY_FILES)) return true;
-      return inner.has?.(kind, depotPath, source) ?? false;
+    has(kind: ExportKind, depotPath: string, source: ExportSource, base?: ExportBase) {
+      // A morph target's entry answers only for the base mesh its skin came from, as `cached` checks (NATIVE-60).
+      if (kind === "geometry" && isGeometry(depotPath) && singleArchive(source) && cache.present(depotPath, source, GEOMETRY_FILES) && sameBase(depotPath, source, base)) return true;
+      return inner.has?.(kind, depotPath, source, base) ?? false;
     },
     async exportAll(requests, signal, exportOptions) {
       // Cached native answers first; what is left of each eligible request's geometry is decoded natively beside the wrapped exporter's

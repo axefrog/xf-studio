@@ -257,7 +257,7 @@ export interface GlitterChains {
  * region (the models the recipe is read with, its mirror and texture grids).
  */
 export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, window: UvWindow,
-  makeup: Pick<LayeredMakeupRegion, "models" | "mirror" | "textures">,
+  makeup: Pick<LayeredMakeupRegion, "models" | "mirror" | "skin" | "textures">,
   dims: { width: number; height: number } = makeup.textures.glitterWindow): GlitterChains {
   const recipe: Recipe = parseRecipe(value, makeup.models), plan = planPresetExport(recipe);
   if (plan.excluded.length || plan.route !== "flat") throw Error("The diagnostic Glitter route needs a preset of flat-finish pigment layers only.");
@@ -309,7 +309,7 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
       const widths = c.width.map(d => Math.max(d, GLITTER_NESTING.minTexels * t));
       const keep = region.mips === "box" && L > 0 ? [] : represented(c, orderOf.get(region.layer)!, widths, target * c.areaMm2, GLITTER_NESTING.capMm);
       if (keep.length) {
-        const clip = clipStore.subarray(0, w * h), coverage = rasterWindow(layer, w, h, window, makeup.mirror);
+        const clip = clipStore.subarray(0, w * h), coverage = rasterWindow(layer, w, h, window, makeup.mirror, makeup.skin);
         for (let p = 0; p < w * h; p++) clip[p] = coverage[p * 4 + 3];
         const col = hexLinear(f.color);
         for (let k = keep.length - 1; k >= 0; k--) {
@@ -399,7 +399,7 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
       for (let k = 0; k < chosen.length; k++) { sum += HEX_AREA * widths[k] ** 2 * c.aspect[chosen[k]]; if (sum > target) break; if (widths[k] <= GLITTER_NESTING.capMm) keep.push(k); }
       const canvas = accentCanvas.level(size, size);
       if (keep.length) {
-        const coverage = raster(layer, size, makeup.mirror), clip = accentClip.subarray(0, size * size);
+        const coverage = raster(layer, size, makeup.mirror, makeup.skin), clip = accentClip.subarray(0, size * size);
         for (let p = 0; p < size * size; p++) clip[p] = coverage[p * 4 + 3];
         // Head texels: x = u·size, y = v·size (authored v); window millimetres shift by the window's origin.
         const ox = window.u0 * MM_PER_UV.u, oy = window.v0 * MM_PER_UV.v;

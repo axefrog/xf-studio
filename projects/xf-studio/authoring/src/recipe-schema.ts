@@ -5,11 +5,11 @@
  * whenever the content allows. No edit ever changes a schema: it is derived when a recipe is written.
  *
  * The layered-makeup engine reads only the current in-memory form; the file lineage (`eye-artistry/recipe-1`,
- * `xfs/recipe-2`…`11`, which structural forms and layer models each holds) is eye makeup's and lives here. Files
+ * `xfs/recipe-2`…`12`, which structural forms and layer models each holds) is eye makeup's and lives here. Files
  * migrate on read exactly as they always have.
  */
 import { CLASSIC_FLAKES, DIRECT_GLINT_1, DIRECT_GLINT_2, DIRECT_GLINT_3, GAME_MATCHED_OPTICS, IRREGULAR_GLITTER,
-  LayerModelRegistry, type LayerModel } from "./engines/layered-makeup/layer-models";
+  LayerModelRegistry, MODEL_SLOTS, MOTTLE_1, slotValue, type LayerModel } from "./engines/layered-makeup/layer-models";
 import { NewerDataError } from "./platform/api";
 import { MAX_LAYERS, parseRecipe as parseInMemory, readLayers, type Recipe } from "./engines/layered-makeup/recipe";
 
@@ -23,10 +23,10 @@ const EYE_MAKEUP_PART = /^xfs\/eye-makeup-part-\d+$/;
 
 /** Every recipe file schema, oldest first. */
 export const RECIPE_FILE_SCHEMAS = ["eye-artistry/recipe-1", "xfs/recipe-2", "xfs/recipe-3", "xfs/recipe-4", "xfs/recipe-5",
-  "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11"] as const;
+  "xfs/recipe-6", "xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11", "xfs/recipe-12"] as const;
 export type RecipeFileSchema = typeof RECIPE_FILE_SCHEMAS[number];
 /** Recipe schemas the Studio writes: older files read as recipe-7, which holds all of their content. */
-export type RecipeSchema = "xfs/recipe-7" | "xfs/recipe-8" | "xfs/recipe-9" | "xfs/recipe-10" | "xfs/recipe-11";
+export type RecipeSchema = "xfs/recipe-7" | "xfs/recipe-8" | "xfs/recipe-9" | "xfs/recipe-10" | "xfs/recipe-11" | "xfs/recipe-12";
 /** The oldest schema a writer uses: what new recipes have always been written as. */
 export const OLDEST_WRITTEN_SCHEMA: RecipeSchema = "xfs/recipe-7";
 export const schemaRank = (schema: RecipeFileSchema) => RECIPE_FILE_SCHEMAS.indexOf(schema);
@@ -46,7 +46,7 @@ export type RecipeLayerModel = LayerModel & { readonly recipeSchema?: RecipeFile
 
 /**
  * Eye makeup's layer models and their file lineage: classic flakes since recipe-1, irregular Glitter 7, Direct 8,
- * Clustered 9, Fine 10, game-matched optics 11. A new model registers with no `recipeSchema`; recipes using it are
+ * Clustered 9, Fine 10, game-matched optics 11, mottle 12. A new model registers with no `recipeSchema`; recipes using it are
  * then written as part-2 only.
  */
 export const EYE_MAKEUP_LAYER_MODELS: readonly RecipeLayerModel[] = Object.freeze([
@@ -56,9 +56,10 @@ export const EYE_MAKEUP_LAYER_MODELS: readonly RecipeLayerModel[] = Object.freez
   { ...DIRECT_GLINT_2, recipeSchema: "xfs/recipe-9" },
   { ...DIRECT_GLINT_3, recipeSchema: "xfs/recipe-10" },
   { ...GAME_MATCHED_OPTICS, recipeSchema: "xfs/recipe-11" },
+  { ...MOTTLE_1, recipeSchema: "xfs/recipe-12" },
 ] satisfies RecipeLayerModel[]);
 
-type OpticalLayer = { flakes?: unknown; optics?: unknown };
+type OpticalLayer = { flakes?: unknown; optics?: unknown; effects?: unknown };
 /** Eye makeup's layer-model registry, with the recipe schema each layer needs. */
 export class RecipeModelRegistry extends LayerModelRegistry {
   constructor(models: readonly RecipeLayerModel[]) { super(models); }
@@ -70,7 +71,8 @@ export class RecipeModelRegistry extends LayerModelRegistry {
   /** The recipe file schema a layer's models need (recipe-7 at least), or undefined when no recipe schema holds one. */
   layerSchema(layer: OpticalLayer): RecipeSchema | undefined {
     let rank = schemaRank(OLDEST_WRITTEN_SCHEMA);
-    for (const [slot, value] of [["flakes", layer.flakes], ["optics", layer.optics]] as const) {
+    for (const slot of MODEL_SLOTS) {
+      const value = slotValue(layer, slot);
       if (value === undefined) continue;
       const needed = (this.of(slot, value) as RecipeLayerModel | undefined)?.recipeSchema;
       if (!needed) return undefined;
@@ -94,7 +96,7 @@ export const LAYER_MODELS = new RecipeModelRegistry(EYE_MAKEUP_LAYER_MODELS);
 
 /**
  * Read a recipe file of any schema, migrating on read: each schema's structural forms (warp fields since recipe-3,
- * strength modes 4, Bézier paths 5, per-point softness 6) and the layer models it holds. Recipe 8–11 keep their
+ * strength modes 4, Bézier paths 5, per-point softness 6) and the layer models it holds. Recipe 8–12 keep their
  * schema; older files hold nothing recipe-7 does not.
  */
 function readFile(value: Record<string, unknown>, models: LayerModelRegistry): RecipeFile {
@@ -117,7 +119,7 @@ function withoutSchema(recipe: RecipeFile): Recipe {
 }
 
 /**
- * Read a recipe: a recipe file of any schema (`eye-artistry/recipe-1`, `xfs/recipe-2`…`11`), which migrates on
+ * Read a recipe: a recipe file of any schema (`eye-artistry/recipe-1`, `xfs/recipe-2`…`12`), which migrates on
  * read exactly as it always has, or an in-memory recipe (an `xfs/eye-makeup-part-2` body, which has no `schema`).
  * Returns the in-memory recipe (a copy).
  */
@@ -126,7 +128,7 @@ export function readRecipe(value: unknown, models: LayerModelRegistry = LAYER_MO
 }
 /**
  * Read a recipe file only, keeping its schema as the in-memory recipe used to (older schemas become
- * `xfs/recipe-7`; 8–11 stay). The collection-1 readers use it, so their output is unchanged.
+ * `xfs/recipe-7`; 8–12 stay). The collection-1 readers use it, so their output is unchanged.
  */
 export function parseRecipeFile(value: unknown, models: LayerModelRegistry = LAYER_MODELS): RecipeFile {
   if (!isFile(value)) throw Error(RECIPE_FILE_MESSAGE);

@@ -50,7 +50,7 @@ import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
   type RenderRig, type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
-import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
+import { manifestOf, type ManifestExport, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
@@ -797,15 +797,18 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
 }
 
 /** Every export a plan's parts are served from, as the preparation cache holds them now: [kind, depot path, archive]. */
-function planExports(graph: ResourceGraph, cache: CharacterPreparationCache, plan: CharacterPlan): [ExportKind, string, string][] {
-  const out: [ExportKind, string, string][] = [];
-  const add = (kind: ExportKind, ref: DepotRef) => {
+function planExports(graph: ResourceGraph, cache: CharacterPreparationCache, plan: CharacterPlan): ManifestExport[] {
+  const out: ManifestExport[] = [];
+  const add = (kind: ExportKind, ref: DepotRef, baseRef?: DepotRef) => {
     const at = locate(graph, ref);
     const into = kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks;
-    if (at && into.has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) out.push([kind, at.depotPath, at.archive.id]);
+    if (!at || !into.has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) return;
+    // A morph target's skin comes from its located base mesh (gatherParts), so the manifest names it too (NATIVE-60).
+    const base = baseRef ? locate(graph, baseRef) : null;
+    out.push(base ? [kind, at.depotPath, at.archive.id, base.depotPath, base.archive.id] : [kind, at.depotPath, at.archive.id]);
   };
   for (const component of plan.components) {
-    add("geometry", component.drawnFrom.ref);
+    add("geometry", component.drawnFrom.ref, component.baseMesh?.ref);
     for (const material of component.materials) {
       for (const provenance of Object.values(material.textures)) add("textures", provenance.ref);
       if (material.layered?.mask) add("masks", material.layered.mask.ref);
