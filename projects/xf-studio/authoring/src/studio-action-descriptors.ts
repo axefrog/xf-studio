@@ -73,6 +73,7 @@ export const ACTION_DESCRIPTORS = {
     intensity: { value: enumerated(INTENSITY_FORMS) }, cone: { value: enumerated(CONE_READINGS) },
     exposure: { value: input("number", CREATOR_EXPOSURE_RANGE.min, CREATOR_EXPOSURE_RANGE.max) } }),
   "preview.resetCreatorLighting": inView("viewport", "workspace", "none"),
+  "preview.setCreatorShadows": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setExposure": inView("viewport", "workspace", "none", { value: input("number", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) }),
   "preview.setKeyAngle": inView("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
   "preview.setStudioLight": inView("viewport", "workspace", "none", { key: enumerated(STUDIO_LIGHT_KEYS), value: input("number") },

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { coneFactor, contribution, CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, CREATOR_RIG_MALE, creatorCamera, creatorRigSpecs,
-  DEFAULT_CREATOR_EXPOSURE, DEFAULT_CREATOR_LIGHTING, defaultCreatorExposure, halfAngles, inverseSquareFalloff, lightColourLinear,
-  linearFalloff, lumensToCandela, spotLightSpec, validCreatorLighting, type Vec3 } from "../src/creator-lighting";
+import * as THREE from "three";
+import { calibrationGain, coneFactor, coneFold, contribution, CREATOR_CALIBRATION, CREATOR_HEAD_SLOT, CREATOR_RIG_FEMALE, CREATOR_RIG_MALE,
+  CREATOR_SHADOW, creatorCamera, creatorRigSpecs, creatorShadowCasters, creatorShadowMapSize, creatorShadowRadius, DEFAULT_CREATOR_EXPOSURE,
+  DEFAULT_CREATOR_LIGHTING, halfAngles, inverseSquareFalloff, lightColourLinear, linearFalloff, lumensToCandela, readCreatorLighting,
+  spotLightSpec, threeConeFactor, validCreatorLighting, type Vec3 } from "../src/creator-lighting";
+import { aimShadowAtHead } from "../src/creator-lighting-rig";
 
 const byName = (name: string) => CREATOR_RIG_FEMALE.find(light => light.name === name)!;
 const angleTo = (from: Vec3, axis: Vec3, to: Vec3) => {
@@ -34,7 +37,7 @@ describe("creator rig table", () => {
     const head = CREATOR_HEAD_SLOT.female;
     const rim = spotLightSpec(byName("Rim_Right"), { intensity: "isotropic", cone: "full" }, head);
     expect([rim.decay, rim.distance]).toEqual([2, 5]);
-    expect(rim.intensity).toBeCloseTo(600 / (4 * Math.PI), 6);
+    expect(rim.intensity).toBeCloseTo(600 / (4 * Math.PI) * coneFold(byName("Rim_Right"), "full", head), 6);
     expect(rim.angle).toBeCloseTo(37.5 * Math.PI / 180, 6);
     expect(rim.penumbra).toBeCloseTo(1 - 1 / 75, 6);
     expect(rim.target).toEqual([-2.253 + 0.788, 1.5 - 0.156, 1.577 - 0.595]);
@@ -42,7 +45,7 @@ describe("creator rig table", () => {
     const face = spotLightSpec(byName("Main_Face"), { intensity: "isotropic", cone: "full" }, head);
     const d = Math.hypot(0.304, 0.62, 0.794);
     expect([face.decay, face.distance]).toEqual([0, 0]);
-    expect(face.intensity).toBeCloseTo(40 / (4 * Math.PI) * (1 - d / 5), 6);
+    expect(face.intensity).toBeCloseTo(40 / (4 * Math.PI) * (1 - d / 5) * coneFold(byName("Main_Face"), "full", head) * calibrationGain("Main_Face"), 6);
     // Half-angle reading doubles the angles (capped below 90° for Three).
     const half = spotLightSpec(byName("Rim_Left_Head"), { intensity: "isotropic", cone: "half" }, head);
     expect(half.angle).toBeCloseTo(89.9 * Math.PI / 180, 6);
@@ -89,11 +92,71 @@ describe("falloff and intensity maths", () => {
     expect(half / e("Rim_Left_Head")).toBeGreaterThan(1.8);
   });
 
-  test("the default exposure is the documented forehead fit, and options validate", () => {
-    expect(Math.abs(defaultCreatorExposure() - DEFAULT_CREATOR_EXPOSURE) / DEFAULT_CREATOR_EXPOSURE).toBeLessThan(0.02);
+  test("the default exposure is the calibration's, and options validate (earlier options read with shadows on)", () => {
+    expect(DEFAULT_CREATOR_EXPOSURE).toBe(CREATOR_CALIBRATION.exposure);
     expect(validCreatorLighting(DEFAULT_CREATOR_LIGHTING)).toBe(true);
     expect(validCreatorLighting({ ...DEFAULT_CREATOR_LIGHTING, cone: "quarter" })).toBe(false);
     expect(validCreatorLighting({ ...DEFAULT_CREATOR_LIGHTING, exposure: 0 })).toBe(false);
+    expect(validCreatorLighting({ intensity: "isotropic", cone: "full", exposure: 1 })).toBe(false);
+    expect(readCreatorLighting({ intensity: "isotropic", cone: "full", exposure: 1 })).toEqual({ intensity: "isotropic", cone: "full", exposure: 1, shadows: true });
+    expect(readCreatorLighting({ ...DEFAULT_CREATOR_LIGHTING, shadows: "yes" })).toBeNull();
+    expect(readCreatorLighting(null)).toBeNull();
+  });
+
+  test("the cone fold gives each light the engine cone's strength at the head", () => {
+    const head = CREATOR_HEAD_SLOT.female;
+    for (const light of CREATOR_RIG_FEMALE) {
+      const d = [head[0] - light.position[0], head[1] - light.position[1], head[2] - light.position[2]];
+      const cos = (d[0]! * light.axis[0] + d[1]! * light.axis[1] + d[2]! * light.axis[2]) / (Math.hypot(...d) * Math.hypot(...light.axis));
+      const three = threeConeFactor(light, "full", cos);
+      if (three > 1e-3) expect(three * coneFold(light, "full", head)).toBeCloseTo(coneFactor(light, "full", cos), 6);
+      else expect(coneFold(light, "full", head)).toBe(1);
+    }
+    // Fill_Upper sits 12 degrees off a 25-degree half-angle cone with a 0.5-degree inner angle: Three gives 0.86, the engine form 0.59.
+    expect(threeConeFactor(byName("Fill_Upper"), "full", Math.cos(12 * Math.PI / 180))).toBeCloseTo(0.86, 1);
+    expect(coneFold(byName("Fill_Upper"), "full", head)).toBeCloseTo(0.68, 1);
+  });
+});
+
+describe("calibration and shadows", () => {
+  test("every calibration gain names a rig light, and a light it doesn't name keeps 1", () => {
+    const names = new Set(CREATOR_RIG_FEMALE.map(light => light.name));
+    for (const [name, gain] of Object.entries(CREATOR_CALIBRATION.gains)) { expect(names.has(name)).toBe(true); expect(gain).toBeGreaterThan(0); }
+    expect(calibrationGain("Rim_Right")).toBe(CREATOR_CALIBRATION.gains.Rim_Right ?? 1);
+  });
+
+  test("the casters are the flagged lights: character contact shadows first, then shadow maps by strength, within the budget", () => {
+    const casters = creatorShadowCasters("female", DEFAULT_CREATOR_LIGHTING);
+    expect(casters).toHaveLength(CREATOR_SHADOW.budget);
+    expect(casters.slice(0, 4).sort()).toEqual(["Main_Face", "Rim_Left_Head", "Rim_Right", "Rim_Top"]);
+    for (const name of casters) { const light = byName(name); expect(light.shadows || light.contactShadows).toBe(true); }
+    expect(casters).not.toContain("Main_Top"); // not flagged in the resource
+    const specs = creatorRigSpecs("female", DEFAULT_CREATOR_LIGHTING);
+    expect(specs.filter(spec => spec.castShadow).map(spec => spec.name).sort()).toEqual([...casters].sort());
+    expect(creatorRigSpecs("female", { ...DEFAULT_CREATOR_LIGHTING, shadows: false }).some(spec => spec.castShadow)).toBe(false);
+    expect(creatorShadowCasters("male", DEFAULT_CREATOR_LIGHTING)).toHaveLength(CREATOR_SHADOW.budget);
+  });
+
+  test("the shadow map follows the preview quality, and its filter keeps the same penumbra in metres", () => {
+    expect([512, 1024, 2048, 4096].map(creatorShadowMapSize)).toEqual([512, 1024, 2048, 2048]);
+    expect(creatorShadowRadius(2048) / creatorShadowRadius(1024)).toBeCloseTo(2, 9);
+    expect(creatorShadowRadius(1024) * 2 * CREATOR_SHADOW.focusRadius / 1024).toBeCloseTo(CREATOR_SHADOW.penumbra, 9);
+  });
+
+  test("a head-aimed shadow centres its map on the head slot whatever the light's own axis", () => {
+    const light = new THREE.SpotLight(0xffffff, 1, 5, Math.PI / 4);
+    const rim = byName("Rim_Left_Head"), head = new THREE.Vector3(...CREATOR_HEAD_SLOT.female);
+    light.position.set(...rim.position);
+    light.target.position.set(rim.position[0] + rim.axis[0], rim.position[1] + rim.axis[1], rim.position[2] + rim.axis[2]);
+    light.updateMatrixWorld(); light.target.updateMatrixWorld();
+    aimShadowAtHead(light.shadow, head, CREATOR_SHADOW.focusRadius);
+    light.shadow.updateMatrices(light);
+    const centre = head.clone().applyMatrix4(light.shadow.matrix);
+    expect(centre.x).toBeCloseTo(0.5, 6); expect(centre.y).toBeCloseTo(0.5, 6);
+    // A point on the focus sphere's edge, across the light's view, lands near the map's edge.
+    const across = new THREE.Vector3().subVectors(head, light.position).cross(new THREE.Vector3(0, 1, 0)).normalize();
+    const edge = head.clone().addScaledVector(across, CREATOR_SHADOW.focusRadius).applyMatrix4(light.shadow.matrix);
+    expect(Math.abs(edge.x - 0.5)).toBeGreaterThan(0.45); expect(Math.abs(edge.x - 0.5)).toBeLessThan(0.55);
   });
 });
 

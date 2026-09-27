@@ -16,7 +16,7 @@ import {parseGlitterChoices, type GlitterChoices} from "./engines/layered-makeup
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 import { isCreatorName } from "./creator-names";
 import { storedCharacterOf, type StoredCharacter } from "./character-context-actions";
-import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
+import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import type { ViewGraphData } from "./platform/api/view-graph";
@@ -207,8 +207,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
       if (finite(p[key], min, max)) state.preview[key] = p[key];
     state.preview.eyeShape = Math.round(state.preview.eyeShape);
     if (LIGHTING_PRESETS.includes(p.lightingPreset)) state.preview.lightingPreset = p.lightingPreset;
-    if (validCreatorLighting(p.creatorLighting)) state.preview.creatorLighting = { intensity: p.creatorLighting.intensity,
-      cone: p.creatorLighting.cone, exposure: p.creatorLighting.exposure };
+    // Options saved before the shadow switch read with shadows on.
+    const creatorLighting = readCreatorLighting(p.creatorLighting);
+    if (creatorLighting) state.preview.creatorLighting = creatorLighting;
     // All or nothing: a damaged or partial rig falls back to the original one.
     const lights = (p as { studioLights?: unknown }).studioLights;
     if (validStudioLights(lights)) state.preview.studioLights = { environment: lights.environment, key: lights.key,

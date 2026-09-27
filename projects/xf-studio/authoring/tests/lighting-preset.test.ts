@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
+import { creatorShadowCasters, DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
 import { createLightingPresetStage } from "../src/lighting-preset-stage";
 import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/preview-actions";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
@@ -57,7 +57,7 @@ test("creator diagnostics validate their switches and exposure, and the camera p
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "intensity", value: "cone" });
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "cone", value: "half" });
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 0.8 });
-  expect(actions.snapshot().creatorLighting).toEqual({ intensity: "cone", cone: "half", exposure: 0.8 });
+  expect(actions.snapshot().creatorLighting).toEqual({ intensity: "cone", cone: "half", exposure: 0.8, shadows: true });
   actions.dispatch({ kind: "camera.creatorFraming", page: "hair" });
   expect(actions.snapshot().camera).toEqual({ position: [0, 1.62, -2], target: [0, 1.62, 0], fov: 15 });
   expect(calls).toEqual([`creator:cone/full/${DEFAULT_CREATOR_LIGHTING.exposure}`, "creator:cone/half/" + DEFAULT_CREATOR_LIGHTING.exposure,
@@ -71,6 +71,9 @@ test("Restore defaults puts every creator calibration control back, and says whe
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "intensity", value: "cone" });
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "cone", value: "half" });
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "exposure", value: 0.8 });
+  actions.dispatch({ kind: "preview.setCreatorShadows", enabled: false });
+  expect(actions.snapshot().creatorLighting.shadows).toBe(false);
+  expect(actions.capability({ kind: "preview.setCreatorShadows", enabled: "yes" as never }).reason).toBe("Choose on or off.");
   expect(actions.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(true);
   actions.dispatch({ kind: "preview.resetCreatorLighting" });
   expect(actions.snapshot().creatorLighting).toEqual({ ...DEFAULT_CREATOR_LIGHTING });
@@ -116,10 +119,14 @@ test("descriptors and application validation cover the new actions", () => {
 test("the workspace keeps the preset and diagnostics, and restore applies them", () => {
   const workspace = freshWorkspace();
   workspace.preview.lightingPreset = "creator";
-  workspace.preview.creatorLighting = { intensity: "cone", cone: "full", exposure: 1.5 };
+  workspace.preview.creatorLighting = { intensity: "cone", cone: "full", exposure: 1.5, shadows: false };
   const parsed = parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS);
   expect(parsed.preview.lightingPreset).toBe("creator");
-  expect(parsed.preview.creatorLighting).toEqual({ intensity: "cone", cone: "full", exposure: 1.5 });
+  expect(parsed.preview.creatorLighting).toEqual({ intensity: "cone", cone: "full", exposure: 1.5, shadows: false });
+  // Options saved before the shadow switch existed read with shadows on.
+  const earlier = parseWorkspace({ ...storedWorkspace(workspace), preview: { ...workspace.preview,
+    creatorLighting: { intensity: "cone", cone: "full", exposure: 1.5 } } }, STUDIO_DOCUMENTS);
+  expect(earlier.preview.creatorLighting).toEqual({ intensity: "cone", cone: "full", exposure: 1.5, shadows: true });
   const damaged = parseWorkspace({ ...storedWorkspace(workspace), preview: { ...workspace.preview, lightingPreset: "disco",
     creatorLighting: { intensity: "cone", cone: "full", exposure: -1 } } }, STUDIO_DOCUMENTS);
   expect(damaged.preview.lightingPreset).toBe("studio");
@@ -145,6 +152,21 @@ test("the Three stage hides the studio stage for the creator rig and restores ex
       group: null, provider: null, alternatives: [], rule: null, size: null, note: "neutral", skipped: [] } }); }); } });
   const spots = () => stage.rig.group.children.filter(child => child instanceof THREE.SpotLight);
   expect(spots()).toHaveLength(15);
+  // The flagged lights cast head-scoped shadow maps that follow the preview quality; the switch turns them off.
+  const casting = () => spots().filter(light => light.castShadow).map(light => light.name.replace("xfs-creator-", ""));
+  expect(casting().sort()).toEqual(creatorShadowCasters("female", DEFAULT_CREATOR_LIGHTING).sort());
+  expect(spots().find(light => light.castShadow)!.shadow.mapSize.x).toBe(1024);
+  stage.setShadowQuality(4096);
+  expect(spots().find(light => light.castShadow)!.shadow.mapSize.x).toBe(2048);
+  stage.setCreatorOptions({ ...DEFAULT_CREATOR_LIGHTING, shadows: false });
+  expect(casting()).toEqual([]);
+  stage.setCreatorOptions({ ...DEFAULT_CREATOR_LIGHTING });
+  expect(casting()).toHaveLength(6);
+  // Solo (developer evidence) shows one light, null all of them again.
+  stage.solo("Main_Face");
+  expect(spots().filter(light => light.visible).map(light => light.name)).toEqual(["xfs-creator-Main_Face"]);
+  stage.solo(null);
+  expect(spots().every(light => light.visible)).toBe(true);
   expect(stage.rig.group.visible).toBe(false);
   let changes = 0; stage.subscribe(() => changes++);
   stage.setPreset("creator");

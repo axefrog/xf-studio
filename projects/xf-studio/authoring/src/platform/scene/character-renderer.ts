@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { extendSkin } from "../../skin";
+import { extendSkin, fullSkinDepthMaterial } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
@@ -109,6 +109,9 @@ export function createCharacterRenderer(input: {
     lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, teeth: RENDER_ORDER.skin, piercings: 0, body: RENDER_ORDER.skin, clothing: RENDER_ORDER.skin };
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
+  const SHADOW_CASTER_SLOTS = new Set<DetailSlot>(["skin", "body", "clothing"]);
+  head.castShadow = true;
+  head.customDepthMaterial = fullSkinDepthMaterial(head);
   let characterDetails: LoadedCharacterDetails | null = null;
   /**
    * How the resolved skin is shown (head-skin-placement.ts): on the core head when the launch route's head is
@@ -284,6 +287,10 @@ export function createCharacterRenderer(input: {
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
         mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
+        // The skin, body and clothing cast the creator rig's shadows (lighting-preset-stage.ts); hair (alpha strands), eyes, decals and
+        // lashes don't. Only the creator rig has shadow-casting lights, so this changes nothing under the studio stage.
+        mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot);
+        if (mesh.castShadow && (mesh as THREE.SkinnedMesh).isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh as THREE.SkinnedMesh);
         // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
         if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
         // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the

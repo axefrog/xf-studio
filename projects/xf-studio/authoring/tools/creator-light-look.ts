@@ -1,0 +1,77 @@
+/**
+ * Creator-lighting captures for calibration (knowledge/creator-lighting.md §12), in an isolated `?verify=1` workspace with disposable
+ * data and a throwaway Chrome profile: the default V (or a save copy) under the Character creator preset at a creator page's camera,
+ * idle off, the 3D view maximized, the viewport canvas only.
+ *
+ *   bun tools/creator-light-look.ts <out dir under evidence/screenshots> [port] [save copy|-] [--page face|hair] [--solo] [--variants] [--timing]
+ *
+ * - always: `creator-all.png` (the preset as it ships) and `creator-no-shadows.png` (the same with the shadow switch off);
+ * - `--solo`: each rig light alone (`solo-<light>.png`), to split a region into per-light shares when refitting the calibration;
+ * - `--variants`: the intensity and cone-reading switches;
+ * - `--timing`: mean frame cost with shadows on and off, and the shadow-map size, into run.json.
+ * Outputs are private renders of local game assets: keep them in the ignored evidence/screenshots tree.
+ */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { launch, startServer } from "./cdp";
+
+const argv = process.argv.slice(2), pageAt = argv.indexOf("--page");
+const framing = pageAt >= 0 ? argv.splice(pageAt, 2)[1]! : "face";
+const flags = new Set(argv.filter(a => a.startsWith("--")));
+const [outArg, portArg = "4396", saveArg] = argv.filter(a => !a.startsWith("--"));
+if (!outArg) throw Error("Usage: bun tools/creator-light-look.ts <out dir> [port] [save copy|-] [--page face|hair] [--solo] [--variants] [--timing]");
+const out = resolve(outArg), port = +portArg, save = saveArg && saveArg !== "-" ? saveArg : undefined;
+mkdirSync(out, { recursive: true });
+const { server } = await startServer(port);
+const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1000, height: 760, scheme: "dark", debugPort: port + 5000 });
+const run = (action: object) => page.evaluate(`window.xfStudioShell.runtime.dispatch(${JSON.stringify(action)})`);
+try {
+  await page.waitFor("document.querySelector('.dock-group') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'ready'", 240000);
+  if (save) {
+    await page.chooseFiles([resolve(save)]);
+    await page.send("Runtime.evaluate", { expression: `window.xfStudioShell.runtime.file({ kind: "savedV.import" })`, awaitPromise: true, userGesture: true });
+  }
+  await page.waitFor(`(() => { const e = window.xfStudioSceneEvidence?.(); return !!e && e.characterDetails.components.some(c => c.slot === "hair"); })()`, 900000);
+  await page.wait(3000);
+  for (const action of [{ kind: "preview.setSurfaceControls", enabled: false }, { kind: "motion.setIdle", enabled: false },
+    { kind: "preview.setLightingPreset", preset: "creator" }, { kind: "camera.creatorFraming", page: framing }]) await run(action).catch(() => undefined);
+  // The 3D view's group maximized, so the viewport fills the workspace; its canvas is the one inside that group.
+  await page.evaluate(`(() => { const g = document.getElementById("dock-tab-head")?.closest("[data-group]");
+    if (g) window.xfStudioShell.dock.toggleMaximize(g.dataset.group); })()`);
+  await page.wait(4000);
+  const rect = await page.evaluate<{ x: number; y: number; width: number; height: number }>(`(() => {
+    const g = document.getElementById("dock-tab-head")?.closest("[data-group]") ?? document;
+    const c = [...g.querySelectorAll("canvas")].sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
+    const r = c.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; })()`);
+  const shots: string[] = [];
+  const capture = async (name: string) => { await page.wait(1200); await page.screenshot(resolve(out, `${name}.png`), rect); shots.push(name); };
+  await capture("creator-all");
+  const lights: { name: string; castShadow: boolean }[] = await page.evaluate(`window.xfStudioCreatorRig.lights()`);
+  const timing: Record<string, number | null> = {};
+  if (flags.has("--timing")) timing.shadowsOnMs = await page.evaluate(`window.xfStudioCreatorRig.frameMs(40)`);
+  if (flags.has("--solo")) {
+    for (const { name } of lights) {
+      await page.evaluate(`window.xfStudioCreatorRig.solo(${JSON.stringify(name)})`);
+      await capture(`solo-${name}`);
+    }
+    await page.evaluate(`window.xfStudioCreatorRig.solo(null)`);
+  }
+  await run({ kind: "preview.setCreatorShadows", enabled: false });
+  await capture("creator-no-shadows");
+  if (flags.has("--timing")) timing.shadowsOffMs = await page.evaluate(`window.xfStudioCreatorRig.frameMs(40)`);
+  await run({ kind: "preview.setCreatorShadows", enabled: true });
+  if (flags.has("--variants")) {
+    for (const [intensity, cone] of [["isotropic", "half"], ["cone", "full"], ["cone", "half"]] as const) {
+      await run({ kind: "preview.setCreatorLighting", key: "intensity", value: intensity });
+      await run({ kind: "preview.setCreatorLighting", key: "cone", value: cone });
+      await capture(`variant-${intensity}-${cone}`);
+    }
+    await run({ kind: "preview.resetCreatorLighting" });
+  }
+  const gpu = await page.evaluate(`(() => { const gl = document.createElement("canvas").getContext("webgl2");
+    const info = gl?.getExtension("WEBGL_debug_renderer_info"); return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unknown"; })()`);
+  writeFileSync(resolve(out, "run.json"), JSON.stringify({ date: new Date().toISOString(), save: save ? "(private save copy)" : null, framing, rect, gpu,
+    lights, shadowMapSize: await page.evaluate(`window.xfStudioCreatorRig.shadowMapSize()`), timing, shots,
+    console: page.console.filter(m => m.type === "error" || m.type === "exception").slice(0, 20) }, null, 2));
+  console.log(`Wrote ${shots.length} captures to ${out}`, JSON.stringify(timing));
+} finally { await page.close(); server.kill(); }

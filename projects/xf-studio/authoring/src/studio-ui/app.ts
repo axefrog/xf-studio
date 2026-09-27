@@ -605,6 +605,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     ...([["full", "full cone angles"], ["half", "half cone angles"]] as const).map(([value, label]) =>
       act(`lighting.creator.cone.${value}`, `Creator lighting calibration: ${label}`, "Research",
         { kind: "preview.setCreatorLighting", key: "cone", value }, { icon: "lighting", keywords: "creator calibration spot angle" })),
+    ...([true, false] as const).map(enabled => act(`lighting.creator.shadows.${enabled ? "on" : "off"}`,
+      `Creator lighting calibration: shadows ${enabled ? "on" : "off"}`, "Research",
+      { kind: "preview.setCreatorShadows", enabled }, { icon: "lighting", keywords: "creator calibration shadow nose rim" })),
     act("lighting.creator.reset", "Creator lighting calibration: restore defaults", "Research",
       { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" })]),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
