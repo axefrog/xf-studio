@@ -4,6 +4,8 @@
  *
  *   bun tools/native-mesh-oracle.ts --game <game folder> [--mods <MO2 mods folder>] --exports <export cache resources folder>
  *     [--filter <regex on depot paths>] [--limit N] [--report <file>] [--verbose]
+ *   bun tools/native-mesh-oracle.ts --game <game folder> --fresh <archive> --paths <file: one depot path per line> --out <folder>
+ *     --wolvenkit <WolvenKit.CLI.exe> (or XFS_WOLVENKIT_CLI)   (exports those resources with WolvenKit now, then compares)
  *
  * The export cache (a preview cache's `exports/resources`) holds, per exported resource, the extracted file (`raw`) and WolvenKit's GLB
  * (`export.glb`). The raw bytes are decoded natively; a morph target's base mesh is read from the archive that holds the same extracted
@@ -29,8 +31,32 @@ import { loadGameOodle } from "../src/native/oodle";
 
 const args = process.argv.slice(2);
 const option = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
-const game = option("game"), mods = option("mods"), exportsRoot = option("exports");
+const game = option("game"), mods = option("mods");
+let exportsRoot = option("exports");
 const filter = option("filter") ? new RegExp(option("filter")!, "i") : null, limit = Number(option("limit") ?? Infinity), verbose = args.includes("--verbose");
+// --fresh: export the listed resources from one archive with WolvenKit now (the preview's uncook arguments), into cache-shaped entries.
+if (game && option("fresh")) {
+  const archive = option("fresh")!, out = option("out"), cli = option("wolvenkit") ?? process.env.XFS_WOLVENKIT_CLI, list = option("paths");
+  if (!out || !cli || !list) { console.error("--fresh needs --out, --paths and --wolvenkit"); process.exit(2); }
+  const { uncookArguments } = await import("../src/game-asset-export-wolvenkit");
+  const { mkdirSync, copyFileSync } = await import("node:fs");
+  const paths = readFileSync(list, "utf8").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const uncooked = join(out, "uncooked");
+  mkdirSync(uncooked, { recursive: true });
+  const began = performance.now();
+  const run = Bun.spawnSync([cli, ...uncookArguments(archive, paths, uncooked, null)], { stdout: "pipe", stderr: "pipe" });
+  console.log(`WolvenKit uncook: exit ${run.exitCode}, ${((performance.now() - began) / 1000).toFixed(1)} s for ${paths.length} resources`);
+  exportsRoot = join(out, "entries");
+  for (const depotPath of paths) {
+    const rel = depotPath.split("\\").join("/"), raw = join(uncooked, rel), glb = join(uncooked, rel.replace(/\.mesh$/i, ".glb").replace(/\.morphtarget$/i, ".morphtarget.glb"));
+    const glbFile = existsSync(glb) ? glb : existsSync(`${raw}.glb`) ? `${raw}.glb` : null;
+    if (!existsSync(raw) || !glbFile) { console.log(`not exported: ${depotPath}`); continue; }
+    const dir = join(exportsRoot, depotHash(depotPath));
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(raw, join(dir, "raw")); copyFileSync(glbFile, join(dir, "export.glb"));
+    writeFileSync(join(dir, "entry.json"), JSON.stringify({ depotPath, hash: depotHash(depotPath) }));
+  }
+}
 if (!game || !exportsRoot) {
   console.error("usage: bun tools/native-mesh-oracle.ts --game <folder> [--mods <MO2 mods>] --exports <export cache resources> [--filter re] [--limit N] [--report file] [--verbose]");
   process.exit(2);

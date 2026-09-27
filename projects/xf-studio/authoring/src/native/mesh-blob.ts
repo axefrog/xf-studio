@@ -37,8 +37,8 @@ export interface MeshLimits {
   readonly maxOutputBytes: number;
 }
 /**
- * Measured on the reference setup's 519 cached meshes and 40 morph targets (tools/native-mesh-oracle.ts): at most 64 chunks, 254 bones,
- * 105 targets, 141,000 indices in a chunk and a 46 MB dense GLB (a scar decal's facial targets), about 5 MB with sparse deltas.
+ * Measured on the 559 cached WolvenKit exports of the reference setup (519 meshes, 40 morph targets): at most 23 chunks, 254 bones,
+ * 105 targets, 65,447 vertices and 385,512 indices in a chunk, and a 64 MB WolvenKit GLB. Each cap is well above that.
  */
 export const DEFAULT_MESH_LIMITS: MeshLimits = Object.freeze({ maxChunks: 1024, maxBones: 4096, maxTargets: 1024, maxIndices: 4_000_000, maxOutputBytes: 512 * 2 ** 20 });
 

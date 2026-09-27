@@ -224,7 +224,7 @@ export class CharacterDetailHost {
   private meshDecoders: NativeDecoders | null = null;
   private get geometryDecoders(): NativeDecoders {
     return this.meshDecoders ??= new NativeDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log, timeoutMs: NATIVE_GEOMETRY_TIMEOUT_MS,
-      label: { reader: "mesh reader", what: "meshes" } });
+      label: { reader: "mesh reader", what: "meshes" }, offSwitch: "XFS_NATIVE_MESHES" });
   }
 
   private get storeRoot() { return join(this.options.cacheRoot, "characters"); }

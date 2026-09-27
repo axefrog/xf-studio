@@ -1,6 +1,6 @@
 /**
  * A `.morphtarget` resource's targets: names and regions, and per target and chunk the sparse vertex deltas. Pure.
- * knowledge/archive-format.md §11.3 documents the layout and the evidence.
+ * knowledge/archive-format.md §11 documents the layout and the evidence.
  *
  * - `MorphTargetMesh.targets` lists one `MorphTargetMeshEntry` per target (`name`, `regionName`, `faceRegion`) and `baseMesh` names the
  *   mesh whose bones the targets move with. `blob` is a `rendRenderMorphTargetMeshBlob`: `baseBlob` (a render mesh blob, mesh-blob.ts:

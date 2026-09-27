@@ -236,10 +236,12 @@ export class NativeDecoders {
   constructor(private readonly options: { script?: string | URL; open?: (gameRoot: string) => Promise<OpenedDecoder>; log?: (message: string) => void;
     env?: Record<string, string | undefined>;
     /** Time budget per request in the worker (default: a texture's). */ timeoutMs?: number;
-    /** What the decoder reads, for the log line when it can't be opened (default: textures). */ label?: { reader: string; what: string } } = {}) {}
+    /** What the decoder reads, for the log line when it can't be opened (default: textures). */ label?: { reader: string; what: string };
+    /** An environment variable that turns this reader alone off when "0" (besides `XFS_NATIVE_READER`), for comparisons. */ offSwitch?: string } = {}) {}
 
   async get(gameRoot: string): Promise<NativeDecoder | null> {
-    if ((this.options.env ?? process.env).XFS_NATIVE_READER === "0") return null;
+    const env = this.options.env ?? process.env;
+    if (env.XFS_NATIVE_READER === "0" || (this.options.offSwitch && env[this.options.offSwitch] === "0")) return null;
     const stamp = nativeRouteStamp(gameRoot);
     let entry = this.decoders.get(gameRoot);
     if (entry && entry.stamp !== stamp) { this.closeEntry(entry); entry = undefined; }

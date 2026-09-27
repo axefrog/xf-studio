@@ -417,6 +417,13 @@ test("mesh decoders log in their own words when they can't open", async () => {
     open: async () => ({ decoder: null, reason: "no library", permanent: true }) });
   expect(await decoders.get(tempRoot())).toBeNull();
   expect(lines).toEqual(["XF Studio's mesh reader is off for this game folder, so WolvenKit exports meshes: no library"]);
+  // XFS_NATIVE_MESHES=0 turns only the mesh reader off (comparisons); the texture reader's decoders ignore it.
+  let opens = 0;
+  const open = async () => { opens++; return { decoder: null, reason: "x", permanent: true }; };
+  expect(await new NativeDecoders({ env: { XFS_NATIVE_MESHES: "0" }, offSwitch: "XFS_NATIVE_MESHES", open }).get(tempRoot())).toBeNull();
+  expect(opens).toBe(0);
+  await new NativeDecoders({ env: { XFS_NATIVE_MESHES: "0" }, open }).get(tempRoot());
+  expect(opens).toBe(1);
 });
 
 test("mutated meshes and morph targets never fail inside the reader", () => {

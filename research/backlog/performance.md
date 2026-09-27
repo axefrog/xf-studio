@@ -39,7 +39,7 @@
 
 | Cost | Measured | Candidate |
 |---|---|---|
-| WolvenKit geometry export on a cold V | ~17–27 s | native mesh decoding ([native reader](native-archive-reader.md) phase 4) |
+| WolvenKit geometry export on a cold V | ~17–27 s | **Done**: native mesh decoding ([native reader](native-archive-reader.md) phase 4); the default V's 18 meshes and morph targets decode in 1.75 s, and a cold preparation took 19.9–20.0 s against 56–63 s with WolvenKit's geometry export the same day |
 | Clothing factory `.csv` files on first use | 642 files, ~35 s through WolvenKit | native `C2dArray` decoding (PIPE-105) |
 | Texture decodes on a cold V | 11–16 s for 66 textures | already native; parallel workers or GPU transcoding if it becomes the longest stage |
 | Warm restart | ~5–6 s (open 1.7 s, resolve 1–2 s) | persist the resolved graph and mount plan across restarts; start preparing the V before the page asks |
