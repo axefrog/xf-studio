@@ -391,11 +391,13 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     if (!snapshot) return { text: "The live face preview isn't connected here.", tone: "muted" };
     const nextLabel = { "game-setup": "Open Settings", guide: "How live expressions work", "stop-idle": "Stop the idle", retry: "Try again" } as const;
     const label = snapshot.next ? nextLabel[snapshot.next] : undefined;
+    // A limit of this version (its next step is the guide) is said calmly; something the person can fix is a warning.
+    const tone = snapshot.next === "guide" ? "muted" : "warning";
     switch (snapshot.phase) {
-      case "ready": return snapshot.reason ? { text: snapshot.reason, tone: "warning", next: label } : undefined;
+      case "ready": return snapshot.reason ? { text: snapshot.reason, tone, next: label } : undefined;
       case "updating": case "idle": return undefined;
       case "preparing": return { text: snapshot.reason ?? "Preparing the live face preview…", tone: "info" };
-      default: return { text: snapshot.reason ?? "The live face preview isn't available.", tone: "warning", next: label };
+      default: return { text: snapshot.reason ?? "The live face preview isn't available.", tone, next: label };
     }
   }
   function updatePresetsNote() {
