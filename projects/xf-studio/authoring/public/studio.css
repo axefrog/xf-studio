@@ -240,7 +240,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* Condensed strips keep the active tab's full label; the others keep a short visible label (never icon-only, UI-96), and the
    strip scrolls when even that doesn't fit. */
 .dock-tabs.condensed .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
+.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
 .dock-tab:hover { color: var(--text); background: var(--bg-hover); }
 .dock-tab[aria-selected="true"] { color: var(--text); background: var(--bg-panel); }
 .dock-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--indicator); }
@@ -263,11 +263,18 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-window { position: absolute; display: flex; flex-direction: column; pointer-events: auto; box-shadow: var(--shadow); background: var(--bg-panel); border: 1px solid var(--line-strong);
   border-radius: 0 var(--bevel) 0 0; min-width: 0; }
 .dock-window .dock-group { border: 0; }
-/* A collapsed group keeps only its tab bar; its cell takes no share of the split, so the neighbours fill the space. */
-.dock-group.collapsed { flex: none; }
-.dock-cell[data-collapsed] > .dock-group.collapsed { flex: none; }
-.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tabbar { writing-mode: vertical-rl; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
-.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tab-label { max-width: none; }
+/* A collapsed group keeps only its tab bar and folds along the axis that takes its space (view-graph-design.md §4.4): along a
+   column it is a header row spanning its column; along a row (a single group, or a column whose groups all collapsed) a
+   full-height vertical strip. A folded cell takes no share of its split, so the neighbours fill the space. */
+.dock-group.collapsed[data-fold="row"] { flex: none; }
+.dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
+/* A strip shorter than its tabs condenses them like a crowded bar and scrolls the rest; its buttons stay in reach. */
+.dock-group.collapsed[data-fold="row"] .dock-tabs { min-height: 0; overflow: hidden auto; }
+.dock-group.collapsed[data-fold="row"] .dock-tab-label { max-width: none; }
+.dock-group.collapsed[data-fold="row"] .dock-tabbar-fill { min-width: 0; min-height: 24px; }
+.dock-cell[data-collapsed] > .dock-split { flex: none; }
+.dock-split > .dock-splitter.inert { cursor: default; }
+.dock-split > .dock-splitter.inert:hover::after { background: transparent; }
 .dock-window.collapsed { height: auto !important; }
 .dock-collapse-btn[aria-expanded="false"] { color: var(--signal); }
 .dock-window .dock-tabbar-fill { cursor: move; }
