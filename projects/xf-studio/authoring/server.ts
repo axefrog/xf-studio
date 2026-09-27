@@ -123,6 +123,9 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
       mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
   },
   ...(process.env.XFS_CHOICE_PREVIEW_CACHE ? { previewRoot: resolve(process.env.XFS_CHOICE_PREVIEW_CACHE) } : {}),
+  // A verification server pointed at another checkout's caches sets `XFS_PREPARED_BUDGET_GB` (0: never evict) so it leaves them whole.
+  ...(process.env.XFS_PREPARED_BUDGET_GB !== undefined
+    ? { preparedBudget: Number(process.env.XFS_PREPARED_BUDGET_GB) > 0 ? Number(process.env.XFS_PREPARED_BUDGET_GB) * 1024 ** 3 : Infinity } : {}),
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
