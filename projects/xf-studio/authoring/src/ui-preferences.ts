@@ -32,7 +32,12 @@ export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePrefer
    */
   choiceSizes?: Record<string, ChoiceSize>;
   /** The easing curve chosen per multi-control operation (easing.ts; e.g. `expression-intensity`). Presentation state, never Undo. */
-  easings?: Record<string, EasingId> };
+  easings?: Record<string, EasingId>;
+  /**
+   * The size a resizable control was given, in CSS pixels, by control key (e.g. `lighting.direction`, the direction dial). The control
+   * clamps it to what fits; absent: its default. Presentation state, never Undo.
+   */
+  controlSizes?: Record<string, number> };
 export type ChoiceSize = "s" | "m" | "l";
 /**
  * Where a scroll container was (scroll-anchor.ts): `key` is the view key of the element at its top edge and `offset` how many pixels
@@ -50,6 +55,7 @@ export type UIPreferenceAction =
   | { kind: "scroll.set"; key: string; anchor?: ScrollAnchor }
   | { kind: "choiceSize.set"; type: string; size: ChoiceSize }
   | { kind: "easing.set"; scope: string; easing: EasingId }
+  | { kind: "controlSize.set"; control: string; size: number }
   | { kind: "tours.record"; tourId: string; outcome: TourRecord }
   | LayoutAction;
 export type UIPreferenceCapability = { available: boolean; reason?: string };
@@ -72,6 +78,8 @@ const MAX_OFFSET = 1_000_000;
 const MAX_CHOICE_TYPES = 32;
 const choiceType = (value: unknown): value is string => typeof value === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(value);
 const choiceSize = (value: unknown): value is ChoiceSize => value === "s" || value === "m" || value === "l";
+/** A kept control size: whole CSS pixels in a sane range (the control clamps it to what fits). */
+const controlSize = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 40 && (value as number) <= 4000;
 /**
  * A view key (view-state.ts): a namespace (a panel or feature id), a colon or dot, then its own path; no control characters, bounded.
  * Author and mod names may be in any script.
@@ -222,6 +230,10 @@ export function parseUIPreferences(value: unknown): UIPreferences {
       const sizes = Object.entries(candidate.choiceSizes).filter(([type, size]) => choiceType(type) && choiceSize(size)).slice(0, MAX_CHOICE_TYPES);
       if (sizes.length) result.choiceSizes = Object.fromEntries(sizes) as Record<string, ChoiceSize>;
     }
+    if (candidate.controlSizes && typeof candidate.controlSizes === "object" && !Array.isArray(candidate.controlSizes)) {
+      const sizes = Object.entries(candidate.controlSizes).filter(([control, size]) => choiceType(control) && controlSize(size)).slice(0, MAX_CHOICE_TYPES);
+      if (sizes.length) result.controlSizes = Object.fromEntries(sizes) as Record<string, number>;
+    }
     if (candidate.easings && typeof candidate.easings === "object" && !Array.isArray(candidate.easings)) {
       const easings = Object.entries(candidate.easings).filter(([scope, easing]) => choiceType(scope) && isEasing(easing)).slice(0, MAX_CHOICE_TYPES);
       if (easings.length) result.easings = Object.fromEntries(easings) as Record<string, EasingId>;
@@ -266,6 +278,11 @@ export class UIPreferenceActions {
       if (!Object.hasOwn(this.value.choiceSizes ?? {}, action.type) && Object.keys(this.value.choiceSizes ?? {}).length >= MAX_CHOICE_TYPES)
         return { available: false, reason: "Too many picture sizes are remembered already." };
     }
+    if (action.kind === "controlSize.set") {
+      if (!choiceType(action.control) || !controlSize(action.size)) return { available: false, reason: "Choose a control and a size in whole pixels." };
+      if (!Object.hasOwn(this.value.controlSizes ?? {}, action.control) && Object.keys(this.value.controlSizes ?? {}).length >= MAX_CHOICE_TYPES)
+        return { available: false, reason: "Too many control sizes are remembered already." };
+    }
     if (action.kind === "easing.set") {
       if (!choiceType(action.scope) || !isEasing(action.easing)) return { available: false, reason: "Choose an operation and one of its curves." };
       if (!Object.hasOwn(this.value.easings ?? {}, action.scope) && Object.keys(this.value.easings ?? {}).length >= MAX_CHOICE_TYPES)
@@ -292,6 +309,7 @@ export class UIPreferenceActions {
     else if (action.kind === "modules.set") this.value.modules = { ...this.value.modules, [action.module]: action.shown };
     else if (action.kind === "choiceSize.set") this.value.choiceSizes = { ...this.value.choiceSizes, [action.type]: action.size };
     else if (action.kind === "easing.set") this.value.easings = { ...this.value.easings, [action.scope]: action.easing };
+    else if (action.kind === "controlSize.set") this.value.controlSizes = { ...this.value.controlSizes, [action.control]: action.size };
     else if (action.kind === "expanded.set") {
       const open = remember(this.value.expanded, action.keys.map(key => [key, action.expanded] as const), MAX_EXPANDED_PER_NAMESPACE, MAX_EXPANDED);
       if (open) this.value.expanded = open; else delete this.value.expanded;

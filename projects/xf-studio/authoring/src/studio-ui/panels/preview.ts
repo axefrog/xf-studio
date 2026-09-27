@@ -86,6 +86,8 @@ export function lightMeta(light: Pick<LightView, "intensity" | "shadows">): stri
   const strength = light.intensity >= 100 ? Math.round(light.intensity) : Number(light.intensity.toPrecision(2));
   return [String(strength), light.shadows ? "shadows" : ""].filter(Boolean).join(" · ");
 }
+/** The direction dial's key in the kept control sizes. */
+const DIAL_SIZE_KEY = "lighting-direction";
 /** The strength slider's range for a kind of light (lux for directional, candela for spot). */
 const STRENGTH_RANGE = { directional: { min: 0, max: 20, step: .05 }, spot: { min: 0, max: 500, step: .5 } } as const;
 
@@ -205,7 +207,12 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     { kind: "action", label: "Spot light", icon: "lighting", capability: capability({ kind: "preview.addLight", type: "spot" }),
       run: () => rt.dispatch({ kind: "preview.addLight", type: "spot" }) }], event.currentTarget as Element, { label: "Add light" }) });
   const lightId = () => selectedLight ?? "";
-  const direction = new DirectionDial({ label: "Direction", transaction: {
+  // The dial's size is a UI preference (`controlSize.set`), kept when the resize bar is released.
+  const direction = new DirectionDial({ label: "Direction", onResize: (size, final) => {
+    if (!final) return;
+    const action = { kind: "controlSize.set" as const, control: DIAL_SIZE_KEY, size };
+    if (port.preferences.capability(action).available) port.preferences.dispatch(action);
+  }, transaction: {
     edit: value => { edit({ kind: "preview.setLight", light: lightId(), key: "azimuth", value: value.azimuth });
       edit({ kind: "preview.setLight", light: lightId(), key: "elevation", value: value.elevation }); },
     commit: endEdit, cancel: endEdit } });
@@ -253,6 +260,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     kind.update(light.type, type => ready ? capability({ kind: "preview.setLightType", light: light.id, type }) : { available: false, reason: "The preview is still loading." },
       { note: light.type === "directional" ? "Cone and softness apply to spot lights." : "" });
     direction.update({ azimuth: light.azimuth, elevation: light.elevation }, { colour: light.colour,
+      size: port.preferences.snapshot().controlSizes?.[DIAL_SIZE_KEY],
       others: list.filter(item => item.id !== light.id).map(item => ({ azimuth: item.azimuth, elevation: item.elevation, colour: item.colour })),
       ...gate({ kind: "preview.setLight", light: light.id, key: "azimuth", value: light.azimuth }) });
     distance.update(light.distance, gate({ kind: "preview.setLight", light: light.id, key: "distance", value: light.distance }));
