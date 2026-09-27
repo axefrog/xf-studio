@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options)",
  "states": {
   "starter": {
    "modes": {
@@ -528,6 +528,12 @@
     },
     "layer/preview.setDetail": {
      "detail": {}
+    },
+    "layer/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "layer/motion.setIdleClip": {
      "clip": {
@@ -1149,6 +1155,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "point/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -1765,6 +1777,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "viewport/motion.setIdleClip": {
      "clip": {
@@ -2383,6 +2401,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "collection/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -2999,6 +3023,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "preset/motion.setIdleClip": {
      "clip": {
@@ -3825,6 +3855,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "layer/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -4452,6 +4488,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "point/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -5068,6 +5110,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "viewport/motion.setIdleClip": {
      "clip": {
@@ -5686,6 +5734,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "collection/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -6302,6 +6356,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "preset/motion.setIdleClip": {
      "clip": {
@@ -7129,6 +7189,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "layer/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -7757,6 +7823,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "point/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -8373,6 +8445,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "viewport/motion.setIdleClip": {
      "clip": {
@@ -8991,6 +9069,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "collection/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -9607,6 +9691,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "preset/motion.setIdleClip": {
      "clip": {
@@ -10433,6 +10523,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "layer/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -11060,6 +11156,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "point/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -11676,6 +11778,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "viewport/motion.setIdleClip": {
      "clip": {
@@ -12294,6 +12402,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "collection/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -12910,6 +13024,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "preset/motion.setIdleClip": {
      "clip": {
@@ -13736,6 +13856,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "layer/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -14363,6 +14489,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "point/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -14979,6 +15111,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "viewport/motion.setIdleClip": {
      "clip": {
@@ -15597,6 +15735,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "collection/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -16213,6 +16357,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "preset/motion.setIdleClip": {
      "clip": {
@@ -17042,6 +17192,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "layer/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -17672,6 +17828,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "point/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -18288,6 +18450,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "viewport/motion.setIdleClip": {
      "clip": {
@@ -18906,6 +19074,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
+    },
     "collection/motion.setIdleClip": {
      "clip": {
       "minLength": 1,
@@ -19522,6 +19696,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/preview.setHairLook": {
+     "value": {
+      "min": 0,
+      "max": 1
+     }
     },
     "preset/motion.setIdleClip": {
      "clip": {

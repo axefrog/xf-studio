@@ -2,7 +2,6 @@ import * as THREE from "three";
 import { extendSkin, fullSkinDepthMaterial } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
-import type { HairLookUniform } from "../../hair-shading";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
 import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
 import type { CharacterDetail, DetailSlot } from "../../render-detail";
@@ -98,7 +97,7 @@ export function createCharacterRenderer(input: {
   // knowledge/hair-shading.md). One explicit choice for hair and lashes.
   const profileEncoding: ProfileEncoding = "srgb-decoded";
   // The view's Hair look (0 Crisp … 1 Game-like): one uniform every strand material of this scene reads (hair-shading.ts).
-  const hairLook: HairLookUniform = { value: 0 };
+  const hairLook: NonNullable<AdapterContext["hairLook"]> = { value: 0 };
   // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
   const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(rig.albedo), coreRoughness: coreRoughnessReader(rig.roughness) });
   let browUnderlay: BrowUnderlayEvidence | undefined;
