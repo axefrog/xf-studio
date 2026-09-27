@@ -5,7 +5,7 @@
  * components whose graphs solve the muscle, twist and corrective joints every body mesh is skinned to (`deformations`:
  * `woman_base_deformations.rig` with `woman_base_deformations.animgraph`) [resource]. A graph of this kind is one linear chain: the
  * shared main pose and the rig's reference pose, into model space, then point, orient and aim constraints, bone offsets, twist
- * distribution, splines, measured "bounce" drivers and translation limits, each writing named transforms, then back to local space.
+ * distribution, splines, measured "bounce" drivers (rotation channels in degrees) and translation limits, each writing named transforms, then back to local space.
  * `compileDeformationRig` turns the rig and graph documents into a compact program; `evaluateDeformationRig` runs it on a pose.
  *
  * The node semantics are inferred, not read from engine source [hypothesis]: they reproduce the rig's own A pose (the bind pose every
@@ -455,18 +455,24 @@ function fromEuler(e: Vec3): Quat {
   const cx = Math.cos(x), sx = Math.sin(x), cy = Math.cos(y), sy = Math.sin(y), cz = Math.cos(z), sz = Math.sin(z);
   return [sx * cy * cz - cx * sy * sz, cx * sy * cz + sx * cy * sz, cx * cy * sz - sx * sy * cz, cx * cy * cz + sx * sy * sz];
 }
+/**
+ * The rotation channels (`RotX`…) are Euler angles in **degrees**, as the engine's `EulerAngles` are (PREV-149): the vanilla elbow
+ * correctives write `RotZ` at −200 and −300 per metre of the elbow's bend measure, which is a few degrees at a strong bend (the same bend
+ * scales the muscle by 0.9 to 1.2) and would be two to three radians, a joint turned inside out, if the angle were radians.
+ */
+const RADIANS_PER_DEGREE = Math.PI / 180;
 function channelOf(m: Mat4, channel: Channel): number {
   const axis = AXES[channel[channel.length - 1]!]!;
   if (channel.startsWith("Pos")) return m[12 + axis]!;
   if (channel.startsWith("Scale")) return scaleOf(m)[axis];
-  return euler(m)[axis];
+  return euler(m)[axis] / RADIANS_PER_DEGREE;
 }
 function withChannel(m: Mat4, channel: Channel, value: number): Mat4 {
   const axis = AXES[channel[channel.length - 1]!]!;
   if (channel.startsWith("Pos")) { const out = m.slice(); out[12 + axis] = value; return out; }
   const t: Vec3 = [m[12]!, m[13]!, m[14]!], s = scaleOf(m);
   if (channel.startsWith("Scale")) { s[axis] = value; return compose(t, rotationOf(m), s); }
-  const e = euler(m); e[axis] = value;
+  const e = euler(m); e[axis] = value * RADIANS_PER_DEGREE;
   return compose(t, fromEuler(e), s);
 }
 

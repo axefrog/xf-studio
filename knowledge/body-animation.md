@@ -48,10 +48,12 @@ The main rig (`woman_base.rig`, 71 joints) is what every body clip keys. Every b
 | `AimConstraint_ObjectUp` / `_ObjectRotationUp` | 78 / 14 | Turns `forwardAxisLS` at the target, `upAxisLS` towards the up object (or the up object's rotated `upTransformVector`) |
 | `SetBoneTransform` | 72 | The joint at its source times the offset (`WholeTransform`) |
 | `SimpleSpline` | 44 | The joint on the quadratic curve start → middle → end at `defaultProgress`, or at a float track's value |
-| `SimpleBounce` | 90 | A measure: X of the end in the start's space; `offset + (multiplier or negativeMultiplier) × X`, written into each output's channels (position, Euler rotation or scale, each scaled) in its parent's space, or into a float track. It drives muscle bulges and slides, not only jiggle; its delay and smoothing are dynamics |
+| `SimpleBounce` | 90 | A measure: X of the end in the start's space; `offset + (multiplier or negativeMultiplier) × X`, written into each output's channels (position, Euler rotation **in degrees** or scale, each scaled) in its parent's space, or into a float track; a rotation measure reads degrees too. It drives muscle bulges and slides, not only jiggle; its delay and smoothing are dynamics |
 | `TranslationLimit` | 8 | Clamps the joint's position in its parent's space |
 
 **The check:** with the main joints in the A pose, these semantics give back the A pose for 179 of the 181 rig joints within 0.5 mm and 1°, and for the other two (`l/r_deltoid_top_bot_out_JNT`) within 2°. That holds whatever the helper joints held on input, so every helper joint is fully determined by the graph [offline]. The twist sign, the bounce slopes and the spline's curve only act away from the A pose, where no capture has checked them yet.
+
+**Rotation channels are degrees** [offline; hypothesis until capture ask 2]: the only bounces that write rotations are the elbow correctives (`l/r_elbow_bend_A/B_mscl_JNT` at −200 and `l/r_elbow_back_mscl_JNT` at −300 per metre of the elbow's bend measure, `RotZ`). The measure is about 5–25 mm in bent-elbow poses, so the turn is 1–7° in degrees but 60–400° in radians, while the same measure scales those muscles by only 0.9 to 1.2. Read as radians they turned the elbow inside out under every bent-elbow pose (PREV-149); the A-pose check can't tell the units apart, because at rest the measure is on the zero slope. The engine's `EulerAngles` are degrees throughout.
 
 **The breasts rig** is a simulation (dangles, drag, collision ellipsoids, blends and a static switch on a visual tag) [resource]; it isn't a constraint chain and the Studio leaves it out. At rest its joints keep the pose the deformation rig gives them [hypothesis].
 
