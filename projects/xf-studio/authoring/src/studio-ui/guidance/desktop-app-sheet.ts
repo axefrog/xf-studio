@@ -1,6 +1,7 @@
 import type { DesktopAppState } from "../../desktop-app";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, button, note } from "../controls";
+import { iconButton } from "../components/icon-button";
 import { h, setText, uid } from "../dom";
 import { icon } from "../icons";
 import type { StudioRuntime } from "../runtime";
@@ -53,7 +54,7 @@ export function openDesktopAppSheet(rt: StudioRuntime) {
   const close = button({ label: "Close", variant: "quiet", onClick: () => done() });
   const dialog = h("dialog", { class: "sheet desktop-app-sheet", "aria-labelledby": titleId },
     h("div", { class: "sheet-head" }, title,
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => done() }, icon("close"))),
+      iconButton({ label: "Close", icon: "close", onClick: () => done() })),
     lead, detail, status, h("div", { class: "report-foot" }, primary, again, h("span", { class: "grow" }), close));
   let renderedKey = "";
   /** What this sheet's own last step said (a launch started, or why not); an earlier session's outcome isn't shown. */

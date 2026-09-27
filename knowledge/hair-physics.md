@@ -111,7 +111,7 @@ Built in `claude/hair-physics` ([plan](../research/animation/hair-physics-plan.m
 - **Settling measures displacement.** A particle resting against a constraint keeps a stored velocity of about `0.5·h·accel` (the second half kick, about 5 cm/s under gravity), because each substep's drift is undone by the projection; the settle rule therefore measures how far particles move per frame, not their stored velocity [offline, from §5.2].
 - **Cost** [offline, Bun on the development machine]: one frame of `hh_033` (two substeps) takes about 15 µs and of `hh_107` about 10 µs; settling from the rigid chains takes 1.4 to 6 ms (`hh_033` reaches the 300-substep cap: its drag of 2.5 s⁻¹ damps slowly). The budget is 0.5 ms a frame for all of V's dangles.
 - **One setting per scene, off by default.** The view graph's scene node holds `physics`; `motion.setPhysics` edits it (an Undo step in View and lighting), and the Motion panel's Hair physics switch dispatches it. It refuses in plain words when V's hair has no physics, or physics the solver doesn't run.
-- **No world motion, no hair-to-hair or clothing collision** (the game has none either, §3), and the rig and graph are read by WolvenKit (not yet natively, NATIVE-58).
+- **No world motion, no hair-to-hair or clothing collision** (the game has none either, §3), and the rig and graph are read by WolvenKit (not yet natively, NATIVE-64).
 
 ## 5. Solver arithmetic (2.31 executable)
 

@@ -17,7 +17,7 @@ export type Transaction<T> = { begin?(): void; edit(value: T): void; commit?(): 
  * shown once) keeps its line from then on: an empty note keeps its height, and a disabled reason takes the note's place. A control
  * without one says why it is disabled in its tooltip and accessible description only; its panel says it once where that matters.
  */
-class NoteLine {
+export class NoteLine {
   readonly element = h("small", { class: "control-note" });
   private reserved: boolean;
   constructor(reserve = false) { this.reserved = reserve; this.element.hidden = !reserve; }
@@ -34,12 +34,56 @@ class NoteLine {
 }
 const editKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
+/**
+ * A range input's edit transaction, shared by Slider and SliderWithValue. A transaction begins lazily on the first value change, so a
+ * click that changes nothing never leaves one open. Pointer drags commit after release; browsers fire `change` for every arrow key,
+ * so a keyboard burst stays one transaction until a short pause or blur. After Escape the input ignores further input until the
+ * pointer is released or focus leaves. `onValue` hears every edited value (to repaint a readout); `active()` says whether a
+ * transaction is open (an update never overwrites a value being dragged).
+ */
+export function bindRangeTransaction(input: HTMLInputElement, transaction: Transaction<number>, onValue: (value: number) => void): { active(): boolean } {
+  let active = false, pointer = false, mode: "pointer" | "keyboard" | undefined, cancelled = false, idle: ReturnType<typeof setTimeout> | undefined;
+  const commit = () => {
+    clearTimeout(idle);
+    if (active) { active = false; mode = undefined; transaction.commit?.(); }
+  };
+  const armIdle = () => { clearTimeout(idle); idle = setTimeout(commit, 700); };
+  input.addEventListener("pointerdown", () => { pointer = true; cancelled = false; });
+  const release = () => { pointer = false; cancelled = false; if (mode === "pointer") setTimeout(commit); };
+  input.addEventListener("pointerup", release);
+  input.addEventListener("pointercancel", release);
+  input.addEventListener("keydown", event => {
+    if (editKeys.has(event.key)) { cancelled = false; if (mode === "keyboard") armIdle(); }
+    else if (event.key === "Escape" && active) {
+      event.preventDefault(); event.stopPropagation();
+      clearTimeout(idle); active = false; mode = undefined; cancelled = true;
+      transaction.cancel?.();
+    }
+  });
+  input.addEventListener("input", () => {
+    if (cancelled || input.disabled) return;
+    if (!active) { active = true; mode = pointer ? "pointer" : "keyboard"; transaction.begin?.(); }
+    if (mode === "keyboard") armIdle();
+    const value = Number(input.value);
+    onValue(value);
+    transaction.edit(value);
+  });
+  input.addEventListener("change", () => { if (mode === "pointer") commit(); });
+  input.addEventListener("blur", () => { cancelled = false; pointer = false; commit(); });
+  return { active: () => active };
+}
+/** A range input's fill (the track left of the thumb). */
+export function fillRange(input: HTMLInputElement) {
+  const min = Number(input.min), max = Number(input.max), value = Number(input.value);
+  input.style.setProperty("--fill", `${max > min ? (value - min) / (max - min) * 100 : 0}%`);
+}
+
 export class Slider {
   readonly element: HTMLElement;
   readonly input: HTMLInputElement;
   private readonly output: HTMLOutputElement;
   private readonly note: NoteLine;
-  private active = false;
+  private readonly edit: { active(): boolean };
   constructor(private options: { label: string; min: number; max: number; step: number; format(value: number): string;
     transaction: Transaction<number>; help?: string; id?: string;
     /** Keep a note line from the start: its note comes and goes (a limit that applies only sometimes). */
@@ -52,50 +96,15 @@ export class Slider {
       h("label", { class: "control-label", for: id }, h("span", { class: "control-label-text" }, h("span", { text: options.label }),
         options.help ? helpTip(options.label, options.help) : null), this.output),
       this.input, this.note.element);
-    // A transaction begins lazily on the first value change, so a click that changes nothing
-    // never leaves one open. Pointer drags commit after release; browsers fire `change` for
-    // every arrow key, so a keyboard burst stays one transaction until a short pause or blur.
-    // After Escape the control ignores further input until the pointer is released or focus leaves.
-    let pointer = false, mode: "pointer" | "keyboard" | undefined, cancelled = false, idle: ReturnType<typeof setTimeout> | undefined;
-    const commit = () => {
-      clearTimeout(idle);
-      if (this.active) { this.active = false; mode = undefined; options.transaction.commit?.(); }
-    };
-    const armIdle = () => { clearTimeout(idle); idle = setTimeout(commit, 700); };
-    this.input.addEventListener("pointerdown", () => { pointer = true; cancelled = false; });
-    const release = () => { pointer = false; cancelled = false; if (mode === "pointer") setTimeout(commit); };
-    this.input.addEventListener("pointerup", release);
-    this.input.addEventListener("pointercancel", release);
-    this.input.addEventListener("keydown", event => {
-      if (editKeys.has(event.key)) { cancelled = false; if (mode === "keyboard") armIdle(); }
-      else if (event.key === "Escape" && this.active) {
-        event.preventDefault(); event.stopPropagation();
-        clearTimeout(idle); this.active = false; mode = undefined; cancelled = true;
-        options.transaction.cancel?.();
-      }
-    });
-    this.input.addEventListener("input", () => {
-      if (cancelled || this.input.disabled) return;
-      if (!this.active) { this.active = true; mode = pointer ? "pointer" : "keyboard"; options.transaction.begin?.(); }
-      if (mode === "keyboard") armIdle();
-      const value = Number(this.input.value);
-      this.fill();
-      this.output.textContent = options.format(value);
-      options.transaction.edit(value);
-    });
-    this.input.addEventListener("change", () => { if (mode === "pointer") commit(); });
-    this.input.addEventListener("blur", () => { cancelled = false; pointer = false; commit(); });
-  }
-  private fill() {
-    const min = Number(this.input.min), max = Number(this.input.max), value = Number(this.input.value);
-    this.input.style.setProperty("--fill", `${max > min ? (value - min) / (max - min) * 100 : 0}%`);
+    this.edit = bindRangeTransaction(this.input, options.transaction, value => { fillRange(this.input); this.output.textContent = options.format(value); });
   }
   update(value: number | undefined, state: { disabled?: boolean; reason?: string; min?: number; max?: number; note?: string } = {}) {
     if (state.min !== undefined) setAttr(this.input, "min", String(state.min));
     if (state.max !== undefined) setAttr(this.input, "max", String(state.max));
-    if (!this.active && value !== undefined) setValue(this.input, String(value));
-    this.fill();
-    setText(this.output, value === undefined ? "—" : this.options.format(this.active ? Number(this.input.value) : value));
+    const active = this.edit.active();
+    if (!active && value !== undefined) setValue(this.input, String(value));
+    fillRange(this.input);
+    setText(this.output, value === undefined ? "—" : this.options.format(active ? Number(this.input.value) : value));
     setDisabled(this.input, !!state.disabled, state.reason);
     this.note.update(this.input, !!state.disabled, state.reason, state.note);
   }
@@ -243,8 +252,11 @@ export class SelectField<T extends string> {
 }
 
 export function button(options: { label: string; icon?: IconName; variant?: "primary" | "quiet" | "danger" | "ghost";
-  onClick(event: MouseEvent): void; title?: string; iconOnly?: boolean; small?: boolean }) {
-  const element = h("button", { class: `btn${options.variant ? ` ${options.variant}` : ""}${options.iconOnly ? " icon-only" : ""}${options.small ? " small" : ""}`,
+  onClick(event: MouseEvent): void; title?: string; iconOnly?: boolean; small?: boolean;
+  /** Opens a menu (`aria-haspopup="menu"`). */
+  menu?: boolean; className?: string }) {
+  const element = h("button", { class: `btn${options.variant ? ` ${options.variant}` : ""}${options.iconOnly ? " icon-only" : ""}${options.small ? " small" : ""}${options.className ? ` ${options.className}` : ""}`,
+    "aria-haspopup": options.menu ? "menu" : undefined,
     type: "button", title: options.title ?? (options.iconOnly ? options.label : undefined), "data-title": options.title ?? (options.iconOnly ? options.label : ""),
     "aria-label": options.iconOnly ? options.label : undefined,
     // An unavailable action runs nothing (the page's reason tip answers the click instead; reason-tip.ts).
@@ -275,4 +287,20 @@ export function badge(text: string, tone: "neutral" | "accent" | "info" | "succe
 export function emptyState(title: string, body: string, ...actions: HTMLElement[]) {
   return h("div", { class: "empty" }, h("p", { class: "empty-title", text: title }), h("p", { class: "empty-body", text: body }),
     actions.length ? h("div", { class: "empty-actions" }, actions) : null);
+}
+/**
+ * An empty state whose texts change in place (a list that empties or fills as the person works): `role="status"`, so the change is
+ * announced, and one element for its whole life.
+ */
+export class EmptyState {
+  readonly element: HTMLElement;
+  private readonly title = h("p", { class: "empty-title" });
+  private readonly body = h("p", { class: "empty-body" });
+  constructor(options: { title?: string; body?: string; actions?: HTMLElement[]; className?: string } = {}) {
+    const actions = options.actions ?? [];
+    this.element = h("div", { class: `empty${options.className ? ` ${options.className}` : ""}`, role: "status" }, this.title, this.body,
+      actions.length ? h("div", { class: "empty-actions" }, actions) : null);
+    this.update(options.title ?? "", options.body ?? "");
+  }
+  update(title: string, body: string) { setText(this.title, title); this.title.hidden = !title; setText(this.body, body); }
 }

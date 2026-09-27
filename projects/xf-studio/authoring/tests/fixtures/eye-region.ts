@@ -25,6 +25,7 @@ import * as port from "../../src/authoring-eye-makeup";
 export { EYE_MAKEUP_REGION, initialRecipe, newLayerTemplate, starterRecipe };
 export const EYE_REGION = EYE_MAKEUP_REGION;
 export const EYE_MIRROR = EYE_MAKEUP_REGION.mirror;
+export const EYE_SKIN = EYE_MAKEUP_REGION.skin;
 export const EYE_MODELS = EYE_MAKEUP_REGION.models;
 export const EYE_FINE_GLITTER = EYE_MAKEUP_REGION.fineGlitter;
 /** Eye makeup's region as the raster worker receives it. */
@@ -38,12 +39,12 @@ export const ACCENT_TEXTURE_SIZE = EYE_MAKEUP_REGION.textures.accent;
 export const HEAD_TEXTURE_SIZE = EYE_MAKEUP_REGION.textures.head;
 
 type Layer = recipe.Layer;
-export const coverage = (u: number, v: number, l: Layer, polygon?: recipe.Point[]) =>
-  polygon ? recipe.coverage(u, v, l, EYE_MIRROR, polygon) : recipe.coverage(u, v, l, EYE_MIRROR);
-export const raster = (l: Layer, size: number) => recipe.raster(l, size, EYE_MIRROR);
-export const createRasterJob = (l: Layer, size: number) => recipe.createRasterJob(l, size, EYE_MIRROR);
+export const coverage = (u: number, v: number, l: Layer, polygon?: recipe.Point[], mottle?: Parameters<typeof recipe.coverage>[5]) =>
+  polygon ? recipe.coverage(u, v, l, EYE_MIRROR, polygon, mottle) : recipe.coverage(u, v, l, EYE_MIRROR, undefined, mottle);
+export const raster = (l: Layer, size: number) => recipe.raster(l, size, EYE_MIRROR, EYE_SKIN);
+export const createRasterJob = (l: Layer, size: number) => recipe.createRasterJob(l, size, EYE_MIRROR, EYE_SKIN);
 export const rasterWindow = (l: Layer, width: number, height: number, area: { u0: number; u1: number; v0: number; v1: number }) =>
-  recipe.rasterWindow(l, width, height, area, EYE_MIRROR);
+  recipe.rasterWindow(l, width, height, area, EYE_MIRROR, EYE_SKIN);
 export const layerCoverageSampler = (l: Layer) => recipe.layerCoverageSampler(l, EYE_MIRROR);
 
 export const editLayers = (value: recipe.Recipe, activeId: string | undefined, command: stack.LayerCommand) =>

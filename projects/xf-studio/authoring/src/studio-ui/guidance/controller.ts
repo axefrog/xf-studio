@@ -53,7 +53,7 @@ export async function runCommand(rt: StudioRuntime, command: TourCommand): Promi
       rt.changed();
       return outcome.ok;
     }
-    case "panel": rt.dock.reveal(command.panel, false); return true;
+    case "panel": rt.dock.reveal(command.panel); return true;
   }
 }
 

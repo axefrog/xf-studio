@@ -1,5 +1,6 @@
 import { bindingReference } from "../input-bindings";
 import { Toggle } from "./controls";
+import { iconButton } from "./components/icon-button";
 import { h, uid } from "./dom";
 import { icon, type IconName } from "./icons";
 import type { Capability } from "./menu";
@@ -100,7 +101,7 @@ export function openInputReference(options: { hints?: { enabled: boolean; set(en
   hints?.update(options.hints!.enabled);
   const dialog = h("dialog", { class: "sheet reference-sheet", "aria-labelledby": "shortcuts-title" },
     h("div", { class: "sheet-head" }, h("h2", { id: "shortcuts-title", text: "Keyboard & mouse" }),
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => close() }, icon("close"))),
+      iconButton({ label: "Close", icon: "close", onClick: () => close() })),
     hints ? h("div", { class: "reference-pref" }, hints.element) : null,
     h("div", { class: "reference-body" }, sections));
   const close = () => { dialog.close(); dialog.remove(); invoker?.focus(); };

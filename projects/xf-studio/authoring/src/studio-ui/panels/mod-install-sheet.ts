@@ -1,4 +1,5 @@
 import { applyCapability, button, note } from "../controls";
+import { iconButton } from "../components/icon-button";
 import { h, setText, uid } from "../dom";
 import { icon } from "../icons";
 import type { StudioRuntime } from "../runtime";
@@ -21,14 +22,14 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
   const changes = h("ul", { class: "result-list install-changes", "aria-label": "What will change" });
   const notes = h("div", { class: "install-notes" });
   const status = h("p", { class: "install-status", role: "status", "aria-live": "polite" });
-  const setup = button({ label: "Open Game & tools", icon: "settings", small: true, onClick: () => { close(); options.openSetup(); } });
+  const setup = button({ label: "Open Settings", icon: "settings", small: true, onClick: () => { close(); options.openSetup(); } });
   const again = button({ label: "Check again", icon: "refresh", small: true, onClick: () => void review() });
   const rename = button({ label: "Rename the mod", icon: "rename", small: true, onClick: () => { close(); options.rename?.(); } });
   const add = button({ label: "Add", icon: "package", variant: "primary", onClick: () => void apply() });
   const cancel = button({ label: "Cancel", variant: "quiet", onClick: () => close() });
   const dialog = h("dialog", { class: "sheet install-sheet", "aria-labelledby": titleId },
     h("div", { class: "sheet-head" }, title,
-      h("button", { class: "icon-btn", type: "button", "aria-label": "Close", onclick: () => close() }, icon("close"))),
+      iconButton({ label: "Close", icon: "close", onClick: () => close() })),
     where, changes, notes, h("div", { class: "install-state" }, status, again, rename, setup),
     h("div", { class: "report-foot" }, add, h("span", { class: "grow" }), cancel));
   let said = "";
@@ -67,7 +68,7 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     const blocked = plan?.blocked ?? null;
     setText(status, busy === "modInstall.apply" ? "Adding your mod…" : said || blocked || "");
     status.className = `install-status${said || blocked ? " warning" : ""}`;
-    // The one next step as a button, as the plan names it (UI-99): Game & tools, renaming the mod, or Check again once the
+    // The one next step as a button, as the plan names it (UI-99): Settings, renaming the mod, or Check again once the
     // person has done what it says. A refused Add offers Check again.
     const next = blocked ? plan!.next : said ? "retry" : null;
     setup.hidden = next !== "setup";

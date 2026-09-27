@@ -29,6 +29,7 @@ import { Frame, StudioRuntime, type Port } from "./runtime";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance/desktop-app-sheet";
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
+import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -63,6 +64,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const featureViewOf = (module: StudioModule) => featureViews.find(entry => entry.binding.owner === (module.feature ?? module.id));
   const context: ViewContext = {
     guidance: { tours: () => guidance.service.tourList(), status: id => guidance.status(id), start: id => guidance.start(id) },
+    // Settings › Appearance sets the same preferences as the header's View preferences menu.
+    appearance: { theme: () => theme.preference, setTheme: next => theme.set(next), hints: view.hints, setHints: view.setHints,
+      research: view.research, setResearch: view.setResearch, openReference: view.openReference },
     // What the shown modules contribute to a view: their crumbs (in module order) and the first readiness badge.
     view: {
       summaries: () => port.views.summaries(undefined, { modules: rt.shownModules() }).flatMap(summary => {
@@ -121,7 +125,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     announce: message => feedback.announce(message),
     beforeLayout: () => port.viewport.cancelInput(),
     afterLayout: () => requestAnimationFrame(() => port.viewport.resize()),
-    homes: catalogue.homes,
   });
   rt.dock = dock;
   /**
@@ -162,6 +165,16 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   }
   rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
+  /**
+   * Settings (UI-109) is summoned like any panel (`reveal`, dock/layout.ts `summonPanel`): with no home among the docked groups a closed
+   * Settings opens floating, or where the person last had it; one already open is brought forward where it is, its group expanded if
+   * collapsed. Then the group asked for is shown and focused.
+   */
+  const settingsPanel = byId.get(SETTINGS_PANEL);
+  rt.settings = { open: (section?: SettingsSection) => {
+    dock.reveal(SETTINGS_PANEL, false);
+    requestAnimationFrame(() => settingsPanel?.show?.(section));
+  } };
   guidance = mountGuidance(rt, { openHelp });
   const header = shellHeader(rt, theme, view, openHelp);
   const status = statusBar(rt);
@@ -196,11 +209,10 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     header.update(frame); status.update(frame); setupCard.update(frame); guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
     for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
-    // The preview setup asked for the game folder or WolvenKit on a host without its own setup form.
+    // The preview setup asked for the game folder or WolvenKit on a host without its own setup form: Settings › Game.
     if (frame.previewSetup.setupRequests !== setupRequests) {
       setupRequests = frame.previewSetup.setupRequests;
-      dock.reveal("package");
-      byId.get("package")?.showSetup?.();
+      rt.settings.open("game");
     }
     // Decide once per paint so every visible heavy panel repaints together.
     const heavyOk = [...heavy].some(id => dock.isVisible(id)) && heavyDue(frame);
@@ -348,17 +360,23 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const pkg = button({ label: "Package", icon: "package", variant: "quiet", title: "Open mod package review", onClick: () => rt.dock.reveal("package") });
   const palette = button({ label: "Commands", icon: "command", variant: "ghost", title: `Command palette (${keys.palette})`, onClick: () => {} });
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
-  for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton]] as const)
+  // One place for everything configured (UI-109): the game and mod manager, the saves folder, WolvenKit, appearance and diagnostics.
+  const settingsButton = button({ label: "Settings", icon: "settings", iconOnly: true, variant: "ghost",
+    title: "Settings: your game and mod manager, saves folder, WolvenKit and appearance", onClick: () => rt.settings.open() });
+  for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton],
+    ["header.settings", settingsButton]] as const)
     rt.anchors.register(anchor, control);
-  const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", title: "Panels, modules and views", onClick: event => {
+  const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels, modules and views", onClick: event => {
     openMenu([...panelMenuItems(rt),
       { kind: "separator" },
       { kind: "action", label: "Reset this layout", icon: "reset", run: () => rt.dock.reset() },
       { kind: "action", label: "Keyboard & mouse", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: () => view.openReference() }],
     event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
   } });
-  const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", onClick: event =>
-    openMenu([...themeItems(theme), { kind: "separator" }, ...view.items()], event.currentTarget as Element,
+  const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", menu: true, onClick: event =>
+    openMenu([...themeItems(theme), { kind: "separator" }, ...view.items(), { kind: "separator" },
+      { kind: "action", label: "All settings…", icon: "settings", hint: "Game, saves folder, WolvenKit, appearance and diagnostics", run: () => rt.settings.open("appearance") }],
+    event.currentTarget as Element,
       { label: "View preferences", invoker: event.currentTarget as Element }) });
   const verify = h("span", { class: "verify-flag", title: "Isolated verification draft and library. Your normal work is untouched.", hidden: true }, "Verification workspace");
   const element = h("header", { class: "shell-header" },
@@ -366,7 +384,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     category,
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
     verify,
-    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, panelsButton, themeButton));
+    h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, themeButton));
   return {
     element,
     bindPalette(open: () => void) { palette.onclick = open; },
@@ -480,7 +498,7 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
     return { kind: "action", label: meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
       hint: `${STATE[state]} · ${meta?.description ?? ""}`,
       ...(state === "parked" ? { capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
-      run: () => state === "collapsed" ? dock.toggleCollapse(id) : dock.toggle(id) };
+      run: () => state === "collapsed" ? dock.reveal(id) : id === SETTINGS_PANEL && state === "closed" ? rt.settings.open() : dock.toggle(id) };
   };
   const owned = new Set(rt.modules.list.flatMap(module => rt.modules.panels(module)));
   const items: MenuItem[] = [{ kind: "heading", label: "Panels", detail: `${dock.sizeClass === "wide" ? "Wide" : "Compact"} layout · each size keeps its own arrangement` },
@@ -612,7 +630,16 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     act("idle", motion?.idle ? "Stop the game idle" : "Play the game idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),
     act("idle.pause", motion?.idlePaused ? "Resume idle" : "Pause idle", "Motion", { kind: "motion.setPaused", paused: !motion?.idlePaused }, { icon: "pause" }),
     act("blink.play", motion?.blinkPlaying ? "Stop blink" : "Play blink", "Motion", { kind: "motion.playBlink", playing: !motion?.blinkPlaying }, { icon: "play", keywords: "blink eyes lids" }),
-    ...[...panels.values()].map(panel => ({ id: `panel.${panel.spec.id}`, title: `${rt.dock.isOpen(panel.spec.id) ? "Go to" : "Open"} ${panel.spec.title}`, group: "Panels",
+    // Settings (UI-109): opened by name, and by what people look for in it. Its generic "Open Settings" entry is left out below.
+    { id: "settings.open", title: "Settings", group: "Settings", icon: "settings",
+      keywords: "preferences options configure setup game folder mod manager wolvenkit saves theme appearance diagnostics privacy", ...always, run: () => rt.settings.open() },
+    { id: "settings.game", title: "Game & tools (Settings › Game)", group: "Settings", icon: "settings",
+      keywords: "game folder cyberpunk install mod organizer mo2 vortex profile mod manager eye plate head setup", ...always, run: () => rt.settings.open("game") },
+    { id: "settings.saves", title: "Where are my saves? (Settings › Saves)", group: "Settings", icon: "folder",
+      keywords: "saves folder save files saved games location explorer choose", ...always, run: () => rt.settings.open("saves") },
+    { id: "settings.tools", title: "WolvenKit (Settings › Tools)", group: "Settings", icon: "settings",
+      keywords: "wolvenkit cli tools download path", ...always, run: () => rt.settings.open("tools") },
+    ...[...panels.values()].filter(panel => panel.spec.id !== SETTINGS_PANEL).map(panel => ({ id: `panel.${panel.spec.id}`, title: `${rt.dock.isOpen(panel.spec.id) ? "Go to" : "Open"} ${panel.spec.title}`, group: "Panels",
       icon: panel.spec.icon, keywords: panel.spec.description, ...always, run: () => rt.dock.reveal(panel.spec.id) })),
     ...[...panels.values()].filter(panel => rt.dock.isOpen(panel.spec.id)).map(panel => ({ id: `panel.float.${panel.spec.id}`, title: `Float ${panel.spec.title}`,
       group: "Layout", icon: "float" as const, ...always, run: () => rt.dock.float(panel.spec.id) })),
