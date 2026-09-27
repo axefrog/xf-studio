@@ -1,6 +1,6 @@
 # Runtime bridge autonomy
 
-**Status: ranks 1, 2, 3, 4, 5, 6 and 9 built and tested offline (ranks 1-3, 5, 6 and 9 on 26 September; rank 4, `cc.open`, in batch 3 on 27 September with the sessions plan's B2, B3, B6, B8 and B9); none seen in game yet. The rest are queued.** In the first bridge session the player still had to open photo mode, open the character creator, press Confirm there, switch photo-mode light 1 on, move the mouse cursor out of shot, and stand V where the drone camera had room ([test card results](../runtime/runtime-bridge-test-card.md#first-session-bridge-checks)). This page ranks the bridge features that remove those steps, from the photo-mode and creator study in [knowledge/photo-mode.md](../../knowledge/photo-mode.md), which holds the evidence and citations. It is a queue for the [runtime bridge](../../projects/xf-runtime-bridge/README.md) track under [runtime access](../../knowledge/runtime-access.md).
+**Status: ranks 1, 2, 3, 4, 5, 6 and 9 built and tested offline (ranks 1-3, 5, 6 and 9 on 26 September; rank 4, `cc.open`, in batch 3 on 27 September with the sessions plan's B2, B3, B6, B8 and B9); the first in-game XF interface, a CET panel with Reconnect after the kill switch, in batch 4 (0.3.0, 27 September; [below](#in-game-xf-interface)); none seen in game yet. The rest are queued.** In the first bridge session the player still had to open photo mode, open the character creator, press Confirm there, switch photo-mode light 1 on, move the mouse cursor out of shot, and stand V where the drone camera had room ([test card results](../runtime/runtime-bridge-test-card.md#first-session-bridge-checks)). This page ranks the bridge features that remove those steps, from the photo-mode and creator study in [knowledge/photo-mode.md](../../knowledge/photo-mode.md), which holds the evidence and citations. It is a queue for the [runtime bridge](../../projects/xf-runtime-bridge/README.md) track under [runtime access](../../knowledge/runtime-access.md).
 
 Effort is rough agent effort once the bridge's redscript actions layer is in place: **S** is under half a day, **M** one to two days, **L** longer or research-heavy. Every write keeps the bridge's rules: behind `allow_writes` and its class, reversible with an `undo`, cleared by the kill switch, logged ([design §4](../runtime/runtime-bridge-design.md#4-safety-model)).
 
@@ -62,9 +62,18 @@ The [next-sessions plan](../runtime/next-sessions-plan.md#bridge-suggestions-for
 | B9 | `cc.page` | **Built:** the creator's camera by body region (the menu's own `RequestCameraChange`); cheap and camera-only. `cc.apply` through a row already moves the camera to that option's region |
 | B10 | Photo-mode NPC hiding (rank 7) | Queued |
 
-## In-game XF interface (consideration, 27 September 2026)
+## In-game XF interface
 
-Integrated XF UI inside the running game is welcome where it helps, CET overlays especially, because changes show live. First candidate: a small CET panel for the bridge (connection status, **reconnect after the kill switch** without restarting the game, the write switch state). In the first bridge session, reconnecting after a disconnect needed a game restart.
+Integrated XF UI inside the running game is welcome where it helps, CET overlays especially, because changes show live (consideration of 27 September 2026). In the first bridge session, reconnecting after a disconnect needed a game restart.
+
+**Built (batch 4, 0.3.0, offline; [checks D3–D5](../runtime/runtime-bridge-test-card.md#batch-4-checks-refusals-the-panel-and-live-posing-l0)):** a small panel in the Cyber Engine Tweaks overlay, in the -diagnostic and -writes packages only (`cet/xf_runtime_bridge/panel.lua`; the distribution package keeps the plain status window):
+
+- **Connection**, in plain words: listening with or without an XF tool connected, stopped by the kill switch, or off in this build.
+- **Reconnect** after the kill switch, without restarting the game. The plugin re-arms only on this in-game action (`XFBridge_Rearm`; no pipe method can), once the kill switch has put back what the bridge changed and the old listener has closed, with a new session (token, pipe name, session id); XF tools reconnect by themselves ([design §4](../runtime/runtime-bridge-design.md#4-safety-model)).
+- **Changes**: whether this build may change the game at all. Where it may, **Pause changes** / **Resume changes** (`XFBridge_PauseWrites`): pausing only takes access away and resuming gives back exactly what `config.ini` allows, so the switch is safe to offer; a read-only build shows the state and no button.
+- **Stop the bridge** (the kill switch) while it listens.
+
+Buttons queue an action that runs in CET's update, never while drawing. Next candidates: a live readout of what the bridge last changed with its undo, and, once live posing works, handles in the overlay.
 
 ## Decisions for the maintainer
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { allGroups, applyDrop, closePanel, group, locate, openPanel, panelsIn, parseTree, recoverWindows,
-  split, type DockNode, type DockTree, type Rect } from "../src/studio-ui/dock/layout";
+import { allCollapsed, allGroups, applyDrop, closePanel, foldAxes, group, lastExpandedDocked, locate, openPanel, panelsIn, parseTree, recoverWindows,
+  isStripStack, keepDockExpanded, parkPanels, revealPanel, setCollapsed, setMaximized, split, splitShares, splitterPair, unparkPanels, type DockNode, type DockTree, type Rect, type SplitNode } from "../src/studio-ui/dock/layout";
 import { compassGuides, edgeGuides, resolveDrop, type DropGeometry } from "../src/studio-ui/dock/snap";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { PANEL_IDS, STUDIO_CATALOGUE } from "../src/compose/views";
@@ -229,4 +229,140 @@ test("composites keep member pixels when growing and when a nested split collaps
   tree = applyDrop(tree, { kind: "panel", panelId: "activity" }, { kind: "tab", groupId: "g-layers", index: 1 });
   expect(tree.floating[0].w).toBe(before);
   panelsIn(tree);
+});
+
+// ----- Collapsed groups: the folding rule (view-graph-design.md §4.4) -----
+const fold = (id: string, panels: string[], collapsed = false) => ({ ...group(panels, panels[0], id), ...(collapsed ? { collapsed: true } : {}) });
+
+test("a collapsed group folds along its split's axis and the expanded groups in that split share all of its space", () => {
+  // The right-hand column of the maintainer's screenshot: three stacked groups, the first two collapsed.
+  const column = split("column", [fold("a", ["finish", "shape"], true), fold("b", ["pigment", "warp"], true), fold("c", ["lighting", "motion", "quality"])],
+    [.3, .3, .4], "s-col");
+  const folds = foldAxes(column);
+  expect([...folds]).toEqual([["a", "column"], ["b", "column"]]);
+  const { folded, shares } = splitShares(column, folds);
+  expect(folded).toEqual([true, true, false]);
+  // The expanded group's flex-grow is the whole split, never its stored 0.4 (which left 60% of the column empty).
+  expect(shares).toEqual([0, 0, 1]);
+  // The stored sizes are untouched, so expanding a group restores the shares it had before collapsing.
+  expect(column.sizes).toEqual([.3, .3, .4]);
+  const reopened = splitShares({ ...column, children: [fold("a", ["finish", "shape"]), column.children[1], column.children[2]] }, foldAxes(
+    { ...column, children: [fold("a", ["finish", "shape"]), column.children[1], column.children[2]] }));
+  expect(reopened.shares.map(share => +share.toFixed(4))).toEqual([.4286, 0, .5714]);
+});
+
+test("one rule for every column: a single group or a whole stack collapsed in a row becomes a vertical strip", () => {
+  const single = split("row", [fold("stage", ["head"]), fold("inspect", ["finish"], true)], [.6, .4], "s-root");
+  expect(foldAxes(single).get("inspect")).toBe("row");
+  expect(splitShares(single, foldAxes(single)).shares).toEqual([1, 0]);
+  // The same column with several stacked groups, all collapsed: the column folds as one along the row, and its groups become
+  // vertical strips sharing the column's height by their stored sizes.
+  const stack = split("column", [fold("a", ["finish"], true), fold("b", ["pigment"], true), fold("c", ["lighting"], true)], [.2, .3, .5], "s-right");
+  const root = split("row", [fold("stage", ["head"]), stack], [.6, .4], "s-root");
+  const folds = foldAxes(root);
+  expect(allCollapsed(stack)).toBe(true);
+  expect(folds.get("s-right")).toBe("row");
+  expect(["a", "b", "c"].map(id => folds.get(id))).toEqual(["row", "row", "row"]);
+  expect(splitShares(root, folds)).toEqual({ folded: [false, true], shares: [1, 0] });
+  // Inside the strip nothing folds along the column; it is a stack of strips, each as long as its tabs need (the stored shares
+  // wait for a group to expand).
+  expect(splitShares(stack, folds).folded).toEqual([false, false, false]);
+  expect(isStripStack(stack, folds)).toBe(true);
+  expect(isStripStack(root, folds)).toBe(false);
+  expect(stack.sizes).toEqual([.2, .3, .5]);
+});
+
+test("nested splits: a fully collapsed inner split gives its space to its neighbours along the outer axis", () => {
+  // A column whose top half is a row of two groups: both collapsed, the row is one full-width header row of two segments.
+  const top = split("row", [fold("a", ["finish"], true), fold("b", ["shape"], true)], [.5, .5], "s-top");
+  const column = split("column", [top, fold("c", ["lighting"])], [.5, .5], "s-col");
+  const folds = foldAxes(column);
+  expect(folds.get("s-top")).toBe("column");
+  expect(folds.get("a")).toBe("column");
+  expect(splitShares(column, folds)).toEqual({ folded: [true, false], shares: [0, 1] });
+  // A row of header rows shares the column's width by the stored sizes (it is not a stack of strips).
+  expect(splitShares(top, folds)).toEqual({ folded: [false, false], shares: [.5, .5] });
+  expect(isStripStack(top, folds)).toBe(false);
+  // With one of them expanded again, only the collapsed one folds, along the inner row: a vertical strip beside it.
+  const partly = { ...column, children: [{ ...top, children: [fold("a", ["finish"], true), fold("b", ["shape"])] }, column.children[1]] } as SplitNode;
+  const partial = foldAxes(partly);
+  expect(partial.get("s-top")).toBeUndefined();
+  expect(partial.get("a")).toBe("row");
+  expect(splitShares(partly, partial).folded).toEqual([false, false]);
+});
+
+test("floating windows: a composite whose groups all collapse shrinks to its header rows, and partial collapse fills the window", () => {
+  const rowComposite = split("row", [fold("a", ["finish"], true), fold("b", ["shape"], true)], [.5, .5], "s-w");
+  const folds = foldAxes(rowComposite);
+  expect(folds.get("s-w")).toBe("column");
+  expect(splitShares(rowComposite, folds).shares).toEqual([.5, .5]);
+  const columnComposite = split("column", [fold("a", ["finish"], true), fold("b", ["shape"])], [.7, .3], "s-w");
+  expect(splitShares(columnComposite, foldAxes(columnComposite)).shares).toEqual([0, 1]);
+  expect(foldAxes(fold("lone", ["finish"], true)).get("lone")).toBe("column");
+  expect(foldAxes(null).size).toBe(0);
+});
+
+test("a splitter resizes the nearest unfolded cells on each side, and is inert beside a folded edge", () => {
+  expect(splitterPair([true, true, false], 1)).toBeUndefined();
+  expect(splitterPair([true, true, false], 2)).toBeUndefined();
+  expect(splitterPair([false, true, false], 1)).toEqual([0, 2]);
+  expect(splitterPair([false, true, false], 2)).toEqual([0, 2]);
+  expect(splitterPair([false, false, true], 1)).toEqual([0, 1]);
+  expect(splitterPair([false, false, true], 2)).toBeUndefined();
+  expect(splitterPair([false, false], 1)).toEqual([0, 1]);
+});
+
+test("the last expanded docked group can't collapse (nothing would take its space); floating ones always can", () => {
+  const tree: DockTree = { root: split("column", [fold("a", ["finish"], true), fold("b", ["shape"])], [.5, .5], "s"), floating: [
+    { id: "w", x: 0, y: 0, w: 300, h: 300, node: fold("f", ["lighting"]) }], closed: [] };
+  expect(lastExpandedDocked(tree, "b")).toBe(true);
+  expect(lastExpandedDocked(tree, "a")).toBe(false);
+  expect(lastExpandedDocked(tree, "f")).toBe(false);
+  expect(lastExpandedDocked({ ...tree, root: split("column", [fold("a", ["finish"]), fold("b", ["shape"])], [.5, .5], "s") }, "b")).toBe(false);
+});
+
+test("a saved layout with collapsed groups in nested splits and windows still loads unchanged", () => {
+  const factory = defaultWide(STUDIO_CATALOGUE);
+  // Collapse both groups of the right-hand column (the UV map and the inspectors): the whole column folds to a vertical strip.
+  const right = allGroups(factory).map(entry => entry.group.id).filter(id => id === "g-uv" || id === "g-inspect");
+  expect(right).toEqual(["g-uv", "g-inspect"]);
+  const tree = right.reduce((next, id) => setCollapsed(next, id, true), factory);
+  const saved = serializeDockState({ wide: tree, compact: defaultCompact(STUDIO_CATALOGUE) });
+  const restored = restoreDockPreference(JSON.parse(JSON.stringify(saved)), area, STUDIO_CATALOGUE);
+  expect(restored.recovered).toBe(true);
+  expect(restored.state.wide).toEqual(tree);
+  expect(foldAxes(restored.state.wide.root).get("s-right")).toBe("row");
+});
+
+test("maximizing a collapsed group expands it, and revealing a panel expands its group (UI-103, UI-105)", () => {
+  const tree: DockTree = { root: split("column", [fold("a", ["finish", "shape"], true), fold("b", ["lighting"])], [.5, .5], "s"), floating: [], closed: [] };
+  const maximized = setMaximized(tree, "a");
+  expect(maximized.maximized).toBe("a");
+  expect(locate(maximized, "finish")!.group.collapsed).toBeUndefined();
+  const revealed = revealPanel(tree, "shape");
+  expect(locate(revealed, "shape")!.group).toEqual({ ...fold("a", ["finish", "shape"]), active: "shape" });
+  expect(revealPanel(revealed, "lighting")).toEqual(revealed);
+});
+
+test("never a blank dock: with every docked group collapsed, the one with the largest share expands (UI-105)", () => {
+  const stack = split("column", [fold("a", ["finish"], true), fold("b", ["pigment"], true)], [.3, .7], "s-right");
+  const tree: DockTree = { root: split("row", [fold("stage", ["head"], true), stack], [.55, .45], "s-root"), floating: [], closed: [] };
+  const kept = keepDockExpanded(tree);
+  expect([...allGroups(kept)].map(entry => [entry.group.id, !!entry.group.collapsed])).toEqual([["stage", false], ["a", true], ["b", true]]);
+  const leaning: DockTree = { ...tree, root: { ...tree.root as SplitNode, sizes: [.2, .8] } };
+  expect([...allGroups(keepDockExpanded(leaning))].filter(entry => !entry.group.collapsed).map(entry => entry.group.id)).toEqual(["b"]);
+  const open: DockTree = { ...tree, root: split("row", [fold("stage", ["head"]), stack], [.5, .5], "s-root") };
+  expect(keepDockExpanded(open)).toBe(open);
+});
+
+test("a parked group comes back at its share of a three-way split, and a floating one comes back collapsed (UI-104)", () => {
+  const tree: DockTree = { root: split("column", [fold("a", ["finish"]), fold("b", ["pigment"]), fold("c", ["lighting"], true)], [.3, .3, .4], "s"),
+    floating: [{ id: "w", x: 40, y: 40, w: 300, h: 400, node: fold("f", ["quality"], true) }], closed: [] };
+  const parked = parkPanels(tree, ["lighting", "quality"]);
+  expect(parked.root?.kind === "split" ? parked.root.sizes : []).toEqual([.5, .5]);
+  const back = unparkPanels(parked, ["lighting", "quality"], tree, area);
+  expect(back.root?.kind === "split" ? back.root.sizes.map(size => +size.toFixed(6)) : []).toEqual([.3, .3, .4]);
+  expect(locate(back, "lighting")!.group.collapsed).toBe(true);
+  expect(locate(back, "quality")!.group.collapsed).toBe(true);
+  expect(back.floating.map(window => [window.x, window.y, window.w, window.h])).toEqual([[40, 40, 300, 400]]);
 });

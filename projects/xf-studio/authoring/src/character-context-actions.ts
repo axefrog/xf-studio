@@ -502,7 +502,7 @@ export class CharacterContextActions {
   detailRequest(): CharacterRequest {
     if (this.state.bodyGender === "male") return DEFAULT_CHARACTER;
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing(),
-      this.bodyShown, this.uncensored);
+      this.bodyShown, this.uncensored, this.creatorPuppet);
   }
   /**
    * Whether the viewer shows V's body (the preview's Body switch): with it off, the request asks for the head alone, so the host neither
@@ -525,6 +525,17 @@ export class CharacterContextActions {
     this.publish();
   }
   private uncensored = false;
+  /**
+   * Whether V stands as the character creator's puppet (the body source is one of the creator's idles, which are authored for the
+   * creator's lifted feet; knowledge/body-animation.md §4): the request says so and the host draws her bare feet that way. A composition
+   * root keeps it in step with the motion; off, the feet follow her footwear (flat when barefoot).
+   */
+  setCreatorPuppet(creator: boolean): void {
+    if (creator === this.creatorPuppet) return;
+    this.creatorPuppet = creator;
+    this.publish();
+  }
+  private creatorPuppet = false;
   private hiddenKey = "";
   private hidden: readonly string[] = Object.freeze([]);
   /** The whole state as the host interprets it (every part). */

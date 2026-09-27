@@ -276,7 +276,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* Condensed strips keep the active tab's full label; the others keep a short visible label (never icon-only, UI-96), and the
    strip scrolls when even that doesn't fit. */
 .dock-tabs.condensed .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
+.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
 .dock-tab:hover { color: var(--text); background: var(--bg-hover); }
 .dock-tab[aria-selected="true"] { color: var(--text); background: var(--bg-panel); }
 .dock-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--indicator); }
@@ -299,11 +299,18 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-window { position: absolute; display: flex; flex-direction: column; pointer-events: auto; box-shadow: var(--shadow); background: var(--bg-panel); border: 1px solid var(--line-strong);
   border-radius: 0 var(--bevel) 0 0; min-width: 0; }
 .dock-window .dock-group { border: 0; }
-/* A collapsed group keeps only its tab bar; its cell takes no share of the split, so the neighbours fill the space. */
-.dock-group.collapsed { flex: none; }
-.dock-cell[data-collapsed] > .dock-group.collapsed { flex: none; }
-.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tabbar { writing-mode: vertical-rl; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
-.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tab-label { max-width: none; }
+/* A collapsed group keeps only its tab bar and folds along the axis that takes its space (view-graph-design.md §4.4): along a
+   column it is a header row spanning its column; along a row (a single group, or a column whose groups all collapsed) a
+   full-height vertical strip. A folded cell takes no share of its split, so the neighbours fill the space. */
+.dock-group.collapsed[data-fold="row"] { flex: none; }
+.dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
+/* A strip shorter than its tabs condenses them like a crowded bar and scrolls the rest; its buttons stay in reach. */
+.dock-group.collapsed[data-fold="row"] .dock-tabs { min-height: 0; overflow: hidden auto; }
+.dock-group.collapsed[data-fold="row"] .dock-tab-label { max-width: none; }
+.dock-group.collapsed[data-fold="row"] .dock-tabbar-fill { min-width: 0; min-height: 24px; }
+.dock-cell[data-collapsed] > .dock-split { flex: none; }
+.dock-split > .dock-splitter.inert { cursor: default; }
+.dock-split > .dock-splitter.inert:hover::after { background: transparent; }
 .dock-window.collapsed { height: auto !important; }
 .dock-collapse-btn[aria-expanded="false"] { color: var(--signal); }
 .dock-window .dock-tabbar-fill { cursor: move; }
@@ -479,6 +486,16 @@ span.category { border-color: transparent; background: transparent; padding-left
 .install-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); min-height: 24px; }
 .install-status { margin: 0; flex: 1 1 240px; font-size: var(--fs-sm); }
 .install-status.warning { color: var(--warning); }
+/* "Get the desktop app" (localhost only): what was found and the one next step. */
+.desktop-app-lead { margin: 0 0 var(--sp-4); }
+.desktop-app-detail { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.desktop-app-detail p { margin: 0; }
+.desktop-app-detail > .btn { justify-self: start; }
+.desktop-app-sheet h2:focus { outline: none; }
+.desktop-app-file { display: flex; align-items: flex-start; gap: var(--sp-3); overflow-wrap: anywhere; }
+.desktop-app-build { display: grid; gap: var(--sp-3); }
+.desktop-app-command { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); }
+.desktop-app-command code { flex: 1; min-width: 0; font-size: var(--fs-sm); }
 /* Game & tools: one form saved as it changes (UI-83). */
 .setup-section > .control, .setup-section > .row, .setup-section .setup-mo2, .setup-section .setup-direct { margin-top: var(--sp-4); }
 .setup-status { margin: var(--sp-4) 0 0; font-size: var(--fs-sm); padding: var(--sp-3) var(--sp-4); border-left: 2px solid var(--line-strong); background: var(--bg-raised); }

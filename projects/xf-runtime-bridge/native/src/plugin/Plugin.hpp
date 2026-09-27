@@ -5,6 +5,7 @@
 #include <atomic>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include <RED4ext/RED4ext.hpp>
@@ -62,6 +63,14 @@ struct State
     // game.options.read's render options: requested by the bridge, answered by the CET layer
     // (XFBridge_OptionsWanted / XFBridge_OptionsReport). Cancelled by the kill switch.
     OptionsExchange options;
+
+    // Reconnect after the kill switch (the CET panel's button, XFBridge_Rearm): requested from script,
+    // carried out by the next Running ticks once the old listener has stopped and the kill switch's
+    // restore has run (Main.cpp). The outcome is reported through XFBridge_Info (last_rearm).
+    std::atomic<bool> rearmRequested{false};
+    std::atomic<uint64_t> rearmRequestedAt{0}; // running tick of the request
+    std::mutex rearmMutex;
+    nlohmann::json lastRearm; // {ok, message, at_tick} or null; guarded by rearmMutex
 };
 
 State& Get();

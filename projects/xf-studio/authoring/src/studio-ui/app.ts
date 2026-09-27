@@ -26,6 +26,7 @@ import type { ViewComposition, ViewContext } from "./views/panels";
 import { featureCommands, featureViewContext } from "./views/feature-context";
 import type { FeatureViewContext } from "./views/feature-view";
 import { Frame, StudioRuntime, type Port } from "./runtime";
+import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance/desktop-app-sheet";
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
 
@@ -120,6 +121,22 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
   rt.dock = dock;
   /**
+   * Withdraw every view tool this presentation doesn't offer (UI-102): a hidden module's, and research tools while they are hidden.
+   * Each keeps its on/off state, and no device acts on it (Surface controls neither draws nor edits) until it is offered again. The
+   * application gets tool IDs only, never which modules show (design §6.3 rule 6). Recomputed only when the filter changes (the
+   * registered tools are fixed for the session), so a paint costs one comparison.
+   */
+  let withdrawnKey = "";
+  const withdrawUnoffered = () => {
+    const filter = rt.toolFilter(), key = JSON.stringify(filter);
+    if (key === withdrawnKey) return;
+    withdrawnKey = key;
+    const all = port.views.tools(undefined, { modules: modules.map(module => module.id), research: true });
+    const offered = new Set(port.views.tools(undefined, filter).map(tool => tool.id));
+    port.views.withdraw(all.map(tool => tool.id).filter(id => !offered.has(id)));
+  };
+  withdrawUnoffered();
+  /**
    * Show or hide a module (design §4.3): its panels leave the dock with their places parked, or come back where they were; its view
    * tools and crumb follow at once because they are derived. An open gesture or form edit is finished first. Its data and exports
    * are untouched, and its actions stay dispatchable.
@@ -133,6 +150,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (control) port.authoring.controlCommit(control.id);
     }
     if (!setPreference(port, feedback, { kind: "modules.set", module: id, shown }, `${module.label} ${shown ? "shown" : "hidden"}`)) return;
+    withdrawUnoffered();
     const ids = panelsOf(module);
     if (shown) dock.addPanels(ids.map(panel => specOf(byId.get(panel)!)));
     else dock.removePanels(ids);
@@ -157,6 +175,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   const paint = () => {
     queued = false;
+    // The research preference may have changed: its tools are withdrawn or offered again before anything reads the tools.
+    withdrawUnoffered();
     const frame = new Frame(port);
     // Editor adapters report limits and rejected gestures; show each once.
     const message = frame.status.message;
@@ -582,7 +602,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" })]),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
     act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
-    act("idle", motion?.idle ? "Stop character-creator idle" : "Play character-creator idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),
+    act("idle", motion?.idle ? "Stop the game idle" : "Play the game idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),
     act("idle.pause", motion?.idlePaused ? "Resume idle" : "Pause idle", "Motion", { kind: "motion.setPaused", paused: !motion?.idlePaused }, { icon: "pause" }),
     act("blink.play", motion?.blinkPlaying ? "Stop blink" : "Play blink", "Motion", { kind: "motion.playBlink", playing: !motion?.blinkPlaying }, { icon: "play", keywords: "blink eyes lids" }),
     ...[...panels.values()].map(panel => ({ id: `panel.${panel.spec.id}`, title: `${rt.dock.isOpen(panel.spec.id) ? "Go to" : "Open"} ${panel.spec.title}`, group: "Panels",
@@ -604,6 +624,10 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       keywords: "research calibration glitter model study compiler plan developer ids advanced", ...always, run: () => view.setResearch(!view.research()) },
     { id: "help.about", title: "About XF Studio", group: "Help", icon: "info", keywords: "version licence license update data folder",
       capability: () => port.about.capability(), run: () => port.about.open() },
+    // Localhost only (the desktop app leaves it out): open the installed desktop app, or how to get it.
+    ...(port.desktopApp.offered() ? [(() => { const entry = desktopAppEntry(port.desktopApp.snapshot());
+      return { id: "help.desktopApp", title: entry.label, group: "Help", icon: "monitor" as const, keywords: "desktop app windows install setup download installer",
+        ...always, run: () => { if (entry.opens) void openDesktopApp(rt); else openDesktopAppSheet(rt); } }; })()] : []),
     { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
       keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
     { id: "help.report", title: "Report a problem…", group: "Help", icon: "warning", keywords: "bug issue error crash diagnostics log github",

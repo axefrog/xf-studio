@@ -355,7 +355,16 @@ export type CharacterDetail = {
   provenance: { label: string; notes: string[]; tool?: string };
   components: RenderComponent[];
   slots: DetailSlotState[];
+  /**
+   * The player puppet's deformation rigs (deformation-rig.ts), when the body is drawn: each compiled program is a content-addressed
+   * JSON file beside the record. Optional and additive: a reader that doesn't know it poses the body's helper joints its own way.
+   */
+  rigs?: RenderRig[];
 };
+/** One secondary animated component of the player puppet: its name, the rig and graph it was compiled from, and the program file. */
+export type RenderRig = { component: string; rig: string; graph: string; file: string; sha256: string };
+/** At most this many rigs per record (the vanilla player has two: `deformations` and `breasts`). */
+export const RECORD_RIGS = 8;
 
 /** A framework that fills slots with inline components (one per filled slot) can bring many parts to one piercing choice. */
 export const RECORD_LIMITS = Object.freeze({ components: 128, chunks: 64, params: 160, textures: 16, stops: 32, layers: 20, notes: 64,
@@ -604,11 +613,18 @@ export function parseCharacterDetail(value: unknown): CharacterDetail {
     for (const what of left) counts.set(what, (counts.get(what) ?? 0) + 1);
     notes.push(`Left out of the prepared details: ${[...counts].slice(0, 6).map(([what, n]) => n > 1 ? `${what} (${n})` : what).join(", ")}${counts.size > 6 ? " and more" : ""}.`.slice(0, 500));
   }
+  // Rigs are kept only with a drawn body, each well formed, the first `RECORD_RIGS`; any other entry is left out (the helper joints
+  // then follow their limbs).
+  const rigs = components.some(item => item.slot === "body") && Array.isArray(doc.rigs) ? doc.rigs.slice(0, RECORD_RIGS).flatMap(rig => {
+    const ok = !!rig && typeof rig === "object" && [rig.component, rig.rig, rig.graph].every(value => typeof value === "string" && value.length > 0 && value.length <= 512) &&
+      typeof rig.file === "string" && /^[a-f0-9]{64}\.json$/.test(rig.file) && rig.file === `${rig.sha256}.json`;
+    return ok ? [{ component: rig.component, rig: rig.rig, graph: rig.graph, file: rig.file, sha256: rig.sha256 }] : [];
+  }) : [];
   return { schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: text(doc.identity, "identity"), origin: "game-files",
     character: { source: doc.character.source, bodyGender: doc.character.bodyGender },
     provenance: { label: text(doc.provenance?.label, "provenance label"), notes: notes.slice(-LIMITS.notes),
       ...(doc.provenance?.tool === undefined ? {} : { tool: text(doc.provenance.tool, "provenance tool") }) },
-    components, slots };
+    components, slots, ...(rigs.length ? { rigs } : {}) };
 }
 
 /** Version dispatch: a v1 record is a core head; a later record is a core head or, under the current schema, a character. */

@@ -65,6 +65,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     rt.report(action.kind, result);
     return result;
   };
+  // A released slider (or the end of a keyboard burst) ends its View and lighting step: the next drag is a step of its own (CORE-95).
+  const endEdit = () => { port.authoring.dispatch({ kind: "view.endEdit" }); };
   const preset = new Segmented<LightingPreset>({ label: "Lighting", options: [
     { value: "studio", label: "Studio", title: "The Studio's soft authoring light" },
     { value: "creator", label: "Character creator", title: "The game's creator and mirror lighting, for comparing with the game" }],
@@ -83,7 +85,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const log = (value: number) => Math.log10(value), exposureRange = rt.range("preview.setCreatorLighting", "value", "exposure");
   const creatorExposure = new Slider({ label: "Creator exposure (k)", min: log(exposureRange.min), max: log(exposureRange.max), step: .01,
     format: value => (10 ** value).toPrecision(3),
-    transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); },
+      commit: endEdit, cancel: endEdit } });
   const resetCalibration = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
     title: "Put the intensity reading, cone angles and creator exposure back to their defaults",
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
@@ -122,14 +125,14 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const studioExposureRange = rt.range("preview.setExposure", "value"), stops = (value: number) => Math.log2(value);
   const exposure = new Slider({ label: "Exposure", min: stops(studioExposureRange.min), max: stops(studioExposureRange.max), step: .05,
     format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
-    transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); }, commit: endEdit, cancel: endEdit } });
   const angle = new Slider({ label: "Key light direction", ...rt.range("preview.setKeyAngle", "degrees"), step: 1,
     format: value => { const degrees = Math.round(value) % 360; return `${Math.round(value)}° ${degrees === 0 ? "front" : degrees === 180 ? "behind"
       : degrees < 180 ? "from V's right" : "from V's left"}`; },
-    transaction: { edit: degrees => { edit({ kind: "preview.setKeyAngle", degrees }); } } });
+    transaction: { edit: degrees => { edit({ kind: "preview.setKeyAngle", degrees }); }, commit: endEdit, cancel: endEdit } });
   const studioSlider = (key: StudioLightKey, label: string, format: (value: number) => string, step: number) => new Slider({ label,
     ...rt.range("preview.setStudioLight", "value", key), step, format,
-    transaction: { edit: value => { edit({ kind: "preview.setStudioLight", key, value }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setStudioLight", key, value }); }, commit: endEdit, cancel: endEdit } });
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   const elevation = studioSlider("elevation", "Key light height", value => `${Math.round(value)}°`, 1);
   const keyStrength = studioSlider("key", "Key light strength", percent, .05);
@@ -226,7 +229,13 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
 
 export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  const idle = new Toggle({ label: "Character-creator idle", onChange: enabled => rt.dispatch({ kind: "motion.setIdle", enabled }) });
+  // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
+  const STILL = "still";
+  const source = new SelectField<string>({ label: "Body", onChange: value => {
+    if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
+    rt.dispatch({ kind: "motion.setIdleClip", clip: value });
+    if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
+  }, help: "Still, or one of the idles the game plays on V in its creator and inventory screens." });
   const pause = button({ label: "Pause idle", icon: "pause", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.setPaused", paused: !motion?.idlePaused });
   } });
@@ -234,7 +243,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     const motion = port.authoring.previewState().motion; if (!motion) return;
     rt.dispatch({ kind: "motion.setContributions", body: body ?? motion.idleBody, face: face ?? motion.idleFace });
   };
-  const head = new Toggle({ label: "Head movement", onChange: value => setContributions(value, undefined) });
+  const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
   const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value) });
   const idleNote = note("");
   const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
@@ -247,7 +256,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
   const element = h("div", { class: "panel-content" },
-    section("Game idle", idle.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
+    section("Game idle", source.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
     section("Blink", blinkControls, blinkNote));
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
@@ -255,14 +264,17 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const motion = frame.preview.motion;
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
-      idle.update(!!motion?.idle, unavailable);
+      const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
+      source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label }))],
+        motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
-      setText(idleNote, !motion?.available ? unavailable.reason : motion.idle
-        ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "head moves" : "head still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
-        : "The character creator's close-up idle, made from your game files. Its timing may differ slightly from the game's.");
+      setText(idleNote, !motion?.available ? unavailable.reason : motion.idleLoading ? "Loading that idle; the previous one plays until it's ready."
+        : motion.idle
+        ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
+        : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
       blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));

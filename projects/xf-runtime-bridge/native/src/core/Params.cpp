@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "core/Dispatcher.hpp"
+#include "core/LivePose.hpp"
 
 namespace xfb::params
 {
@@ -455,6 +456,171 @@ PhotoEnterRoute ParsePhotoEnter(const json& aParams)
                       "the game offers no way to open the full photo mode from inside; photo.open presses the photo "
                       "mode key in the game window (or the player presses it; game.wait with phase photo_mode notices). "
                       "route \"quest\" opens a restricted photo mode and is for research only");
+}
+
+PoseSetRequest ParsePoseSet(const json& aParams)
+{
+    RequireOnly(aParams, {"record", "pose", "category", "category_value", "pose_value"});
+    PoseSetRequest request;
+    const auto record = Text(aParams, "record", 128);
+    const auto pose = Text(aParams, "pose", 128);
+    const auto category = Text(aParams, "category", 128);
+    const auto categoryValue = Integer(aParams, "category_value", 0, 1000000);
+    const auto poseValue = Integer(aParams, "pose_value", 0, 1000000);
+    const int forms = (record ? 1 : 0) + (pose ? 1 : 0) + (poseValue ? 1 : 0);
+    if (forms != 1)
+    {
+        Bad("give one of: 'record' (a pose record, e.g. PhotoModePoses.idle_stand_01), 'pose' (its on-screen label, "
+            "optionally with 'category'), or 'category_value' and 'pose_value' (option data from photo.state)");
+    }
+    if (category && !pose)
+    {
+        Bad("'category' goes with 'pose'");
+    }
+    if (categoryValue.has_value() != poseValue.has_value())
+    {
+        Bad("'category_value' and 'pose_value' go together");
+    }
+    if (record)
+    {
+        for (const char c : *record)
+        {
+            const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+            if (!ok)
+            {
+                Bad("'record' takes letters, digits, '_' and '.' only");
+            }
+        }
+        request.record = record->rfind("PhotoModePoses.", 0) == 0 ? *record : "PhotoModePoses." + *record;
+    }
+    request.pose = pose.value_or("");
+    request.category = category.value_or("");
+    request.categoryValue = categoryValue ? static_cast<int32_t>(*categoryValue) : -1;
+    request.poseValue = poseValue ? static_cast<int32_t>(*poseValue) : -1;
+    return request;
+}
+
+PoseLiveReadRequest ParsePoseLiveRead(const json& aParams)
+{
+    RequireOnly(aParams, {"set", "clip", "expect_hash"});
+    PoseLiveReadRequest request;
+    request.set = Text(aParams, "set", 216).value_or(livepose::kCarrierSet);
+    request.clip = Text(aParams, "clip", 128).value_or(livepose::kCarrierClip);
+    for (const char c : request.set)
+    {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' ||
+                        c == '.' || c == '\\' || c == '/';
+        if (!ok)
+        {
+            Bad("'set' is a depot path (letters, digits, '_', '-', '.', and backslash or '/')");
+        }
+    }
+    if (request.set.size() < 7 || request.set.compare(request.set.size() - 6, 6, ".anims") != 0 ||
+        request.set.find("..") != std::string::npos)
+    {
+        Bad("'set' must be an animation set's depot path ending .anims");
+    }
+    for (const char c : request.clip)
+    {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+        if (!ok)
+        {
+            Bad("'clip' takes letters, digits, '_', '-' and '.' only");
+        }
+    }
+    request.expectHash = Text(aParams, "expect_hash", 16).value_or("");
+    if (!request.expectHash.empty() &&
+        (request.expectHash.size() != 16 || request.expectHash.find_first_not_of("0123456789abcdef") != std::string::npos))
+    {
+        Bad("'expect_hash' is 16 lowercase hex digits (the carrier build's keys_hash)");
+    }
+    return request;
+}
+
+PoseLiveApplyRequest ParsePoseLiveApply(const json& aParams)
+{
+    RequireOnly(aParams, {"joints", "hips", "restore"});
+    PoseLiveApplyRequest request;
+    request.restore = Boolean(aParams, "restore").value_or(false);
+    const auto joints = aParams.find("joints");
+    const auto hips = aParams.find("hips");
+    const bool hasJoints = joints != aParams.end() && !joints->is_null();
+    const bool hasHips = hips != aParams.end() && !hips->is_null();
+    if (request.restore)
+    {
+        if (hasJoints || hasHips)
+        {
+            Bad("'restore' puts the carrier's own keys back and takes nothing else");
+        }
+        return request;
+    }
+    if (!hasJoints && !hasHips)
+    {
+        Bad("give 'joints' ({\"RightForeArm\": [x, y, z, w], ...}) and/or 'hips' ([x, y, z]), or 'restore': true");
+    }
+    const auto numbers = [](const json& aValue, size_t aCount, const std::string& aWhat) {
+        if (!aValue.is_array() || aValue.size() != aCount)
+        {
+            Bad(aWhat + " must be a list of " + std::to_string(aCount) + " numbers");
+        }
+        std::vector<double> out;
+        for (const auto& item : aValue)
+        {
+            if (!item.is_number() || !std::isfinite(item.get<double>()))
+            {
+                Bad(aWhat + " must be a list of " + std::to_string(aCount) + " finite numbers");
+            }
+            out.push_back(item.get<double>());
+        }
+        return out;
+    };
+    if (hasJoints)
+    {
+        if (!joints->is_object() || joints->empty() || joints->size() > 128)
+        {
+            Bad("'joints' maps 1 to 128 joint names (or indices) to rotations [x, y, z, w]");
+        }
+        for (const auto& [name, value] : joints->items())
+        {
+            if (name.empty() || name.size() > 64 ||
+                name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") != std::string::npos)
+            {
+                Bad("joint names are letters, digits and '_' (or a joint index)");
+            }
+            const auto q = numbers(value, 4, "the rotation of '" + name + "'");
+            const double length = std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+            if (std::fabs(length - 1.0) > 0.01)
+            {
+                Bad("the rotation of '" + name + "' must be a unit quaternion [x, y, z, w] (its length is " + Format(length) + ")");
+            }
+            request.joints.push_back({name, {static_cast<float>(q[0] / length), static_cast<float>(q[1] / length),
+                                             static_cast<float>(q[2] / length), static_cast<float>(q[3] / length)}});
+        }
+    }
+    if (hasHips)
+    {
+        const auto v = numbers(*hips, 3, "'hips'");
+        for (const double c : v)
+        {
+            if (std::fabs(c) > 3.0)
+            {
+                Bad("'hips' values must be within 3 m");
+            }
+        }
+        request.hips = std::array<float, 3>{static_cast<float>(v[0]), static_cast<float>(v[1]), static_cast<float>(v[2])};
+    }
+    return request;
+}
+
+bool LivePoseAllowed(bool aConfigFlag)
+{
+    if (!aConfigFlag)
+    {
+        throw MethodError("live_pose_disabled",
+                          "writing the live-pose carrier is switched off ([bridge] allow_live_pose = false; only the test "
+                          "profile's -writes package allows it)");
+    }
+    return true;
 }
 
 bool CreatorLeaveAllowed(bool aConfigFlag)

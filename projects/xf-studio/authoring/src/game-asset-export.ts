@@ -150,7 +150,18 @@ export type GeometryRepair = (input: { source: ExportSource; depotPath: string; 
    */
   withMaterials?: boolean }) =>
   Promise<GeometryRepairOutcome>;
+/**
+ * A second route for a morph target whose GLB came out without its skin: export the resource's own raw copy (`raw`, the source's bytes,
+ * so no other copy can stand in) with the game folder into `workDir`, and return the GLB written, or null when the tool wrote none. The
+ * tool reads the base mesh's rig from the game folder to build the skin [observed: WolvenKit 9.0.1, a nails morph mod's
+ * `a0_000_pwa_base__nails_l.morphtarget`: without the game folder the GLB has no skin; with it, five fingertip joints]. A tool failure is
+ * null; cancellation and a missing tool or runtime are thrown.
+ */
+export type MorphTargetSkin = (input: { source: ExportSource; depotPath: string; raw: string; workDir: string; signal?: AbortSignal;
+  lowPriority?: LowPriority }) => Promise<string | null>;
 export type GameAssetExporterOptions = {
+  /** Skin route for a morph target whose GLB came out without a skin (`MorphTargetSkin`). */
+  skinMorphTarget?: MorphTargetSkin;
   /** Identity of the exporting tool; part of every cache key. */
   tool?: ExportTool;
   /** Archive index lookup: which decimal depot hashes the source contains. May throw when unreadable. */
@@ -167,6 +178,37 @@ export type GameAssetExporterOptions = {
 };
 /** The cache file that records a repaired export's plain line (`ExportedGeometry.repair`). */
 const REPAIR_NOTE = "repair.txt";
+/** The cache file that records that a morph target exported without a skin went through the skin route (and what came of it). */
+const SKIN_NOTE = "skin.txt";
+
+/** What a GLB holds, from its JSON chunk alone: meshes, skins and each mesh primitive's vertex count; null when it isn't a GLB. */
+export function glbSkinState(file: string): { meshes: number; skins: number; vertices: number[] } | null {
+  try {
+    const bytes = readFileSync(file);
+    if (bytes.length < 20 || bytes.readUInt32LE(0) !== 0x46546c67 || bytes.readUInt32LE(16) !== 0x4e4f534a) return null;
+    const length = bytes.readUInt32LE(12);
+    if (20 + length > bytes.length) return null;
+    const json = JSON.parse(bytes.subarray(20, 20 + length).toString("utf8")) as { meshes?: { primitives?: { attributes?: { POSITION?: number } }[] }[];
+      skins?: unknown[]; accessors?: { count?: number }[] };
+    const vertices = (json.meshes ?? []).flatMap(mesh => (mesh.primitives ?? []).map(primitive => json.accessors?.[primitive.attributes?.POSITION ?? -1]?.count ?? 0));
+    return { meshes: json.meshes?.length ?? 0, skins: json.skins?.length ?? 0, vertices };
+  } catch { return null; }
+}
+/** A GLB with meshes and no skin (read once per file identity). */
+const unskinnedMemo = new Map<string, boolean>();
+function unskinnedGlb(file: string | undefined): boolean {
+  if (!file) return false;
+  let key: string;
+  try { const stat = statSync(file); key = `${file}|${stat.size}|${stat.mtimeMs}`; } catch { return false; }
+  let known = unskinnedMemo.get(key);
+  if (known === undefined) {
+    const state = glbSkinState(file);
+    known = !!state && state.meshes > 0 && state.skins === 0;
+    if (unskinnedMemo.size > 4096) unskinnedMemo.clear();
+    unskinnedMemo.set(key, known);
+  }
+  return known;
+}
 const UNKNOWN_TOOL: ExportTool = { key: "unknown", label: "an unidentified exporter" };
 /** How many by-hash launches one session runs at once (each WolvenKit call selects one resource by its hash). */
 export const BY_HASH_CONCURRENCY = 4;
@@ -418,6 +460,29 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
     writeFileSync(note, repaired.detail);
     files[REPAIR_NOTE] = note;
   };
+  /**
+   * A morph target whose GLB has no skin goes through the skin route (`GameAssetExporterOptions.skinMorphTarget`): its second GLB is used
+   * when it has a skin and the same vertices, and a note records the outcome either way, so the route runs once per export.
+   */
+  const skin = async (source: ExportSource, depotPath: string, files: Record<string, string>, workRoot: string, signal?: AbortSignal,
+    lowPriority?: LowPriority) => {
+    if (!options.skinMorphTarget || !/\.morphtarget$/i.test(depotPath) || !files.raw || !unskinnedGlb(files["export.glb"])) return;
+    const workDir = join(workRoot, depotHash(depotPath));
+    mkdirSync(workDir, { recursive: true });
+    let glb: string | null;
+    try { glb = await options.skinMorphTarget({ source, depotPath, raw: files.raw, workDir, signal, lowPriority }); }
+    catch (error) {
+      if (!(error instanceof GameAssetExportError) || error.code !== "tool_failed") throw error;
+      glb = null;
+    }
+    const before = glbSkinState(files["export.glb"]!), after = glb && existsSync(glb) ? glbSkinState(glb) : null;
+    const usable = !!after && after.skins > 0 && JSON.stringify(after.vertices) === JSON.stringify(before?.vertices ?? []);
+    if (usable) files["export.glb"] = glb!;
+    hostTrace().event("wolvenkit", "morph_skin", { depotPath, outcome: usable ? "skinned" : after ? "unusable" : "none" });
+    const note = join(workDir, SKIN_NOTE);
+    writeFileSync(note, usable ? "Exported again with the game folder for its skin." : "No skin: the second export with the game folder had none either.");
+    files[SKIN_NOTE] = note;
+  };
   const present = (source: ExportSource, depotPaths: readonly string[]): Set<string> | null => {
     if (!options.contains) return null;
     try {
@@ -455,6 +520,11 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
       const cached = found && (materials || !found["materials.json"] || cache.rawChecked(depotPath, request.source)) ? found : null;
       // A lasting partial entry answers too (its GLB is served; `complete` says what is missing).
       const lasting = !!cached && cache.partialRuns(depotPath, request.source) >= PARTIAL_RUNS;
+      // A morph target cached without its skin, from before the skin route, goes through it once.
+      if (cached && options.skinMorphTarget && /\.morphtarget$/i.test(depotPath) && !cached[SKIN_NOTE] && unskinnedGlb(cached["export.glb"])) {
+        needed.geometry.push(depotPath);
+        continue;
+      }
       if (cached && (required(depotPath, materials).every(name => cached[name]) || (lasting && cached.raw && cached["export.glb"])))
         answer.geometry.set(depotPath, geometryFiles(depotPath, cached, true, materials));
       else needed.geometry.push(depotPath);
@@ -506,6 +576,7 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
         files = { raw: own };
       }
       if (repairing) await repair(source, depotPath, files, join(outDir, "repair"), signal, lowPriority, needMaterials);
+      await skin(source, depotPath, files, join(outDir, "skin"), signal, lowPriority);
       const complete = required(depotPath, needMaterials).every(name => files[name]);
       // The raw is the source's own: exported without the game folder, checked against such an export, or repaired from that copy.
       const checked = !withGame || !!own || !!files[REPAIR_NOTE];
@@ -555,7 +626,12 @@ export function createGameAssetExporter(cacheRoot: string, run: UncookRun, optio
     tool,
     has(kind, depotPath, source) {
       // The character details ask for geometry without materials: an unchecked entry is exported again (PIPE-106).
-      if (kind === "geometry") return cache.present(depotPath, source, ["raw", "export.glb"]) && cache.answersWithoutMaterials(depotPath, source);
+      if (kind === "geometry") {
+        if (!cache.present(depotPath, source, ["raw", "export.glb"]) || !cache.answersWithoutMaterials(depotPath, source)) return false;
+        // A morph target cached without its skin, from before the skin route, isn't ready: it goes through the route first.
+        const files = options.skinMorphTarget && /\.morphtarget$/i.test(depotPath) ? cache.read(depotPath, source) : null;
+        return !files || !!files[SKIN_NOTE] || !unskinnedGlb(files["export.glb"]);
+      }
       if (kind === "textures") return cache.present(depotPath, source, ["texture.png"]);
       return cache.present(depotPath, source, ["layer-0.png"]);
     },

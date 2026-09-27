@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import * as THREE from "three";
 import { IdleAnimation } from "../src/idle-animation";
+import { compileDeformationRig } from "../src/deformation-rig";
 
 test("facial movement composes before head rotation, with its own clock and exact restore", () => {
   const body = new THREE.Group(), head = new THREE.Bone(); head.name="Head";body.add(head);
@@ -212,4 +213,35 @@ test("a flat helper joint of a driven skeleton follows the rig segment it sits o
   const at = helper.getWorldPosition(new THREE.Vector3());
   expect(at.x).toBeCloseTo(0.35, 5); expect(at.y).toBeCloseTo(1.4, 5); expect(at.z).toBeCloseTo(0.02, 5);
   expect(still.getWorldPosition(new THREE.Vector3()).toArray()).toEqual([0.2, 1.25, 0]);
+});
+
+test("with the puppet's deformation rig, a helper joint follows the joint the rig solves, not its nearest segment", () => {
+  // The clip turns the forearm a quarter about z at t = 1; the helper sits on the arm segment, nearest the arm.
+  const source = new THREE.Group(), arm = new THREE.Bone(), fore = new THREE.Bone();
+  arm.name = "Arm"; fore.name = "ForeArm"; arm.position.set(0.2, 1.4, 0); fore.position.set(0, -0.3, 0); arm.add(fore); source.add(arm);
+  const quarter = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2).toArray();
+  const clip = new THREE.AnimationClip("idle", 2, [new THREE.QuaternionKeyframeTrack("ForeArm.quaternion", [0, 1, 2], [0, 0, 0, 1, ...quarter, 0, 0, 0, 1])]);
+  const armature = new THREE.Group(), joint = (name: string, x: number, y: number, z: number) => {
+    const bone = new THREE.Bone(); bone.name = name; bone.position.set(x, y, z); armature.add(bone); return bone; };
+  const tArm = joint("Arm", 0.2, 1.4, 0), tFore = joint("ForeArm", 0.2, 1.1, 0), helper = joint("l_twist_JNT", 0.2, 1.25, 0.02);
+  armature.updateMatrixWorld(true);
+  // The deformation rig, in the game's axes (x, −z, y): the helper is the forearm's child; its graph does nothing more.
+  const cn = (value: string) => ({ $type: "CName", $storage: "string", $value: value });
+  const qs = (x: number, y: number, z: number) => ({ Translation: { X: x, Y: y, Z: z }, Rotation: { i: 0, j: 0, k: 0, r: 1 }, Scale: { X: 1, Y: 1, Z: 1 } });
+  const rig = { boneNames: ["Arm", "ForeArm", "l_twist_JNT"].map(cn), boneParentIndexes: [-1, 0, 1], aPoseLS: [qs(0.2, 0, 1.4), qs(0, 0, -0.3), qs(0, -0.02, 0.15)],
+    aPoseMS: [qs(0.2, 0, 1.4), qs(0.2, 0, 1.1), qs(0.2, -0.02, 1.25)] };
+  const graph = { rootNode: { HandleId: "3", Data: { $type: "animAnimNode_Root", nodes: [{ HandleId: "2", Data: { $type: "animAnimNode_Output", node: { node: {
+    HandleId: "1", Data: { $type: "animAnimNode_PoseLsToMs", inputLink: { node: { HandleId: "0", Data: { $type: "animAnimNode_ReferencePoseTerminator" } } } } } } } }] } } };
+  const program = compileDeformationRig(rig as never, graph as never, { rig: "r", graph: "g" });
+  const idle = new IdleAnimation(source, clip, [tArm, tFore], {});
+  idle.setDeformations([program]);
+  idle.attach([helper]);
+  expect(idle.rigJoints).toEqual(["l_twist_JNT"]);
+  idle.setEnabled(true); idle.seek(1); armature.updateMatrixWorld(true);
+  // (0, 0.15, 0.02) from the forearm's pivot, a quarter turn about z: (−0.15, 0, 0.02).
+  const at = helper.getWorldPosition(new THREE.Vector3());
+  expect(at.x).toBeCloseTo(0.05, 5); expect(at.y).toBeCloseTo(1.1, 5); expect(at.z).toBeCloseTo(0.02, 5);
+  // Without the rig it goes back to its nearest segment (the arm, which doesn't move here).
+  idle.setDeformations([]); idle.seek(1); armature.updateMatrixWorld(true);
+  expect(helper.getWorldPosition(new THREE.Vector3()).toArray().map(x => +x.toFixed(6))).toEqual([0.2, 1.25, 0.02]);
 });
