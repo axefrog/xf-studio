@@ -169,7 +169,7 @@ A manifest is the registration because it can be read **before** script compilat
 | `id` | Reverse-dotted and lowercase, unique. `xf.` is reserved for first-party plugins. Two installed copies of one id: the higher version loads and the other is named in the report |
 | `version` | SemVer |
 | `core_api` | A SemVer range against XF Core's API version, not its release version |
-| `requires.capabilities` | `name@major`. XF Core and other plugins advertise `name@major.minor`. A missing capability refuses the plugin with a plain reason |
+| `requires.capabilities` | `name@MAJOR` (for example `store@1`). XF Core and other plugins advertise the major and minor version they offer. A missing capability refuses the plugin with a plain reason |
 | `requires.frameworks` | Names from the shared marker table (RED4ext, redscript, CET, Codeware, ArchiveXL, TweakXL) with a range. Versions come from DLL version resources, as the Studio reads them. redscript is judged by its compiled result (§3.4), since `scc.exe` has no version resource |
 | `optional.*` | Checked the same way. The plugin asks at run time (`XFCore.Has("lights.host", 1)`) and degrades plainly |
 | `provides` | Capabilities offered to other plugins, with calls routed through XF Core so the provider's circuit breaker still applies |
