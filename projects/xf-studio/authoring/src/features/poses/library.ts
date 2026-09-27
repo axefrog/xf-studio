@@ -24,6 +24,8 @@ export type PoseRow = {
   readonly favourite: boolean;
   /** Null when it can be applied; otherwise why not, in plain words. */
   readonly unavailable: string | null;
+  /** Where the search's words fall in `label` ([start, end) pairs), for highlighting. */
+  readonly matches?: readonly (readonly [number, number])[];
 };
 export type PoseGroup = {
   readonly id: string;
@@ -32,6 +34,8 @@ export type PoseGroup = {
   /** For a category: the pack that added it (many mod categories have raw labels), null for the game's. */
   readonly pack: string | null;
   readonly rows: readonly PoseRow[];
+  /** Where the search's words fall in `label`. */
+  readonly matches?: readonly (readonly [number, number])[];
 };
 export type PoseTree = {
   readonly groups: readonly PoseGroup[];
@@ -59,6 +63,14 @@ export function entryUnavailable(entry: PoseEntry): string | null {
   return null;
 }
 
+/** Where the words fall in a label, when folding kept its length (accents folded, otherwise unchanged); undefined when none do. */
+export function labelMatches(label: string, words: readonly string[]): [number, number][] | undefined {
+  const folded = foldText(label);
+  if (!words.length || folded.length !== label.length) return undefined;
+  const ranges = words.flatMap(word => { const at = folded.indexOf(word); return at < 0 ? [] : [[at, at + word.length] as [number, number]]; });
+  return ranges.length ? ranges : undefined;
+}
+
 export function buildPoseTree(catalogue: PoseCatalogue | null, prefs: PosePreferences, options: PoseTreeOptions): PoseTree {
   const words = searchWords(options.query);
   const worn = new Set(options.wornTags);
@@ -66,6 +78,7 @@ export function buildPoseTree(catalogue: PoseCatalogue | null, prefs: PosePrefer
   const favourites = new Set(prefs.favourites.map(item => item.id));
   const byId = new Map((catalogue?.entries ?? []).map(entry => [entry.id, entry]));
   const hidden = new Set<string>(), hidingTags = new Set<string>();
+  const withMatches = (label: string) => { const matches = labelMatches(label, words); return matches ? { matches } : {}; };
   const hides = (entry: PoseEntry) => {
     const tags = entry.hiddenForGarmentTags.filter(tag => worn.has(tag));
     if (!tags.length) return false;
@@ -75,7 +88,7 @@ export function buildPoseTree(catalogue: PoseCatalogue | null, prefs: PosePrefer
   const rowOf = (entry: PoseEntry): PoseRow => {
     const category = categories.get(entry.category);
     return { id: entry.id, label: entry.label, category: category?.label ?? "", pack: entry.source.declaredBy ?? category?.source.declaredBy ?? null,
-      badges: entry.badges, favourite: favourites.has(entry.id), unavailable: entryUnavailable(entry) };
+      badges: entry.badges, favourite: favourites.has(entry.id), unavailable: entryUnavailable(entry), ...withMatches(entry.label) };
   };
   const matches = (row: PoseRow, clip: string | null) => {
     if (!words.length) return true;
@@ -86,7 +99,7 @@ export function buildPoseTree(catalogue: PoseCatalogue | null, prefs: PosePrefer
     const entry = byId.get(ref.id);
     if (entry) { if (hides(entry)) return []; const row = rowOf(entry); return matches(row, entry.clip?.name ?? null) ? [row] : []; }
     const row: PoseRow = { id: ref.id, label: ref.label, category: "", pack: null, badges: [], favourite: favourites.has(ref.id),
-      unavailable: catalogue ? NOT_INSTALLED : null };
+      unavailable: catalogue ? NOT_INSTALLED : null, ...withMatches(ref.label) };
     return matches(row, null) ? [row] : [];
   });
   const groups: PoseGroup[] = [];
@@ -106,7 +119,7 @@ export function buildPoseTree(catalogue: PoseCatalogue | null, prefs: PosePrefer
   }
   for (const category of catalogue?.categories ?? []) {
     const rows = perCategory.get(category.id);
-    if (rows?.length) groups.push({ id: category.id, kind: "category", label: category.label, pack: category.source.declaredBy, rows });
+    if (rows?.length) groups.push({ id: category.id, kind: "category", label: category.label, pack: category.source.declaredBy, rows, ...withMatches(category.label) });
   }
   return { groups, hiddenByOutfit: hidden.size, hidingTags: [...hidingTags].sort(), shown, total: catalogue?.entries.length ?? 0 };
 }

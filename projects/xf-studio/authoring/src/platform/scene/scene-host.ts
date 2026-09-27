@@ -447,7 +447,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     studioLighting: () => studio.state(),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
-  return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
+  return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
     "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail",
     "setBlink", "animateBlink", "setWire", "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }

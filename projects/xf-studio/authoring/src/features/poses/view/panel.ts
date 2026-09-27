@@ -11,7 +11,7 @@ import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { PoseBadge } from "../types";
 import type { PoseLibraryFacade } from "../facade";
-import { foldText, searchWords, type PoseTree } from "../library";
+import type { PoseTree } from "../library";
 import { POSES_PANEL_META } from "./contribution";
 
 type Ctx = ModuleViewContext<PoseLibraryFacade>;
@@ -25,14 +25,6 @@ const tagWords = (tags: readonly string[]) => tags.map(tag => TAG_WORDS[tag] ?? 
 const SEP = "\u001f";
 const rowKey = (group: string, pose: string) => `${group}${SEP}${pose}`;
 const poseOf = (key: string) => key.slice(key.indexOf(SEP) + 1);
-/** Where the search's words fall in a label, when folding kept its length (accents folded, otherwise unchanged). */
-function highlight(label: string, words: readonly string[]): [number, number][] | undefined {
-  const folded = foldText(label);
-  if (!words.length || folded.length !== label.length) return undefined;
-  const ranges = words.flatMap(word => { const at = folded.indexOf(word); return at < 0 ? [] : [[at, at + word.length] as [number, number]]; });
-  return ranges.length ? ranges : undefined;
-}
-
 export function posesPanel(ctx: Ctx): PanelController {
   const facade = ctx.facade;
   let query = "", treeKey = "", stateKey = "", lastTree: PoseTree | null = null;
@@ -72,12 +64,11 @@ export function posesPanel(ctx: Ctx): PanelController {
 
   /** The tree's groups as the library draws them. */
   const groupsOf = (poseTree: PoseTree): TreeGroupData[] => {
-    const words = searchWords(query);
     return poseTree.groups.map(group => ({
-      id: group.id, label: group.label, secondary: group.pack ?? undefined, count: group.rows.length, highlight: highlight(group.label, words),
+      id: group.id, label: group.label, secondary: group.pack ?? undefined, count: group.rows.length, highlight: group.matches,
       rows: group.rows.map((row): TreeRowData => ({ id: rowKey(group.id, row.id), label: row.label,
         secondary: group.kind === "category" ? undefined : row.category || undefined, badges: row.badges.map(badge => ({ text: BADGES[badge] })),
-        disabled: !!row.unavailable, reason: row.unavailable ?? undefined, highlight: highlight(row.label, words), trailingState: row.favourite })),
+        disabled: !!row.unavailable, reason: row.unavailable ?? undefined, highlight: row.matches, trailingState: row.favourite })),
     }));
   };
 
