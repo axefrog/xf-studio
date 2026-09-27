@@ -149,12 +149,14 @@ test("desktop capabilities and Local setup enable Build only for validated host 
 // Spawns a process tree and waits out a deadline plus a 1.2 s survival window (about 1.9 s locally); Windows CI process start-up is slower.
 test("a desktop Build deadline stops the process tree and publishes no candidate", async () => {
   const marker = resolve(root, `survived-${crypto.randomUUID()}`);
-  // The builder starts a grandchild (as it starts WolvenKit); stopping the tree must stop both.
-  const childCode = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "survived"), 1000);`;
+  // The builder starts a grandchild (as it starts WolvenKit); stopping the tree must stop both. The deadline leaves a slow
+  // runner time to start the grandchild before the stop (a 400 ms deadline raced its spawn on CI), and the grandchild
+  // writes only well after the deadline, so a survivor is still seen.
+  const childCode = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "survived"), 4000);`;
   const h = host(`Bun.spawn([process.execPath, "-e", ${JSON.stringify(childCode)}]);\nawait Bun.sleep(30_000);\n`);
-  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 400, undefined, fixtureWolvenKit, withPlate());
+  const result = await runDesktopBuild(fixture, h.settings, h.data, h.tools, 2000, undefined, fixtureWolvenKit, withPlate());
   expect(result).toMatchObject({ kind: "failure", code: "package_build_timeout" });
-  await Bun.sleep(1200);
+  await Bun.sleep(4500);
   expect(existsSync(marker)).toBe(false);
   expect(existsSync(resolve(h.data, "package-candidates"))).toBe(false);
 }, 30_000);
