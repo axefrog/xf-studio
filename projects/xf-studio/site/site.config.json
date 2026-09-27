@@ -5,8 +5,8 @@
   "repoBranch": "main",
   "author": { "name": "axefrog", "url": "https://github.com/axefrog" },
   "statusReviewed": "2026-09-25",
-  "releaseStatus": "unreleased",
-  "release": null,
+  "releaseStatus": "prerelease",
+  "release": { "tag": "v0.1.0-alpha.2", "title": "XF Studio 0.1.0 alpha 2" },
   "nav": [
     { "id": "overview", "label": "Overview", "href": "./" },
     { "id": "eye-makeup", "label": "Eye makeup", "href": "./#eye-makeup" },

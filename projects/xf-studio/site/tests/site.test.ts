@@ -7,14 +7,17 @@ import { checkSite, trackedRepoFiles } from "../tools/check";
 import { loadConfig, normalizeBaseUrl, validateRelease, type SiteConfig } from "../tools/config";
 
 const temp: string[] = [];
-const fresh = (baseUrl?: string, release: Partial<Pick<SiteConfig, "releaseStatus" | "release">> = {}) => {
+// Tests state the release state they check rather than read the live site.config.json, which changes with each release.
+const UNRELEASED: Pick<SiteConfig, "releaseStatus" | "release"> = { releaseStatus: "unreleased", release: null };
+const unreleasedConfig = () => ({ ...loadConfig(), ...UNRELEASED });
+const fresh = (baseUrl?: string, release: Partial<Pick<SiteConfig, "releaseStatus" | "release">> = UNRELEASED) => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-site-test-"));
   temp.push(dir);
   return buildSite({ outDir: dir, baseUrl, ...release });
 };
 afterAll(() => { for (const dir of temp) rmSync(dir, { recursive: true, force: true }); });
 const messages = async (dir: string, repoFiles: Set<string> | null = null) =>
-  (await checkSite(dir, { repoFiles })).issues.map(issue => `${issue.file}: ${issue.message}`);
+  (await checkSite(dir, { repoFiles, config: unreleasedConfig() })).issues.map(issue => `${issue.file}: ${issue.message}`);
 
 describe("build", () => {
   test("renders every page with no leftover placeholders and versioned assets", () => {
@@ -81,7 +84,7 @@ describe("build", () => {
 
 describe("checks", () => {
   test("the real site passes, including repository links against tracked files", async () => {
-    const result = fresh();
+    const result = fresh(undefined, {}); // The live release state, as deployed.
     const repoFiles = trackedRepoFiles();
     const report = await checkSite(result.outDir, { repoFiles });
     expect(report.issues).toEqual([]);
@@ -155,7 +158,7 @@ describe("checks", () => {
     expect(found.filter(m => m.includes("release link must be"))).toHaveLength(2);
     expect(found.some(m => m.includes("“tested in game”"))).toBe(true);
     // The rendered section must match the configured state.
-    expect((await checkSite(result.outDir, { repoFiles: null })).issues.some(issue => issue.message.includes('rendered for releaseStatus "unreleased"'))).toBe(true);
+    expect((await checkSite(result.outDir, { repoFiles: null, config: unreleasedConfig() })).issues.some(issue => issue.message.includes('rendered for releaseStatus "unreleased"'))).toBe(true);
   });
 
   test("release configuration is validated", () => {
