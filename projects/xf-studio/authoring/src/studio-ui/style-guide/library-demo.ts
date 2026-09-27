@@ -1,7 +1,8 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, BipolarSlider, type TabItem } from "../components";
+  Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, BipolarSlider, LightList, DirectionDial, type LightListItem,
+  type TabItem } from "../components";
 import { h } from "../dom";
 
 type Mount = () => HTMLElement;
@@ -47,6 +48,22 @@ const MOUNTS: Record<string, Mount> = {
       onLinkChange: next => { linked = next; pair.update(values, { linked }); },
       transaction: { edit: edit => { if (edit.sides === "both") { values.left = values.right = edit.value; } else values[edit.sides] = edit.value; pair.update(values, { linked }); } } });
     pair.update(values, { linked }); return pair.element; },
+  "lib-light-list": () => {
+    let lights: LightListItem[] = [{ id: "key", name: "Key", meta: "Directional · 2.5 · shadows", colour: "#fff2e9", kind: "directional" },
+      { id: "fill", name: "Fill", meta: "Directional · 1", colour: "#c6dafa", kind: "directional" },
+      { id: "neon", name: "Neon sign", meta: "Spot · 40", colour: "#ff3d9a", kind: "spot" }];
+    let selected = "key";
+    const list: LightList = new LightList({ label: "Lights", maxLength: 60, onSelect: id => { selected = id; list.update(lights, selected); },
+      onMove: (id, index) => { const light = lights.find(item => item.id === id)!; lights = lights.filter(item => item.id !== id); lights.splice(index, 0, light); list.update(lights, selected); },
+      onRename: (id, name) => { lights = lights.map(item => item.id === id ? { ...item, name } : item); list.update(lights, selected); },
+      onMenu: () => {} });
+    list.update(lights, selected);
+    return h("div", { style: "max-width:320px" }, list.element); },
+  "lib-direction-dial": () => {
+    const dial: DirectionDial = new DirectionDial({ label: "Direction", transaction: { edit: value => dial.update(value, { colour: "#fff2e9", others }) } });
+    const others = [{ azimuth: 30, elevation: 5, colour: "#c6dafa" }, { azimuth: 150, elevation: 35, colour: "#e6eeff" }];
+    dial.update({ azimuth: 329, elevation: 22 }, { colour: "#fff2e9", others });
+    return h("div", { style: "max-width:260px" }, dial.element); },
   "lib-bipolar": () => {
     const make = (label: string, ends: { negative: string; positive: string }, start: number, mixed = false) => {
       let value = start, isMixed = mixed;

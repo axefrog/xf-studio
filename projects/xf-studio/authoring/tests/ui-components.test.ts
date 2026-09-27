@@ -335,3 +335,65 @@ test("icon button: a mode toggle carries its pressed state and the mode class; t
   free.update({ groups, expanded });
   expect((free.element as unknown as { style: { height?: string } }).style.height).toBeUndefined();
 });
+
+test("direction dial: the dial maps angle and height both ways, keys make one burst, typed values are one step, unavailable says why", async () => {
+  const { DirectionDial, dialPoint, dialDirection, azimuthWords } = await lib();
+  // Front at the bottom, V's right on the left, straight up at the centre, level on the dashed ring.
+  expect(dialPoint({ azimuth: 0, elevation: 0 })).toEqual({ x: 50, y: 72 });
+  expect(dialPoint({ azimuth: 90, elevation: 0 }).x).toBeCloseTo(28, 9);
+  expect(dialPoint({ azimuth: 45, elevation: 90 })).toEqual({ x: 50, y: 50 });
+  for (const direction of [{ azimuth: 329, elevation: 22 }, { azimuth: 90, elevation: -30 }, { azimuth: 180, elevation: 60 }]) {
+    const p = dialPoint(direction);
+    expect(dialDirection(p.x, p.y, { min: -89, max: 89 })).toEqual(direction);
+  }
+  expect([azimuthWords(0), azimuthWords(90), azimuthWords(270), azimuthWords(330), azimuthWords(180), azimuthWords(140)])
+    .toEqual(["from the front", "from V's right", "from V's left", "from the front, V's left", "from behind", "from behind, V's right"]);
+  const { calls, t } = log();
+  const dial = new DirectionDial({ label: "Direction", transaction: t, reserveNote: true });
+  dial.update({ azimuth: 329, elevation: 22 }, { colour: "#fff2e9", others: [{ azimuth: 30, elevation: 5, colour: "#c6dafa" }] });
+  expect([dial.dial.getAttribute("role"), dial.dial.getAttribute("aria-valuenow"), dial.dial.getAttribute("aria-valuetext")])
+    .toEqual(["slider", "329", "329°, from the front, V's left, 22° up"]);
+  key(dial.dial, "ArrowRight"); key(dial.dial, "ArrowRight"); key(dial.dial, "ArrowUp");
+  expect(calls).toEqual(["begin", 'edit {"azimuth":334,"elevation":22}', 'edit {"azimuth":339,"elevation":22}', 'edit {"azimuth":339,"elevation":27}']);
+  fire(dial.dial, "blur");
+  expect(calls.at(-1)).toBe("commit");
+  calls.length = 0;
+  key(dial.dial, "PageUp"); fire(dial.dial, "blur");
+  expect(calls).toEqual(["begin", 'edit {"azimuth":354,"elevation":27}', "commit"]);
+  calls.length = 0;
+  key(dial.dial, "Home"); fire(dial.dial, "blur");
+  expect(calls[1]).toBe('edit {"azimuth":0,"elevation":27}');
+  // The height readout, typed in place, is one step, clamped to the range.
+  calls.length = 0;
+  const [angle, height] = [...dial.element.querySelectorAll(".readout-field")] as HTMLElement[];
+  expect(angle!.querySelector("output")!.textContent).toBe("0°");
+  fire(height!.querySelector("output") as HTMLElement, "click");
+  const field = height!.querySelector("input") as HTMLInputElement;
+  field.value = "120"; key(field, "Enter");
+  expect(calls).toEqual(["begin", 'edit {"azimuth":0,"elevation":89}', "commit"]);
+  // Unavailable: no input, the reason on the reserved note line.
+  calls.length = 0;
+  dial.update({ azimuth: 0, elevation: 89 }, { disabled: true, reason: "The preview is still loading." });
+  key(dial.dial, "ArrowLeft");
+  expect(calls).toEqual([]);
+  expect([dial.dial.getAttribute("aria-disabled"), dial.element.querySelector(".control-note")!.textContent]).toEqual(["true", "The preview is still loading."]);
+});
+
+test("light list: each row leads with the light's colour chip and kind glyph, and is named with its kind and meta", async () => {
+  const { LightList } = await lib();
+  const picked: string[] = [];
+  const list = new LightList({ label: "Lights", maxLength: 60, onSelect: id => picked.push(id), onMove: () => {}, onRename: () => {}, onMenu: () => {} });
+  document.body.append(list.element);
+  list.update([{ id: "key", name: "Key", meta: "Directional · 2.5 · shadows", colour: "#fff2e9", kind: "directional" },
+    { id: "neon", name: "Neon sign", meta: "Spot · 40", colour: "#ff3d9a", kind: "spot" }], "neon");
+  const rows = [...list.element.querySelectorAll(".item-row")] as HTMLElement[];
+  expect(rows).toHaveLength(2);
+  const chip = rows[1]!.querySelector(".light-chip") as unknown as { style: { values: Map<string, string> } };
+  expect(chip.style.values.get("--swatch")).toBe("#ff3d9a");
+  expect(rows[1]!.querySelector(".light-kind")!.getAttribute("title")).toBe("Spot light");
+  expect(rows[1]!.querySelector(".item-main")!.getAttribute("aria-label")).toBe("Neon sign, spot light, Spot · 40, selected");
+  expect(rows[0]!.querySelector(".item-main")!.getAttribute("aria-label")).toBe("Key, directional light, Directional · 2.5 · shadows");
+  fire(rows[0]!.querySelector(".item-main") as HTMLElement, "click");
+  expect(picked).toEqual(["key"]);
+  expect(list.element.classList.contains("light-list")).toBe(true);
+});

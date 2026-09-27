@@ -28,7 +28,7 @@ export type LightListOptions = {
 export class LightList {
   readonly element: HTMLElement;
   private readonly list: ItemList<LightListItem>;
-  private readonly marks = new WeakMap<ListRow, { chip: HTMLElement; kind: string }>();
+  private readonly marks = new WeakMap<ListRow, { chip: HTMLElement; glyph: HTMLElement; kind: string }>();
   constructor(options: LightListOptions) {
     this.list = new ItemList<LightListItem>({ ...options, noun: "light", decorate: (item, row) => this.decorate(item, row) });
     this.element = this.list.element;
@@ -41,16 +41,16 @@ export class LightList {
   private decorate(item: LightListItem, row: ListRow) {
     let mark = this.marks.get(row);
     if (!mark) {
-      const chip = h("span", { class: "swatch light-chip", "aria-hidden": "true" });
-      row.lead.replaceChildren(chip, h("span", { class: "light-kind", "aria-hidden": "true" }));
-      mark = { chip, kind: "" };
+      const chip = h("span", { class: "swatch light-chip", "aria-hidden": "true" }), glyph = h("span", { class: "light-kind", "aria-hidden": "true" });
+      row.lead.replaceChildren(chip, glyph);
+      mark = { chip, glyph, kind: "" };
       this.marks.set(row, mark);
     }
     mark.chip.style.setProperty("--swatch", item.colour);
     if (mark.kind !== item.kind) {
       mark.kind = item.kind;
-      row.lead.lastElementChild!.replaceChildren(icon(item.kind === "spot" ? "lighting" : "sun"));
-      row.lead.lastElementChild!.setAttribute("title", item.kind === "spot" ? "Spot light" : "Directional light");
+      mark.glyph.replaceChildren(icon(item.kind === "spot" ? "lighting" : "sun"));
+      mark.glyph.setAttribute("title", item.kind === "spot" ? "Spot light" : "Directional light");
     }
     const selected = row.element.classList.contains("selected");
     setAttr(row.main, "aria-label", `${item.name}, ${item.kind} light${item.meta ? `, ${item.meta}` : ""}${selected ? ", selected" : ""}`);

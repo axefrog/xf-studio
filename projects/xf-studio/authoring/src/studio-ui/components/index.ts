@@ -28,3 +28,6 @@ export { SplitView, type SplitViewOptions } from "./split-view";
 export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeRowData, type TreeViewOptions } from "./tree-view";
 export { progressBar, type ProgressBar } from "./progress";
 export { FolderSetting, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
+// Feature-specific: lighting setups.
+export { LightList, type LightListItem, type LightListOptions } from "./light-list";
+export { azimuthWords, DirectionDial, dialDirection, dialPoint, type DialMark, type Direction, type DirectionDialOptions } from "./direction-dial";

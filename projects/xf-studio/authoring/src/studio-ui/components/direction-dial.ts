@@ -32,6 +32,8 @@ export type DirectionDialOptions = {
 export type DialMark = { azimuth: number; elevation: number; colour: string };
 
 const SIZE = 100, R = 44;
+/** The drawing's box: the dial with room outside its edge for the four direction words. */
+const VIEW = Object.freeze({ x: -20, y: -9, width: 140, height: 118 });
 /** Where a direction draws on the dial: centre straight up, the ring (r = R/2) level, the edge straight down. */
 export function dialPoint(direction: Direction): { x: number; y: number } {
   const r = R * (90 - direction.elevation) / 180, a = direction.azimuth * Math.PI / 180;
@@ -76,7 +78,7 @@ export class DirectionDial {
   constructor(private readonly options: DirectionDialOptions) {
     this.range = options.elevation ?? { min: -89, max: 89 };
     const labelId = uid("dial");
-    const drawing = svg("svg", { viewBox: `0 0 ${SIZE} ${SIZE}`, class: "direction-dial-art", "aria-hidden": "true" });
+    const drawing = svg("svg", { viewBox: `${VIEW.x} ${VIEW.y} ${VIEW.width} ${VIEW.height}`, class: "direction-dial-art", "aria-hidden": "true" });
     const c = SIZE / 2;
     drawing.append(
       svg("circle", { cx: c, cy: c, r: R, class: "dial-edge" }),
@@ -85,7 +87,9 @@ export class DirectionDial {
       // V at the centre, her nose toward the front (the bottom edge).
       svg("circle", { cx: c, cy: c, r: 4.5, class: "dial-head" }), svg("line", { x1: c, y1: c + 4.5, x2: c, y2: c + 7.5, class: "dial-nose" }));
     const word = (text: string, x: number, y: number, anchor: string) => { const t = svg("text", { x, y, "text-anchor": anchor, class: "dial-word" }); t.textContent = text; return t; };
-    drawing.append(word("Front", c, SIZE - 1, "middle"), word("Behind", c, 6, "middle"), word("V's right", 1, c - 2, "start"), word("V's left", SIZE - 1, c - 2, "end"));
+    // The words sit outside the edge, clear of the rings and axes.
+    drawing.append(word("Front", c, c + R + 7, "middle"), word("Behind", c, c - R - 3, "middle"), word("V's right", c - R - 3, c + 2, "end"),
+      word("V's left", c + R + 3, c + 2, "start"));
     this.marks = svg("g", { class: "dial-marks" });
     this.handle = svg("circle", { cx: c, cy: c + R / 2, r: 5.5, class: "dial-handle" });
     drawing.append(this.marks, this.handle);
@@ -142,8 +146,8 @@ export class DirectionDial {
     this.dial.focus();
     this.dial.setPointerCapture(event.pointerId);
     const art = this.dial.querySelector("svg")!;
-    const at = (e: PointerEvent) => { const box = art.getBoundingClientRect(); return dialDirection((e.clientX - box.left) / box.width * SIZE,
-      (e.clientY - box.top) / box.height * SIZE, this.range); };
+    const at = (e: PointerEvent) => { const box = art.getBoundingClientRect();
+      return dialDirection(VIEW.x + (e.clientX - box.left) / box.width * VIEW.width, VIEW.y + (e.clientY - box.top) / box.height * VIEW.height, this.range); };
     this.start = { ...this.value };
     const t = this.options.transaction;
     t.begin?.();

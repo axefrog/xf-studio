@@ -12,7 +12,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 **Categories.**
 - **General:** controls, lists, tabs, menus, tips and status.
 - **Layout:** stack, block section, page header, property list, code block and split view.
-- **Feature-specific:** components only one feature needs. They still live in the library. There are none yet; the migration plan below fills this category.
+- **Feature-specific:** components only one feature needs. They still live in the library: the lighting setups' Light list and Direction dial so far; the migration plan below adds more.
 
 **API conventions.** Every component follows these.
 - A class (or a factory for stateless ones) exposes `element` and `update(state)`. `update` is idempotent: it changes only what differs, never rebuilds what someone may be reading or focusing, and keeps a value the person is editing.
@@ -36,7 +36,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 |---|---|
 | General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
 | Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView` |
-| Feature-specific | none yet |
+| Feature-specific | `LightList`, `DirectionDial` (lighting setups) |
 
 Components added on request:
 - For the expressions panel (`claude/expressions-p1`): SliderWithValue, PairControl, GroupSection (the expander with a count and reset), SearchField and Combobox.
@@ -44,6 +44,7 @@ Components added on request:
 - For settings discoverability and Game & tools: FolderSetting.
 - For the expression drawer's merged opposing controls (gaze, brow up/down): BipolarSlider, built on the internal readout field (`components/readout-field.ts`: the one readout, typed into in place, which Slider with value adopts next). Also TreeView's `maxRows`/`minRows` (a tree that fits its content, no resize grip) and iconButton's `mode` (a mode toggle tinted when on, for mirrored sides).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
+- For the lighting setups (`claude/lighting-setups`): Light list (the Ordered list with a light's colour chip and kind glyph) and Direction dial (a top view of V: one handle for a light's angle and height, readouts typed in place).
 
 ## The ratchet
 
