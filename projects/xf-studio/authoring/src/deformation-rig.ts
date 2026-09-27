@@ -18,7 +18,15 @@ import { asArray, cname, HandleScope, isObject, type Json, type JsonObject } fro
 
 export const DEFORMATION_PROGRAM = "xfs/deformation-program-1";
 /** Bounds on what a program may hold (a graph is data from a mod as much as from the game). */
-export const DEFORMATION_LIMITS = Object.freeze({ joints: 1024, transforms: 4096, ops: 8192, sources: 16, outputs: 16, tracks: 64 });
+export const DEFORMATION_LIMITS = Object.freeze({ joints: 1024, transforms: 4096, ops: 8192, sources: 16, outputs: 16, tracks: 64,
+  /**
+   * Most units of work one evaluation may cost (`programWork`: a unit per placed joint, per extended transform, per constraint source,
+   * per written output and channel): a program at every other bound cost 287 ms an evaluation (PREV-121); this keeps one well under a
+   * millisecond. The vanilla rigs need a few hundred.
+   */
+  work: 65_536,
+  /** Largest magnitude of any number a program holds (metres, weights, scales); a larger finite one overflows the maths (PREV-122). */
+  magnitude: 1e6 });
 
 /** A 4×4 matrix, column-major (THREE.Matrix4 `elements` order), in the rig's space (the game's: Z up). */
 export type Mat4 = number[];
@@ -209,7 +217,26 @@ export function compileDeformationRig(rig: JsonObject, graph: JsonObject, paths:
     }
     if (ops.length > DEFORMATION_LIMITS.ops) throw new DeformationRigError("The graph has too many nodes.");
   }
-  return { schema: DEFORMATION_PROGRAM, rig: paths.rig, graph: paths.graph, transforms, joints: names.length, bind, tracks, ops, skipped: [...skipped].sort() };
+  // What the compiler emits is exactly what the parser accepts (PREV-123): a graph beyond the parser's bounds is refused here, plainly.
+  return parseDeformationProgram({ schema: DEFORMATION_PROGRAM, rig: paths.rig, graph: paths.graph, transforms, joints: names.length, bind, tracks, ops,
+    skipped: [...skipped].sort().slice(0, SKIPPED_NOTES) });
+}
+/** Most node-type notes a program keeps. */
+const SKIPPED_NOTES = 64;
+
+/** An evaluation's cost in units (`DEFORMATION_LIMITS.work`). */
+export function programWork(program: Pick<DeformationProgram, "joints" | "ops">): number {
+  let work = program.joints;
+  for (const op of program.ops) {
+    switch (op.op) {
+      case "extend": work += op.transforms.length; break;
+      case "point": case "orient": work += op.sources.length; break;
+      case "twist": work += 1 + op.outputs.length; break;
+      case "bounce": work += 1 + op.tracks.length + op.outputs.reduce((sum, output) => sum + 1 + output.channels.length, 0); break;
+      default: work += 1;
+    }
+  }
+  return work;
 }
 
 /** The graph's nodes in evaluation order: from its output back along each node's single pose input, then reversed. */
@@ -249,6 +276,8 @@ export function evaluateDeformationRig(program: DeformationProgram, pose: Mat4[]
     const parent = transforms[i]!.parent;
     pose[i] = parent < 0 ? transforms[i]!.local.slice() : multiply(pose[parent]!, transforms[i]!.local);
   }
+  const before = new Map<number, Mat4>();
+  for (const op of program.ops) for (const i of writtenBy(op)) if (!before.has(i) && pose[i]) before.set(i, pose[i]!);
   const tracks = program.tracks.map(() => 0);
   for (const op of program.ops) {
     switch (op.op) {
@@ -315,7 +344,22 @@ export function evaluateDeformationRig(program: DeformationProgram, pose: Mat4[]
       }
     }
   }
+  // A degenerate pose (a zero-length aim, a scale that overflowed) never reaches the bones as NaN: that transform keeps the pose it had
+  // before the program wrote it (PREV-122).
+  for (const [i, earlier] of before) if (!pose[i]!.every(Number.isFinite)) pose[i] = earlier;
+  for (let i = 0; i < pose.length; i++) if (pose[i] && !pose[i]!.every(Number.isFinite)) pose[i] = transforms[i]!.local.slice();
+  for (let i = 0; i < tracks.length; i++) if (!Number.isFinite(tracks[i]!)) tracks[i] = 0;
   return tracks;
+}
+/** The transforms an op writes. */
+function writtenBy(op: DeformationOp): number[] {
+  switch (op.op) {
+    case "extend": return op.transforms;
+    case "track": return [];
+    case "twist": return op.outputs.map(output => output.target);
+    case "bounce": return op.outputs.map(output => output.target);
+    default: return [op.target];
+  }
 }
 
 // ---- small matrix and quaternion helpers (column-major 4×4; quaternions [x, y, z, w]) ----
@@ -436,16 +480,22 @@ export function parseDeformationProgram(value: unknown): DeformationProgram {
   if (!p || p.schema !== DEFORMATION_PROGRAM || typeof p.rig !== "string" || typeof p.graph !== "string") fail("not a program");
   if (!Array.isArray(p.transforms) || p.transforms.length > DEFORMATION_LIMITS.transforms || !Number.isInteger(p.joints) || p.joints < 1 ||
     p.joints > Math.min(p.transforms.length, DEFORMATION_LIMITS.joints)) fail("transform counts");
-  const n = p.transforms.length;
-  const matrix = (m: unknown) => Array.isArray(m) && m.length === 16 && m.every(x => typeof x === "number" && Number.isFinite(x)) ? m as Mat4 : fail("a matrix");
-  const index = (i: unknown, allowNone = false) => Number.isInteger(i) && (i as number) < n && ((i as number) >= 0 || (allowNone && i === -1)) ? i as number : fail("an index");
-  const finite = (x: unknown) => typeof x === "number" && Number.isFinite(x) ? x : fail("a number");
+  const n = p.transforms.length, M = DEFORMATION_LIMITS.magnitude;
+  const bounded = (x: unknown) => typeof x === "number" && Number.isFinite(x) && Math.abs(x) <= M;
+  const matrix = (m: unknown) => Array.isArray(m) && m.length === 16 && m.every(bounded) ? m as Mat4 : fail("a matrix");
+  /**
+   * Transforms are defined in order (PREV-124): the rig's joints, then each added transform when its `extend` runs; an op may name only
+   * transforms defined before it, so evaluation never reads a transform nothing has placed.
+   */
+  let defined = p.joints;
+  const index = (i: unknown, allowNone = false) => Number.isInteger(i) && (i as number) < defined && ((i as number) >= 0 || (allowNone && i === -1)) ? i as number : fail("an index");
+  const finite = (x: unknown) => bounded(x) ? x as number : fail("a number");
   const vector = (v: unknown) => Array.isArray(v) && v.length === 3 ? v.map(finite) as Vec3 : fail("a vector");
   const axis = (a: unknown) => a === 0 || a === 1 || a === 2 ? a as Axis : fail("an axis");
   const channel = (c: unknown) => CHANNELS.has(c as Channel) ? c as Channel : fail("a channel");
   const list = <T>(items: unknown, max: number, read: (item: any) => T) => Array.isArray(items) && items.length <= max ? items.map(read) : fail("a list");
   const transforms = p.transforms.map((t, i) => ({ name: typeof t?.name === "string" && t.name.length <= 256 ? t.name : fail("a name"),
-    parent: i < p.joints ? (t.parent === -1 || (Number.isInteger(t.parent) && t.parent >= 0 && t.parent < i) ? t.parent : fail("a parent")) : index(t.parent),
+    parent: t.parent === -1 && i < p.joints || (Number.isInteger(t.parent) && t.parent >= 0 && t.parent < i) ? t.parent : fail("a parent"),
     local: matrix(t.local) }));
   const bind = list(p.bind, p.joints, matrix);
   if (bind.length !== p.joints) fail("bind poses");
@@ -454,7 +504,7 @@ export function parseDeformationProgram(value: unknown): DeformationProgram {
   const S = DEFORMATION_LIMITS.sources, O = DEFORMATION_LIMITS.outputs;
   const ops = list(p.ops, DEFORMATION_LIMITS.ops, (op): DeformationOp => {
     switch (op?.op) {
-      case "extend": return { op: "extend", transforms: list(op.transforms, n, i => { const k = index(i); return k >= p.joints ? k : fail("an added transform"); }) };
+      case "extend": return { op: "extend", transforms: list(op.transforms, n, i => i === defined && defined < n ? defined++ : fail("an added transform out of order")) };
       case "track": return { op: "track", track: track(op.track), value: finite(op.value) };
       case "point": case "orient": {
         const sources = list(op.sources, S, i => index(i)), weights = list(op.weights, S, finite);
@@ -480,6 +530,7 @@ export function parseDeformationProgram(value: unknown): DeformationProgram {
       default: return fail("an operation");
     }
   });
-  const skipped = list(p.skipped, 64, s => typeof s === "string" ? s : fail("a note"));
+  const skipped = list(p.skipped, SKIPPED_NOTES, s => typeof s === "string" ? s : fail("a note"));
+  if (programWork({ joints: p.joints, ops }) > DEFORMATION_LIMITS.work) fail("too much work for one evaluation");
   return { schema: DEFORMATION_PROGRAM, rig: p.rig, graph: p.graph, transforms, joints: p.joints, bind, tracks, ops, skipped };
 }

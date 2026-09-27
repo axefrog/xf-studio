@@ -1,6 +1,6 @@
 # Facial animation and the blink
 
-**Maturity: Draft.** Consolidated from the installed 2.31 facial rig, facial setups, morph targets and face animation sets, read offline with WolvenKit and the Cyberpunk Blender Add-on's facial solver on 23 to 26 September 2026. Nothing here has runtime evidence of its own. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[hypothesis]** not yet established. Measurements, hashes and commands are in [the game's blink](../research/animation/game-blink.md) and [character-creator idle](../research/animation/cc-idle.md).
+**Maturity: Draft.** Consolidated from the installed 2.31 facial rig, facial setups, morph targets and face animation sets, read offline with WolvenKit and the Cyberpunk Blender Add-on's facial solver on 23 to 27 September 2026. Nothing here has runtime evidence of its own. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[hypothesis]** not yet established. Measurements, hashes and commands are in [the game's blink](../research/animation/game-blink.md) and [character-creator idle](../research/animation/cc-idle.md).
 
 This page answers how V's face is animated, and in particular how a blink closes the eyes, and what the Studio reproduces.
 
@@ -54,6 +54,23 @@ The female face-rig entity names the **male** player setup (`h0_001_ma_c__player
 - **The idle.** The idle blinks by itself and the facial solve is not additive, so the blink controls are off while the idle plays; turning the idle on returns the blink to the editing pose [source].
 - **Makeup coverage on closed lids.** On save B's eye shape (`h111`) a strip of the upper lid that hides under the crease while the eye is open comes into view when it closes and shows bare skin inside the drawn makeup: it appears to lie outside the eye plate's footprint [observed in the browser; cause a hypothesis]. If the game deforms the lid the same way, exported makeup has the same gap on closed eyes.
 
+## 6. The idle's upper face
+
+Why the creator shows movement above V's eyes that the Studio's close-up idle barely shows. Scripts and numbers: [brow idle gap, 27 September](../research/animation/brow-idle-gap.md#27-september-the-loop-is-played-faithfully-the-eyes-section-is-what-moves-the-brows).
+
+| Fact | Detail | Grade |
+|---|---|---|
+| The close-up loop barely moves the brows | `ui_closeup_shot`: brow raises at most 0.0012 (inner) and 0.086 (right outer only, 10.4–10.9 s); `brows_lower` a constant 0.41; lateral, widen and inner squint 0. Solved, the brow joints swing at most 0.55 mm and 0.7° over the loop; their largest offset from rest (1.9 mm) is that constant lowered pose, not motion | [resource] [measured offline] |
+| Its squint is small | Outer lower squint 0–0.30 (left) and 0–0.35 (right), peaking near 2, 4, 11 and 14 s, moves the cheek and lower lid joints up to 1.7 mm; the upper lids move with the nine blinks | [resource] [measured offline] |
+| Nothing mutes them | The muzzle tracks rest at 0 and the clip adds 0; a muzzle scales its poses by 1 − muzzle; the envelopes rest at 1; `brows_lower` is limited only by the outer raise, too small here to matter. At full weight `brows_lower` moves `brows_rowA_1` 4.4 mm and the outer lower squint moves `eye_check_rowD_0` 4.5 mm (two in-betweens) | [resource] [source] [measured offline] |
+| The Studio plays it faithfully | The baked close-up face matches the pinned solver to 6 × 10⁻⁶ mm per joint; every moving upper-face joint exists and carries weights in the prepared head, and all 26 moving brow joints in the brows mesh (the head lacks only the unskinned lid roots); the brow cards move 0.08–1.13 mm | [measured offline] |
+| The setup choice doesn't explain it | Solved with the male player setup V's face rig names, the loop's brows swing 0.80 mm | [measured offline] |
+| The face graph adds no brow motion | No node writes brow or squint tracks; `EyesTracksLookAt` sets the gaze tracks from the look-at target (gaze down at 1 lowers the upper lid 7.9 mm, at 0.13 about 1 mm); gaze-change blinks add `brows_lower` 0.049 and outer squint 0.076 | [resource] |
+| **The eyes section moves the brows** | The eye camera (`UI_Eyes`) serves the eyes, eyebrows, eyelash colour and eye makeup rows and sets the eyes flag; the graph then plays `ui_closeup_shot_eyes` once (4.00 s): brow raises about 0.7, `brows_lower` 0.12–0.32, outer squint about 0.30 around 1.5–2.25 s, with a blink. Solved, the brows swing about 5.8 mm, 11 times the loop. Hovering or changing a row requests its camera and any other row (an XF Eye Artistry row included) asks for the head camera, so moving between rows can play it again, subject to the graph's 15-second timed return ([facial expressions §5](facial-expressions.md#5-the-character-creator-idle), [photo mode](photo-mode.md)) | [resource] [source] [measured offline]; replays [hypothesis] |
+| Wrinkles | At the squint moments the solver's wrinkle outputs reach 0.51 and 0.58 (left, right); the preview doesn't render wrinkle shading, which in game would make a 1–2 mm squint read more strongly | [measured offline] for the signal; its look [hypothesis] |
+
+**Reading adopted by the Studio** [hypothesis until test ask 5]: the brow lowering and lid narrowing seen in game are mostly the eyes-section showcase, with wrinkle shading and live gaze as further contributors. The Motion panel offers **Creator close-up, eyes section**: the close-up body with the showcase once and then the close-up loop, blended as [CC idle](../research/animation/cc-idle.md#the-games-other-preview-idles) describes. The close-up stays the default idle; the showcase is never labelled or looped as the idle.
+
 ## Open questions
 
 1. Which facial setup does the engine solve V's face with: the female head's own or the male player setup the face-rig entity names? A probe is prepared (the bridge's `face.rig.read`, check R1 on the [test card](../research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2); a CET fallback in [experiment 022](../experiments/022-session-3/README.md#part-d-expression-console-checks-optional)).
@@ -62,6 +79,7 @@ The female face-rig entity names the **male** player setup (`h0_001_ma_c__player
 4. What counts as a gaze change for the look-at controller's blinks, and what drives blinks in gameplay outside the creator and photo-mode graphs? (Those graphs play the additive blink clips on gaze changes, with minimum intervals, and have no periodic blink: [facial expressions §2](facial-expressions.md#2-which-graph-drives-vs-face-where).)
 5. Does the closed lid on deep-set shapes uncover skin outside the eye plate in game?
 6. Do lashes rigged to other lid joints than the lid skin under them (the "Lush Manga Eyelashes" mesh) leave the closed lid in game as they do in the preview (§5)?
+7. Is the brow and lid movement seen above V's eyes in the creator the eyes-section showcase (§6), and how much do wrinkle shading and live gaze add?
 
 ## In-game test asks
 
@@ -71,6 +89,7 @@ Batch into one prepared session; record the game version and the face-rig and mo
 2. **Lashes on closed lids.** Same captures: do the upper lashes lie along the closed lid line as in the Studio?
 3. **Makeup on closed lids.** With an XF Eye Artistry look covering the upper lid, close the eyes on eye shape 12: does bare skin show between the crease and the lashes?
 4. **Mod lashes on closed lids.** With the CCXL "Lush Manga Eyelashes" chosen, photo mode, eyes closed, one frontal and one three-quarter close-up of the left eye; then the same with vanilla lashes. If the outer lashes kink upward off the lid as in the preview (`evidence/screenshots/head-fixes/lashes-compare.png`, private), the mod's rigging does it in game too.
+5. **The eyes section's brows** (§6). A fixed camera on the creator's head: 25 s hovering only a head-camera row (skin), then 25 s moving back and forth between an XF Eye Artistry row and the eyebrows row. Do the brows lower and the lids narrow only in the second? Compare with the Studio's **Creator close-up** and **Creator close-up, eyes section** idles (`evidence/screenshots/idle-brows/`, private). The runtime bridge can read the active clip and the paperdoll flags meanwhile.
 
 ## Related pages
 

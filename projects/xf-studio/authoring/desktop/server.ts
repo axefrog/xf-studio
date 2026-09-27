@@ -195,6 +195,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     solver: () => locateFacialSolver({ toolsRoot: resolve(dataRoot, "tools"), script: resolve(import.meta.dir, "facial_solver_server.py") }),
     log: logTo("facial") });
   const facialRequest = createFacialHandler(facial);
+  // "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
+  characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
   // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
   const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
     app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,

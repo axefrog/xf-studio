@@ -5,10 +5,11 @@
  * No game data, no Python: the solver process is a fake (CI runs on Linux).
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFacialHandler, FacialHost, locateFacialSolver, SOLVER_MISSING, type FacialExtractor, type FacialSolverProcess } from "../src/facial-host";
+import { createFacialHandler, FacialHost, locateFacialSolver, MAX_RESTARTS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
+  type FacialSolverProcess, type FacialSolverSpawner } from "../src/facial-host";
 import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG } from "../src/facial-catalogue";
 import { depotHash } from "../src/depot-path";
 import type { Installation } from "../src/resolver-host";
@@ -46,15 +47,20 @@ const rig = cr2w({ $type: "appearanceAppearanceResource", appearances: [handle({
     { $type: "entAnimationSetupExtensionComponent", name: cn("PhotomodeAnimations"), animations: { $type: "animAnimSetup", cinematics: [],
       gameplay: [{ $type: "animAnimSetupEntry", animSet: rh(depotHash(SET)), priority: 128, variableNames: [] }] } }] } } })] });
 
-function world(root: string) {
+type WorldOptions = { spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?: () => number; jsonBudget?: number;
+  /** A mod archive that also provides the animation set, with these faces. */
+  setOverride?: object };
+function world(root: string, options: WorldOptions = {}) {
   const fixture = fixtureInstallation([
     { virtualPath: "archive/pc/content/basegame_4_animation.archive", files: { [FACE_SKELETON]: {}, [FACE_SETUP]: {}, [FACIAL_ADDITIVES]: {}, [SET]: {},
       [EXPRESSION_TABLE]: table([[0, "facial_happy"]]), [PHOTO_MODE_FACE_RIG]: rig } },
     // An expression mod's table wins the path (precedence), with an extra row.
     { virtualPath: "archive/pc/mod/zz_faces.archive", provider: "manual", providerName: "Some expression pack",
       files: { [EXPRESSION_TABLE]: table([[0, "facial_happy"], [1, "facial_grin"], [2, "facial_missing"]]) } },
+    ...(options.setOverride ? [{ virtualPath: "archive/pc/mod/zzz_set.archive", provider: "manual" as const, providerName: "Set update", files: { [SET]: {} } }] : []),
   ]);
-  const documents = new Map<string, unknown>([[depotHash(FACE_SKELETON), skeleton], [depotHash(FACE_SETUP), setup], [depotHash(FACIAL_ADDITIVES), additives], [depotHash(SET), faces]]);
+  const documents = new Map<string, unknown>([[depotHash(FACE_SKELETON), skeleton], [depotHash(FACE_SETUP), setup], [depotHash(FACIAL_ADDITIVES), additives],
+    [depotHash(SET), options.setOverride ?? faces]]);
   let extractions = 0;
   const extract: FacialExtractor = async (_cli, _archive, resources, _dir, take) => {
     extractions++;
@@ -67,7 +73,8 @@ function world(root: string) {
   const host = new FacialHost({ cacheRoot: root, resolverCache: join(root, "resolver"),
     settings: () => ({ gameRoot: root, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
     solver: () => ({ addon: "addon", python: "python", script: "server.py" }),
-    open: () => ({ ...fixture, fetcher: fixture.graph.port }) as unknown as Installation, extract, spawn: () => process });
+    open: () => ({ ...fixture, fetcher: fixture.graph.port }) as unknown as Installation, extract, spawn: options.spawn ?? (() => process),
+    solveTimeoutMs: options.solveTimeoutMs, now: options.now, jsonBudget: options.jsonBudget });
   return { host, solves, extractions: () => extractions };
 }
 const zeros = (n: number) => btoa(String.fromCharCode(...new Uint8Array(n * 4)));
@@ -138,4 +145,208 @@ test("without a game folder the host says so plainly; the solver is found only w
   // The desktop: no environment, no repository, no Python: missing, in plain words.
   expect(locateFacialSolver({ toolsRoot: "/data/tools", script: "/s.py", exists: () => true })).toEqual({ missing: SOLVER_MISSING });
   expect(locateFacialSolver({ toolsRoot: "/data/tools", script: "/s.py", pythonDefault: "python", exists: () => false })).toEqual({ missing: SOLVER_MISSING });
+});
+
+// ---- Solver lifetime and bounds (review at 9f71a56: CORE-99..106) ----
+
+/** A fake solver process the test drives: its solves wait until answered, it can stop (a crash), and records being disposed. */
+function fakeProcess(options: { ready?: boolean; hang?: boolean } = {}) {
+  const solves: { resolve(value: { q: string; t: string; ms: number }): void; reject(error: Error): void }[] = [];
+  let exited = false, disposed = false;
+  const process: FacialSolverProcess = {
+    ready: Promise.resolve(options.ready === false ? { ok: false as const, error: "no" } : { ok: true as const, compileMs: 1 }),
+    get exited() { return exited; },
+    dispose: () => { disposed = true; exited = true; for (const solve of solves.splice(0)) solve.reject(Error("The solver stopped.")); },
+    solve: () => exited ? Promise.reject(Error("The solver stopped.")) : new Promise((resolve, reject) => {
+      if (options.hang) { solves.push({ resolve, reject }); return; }
+      resolve({ q: zeros(8), t: zeros(6), ms: 1 });
+    }),
+  };
+  return { process, crash: () => { exited = true; for (const solve of solves.splice(0)) solve.reject(Error("The solver stopped.")); }, disposed: () => disposed };
+}
+const ready = async (host: FacialHost) => { host.state(); await host.settled(); await new Promise(resolve => setTimeout(resolve, 0)); };
+
+test("a solver program that can't be started says plainly that it isn't set up, and the installed expressions still load (CORE-99)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const { host } = world(root, { spawn: () => { throw Error("ENOENT: python"); } });
+    await ready(host);
+    const state = host.state();
+    expect(state.solver).toEqual({ phase: "missing", reason: SOLVER_NOT_SET_UP });
+    expect(state.expressions.phase).toBe("ready");
+    expect(host.expressions().items.length).toBe(2);
+    expect(await host.solve({ controls: { jaw_mid_open: 0.1 } })).toMatchObject({ ok: false, code: "unavailable", message: SOLVER_NOT_SET_UP });
+    // The real spawner with no such program: refused at once or failing to start, never "starting" forever.
+    let outcome: string;
+    try {
+      const started = spawnFacialSolver({ addon: root, python: join(root, "no-such-python"), script: join(root, "server.py") }, "rig.json", "setup.json");
+      outcome = (await started.ready).ok ? "ready" : "failed";
+    } catch { outcome = "thrown"; }
+    expect(["thrown", "failed"]).toContain(outcome);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a solve that doesn't come back in time fails plainly, and the solver is started again for the next solve (CORE-100)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const processes = [fakeProcess({ hang: true }), fakeProcess()];
+    let spawned = 0;
+    const { host } = world(root, { spawn: () => processes[spawned++]!.process, solveTimeoutMs: 30 });
+    await ready(host);
+    expect(await host.solve({ controls: { jaw_mid_open: 0.1 } })).toMatchObject({ ok: false, code: "failed", message: expect.stringContaining("took too long") });
+    expect(processes[0]!.disposed()).toBe(true);
+    // Every later solve isn't blocked: the next one starts a new solver and is answered.
+    expect(await host.solve({ controls: { jaw_mid_open: 0.2 } })).toMatchObject({ ok: true, frames: 1 });
+    expect(spawned).toBe(2);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a crashed solver is started again within a budget that refills; past it the state says so instead of ready (CORE-101)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    let clock = 1_000_000, spawned = 0;
+    const made: ReturnType<typeof fakeProcess>[] = [];
+    const { host } = world(root, { now: () => clock, spawn: () => { spawned++; const next = fakeProcess(); made.push(next); return next.process; } });
+    await ready(host);
+    for (let i = 0; i < MAX_RESTARTS; i++) {
+      made.at(-1)!.crash();
+      expect(await host.solve({ controls: { jaw_mid_open: 0.1 } })).toMatchObject({ ok: true });
+    }
+    expect(spawned).toBe(1 + MAX_RESTARTS);
+    made.at(-1)!.crash();
+    // The budget is spent: the state no longer reports ready for a stopped process.
+    expect(host.state().solver).toMatchObject({ phase: "failed", reason: expect.stringContaining("stopped several times") });
+    expect(await host.solve({ controls: { jaw_mid_open: 0.1 } })).toMatchObject({ ok: false, code: "unavailable" });
+    // Old restarts age out: the next question starts it again.
+    clock += RESTART_WINDOW_MS + 1
+    const st = host.state();
+    expect(st.solver.phase).toBe("starting");
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(host.state().solver.phase).toBe("ready");
+    expect(spawned).toBe(2 + MAX_RESTARTS);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("pages take turns: a newer pose replaces only the same page's waiting one (CORE-104)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const { host, solves } = world(root);
+    await ready(host);
+    const running = host.solve({ controls: { jaw_mid_open: 0.1 }, client: "page-a" });
+    const a1 = host.solve({ controls: { jaw_mid_open: 0.2 }, client: "page-a" });
+    const b1 = host.solve({ controls: { jaw_mid_open: 0.3 }, client: "page-b" });
+    const a2 = host.solve({ controls: { jaw_mid_open: 0.4 }, client: "page-a" });
+    expect(await a1).toMatchObject({ ok: false, code: "superseded" });
+    for (let i = 0; i < 3; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      solves[i]!.resolve({ q: zeros(8), t: zeros(6), ms: 1 });
+    }
+    expect(await running).toMatchObject({ ok: true });
+    expect(await b1).toMatchObject({ ok: true });
+    expect(await a2).toMatchObject({ ok: true });
+    expect(await host.solve({ controls: {}, client: "bad page!" })).toMatchObject({ ok: false, code: "invalid" });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the solve endpoint reads its body within the limit and refuses JSON that isn't a pose (CORE-106)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const { host } = world(root);
+    await ready(host);
+    const handler = createFacialHandler(host);
+    const post = (body: string, headers: Record<string, string> = {}) => handler(new Request("http://127.0.0.1:1/api/facial/solve",
+      { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body }));
+    expect((await post("null")).status).toBe(400);
+    expect((await post("[1]")).status).toBe(400);
+    expect((await post("{}", { "Content-Length": "999999" })).status).toBe(413);
+    expect((await post(JSON.stringify({ controls: { jaw_mid_open: "x".repeat(70_000) } }))).status).toBe(413);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the facial cache is bounded, counted and cleared with the prepared game files, and crash leftovers are swept (CORE-102)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    // A temporary folder a host left mid-extraction two hours ago, and an old animation set nobody uses.
+    const leftover = join(root, "facial", "tmp", "facial-1-old");
+    mkdirSync(leftover, { recursive: true });
+    const old = new Date(Date.now() - 2 * 3_600_000);
+    utimesSync(leftover, old, old);
+    mkdirSync(join(root, "facial", "json"), { recursive: true });
+    const unused = join(root, "facial", "json", "unused.json");
+    writeFileSync(unused, "x".repeat(4000));
+    utimesSync(unused, old, old);
+    const { host } = world(root, { jsonBudget: 3000 });
+    await ready(host);
+    expect(existsSync(leftover)).toBe(false);
+    expect(existsSync(unused)).toBe(false);
+    // The face's own files are kept whatever the budget.
+    expect(readdirSync(join(root, "facial", "json")).length).toBeGreaterThanOrEqual(2);
+    expect(await host.preparedBytes()).toBeGreaterThan(0);
+    const cleared = await host.clearPrepared();
+    expect(cleared.freed).toBeGreaterThan(0);
+    expect(existsSync(join(root, "facial", "json"))).toBe(false);
+    expect(existsSync(join(root, "facial", "start-points"))).toBe(false);
+    // Forgotten: the next question prepares the face again from the game files.
+    await ready(host);
+    expect(host.state().rig.phase).toBe("ready");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("start points are read again when an animation set's archive changes, not served from an older installation's cache (CORE-103)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const first = world(root);
+    await ready(first.host);
+    expect(first.host.expressions().items.find(item => item.clip === "facial_grin")?.controls).toEqual({ jaw_mid_open: Math.fround(0.3) });
+    // A mod now provides the set with a changed clip: the same table and face rig, a different set.
+    const updated = animSet([["facial_happy", "AdditiveFromRefPose", 0.033, [], [[3, 0.5]]], ["facial_grin", "AdditiveFromRefPose", 0.033, [], [[5, 0.9]]]]);
+    const second = world(root, { setOverride: updated });
+    await ready(second.host);
+    expect(second.host.expressions().items.find(item => item.clip === "facial_grin")?.controls).toEqual({ jaw_mid_open: Math.fround(0.9) });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the real protocol over a process's pipes: split and joined lines, a printed warning, a lost answer, and a crash mid-request (CORE-100)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    // Any program that speaks the protocol: Bun itself runs a stand-in for the Python server, so the test needs no Python.
+    const script = join(root, "solver.js");
+    writeFileSync(script, `
+      const out = text => process.stdout.write(text);
+      out("a module printed this\\n");
+      out('{"ready": true, "jo'); setTimeout(() => out('ints": 2, "tracks": 7, "compileMs": 5}\\n'), 20);
+      let buffer = "";
+      process.stdin.on("data", chunk => {
+        buffer += chunk;
+        for (let at = buffer.indexOf("\\n"); at >= 0; at = buffer.indexOf("\\n")) {
+          const line = buffer.slice(0, at); buffer = buffer.slice(at + 1);
+          const request = JSON.parse(line), first = request.frames[0][0];
+          if (first === 99) { out("Traceback: not json\\n"); continue; }
+          if (first === 98) process.exit(3);
+          const answer = JSON.stringify({ id: request.id, ms: 0.5, q: "AAAAAAAAAAAAAAAAAAAAAA==", t: "AAAAAAAAAAAAAAAA" });
+          // Framing in odd pieces: half a line, then the rest with a blank line (the pipe may join or split them further).
+          out(answer.slice(0, 10)); out(answer.slice(10) + "\\n\\n");
+        }
+      });
+    `);
+    const logged: string[] = [];
+    const solver = spawnFacialSolver({ addon: root, python: process.execPath, script }, "rig.json", "setup.json", { log: message => logged.push(message) });
+    expect(await solver.ready).toEqual({ ok: true, compileMs: 5 });
+    expect(logged.some(line => line.includes("a module printed this"))).toBe(true);
+    const frame = (value: number) => [new Float32Array([value, 0, 0, 0, 0, 0, 0])];
+    // Settled outcomes (a rejection read as its message), so a regression fails fast instead of hanging the test.
+    const outcome = (work: Promise<unknown>) => Promise.race([work.then(value => ({ value }), error => ({ error: String(error) })),
+      Bun.sleep(5000).then(() => ({ error: "no answer" }))]);
+    const [a, b] = await Promise.all([outcome(solver.solve(frame(0.1))), outcome(solver.solve(frame(0.2)))]);
+    expect(a).toEqual({ value: { q: "AAAAAAAAAAAAAAAAAAAAAA==", t: "AAAAAAAAAAAAAAAA", ms: 0.5 } });
+    expect(b).toMatchObject({ value: { ms: 0.5 } });
+    // A line that isn't an answer fails the request waiting for it instead of leaving it forever.
+    expect(await outcome(solver.solve(frame(99)))).toEqual({ error: expect.stringContaining("couldn't be read") });
+    expect(logged.some(line => line.includes("Traceback"))).toBe(true);
+    // A crash mid-request answers the request and marks the process stopped.
+    expect(await outcome(solver.solve(frame(98)))).toEqual({ error: expect.stringContaining("stopped") });
+    expect(solver.exited).toBe(true);
+    expect(await outcome(solver.solve(frame(0.3)))).toEqual({ error: expect.stringContaining("stopped") });
+    solver.dispose();
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
