@@ -95,6 +95,82 @@ describe("dangle spec", () => {
   });
 });
 
+describe("hostile and extreme graphs (PREV-129, PREV-130, PREV-139)", () => {
+  /** A constraint tree `depth` groups deep in which every group lists the one below `fan` times (first its handle, then references). */
+  function sharedGroups(fan: number, depth: number) {
+    let below: { HandleId: string; Data: object } | null = null;
+    for (let level = depth; level >= 0; level--) {
+      const data: object = { $type: "animDyngConstraintMulti", innerConstraints: below
+        ? [below, ...Array.from({ length: fan - 1 }, () => ({ HandleRefId: below!.HandleId }))] : [] };
+      below = H(data);
+    }
+    return below!;
+  }
+
+  test("a group listed many times through handles is refused at once, not walked once per path (PREV-129)", () => {
+    // Fan-out 4 at depth 7: 16,384 paths from 8 handles; fan-out 32 at depth 8 would be about 1e12.
+    const started = performance.now();
+    const spec = compile(graph(simulation({ dyngConstraint: sharedGroups(4, 7) })));
+    expect(spec.simulation).toBeNull();
+    expect(spec.notes).toEqual(["Its simulation lists one group of constraints more than once, so it hangs still."]);
+    const hostile = compile(graph(simulation({ dyngConstraint: sharedGroups(32, 8) })));
+    expect(hostile.notes).toEqual(spec.notes);
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
+  test("every entry the walk visits counts against a budget, empty ones included; a constraint listed twice is still read twice", () => {
+    const empty = compile(graph(simulation({ dyngConstraint: H({ $type: "animDyngConstraintMulti", innerConstraints: Array.from({ length: 9000 }, () => ({})) }) })));
+    expect(empty.simulation).toBeNull();
+    expect(empty.notes).toEqual(["Its simulation lists more constraints than the preview runs, so it hangs still."]);
+    const leaf = H({ $type: "animDyngConstraintLink", bone1: ti("c1"), bone2: ti("c2") });
+    const twice = compile(graph(simulation({ dyngConstraint: H({ $type: "animDyngConstraintMulti", innerConstraints: [leaf, { HandleRefId: leaf.HandleId }] }) })));
+    expect(twice.simulation!.constraints.map(c => c.kind)).toEqual(["link", "link"]);
+  });
+
+  test("finite but extreme values leave the chain rigid with a note, and a served spec holding them is refused (PREV-130)", () => {
+    const ellipsoid = (fields: object) => H({ $type: "animDyngConstraintMulti", innerConstraints: [
+      H({ $type: "animDyngConstraintEllipsoid", bone: ti("c2"), ellipsoidTransformLS: qs(), constraintRadius: 0.1, ...fields })] });
+    const cases: [string, JsonObject][] = [
+      ["an ellipsoid scale of 0", graph(simulation({ dyngConstraint: ellipsoid({ constraintScale1: 0 }) }))],
+      ["a mass of 1e-320", graph(simulation({}, { particles: [particle("c1", { isFree: 0 }), particle("c2", { mass: 1e-320 })] }))],
+      ["gravity of 1e200", graph(simulation({}, { gravityWS: 1e200 }))],
+      ["link bounds of 1e307 %", graph(simulation({ dyngConstraint: H({ $type: "animDyngConstraintMulti", innerConstraints: [
+        H({ $type: "animDyngConstraintLink", bone1: ti("c1"), bone2: ti("c2"), lengthLowerBoundRatioPercentage: 1e307, lengthUpperBoundRatioPercentage: 1e307 })] }) }))],
+      ["a pull spring past the integration's stability (pull 1e4, mass 0.01)", graph(simulation({}, { particles: [particle("c1", { isFree: 0 }),
+        particle("c2", { mass: 0.01, pullForceFactor: 1e4 })] }))],
+      ["negative damping", graph(simulation({}, { particles: [particle("c1", { isFree: 0 }), particle("c2", { damping: -5 })] }))],
+    ];
+    for (const [what, g] of cases) {
+      const spec = compile(g);
+      expect(spec.simulation, what).toBeNull();
+      expect(spec.notes[0], what).toMatch(/can't run stably, so it hangs still\.$/);
+    }
+    // The vanilla hh_107 tuning (mass 0.6, damping 3, pull 30) is well inside the ranges.
+    expect(compile(graph(simulation({}, { particles: [particle("c1", { isFree: 0 }), particle("c2", { mass: 0.6, damping: 3, pullForceFactor: 30 })] })))).toMatchObject({ notes: [] });
+    // A served spec edited past the ranges is refused by the browser's parse.
+    const served = JSON.parse(JSON.stringify(compile(graph(simulation()))));
+    served.simulation.particles[1].mass = 1e-320;
+    expect(() => parseDangleSpec(served)).toThrow(/mass out of range/);
+    served.simulation.particles[1].mass = 0.4;
+    served.simulation.gravity = 1e200;
+    expect(() => parseDangleSpec(served)).toThrow(/forces out of range/);
+  });
+
+  test("the host's compile refuses what the browser's parse would, with a DangleSpecError and its reason (PREV-139)", () => {
+    const rigWith = (names: string[], parents: number[]) => ({ $type: "animRig", boneNames: names.map(cn), boneParentIndexes: parents,
+      boneTransforms: names.map(() => qs([0, 0, 0.1])) }) as unknown as JsonObject;
+    // A 300-character joint name used to compile, then be refused whole in the browser.
+    expect(() => compileDangleSpec(rigWith(["Head", "x".repeat(300)], [-1, 0]), null, { rig: "r", graph: "" })).toThrow(/longer than 256 characters/);
+    // A fractional parent index used to throw a TypeError, which the host rethrew.
+    expect(() => compileDangleSpec(rigWith(["Head", "d1"], [-1, 0.5]), null, { rig: "r", graph: "" })).toThrow(DangleSpecError);
+    expect(() => compileDangleSpec(rigWith(["Head"], [-1]), null, { rig: "r".repeat(600), graph: "" })).toThrow(DangleSpecError);
+    // A long type or joint name from the file is clipped in its note, so the note still reads back.
+    const spec = compile(graph(simulation(), [{ $type: `animAnimNode_${"Z".repeat(400)}` }]));
+    expect(spec.notes[0]!.length).toBeLessThanOrEqual(300);
+    expect(parseDangleSpec(JSON.parse(JSON.stringify(spec)))).toEqual(spec);
+  });
+});
+
 describe("the resolver keeps the bindings a dangle needs", () => {
   test("a skinned mesh's skeleton and an animated component's rig, graph and bindings", () => {
     const entity = { $type: "entEntityTemplate", compiledData: { BufferId: "0", Flags: 0, Type: "WolvenKit.RED4.Archive.Buffer.RedPackage, WolvenKit.RED4",

@@ -65,7 +65,11 @@ export class DangleRig {
   /** Whether any part has a simulation the solver runs. */
   get simulated() { return [...this.instances.values()].some(instance => instance.solver); }
   /** Plain notes on parts that hang still (their graph isn't one the solver runs). */
-  notes(): string[] { return [...new Set([...this.instances.values()].flatMap(instance => instance.spec.notes))]; }
+  notes(): string[] {
+    const notes = [...this.instances.values()].flatMap(instance => instance.spec.notes);
+    if ([...this.instances.values()].some(instance => instance.solver?.unstable)) notes.push("A strand's simulation ran out of range and was put back on the head.");
+    return [...new Set(notes)];
+  }
   /** The virtual driver a part's joint follows (none for a joint the part doesn't have). */
   driverFor(key: string, name: string): THREE.Object3D | undefined { return this.instances.get(key)?.drivers.get(name); }
   /** Whether a part's joint takes its pose from V (a base joint) rather than from the rig. */
