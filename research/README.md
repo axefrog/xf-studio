@@ -14,6 +14,7 @@ Research notes, contracts and evidence for XF Studio and related Cyberpunk 2077 
 | [animation/](animation/) | Character-creator idle playback, idle control design, brow idle gap. |
 | [brows/](brows/brow-editor-design.md) | Brow editor design: field-driven groom into the brow texture set, platform fit and phased plan. |
 | [jewellery/](jewellery/) | Vanilla piercing preview, PRC inventory/preview/catalogue audit, jewellery construction-set proposal, earring references. |
+| [nails/](nails/nail-salon-design.md) | Nail Salon design: how V's nails render, a nail-board vector editor, nail finishes and an additive export to the game's Nails row. |
 | [runtime/](runtime/runtime-bridge-design.md) | Runtime access: base mods per mod type, the local bridge design, the agent autonomy capability matrix and the bridge test card. |
 | [archive-xl/](archive-xl/) | ArchiveXL expansion strategy (legacy matrix lessons) and pinned upstream source notes. |
 | [consumers/](consumers/README.md) | Locally extracted third-party resources for research (payloads ignored; manifests/notes tracked). |
