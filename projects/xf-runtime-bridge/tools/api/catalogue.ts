@@ -6,9 +6,12 @@
 //
 // Permission classes (data for a future consent screen):
 //   read             looks at the game or its window; changes nothing
+//   notify           shows a short message in the bridge's own in-game label; changes nothing in the game
 //   write-photo      changes photo mode only (camera, lights, expression, its UI); gone when photo mode closes
 //   write-world      changes the world around V (time of day, time flow)
 //   write-character  changes V's appearance
+//   write-inventory  changes V's clothing and inventory (off in the bridge's config.ini until the maintainer approves it)
+//   write-save       makes a manual save or loads one
 //   control          changes only the bridge itself (the kill switch)
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
@@ -26,10 +29,14 @@ import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
-export type Permission = "read" | "write-photo" | "write-world" | "write-character" | "control";
+export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "control";
 
 export const PERMISSIONS: Record<Permission, { label: string; description: string }> = {
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
+  notify: {
+    label: "Show messages in the game",
+    description: "Shows short messages to the player under the bridge's status label in the game. Changes nothing in the game; the messages fade by themselves.",
+  },
   "write-photo": {
     label: "Control photo mode",
     description: "Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode.",
@@ -38,6 +45,16 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
   "write-character": {
     label: "Change V's appearance",
     description: "Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile).",
+  },
+  "write-inventory": {
+    label: "Change V's clothing",
+    description:
+      "Equips and unequips V's clothing, and can add a test item to V's inventory (and remove it again). Off in the bridge's settings until the maintainer allows it; undo by equipping the earlier item.",
+  },
+  "write-save": {
+    label: "Save and load the game",
+    description:
+      "Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden.",
   },
   control: {
     label: "Stop the bridge",
@@ -58,7 +75,8 @@ export type CommandDef = {
   input: JsonSchema;
   /** How to undo a write, in plain words. */
   undo?: string;
-  bridge?: { method: string; params?: (input: Record<string, unknown>) => Record<string, unknown> };
+  /** timeoutMs: how long the tools wait for the bridge's answer, for a method that waits on the game (default: the client's 8 s). */
+  bridge?: { method: string; params?: (input: Record<string, unknown>) => Record<string, unknown>; timeoutMs?: (input: Record<string, unknown>) => number };
   local?: (input: Record<string, unknown>, context: CommandContext) => Promise<CommandResult>;
 };
 
@@ -235,6 +253,10 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
   const adapter: FramingAdapter = {
     subject: async (offset) => (await bridgeCall(context, "photo.subject", offset)) as unknown as SubjectReading,
     setCamera: async (values) => ((await bridgeCall(context, "photo.camera.set", values)).applied as CameraApplied[] | undefined) ?? [],
+    // Between the reads that wait for a change to take (the stand-in and the camera move a frame later).
+    pause: async (ms) => {
+      await sleepMs(ms);
+    },
     grab: async () => {
       if (!hudUndo) {
         // The capture route compares captures, so the menu and cursor are hidden first (and restored after).
@@ -273,6 +295,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
   };
   let lookAtBefore: number | undefined;
   let presetBefore: number | undefined;
+  let rollBefore: number | undefined;
   try {
     if (input.xf_preset && input.camera_preset !== undefined) throw planError("bad_input", "Give xf_preset or camera_preset, not both.");
     const target = (input.target as FrameOptions["target"]) ?? "face";
@@ -284,6 +307,14 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       const applied = ((set.applied as CameraApplied[] | undefined) ?? [])[0];
       if (applied && applied.before_known !== false && typeof applied.before === "number" && applied.before >= 0) presetBefore = Math.round(applied.before);
       await sleepMs(800);
+      // A camera preset carries its own roll, and another mod's presets can override the XF ones (session 3:
+      // Portrait Enhancer's presets 5-9 roll the camera 90 degrees). Level the camera unless asked not to.
+      if (input.keep_roll !== true) {
+        const levelled = await bridgeCall(context, "photo.camera.set", { roll: 0 });
+        const roll = ((levelled.applied as CameraApplied[] | undefined) ?? [])[0];
+        if (roll && roll.before_known !== false && typeof roll.before === "number") rollBefore = roll.before;
+        await sleepMs(300);
+      }
     }
     if (input.look_at !== undefined && input.look_at !== "keep") {
       const set = await bridgeCall(context, "photo.camera.set", { look_at: input.look_at === "off" ? 0 : 1 });
@@ -303,19 +334,46 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       ...(input.tolerance !== undefined ? { tolerance: input.tolerance as number } : {}),
     };
     const result = await frame(adapter, options);
-    if (lookAtBefore !== undefined || presetBefore !== undefined) {
+    if (lookAtBefore !== undefined || presetBefore !== undefined || rollBefore !== undefined) {
       result.undo = {
         method: "photo.camera.set",
-        params: { ...(presetBefore !== undefined ? { camera_preset: presetBefore } : {}), ...(result.undo?.params ?? {}), ...(lookAtBefore !== undefined ? { look_at: lookAtBefore } : {}) },
+        params: {
+          ...(presetBefore !== undefined ? { camera_preset: presetBefore } : {}),
+          ...(rollBefore !== undefined ? { roll: rollBefore } : {}),
+          ...(result.undo?.params ?? {}),
+          ...(lookAtBefore !== undefined ? { look_at: lookAtBefore } : {}),
+        },
       };
     }
+    if (rollBefore !== undefined && Math.abs(rollBefore) > 0.5) result.notes.unshift(`The camera preset rolled the camera ${Math.round(rollBefore)} degrees; it was levelled (keep_roll keeps it).`);
     return { value: preset !== undefined ? { ...result, camera_preset: preset } : result };
   } catch (error) {
-    if (error instanceof FramingError) throw planError(error.code, error.message);
+    if (error instanceof FramingError) {
+      // The steps taken so far go with the refusal (and into the command log), for diagnosis.
+      throw Object.assign(new Error(error.message), { plain: { code: error.code, message: error.message, ...(error.steps.length ? { detail: JSON.stringify({ steps: error.steps }) } : {}) } });
+    }
     throw error;
   } finally {
     if (hudUndo) await bridgeCall(context, "photo.hud.hide", hudUndo).catch(() => undefined);
   }
+}
+
+/** photo.light.set: place {camera: true} goes to the bridge as "camera" (the schema has no string-or-object). */
+export function lightParams(input: Record<string, unknown>): Record<string, unknown> {
+  const place = input.place as Record<string, unknown> | undefined;
+  if (!place) return input;
+  const given = ["camera", "world", "azimuth", "elevation", "distance"].filter((key) => place[key] !== undefined);
+  if (place.camera !== undefined && given.length > 1) throw planError("bad_input", "Give place.camera alone, or a position (azimuth, elevation, distance, or world).");
+  if (place.world !== undefined && given.length > 1) throw planError("bad_input", "Give place.world alone, or azimuth, elevation and distance.");
+  if (place.camera === false) throw planError("bad_input", "place.camera takes true (put the light where the camera is now).");
+  return place.camera === true ? { ...input, place: "camera" } : input;
+}
+
+/** game.load: exactly one of latest and name. */
+function loadParams(input: Record<string, unknown>): Record<string, unknown> {
+  if ((input.latest === true) === (input.name !== undefined)) throw planError("bad_input", "Give latest: true or a save's name (one of them).");
+  if (input.latest === false) throw planError("bad_input", "latest takes true (the most recent save); give a name instead to load another.");
+  return input;
 }
 
 /** cc.apply: exactly one of index and value (the schema can't say "one of", so the tools check it too). */
@@ -613,7 +671,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.light.set",
     title: "Adjust a photo-mode light",
     description:
-      "Selects photo-mode light 1, 2 or 3, switches it on or off, picks spot or ambient, and sets its brightness, range, cone angles and colour (hue 0-360, saturation, luminosity). Lights start off each time photo mode opens. The light can't be moved; to light V from another side, turn V (photo_frame with yaw_offset, look-at off).",
+      "Selects photo-mode light 1, 2 or 3, switches it on or off, sets its shadow, brightness, range, cone angles and colour (hue 0-360, saturation, luminosity), and can place it (place). Lights start off each time photo mode opens, and photo mode puts a light where the camera is when it switches on. place: {camera: true} switches it off and on so it moves to where the camera is now (after framing); {azimuth, elevation, distance} puts it about V's head and aims it at V (research: the result says whether photo mode kept it there); {world: [x, y, z]} is the undo's form. type (spot or ambient) is skipped with a note where the game's menu has no type row (game 2.31).",
     permission: "write-photo",
     input: obj(
       {
@@ -629,11 +687,21 @@ export const CATALOGUE: readonly CommandDef[] = [
         saturation: num("Colour saturation, 0 to 100.", 0, 100),
         luminosity: num("Colour luminosity, 0 to 100.", 0, 100),
         select_after: int("Select this light (1, 2 or 3) in the menu once the values are set; the undo uses it to put the menu's selection back.", 1, 3),
+        place: {
+          description: "Where to put the light: camera (where the camera is now), or about V's head (azimuth, elevation, distance, aimed at V), or a world position (world).",
+          ...obj({
+            camera: bool("true: switch the light off and on again so photo mode puts it where the camera is now."),
+            azimuth: num("Degrees around V from V's facing, counter-clockwise seen from above (90 = V's left). Default 0 (in front).", -180, 180),
+            elevation: num("Degrees above V's head level. Default 15.", -80, 80),
+            distance: num("Metres from V's head. Default 1.2.", 0.2, 10),
+            world: { type: "array", description: "A world position [x, y, z] in metres (the undo's form).", items: num("A coordinate.", -100000, 100000), minItems: 3, maxItems: 3 },
+          }),
+        },
       },
       ["light"],
     ),
-    undo: "the result's undo parameters restore that light's previous values (including on/off and type) and the menu's previous light selection.",
-    bridge: { method: "photo.light.set" },
+    undo: "the result's undo parameters restore that light's previous values (including on/off), its earlier position and the menu's previous light selection.",
+    bridge: { method: "photo.light.set", params: lightParams },
   },
   {
     name: "photo.hud.hide",
@@ -789,6 +857,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       },
       xf_preset: bool("First select the framing's XF camera preset (6 full body, 7 face, 8 eyes, 9 head and shoulders; needs the test profile's preset file), then fine-tune."),
       camera_preset: int("First select this photo-mode camera preset (0-9), then fine-tune.", 0, 9),
+      keep_roll: bool("Keep the camera preset's own roll. Default false: the camera is levelled (roll 0) after selecting a preset."),
       face_camera: bool("Turn V to face the camera first. Default true."),
       yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps.", -90, 90),
       look_at: oneOf("V's look-at before framing: keep (default), off (V's head follows the body, for light sweeps) or camera.", ["keep", "off", "camera"]),
@@ -796,7 +865,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       max_steps: int("Most correction steps (default 6).", 1, 12),
       tolerance: num("Allowed centring error as a fraction of the window height (default 0.01).", 0.001, 0.2),
     }),
-    undo: "the result's undo puts the field of view, V's rotation and placement (and look-at and camera preset) back as they were.",
+    undo: "the result's undo puts the field of view, V's rotation and placement (and look-at, roll and camera preset) back as they were.",
     local: runFrame,
   },
 
@@ -812,7 +881,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       timeout_ms: int("How long to wait for the screen, in milliseconds (default 5000).", 500, 15000),
     }),
     undo: "cc.back (or Back in the appearance screen) discards every change made there and closes it.",
-    bridge: { method: "cc.open" },
+    bridge: { method: "cc.open", timeoutMs: (input) => ((input.timeout_ms as number | undefined) ?? 5000) + 6000 },
   },
   {
     name: "cc.apply",
@@ -855,6 +924,37 @@ export const CATALOGUE: readonly CommandDef[] = [
     bridge: { method: "cc.confirm" },
   },
   {
+    name: "inventory.equip",
+    title: "Equip a clothing item on V",
+    description:
+      "Equips a clothing item on V by its item record (for example Items.Helmet_01_basic_01), as the inventory screen does, and waits until the slot shows it. With add_if_missing, an item V doesn't have is added to V's inventory first (and remembered, so inventory_unequip can remove it again). Clothing slots only (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit); only in normal play, not in combat or a scene. Needs the inventory permission, which the bridge's settings keep off until the maintainer allows it.",
+    permission: "write-inventory",
+    input: obj(
+      {
+        item: str("The item record, for example Items.Helmet_01_basic_01.", { pattern: "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", maxLength: 128 }),
+        slot: oneOf("The clothing slot, checked against the item's own (optional).", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet", "Outfit"]),
+        add_if_missing: bool("Add the item to V's inventory if V doesn't have it. Default false."),
+      },
+      ["item"],
+    ),
+    undo: "the result's undo equips the earlier item again, or empties the slot (removing an item the bridge added); loading a save also undoes it.",
+    bridge: { method: "inventory.equip", timeoutMs: () => 15000 },
+  },
+  {
+    name: "inventory.unequip",
+    title: "Take off a clothing item",
+    description:
+      "Takes off what V wears in one clothing slot (slot), or the given item (item), and waits until the slot is empty. remove_added also takes the item out of V's inventory, but only an item the bridge itself added this session. Needs the inventory permission.",
+    permission: "write-inventory",
+    input: obj({
+      slot: oneOf("The clothing slot to empty.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet", "Outfit"]),
+      item: str("The item record to take off (instead of slot).", { pattern: "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", maxLength: 128 }),
+      remove_added: bool("Also remove the item from V's inventory if the bridge added it (with item). Default false."),
+    }),
+    undo: "the result's undo equips the earlier item again.",
+    bridge: { method: "inventory.unequip", timeoutMs: () => 15000 },
+  },
+  {
     name: "cc.back",
     title: "Leave the appearance screen without keeping changes",
     description: "Presses Back on the open appearance screen and confirms it, discarding every change made there and closing the screen. Only in the XF test profile.",
@@ -862,6 +962,52 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj(),
     undo: "Nothing to undo: the changes made on the screen were discarded.",
     bridge: { method: "cc.back" },
+  },
+
+  // Saves
+  {
+    name: "game.save",
+    title: "Make a manual save",
+    description:
+      "Makes one new manual save, as the save menu's empty slot does, and waits for the game to confirm it (the game names it ManualSave-<n>; name is only a label for the logs). Never overwrites or deletes a save. Only from normal play. While the bridge's own changes are live it keeps saving locked, and this is refused unless override_lock is true: the save then keeps those changes, and the lock goes back on afterwards. Needs the save permission.",
+    permission: "write-save",
+    input: obj({
+      name: str("A label for the logs (letters, digits, spaces, '.', '_', '-').", { pattern: "^[A-Za-z0-9 ._-]{1,64}$", maxLength: 64 }),
+      override_lock: bool("Save even though the bridge's changes are live (they are kept in the save). Default false."),
+      timeout_ms: int("How long to wait for the game to confirm the save, in milliseconds (default 20000).", 2000, 60000),
+    }),
+    undo: "None: a save can't be unsaved. Delete it in the game's Load menu if it isn't wanted.",
+    bridge: { method: "game.save", timeoutMs: (input) => ((input.timeout_ms as number | undefined) ?? 20000) + 8000 },
+  },
+  {
+    name: "game.load",
+    title: "Load a save",
+    description:
+      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. Everything since that save is discarded, the bridge's save lock with it. From normal play or the pause menu, not photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.",
+    permission: "write-save",
+    input: obj({
+      latest: bool("true: load the most recent save of this playthrough."),
+      name: str("A save's name as the game lists it (for example ManualSave-12).", { pattern: "^[A-Za-z0-9 ._-]{1,64}$", maxLength: 64 }),
+    }),
+    undo: "None: loading discards everything since that save.",
+    bridge: { method: "game.load", params: loadParams, timeoutMs: () => 15000 },
+  },
+
+  // The player's view
+  {
+    name: "ui.message",
+    title: "Show a message in the game",
+    description:
+      "Shows a short message to the player under the bridge's status label in the top-left corner of the game (drawn by the bridge's Cyber Engine Tweaks layer, so the player never has to leave the game): one line of up to 200 characters, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest. level colours it: info, ask (something for the player to do), warn or done. clear: true removes them all. The kill switch clears them too.",
+    permission: "notify",
+    input: obj({
+      text: str("The message: one short line (at most 200 characters are shown).", { minLength: 1, maxLength: 500 }),
+      seconds: int("How long it shows, 1 to 600 seconds. Default 8.", 1, 600),
+      level: oneOf("info (default), ask, warn or done.", ["info", "ask", "warn", "done"]),
+      clear: bool("Remove every message first (alone: only that)."),
+    }),
+    undo: "ui.message with clear: true; messages also fade by themselves.",
+    bridge: { method: "ui.message" },
   },
 
   // World

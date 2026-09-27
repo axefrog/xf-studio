@@ -1,7 +1,8 @@
 -- XF Runtime Bridge: CET (Cyber Engine Tweaks) layer.
 --
 -- Proves: CET events, per-mod logging, calls into the RED4ext natives (Game.XFBridge_*) and into
--- the redscript layer, a kill-switch hotkey, and a small always-visible status indicator.
+-- the redscript layer, a kill-switch hotkey, and a small always-visible status indicator with the
+-- coordinator's messages under it (ui.message, bridge 0.4).
 -- CET has no networking (its sandbox exposes no sockets or HTTP), so the external bridge lives
 -- in the RED4ext plugin; this layer only reports to it and shows its state.
 --
@@ -14,6 +15,16 @@ local MOD = "xf_runtime_bridge"
 local REFRESH_SECONDS = 2.0
 local PENDING_REFRESH_SECONDS = 0.5
 local OPTIONS_POLL_SECONDS = 0.25
+local MESSAGES_POLL_SECONDS = 0.25
+-- The message lines wrap at this width (pixels), so they stay in the top-left corner, clear of the
+-- centre of the screen where every framing and capture region sits.
+local MESSAGE_WRAP_PX = 520
+local MESSAGE_COLORS = {
+  info = { 0.92, 0.92, 0.92, 1.0 },
+  ask = { 1.0, 0.82, 0.3, 1.0 },
+  warn = { 1.0, 0.45, 0.4, 1.0 },
+  done = { 0.45, 0.95, 0.55, 1.0 },
+}
 -- The plugin refuses a value longer than this, and an answer larger than its 64 KiB limit
 -- (core/OptionsExchange.hpp); such values are left out and named under "skipped" instead (RB-47).
 local MAX_OPTION_VALUE_CHARS = 256
@@ -32,6 +43,8 @@ local state = {
   info = nil,          -- decoded XFBridge_Info()
   sinceRefresh = 0,
   sinceOptionsPoll = 0,
+  sinceMessagesPoll = 0,
+  messages = {},   -- ui.message lines: { {text, level}, ... }, oldest first (XFBridge_Messages)
   overlayOpen = false,
   cidCounter = 0,
   lastError = nil,
@@ -161,6 +174,30 @@ local function answerOptions()
     found, #request.names, #skipped, tostring(sent and stored)))
 end
 
+-- ui.message: the lines the plugin holds (XFBridge_Messages answers {"messages":[{text, level, ...}]} or "").
+-- A killed bridge answers none. Read-only; polled four times a second while the bridge is on.
+local function pollMessages()
+  local bridge = state.info and state.info.bridge
+  if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then
+    state.messages = {}
+    return
+  end
+  local ok, text = pcall(function() return Game.XFBridge_Messages() end)
+  if not ok or type(text) ~= "string" or text == "" then
+    state.messages = {}
+    return
+  end
+  local decoded, answer = pcall(json.decode, text)
+  if not decoded or type(answer) ~= "table" or type(answer.messages) ~= "table" then return end
+  local lines = {}
+  for _, message in ipairs(answer.messages) do
+    if type(message) == "table" and type(message.text) == "string" then
+      table.insert(lines, { text = message.text, level = MESSAGE_COLORS[message.level] and message.level or "info" })
+    end
+  end
+  state.messages = lines
+end
+
 -- The panel's actions, run from onUpdate. Each asks the plugin, then shows its answer in plain words.
 local function decodeAnswer(ok, text)
   if not ok or type(text) ~= "string" then return nil end
@@ -237,6 +274,11 @@ registerForEvent("onUpdate", function(deltaTime)
     state.sinceOptionsPoll = 0
     answerOptions()
   end
+  state.sinceMessagesPoll = state.sinceMessagesPoll + deltaTime
+  if state.sinceMessagesPoll >= MESSAGES_POLL_SECONDS then
+    state.sinceMessagesPoll = 0
+    pollMessages()
+  end
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -297,6 +339,17 @@ registerForEvent("onDraw", function()
       ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoSavedSettings, ImGuiWindowFlags.NoFocusOnAppearing)
     if ImGui.Begin("XF Runtime Bridge##indicator", flags) then
       ImGui.TextColored(color[1], color[2], color[3], color[4], "XF bridge: " .. text)
+      -- The coordinator's messages (ui.message), one wrapped line each, under the status.
+      if #state.messages > 0 then
+        ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)
+        for _, message in ipairs(state.messages) do
+          local c = MESSAGE_COLORS[message.level] or MESSAGE_COLORS.info
+          ImGui.PushStyleColor(ImGuiCol.Text, c[1], c[2], c[3], c[4])
+          ImGui.TextWrapped(message.text)
+          ImGui.PopStyleColor(1)
+        end
+        ImGui.PopTextWrapPos()
+      end
     end
     ImGui.End()
   end
@@ -327,7 +380,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.3.0",
+  version = "0.4.0",
   -- For other CET mods: GetMod("xf_runtime_bridge").info()
   info = function() return state.info end,
 }

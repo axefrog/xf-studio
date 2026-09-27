@@ -160,6 +160,170 @@ void AddOption(std::vector<Attribute>& aOut, const json& aParams, const char* aN
 }
 } // namespace
 
+namespace
+{
+// A TweakDB record name: letters, digits, '_' and '.', 3 to 128 characters, at least one dot.
+bool RecordNameOk(const std::string& aName)
+{
+    if (aName.size() < 3 || aName.size() > 128 || aName.find('.') == std::string::npos || aName.front() == '.' || aName.back() == '.')
+    {
+        return false;
+    }
+    return std::all_of(aName.begin(), aName.end(), [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+    });
+}
+
+// A save name or label: letters, digits, spaces, '.', '_' and '-', 1 to 64 characters.
+bool SaveNameOk(const std::string& aName)
+{
+    return !aName.empty() && aName.size() <= 64 && std::all_of(aName.begin(), aName.end(), [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '.' || c == '_' || c == '-';
+    });
+}
+
+std::string Slot(const json& aParams)
+{
+    const auto slot = Text(aParams, "slot", 32);
+    if (!slot)
+    {
+        return {};
+    }
+    const auto slots = ClothingSlots();
+    if (std::find(slots.begin(), slots.end(), *slot) == slots.end())
+    {
+        Bad("'slot' must be one of Head, Face, OuterChest, InnerChest, Legs, Feet or Outfit");
+    }
+    return *slot;
+}
+
+std::string ItemName(const json& aParams)
+{
+    const auto item = Text(aParams, "item", 128);
+    if (!item)
+    {
+        return {};
+    }
+    if (!RecordNameOk(*item))
+    {
+        Bad("'item' must be an item record name such as Items.Helmet_01_basic_01");
+    }
+    return *item;
+}
+} // namespace
+
+MessageRequest ParseMessage(const json& aParams)
+{
+    RequireOnly(aParams, {"text", "seconds", "level", "clear"});
+    MessageRequest request;
+    const auto it = aParams.find("text");
+    if (it != aParams.end() && !it->is_null())
+    {
+        if (!it->is_string())
+        {
+            Bad("'text' must be text");
+        }
+        request.text = it->get<std::string>();
+        if (request.text.empty() || request.text.size() > 500)
+        {
+            Bad("'text' must be 1 to 500 characters");
+        }
+    }
+    request.seconds = static_cast<int32_t>(Integer(aParams, "seconds", 1, MessageBoard::kMaxSeconds).value_or(8));
+    if (const auto level = Text(aParams, "level", 8))
+    {
+        if (*level != "info" && *level != "ask" && *level != "warn" && *level != "done")
+        {
+            Bad("'level' must be info, ask, warn or done");
+        }
+        request.level = *level;
+    }
+    request.clear = Boolean(aParams, "clear").value_or(false);
+    if (request.text.empty() && !request.clear)
+    {
+        Bad("give text (the message) or clear: true");
+    }
+    if (!request.text.empty() && CleanMessageText(request.text, MessageBoard::kMaxChars).empty())
+    {
+        Bad("'text' has nothing to show (only spaces or control characters)");
+    }
+    return request;
+}
+
+std::vector<std::string> ClothingSlots()
+{
+    return {"Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet", "Outfit"};
+}
+
+InventoryEquipRequest ParseInventoryEquip(const json& aParams)
+{
+    RequireOnly(aParams, {"item", "slot", "add_if_missing"});
+    InventoryEquipRequest request;
+    request.item = ItemName(aParams);
+    if (request.item.empty())
+    {
+        Bad("'item' is required (an item record name such as Items.Helmet_01_basic_01)");
+    }
+    request.slot = Slot(aParams);
+    request.addIfMissing = Boolean(aParams, "add_if_missing").value_or(false);
+    return request;
+}
+
+InventoryUnequipRequest ParseInventoryUnequip(const json& aParams)
+{
+    RequireOnly(aParams, {"item", "slot", "remove_added"});
+    InventoryUnequipRequest request;
+    request.item = ItemName(aParams);
+    request.slot = Slot(aParams);
+    if (request.item.empty() == request.slot.empty())
+    {
+        Bad("give slot or item (one of them)");
+    }
+    request.removeAdded = Boolean(aParams, "remove_added").value_or(false);
+    if (request.removeAdded && request.item.empty())
+    {
+        Bad("'remove_added' needs item (only an item the bridge added can be removed)");
+    }
+    return request;
+}
+
+GameSaveRequest ParseGameSave(const json& aParams)
+{
+    RequireOnly(aParams, {"name", "override_lock", "timeout_ms"});
+    GameSaveRequest request;
+    if (const auto name = Text(aParams, "name", 64))
+    {
+        if (!SaveNameOk(*name))
+        {
+            Bad("'name' may use letters, digits, spaces, '.', '_' and '-' only");
+        }
+        request.name = *name;
+    }
+    request.overrideLock = Boolean(aParams, "override_lock").value_or(false);
+    request.timeoutMs = static_cast<int32_t>(Integer(aParams, "timeout_ms", 2000, 60000).value_or(20000));
+    return request;
+}
+
+GameLoadRequest ParseGameLoad(const json& aParams)
+{
+    RequireOnly(aParams, {"latest", "name"});
+    GameLoadRequest request;
+    request.latest = Boolean(aParams, "latest").value_or(false);
+    if (const auto name = Text(aParams, "name", 64))
+    {
+        if (!SaveNameOk(*name))
+        {
+            Bad("'name' may use letters, digits, spaces, '.', '_' and '-' only");
+        }
+        request.name = *name;
+    }
+    if (request.latest == !request.name.empty())
+    {
+        Bad("give latest: true or a save's name (one of them)");
+    }
+    return request;
+}
+
 void RequireOnly(const json& aParams, std::initializer_list<const char*> aKnown)
 {
     if (!aParams.is_object())
@@ -282,11 +446,81 @@ std::vector<int32_t> CameraKeys()
             key::kSubjectYaw,  key::kSubjectLeftRight, key::kSubjectNearFar, key::kSubjectUpDown};
 }
 
+namespace
+{
+LightPlacement ParsePlacement(const json& aValue)
+{
+    LightPlacement place;
+    if (aValue.is_string())
+    {
+        if (aValue.get<std::string>() != "camera")
+        {
+            Bad("'place' must be \"camera\", {azimuth, elevation, distance} or {world: [x, y, z]}");
+        }
+        place.kind = LightPlacement::Kind::Camera;
+        return place;
+    }
+    if (!aValue.is_object())
+    {
+        Bad("'place' must be \"camera\", {azimuth, elevation, distance} or {world: [x, y, z]}");
+    }
+    if (aValue.contains("camera"))
+    {
+        RequireOnly(aValue, {"camera"});
+        if (aValue["camera"] != true)
+        {
+            Bad("'place.camera' must be true");
+        }
+        place.kind = LightPlacement::Kind::Camera;
+        return place;
+    }
+    if (aValue.contains("world"))
+    {
+        RequireOnly(aValue, {"world"});
+        const auto& world = aValue["world"];
+        if (!world.is_array() || world.size() != 3)
+        {
+            Bad("'place.world' must be [x, y, z]");
+        }
+        for (size_t i = 0; i < 3; ++i)
+        {
+            if (!world[i].is_number() || !std::isfinite(world[i].get<double>()) || std::abs(world[i].get<double>()) > 100000.0)
+            {
+                Bad("'place.world' must hold three numbers (world metres)");
+            }
+            place.world[i] = world[i].get<float>();
+        }
+        place.kind = LightPlacement::Kind::World;
+        return place;
+    }
+    RequireOnly(aValue, {"azimuth", "elevation", "distance"});
+    place.kind = LightPlacement::Kind::Around;
+    place.azimuth = static_cast<float>(Number(aValue, "azimuth", -180, 180).value_or(0.0));
+    place.elevation = static_cast<float>(Number(aValue, "elevation", -80, 80).value_or(15.0));
+    place.distance = static_cast<float>(Number(aValue, "distance", 0.2, 10).value_or(1.2));
+    return place;
+}
+} // namespace
+
+json PlacementJson(const LightPlacement& aPlacement)
+{
+    switch (aPlacement.kind)
+    {
+    case LightPlacement::Kind::Camera:
+        return "camera";
+    case LightPlacement::Kind::World:
+        return json{{"world", {aPlacement.world[0], aPlacement.world[1], aPlacement.world[2]}}};
+    case LightPlacement::Kind::Around:
+        break;
+    }
+    return json{{"azimuth", aPlacement.azimuth}, {"elevation", aPlacement.elevation}, {"distance", aPlacement.distance}};
+}
+
 LightRequest ParseLight(const json& aParams)
 {
     RequireOnly(aParams,
                 {"light", "on", "type", "shadow", "brightness", "range", "inner_angle", "outer_angle", "hue",
-                 "saturation", "luminosity", "select_after"});
+                 "saturation", "luminosity", "select_after", "place"});
     LightRequest request;
     request.light = static_cast<int32_t>(Integer(aParams, "light", 1, 3).value_or(1));
     request.selectAfter = static_cast<int32_t>(Integer(aParams, "select_after", 1, 3).value_or(0));
@@ -308,10 +542,14 @@ LightRequest ParseLight(const json& aParams)
     Add(request.attributes, aParams, "hue", key::kLightHue, 0, 360);
     Add(request.attributes, aParams, "saturation", key::kLightSaturation, 0, 100);
     Add(request.attributes, aParams, "luminosity", key::kLightLuminosity, 0, 100);
-    if (request.attributes.empty())
+    if (const auto it = aParams.find("place"); it != aParams.end() && !it->is_null())
+    {
+        request.place = ParsePlacement(*it);
+    }
+    if (request.attributes.empty() && !request.place)
     {
         Bad("give at least one light setting: on, type, shadow, brightness, range, inner_angle, outer_angle, hue, "
-            "saturation or luminosity");
+            "saturation, luminosity or place");
     }
     return request;
 }

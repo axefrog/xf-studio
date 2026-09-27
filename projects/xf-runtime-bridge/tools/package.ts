@@ -5,6 +5,8 @@
 //                                      dist/xf-runtime-bridge-<version>-diagnostic.zip  (bridge on, read-only)
 //                                      dist/xf-runtime-bridge-<version>-writes.zip      (bridge on, writes allowed;
 //                                                                                        the XF test profile only)
+//   bun tools/package.ts --allow-inventory   the same, with the inventory write class in the -writes zip (only after
+//                                            the maintainer approves writes to V's inventory)
 //
 // What each package holds is tools/packaging.ts (tested by tools/test/package.test.ts). This file adds
 // the provenance gate and the zips: it refuses to package unless the project tree is clean and the DLL
@@ -54,9 +56,13 @@ if (builtDirty !== "0" || builtCommit !== head) {
   process.exit(3);
 }
 
+// --allow-inventory: the -writes package also allows the inventory write class (inventory.equip/unequip).
+// Only once the maintainer has approved writes to V's inventory; the manifest records it (inventory_writes).
+const allowInventory = process.argv.includes("--allow-inventory");
+
 function build(variant: Variant) {
   const stageDir = join(projectDir, "dist", "stage", variant);
-  const manifest = stageVariant({ projectDir, variant, dll, stageDir, version: version!, commit: builtCommit });
+  const manifest = stageVariant({ projectDir, variant, dll, stageDir, version: version!, commit: builtCommit, allowInventory });
   const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${SUFFIX[variant]}.zip`);
   rmSync(zip, { force: true });
   // Windows' own bsdtar (not Git's GNU tar) writes a zip when the name ends in .zip and -a is given.

@@ -132,10 +132,18 @@ Config ParseConfig(const std::string& aText)
                 {
                     config.writeClasses |= kWriteCharacter;
                 }
+                else if (name == "inventory")
+                {
+                    config.writeClasses |= kWriteInventory;
+                }
+                else if (name == "save")
+                {
+                    config.writeClasses |= kWriteSave;
+                }
                 else if (!name.empty())
                 {
                     config.warnings.push_back("line " + std::to_string(lineNumber) + ": unknown write class '" +
-                                              name.substr(0, 32) + "' ignored (photo, world, character)");
+                                              name.substr(0, 32) + "' ignored (photo, world, character, inventory, save)");
                 }
             }
         }
@@ -230,6 +238,14 @@ std::vector<std::string> WriteClassList(const Config& aConfig)
     if (aConfig.writeClasses & kWriteCharacter)
     {
         out.emplace_back("character");
+    }
+    if (aConfig.writeClasses & kWriteInventory)
+    {
+        out.emplace_back("inventory");
+    }
+    if (aConfig.writeClasses & kWriteSave)
+    {
+        out.emplace_back("save");
     }
     return out;
 }

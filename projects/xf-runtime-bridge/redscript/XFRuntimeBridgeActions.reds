@@ -82,6 +82,21 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // so a cc.open that timed out can tell "nothing will open" from "the screen may still open" (RB-42).
   private let m_ccOpenOutcome: String;
   private let m_ccOpenOutcomeCid: String;
+  // The appearance screen's changes (session 3's busy flag): how many real changes the screen made since
+  // it opened, when the last one started (engine time; 0 when none is pending) and when the bridge first
+  // saw the busy flag set without a pending change it knows of.
+  private let m_ccChanges: Int32;
+  private let m_ccPendingSince: Float;
+  private let m_ccBusySeenAt: Float;
+  // inventory.equip: items the bridge itself added to V's inventory this session (only these may be removed again).
+  private let m_addedItems: array<ItemID>;
+  // game.save: the last manual save's state ("none", "pending", "saved", "failed"), and whether the
+  // bridge's save lock goes back on once it finishes (a save with override_lock).
+  private let m_saveState: String;
+  private let m_relockAfterSave: Bool;
+  // game.load by name: the save list the game answered with (OnSavesForLoadReady).
+  private let m_saves: array<String>;
+  private let m_savesReady: Bool;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -274,6 +289,124 @@ public class XFBridgeRegistry extends ScriptableSystem {
     return was;
   }
 
+  // The appearance screen's changes ------------------------------------------------------------
+
+  public func NoteCreatorOpened() -> Void {
+    this.m_ccChanges = 0;
+    this.m_ccPendingSince = 0.0;
+    this.m_ccBusySeenAt = 0.0;
+  }
+
+  public func NoteCreatorChange(now: Float) -> Void {
+    this.m_ccChanges += 1;
+    this.m_ccPendingSince = MaxF(now, 0.001);
+    this.m_ccBusySeenAt = 0.0;
+  }
+
+  public func NoteCreatorChangeDone() -> Void {
+    this.m_ccPendingSince = 0.0;
+    this.m_ccBusySeenAt = 0.0;
+  }
+
+  public func CreatorChanges() -> Int32 {
+    return this.m_ccChanges;
+  }
+
+  public func CreatorPendingSince() -> Float {
+    return this.m_ccPendingSince;
+  }
+
+  // Engine time the busy flag was first seen with no pending change (set on the first call).
+  public func CreatorBusySeenAt(now: Float) -> Float {
+    if this.m_ccBusySeenAt <= 0.0 {
+      this.m_ccBusySeenAt = MaxF(now, 0.001);
+    }
+    return this.m_ccBusySeenAt;
+  }
+
+  // Inventory ----------------------------------------------------------------------------------
+
+  public func NoteAddedItem(id: ItemID) -> Void {
+    if !ArrayContains(this.m_addedItems, id) {
+      ArrayPush(this.m_addedItems, id);
+    }
+  }
+
+  public func WasAddedByBridge(id: ItemID) -> Bool {
+    return ArrayContains(this.m_addedItems, id);
+  }
+
+  public func ForgetAddedItem(id: ItemID) -> Void {
+    ArrayRemove(this.m_addedItems, id);
+  }
+
+  // Saves --------------------------------------------------------------------------------------
+
+  public func SetSaveState(state: String) -> Void {
+    this.m_saveState = state;
+  }
+
+  public func SaveState() -> String {
+    if StrLen(this.m_saveState) == 0 {
+      return "none";
+    }
+    return this.m_saveState;
+  }
+
+  public func SetRelockAfterSave(relock: Bool) -> Void {
+    this.m_relockAfterSave = relock;
+  }
+
+  public func RelockAfterSave() -> Bool {
+    return this.m_relockAfterSave;
+  }
+
+  // The game answers ManualSave through this callback (registered by XFGame.Save; the same callback
+  // the pause menu's quick save uses, pauseMenu.script:65, 185).
+  protected cb func OnXFBridgeSavingComplete(success: Bool, locks: array<gameSaveLock>) -> Bool {
+    let handler = new inkMenuScenario().GetSystemRequestsHandler();
+    if IsDefined(handler) {
+      handler.UnregisterFromCallback(n"OnSavingComplete", this, n"OnXFBridgeSavingComplete");
+    }
+    if success {
+      this.m_saveState = "saved";
+    } else {
+      this.m_saveState = "failed";
+    }
+    XFBridgeLog.Info("game-save", "manual save finished: success=" + XFJson.Flag(success) + " locks=" + IntToString(ArraySize(locks)));
+    if this.m_relockAfterSave {
+      this.m_relockAfterSave = false;
+      SaveLocksManager.RequestSaveLockAdd(GetGameInstance(), n"XFRuntimeBridge");
+      this.m_saveLockHeld = true;
+      XFBridgeLog.Info("game-save", "save lock taken again after the save (reason XFRuntimeBridge)");
+    }
+    return true;
+  }
+
+  // The game answers RequestSavesForLoad through this callback (loadGameMenu.script:109, 381).
+  protected cb func OnXFBridgeSavesReady(saves: array<String>) -> Bool {
+    let handler = new inkMenuScenario().GetSystemRequestsHandler();
+    if IsDefined(handler) {
+      handler.UnregisterFromCallback(n"OnSavesForLoadReady", this, n"OnXFBridgeSavesReady");
+    }
+    this.m_saves = saves;
+    this.m_savesReady = true;
+    return true;
+  }
+
+  public func ClearSaves() -> Void {
+    ArrayClear(this.m_saves);
+    this.m_savesReady = false;
+  }
+
+  public func SavesReady() -> Bool {
+    return this.m_savesReady;
+  }
+
+  public func Saves() -> array<String> {
+    return this.m_saves;
+  }
+
   // Safety state -------------------------------------------------------------------------------
 
   public func SetSaveLockHeld(held: Bool) -> Void {
@@ -389,6 +522,26 @@ public func XFBridgeSetUiVisible(visible: Bool) -> Void {
   }
 }
 
+// A photo-mode light's entity (index 0-2): the light indicator keeps one screen projection per light,
+// and each projection names the entity it follows (photoModeLightIndicatorController.script:18-66;
+// inkScreenProjection.GetEntity). The lights are gamePhotomodeLightObject entities, game objects
+// (RED4ext.SDK game/PhotomodeLightObject.hpp). Null when the indicator or the projection isn't there.
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeLightEntity(index: Int32) -> ref<Entity> {
+  if !inkWidgetRef.IsValid(this.m_lightIndicator) {
+    return null;
+  }
+  let indicator = inkWidgetRef.GetController(this.m_lightIndicator) as PhotomodeLightIndicatorController;
+  if !IsDefined(indicator) {
+    return null;
+  }
+  let projection = indicator.GetProjection(index);
+  if !IsDefined(projection) {
+    return null;
+  }
+  return projection.GetEntity();
+}
+
 // V's photo-mode stand-in as the controller knows it (native-set; no script assigns it).
 @addMethod(gameuiPhotoModeMenuController)
 public func XFBridgeFakePlayer() -> wref<PlayerPuppet> {
@@ -441,6 +594,67 @@ protected cb func OnInitialize() -> Bool {
   if IsDefined(registry) {
     registry.SetCharacterMenu(this);
     registry.CancelCreatorOpen();
+    registry.NoteCreatorOpened();
+  }
+  return result;
+}
+
+// A row's change (its arrows, or cc.apply through the row) sets the menu's busy flag to SWAPPING, which
+// only the system's OnAppearanceAppliedEvent clears (characterCreationBodyMorphMenu.script:309-313,
+// 473-483). Selecting the value a row already shows applies nothing, so that event never comes and the
+// flag stays set for good: Confirm, presets and every later cc.apply are refused. Session 3 hit this
+// with a skin-type re-apply (0 -> 0; plugin log 04:14:44). So a change to the same value puts the flag
+// back, and a real change is noted (with its start time) for cc.confirm and the stale-busy check.
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnSliderChange(widget: wref<inkWidget>) -> Bool {
+  let row = widget.GetController() as characterCreationBodyMorphOption;
+  let same = false;
+  if IsDefined(row) {
+    let option = row.GetSelectorOption();
+    same = IsDefined(option) && option.currIndex == row.GetSelectorIndex();
+  }
+  let wasAvailable = Equals(this.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE);
+  let result = wrappedMethod(widget);
+  if same && wasAvailable {
+    this.m_busySwitchingAppearance = BusySwitchingReason.AVAILABLE;
+  } else {
+    if !same {
+      let registry = XFBridgeRegistry.Get();
+      if IsDefined(registry) {
+        registry.NoteCreatorChange(EngineTime.ToFloat(GameInstance.GetEngineTime(GetGameInstance())));
+      }
+    }
+  }
+  return result;
+}
+
+// A colour row's change (no busy flag; characterCreationBodyMorphMenu.script:821-830) counts as a change.
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnColorChange(widget: wref<inkWidget>) -> Bool {
+  let row = widget.GetController() as characterCreationBodyMorphColorOption;
+  let same = false;
+  if IsDefined(row) {
+    let option = row.GetColorPickerOption();
+    same = IsDefined(option) && option.currIndex == row.GetColorIndex();
+  }
+  let result = wrappedMethod(widget);
+  if !same {
+    let registry = XFBridgeRegistry.Get();
+    if IsDefined(registry) {
+      registry.NoteCreatorChange(EngineTime.ToFloat(GameInstance.GetEngineTime(GetGameInstance())));
+      registry.NoteCreatorChangeDone();
+    }
+  }
+  return result;
+}
+
+// The game's own completion signal for a row's change: the busy flag clears here.
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnAppearanceAppliedEvent(evt: ref<gameuiCharacterCustomizationSystem_OnAppearanceAppliedEvent>) -> Bool {
+  let result = wrappedMethod(evt);
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) && Equals(this.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+    registry.NoteCreatorChangeDone();
   }
   return result;
 }
@@ -594,6 +808,7 @@ public abstract class XFBridgeActions {
         out += ",\"photo_controller_seen\":" + XFJson.Flag(IsDefined(registry.GetPhotoController()));
         out += ",\"photo_ui_hidden\":" + XFJson.Flag(registry.IsPhotoUiHidden());
         out += ",\"cursor_hidden\":" + XFJson.Flag(registry.IsCursorHidden());
+        out += ",\"save_state\":" + XFJson.Str(registry.SaveState());
       }
     }
     XFBridgeLog.Debug(cid, "Status phase=" + phase);
@@ -923,6 +1138,107 @@ public abstract class XFPhoto {
     let cursorAfter = registry.IsCursorHidden();
     XFBridgeLog.Info(cid, "photo UI visible " + XFJson.Flag(before) + " -> " + XFJson.Flag(visible) + ", cursor hidden " + XFJson.Flag(cursorBefore) + " -> " + XFJson.Flag(cursorAfter) + "; undo: photo.hud.hide with hidden=" + XFJson.Flag(!before));
     return "{\"ok\":true,\"hidden\":" + XFJson.Flag(!visible) + ",\"was_hidden\":" + XFJson.Flag(!before) + ",\"cursor_hidden\":" + XFJson.Flag(cursorAfter) + ",\"was_cursor_hidden\":" + XFJson.Flag(cursorBefore) + ",\"cursor_controllers\":" + IntToString(registry.CursorControllers()) + "}";
+  }
+
+  // --- Photo-mode light placement (photo.light.set place) -------------------------------------
+  //
+  // Photo mode places a light where the camera is when the light is switched on, and no menu value moves
+  // it (session 3; knowledge/photo-mode-lights.md). The placement route here moves the light's own
+  // entity with the teleportation facility, as CharLi moves its spawned lights about V; whether photo
+  // mode keeps a moved light there is what LightPosition reads back a few frames later.
+
+  public static func LightEntity(light: Int32) -> ref<GameObject> {
+    let controller = XFPhoto.Controller();
+    if !IsDefined(controller) || light < 1 || light > 3 {
+      return null;
+    }
+    return controller.XFBridgeLightEntity(light - 1) as GameObject;
+  }
+
+  // Where V's head is (the stand-in's Head slot) and which way V faces, for placing lights about V.
+  public static func HeadAndFacing(out head: Vector4, out facing: Vector4) -> Bool {
+    let registry = XFBridgeRegistry.Get();
+    let controller = XFPhoto.Controller();
+    let puppet: wref<GameObject>;
+    if IsDefined(registry) {
+      puppet = registry.GetPhotoPuppet();
+    }
+    if !IsDefined(puppet) && IsDefined(controller) {
+      puppet = controller.XFBridgeFakePlayer();
+    }
+    if !IsDefined(puppet) {
+      return false;
+    }
+    let slotTransform: WorldTransform;
+    let scripted = puppet as ScriptedPuppet;
+    let found = false;
+    if IsDefined(scripted) {
+      let slots = scripted.GetSlotComponent();
+      if IsDefined(slots) && slots.GetSlotTransform(n"Head", slotTransform) {
+        head = WorldPosition.ToVector4(WorldTransform.GetWorldPosition(slotTransform));
+        found = true;
+      }
+    }
+    if !found {
+      head = puppet.GetWorldPosition();
+      head.Z += 1.62;
+    }
+    facing = puppet.GetWorldForward();
+    return true;
+  }
+
+  public static func LightPosition(cid: String, light: Int32) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let entity = XFPhoto.LightEntity(light);
+    if !IsDefined(entity) {
+      return XFJson.Fail("unavailable", "photo mode's light " + IntToString(light) + " entity wasn't found (the light indicator has no projection for it)");
+    }
+    return "{\"ok\":true,\"light\":" + IntToString(light) + ",\"position\":" + XFPhoto.Vec(entity.GetWorldPosition()) + ",\"forward\":" + XFPhoto.Vec(entity.GetWorldForward()) + "}";
+  }
+
+  // mode 1: about V's head: azimuth (degrees from V's facing, counter-clockwise seen from above, so 90 is
+  // V's left), elevation (degrees above level) and distance (metres); mode 2: the world position (a, b, c).
+  // The light is turned to point at V's head in both.
+  public static func PlaceLight(cid: String, light: Int32, mode: Int32, a: Float, b: Float, c: Float) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let entity = XFPhoto.LightEntity(light);
+    if !IsDefined(entity) {
+      return XFJson.Fail("unavailable", "photo mode's light " + IntToString(light) + " entity wasn't found (the light indicator has no projection for it)");
+    }
+    let head: Vector4;
+    let facing: Vector4;
+    if !XFPhoto.HeadAndFacing(head, facing) {
+      return XFJson.Fail("unavailable", "V's photo-mode stand-in hasn't been seen yet; close and reopen photo mode");
+    }
+    let target: Vector4;
+    if mode == 2 {
+      target = new Vector4(a, b, c, 1.0);
+    } else {
+      let az = Deg2Rad(a);
+      let el = Deg2Rad(b);
+      let fx = facing.X * CosF(az) - facing.Y * SinF(az);
+      let fy = facing.X * SinF(az) + facing.Y * CosF(az);
+      let n = SqrtF(fx * fx + fy * fy);
+      if n < 0.0001 {
+        return XFJson.Fail("unavailable", "V's facing couldn't be read");
+      }
+      target = new Vector4(head.X + c * CosF(el) * fx / n, head.Y + c * CosF(el) * fy / n, head.Z + c * SinF(el), 1.0);
+    }
+    let aim = new Vector4(head.X - target.X, head.Y - target.Y, head.Z - target.Z, 0.0);
+    let aimLength = SqrtF(aim.X * aim.X + aim.Y * aim.Y + aim.Z * aim.Z);
+    if aimLength < 0.05 {
+      return XFJson.Fail("bad_params", "the light would sit inside V's head; give a distance of at least 0.05 m");
+    }
+    let angles = Quaternion.ToEulerAngles(Quaternion.BuildFromDirectionVector(new Vector4(aim.X / aimLength, aim.Y / aimLength, aim.Z / aimLength, 0.0), new Vector4(0.0, 0.0, 1.0, 0.0)));
+    let before = entity.GetWorldPosition();
+    XFBridgeActions.EnsureSaveLock(cid);
+    GameInstance.GetTeleportationFacility(GetGameInstance()).Teleport(entity, target, angles);
+    XFBridgeLog.Info(cid, "photo light " + IntToString(light) + " moved from " + XFPhoto.Vec(before) + " to " + XFPhoto.Vec(target) + " aimed at V's head; undo: place it back at the earlier position");
+    return "{\"ok\":true,\"light\":" + IntToString(light) + ",\"before\":" + XFPhoto.Vec(before) + ",\"after\":" + XFPhoto.Vec(target) + ",\"head\":" + XFPhoto.Vec(head) + ",\"distance\":" + XFJson.Num(aimLength) + "}";
   }
 
   // --- Subject and camera, for framing (photo.subject) ---------------------------------------
@@ -1454,7 +1770,13 @@ public abstract class XFCharacter {
         name = "Ripperdoc";
       }
     }
-    return "{\"seen\":true,\"updating_finalized_state\":" + XFJson.Flag(menu.m_updatingFinalizedState) + ",\"edit_mode\":" + XFJson.Str(name) + ",\"busy\":" + XFJson.Flag(NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE)) + "}";
+    let changes = 0;
+    let pending = false;
+    if IsDefined(registry) {
+      changes = registry.CreatorChanges();
+      pending = registry.CreatorPendingSince() > 0.0;
+    }
+    return "{\"seen\":true,\"updating_finalized_state\":" + XFJson.Flag(menu.m_updatingFinalizedState) + ",\"edit_mode\":" + XFJson.Str(name) + ",\"busy\":" + XFJson.Flag(NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE)) + ",\"change_pending\":" + XFJson.Flag(pending) + ",\"changes\":" + IntToString(changes) + "}";
   }
 
   // Leaves the appearance screen through the menu's own functions (characterCreationBodyMorphMenu
@@ -1465,19 +1787,60 @@ public abstract class XFCharacter {
     if !XFBridgeActions.CharacterMenuOpen() {
       return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open in its edit-V's-look mode");
     }
-    let menu = XFBridgeRegistry.Get().GetCharacterMenu();
-    if NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+    let registry = XFBridgeRegistry.Get();
+    let menu = registry.GetCharacterMenu();
+    let changes = registry.CreatorChanges();
+    // Nothing changed on the screen: there is nothing to confirm, so Confirm's ReFinalizeState isn't needed
+    // (and a stuck busy flag can't block leaving). The screen closes through Back, which discards nothing.
+    if keep && changes == 0 {
+      menu.m_busySwitchingAppearance = BusySwitchingReason.AVAILABLE;
+      menu.ConfirmBackConfirmation();
+      XFBridgeLog.Info(cid, "cc.confirm: nothing to confirm (no option changed on the screen); closed with Back, nothing discarded");
+      return "{\"ok\":true,\"kept\":false,\"changed\":false,\"closed_with\":\"back\",\"note\":\"nothing to confirm: no option changed on this screen, so it was closed with Back (nothing was discarded)\"}";
+    }
+    if XFCharacter.Busy(cid, menu) {
       return XFJson.Fail("busy", "the appearance screen is still applying the previous change");
     }
     if keep {
       XFBridgeActions.EnsureSaveLock(cid);
       menu.ConfirmCustomizedCharacter();
-      XFBridgeLog.Info(cid, "cc.confirm: the look is kept (ReFinalizeState); undo: load the safety save");
+      XFBridgeLog.Info(cid, "cc.confirm: the look is kept (ReFinalizeState; " + IntToString(changes) + " change(s) on the screen); undo: load the safety save");
     } else {
       menu.ConfirmBackConfirmation();
       XFBridgeLog.Info(cid, "cc.back: every change on the appearance screen discarded");
     }
-    return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + "}";
+    return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + ",\"changed\":" + XFJson.Flag(changes > 0) + ",\"changes\":" + IntToString(changes) + "}";
+  }
+
+  // Whether the appearance screen is still applying a change. The menu's busy flag is the game's own
+  // readiness signal, but it can be left set when no completion will ever come (a change to the value
+  // already shown, before this build's OnSliderChange wrap; or a change whose completion event never
+  // arrives). Such a flag is stale when no change is pending and it has stayed set for 8 s, or when the
+  // pending change started more than 12 s ago; a stale flag is cleared (set back to AVAILABLE, as the
+  // completion event would) and logged, and the answer is "not busy".
+  public static func Busy(cid: String, menu: wref<characterCreationBodyMorphMenu>) -> Bool {
+    if Equals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+      return false;
+    }
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) {
+      return true;
+    }
+    let now = EngineTime.ToFloat(GameInstance.GetEngineTime(GetGameInstance()));
+    let pending = registry.CreatorPendingSince();
+    let stale = false;
+    if pending > 0.0 {
+      stale = now - pending > 12.0;
+    } else {
+      stale = now - registry.CreatorBusySeenAt(now) > 8.0;
+    }
+    if !stale {
+      return true;
+    }
+    menu.m_busySwitchingAppearance = BusySwitchingReason.AVAILABLE;
+    registry.NoteCreatorChangeDone();
+    XFBridgeLog.Warn(cid, "appearance screen busy flag was stale (no completion came); cleared");
+    return false;
   }
 
   public static func ModeName(mode: Int32) -> String {
@@ -1488,9 +1851,16 @@ public abstract class XFCharacter {
   }
 
   // Why the appearance screen can't be opened now, as a failure answer, or "" when it can: V in
-  // the world with no menu open (phase gameplay), not in combat, not in a vehicle, no scene playing,
-  // the game allowing photo mode (the same "safe moment" check), and no combat, scene, tier or
-  // moving-platform save lock from the game.
+  // the world with no menu open (phase gameplay), not in combat, not in a vehicle, no real scene
+  // playing (scene tier 3 or above), the game allowing photo mode (the same "safe moment" check), and no
+  // combat, scene, tier or moving-platform save lock from the game.
+  //
+  // Scene tiers (GameplayTier): 1 full gameplay, 2 staged gameplay, 3 limited gameplay, 4 first-person
+  // cinematic, 5 cinematic. Tier 2 is the normal state in V's apartment (session 3: every cc.open there
+  // was refused at tier 2, where Character Customization Anywhere's F12 works). The game itself treats
+  // tier 2 as free enough to change clothes: the inventory blocks equipping only at tiers 3 to 5
+  // (InventoryGPRestrictionHelper.BlockedBySceneTier, inventoryItemData.script:842-847). So tier 2 is
+  // accepted and tiers 3 and above are refused.
   public static func OpenRefusal() -> String {
     let game = GetGameInstance();
     let phase = XFBridgeActions.Phase();
@@ -1518,8 +1888,8 @@ public abstract class XFCharacter {
     let psm = player.GetPlayerStateMachineBlackboard();
     if IsDefined(psm) {
       let tier = psm.GetInt(GetAllBlackboardDefs().PlayerStateMachine.SceneTier);
-      if tier > 1 {
-        return XFJson.Fail("not_safe_now", "a scene is playing (scene tier " + IntToString(tier) + ")");
+      if tier > 2 {
+        return XFJson.Fail("not_safe_now", "a scene is playing (scene tier " + IntToString(tier) + "; tiers 1 and 2 are normal play)");
       }
     }
     if !GameInstance.GetPhotoModeSystem(game).CanPhotoModeBeEnabled() {
@@ -1643,7 +2013,7 @@ public abstract class XFCharacter {
       return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open");
     }
     let menu = XFBridgeRegistry.Get().GetCharacterMenu();
-    if NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+    if XFCharacter.Busy(cid, menu) {
       return XFJson.Fail("busy", "the appearance screen is still applying the previous change");
     }
     let system = GameInstance.GetCharacterCustomizationSystem(game);
@@ -1674,8 +2044,14 @@ public abstract class XFCharacter {
     if index < 0 || index >= count {
       return XFJson.Fail("bad_params", "option '" + option + "' has values 0 to " + IntToString(count - 1) + ", not " + IntToString(index));
     }
-    XFBridgeActions.EnsureSaveLock(cid);
     let before = Cast<Int32>(match.currIndex);
+    // The value already shown: applying it would change nothing, and through the row it would leave the
+    // screen's busy flag set for good (session 3). Nothing is sent; the answer says so.
+    if index == before {
+      XFBridgeLog.Info(cid, "cc.apply " + NameToString(match.info.name) + " already " + IntToString(index) + "; nothing applied");
+      return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"value_label\":" + XFJson.Str(XFCharacter.ValueText(match, index)) + ",\"matched_by\":" + XFJson.Str(matchedBy) + ",\"changed\":false,\"route\":\"none\",\"note\":\"already set; nothing applied\"}";
+    }
+    XFBridgeActions.EnsureSaveLock(cid);
     // Through the option's own row when it is on screen: the row shows the new value's name and
     // keeps its own index, then asks the menu to apply it (OnSliderChange / OnColorChange), exactly
     // as its arrows do. Otherwise straight through the system, as before (the row then keeps
@@ -1686,7 +2062,7 @@ public abstract class XFCharacter {
       route = "system";
     }
     XFBridgeLog.Info(cid, "cc.apply " + NameToString(match.info.name) + " " + IntToString(before) + " -> " + IntToString(index) + " via " + route + "; undo: cc.apply index " + IntToString(before) + ", or Back in the mirror (discards every change)");
-    return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"before_value\":" + XFJson.Str(XFCharacter.ValueLabel(match, before)) + ",\"value_label\":" + XFJson.Str(XFCharacter.ValueText(match, index)) + ",\"matched_by\":" + XFJson.Str(matchedBy) + ",\"route\":" + XFJson.Str(route) + ",\"row_updated\":" + XFJson.Flag(Equals(route, "row")) + "}";
+    return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"before_value\":" + XFJson.Str(XFCharacter.ValueLabel(match, before)) + ",\"value_label\":" + XFJson.Str(XFCharacter.ValueText(match, index)) + ",\"matched_by\":" + XFJson.Str(matchedBy) + ",\"route\":" + XFJson.Str(route) + ",\"row_updated\":" + XFJson.Flag(Equals(route, "row")) + ",\"changed\":true}";
   }
 
   // Selects index on the menu row that shows this option (matched by UI slot, as the menu's own

@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
-import { frame, frameByCapture, FRAMINGS, readingProblem, screenSpace, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
+import { chooseHorizontal, frame, frameByCapture, FRAMINGS, readingProblem, sameWorld, screenSpace, SETTLE, settledReading, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
 import { resolveRegion } from "../capture/regions.ts";
 import { captureBurst } from "../capture/capture.ts";
 import type { Pixels } from "../capture/win32.ts";
@@ -116,6 +116,159 @@ const adapterFor = (world: World, withSubject = true): FramingAdapter => ({
   setCamera: async (values) => world.set(values),
   grab: async () => world.render(),
   pose: async () => ({ fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud }),
+});
+
+/**
+ * The game as session 3 (28 September 2026) saw it: V's placement axes are fixed vectors that need not
+ * be the camera's (left/right can run along the view), close/far exists, and a photo.subject read made
+ * straight after a change still shows the world from before it (the pose values are already new).
+ */
+class GameLikeWorld extends World {
+  nf = 0;
+  axes = { lr: { x: 1.1, y: 0.3, z: 0 }, nf: { x: 0.1, y: -1, z: 0 }, ud: { x: 0.2, y: 0, z: 0.9 } };
+  origin = { x: -0.6, y: 8, z: 1.5 };
+  override head() {
+    const theta = (200 + this.yaw) * DEG;
+    const f = { x: Math.sin(theta), y: Math.cos(theta) };
+    const a = this.axes;
+    return {
+      x: this.origin.x + a.lr.x * this.lr + a.nf.x * this.nf + a.ud.x * this.ud + f.x * 0.03,
+      y: this.origin.y + a.lr.y * this.lr + a.nf.y * this.nf + a.ud.y * this.ud + f.y * 0.03,
+      z: this.origin.z + a.lr.z * this.lr + a.nf.z * this.nf + a.ud.z * this.ud,
+      f,
+    };
+  }
+  override reading(offset: { up: number; forward: number; right: number }): SubjectReading {
+    const r = super.reading(offset);
+    r.pose = { ...r.pose, near_far: { value: this.nf, min: -5, max: 5 } };
+    return r;
+  }
+  override set(values: { fov?: number; subject?: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } }) {
+    const applied = super.set(values);
+    if (values.subject?.near_far !== undefined) {
+      applied.push({ name: "subject.near_far", before: this.nf, after: values.subject.near_far, before_known: true });
+      this.nf = values.subject.near_far;
+    }
+    return applied;
+  }
+}
+
+/** An adapter whose first read after each change answers from the world as it was before the change. */
+function laggingAdapter(world: GameLikeWorld): FramingAdapter & { reads: number } {
+  let stale: { fov: number; yaw: number; lr: number; ud: number; nf: number } | null = null;
+  const adapter = {
+    reads: 0,
+    subject: async (offset: { up: number; forward: number; right: number }) => {
+      adapter.reads++;
+      if (stale) {
+        const now = { fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud, nf: world.nf };
+        const pose = world.reading(offset).pose;
+        Object.assign(world, stale);
+        const old = world.reading(offset);
+        Object.assign(world, now);
+        stale = null;
+        return { ...old, pose };
+      }
+      return world.reading(offset);
+    },
+    setCamera: async (values: { fov?: number; subject?: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } }) => {
+      stale = { fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud, nf: world.nf };
+      return world.set(values);
+    },
+    pose: async () => ({ fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud }),
+  };
+  return adapter;
+}
+
+describe("photo.frame after session 3", () => {
+  test("a read straight after a change is stale in the game; framing waits for the world to take each change", async () => {
+    const world = new GameLikeWorld();
+    const adapter = laggingAdapter(world);
+    const result = await frame(adapter, { target: "face" });
+    expect(result.method).toBe("project");
+    expect(result.converged, JSON.stringify(result.notes)).toBe(true);
+    expect(result.axis).toBe("left_right");
+    // Every change was read at least twice (the stale read, then the settled ones).
+    expect(result.steps.every((s) => (s.values?.reads ?? 0) >= 2)).toBe(true);
+    // Nothing was slammed to the end of the range, as session 3's run was (left/right and up/down at -5 and 5).
+    expect(Math.abs(world.lr)).toBeLessThan(2);
+    expect(Math.abs(world.ud)).toBeLessThan(2);
+  });
+
+  test("reproduces session 3: with one read per change (the 0.3.0 loop), the stale reads break framing", async () => {
+    const world = new GameLikeWorld();
+    const saved = SETTLE.maxReads;
+    SETTLE.maxReads = 1;
+    try {
+      const outcome = await frame(laggingAdapter(world), { target: "face" }).then(
+        (r) => (r.converged ? "converged" : "not converged"),
+        (e) => (e as { code?: string }).code,
+      );
+      expect(outcome).not.toBe("converged");
+    } finally {
+      SETTLE.maxReads = saved;
+    }
+  });
+
+  test("sameWorld and settledReading: a stale first read is skipped, an unchanged world settles after a few reads", async () => {
+    const world = new GameLikeWorld();
+    const adapter = laggingAdapter(world);
+    const offset = { up: 0, forward: 0, right: 0 };
+    const before = world.reading(offset);
+    await adapter.setCamera({ subject: { up_down: 0.3 } });
+    const settled = await settledReading(adapter, offset, before);
+    expect(settled.settled).toBe(true);
+    expect(settled.reads).toBe(3); // stale, new, new again
+    expect(sameWorld(settled.reading, world.reading(offset))).toBe(true);
+    expect(sameWorld(settled.reading, before)).toBe(false);
+    // A change that moves nothing (already at that value) settles after SETTLE.unchangedReads reads.
+    await adapter.setCamera({ subject: { up_down: 0.3 } });
+    const unchanged = await settledReading(adapter, offset, settled.reading);
+    expect(unchanged).toMatchObject({ settled: true, reads: SETTLE.unchangedReads });
+  });
+
+  test("when left/right runs along the view (V turned), close/far centres V sideways", async () => {
+    const world = new GameLikeWorld();
+    world.axes = { lr: { x: 0.02, y: 1, z: 0 }, nf: { x: 1, y: -0.05, z: 0 }, ud: { x: 0, y: 0, z: 1 } };
+    world.nf = 0.25; // V starts off to the side
+    const result = await frame(laggingAdapter(world), { target: "face" });
+    expect(result.axis).toBe("near_far");
+    expect(result.converged, JSON.stringify(result.notes)).toBe(true);
+    expect(result.notes.join(" ")).toContain("close/far");
+    expect(result.undo?.params).toMatchObject({ subject: { near_far: 0.25 } });
+  });
+
+  test("when no placement axis moves V across the screen, framing still centres vertically and sizes (vertical-only)", async () => {
+    const world = new GameLikeWorld();
+    world.axes = { lr: { x: 0, y: 1, z: 0 }, nf: { x: 0, y: -1, z: 0 }, ud: { x: 0, y: 0, z: 1 } };
+    world.origin = { x: 0, y: 8, z: 1.5 }; // straight ahead: moving along the view moves V across nothing
+    const result = await frame(laggingAdapter(world), { target: "eyes" });
+    expect(result.axis).toBe("vertical-only");
+    expect(Math.abs(result.residual.y)).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(result.residual.size - 1)).toBeLessThan(0.05);
+    expect(result.notes.join(" ")).toContain("only centred vertically");
+  });
+
+  test("chooseHorizontal picks the axis that moves V across the screen, and none when both run along the view", () => {
+    const up = { x: 0, y: -1 };
+    expect(chooseHorizontal({ left_right: { x: 0.01, y: 0 }, near_far: { x: 0.9, y: 0.1 } }, up).axis).toBe("near_far");
+    expect(chooseHorizontal({ left_right: { x: 1, y: 0.2 } }, up).axis).toBe("left_right");
+    expect(chooseHorizontal({ left_right: { x: 0.001, y: 0.5 }, near_far: { x: -0.002, y: 0.1 } }, up).axis).toBeNull();
+  });
+
+  test("a camera rolled 90 degrees (session 3's presets) still frames through the measured Jacobian", async () => {
+    // Screen x and y swapped about the centre: the world's vertical runs across the screen.
+    const world = new GameLikeWorld();
+    const base = world.reading.bind(world);
+    const roll = (p: { x: number; y: number; z?: number; w?: number }) => ({ ...p, x: world.width / 2 + (p.y - world.height / 2), y: world.height / 2 - (p.x - world.width / 2) });
+    world.reading = (offset) => {
+      const r = base(offset);
+      return { ...r, screen: { target: roll(r.screen.target), head: roll(r.screen.head), center: roll(r.screen.center), up: roll(r.screen.up), right: roll(r.screen.right) } };
+    };
+    const result = await frame(laggingAdapter(world), { target: "face" });
+    expect(result.method).toBe("project");
+    expect(Math.hypot(result.residual.x, result.residual.y)).toBeLessThan(0.05);
+  });
 });
 
 describe("photo.frame", () => {

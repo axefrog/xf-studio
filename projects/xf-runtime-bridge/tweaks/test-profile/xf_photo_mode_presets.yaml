@@ -13,9 +13,14 @@
 # Starting values: the camera 1.8 m from V at eye level, as Portrait Enhancer's portrait preset 1
 # (distance -1.8, up/down 0.07) but level (pitch 0); the field of view fits each framing's span at
 # that distance (fov = 2 atan(span / 2 / 1.8)). Whether presets follow V's spawn and how collision
-# moves them is the next session's check (knowledge/photo-mode.md open question 4). The profile's
-# Portrait Enhancer also overrides these records; TweakXL should read this folder after it (by path
-# order), which the session confirms by selecting preset 7.
+# moves them is the next session's check (knowledge/photo-mode.md open question 4).
+#
+# Session 3 (28 September 2026) found these values overridden: the profile's Portrait Enhancer for Photo
+# Mode sets all nine presets in a .tweak file, and its presets 5-9 roll the camera 90 degrees (preset 7
+# arrived with field of view 28 and roll 90). TweakXL reads tweak files in directory order, except that
+# a name starting with "^" is read last (TweakXL 1.11.4 TweakImporter.cpp:184-188), so the packages
+# stage this file as "^xf_photo_mode_presets.yaml" (tools/packaging.ts). photo.frame also levels the
+# camera (roll 0) after selecting any preset, so a preset that still arrives rolled can't turn the shot.
 #
 # Floats are written with a decimal point so TweakXL reads them as Float
 # (TweakXL v1.11.4 src/App/Tweaks/Declarative/Yaml/YamlReader.Values.cpp:499-523).

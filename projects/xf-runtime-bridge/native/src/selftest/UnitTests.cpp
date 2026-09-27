@@ -24,6 +24,7 @@
 #include "core/GameThreadQueue.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
+#include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/ScriptFrame.hpp"
@@ -1444,6 +1445,382 @@ void Batch4Tests()
 }
 } // namespace
 
+// Bridge 0.4: the message line, the new write classes, the light's type and placement, and the inventory,
+// save and load sequences.
+void MessageTests()
+{
+    bool cut = false;
+    Check("message text: control characters become single spaces, the ends are trimmed",
+          xfb::CleanMessageText("  Open\tthe\n\ncreator  ", 200) == "Open the creator");
+    const auto longText = xfb::CleanMessageText(std::string(10, 'a') + "\xC3\xA9\xC3\xA9", 11, &cut);
+    Check("message text is cut at a character boundary, never inside a UTF-8 sequence", longText == std::string(10, 'a') + "\xC3\xA9" && cut, longText);
+    Check("invalid UTF-8 becomes U+FFFD", xfb::CleanMessageText("a\xFF" "b", 20) == "a\xEF\xBF\xBD" "b");
+    Check("an overlong encoding is invalid too", xfb::CleanMessageText("\xC0\xAF", 20) == "\xEF\xBF\xBD\xEF\xBF\xBD");
+
+    xfb::MessageBoard board;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+    Check("an empty board draws nothing", board.Snapshot(t0).empty());
+    json last;
+    for (int i = 0; i < 6; ++i)
+    {
+        last = board.Post({"message " + std::to_string(i), 5, "info", false}, t0);
+    }
+    const auto shown = json::parse(board.Snapshot(t0));
+    Check("at most four messages show; a new one pushes out the oldest",
+          shown["messages"].size() == 4 && shown["messages"][0]["text"] == "message 2" && last["dropped"].size() == 1, shown.dump());
+    Check("messages expire by themselves", board.Snapshot(t0 + std::chrono::seconds(6)).empty());
+    board.Post({"ask the player", 60, "ask", false}, t0);
+    Check("clear removes every message", board.Clear() == 1 && board.Active(t0) == 0);
+    const auto cleared = board.Post({"", 8, "info", true}, t0);
+    Check("a clear without text only clears", cleared.value("cleared", -1) == 0 && !cleared.contains("id"), cleared.dump());
+    const auto capped = board.Post({"x", 99999, "info", false}, t0);
+    Check("seconds are capped", capped["seconds"] == xfb::MessageBoard::kMaxSeconds);
+
+    namespace p = xfb::params;
+    Check("ui.message needs text or clear", ParamsCode([] { p::ParseMessage(json::object()); }) == "bad_params");
+    Check("ui.message refuses a text of only spaces", ParamsCode([] { p::ParseMessage(json{{"text", " \n\t "}}); }) == "bad_params");
+    Check("ui.message refuses an unknown level", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"level", "shout"}}); }) == "bad_params");
+    const auto ask = p::ParseMessage(json{{"text", "Press Confirm"}, {"level", "ask"}, {"seconds", 30}});
+    Check("ui.message takes text, level and seconds", ask.text == "Press Confirm" && ask.level == "ask" && ask.seconds == 30);
+}
+
+void Batch5ClassTests()
+{
+    const auto defaults = xfb::ParseConfig("");
+    Check("inventory and save are off unless listed", (defaults.writeClasses & (xfb::kWriteInventory | xfb::kWriteSave)) == 0u);
+    const auto listed = xfb::ParseConfig("[bridge]\nallow_write_classes = photo, save, Inventory\n");
+    Check("inventory and save can be listed", listed.writeClasses == (xfb::kWritePhoto | xfb::kWriteSave | xfb::kWriteInventory) &&
+                                                  xfb::WriteClassList(listed) == std::vector<std::string>{"photo", "inventory", "save"});
+    Check("access names for the new classes", xfb::AccessName(xfb::Access::WriteInventory) == "write-inventory" &&
+                                                 xfb::AccessName(xfb::Access::WriteSave) == "write-save" && xfb::AccessName(xfb::Access::Notify) == "notify" &&
+                                                 !xfb::IsWrite(xfb::Access::Notify) && xfb::IsWrite(xfb::Access::WriteSave));
+
+    xfb::Config config;
+    config.allowWrites = true;
+    config.writeClasses = xfb::kWritePhoto | xfb::kWriteWorld | xfb::kWriteCharacter;
+    config.maxRequestsPerSecond = 200;
+    xfb::Session session;
+    std::string error;
+    wchar_t temp[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, temp);
+    xfb::CreateSession(session, error, std::filesystem::path(temp) / L"xfb-unit-classes5-not-created");
+    xfb::GameThreadQueue queue;
+    xfb::Dispatcher dispatcher(config, session, queue);
+    for (const auto& [name, access] : std::vector<std::pair<std::string, xfb::Access>>{
+             {"t.inventory", xfb::Access::WriteInventory}, {"t.save", xfb::Access::WriteSave}, {"t.notify", xfb::Access::Notify}})
+    {
+        dispatcher.Register({name, access, xfb::RunOn::BridgeThread, "unit", [](const xfb::MethodContext&) { return json{{"ok", true}}; }});
+    }
+    const auto call = [&](const char* aMethod) {
+        const auto line = json{{"v", 1}, {"id", 1}, {"token", session.token}, {"method", aMethod}}.dump();
+        const auto reply = json::parse(dispatcher.Handle(line, 0).line);
+        return reply.value("ok", false) ? std::string("ok") : reply["error"].value("code", std::string());
+    };
+    Check("the inventory and save classes are refused unless listed",
+          call("t.inventory") == "write_class_disabled" && call("t.save") == "write_class_disabled" && call("t.notify") == "ok");
+    config.allowWrites = false;
+    dispatcher.SetWritesPaused(true);
+    Check("a message is shown even with writes off or paused (it changes nothing in the game)", call("t.notify") == "ok");
+}
+
+void LightPlacementTests()
+{
+    namespace p = xfb::params;
+    struct Fake : FakePhoto
+    {
+        std::map<int32_t, std::array<double, 3>> at;
+        bool drift = false;
+        xfb::writes::LightOps Ops()
+        {
+            auto ops = FakePhoto::Ops();
+            const auto base = ops.set;
+            ops.set = [this, base](int32_t aKey, float aValue) {
+                if (aKey == p::key::kLightType)
+                {
+                    calls.push_back("45");
+                    throw xfb::MethodError("unavailable", "photo-mode setting 45 is not in the menu right now");
+                }
+                return base(aKey, aValue);
+            };
+            ops.place = [this](int32_t aLight, const p::LightPlacement& aPlace) {
+                calls.push_back("place " + std::to_string(aLight));
+                const auto before = at[aLight];
+                at[aLight] = aPlace.kind == p::LightPlacement::Kind::World ? std::array<double, 3>{aPlace.world[0], aPlace.world[1], aPlace.world[2]}
+                                                                           : std::array<double, 3>{1.0, 2.0, 3.0};
+                const auto vec = [](const std::array<double, 3>& v) { return json{{"x", v[0]}, {"y", v[1]}, {"z", v[2]}}; };
+                return json{{"before", vec(before)}, {"after", vec(at[aLight])}};
+            };
+            ops.position = [this](int32_t aLight) {
+                auto v = at[aLight];
+                if (drift)
+                {
+                    v[0] += 1.0;
+                }
+                return json{{"position", {{"x", v[0]}, {"y", v[1]}, {"z", v[2]}}}};
+            };
+            return ops;
+        }
+    };
+    {
+        Fake fake;
+        fake.values[p::key::kLightSelect] = 0;
+        const auto out = xfb::writes::LightSet(p::ParseLight(json::parse(R"({"light":1,"on":true,"type":"spot","brightness":60})")), fake.Ops());
+        Check("a missing light type row is skipped with a note, not a failure",
+              out["applied"].size() == 2 && out["skipped"][0]["name"] == "type" && out.contains("note") && !out["undo"]["params"].contains("type"),
+              out.dump());
+    }
+    {
+        Fake fake;
+        fake.values[p::key::kLightSelect] = 0;
+        fake.at[1] = {9.0, 9.0, 9.0};
+        const auto out =
+            xfb::writes::LightSet(p::ParseLight(json::parse(R"({"light":1,"place":{"azimuth":30,"elevation":20,"distance":1.5}})")), fake.Ops());
+        Check("place moves the light, reads it back and says it held",
+              out["placement"]["route"] == "moved" && out["placement"]["held"] == true &&
+                  std::find(fake.calls.begin(), fake.calls.end(), "place 1") != fake.calls.end(),
+              out.dump());
+        Check("its undo puts the light back where it was",
+              out["undo"]["params"]["place"] == json{{"world", {9.0, 9.0, 9.0}}} && out["undo"]["params"]["light"] == 1, out["undo"].dump());
+        const auto undone = xfb::writes::LightSet(p::ParseLight(out["undo"]["params"]), fake.Ops());
+        Check("running that undo places it at the earlier world position", fake.at[1] == std::array<double, 3>{9.0, 9.0, 9.0}, undone.dump());
+    }
+    {
+        Fake fake;
+        fake.values[p::key::kLightSelect] = 0;
+        fake.drift = true;
+        const auto out = xfb::writes::LightSet(p::ParseLight(json::parse(R"({"light":1,"place":{"distance":1}})")), fake.Ops());
+        Check("a light photo mode moves again is reported (held false, with the fallback named)",
+              out["placement"]["held"] == false && out["placement"]["note"].get<std::string>().find("camera") != std::string::npos, out.dump());
+    }
+    {
+        Fake fake;
+        fake.values[p::key::kLightSelect] = 0;
+        fake.values[p::key::kLightState] = 0;
+        const auto out = xfb::writes::LightSet(p::ParseLight(json::parse(R"({"light":1,"place":"camera"})")), fake.Ops());
+        std::string calls;
+        for (const auto& c : fake.calls)
+        {
+            calls += c + " ";
+        }
+        Check("place camera switches the light off and on again, with a settle after each",
+              calls == "43=0 44=0 settle 44=1 settle " && out["placement"]["route"] == "switched_again" && out["undo"]["params"]["on"] == false,
+              calls + out.dump());
+    }
+    Check("place refuses a distance inside V's head",
+          ParamsCode([] { p::ParseLight(json::parse(R"({"light":1,"place":{"distance":0.05}})")); }) == "bad_params");
+    Check("place refuses an unknown name", ParamsCode([] { p::ParseLight(json::parse(R"({"light":1,"place":"sun"})")); }) == "bad_params");
+    Check("place alone is a valid light change", ParamsCode([] { p::ParseLight(json::parse(R"({"light":2,"place":"camera"})")); }) == "ok");
+}
+
+struct FakeWardrobe
+{
+    std::map<std::string, std::string> worn;
+    std::vector<std::string> added;
+    std::vector<std::string> calls;
+    int ticksToApply = 2;
+    int pending = -1;
+    std::string pendingSlot;
+    std::string pendingItem;
+    bool never = false;
+    xfb::writes::InventoryOps Ops(const std::string& aItem, const std::string& aSlot, bool aAdd)
+    {
+        xfb::writes::InventoryOps ops;
+        ops.equip = [this, aItem, aSlot, aAdd] {
+            calls.push_back("equip");
+            const auto previous = worn.count(aSlot) ? worn[aSlot] : std::string();
+            if (aAdd)
+            {
+                added.push_back(aItem);
+            }
+            pending = ticksToApply;
+            pendingSlot = aSlot;
+            pendingItem = aItem;
+            return json{{"item", aItem}, {"slot", aSlot}, {"added", aAdd}, {"already_equipped", previous == aItem}, {"previous", previous}};
+        };
+        ops.unequip = [this, aSlot] {
+            calls.push_back("unequip");
+            const auto previous = worn.count(aSlot) ? worn[aSlot] : std::string();
+            pending = ticksToApply;
+            pendingSlot = aSlot;
+            pendingItem.clear();
+            return json{{"slot", aSlot}, {"previous", previous}, {"was_empty", previous.empty()}};
+        };
+        ops.slot = [this, aSlot](const std::string&, const std::string&) {
+            const auto item = worn.count(aSlot) ? worn[aSlot] : std::string();
+            return json{{"slot", aSlot}, {"item", item}, {"empty", item.empty()}};
+        };
+        ops.removeAdded = [this](const std::string& aName) {
+            calls.push_back("remove " + aName);
+            return json{{"removed", true}};
+        };
+        ops.settle = [this] {
+            if (pending > 0 && --pending == 0 && !never)
+            {
+                if (pendingItem.empty())
+                {
+                    worn.erase(pendingSlot);
+                }
+                else
+                {
+                    worn[pendingSlot] = pendingItem;
+                }
+            }
+        };
+        return ops;
+    }
+};
+
+void InventoryAndSaveTests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    Check("inventory.equip needs an item record name",
+          ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Helmet"}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}, {"slot", "Weapon"}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseInventoryEquip(json{{"item", "Items.Helmet_01; x"}}); }) == "bad_params");
+    Check("inventory.unequip takes slot or item, and remove_added only with item",
+          ParamsCode([] { p::ParseInventoryUnequip(json::object()); }) == "bad_params" &&
+              ParamsCode([] { p::ParseInventoryUnequip(json{{"slot", "Head"}, {"item", "Items.Cap_01"}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseInventoryUnequip(json{{"slot", "Head"}, {"remove_added", true}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseInventoryUnequip(json{{"slot", "Head"}}); }) == "ok");
+    Check("game.load takes latest or a name, not both",
+          ParamsCode([] { p::ParseGameLoad(json::object()); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameLoad(json{{"latest", true}, {"name", "ManualSave-1"}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameLoad(json{{"name", "../../x"}}); }) == "bad_params" &&
+              ParamsCode([] { p::ParseGameLoad(json{{"name", "ManualSave-12"}}); }) == "ok");
+    Check("game.save's name is a plain label", ParamsCode([] { p::ParseGameSave(json{{"name", "before \"x\""}}); }) == "bad_params" &&
+                                                   ParamsCode([] { p::ParseGameSave(json{{"name", "session 4 start"}}); }) == "ok");
+    {
+        FakeWardrobe wardrobe;
+        const auto request = p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}, {"add_if_missing", true}});
+        const auto out = w::InventoryEquip(request, wardrobe.Ops("Items.Helmet_01", "Head", true));
+        Check("equip waits until the slot shows the item; an added item's undo unequips and removes it",
+              out["equipped"] == true && out["undo"] == json{{"method", "inventory.unequip"}, {"params", {{"item", "Items.Helmet_01"}, {"remove_added", true}}}},
+              out.dump());
+        const auto undo = w::InventoryUnequip(p::ParseInventoryUnequip(out["undo"]["params"]), wardrobe.Ops("Items.Helmet_01", "Head", false));
+        Check("running that undo empties the slot and removes the added item",
+              wardrobe.worn.count("Head") == 0 && undo["removed"] == true && wardrobe.calls.back() == "remove Items.Helmet_01", undo.dump());
+    }
+    {
+        FakeWardrobe wardrobe;
+        wardrobe.worn["Head"] = "Items.Cap_01";
+        const auto out = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}}), wardrobe.Ops("Items.Helmet_01", "Head", false));
+        Check("equip over another item: the undo equips that item again",
+              out["undo"] == json{{"method", "inventory.equip"}, {"params", {{"item", "Items.Cap_01"}, {"slot", "Head"}}}}, out.dump());
+    }
+    {
+        FakeWardrobe wardrobe;
+        wardrobe.never = true;
+        const auto out = w::InventoryEquip(p::ParseInventoryEquip(json{{"item", "Items.Helmet_01"}}), wardrobe.Ops("Items.Helmet_01", "Head", false));
+        Check("an equip the slot never shows says so (equipped false, a note)", out["equipped"] == false && out.contains("note"), out.dump());
+    }
+
+    struct FakeSaves
+    {
+        bool bridgeLock = true;
+        bool locked = true;
+        int unlockAfter = 2;
+        std::string state = "none";
+        int saveAfter = 2;
+        bool fail = false;
+        bool relocked = false;
+        w::SaveOps Ops(bool aOverride)
+        {
+            w::SaveOps ops;
+            ops.prepare = [this, aOverride] {
+                if (bridgeLock && !aOverride)
+                {
+                    throw xfb::MethodError("bridge_save_lock", "the bridge keeps saving locked");
+                }
+                return json{{"lock_released", bridgeLock}};
+            };
+            ops.status = [this] {
+                if (locked && --unlockAfter <= 0)
+                {
+                    locked = false;
+                }
+                if (state == "pending" && --saveAfter <= 0)
+                {
+                    state = fail ? "failed" : "saved";
+                }
+                return json{{"locked", locked}, {"state", state}};
+            };
+            ops.save = [this] {
+                state = "pending";
+                return json{{"requested", true}};
+            };
+            ops.relock = [this] { relocked = true; };
+            ops.sleep = [](std::chrono::milliseconds) {};
+            return ops;
+        }
+    };
+    const auto saveCode = [](FakeSaves& aFake, const json& aParams) {
+        try
+        {
+            const auto out = w::GameSave(p::ParseGameSave(aParams), aFake.Ops(aParams.value("override_lock", false)));
+            return out.value("saved", false) ? std::string("saved") : std::string("?");
+        }
+        catch (const xfb::MethodError& e)
+        {
+            return e.code;
+        }
+    };
+    {
+        FakeSaves fake;
+        Check("game.save refuses while the bridge's save lock is held", saveCode(fake, json::object()) == "bridge_save_lock");
+        Check("with override_lock it waits for the lock to go, then saves", saveCode(fake, json{{"override_lock", true}}) == "saved");
+    }
+    {
+        FakeSaves fake;
+        fake.unlockAfter = 1000;
+        Check("a lock that doesn't go: nothing saved, the bridge's lock back on",
+              saveCode(fake, json{{"override_lock", true}}) == "saving_locked" && fake.relocked);
+    }
+    {
+        FakeSaves fake;
+        fake.fail = true;
+        Check("the game's failed answer is save_failed", saveCode(fake, json{{"override_lock", true}}) == "save_failed");
+    }
+    {
+        FakeSaves fake;
+        fake.saveAfter = 1000000;
+        Check("no answer within the wait is save_uncertain", saveCode(fake, json{{"override_lock", true}, {"timeout_ms", 2000}}) == "save_uncertain");
+    }
+
+    const std::vector<std::string> saves{"ManualSave-3", "AutoSave-1", "manualsave-9", "ManualSave-9"};
+    Check("FindSave: exact first, then ignoring case, -1 none, -2 ambiguous",
+          w::FindSave(saves, "AutoSave-1") == 1 && w::FindSave(saves, "autosave-1") == 1 && w::FindSave(saves, "Nope") == -1 &&
+              w::FindSave(saves, "MANUALSAVE-9") == -2 && w::FindSave(saves, "ManualSave-9") == 3);
+    {
+        int polls = 0;
+        std::string loaded;
+        w::LoadOps ops;
+        ops.latest = [] { return json{{"requested", true}, {"route", "latest"}}; };
+        ops.list = [] { return json{{"requested", true}}; };
+        ops.saves = [&polls, &saves] { return ++polls < 3 ? json{{"ready", false}} : json{{"ready", true}, {"saves", saves}}; };
+        ops.load = [&loaded](int32_t aIndex, const std::string& aName) {
+            loaded = std::to_string(aIndex) + ":" + aName;
+            return json{{"requested", true}, {"route", "name"}};
+        };
+        ops.sleep = [](std::chrono::milliseconds) {};
+        const auto out = w::GameLoad(p::ParseGameLoad(json{{"name", "AutoSave-1"}}), ops);
+        Check("game.load by name waits for the game's list and loads that position",
+              loaded == "1:AutoSave-1" && out["undo"].is_null() && out.contains("undo_note"), out.dump());
+        std::string message;
+        try
+        {
+            w::GameLoad(p::ParseGameLoad(json{{"name", "Missing-1"}}), ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + " " + e.what();
+        }
+        Check("a name that isn't there: save_not_found, listing some names", message.find("save_not_found") == 0 && message.find("ManualSave-3") != std::string::npos,
+              message);
+        Check("latest takes the quick-load path", w::GameLoad(p::ParseGameLoad(json{{"latest", true}}), ops)["route"] == "latest");
+    }
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -1461,6 +1838,10 @@ int RunUnitTests()
     FaceTests();
     CreatorAndOptionsTests();
     Batch4Tests();
+    MessageTests();
+    Batch5ClassTests();
+    LightPlacementTests();
+    InventoryAndSaveTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }
