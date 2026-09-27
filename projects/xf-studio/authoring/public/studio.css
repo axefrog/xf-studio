@@ -346,9 +346,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 .folder-choice[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 .folder-choice-path { overflow-wrap: break-word; }
 .folder-choice-source { font-size: var(--fs-xs); color: var(--text-muted); }
-/* Tree view (components/tree-view.ts): fixed-height items positioned in a spacer, so only the rows in view are in the page. */
-.tree-view { position: relative; overflow: auto; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line); container-type: inline-size; }
-.tree-spacer { position: relative; min-height: 100%; }
+/* Tree view (components/tree-view.ts): a frame the owner sizes, holding the scrolling tree (fixed-height items positioned in a
+   spacer, so only the rows in view are in the page), the empty message at its top and the loading status pinned to its corner. */
+.tree-view { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line);
+  container-type: inline-size; }
+.tree-scroll { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; }
+.tree-spacer { position: relative; }
 .tree-item { position: absolute; left: 0; right: 0; top: 0; height: 28px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); cursor: pointer;
   font-size: var(--fs-sm); white-space: nowrap; }
 .tree-item:hover { background: var(--bg-hover); }
@@ -367,8 +370,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 @container (max-width: 320px) { .tree-secondary { display: none; } }
 .tree-count { margin-left: auto; font: var(--fs-2xs) var(--font-mono); color: var(--text-muted); }
 .tree-trailing { margin-left: auto; display: inline-flex; flex: none; }
-.tree-status { position: absolute; top: var(--sp-2); right: var(--sp-3); z-index: 2; padding: 2px var(--sp-3); background: var(--bg-overlay); border: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-muted); }
-.tree-empty { margin: 0; padding: var(--sp-5); color: var(--text-muted); font-size: var(--fs-sm); }
+/* Pinned to the frame (it never scrolls with the rows), clear of the tree's thin scrollbar. */
+.tree-status { position: absolute; top: var(--sp-2); right: var(--sp-6); z-index: 2; padding: 2px var(--sp-3); background: var(--bg-overlay); border: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-muted); }
+.tree-empty { flex: none; margin: 0; padding: var(--sp-5); color: var(--text-muted); font-size: var(--fs-sm); }
 /* Favourite toggle: shown on the row's hover or focus, and always while on. */
 .tree-row .favourite-toggle[aria-pressed="false"] { opacity: 0; }
 .tree-row:hover .favourite-toggle, .tree-row:focus .favourite-toggle, .tree-row:focus-within .favourite-toggle { opacity: 1; }

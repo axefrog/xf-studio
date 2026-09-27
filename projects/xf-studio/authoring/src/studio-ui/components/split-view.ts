@@ -1,4 +1,5 @@
-import { clamp, h, setAttr } from "../dom";
+import { clamp, h } from "../dom";
+import { Splitter } from "./splitter";
 
 /**
  * Split view (style guide "Split view"): a master/detail pair side by side inside a panel, e.g. a tree and its inspector, with a
@@ -23,23 +24,18 @@ export type SplitViewOptions = {
 export class SplitView {
   readonly element: HTMLElement;
   readonly gutter: HTMLElement;
+  private readonly splitter: Splitter;
   private share: number;
   constructor(private readonly options: SplitViewOptions) {
     this.share = options.key ? shares.get(options.key) ?? options.initial ?? .45 : options.initial ?? .45;
-    this.gutter = h("div", { class: "split-gutter", role: "separator", tabindex: 0, "aria-orientation": "vertical", "aria-label": `Resize ${options.label}`,
-      "aria-valuemin": "0", "aria-valuemax": "100", title: "Drag to resize · Arrow keys adjust · Double-click to share evenly" });
+    this.splitter = new Splitter({ axis: "row", label: `Resize ${options.label}`, className: "split-gutter",
+      title: "Drag to resize · Arrow keys adjust · Double-click to share evenly",
+      onStep: (direction, big) => this.set(this.share + direction * (big ? .1 : .03)), onLimit: end => this.set(end === "start" ? 0 : 1),
+      onEqualize: () => this.set(.5) });
+    this.gutter = this.splitter.element;
     this.element = h("div", { class: `split-view${options.className ? ` ${options.className}` : ""}` }, h("div", { class: "split-grid" },
       h("div", { class: "split-pane split-start" }, options.start), this.gutter, h("div", { class: "split-pane split-end" }, options.end)));
     this.apply(this.share);
-    this.gutter.addEventListener("keydown", event => {
-      const step = event.shiftKey ? .1 : .03;
-      const next = event.key === "ArrowLeft" ? this.share - step : event.key === "ArrowRight" ? this.share + step : event.key === "Home" ? 0 : event.key === "End" ? 1
-        : event.key === "Enter" ? .5 : undefined;
-      if (next === undefined) return;
-      event.preventDefault();
-      this.set(next);
-    });
-    this.gutter.addEventListener("dblclick", () => this.set(.5));
     this.gutter.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;
       event.preventDefault();
@@ -66,6 +62,6 @@ export class SplitView {
   private apply(value: number) {
     this.share = value;
     this.element.style.setProperty("--split", String(Math.round(value * 1000) / 1000));
-    setAttr(this.gutter, "aria-valuenow", String(Math.round(value * 100)));
+    this.splitter.setValue(value);
   }
 }

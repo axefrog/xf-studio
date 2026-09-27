@@ -3,10 +3,16 @@
  * and regular-expression literals blanked (line structure kept), so prose and messages never look like code.
  * A template's `${…}` expressions are blanked too, which only makes the scans more lenient there.
  */
-export function codeOnly(text: string): string {
+export function codeOnly(text: string): string { return scan(text, false); }
+/** The source with only its comments blanked: literals keep their contents (markup in a string, for the component ratchet). */
+export function withoutComments(text: string): string { return scan(text, true); }
+function scan(text: string, keepLiterals: boolean): string {
   const out: string[] = [];
-  /** What precedes a `/`: a value (then it divides) or an operator or keyword (then it starts a regular expression). */
-  let value = false, word = "";
+  /**
+   * What precedes a `/`: a value (then it divides) or an operator or keyword (then it starts a regular expression). A `}` that
+   * closes a line is a block's end, so a `/` opening the next line starts a regular expression (UI-121).
+   */
+  let value = false, word = "", afterBrace = false, newline = false;
   const blank = (s: string) => s.replace(/[^\n]/g, " ");
   let i = 0;
   while (i < text.length) {
@@ -16,7 +22,7 @@ export function codeOnly(text: string): string {
       const stop = end < 0 ? text.length : next === "/" ? end : end + 2;
       out.push(blank(text.slice(i, stop))); i = stop; continue;
     }
-    if (c === "\"" || c === "'" || c === "`" || (c === "/" && !value)) {
+    if (c === "\"" || c === "'" || c === "`" || (c === "/" && (!value || (afterBrace && newline)))) {
       let j = i + 1, klass = false;
       while (j < text.length) {
         const d = text[j];
@@ -28,15 +34,17 @@ export function codeOnly(text: string): string {
         j++;
       }
       if (c === "/") while (/[a-z]/.test(text[j + 1] ?? "")) j++;
-      out.push(c + blank(text.slice(i + 1, Math.min(j, text.length))) + (text[j] ?? "")); i = j + 1;
-      value = true; word = ""; continue;
+      const body = text.slice(i + 1, Math.min(j, text.length));
+      out.push(c + (keepLiterals ? body : blank(body)) + (text[j] ?? "")); i = j + 1;
+      value = true; word = ""; afterBrace = newline = false; continue;
     }
     out.push(c);
-    if (/[\w$]/.test(c)) { word += c; value = true; }
+    if (/[\w$]/.test(c)) { word += c; value = true; afterBrace = newline = false; }
     else {
       if (word && /^(?:return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await)$/.test(word)) value = false;
       word = "";
-      if (!/\s/.test(c)) value = c === ")" || c === "]" || c === "}";
+      if (c === "\n") newline = true;
+      else if (!/\s/.test(c)) { value = c === ")" || c === "]" || c === "}"; afterBrace = c === "}"; newline = false; }
     }
     i++;
   }
