@@ -28,6 +28,7 @@ import { createPreviewCoreHandler } from "./src/preview-core-server";
 import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
+import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "./src/choice-preview-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
@@ -113,6 +114,7 @@ const previewCore = new PreviewCoreHost({
 const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // Brows, lashes and hair: resolved from the launch route Build uses and exported from the winning archives.
 // The resolver's JSON cache is shared with `tools/resolve-character.ts`; `XFS_RESOLVER_CACHE` relocates it.
+// Choice previews live in `choice-previews/` beside it; `XFS_CHOICE_PREVIEW_CACHE` relocates them (a verification server keeps its own).
 const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
@@ -120,9 +122,11 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
     return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
       mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
   },
+  ...(process.env.XFS_CHOICE_PREVIEW_CACHE ? { previewRoot: resolve(process.env.XFS_CHOICE_PREVIEW_CACHE) } : {}),
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
+const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
 // Photo-mode poses (pose-library-design.md P1): listed from the same launch route and resolver cache as the creator options.
 const poseSettings = () => {
   const settings = localSettings.load().settings;
@@ -215,6 +219,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
+    if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
     if (url.pathname === POSES_ENDPOINT) return poseRequest(request);
     if (url.pathname === POSE_PREFERENCES_ENDPOINT) return posePreferencesRequest(request);
@@ -234,7 +239,7 @@ const server = Bun.serve({
     if (url.pathname === "/health")
       return Response.json({ app: "xf-studio", version: "0.1.0" });
     // Resolved character details have one source: the host's content-addressed store.
-    if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method);
+    if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method, url.searchParams.has("background"));
     if (url.pathname.startsWith(GRADING_LUT_ASSET_PREFIX)) return serveGradingLut(gradingLut, url.pathname, request.method);
     // Research pages pinned to historical private fixtures read them here, never through /assets.
     const research = url.pathname.startsWith("/research-assets/");

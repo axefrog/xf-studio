@@ -22,6 +22,8 @@ import { routeIdentity, routeStamps } from "./route-fingerprint";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 import type { DiagnosticTrace } from "./diagnostics/model";
 import { hostFailure } from "./diagnostics/host-log";
+import { type ChoicePreviewSource, type PreviewKind, previewSourceOf } from "./choice-preview";
+import { ChoicePreviewStore, manifestStamp } from "./choice-preview-host";
 
 /**
  * Host application service that owns one character-detail preparation at a time for the preview (both
@@ -108,7 +110,18 @@ export type CharacterDetailHostOptions = {
   trace?: DiagnosticTrace;
   /** The native decode worker a packaged host ships (the clothing preset's decode; clothing-host.ts). */
   nativeDecodeWorker?: string;
+  /** Where choice previews and their sources are kept (choice-preview-host.ts; default `cacheRoot/choice-previews`). */
+  previewRoot?: string;
 };
+/** One question about a row's choice previews (choice-preview-server.ts): the V, the row, the positions to look up, and the one to derive. */
+export type PreviewSourcesInput = { base: CharacterRequest; option: string; kind: PreviewKind; positions: readonly number[]; derive: number | null };
+/**
+ * Per position: `ready` with its source, `none` (the choice draws nothing for this detail), or `unprepared` (not prepared yet, or its
+ * derivation waits or failed this time).
+ */
+export type PreviewSourceItem = { position: number; state: "ready" | "none" | "unprepared"; source?: ChoicePreviewSource };
+/** Most sources derived in a row while choices wait to be prepared ahead: then preparing ahead takes its turn (one batch). */
+const PREVIEW_RUN = 8;
 /** How often, at most, the prepared files are checked against their budget. */
 const EVICT_INTERVAL_MS = 60_000;
 /** `work`'s answer, or a cancellation as soon as `signal` aborts (`work` itself keeps running; its caller tracks it). */
@@ -188,7 +201,18 @@ export class CharacterDetailHost {
   private asking = 0;
   /** When the page last asked for its V or read one of its files (`noteAsk`): background work waits until the page has been quiet a moment. */
   private askedAt = 0;
+  /** Rendered choice previews and their sources (choice-preview-host.ts). */
+  readonly previews: ChoicePreviewStore;
+  /**
+   * The preview source being derived now (a prepared choice's record, planned and written from the caches): one at a time, never beside
+   * a person's change or a batch prepared ahead. `passed`: it reached its last step, so a person's change waits for it instead of stopping
+   * it (the scheduling rule: work past its threshold is never thrown away).
+   */
+  private previewing: { controller: AbortController; promise: Promise<unknown>; passed: boolean } | null = null;
+  /** Sources derived since preparing ahead last finished a batch (`PREVIEW_RUN`). */
+  private previewRun = { count: 0, batches: 0 };
   constructor(private readonly options: CharacterDetailHostOptions) {
+    this.previews = new ChoicePreviewStore(options.previewRoot ?? join(options.cacheRoot, "choice-previews"));
     this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
       resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
     this.prefetch = new ChoicePrefetcher({
@@ -311,6 +335,11 @@ export class CharacterDetailHost {
     // batch have let go (PREV-102, PIPE-103).
     const waits: Promise<unknown>[] = [...this.running.values()].map(run => run.promise);
     if (this.prefetch.preparing) waits.push(this.prefetch.idle());
+    // A preview source being derived is stopped, unless it is already writing (then it finishes: it takes a moment and is kept).
+    if (this.previewing) {
+      if (!this.previewing.passed) this.previewing.controller.abort();
+      waits.push(this.previewing.promise.catch(() => { /* Settled. */ }));
+    }
     const begun = waits.length ? Promise.all(waits).then(run) : new Promise<Awaited<ReturnType<typeof run>>>(resolve => resolve(run()));
     const promise = begun
       .then(result => {
@@ -438,13 +467,77 @@ export class CharacterDetailHost {
   private async foregroundIdle(): Promise<void> {
     for (;;) {
       if (this.running.size) await Promise.all([...this.running.values()].map(run => run.promise.catch(() => { /* Settled. */ })));
+      if (this.previewing) await this.previewing.promise.catch(() => { /* Settled. */ });
       const quiet = QUIET_MS - (Date.now() - this.askedAt);
-      if (!this.running.size && !this.asking && quiet <= 0) return;
+      if (!this.running.size && !this.asking && !this.previewing && quiet <= 0) return;
       await new Promise(done => setTimeout(done, Math.max(5, Math.min(quiet, QUIET_MS))));
     }
   }
   /** The page asked for its V or read one of its files: a person is waiting on the host. */
   noteAsk(): void { this.askedAt = Date.now(); }
+
+  // ---- Choice previews (choice-previews-design.md §6.2) ----
+
+  /**
+   * A row's preview sources: each position's indexed source, and for `derive` (a choice prepared ahead and ready), its source derived now
+   * from the prepared record, in the background lane: after a person's change, a batch prepared ahead and the quiet moment after a
+   * person's request, one at a time. Never prepares a choice that isn't ready (that is preparing ahead's work).
+   */
+  async previewSources(input: PreviewSourcesInput): Promise<PreviewSourceItem[]> {
+    const route = this.route();
+    if (!route) return input.positions.map(position => ({ position, state: "unprepared" as const }));
+    const manifests = this.manifests(route), items: PreviewSourceItem[] = [];
+    for (const position of input.positions) {
+      const request = await this.requestFor(input.base, input.option, position);
+      if (!request) { items.push({ position, state: "none" }); continue; }
+      const key = manifests.key(request), stamp = manifestStamp(manifests.dir, key);
+      let source = stamp ? this.previews.source(key, stamp) : undefined;
+      if (source === undefined && position === input.derive && stamp && this.prefetch.stateOf(input.base, input.option, position) === "r")
+        source = await this.derivePreview(request, input.kind, route, key);
+      items.push(source === undefined ? { position, state: "unprepared" } : source === null ? { position, state: "none" } : { position, state: "ready", source });
+    }
+    return items;
+  }
+  /** Plan and write a ready choice's record from the caches and keep its source (undefined: stopped, degraded or failed this time). */
+  private async derivePreview(request: CharacterRequest, kind: PreviewKind, route: CharacterRoute, key: string): Promise<ChoicePreviewSource | null | undefined> {
+    // Wait for the background lane: no person's change, no batch prepared ahead, no other derivation, and the page quiet a moment.
+    for (let waited = 0; ; waited++) {
+      if (this.prefetch.stats.batches !== this.previewRun.batches) this.previewRun = { count: 0, batches: this.prefetch.stats.batches };
+      // Preparing ahead gets its turn after a run of derivations (its next batch), unless it has nothing to do.
+      const yieldToPrefetch = this.previewRun.count >= PREVIEW_RUN && this.prefetch.pending;
+      const busy = this.running.size || this.asking || this.previewing || this.prefetch.preparing || this.warming.size || Date.now() - this.askedAt < QUIET_MS;
+      if (!busy && !yieldToPrefetch) break;
+      if (waited > 1200) return undefined;
+      await new Promise(done => setTimeout(done, 100));
+    }
+    const settings = this.options.settings(), fingerprint = installationFingerprint(settings);
+    if (this.shared?.fingerprint !== fingerprint) this.shared = { fingerprint, cache: new CharacterPreparationCache() };
+    const cache = this.shared.cache, controller = new AbortController();
+    const entry: { controller: AbortController; promise: Promise<unknown>; passed: boolean } = { controller, promise: Promise.resolve(), passed: false };
+    const started = Date.now();
+    const work = backgroundExtraction(this.resolverCache, () => (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
+      derive: request.choices?.length ? structuralInput : undefined, manifests: this.manifests(route), resolverCache: this.resolverCache,
+      exporter: this.exporterFor(route.wolvenKitCli), signal: controller.signal, log: this.options.log, nativeDecodeWorker: this.options.nativeDecodeWorker,
+      progress: step => { if (step === "writing") entry.passed = true; } }));
+    entry.promise = work;
+    this.previewing = entry;
+    this.previewRun.count++;
+    try {
+      const result = await work;
+      if (result.degraded) return undefined;
+      const source = previewSourceOf(result.record.components, kind);
+      // The manifest the preparation just wrote is the one this source belongs to.
+      const stamp = manifestStamp(this.manifests(route).dir, key);
+      if (stamp) this.previews.setSource(key, stamp, source);
+      this.options.log?.(`Choice preview source derived in ${((Date.now() - started) / 1000).toFixed(2)} s (${source ? `${source.parts.length} part(s)` : "nothing drawn"}).`);
+      return source;
+    } catch (error) {
+      if (!controller.signal.aborted) this.options.log?.(`A choice preview's source couldn't be derived: ${(error as Error)?.message ?? error}`);
+      return undefined;
+    } finally {
+      if (this.previewing === entry) this.previewing = null;
+    }
+  }
 
   // ---- Prepared game files (prepared-files.ts) ----
 
@@ -455,7 +548,7 @@ export class CharacterDetailHost {
   /** The prepared files' size on disk (other hosts' included in `bytes` and `others`). */
   async preparedFiles(): Promise<PreparedSize & { others: number }> {
     const [own, ...others] = await Promise.all([preparedSize(this.preparedRoots), ...this.otherPrepared.map(source => source.bytes().catch(() => 0))]);
-    const extra = others.reduce((sum, bytes) => sum + bytes, 0);
+    const extra = others.reduce((sum, bytes) => sum + bytes, 0) + this.previews.bytes();
     return { ...own, bytes: own.bytes + extra, others: extra };
   }
   /** Keep exports and extracted JSON within their budget (at most once a minute; never what this session used). */
@@ -484,7 +577,11 @@ export class CharacterDetailHost {
     await this.prefetch.idle();
     await this.warmingSettled();
     await this.evicting;
+    this.previewing?.controller.abort();
+    await this.previewing?.promise.catch(() => {});
     const result = await clearPrepared(this.preparedRoots);
+    try { result.freed += this.previews.clear().freed; }
+    catch (error) { this.options.log?.(`Some choice previews couldn't be cleared: ${(error as Error)?.message ?? error}`); }
     for (const source of this.otherPrepared) {
       try { result.freed += (await source.clear()).freed; }
       catch (error) { this.options.log?.(`Some prepared game files couldn't be cleared: ${(error as Error)?.message ?? error}`); }

@@ -57,6 +57,7 @@ import type { SavedV } from "./save-reader";
 import { CLOTHING_AREA_LABELS, CLOTHING_STATE_LABELS, CLOTHING_STATES, type ClothingSetting, clothingSettingOf, type ClothingState, DEFAULT_CLOTHING,
   dressingFor, HEADWEAR_AREAS, UNDERWEAR_AREAS } from "./clothing-dressing";
 import { CLOTHING_AREAS, type ClothingArea, wornAreas } from "./save-loadout";
+import { type ChoicePreviewPort, type ChoicePreviewRow, ChoicePreviewService } from "./choice-preview-service";
 
 /** The host side of the context: the installed catalogue's panel, pages, searches, views and presets (cc-catalogue-server.ts). */
 export type CreatorPort = {
@@ -98,6 +99,8 @@ export type CharacterContextPorts = {
   showSave(save: SavedV | null): void;
   /** The shown V's preparation (character-detail-actions.ts): whether it failed, and Try again (PREV-86). */
   details?: { failed(): boolean; retry(): void };
+  /** Choice previews (choice-preview-service.ts): pictures of a shape row's choices, drawn off the main thread. */
+  previews?: ChoicePreviewPort;
 };
 export type ContextOrigin = { readonly kind: "default" } | { readonly kind: "save" } | { readonly kind: "preset"; readonly name: string | null };
 type State = {
@@ -269,6 +272,8 @@ export class CharacterContextActions {
   private fetch: { key: string; option: string; positions: number[]; focus: number | null; sent: string; states: Map<number, ChoiceFetch>;
     stopped: "time" | "disk" | "setup" | null; busy: boolean; asking: AbortController | null; again: boolean; view: CharacterFetchState } | null = null;
   private firstTime = false;
+  /** Pictures of shape rows' choices, once a row with them is shown (choice-preview-service.ts). */
+  private previewService: ChoicePreviewService | null = null;
   private prepared: { bytes: number | null; clearing: boolean; freed: number | null; asking: boolean } = { bytes: null, clearing: false, freed: null, asking: false };
   /** The Clothing setting and its own Undo history (it is not a creator choice). */
   private clothing: ClothingSetting = DEFAULT_CLOTHING;
@@ -489,6 +494,20 @@ export class CharacterContextActions {
     if (sent !== fetch.sent) { fetch.sent = sent; fetch.positions = wanted; fetch.focus = hint; this.askPrefetch(fetch); }
     return fetch.view;
   }
+  /**
+   * A shape row's choice pictures (choice-previews-design.md): asks for the pictures of `positions` (view order), the V's chosen one and
+   * the one under the pointer first, as preparing ahead makes each ready. Null when the row has no picture kind or previews are off.
+   */
+  previews(option: string, positions: readonly number[], selected: number | null, focus: number | null = null): ChoicePreviewRow | null {
+    const kind = this.byId.get(option)?.preview;
+    if (!kind || !this.ports.previews || !this.ready()) return null;
+    this.previewService ??= new ChoicePreviewService(this.ports.previews, () => this.publish());
+    const fetch = this.fetch?.option === option ? this.fetch : null;
+    return this.previewService.update({ option, kind, request: this.detailRequest(), body: this.state.bodyGender, positions, selected, focus,
+      ready: position => fetch?.states.get(position) === "r", busy: this.viewing !== null });
+  }
+  /** What choice previews have cost so far (measurement and diagnostics). */
+  previewStats() { return this.previewService?.stats ?? null; }
   /** The row closed: stop preparing its choices ahead. */
   stopPrefetch(option: string): void {
     if (this.fetch?.option !== option) return;
@@ -1088,6 +1107,7 @@ export class CharacterContextActions {
   dispose() {
     this.disposed = true;
     this.fetch?.asking?.abort();
+    this.previewService?.dispose();
     this.session?.abort();
     this.viewing?.controller.abort();
     this.searching?.controller?.abort();
