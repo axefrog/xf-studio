@@ -34,6 +34,15 @@ export const btn = (label: string, options: { icon?: IconName; variant?: string;
   `<button type="button" class="btn${options.variant ? ` ${options.variant}` : ""}${options.small ? " small" : ""}${options.iconOnly ? " icon-only" : ""}"${options.disabled ? " disabled" : ""}${options.unavailable ? ` aria-disabled="true" data-reason="${esc(options.unavailable)}" aria-description="${esc(options.unavailable)}"` : ""}${options.pressed !== undefined ? ` aria-pressed="${options.pressed}"` : ""}${options.title ?? options.unavailable ? ` title="${esc((options.title ?? options.unavailable)!)}"` : ""}${options.iconOnly ? ` aria-label="${esc(label)}"` : ""}>${options.icon ? i(options.icon) : ""}${options.iconOnly ? "" : `<span>${label}</span>`}</button>`;
 /** The visible reason of an unavailable main action, as the page's reason tip shows it (reason-tip.ts). */
 export const reasonTip = (reason: string) => `<div class="reason-tip static-tip" role="tooltip" style="position:static">${esc(reason)}</div>`;
+/** The shared expander (expander.ts), as a level's markup: the chevron, the label and an optional count. */
+export const expander = (level: "group" | "section" | "subsection" | "row" | "maker", label: string, expanded: boolean, count?: string, extra = "") =>
+  `<button type="button" class="expander${extra ? ` ${extra}` : ""}" data-level="${level}" aria-expanded="${expanded}"><span class="expander-chevron" aria-hidden="true">${i("chevronRight")}</span><span class="expander-label">${label}</span>${count ? `<span class="expander-count">${count}</span>` : ""}</button>`;
+/** A help icon (help-tip.ts): what something is, in its tip; `open` also shows the tip beside it, as the page's one tip draws it. */
+export const helpTip = (what: string, text: string, open = false) =>
+  `<button type="button" class="help-tip" aria-label="About ${esc(what)}" aria-description="${esc(text)}" data-help="${esc(text)}">${i("help")}</button>${open ? `<div class="help-bubble" role="tooltip" style="position:static;margin-top:var(--sp-2)"><p>${esc(text)}</p></div>` : ""}`;
+/** Expand all / Collapse all (expander.ts `ExpandAll`). */
+export const expandAll = (what: string, expand = true) =>
+  `<button type="button" class="icon-btn small expand-all" data-expand="${expand}" aria-label="${expand ? "Expand" : "Collapse"} everything in ${esc(what)}" title="${expand ? "Expand" : "Collapse"} everything in ${esc(what)}">${i("expandAll")}${i("collapseAll")}</button>`;
 export const badge = (label: string, tone = "neutral") => `<span class="badge ${tone}">${label}</span>`;
 export const chip = (label: string, tone = "") => `<span class="chip ${tone}">${label}</span>`;
 export const eyebrow = (label: string) => `<h3 class="section-title">${label}</h3>`;

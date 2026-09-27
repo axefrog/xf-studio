@@ -3,6 +3,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { DETAIL_SLOTS } from "../src/render-detail";
+import { CHARACTER_CONTRIBUTIONS, sectionWords } from "../src/character-panel-sections";
 
 const MODULES = ["cc-catalogue", "cc-presentation", "cc-render-coverage", "cc-preset", "character-context", "game-text", "tweakdb-flats", "cc-panel",
   "character-context-actions", "browser-cc-catalogue-device", "studio-ui/panels/character", "studio-ui/panels/character-choices", "cc-catalogue-host",
@@ -17,9 +18,12 @@ const HOST = new Set(["cc-catalogue-host", "cc-catalogue-service", "cc-catalogue
 const PURE = MODULES.filter(name => !HOST.has(name));
 /**
  * The panel's hierarchy names the preview's own details (render-detail.ts `DETAIL_SLOTS`: "eyes", "piercings", …), which it matches to
- * rows through their creator slots; two of those words are also vanilla option names, which is not naming an option.
+ * rows through their creator slots, and its taxonomy's vocabulary (section ids and the anatomy and makeup words it matches against the
+ * words of any row's identifiers, `sectionWords`). Some of those words are also vanilla option names ("nose", "jaw"), which is not
+ * naming an option: no rule keys on an option's name, and a modded row built from the same words lands in the same place.
  */
-const PREVIEW_WORDS: Readonly<Record<string, ReadonlySet<string>>> = { "character-panel-sections": new Set(DETAIL_SLOTS) };
+const PREVIEW_WORDS: Readonly<Record<string, ReadonlySet<string>>> = { "character-panel-sections": new Set([...DETAIL_SLOTS, ...sectionWords(),
+  ...CHARACTER_CONTRIBUTIONS.map(contribution => contribution.id)]) };
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
 /** Code without comments, so prose may explain the rules with examples. */
 const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");

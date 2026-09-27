@@ -7,6 +7,7 @@ import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
 import { applyCapability, button } from "./controls";
 import { installReasonTips } from "./reason-tip";
+import { installHelpTips } from "./help-tip";
 import { DockView } from "./dock/dock-view";
 import type { PanelId } from "./dock/layout";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "./dock/persist";
@@ -40,6 +41,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref),
     expected: code => port.diagnostics.expected(code) });
   installReasonTips(document);
+  installHelpTips(document);
   const catalogue = views.catalogue;
   const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);
@@ -236,7 +238,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
 
   const commands = () => [...buildCommands(rt, theme, view, byId,
-    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...guidance.commands()];
+    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...guidance.commands()];
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
