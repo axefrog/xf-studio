@@ -724,14 +724,14 @@ test("scrub slider: rests at the middle, previews while moved, applies on releas
   expect(calls).toEqual(["curve in"]);
 });
 
-test("direction dial: Shift keeps the angle, Alt snaps the angle around V to 15°, and the height scale hides the tick the marker would cover", async () => {
+test("direction dial: Shift keeps the angle, Alt snaps the angle around V to 15°, Shift+Alt keeps the height, and the height scale hides the tick the marker would cover", async () => {
   const { dragDirection, dialPoint, snapStep, heightTicks, ANGLE_SNAP } = await lib();
   const range = { min: -89, max: 89 }, start = { azimuth: 329, elevation: 22 };
   const p = dialPoint({ azimuth: 97, elevation: 37 });
   expect(dragDirection(p.x, p.y, start, {}, range)).toEqual({ azimuth: 97, elevation: 37 });
   expect(dragDirection(p.x, p.y, start, { shift: true }, range)).toEqual({ azimuth: 329, elevation: 37 });
   expect(dragDirection(p.x, p.y, start, { alt: true }, range)).toEqual({ azimuth: 90, elevation: 37 }); // the angle snaps, the height is free
-  expect(dragDirection(p.x, p.y, start, { shift: true, alt: true }, range)).toEqual({ azimuth: 329, elevation: 37 }); // Shift wins
+  expect(dragDirection(p.x, p.y, start, { shift: true, alt: true }, range)).toEqual({ azimuth: 97, elevation: 22 }); // Shift+Alt keeps the height
   const nearFront = dialPoint({ azimuth: 356, elevation: 10 });
   expect(dragDirection(nearFront.x, nearFront.y, start, { alt: true }, range).azimuth).toBe(0); // 360 wraps to 0
   expect(ANGLE_SNAP).toBe(15);

@@ -13,7 +13,8 @@ import { ReadoutField } from "./readout-field";
  *   when you face her. Azimuth 0° is the front and rises toward V's right (90°), behind (180°) and V's left (270°).
  * - **Other lights** of the setup show as small dots in their own colours, for context; only the handle moves. While a light is dragged
  *   the other dots dim and a dashed radius runs from the centre to the edge through it: moving along that line changes only its height.
- * - **Modifiers while dragging:** Shift keeps the angle (height only, along the radius); Alt snaps the angle around V to 15° steps.
+ * - **Modifiers while dragging:** Shift keeps the angle (height only, along the radius); Alt snaps the angle around V to 15° steps; Shift and Alt together keep
+ *   the height (a smooth turn around V at the same height).
  * - **Height scale:** ticks at the range's ends, its quarters and level, each labelled; the current height is marked in the light's
  *   colour, and a labelled tick it would overlap is hidden (`heightTicks`).
  * - **One transaction per gesture.** A drag is begin, edits, commit (Escape during it restores the start and cancels); a burst of key
@@ -70,10 +71,12 @@ export function dialDirection(x: number, y: number, range: { min: number; max: n
 }
 /**
  * A drag's direction under the pointer, with the modifiers: Shift keeps the angle the drag started with (only the height follows the
- * pointer's distance from the centre), Alt snaps the angle around V to `ANGLE_SNAP` steps (the height stays free).
+ * pointer's distance from the centre), Alt snaps the angle around V to `ANGLE_SNAP` steps (the height stays free), and Shift with
+ * Alt keeps the height the drag started with instead (the angle follows the pointer, unsnapped).
  */
 export function dragDirection(x: number, y: number, start: Direction, modifiers: { shift?: boolean; alt?: boolean }, range: { min: number; max: number }): Direction {
   const free = dialDirection(x, y, range);
+  if (modifiers.shift && modifiers.alt) return { azimuth: free.azimuth, elevation: start.elevation };
   const azimuth = modifiers.shift ? start.azimuth : modifiers.alt ? (Math.round(free.azimuth / ANGLE_SNAP) * ANGLE_SNAP) % 360 : free.azimuth;
   return { azimuth, elevation: free.elevation };
 }
