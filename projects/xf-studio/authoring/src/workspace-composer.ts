@@ -49,6 +49,10 @@ export class WorkspaceComposer {
       idle: motion?.idle ?? original.idle, idleTime: motion?.idleTime ?? original.idleTime,
       idlePaused: motion?.idlePaused ?? original.idlePaused,
       idleBody: motion?.idleBody ?? original.idleBody, idleFace: motion?.idleFace ?? original.idleFace };
+    // The chosen idle is stored only when it isn't the default (the close-up), so a workspace that never chooses keeps its bytes.
+    const idleClip = motion ? motion.idleClip : original.idleClip;
+    delete preview.idleClip;
+    if (idleClip && idleClip !== "closeup") preview.idleClip = idleClip;
     // The context owns every creator choice (CORE-58) and is stored only when something was set. The retired tried piercing style is
     // written back as read until the context stores choices (it migrates the style into them once its catalogue is ready, CORE-74);
     // then it is written empty.

@@ -14,6 +14,6 @@ export const PLATFORM_VIEW_TOOLS: readonly ViewToolContribution[] = Object.freez
   { id: "camera.body", module: "platform", label: "Whole body view", title: "Frame your V's whole body", icon: "body", order: 20,
     scenes: ["character"], placement: "toolbar", kind: "action", state: "camera", dispatches: "camera.body",
     keywords: "full body camera frame arms legs feet nails" },
-  { id: "motion.idle", module: "platform", label: "Character-creator idle", icon: "play", order: 50, scenes: ["character"],
+  { id: "motion.idle", module: "platform", label: "Game idle", icon: "play", order: 50, scenes: ["character"],
     placement: "toolbar", kind: "toggle", state: "scene", dispatches: "motion.setIdle", keywords: "idle motion animation play pause" },
 ]);
