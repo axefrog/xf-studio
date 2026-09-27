@@ -172,6 +172,9 @@ test("intensity: toward full or rest from the drag's start, zeros and controls o
   expect(apply({ kind: "expression.intensity", base, amount: -1 }, start).part.controls).toEqual({});
   expect(apply({ kind: "expression.intensity", base: { jaw_mid_open: f32(0.4) }, amount: 1 }, start).part.controls).toEqual({ jaw_mid_open: 1, lips_l_corner_up: f32(0.2) });
   expect(expressionCapability(start, { kind: "expression.intensity", base, amount: 2 })).toMatchObject({ available: false, code: "invalid_value" });
+  // The bleed area snaps the slider to the middle, which previews amount 0: from a mid-drag preview, the start-of-drag weights come back.
+  const previewed = apply({ kind: "expression.intensity", base, amount: 0.8 }, start);
+  expect(apply({ kind: "expression.intensity", base, amount: 0 }, { part: previewed.part, editor: {} }).part.controls).toEqual(base);
   // In the Studio: a drag is one Undo step; cancelling restores the start and leaves no step.
   const c = core();
   c.app.dispatch({ kind: "expression.setControl", name: "jaw_mid_open", value: 0.4 } as never);
