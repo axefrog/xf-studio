@@ -3,6 +3,7 @@ import { applyCapability, badge, button, emptyState, note, section, Segmented, S
 import { h, setText } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
 import { comingSoon, liveFeatures } from "../coming-soon";
+import { ChoiceList } from "../components/choice-list";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -260,9 +261,9 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
   const STILL = "still";
-  // Mutually exclusive buttons, one per idle prepared on this computer (the list can change), wrapping onto more rows as needed. The
-  // pressed button moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
-  const source = new Segmented<string>({ label: "Body", wrap: true, reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
+  // One choice per idle prepared on this computer (the list can change), all shown, in the Character panel's choice look (ChoiceList).
+  // The chosen one moves at once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
+  const source = new ChoiceList<string>({ label: "Body", reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
     if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });

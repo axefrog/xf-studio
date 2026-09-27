@@ -287,3 +287,33 @@ test("folder setting: several found folders are all shown as choices with where 
   folder.update({ chosen: null, found: [] });
   expect([clear.hidden, el.querySelector(".folder-using")!.textContent]).toEqual([true, "Not chosen yet"]);
 });
+
+test("choice list: every choice shown in the Character look; arrows move focus without choosing, a click chooses; unavailable choices keep their reason; tiles carry an accessible name", async () => {
+  const { ChoiceList } = await lib();
+  const chosen: string[] = [];
+  const list = new ChoiceList<string>({ label: "Body", reserveNote: true, onSelect: value => chosen.push(value),
+    options: [{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "inventory", label: "Inventory" }] });
+  const el = list.element as unknown as LightElement;
+  const items = () => Array.from(el.querySelectorAll(".choice"));
+  expect(el.querySelector(".choices")!.classList.contains("chips")).toBe(true);
+  list.update("closeup");
+  expect(items().map(item => [item.getAttribute("role"), item.getAttribute("aria-selected"), item.tabIndex])).toEqual([["option", "false", -1], ["option", "true", 0], ["option", "false", -1]]);
+  // An unchanged list rebuilds nothing.
+  const before = items()[0];
+  list.setOptions([{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "inventory", label: "Inventory" }]);
+  expect(items()[0]).toBe(before);
+  items()[1]!.focus();
+  key(el.querySelector(".choices") as unknown as HTMLElement, "ArrowRight");
+  expect(chosen).toEqual([]);
+  items()[2]!.click();
+  expect(chosen).toEqual(["inventory"]);
+  list.update("still", value => value === "inventory" ? { available: false, reason: "That idle isn't prepared." } : { available: true });
+  expect([items()[2]!.getAttribute("aria-disabled"), items()[2]!.getAttribute("data-reason")]).toEqual(["true", "That idle isn't prepared."]);
+  items()[2]!.click();
+  expect(chosen).toEqual(["inventory"]);
+  list.update("still", undefined, { disabled: true, reason: "Your V's motion appears once the 3D preview is ready." });
+  expect(el.querySelector(".control-note")!.textContent).toBe("Your V's motion appears once the 3D preview is ready.");
+  const tiles = new ChoiceList<string>({ label: "Eye shape", layout: "tiles", onSelect: () => {}, options: [{ value: "0", label: "1", name: "Eye shape 1" }] });
+  const tile = (tiles.element as unknown as LightElement).querySelector(".choice")!;
+  expect([tile.getAttribute("aria-label"), tile.textContent]).toEqual(["Eye shape 1", "1"]);
+});

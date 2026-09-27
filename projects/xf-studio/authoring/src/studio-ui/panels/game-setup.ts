@@ -1,7 +1,7 @@
 import type { FolderField } from "../../local-setup-actions";
 import type { LocalSetupFields } from "../../local-settings-server";
 import { applyCapability, button, note, Segmented } from "../controls";
-import { FolderSetting, type FolderChoice, type FolderOutcome } from "../components";
+import { ChoiceList, FolderSetting, type FolderChoice, type FolderOutcome } from "../components";
 import { h, setAttr, setText, setValue, uid } from "../dom";
 import { helpTip } from "../help-tip";
 import { icon } from "../icons";
@@ -106,10 +106,10 @@ export function gameSetupForm(rt: StudioRuntime) {
   wolvenKit.addEventListener("change", () => void save({ wolvenKitCli: wolvenKit.value.trim() || null }));
   const wolvenKitField = h("div", { class: "control" }, h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Your own WolvenKit (optional)" }),
     helpTip("Your own WolvenKit", "Leave this empty and XF Studio sets WolvenKit up for you (it asks before downloading).")), wolvenKit);
-  const plateHead = h("select", { class: "field" });
-  const plateHeadLabel = h("span", { class: "control-label" });
-  const plateHeadTip = helpTip("the head used for the eye plate", "Build cuts the eye plate from this head. Choose the unmodified head only if a head mod stops Build.");
-  plateHead.addEventListener("change", () => void save({ eyePlateHead: plateHead.value as LocalSetupFields["eyePlateHead"] }));
+  // Two long choices, both shown (ChoiceList `rows`); the label and choices come from the settings view (one wording everywhere).
+  const plateHead = new ChoiceList<LocalSetupFields["eyePlateHead"]>({ label: "Head used for the eye plate", layout: "rows",
+    help: "Build cuts the eye plate from this head. Choose the unmodified head only if a head mod stops Build.",
+    onSelect: value => void save({ eyePlateHead: value }) });
 
   const findAgain = button({ label: "Find my game and mod manager again", icon: "search", small: true, variant: "quiet", onClick: () => void detect(true) });
   const restore = button({ label: "Restore previous settings", icon: "reset", small: true, onClick: () => void (async () => {
@@ -120,7 +120,7 @@ export function gameSetupForm(rt: StudioRuntime) {
   const mo2Section = h("div", { class: "setup-mo2" }, mo2.element, profileField), directSection = h("div", { class: "setup-direct" }, direct.element);
   const gameElement = h("div", { class: "setup-section setup-game" },
     h("div", { class: "row wrap gap-s" }, restore), route.element, game.element, mo2Section, directSection,
-    h("div", { class: "control" }, h("div", { class: "control-line" }, plateHeadLabel, plateHeadTip), plateHead), h("div", { class: "row wrap gap-s" }, findAgain));
+    plateHead.element, h("div", { class: "row wrap gap-s" }, findAgain));
   const toolsElement = h("div", { class: "setup-section setup-tools" }, wolvenKitField);
   const saves = savesFolderField(rt, save);
   // Finding is read only and quick: done once when the form is first shown, and again on request.
@@ -183,13 +183,10 @@ export function gameSetupForm(rt: StudioRuntime) {
       setValue(wolvenKit, fields?.wolvenKitCli ?? "");
       if (view) {
         const choice = view.eyePlateHead;
-        setText(plateHeadLabel, choice.label);
-        setAttr(plateHead, "aria-label", choice.label);
-        if (plateHead.options.length !== choice.options.length)
-          plateHead.replaceChildren(...choice.options.map(option => h("option", { value: option.value, text: option.label })));
-        if (document.activeElement !== plateHead) plateHead.value = view.fields.eyePlateHead;
+        plateHead.setOptions(choice.options.map(option => ({ value: option.value, label: option.label })));
+        plateHead.update(view.fields.eyePlateHead, undefined, locked ? { disabled: true, reason: "Restore your previous settings first." } : {});
       }
-      for (const control of [profile, profileText, wolvenKit, plateHead]) control.disabled = locked;
+      for (const control of [profile, profileText, wolvenKit]) control.disabled = locked;
       applyCapability(findAgain, frame.installDetection?.busy ? { available: false, reason: "XF Studio is looking now." }
         : port.installDetection.capability({ kind: "detect.gameInstalls" }));
       saves.update(frame, locked);

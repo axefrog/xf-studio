@@ -32,6 +32,7 @@ import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTH
 import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
 import { expander, expanderLabel, setExpanded } from "../expander";
+import { choiceItem } from "../components/choice-list";
 
 export type ChoiceListInput = {
   /** The option shown (its ID) and the search the list is limited to: another of either rebuilds the list. */
@@ -111,7 +112,7 @@ export class ChoiceList {
   private active: HTMLButtonElement | null = null;
 
   constructor(id: string, private readonly onChoose: (choice: CcPanelChoice) => void, private readonly onHint: (choice: CcPanelChoice) => void = () => {}) {
-    this.list = h("div", { class: "cc-choices", id, role: "listbox" });
+    this.list = h("div", { class: "choices cc-choices", id, role: "listbox" });
     this.status = h("p", { class: "note cc-choices-status", hidden: true });
     this.element = h("div", { class: "cc-choice-list" }, this.list, this.status);
     this.list.addEventListener("keydown", event => this.key(event));
@@ -271,10 +272,11 @@ export class ChoiceList {
     const from = choice.mod >= 0 ? `From ${input.mods[choice.mod] ?? "a mod"}` : "From the game";
     // In a colour grid every choice but Off is a narrow swatch; its label is the accessible name and tooltip.
     const swatch = input.grid && !choice.off ? h("span", { class: "swatch", "aria-hidden": "true" }) : null;
-    const item = h("button", { class: `cc-choice${input.grid ? " swatch-choice" : ""}${choice.off ? " off" : ""}`, type: "button", role: "option",
-      "aria-selected": String(choice.position === input.selected), tabindex: "-1", title: `${choice.off ? "Off" : choice.label} · ${from}`,
-      "aria-label": choice.off ? "Off" : choice.label, "aria-description": from, "data-position": String(choice.position) },
-      swatch, swatch ? null : h("span", { class: "cc-choice-label", text: choice.off ? "Off" : choice.label }));
+    // One look with every choice list (the library's `choiceItem`); the creator's own marks (prepared ahead) ride on `cc-choice`.
+    const label = choice.off ? "Off" : choice.label;
+    const item = choiceItem({ label, selected: choice.position === input.selected, title: `${label} · ${from}`, description: from, off: choice.off,
+      swatch: input.grid, className: "cc-choice", content: swatch ?? h("span", { class: "choice-label cc-choice-label", text: label }) });
+    item.dataset.position = String(choice.position);
     // The choice shows as chosen at once, before anything is prepared; the next update puts back the V's own if the change was refused.
     item.addEventListener("click", () => { this.rove(item); this.select(choice.position); this.onChoose(choice); });
     item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });

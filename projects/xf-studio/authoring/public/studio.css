@@ -248,8 +248,6 @@ span.category { border-color: transparent; background: transparent; padding-left
 .segment:disabled { opacity: .45; cursor: not-allowed; }
 /* Wrapping choices: even tiles at least as wide as the longest label (--segment-min, set by the control), as many a row as fit; a label
    wider than the row takes the row and wraps inside its tile. */
-.segmented.wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--segment-min, 6ch)), 1fr)); width: 100%; font-size: var(--fs-sm); }
-.segmented.wrap .segment { justify-content: center; text-align: center; white-space: normal; height: auto; min-height: calc(var(--control-h) - 4px); padding-block: 2px; }
 .color-field { display: flex; gap: var(--sp-3); align-items: center; }
 .swatch-frame { display: inline-grid; width: 34px; height: var(--control-h); border: 1px solid var(--line-strong); padding: 2px; background: var(--bg-sunken); border-radius: 0 var(--bevel-sm) 0 0; flex: none; }
 .swatch-input { appearance: none; width: 100%; height: 100%; border: 0; padding: 0; background: none; cursor: pointer; }
@@ -707,22 +705,39 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-row-not-shown.on { visibility: visible; }
 .cc-row-not-shown .icon { width: 12px; height: 12px; }
 .cc-row.not-shown .cc-row-label { color: var(--text-muted); }
-.cc-choices { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) var(--sp-4) var(--cc-indent); }
-.cc-choices.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
-.cc-choice { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); min-height: var(--control-h-sm); min-width: var(--control-h-sm); padding: 0 var(--sp-3);
-  border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-muted); font-size: var(--fs-sm); }
-.cc-choice:hover { color: var(--text); border-color: var(--line-strong); }
-.cc-choice[aria-selected="true"] { border-color: var(--signal); color: var(--text); background: var(--signal-bg); box-shadow: inset 0 -2px 0 var(--signal); }
-.cc-choice.off { font-family: var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
-.cc-choice.swatch-choice { padding: 2px; aspect-ratio: 1; min-width: 0; }
-.cc-choice.swatch-choice .swatch { width: 100%; height: 100%; }
-.cc-choice.swatch-choice .swatch[data-empty] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line) 3px 4px); }
-.cc-choice.swatch-choice.off { aspect-ratio: auto; grid-column: span 2; }
+/* Choice list (components/choice-list.ts) and the Character panel's creator choices share one look: chips that wrap, rows, or even tiles. */
+.choices { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
+.choices.rows { display: grid; grid-template-columns: minmax(0, 1fr); }
+.choices.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); }
+.choices.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.choice { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); min-height: var(--control-h-sm); min-width: var(--control-h-sm); padding: 0 var(--sp-3);
+  border: 1px solid var(--line); background: var(--bg-raised); color: var(--text-muted); font: inherit; font-size: var(--fs-sm); text-align: center; cursor: pointer; }
+.choice:hover { color: var(--text); border-color: var(--line-strong); }
+.choice[aria-selected="true"] { border-color: var(--signal); color: var(--text); background: var(--signal-bg); box-shadow: inset 0 -2px 0 var(--signal); }
+.choice[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.choice[aria-disabled="true"]:hover { color: var(--text-muted); border-color: var(--line); }
+.choice:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.choice-content { display: inline-flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.choice-content .swatch { width: 12px; height: 12px; flex: none; background: var(--swatch); border: 1px solid var(--line); }
+.choices.rows .choice { justify-content: flex-start; text-align: left; padding-block: var(--sp-2); }
+.choices.tiles .choice { padding: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.choice-group { display: grid; gap: var(--sp-1); }
+.choices.grouped { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.choice-group-title { font: 600 var(--fs-2xs)/1.6 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+.choice-group-items { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.choices.rows .choice-group-items { display: grid; grid-template-columns: minmax(0, 1fr); }
+.choice.off { font-family: var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
+.choice.swatch-choice { padding: 2px; aspect-ratio: 1; min-width: 0; }
+.choice.swatch-choice .swatch { width: 100%; height: 100%; }
+.choice.swatch-choice .swatch[data-empty] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line) 3px 4px); }
+.choice.swatch-choice.off { aspect-ratio: auto; grid-column: span 2; }
 /* A swatch derived from what wins for the choice: one colour, a root-to-tip gradient, or the game's icon cut from a sheet (cc-swatch.ts, cc-icons.ts). */
-.cc-choice.swatch-choice .swatch, .cc-row-swatch { background-color: var(--swatch); background-image: var(--swatch-image, none); background-size: var(--swatch-size, auto);
+.choice.swatch-choice .swatch, .cc-row-swatch { background-color: var(--swatch); background-image: var(--swatch-image, none); background-size: var(--swatch-size, auto);
   background-position: var(--swatch-position, 0 0); background-repeat: no-repeat; }
-.cc-choice.swatch-choice .swatch[data-empty="waiting"] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line-soft) 3px 4px); opacity: .7; }
-.cc-choice.swatch-choice .cc-choice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice.swatch-choice .swatch[data-empty="waiting"] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line-soft) 3px 4px); opacity: .7; }
+.choice.swatch-choice .choice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The creator choices sit indented under their row. */
+.cc-choices { padding: var(--sp-2) var(--sp-3) var(--sp-4) var(--cc-indent); }
 /* Grid, not a flex column: a flex column sizes a group of aspect-ratio swatches too tall. */
 .cc-choices.grouped { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .cc-maker-items { display: flex; flex-wrap: wrap; gap: var(--sp-2); }

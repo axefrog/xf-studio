@@ -482,7 +482,7 @@ A decided feature that isn't built yet shows where it will live, as a **visible,
 | Tattoos | Modules menu › Character, Planned | `module:tattoos` | [Tattoos brief](../character-customization/tattoos-brief.md) |
 | New view | Panels flyout › Views | `action:view.create` | [View graph design](view-graph-design.md) P4 |
 | Duplicate view (shared camera) | Panels flyout › Views | `action:view.duplicate` | [View graph design](view-graph-design.md) P4 |
-| Pose (body source) | Motion › Body, a disabled choice | `module:poses` | [Pose library design](../animation/pose-library-design.md), [view graph §5.1](view-graph-design.md#51-poses-v-centric-no-document-part). In the catalogue (`motionPose`); placed once the Body select becomes a button set (`claude/hair-physics`), whose `Segmented` extension it reuses. The Poses module is in progress on `claude/pose-panel` |
+| Pose (body source) | Motion › Body, a disabled choice | `module:poses` | [Pose library design](../animation/pose-library-design.md), [view graph §5.1](view-graph-design.md#51-poses-v-centric-no-document-part). In the catalogue (`motionPose`), not placed yet: the Poses module (`claude/pose-panel`) decides how a pose joins Body |
 | Skin scattering quality | Camera & light › Display | `action:preview.setSubsurfaceQuality` | [Skin shader §11](../materials/shader-skin.md) ("a viewing preference beside the lighting presets") |
 | Face handles | Expression, a disabled button | `tool:expressions.handles` | [Expression editor design](../animation/expression-editor-design.md) phase 2 |
 | Sculpt | Expression, a disabled button | `tool:expressions.sculpt` | [Expression editor design](../animation/expression-editor-design.md), "sculpt mode (Option 3)", confirmed as a later mode |
@@ -502,11 +502,11 @@ The rule (AGENTS.md): show every choice at once (a button set, a swatch row, an 
 
 | Dropdown | Verdict | To | State |
 |---|---|---|---|
-| Motion › Body (Still or an idle) | Convert | `Segmented` with dynamic options | Owned by `claude/hair-physics` |
-| Character › Eye shape in the 3D view (1–22 by head) | Convert | Numbered button set that wraps | Waits for `Segmented`'s dynamic options and wrapping (`claude/hair-physics`) |
-| Character › Clothes in the 3D view (up to 4 states, only those offered) | Convert | Button set | Same |
-| Settings › Head used for the eye plate (2 long options) | Convert | Button set that stacks | Same |
-| Colour & finish › Glitter preview model (research only, 5 long options) | Convert | Button set that stacks | Same |
+| Motion › Body (Still or an idle) | Convert | `ChoiceList` (chips) | **Done**. It had become a wrapped `Segmented` on `claude/hair-physics`, which read as a broken listbox (a sunken box of centred rows, the chosen one only underlined); `Segmented`'s `wrap` mode is removed |
+| Character › Eye shape in the 3D view (1–22 by head) | Convert | `ChoiceList` (tiles), each tile named "Eye shape n" | **Done** |
+| Character › Clothes in the 3D view (up to 4 states, only those offered) | Convert | `ChoiceList` (rows) | **Done** |
+| Settings › Head used for the eye plate (2 long options) | Convert | `ChoiceList` (rows) | **Done** |
+| Colour & finish › Glitter preview model (research only, 5 long options) | Convert | `ChoiceList` (rows) | **Done** |
 | Settings › Cyberpunk 2077 folder, Mod Organizer 2 instance, extra mod folder | Convert | `FolderSetting` with every found folder shown as a choice | **Done**: the library's FolderSetting gained `found`/`onSelect` and an optional folder's `onClear`; the first found folder is saved while none is chosen (defaults first) |
 | Settings › Mod Organizer 2 profile | Keep | — | An open-ended list of the person's own profile names, which can run to dozens. A short list (5 or fewer) as buttons is optional later |
 | Expression › Start from (about 100 grouped expressions, used as a command) | Convert | `SearchField` plus `TreeView` grouped by provider | Folded into the expressions drawer follow-up |
@@ -526,7 +526,7 @@ Phase 2 applied §3–§6a with the component library's help tips, sections, pro
 | Library, Mod package, History | Done (L3, L4: the buttons already share a row and wrap only in a narrow panel; L8 not done) |
 | Shell, Settings, Help, Expression, Save Explorer | Done (Save Explorer's tree keys note kept: the tree has no heading to hold a tip) |
 | Toasts and reasons (§3.20) | Done |
-| Coming soon placeholders (§6) | Done, except the Pose choice (waits for the Body button set) |
-| Dropdowns (§6a) | Settings folders done; four button-set conversions wait for `Segmented`'s dynamic options and wrapping |
+| Coming soon placeholders (§6) | Done, except the Pose choice (left to the Poses module) |
+| Dropdowns (§6a) | Done except the MO2 profile (kept) and Expression › Start from (the drawer follow-up). The library's `ChoiceList` (chips, rows, tiles) is the single-select control for more than four options or long labels, in the Character panel's choice look (the creator choices are built from the same `choiceItem`); `Segmented` is for two to four short options |
 
-**Still open:** L6 (studio slider sub-groups), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and the §6a conversions above.
+**Still open:** L6 (studio slider sub-groups), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and Expression › Start from (§6a).

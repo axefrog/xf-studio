@@ -10,7 +10,7 @@ import type { MottleKey, RecipeAction } from "../../../engines/layered-makeup/re
 import type { ReadonlyDeep } from "../../../read-only";
 import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../../../studio-ui/controls";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
-import { setHelp } from "../../../studio-ui/components";
+import { ChoiceList, setHelp } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import type { Frame } from "../../../studio-ui/runtime";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -102,7 +102,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
     "One shift colour per preset is built into your mod."] }, h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element));
 
   // Glitter preview suite and flake studies.
-  const model = new SelectField<GlitterModel>({ label: "Glitter preview model", onChange: value => {
+  // Five models with long names, all shown (ChoiceList `rows`); a research tool.
+  const model = new ChoiceList<GlitterModel>({ label: "Glitter preview model", layout: "rows", onSelect: value => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
   } });
   const modelSummary = note("");
@@ -200,8 +201,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       directSection.hidden = !(glitter && ["direct", "clustered", "fine"].includes(modelId));
       if (glitter) {
         const modelChoices = ctx.facade.choicesFor(target, "glitter.selectModel", "model");
-        model.update(catalogues(ctx).glitterModels.map(item => ({ value: item.id, label: item.label,
-          disabled: modelChoices.find(choice => choice.value === item.id)?.capability.available === false && item.id !== modelId })), modelId);
+        model.setOptions(catalogues(ctx).glitterModels.map(item => ({ value: item.id, label: item.label })));
+        model.update(modelId, value => modelChoices.find(choice => choice.value === value)?.capability ?? { available: true });
         setText(modelSummary, catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
       }
       if (!classicSection.hidden) {

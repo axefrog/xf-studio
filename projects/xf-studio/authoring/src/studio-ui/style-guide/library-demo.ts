@@ -1,7 +1,7 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, type TabItem } from "../components";
+  Toggle, ColorField, applyCapability, openMenu, TreeView, favouriteToggle, FolderSetting, ChoiceList, type TabItem } from "../components";
 import { h } from "../dom";
 
 type Mount = () => HTMLElement;
@@ -108,6 +108,18 @@ const MOUNTS: Record<string, Mount> = {
     tree.element.style.height = "220px";
     const search = new SearchField({ label: "Search sample poses", placeholder: "Search poses (Down moves into the list)", onFilter: () => {}, onArrowDown: () => tree.focus() });
     return h("div", { style: "max-width:420px" }, stack({ gap: "normal" }, search.element, tree.element)); },
+  "lib-choice-list": () => {
+    const body: ChoiceList<string> = new ChoiceList<string>({ label: "Body", reserveNote: true, onSelect: value => body.update(value, undefined, { note: value === "still" ? "" : "Loading that idle; the previous one plays until it's ready." }),
+      options: [["still", "Still"], ["closeup", "Creator close-up"], ["eyes", "Creator close-up eyes section"], ["full", "Creator full body"], ["inventory", "Inventory"],
+        ["nails", "Creator nails"], ["gender", "Gender selection"]].map(([value, label]) => ({ value: value!, label: label! })) });
+    body.update("closeup");
+    const eyes: ChoiceList<string> = new ChoiceList<string>({ label: "Eye shape in the 3D view", layout: "tiles", onSelect: value => eyes.update(value),
+      options: Array.from({ length: 22 }, (_, k) => ({ value: String(k), label: String(k + 1), name: `Eye shape ${k + 1}` })) });
+    eyes.update("6");
+    const head: ChoiceList<string> = new ChoiceList<string>({ label: "Head used for the eye plate", layout: "rows", onSelect: value => head.update(value),
+      options: [{ value: "installed", label: "The head your game loads (recommended)" }, { value: "base-game", label: "The unmodified game head" }] });
+    head.update("installed");
+    return h("div", { style: "max-width:420px" }, stack({ gap: "loose" }, body.element, eyes.element, head.element)); },
   "lib-folder-setting": () => {
     let chosen: string | null = null;
     const folder: FolderSetting = new FolderSetting({ label: "Saves folder", help: "Where the game keeps your saves.", placeholder: "e.g. %USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077",

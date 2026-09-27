@@ -30,12 +30,10 @@ const finishGroups: [string, string, [string, string][]][] = [
   ["Experimental", "warn", [["shimmer", "Shimmer"], ["glossy", "Glossy"], ["iridescent", "Colour-shift"]]],
   ["Preview only", "warn", [["glitter", "Glitter"]]]];
 
-/** A wrapping segmented specimen (the control's `wrap` layout, with a reserved note line when `note` is given). */
-const wrapped = (label: string, options: string[], selected: number, note?: string) => {
-  const longest = Math.max(...options.map(option => option.length));
-  return `<div class="control"><span class="control-label"><span>${label}</span></span><div class="segmented wrap" role="group" aria-label="${label}" style="--segment-min:calc(${longest}ch + 2 * var(--sp-4) + 2px)">${options.map((option, index) =>
-    `<button type="button" class="segment" aria-pressed="${index === selected}"><span>${option}</span></button>`).join("")}</div>${note ? `<small class="control-note info">${note}</small>` : ""}</div>`;
-};
+/** A choice list specimen (components/choice-list.ts): `layout` chips, rows or tiles, the chosen one marked, an optional reserved note. */
+const choices = (label: string, options: string[], selected: number, layout: "chips" | "rows" | "tiles", note?: string) =>
+  `<div class="control choice-list"><div class="control-line"><span class="control-label">${label}</span></div><div class="choices ${layout}" role="listbox" aria-label="${label}">${options.map((option, index) =>
+    `<button type="button" class="choice" role="option" aria-selected="${index === selected}" tabindex="${index === selected ? 0 : -1}"><span class="choice-label">${option}</span></button>`).join("")}</div>${note ? `<small class="control-note info">${note}</small>` : ""}</div>`;
 export function components() {
   return section("components", "04", "Components",
     `Components are presentation only. Each one names the application action or read-only state behind it, and shows the application's reason
@@ -117,19 +115,20 @@ export function components() {
       a11y: "Native checkbox with role=switch; the disabled reason is visible text, not only a tooltip." }),
     pattern({ id: "c-segmented", title: "Segmented control", status: "implemented",
       specimen: `<div class="stack-s">${segmented("Selected point handles", ["Smooth", "Symmetric", "Corner"], 0)}${segmented("Generated texture resolution", ["512", "1K", "2K", "4K"], 1, [3])}</div>`,
-      what: "Mutually exclusive choices shown together; the selection carries a cyan underline. Choices the application refuses (e.g. 4K over the hardware budget) are disabled with the reason as a tooltip and in the palette. A data-driven list (the Motion panel's Body source: Still and the game idles prepared on this computer) changes its choices with `setOptions`, which rebuilds the buttons only when the list differs and keeps focus on the same choice; `wrap` flows the buttons onto more rows when their labels don't fit; the whole group can be disabled with one visible reason, and a reserved note line under it carries a transient state (\"Loading that idle\") without moving anything.",
-      when: "Two to eight short options that benefit from comparison, fixed or data-driven (wrap them when they may not fit one row). Long lists that need search use a select or a menu.",
+      what: "Mutually exclusive choices shown together; the selection carries a cyan underline. Choices the application refuses (e.g. 4K over the hardware budget) are disabled with the reason as a tooltip and in the palette. The choices may change with `setOptions` (rebuilt only when the list differs, focus kept on the same choice); the whole group can be disabled with one visible reason, and a reserved note line under it carries a transient state without moving anything.",
+      when: "Two to four short options in one row that benefit from comparison (modes, views, a size). More options, or long labels, use a Choice list (c-choice-list).",
       a11y: "A labelled group of toggle buttons with aria-pressed; a disabled group states its reason in the note line and as the group's description.",
       drives: `${code("choicesFor(target, kind, field)")} or per-value ${code("capability")}; ${code("setOptions")} for a list that changes.` }),
-    pattern({ id: "c-segmented-wrap", title: "Segmented control, wrapping", status: "implemented", wide: true,
-      specimen: `<div style="display:grid;gap:var(--sp-5);max-width:320px">${wrapped("Body", ["Still", "Creator close-up", "Creator full body", "Inventory", "Creator nails", "Gender selection"], 3,
-        "Loading that idle; the previous one plays until it's ready.")}${wrapped("Eye shape", Array.from({ length: 22 }, (_, k) => String(k + 1)), 6)}${wrapped("Head used for the eye plate",
-        ["The head your mods install", "The unmodified game head"], 0)}</div>`,
-      what: "The same control with `wrap`: even tiles as wide as the longest label, as many a row as fit the panel. A numbered set (eye shapes 1–22) fills each row with equal tiles; two long labels that can't share a row stack one per row; a data-driven list (the Motion panel's Body source) changes with `setOptions`. The reserved note line under it carries a transient state (\"Loading that idle\") in its own place, and the pressed tile moves the moment it is chosen.",
-      when: "Exclusive choices whose count or labels vary, or that may not fit one row. Fixed short sets keep the one-row strip.",
-      combine: "Label above, tiles, then the reserved note line; a switch or slider that depends on the choice goes below the note, never beside the tiles.",
-      adapt: "Tiles never overflow: the row count grows as the panel narrows, and a label wider than the whole row wraps inside its tile. The pressed tile keeps its cyan underline in every row.",
-      drives: `${code("setOptions(choices)")}, then ${code("update(selected, capability, { disabled, reason, note })")}.` }),
+    pattern({ id: "c-choice-list", title: "Choice list", status: "implemented", wide: true,
+      specimen: `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--sp-6)">${choices("Body", ["Still", "Creator close-up", "Creator close-up eyes section", "Creator full body", "Inventory", "Creator nails", "Gender selection"], 3, "chips",
+        "Loading that idle; the previous one plays until it's ready.")}${choices("Eye shape in the 3D view", Array.from({ length: 22 }, (_, k) => String(k + 1)), 6, "tiles")}${choices("Head used for the eye plate",
+        ["The head your game loads (recommended)", "The unmodified game head"], 0, "rows")}</div>`,
+      what: "One choice among more than about four options, or among long labels, all shown at once in the Character panel's choice look: bordered chips that wrap (`chips`), one full-width row each (`rows`), or an even grid of tiles for a numbered set (`tiles`). The chosen one has the signal border, fill and underline. A reserved note line under it carries a passing state (\"Loading that idle\") or why the whole list is unavailable, without moving anything.",
+      when: "The Motion panel's Body source, the Character panel's clothes and eye shape, Settings' eye-plate head, the Glitter preview model. Two to four short options stay a Segmented control; a long list that needs search uses a search field over a tree.",
+      combine: "Label (with its help tip) above, the choices, then the reserved note; controls that depend on the choice go below the note.",
+      adapt: "Chips and tiles wrap onto more rows as the panel narrows; rows never truncate a label (it wraps inside its row).",
+      drives: `${code("setOptions(choices)")}, then ${code("update(selected, capability, { disabled, reason, note })")}.`,
+      a11y: "The listbox pattern: one Tab stop, arrows (Up and Down by a row in tiles), Home and End move focus without choosing; Enter, Space or a click chooses. An unavailable choice stays focusable with its reason." }),
     pattern({ id: "c-color", title: "Colour field", status: "implemented",
       specimen: `<div class="control" style="max-width:200px"><span class="control-label"><span>Colour</span></span><div class="color-field"><span class="swatch-frame"><input type="color" class="swatch-input" value="#b0587a" aria-label="Colour"></span><input class="field mono hex" value="#b0587a" aria-label="Colour hex value"></div></div>`,
       what: "Native picker plus a hex field. Picker changes are one transaction; hex entry commits on Enter/blur and flags invalid input without applying it.",

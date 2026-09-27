@@ -38,7 +38,7 @@ import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-p
 import { applyCapability, button, note, section, SelectField, Toggle } from "../controls";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
-import { propertyList } from "../components";
+import { ChoiceList, propertyList } from "../components";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
@@ -48,7 +48,7 @@ import type { Frame, Port, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { characterDetailLine, characterDetailRows } from "./preview";
-import { ChoiceList, swatchLook } from "./character-choices";
+import { ChoiceList as CreatorChoiceList, swatchLook } from "./character-choices";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { ClothingState } from "../../clothing-dressing";
 import type { ClothingArea } from "../../save-loadout";
@@ -164,7 +164,8 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   noMatch.hidden = true;
 
   // ---- Clothing: which of V's clothes the 3D view shows (a viewing setting; the panel's Undo steps it too) ----
-  const clothingState = new SelectField<ClothingState>({ label: "Clothes in the 3D view", onChange: state => dispatch({ kind: "character.setClothing", state }),
+  // Every state on offer shown at once (show the options): long labels, so one full-width row each (ChoiceList `rows`).
+  const clothingState = new ChoiceList<ClothingState>({ label: "Clothes in the 3D view", layout: "rows", onSelect: state => dispatch({ kind: "character.setClothing", state }),
     help: CLOTHES_HELP });
   // One switch per clothing area the save dresses; switching one picks the areas yourself (the setting becomes "Choose areas").
   const areaToggles = new Map<ClothingArea, Toggle>();
@@ -173,7 +174,8 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const clothingNote = note("");
 
   // ---- Controls contributions name (character-panel-sections.ts): the eye shape, the uncensored look, the clothes ----
-  const eyeShape = new SelectField<string>({ label: "Eye shape in the 3D view", onChange: value => dispatch({ kind: "preview.setEyeShape", index: Number(value) }),
+  // A numbered set (1–22, by head): an even grid of tiles (ChoiceList `tiles`), each named "Eye shape n".
+  const eyeShape = new ChoiceList<string>({ label: "Eye shape in the 3D view", layout: "tiles", onSelect: value => dispatch({ kind: "preview.setEyeShape", index: Number(value) }),
     help: "The 3D view's eye shape, which eye makeup is placed on. It overrides your V's Eyes row in the 3D view only." });
   // One reserved line: why the eye shape waits, or that it overrides the saved one (never appears or vanishes).
   const eyeNote = note("");
@@ -230,7 +232,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   type RowControls = { view: RowView; element: HTMLElement; main: HTMLButtonElement; label: HTMLElement; value: HTMLElement; swatch: HTMLElement;
     notShown: HTMLElement; off: HTMLButtonElement; reset: HTMLButtonElement;
     /** What the row is (it follows a switcher, the 3D view can't draw it), in a help tip; only on rows where an option has something to say. */
-    help: HTMLButtonElement | null; list: ChoiceList; more: HTMLButtonElement;
+    help: HTMLButtonElement | null; list: CreatorChoiceList; more: HTMLButtonElement;
     open: boolean; query: string;
     /** The option whose choices are being prepared ahead, and their positions in the order to prepare them (in view first). */
     prefetching: string | null; positions: number[]; loaded: number };
@@ -358,7 +360,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
           reset: button({ label: "Back to your V's own", icon: "reset", iconOnly: true, small: true, variant: "quiet", onClick: () => {} }),
           // A help tip only where one of the row's options has something to say; it keeps its place when the shown one has nothing (UI-68).
           help: view.options.some(option => staticDetail(panel, option, false)) ? helpTip(view.options[0]!.label) : null,
-          list: new ChoiceList(id, choice => {
+          list: new CreatorChoiceList(id, choice => {
             const option = current(controls);
             if (option) dispatch({ kind: "character.setOption", part: option.part, option: option.name, choice: choice.key, ...(choice.activates ? { activates: [...choice.activates] } : {}) });
           }, choice => {
@@ -667,7 +669,8 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
 
       // Clothing.
       const clothing = context?.clothing;
-      clothingState.update(clothing?.states ?? [], clothing?.state, !clothing, "Your V appears once the 3D preview is ready.");
+      clothingState.setOptions(clothing?.states ?? []);
+      clothingState.update(clothing?.state, undefined, clothing ? {} : { disabled: true, reason: "Your V appears once the 3D preview is ready." });
       // The switches follow the areas the save dresses (built once per area, so a change never rebuilds them).
       for (const { area, label } of clothing?.areas ?? []) if (!areaToggles.has(area)) {
         const toggle = new Toggle({ label, onChange: shown => dispatch({ kind: "character.setClothingArea", area, shown }) });
@@ -692,8 +695,9 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         return choice ? `Eye shape ${Number(choice.number)}${research ? choice.target ? ` (${choice.target})` : " (base)" : ""}` : "";
       };
       // The shown eye shape is the preview's own state; the view keeps no default of its own (UI-93).
-      eyeShape.update(shapes.map(choice => ({ value: String(choice.index), label: shapeLabel(choice.index) })), preview ? String(preview.eyeShape) : undefined,
-        !preview || !shapes.length, (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "Preview is still loading."));
+      eyeShape.setOptions(shapes.map(choice => ({ value: String(choice.index), label: String(Number(choice.number)), name: shapeLabel(choice.index) })));
+      eyeShape.update(preview ? String(preview.eyeShape) : undefined, undefined, !preview || !shapes.length
+        ? { disabled: true, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "Preview is still loading.") } : {});
       const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "These work once the 3D preview is ready.";
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Your V's own is ${shapeLabel(saved.suggestedEyeShape)}; this changes the 3D view only.` : "";

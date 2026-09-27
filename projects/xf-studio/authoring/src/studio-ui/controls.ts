@@ -140,9 +140,9 @@ export type SegmentOption<T extends string | number> = { value: T; label: string
 /**
  * Mutually exclusive choices shown together (style guide `c-segmented`). The choices may change after construction (`setOptions`: a
  * data-driven list such as the game's idles prepared on this computer): the buttons are rebuilt only when the list differs, and focus
- * stays on the same choice. `wrap` lays the choices out as even tiles that flow onto more rows instead of overflowing, one per row when
- * a label can't fit two a row; without it the control is the one-row strip every fixed call site uses; `update` can disable the whole group
- * with one reason (the reason stays visible in the note line, which keeps its height when `reserveNote` is set).
+ * stays on the same choice. It is for two to four short options in one row; more, or long labels, use the ChoiceList (components/
+ * choice-list.ts). `update` can disable the whole group with one reason (the reason stays visible in the note line, which keeps its height
+ * when `reserveNote` is set).
  */
 export class Segmented<T extends string | number> {
   readonly element: HTMLElement;
@@ -151,9 +151,9 @@ export class Segmented<T extends string | number> {
   private readonly note: NoteLine;
   private signature = "";
   constructor(private readonly options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean;
-    wrap?: boolean; reserveNote?: boolean }) {
+    reserveNote?: boolean }) {
     const labelId = uid("seg");
-    this.group = h("div", { class: `segmented${options.wrap ? " wrap" : ""}`, role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
+    this.group = h("div", { class: "segmented", role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
       "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote);
     this.element = h("div", { class: `control${options.compact ? " compact" : ""}` },
@@ -170,12 +170,6 @@ export class Segmented<T extends string | number> {
       "aria-pressed": "false", title: option.title, "data-title": option.title,
       onclick: () => this.options.onSelect(option.value) }, option.icon ? icon(option.icon) : null, h("span", { text: option.label })) }));
     this.group.replaceChildren(...this.buttons.map(item => item.button));
-    // A wrapping group lays its choices out as even tiles as wide as its longest label: numbered sets fill each row evenly, and labels
-    // too long for two a row stack one per row (studio.css `.segmented.wrap`).
-    if (this.options.wrap) {
-      const longest = Math.max(1, ...options.map(option => option.label.length + (option.icon ? 3 : 0)));
-      this.group.style.setProperty("--segment-min", `calc(${longest}ch + 2 * var(--sp-4) + 2px)`);
-    }
     if (focused !== undefined) this.buttons.find(item => item.value === focused)?.button.focus();
   }
   /**
