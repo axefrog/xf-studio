@@ -24,7 +24,7 @@
  * - **Grouped by who made them** (cc-panel.ts `groups`, cc-controls backlog 4a): when a row's choices come from more than one maker, each
  *   maker's choices sit under a small heading (the base game first, then XF Studio, then every author or mod by name), in the creator's
  *   order within it; Off stays above the groups. A heading is a button that folds its group away and back (Enter, Space or a click;
- *   Left folds and Right unfolds it from the keyboard), remembered per option while the panel is open. A folded group holding the V's
+ *   Left folds and Right unfolds it from the keyboard), remembered per option across reloads (view-state.ts, `character:maker:<option>/<maker>`). A folded group holding the V's
  *   choice says so. Arrow keys move through headings and the choices of unfolded groups in the order they show; in a colour grid Up
  *   and Down move by the group's own columns and step onto the heading next to it at its edges. A row with one maker has no headings.
  *   A heading is the shared expander (expander.ts, level "maker"). Makers with a single choice in the row share one "Other mods" heading,
@@ -37,6 +37,8 @@ import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTH
 import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
 import { expander, expanderLabel, setExpanded } from "../expander";
+import { viewState } from "../view-state";
+import { holdScroll, revealInView } from "../scroll-anchor";
 import { choiceItem } from "../components/choice-list";
 import { previewTile, type PreviewTile } from "../components/choice-preview";
 import type { ChoicePreviewRow } from "../../choice-preview-service";
@@ -102,6 +104,9 @@ const FETCH_SHOWN: Partial<Record<ChoiceFetch, { mark: string; words: string }>>
 /** What decides whether a list is grouped, and how: another of it rebuilds the list. */
 const groupedKey = (input: ChoiceListInput) => `${input.groups ? `g:${(input.groups.pooled ?? []).join(",")}` : ""}${input.previews ? "|pictures" : ""}`;
 
+/** A maker group's view key: its option, then the maker (lower case, bounded; `null`: the pooled "Other mods"; "": the option's prefix). */
+const makerKey = (option: string, maker: string | null) =>
+  `character:maker:${option.slice(0, 80)}/${maker === null ? "(other mods)" : maker.toLocaleLowerCase().slice(0, 100)}`;
 export class ChoiceList {
   /** The list and its one status line (loading, a failure, nothing matching). */
   readonly element: HTMLElement;
@@ -116,11 +121,10 @@ export class ChoiceList {
   private groups: Map<number, Group> | null = null;
   private order: (a: number, b: number) => number = (a, b) => a - b;
   private lead: HTMLElement | null = null;
-  /** Folded groups, by option and group label (kept while the panel is open). */
-  private readonly folded = new Set<string>();
   private selected: number | null = null;
   /** The V's choice is still to be brought into view (a row just opened, or another search). */
-  private reveal = false;
+  /** What the V's choice still needs once it is listed: its group opened (the row shown anew), and brought into view (the person opened the row). */
+  private reveal: "none" | "unfold" | "scroll" = "none";
   /** The item that takes Tab focus (roving tabindex). */
   private active: HTMLButtonElement | null = null;
 
@@ -158,18 +162,21 @@ export class ChoiceList {
   }
 
   /**
-   * The V's choice is never hidden (show the options, don't hide them): once it has loaded after a row opens, the maker group holding it
-   * opens (even one folded earlier), and it is scrolled into view.
+   * The V's choice is never hidden (show the options, don't hide them): once it has loaded after the person opens the row, the maker group
+   * holding it opens (even one folded earlier), and it is brought into view within the panel (scroll-anchor.ts `revealInView`: as little
+   * as needed, never while a remembered position is being restored). Choosing never moves the view (`holdScroll`), and nothing else
+   * (a rebuild, a search, focus coming back) scrolls it.
    */
-  /** Bring the V's choice into view at the next update where it is listed (the row just opened). */
-  revealChosenNext() { this.reveal = true; }
+  /** Bring the V's choice into view at the next update where it is listed (the person just opened the row). */
+  revealChosenNext() { this.reveal = "scroll"; }
   private revealChosen() {
-    if (!this.reveal || this.selected === null) return;
+    if (this.reveal === "none" || this.selected === null) return;
     const entry = this.items.find(item => item.choice.position === this.selected);
     if (!entry) return;
-    this.reveal = false;
+    const scroll = this.reveal === "scroll";
+    this.reveal = "none";
     if (entry.group && !entry.group.open) this.fold(entry.group, false);
-    if (typeof entry.element.scrollIntoView === "function" && entry.element.isConnected) entry.element.scrollIntoView({ block: "nearest" });
+    if (scroll) revealInView(entry.element);
   }
 
   /** Another option or search: new items, and focus back on the same choice when it is still listed. */
@@ -178,7 +185,8 @@ export class ChoiceList {
     this.list.replaceChildren();
     this.items = []; this.byPosition.clear(); this.active = null; this.selected = null;
     this.shown = { option: input.option, query: input.query, grouped: groupedKey(input) };
-    this.reveal = true;
+    // Shown anew: the V's choice is never in a folded group, but nothing scrolls (the person's view stays).
+    if (this.reveal === "none") this.reveal = "unfold";
     this.groups = input.groups ? new Map() : null;
     this.pooled = new Set(input.groups?.pooled ?? []);
     this.order = input.groups ? compareGroups(input.groups.list) : (a, b) => a - b;
@@ -191,7 +199,8 @@ export class ChoiceList {
     if (selected) setAttr(selected, "aria-selected", "true");
     const restore = focusedAt === undefined ? undefined : this.byPosition.get(focusedAt);
     this.rove(restore ?? selected);
-    restore?.focus();
+    // Focus comes back where it was without scrolling: the person's view stays put.
+    restore?.focus({ preventScroll: true });
   }
 
   /** Draw a grid item's swatch (only when its look changes: swatches arrive after the items). */
@@ -242,7 +251,7 @@ export class ChoiceList {
     if (known) return known;
     const maker = index === OTHER_MODS_INDEX ? OTHER_MODS_GROUP : input.groups!.list[index] ?? { label: "Mods", kind: "mod" as const };
     const id = `${this.list.id}-g${index < 0 ? "other" : index}`;
-    const key = `${input.option}\n${index === OTHER_MODS_INDEX ? "\u0000other" : maker.label.toLocaleLowerCase()}`, open = !this.folded.has(key);
+    const key = makerKey(input.option, index === OTHER_MODS_INDEX ? null : maker.label), open = viewState().expanded(key) ?? true;
     const count = h("span", { class: "cc-maker-count expander-count" });
     const head = expander("maker", { expanded: open, controls: `${id}-items`, id: `${id}-head`, tabindex: "-1" }, expanderLabel(maker.label, "cc-maker-label"), count);
     head.classList.add("cc-maker-head");
@@ -261,7 +270,7 @@ export class ChoiceList {
     group.open = !folded;
     group.body.hidden = folded;
     setExpanded(group.head, !folded);
-    if (folded) this.folded.add(group.key); else this.folded.delete(group.key);
+    viewState().setExpanded([group.key], !folded);
     this.describeGroup(group);
     if (folded && this.active && group.body.contains(this.active)) {
       const refocus = document.activeElement === this.active;
@@ -273,7 +282,7 @@ export class ChoiceList {
   /** Fold every maker group away, or unfold them all (the section's Expand all / Collapse all). */
   setAllFolded(folded: boolean) {
     // Unfolding also forgets folds of groups not shown yet (their choices on a later page).
-    if (!folded) this.folded.clear();
+    if (!folded && this.shown) { const kept = viewState().folded(makerKey(this.shown.option, "")); if (kept.length) viewState().setExpanded(kept, true); }
     for (const group of this.groups?.values() ?? []) if (group.open === folded) this.fold(group, folded);
   }
   /** Whether a maker group is folded (none when the list is not grouped). */
@@ -314,7 +323,8 @@ export class ChoiceList {
       content: tile?.element ?? swatch ?? h("span", { class: "choice-label cc-choice-label", text: label }) });
     item.dataset.position = String(choice.position);
     // The choice shows as chosen at once, before anything is prepared; the next update puts back the V's own if the change was refused.
-    item.addEventListener("click", () => { this.rove(item); this.select(choice.position); this.onChoose(choice); });
+    // The person's choice never moves their view, whatever it rebuilds or shows (scroll-anchor.ts `holdScroll`).
+    item.addEventListener("click", () => { holdScroll(this.list); this.rove(item); this.select(choice.position); this.onChoose(choice); });
     item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });
     item.addEventListener("pointerenter", () => this.onHint(choice));
     const group = this.groups && !choice.off ? this.groupFor(choiceGroup(choice, input.groups!), input) : null;

@@ -27,7 +27,8 @@ const views = readdirSync(join(root, "features")).map(id => join(root, "features
  */
 const CORE_VALUES = new Map<string, readonly string[]>([
   ["context-menu", ["allowsNativeTextMenu"]],
-  ["ui-preferences", ["effectiveTheme", "recoverDockLayout"]],
+  // The theme, the dock's recovery gate, and the remembered scroll anchor's validation (view-state.ts reads stored anchors through it).
+  ["ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout"]],
   // Saved layouts' pure reads: the library as shown (the first layout when none is stored), names and the automatic size switch.
   ["layout-library", ["activeLayout", "autoSwitchTarget", "layoutLibraryOf", "layoutNameProblem", "MAX_LAYOUT_NAME", "nextLayoutName"]],
   ["mod-branding", ["EYE_MAKEUP_MOD"]],
