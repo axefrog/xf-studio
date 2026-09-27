@@ -12,7 +12,19 @@
 
 local MOD = "xf_runtime_bridge"
 local REFRESH_SECONDS = 2.0
+local PENDING_REFRESH_SECONDS = 0.5
 local OPTIONS_POLL_SECONDS = 0.25
+-- The plugin refuses a value longer than this, and an answer larger than its 64 KiB limit
+-- (core/OptionsExchange.hpp); such values are left out and named under "skipped" instead (RB-47).
+local MAX_OPTION_VALUE_CHARS = 256
+local MAX_OPTIONS_ANSWER_BYTES = 60000
+
+-- The in-game panel (panel.lua) ships in the test packages only; without it the overlay shows the plain
+-- details window below.
+local hasPanel, panel = pcall(require, "panel")
+if not hasPanel or type(panel) ~= "table" then
+  panel = nil
+end
 
 local state = {
   initialized = false,
@@ -23,6 +35,10 @@ local state = {
   overlayOpen = false,
   cidCounter = 0,
   lastError = nil,
+  actions = {},    -- queued by the panel's buttons, run in onUpdate (never while drawing)
+  pending = nil,   -- "rearm" while a reconnect is under way
+  message = nil,   -- the panel's last outcome, in plain words
+  messageOk = true,
 }
 
 local function nextCid()
@@ -114,32 +130,107 @@ local function answerOptions()
   local decoded, request = pcall(json.decode, wanted)
   if not decoded or type(request) ~= "table" or type(request.names) ~= "table" or type(request.seq) ~= "number" then return end
   local values = {}
+  local skipped = {}
   local found = 0
+  local size = 64
   for _, full in ipairs(request.names) do
     local category, name = string.match(tostring(full), "^(.+)/([^/]+)$")
     if category and name then
       local got, text = pcall(function() return GameOptions.Get(category, name) end)
       if got and type(text) == "string" and text ~= "" then
-        values[full] = text
-        found = found + 1
+        -- Too long for the plugin, or past the answer's size limit: left out and named (RB-47).
+        local cost = #full + #text + 8
+        if #text > MAX_OPTION_VALUE_CHARS or size + cost > MAX_OPTIONS_ANSWER_BYTES then
+          table.insert(skipped, full)
+          size = size + #full + 4
+        else
+          values[full] = text
+          found = found + 1
+          size = size + cost
+        end
       end
     end
   end
-  local encoded, body = pcall(json.encode, { seq = request.seq, values = values })
+  local encoded, body = pcall(json.encode, { seq = request.seq, values = values, skipped = skipped })
   if not encoded then
     log("warn", "-", "render options: could not encode the answer: " .. tostring(body))
     return
   end
   local sent, stored = pcall(function() return Game.XFBridge_OptionsReport(body) end)
-  log("debug", "-", string.format("render options answered: seq=%s found=%d of %d stored=%s", tostring(request.seq), found,
-    #request.names, tostring(sent and stored)))
+  log("debug", "-", string.format("render options answered: seq=%s found=%d of %d skipped=%d stored=%s", tostring(request.seq),
+    found, #request.names, #skipped, tostring(sent and stored)))
+end
+
+-- The panel's actions, run from onUpdate. Each asks the plugin, then shows its answer in plain words.
+local function decodeAnswer(ok, text)
+  if not ok or type(text) ~= "string" then return nil end
+  local decoded, answer = pcall(json.decode, text)
+  if decoded and type(answer) == "table" then return answer end
+  return nil
+end
+
+local function runAction(action)
+  local cid = nextCid()
+  if action.name == "rearm" then
+    local answer = decodeAnswer(callNative("XFBridge_Rearm", "cet-panel"))
+    if answer and answer.requested then
+      state.pending = "rearm"
+      state.message = "Reconnecting..."
+      state.messageOk = true
+      log("warn", cid, "panel: reconnect requested")
+    else
+      state.message = "Couldn't reconnect: " .. tostring(answer and answer.reason or "the plugin didn't answer")
+      state.messageOk = false
+      log("warn", cid, "panel: reconnect refused: " .. tostring(answer and answer.reason))
+    end
+  elseif action.name == "pause" then
+    local answer = decodeAnswer(callNative("XFBridge_PauseWrites", action.argument == true))
+    if answer and answer.reason then
+      state.message = answer.reason
+      state.messageOk = false
+    elseif answer then
+      state.message = answer.writes_paused and "Changes are paused: XF tools can still look, but can't change the game."
+        or "Changes are allowed again."
+      state.messageOk = true
+    end
+    log("info", cid, "panel: writes paused=" .. tostring(answer and answer.writes_paused))
+  elseif action.name == "kill" then
+    local ok, killed = callNative("XFBridge_Kill", "cet-panel")
+    state.message = (ok and killed) and "The bridge is stopped. Reconnect starts it again." or "The bridge wasn't running."
+    state.messageOk = ok and killed
+    log("warn", cid, "panel: kill switch pressed; killed=" .. tostring(ok and killed))
+  end
+  refreshInfo()
+end
+
+local function queueAction(name, argument)
+  table.insert(state.actions, { name = name, argument = argument })
+end
+
+-- While a reconnect is under way: when the plugin reports it done, say how it went.
+local function followPending()
+  if state.pending ~= "rearm" or not state.info then return end
+  if state.info.rearm_pending then return end
+  local outcome = state.info.last_rearm
+  state.pending = nil
+  if type(outcome) == "table" and outcome.ok then
+    state.message = "Reconnected. XF tools connect again by themselves."
+    state.messageOk = true
+  else
+    state.message = "Couldn't reconnect: " .. tostring(type(outcome) == "table" and outcome.message or "no answer from the plugin")
+    state.messageOk = false
+  end
 end
 
 registerForEvent("onUpdate", function(deltaTime)
+  while #state.actions > 0 do
+    runAction(table.remove(state.actions, 1))
+  end
   state.sinceRefresh = state.sinceRefresh + deltaTime
-  if state.sinceRefresh >= REFRESH_SECONDS then
+  if state.sinceRefresh >= (state.pending and PENDING_REFRESH_SECONDS or REFRESH_SECONDS) then
     state.sinceRefresh = 0
     refreshInfo()
+    followPending()
   end
   state.sinceOptionsPoll = state.sinceOptionsPoll + deltaTime
   if state.sinceOptionsPoll >= OPTIONS_POLL_SECONDS then
@@ -162,7 +253,8 @@ registerForEvent("onShutdown", function()
   log("info", "-", "onShutdown")
 end)
 
--- Kill switch: bind it in CET's Bindings tab. The bridge refuses everything until restart.
+-- Kill switch: bind it in CET's Bindings tab. The bridge refuses everything until it is reconnected (the
+-- test builds' panel) or the game restarts.
 registerHotkey("xf_bridge_kill", "Kill XF Runtime Bridge (stop the local pipe)", function()
   local cid = nextCid()
   local ok, killed = callNative("XFBridge_Kill", "cet-hotkey")
@@ -185,7 +277,7 @@ local function bridgeSummary()
     return "off", { 0.6, 0.6, 0.6, 1.0 }
   end
   if bridge.listening then
-    local mode = bridge.allow_writes and "writes ON" or "read-only"
+    local mode = bridge.allow_writes and (bridge.writes_paused and "writes paused" or "writes ON") or "read-only"
     local client = bridge.has_client and ", client connected" or ""
     local color = bridge.allow_writes and { 1.0, 0.7, 0.2, 1.0 } or { 0.4, 0.9, 0.5, 1.0 }
     return "listening (" .. mode .. client .. ")", color
@@ -209,8 +301,14 @@ registerForEvent("onDraw", function()
     ImGui.End()
   end
 
-  -- Details while the CET overlay is open.
-  if state.overlayOpen then
+  -- The panel (test builds) or the plain details while the CET overlay is open.
+  if state.overlayOpen and panel then
+    local drew, err = pcall(panel.draw, state, queueAction)
+    if not drew then
+      state.lastError = tostring(err)
+      pcall(ImGui.End)
+    end
+  elseif state.overlayOpen then
     if ImGui.Begin("XF Runtime Bridge", ImGuiWindowFlags.AlwaysAutoResize) then
       ImGui.TextColored(color[1], color[2], color[3], color[4], "Bridge: " .. text)
       if state.info then
@@ -229,7 +327,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.1.0",
+  version = "0.3.0",
   -- For other CET mods: GetMod("xf_runtime_bridge").info()
   info = function() return state.info end,
 }
