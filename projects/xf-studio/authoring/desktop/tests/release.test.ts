@@ -66,9 +66,14 @@ describe("changelog", () => {
     expect(() => changelogSection(section("### New and improved\n<!-- later -->\n### Fixes and under the hood\n- b\n"), "0.2.0-alpha.1"))
       .toThrow('non-empty "### New and improved"');
     expect(() => changelogSection(section("Loose text\n### New and improved\n- a\n### Fixes and under the hood\n- b\n"), "0.2.0-alpha.1"))
-      .toThrow("outside its two subsections");
+      .toThrow("outside its subsections");
     expect(() => changelogSection(section("### New and improved\n- a\n### Fixes and under the hood\n- b\n### Commits\n- c\n"), "0.2.0-alpha.1"))
       .toThrow("unexpected subsections: Commits");
+    // An optional third part, "Known limitations", is kept when present and must not be empty.
+    expect(changelogSection(section("### New and improved\n- a\n### Fixes and under the hood\n- b\n### Known limitations\n- c\n"), "0.2.0-alpha.1").limitations)
+      .toBe("- c");
+    expect(() => changelogSection(section("### New and improved\n- a\n### Fixes and under the hood\n- b\n### Known limitations\n\n"), "0.2.0-alpha.1"))
+      .toThrow('non-empty "### Known limitations"');
     // A prefix of another version must not match.
     expect(() => changelogSection(section(""), "0.2.0-alpha")).toThrow("no ");
   });
@@ -140,6 +145,13 @@ describe("release staging and notes", () => {
     expect(notes).toContain("built from your own Cyberpunk 2077 files");
     expect(() => releaseNotes({ version: "0.1.0-alpha.1", newAndImproved: "a", fixes: "b" }, version, []))
       .toThrow("do not include");
+    // With known limitations, they follow the fixes, and the warning points to them instead of saying nothing was tested.
+    const limited = releaseNotes({ version: "0.1.0-alpha.1", newAndImproved: "- New editor.", fixes: "- Faster.", limitations: "- Feminine V only." },
+      version, [{ name: "XFStudio-0.1.0-alpha.1-win-x64-setup.exe", sha256: "a".repeat(64), bytes: 1 }]);
+    expect(limited.indexOf("- Faster.")).toBeLessThan(limited.indexOf("## Known limitations"));
+    expect(limited.indexOf("- Feminine V only.")).toBeLessThan(limited.indexOf("Verify your download"));
+    expect(limited).toContain("listed under Known limitations");
+    expect(limited).not.toContain("have not been tested in the game");
   });
 });
 

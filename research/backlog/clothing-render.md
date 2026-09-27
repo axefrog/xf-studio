@@ -75,7 +75,7 @@ How the body track met them (26 September; [body rendering §5](../../knowledge/
 
 Viewing clothes exports nothing. Two export consequences follow from the research:
 
-- **XF Eye Artistry under helmets and masks.** The export's makeup component is named `xfs_c<key>_makeup` (prefix `xfs_`), so ArchiveXL's `hide_Head` rule, which hides `hx_` and the other head prefixes, doesn't reach it. If a full-head item hides V's head in game, the makeup might stay visible. Check in game before renaming anything ([clothing Q5](../../knowledge/clothing.md#open-questions)); a rename would change resource identity and needs the [pipeline contract](../authoring/studio-to-mod-pipeline.md) updated in the same change.
+- **XF Eye Artistry under helmets and masks.** Done from source (28 September): the makeup component is now `hx_xfs_c<key>_makeup`, so ArchiveXL's `hide_Head` hides it with the head as it hides vanilla makeup ([clothing Q5](../../knowledge/clothing.md#open-questions), [pipeline guide](../authoring/studio-to-mod-pipeline.md#how-those-maps-become-game-resources)). No vanilla item carries `hide_Head`; the in-game check needs a mod item that does.
 - **Later clothing features** (recolours, outfit presets, new garments) would export XF-branded item mods: TweakXL records, one root entity with `DynamicAppearance`, `{gender}`/`{body}` substitution and new colourways as mesh appearances. They are later features that need the maintainer's go-ahead first.
 
 ## Phases
@@ -100,7 +100,7 @@ One prepared session once phases 1–4 exist, with a checklist, fixed camera pre
 1. A reference outfit per layer (inner shirt, jacket, trousers tucked into boots, a hat), third person and photo mode, compared with the Studio's render of the same save.
 2. A vanilla wardrobe set with one area left empty (the hide path), and the partial-sleeve look (`hide_T1part`).
 3. With EquipmentEx: an active outfit, and the bridge snapshot compared with the save's prediction.
-4. A full-head item tagged `hide_Head`, and a vanilla helmet, over XF Eye Artistry makeup.
+4. A mod item tagged `hide_Head`, and a vanilla helmet, over XF Eye Artistry makeup built with the `hx_` component.
 5. One refit on a body mod, to check `{body}` resolution and body masking.
 6. Close-ups of garment edges (collar, waistband, boot tops) for the garment-support phase.
 

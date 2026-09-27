@@ -148,6 +148,15 @@ export function fnv1a32(text: string): string {
 /** Material entry of a flat preset with a diagnostic surface override: one entry per distinct override. */
 export const diagnosticFlatEntry = (surface: NonNullable<PresetDiagnostics["surface"]>) => "@flat_" + fnv1a32(surfaceKey(surface));
 
+/**
+ * The makeup component's ArchiveXL prefix. ArchiveXL groups components by the text up to the first `_` at index 2–5
+ * (`Garment/Prefix.cpp`), and its bundled `hide_Head` tag hides `hx_`, the vanilla head-decal prefix (makeup, freckles,
+ * tattoos, scars: `hx_000_pwa__basehead_makeup_eyes_01`), with the rest of the head (`VisualTags.xl`). Under `xfs_` a
+ * head-hiding item would leave the makeup floating; under `hx_` it hides and shows with the head as vanilla makeup does.
+ * The exception to the `xfs_` naming rule is the prefix only: `xfs_` follows it (naming.md).
+ */
+export const MAKEUP_COMPONENT_PREFIX = "hx_";
+
 export function planCollection(value: unknown) {
   const collection = parseCollection(value), key = collection.id.replaceAll("-", "");
   // Diagnostic knobs travel only inside exported files (export-diagnostics.ts); a normal collection has none.
@@ -198,7 +207,7 @@ export function planCollection(value: unknown) {
   // Branding (modName/selectorLabel) is display text, never part of a resource identity.
   return { schema:"xfas/export-plan-1" as const, collectionId:collection.id, name:collection.name,
     modName:EYE_MAKEUP_MOD.modName, selectorLabel:EYE_MAKEUP_MOD.selectorLabel, namespace, depot,
-    selector:namespace, component:`${namespace}_makeup`, offAppearance:"xfs_off", templateAppearance:`${namespace}__xfs_template`,
+    selector:namespace, component:`${MAKEUP_COMPONENT_PREFIX}${namespace}_makeup`, offAppearance:"xfs_off", templateAppearance:`${namespace}__xfs_template`,
     app:`${depot}/xfs_collection.app`, customization:`${depot}/xfs_collection.inkcharcustomization`,
     mesh:`${depot}/models/xfs_eye_plate.mesh`, morph:`${depot}/models/xfs_eye_plate.morphtarget`,
     // The packaged plate: one render chunk per lift (mm along the head's normals), in this order; a diagnostic glitter
