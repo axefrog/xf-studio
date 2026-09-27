@@ -44,6 +44,7 @@
 | Texture decodes on a cold V | 11–16 s for 66 textures | already native; parallel workers or GPU transcoding if it becomes the longest stage |
 | Warm restart | ~5–6 s (open 1.7 s, resolve 1–2 s) | persist the resolved graph and mount plan across restarts; start preparing the V before the page asks |
 | Choice clicks | host answers in 0.1–0.2 s, but the selection lagged seconds | optimistic selection and pre-emption (fix in progress); prefetch likely next choices |
+| Page rebuilds the whole V on every change | the host prepares a change in 0.2–0.3 s with every part reused, yet the page takes seconds (e.g. "Hide my V's makeup") | **incremental scene update**: keep loaded parts (meshes, textures, GPU resources) keyed by content identity; on a new record load only the changed parts and release only the removed ones; measure click → pixels |
 | Hair and other parts dropped after a failed export | the part never shows | never let one refused input drop a whole archive (PIPE-108) |
 
 ## Related
