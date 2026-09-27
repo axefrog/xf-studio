@@ -10,7 +10,7 @@ import type { MottleKey, RecipeAction } from "../../../engines/layered-makeup/re
 import type { ReadonlyDeep } from "../../../read-only";
 import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../../../studio-ui/controls";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
-import { ChoiceList, setHelp } from "../../../studio-ui/components";
+import { ChoiceList, propertyList, setHelp } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import type { Frame } from "../../../studio-ui/runtime";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -103,10 +103,10 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
 
   // Glitter preview suite and flake studies.
   // Five models with long names, all shown (ChoiceList `rows`); a research tool.
-  const model = new ChoiceList<GlitterModel>({ label: "Glitter preview model", layout: "rows", onSelect: value => {
+  // The chosen model's description is its help tip (UI-131): what it is, not something to do.
+  const model = new ChoiceList<GlitterModel>({ label: "Glitter preview model", layout: "rows", help: "", onSelect: value => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
   } });
-  const modelSummary = note("");
   const classic = {
     cells: new Slider({ label: "Flake fineness", ...ctx.range("glitter.setClassic", "value", "cells"), step: 8, format: value => String(Math.round(value)),
       transaction: recipeTransaction<number>(ctx, "flake-cells", (layer, value) => ({ kind: "glitter.setClassic", layerId: layer.id, key: "cells", value: Math.round(value) })) }),
@@ -129,9 +129,11 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       transaction: recipeTransaction<number>(ctx, "irregular-tilt", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "tilt", value })) }),
     color: new ColorField({ label: "Flake colour", transaction: recipeTransaction<string>(ctx, "irregular-color", (layer, value) => ({ kind: "glitter.setIrregular", layerId: layer.id, key: "color", value })) }),
   };
-  // Its text changes length as the flakes are counted; it keeps room for its longest form (UI-90).
-  const measurement = note("", "info");
-  measurement.classList.add("steady-note");
+  // The flake measurement as a compact property list (UI-131): the same rows whether counted or counting, so nothing moves (UI-90).
+  const measured = { centres: h("span", {}), field: h("span", {}), pixels: h("span", {}) };
+  const fieldTerm = h("span", {});
+  const measurement = propertyList([{ term: "Flake centres", value: measured.centres, mono: true }, { term: fieldTerm, value: measured.field, mono: true },
+    { term: "Covered pixels", value: measured.pixels, mono: true }], { label: "Flake measurement", className: "flake-measurement" });
   // The glint-strength control's usable top comes from the Glitter model catalogue (UI-93).
   const glintMax = catalogues(ctx).glitterModels.find(item => item.controlMax?.strength)?.controlMax?.strength;
   const direct = {
@@ -144,12 +146,14 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
     color: new ColorField({ label: "Facet colour", transaction: recipeTransaction<string>(ctx, "direct-color", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "color", value })) }),
   };
   // Choosing among the Glitter model studies is a research tool (UI-85); everyone edits the layer's own model.
-  const modelChoice = h("div", { class: "research-only" }, model.element, modelSummary);
+  const modelChoice = h("div", { class: "research-only" }, model.element);
   // That Glitter isn't built into mods is said once, by the finish's export line; the section says only how its colours work.
   const glitterSection = section({ title: "Glitter", help: "Layer colour is the base; the flakes have their own colour." }, modelChoice);
   const classicSection = section({ title: "Flakes", help: ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."] },
     classic.cells.element, classic.density.element, classic.tilt.element);
-  const irregularSection = section("Irregular flakes", irregular.count.element, measurement, irregular.radius.element, irregular.spread.element, irregular.tilt.element, irregular.color.element);
+  const irregularSection = section({ title: "Irregular flakes", help: ["Field density is not a visible flake count.",
+    "The counts measure the painted shape's texture: flake centres in the shape, the field they come from, and texture pixels with flake coverage. They are not glints seen on screen."] },
+  irregular.count.element, measurement, irregular.radius.element, irregular.spread.element, irregular.tilt.element, irregular.color.element);
   const directSection = section("Glint facets", direct.density.element, direct.fineShare.element, direct.strength.element, direct.color.element);
   const body = h("div", { class: "stack" },
     section("Pigment", h("div", { class: "row gap-m align-end" }, color.element, opacity.element)),
@@ -203,7 +207,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         const modelChoices = ctx.facade.choicesFor(target, "glitter.selectModel", "model");
         model.setOptions(catalogues(ctx).glitterModels.map(item => ({ value: item.id, label: item.label })));
         model.update(modelId, value => modelChoices.find(choice => choice.value === value)?.capability ?? { available: true });
-        setText(modelSummary, catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
+        model.setHelp(catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
       }
       if (!classicSection.hidden) {
         const flakesTitle = glitter ? "Classic reflective flakes" : "Shimmer flakes";
@@ -224,10 +228,11 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         irregular.count.update(Math.round(f.count / flakesPerPercent), { note: count?.note });
         irregular.radius.update(f.radius, { min: radius?.min, max: radius?.max, note: radius?.note });
         irregular.spread.update(f.spread); irregular.tilt.update(f.tilt); irregular.color.update(f.color);
-        const measured = frame.status.glitter.find(item => item.layerId === layer.id);
-        setText(measurement, measured?.current
-          ? `${measured.maskCentres.toLocaleString()} approximate flake centres in this painted shape from ${measured.regionRetained.toLocaleString()} ${measured.dense ? "retained in the eye UV regions" : "generated across the UV atlas"}. ${measured.coveredPixels.toLocaleString()} painted texture pixels contain flake coverage at ${measured.size}² — not visible screen glints.`
-          : "Calculating flakes in this painted shape. Field density is not a visible flake count.");
+        const counted = frame.status.glitter.find(item => item.layerId === layer.id), ready = !!counted?.current;
+        setText(fieldTerm, counted?.dense === false ? "Field across the atlas" : "Field in the eye regions");
+        setText(measured.centres, ready ? `≈ ${counted!.maskCentres.toLocaleString()}` : "…");
+        setText(measured.field, ready ? counted!.regionRetained.toLocaleString() : "…");
+        setText(measured.pixels, ready ? `${counted!.coveredPixels.toLocaleString()} at ${counted!.size}²` : "…");
       }
       if (!directSection.hidden && flakes && "model" in flakes && flakes.model !== "irregular-planar-1") {
         const f = flakes as ReadonlyDeep<DirectGlintFlakes>;

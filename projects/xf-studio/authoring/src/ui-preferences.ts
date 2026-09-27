@@ -1,4 +1,5 @@
 import { applyLayoutAction, isLayoutAction, layoutCapability, parseLayoutLibrary, type LayoutAction, type LayoutLibrary } from "./layout-library";
+import { isEasing, type EasingId } from "./easing";
 
 /** Workspace-only preferences. A dock implementation owns the meaning of `state`. */
 export type ThemePreference = "system" | "light" | "dark";
@@ -29,7 +30,9 @@ export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePrefer
    * The grid size of choice pictures per feature type (choice-previews-design.md §7.1: `s`, `m`, `l`), by the picture kind
    * (choice-preview.ts `PreviewKind`, e.g. `hair`); absent: the type's default. Presentation state, never Undo.
    */
-  choiceSizes?: Record<string, ChoiceSize> };
+  choiceSizes?: Record<string, ChoiceSize>;
+  /** The easing curve chosen per multi-control operation (easing.ts; e.g. `expression-intensity`). Presentation state, never Undo. */
+  easings?: Record<string, EasingId> };
 export type ChoiceSize = "s" | "m" | "l";
 /**
  * Where a scroll container was (scroll-anchor.ts): `key` is the view key of the element at its top edge and `offset` how many pixels
@@ -46,6 +49,7 @@ export type UIPreferenceAction =
   | { kind: "expanded.set"; keys: readonly string[]; expanded: boolean }
   | { kind: "scroll.set"; key: string; anchor?: ScrollAnchor }
   | { kind: "choiceSize.set"; type: string; size: ChoiceSize }
+  | { kind: "easing.set"; scope: string; easing: EasingId }
   | { kind: "tours.record"; tourId: string; outcome: TourRecord }
   | LayoutAction;
 export type UIPreferenceCapability = { available: boolean; reason?: string };
@@ -218,6 +222,10 @@ export function parseUIPreferences(value: unknown): UIPreferences {
       const sizes = Object.entries(candidate.choiceSizes).filter(([type, size]) => choiceType(type) && choiceSize(size)).slice(0, MAX_CHOICE_TYPES);
       if (sizes.length) result.choiceSizes = Object.fromEntries(sizes) as Record<string, ChoiceSize>;
     }
+    if (candidate.easings && typeof candidate.easings === "object" && !Array.isArray(candidate.easings)) {
+      const easings = Object.entries(candidate.easings).filter(([scope, easing]) => choiceType(scope) && isEasing(easing)).slice(0, MAX_CHOICE_TYPES);
+      if (easings.length) result.easings = Object.fromEntries(easings) as Record<string, EasingId>;
+    }
     if (candidate.tours && typeof candidate.tours === "object" && !Array.isArray(candidate.tours)) {
       const tours = Object.entries(candidate.tours).filter(([id, record]) => tourId(id) && tourRecord(record)).slice(0, MAX_TOURS);
       if (tours.length) result.tours = Object.fromEntries(tours) as Record<string, TourRecord>;
@@ -258,6 +266,11 @@ export class UIPreferenceActions {
       if (!Object.hasOwn(this.value.choiceSizes ?? {}, action.type) && Object.keys(this.value.choiceSizes ?? {}).length >= MAX_CHOICE_TYPES)
         return { available: false, reason: "Too many picture sizes are remembered already." };
     }
+    if (action.kind === "easing.set") {
+      if (!choiceType(action.scope) || !isEasing(action.easing)) return { available: false, reason: "Choose an operation and one of its curves." };
+      if (!Object.hasOwn(this.value.easings ?? {}, action.scope) && Object.keys(this.value.easings ?? {}).length >= MAX_CHOICE_TYPES)
+        return { available: false, reason: "Too many curves are remembered already." };
+    }
     if (action.kind === "layout.set" && action.layout !== undefined && !parseDockLayout(action.layout))
       return { available: false, reason: "The panel layout is not a supported bounded JSON document." };
     if (action.kind === "tours.record") {
@@ -278,6 +291,7 @@ export class UIPreferenceActions {
     else if (action.kind === "tours.record") this.value.tours = { ...this.value.tours, [action.tourId]: action.outcome };
     else if (action.kind === "modules.set") this.value.modules = { ...this.value.modules, [action.module]: action.shown };
     else if (action.kind === "choiceSize.set") this.value.choiceSizes = { ...this.value.choiceSizes, [action.type]: action.size };
+    else if (action.kind === "easing.set") this.value.easings = { ...this.value.easings, [action.scope]: action.easing };
     else if (action.kind === "expanded.set") {
       const open = remember(this.value.expanded, action.keys.map(key => [key, action.expanded] as const), MAX_EXPANDED_PER_NAMESPACE, MAX_EXPANDED);
       if (open) this.value.expanded = open; else delete this.value.expanded;

@@ -50,7 +50,7 @@ export type GradingLutHostOptions = {
   now?: () => number;
 };
 
-const NOT_SET_UP = "Colour grading: the game's LUT appears once your game folder and WolvenKit are set up. A neutral grade is shown for now.";
+const NOT_SET_UP = "The game's colour grade appears once your game folder and WolvenKit are set up. A neutral grade is shown for now.";
 
 /** Cache identity of an archive: its path, size and modification time (the id alone when it is not a file). */
 const fingerprint = (path: string) => { try { const s = statSync(path); return `${path}|${s.size}|${s.mtimeMs}`; } catch { return path; } };
@@ -95,11 +95,11 @@ const tryAgain = (retry: boolean) => retry ? "XF Studio tries again shortly."
 /** Plain note for a failure that left the neutral grade. */
 function failureNote(error: unknown, retry: boolean): string {
   if (error instanceof WolvenKitRunError) {
-    if (error.code === "runtime_missing") return `Colour grading: ${WOLVENKIT_RUNTIME_MISSING_MESSAGE} A neutral grade is shown until it is. ${tryAgain(retry)}`;
-    if (error.code === "tool_timeout") return `Colour grading: reading the game's LUT took too long, so a neutral grade is shown for now. ${tryAgain(retry)}`;
-    return `Colour grading: WolvenKit couldn't read the game's LUT, so a neutral grade is shown for now. ${tryAgain(retry)}`;
+    if (error.code === "runtime_missing") return `${WOLVENKIT_RUNTIME_MISSING_MESSAGE} A neutral colour grade is shown until it is. ${tryAgain(retry)}`;
+    if (error.code === "tool_timeout") return `Reading the game's colour grade took too long, so a neutral grade is shown for now. ${tryAgain(retry)}`;
+    return `WolvenKit couldn't read the game's colour grade, so a neutral grade is shown for now. ${tryAgain(retry)}`;
   }
-  return `Colour grading: the game's LUT couldn't be read, so a neutral grade is shown for now. ${tryAgain(retry)}`;
+  return `The game's colour grade couldn't be read, so a neutral grade is shown for now. ${tryAgain(retry)}`;
 }
 
 /**

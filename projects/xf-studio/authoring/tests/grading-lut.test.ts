@@ -114,7 +114,7 @@ describe("LUT selection by archive precedence", () => {
     const lookupOf = (graph: ReturnType<typeof archives>["graph"]) => (path: string) => graph.locate({ hash: depotHash(path), path }).lookup;
     const vanilla = await selectGradingLut({ environmentPath: VANILLA_SDR_LUT, lookup: lookupOf(archives(false).graph), read: reader(documents) });
     expect(vanilla.source).toMatchObject({ kind: "installed", archive: "basegame_3_nightcity.archive", group: "content" });
-    expect(vanilla.source.note).toBe("Colour grading: the game's own LUT.");
+    expect(vanilla.source.note).toBe("The game's own colour grade.");
     const fallback = await selectGradingLut({ environmentPath: VANILLA_SDR_LUT, lookup: lookupOf(archives(true).graph),
       read: reader(documents, ["#####-lut-a.archive"]) });
     expect(fallback.source).toMatchObject({ kind: "vanilla-fallback", archive: "basegame_3_nightcity.archive" });

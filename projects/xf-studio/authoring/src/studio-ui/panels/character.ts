@@ -415,7 +415,10 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         controls.list.element.hidden = true;
         // The swatch card for the list's colour swatches: the true colour, name and maker of the one under the pointer or focus.
         attachSwatchCard(controls.list.list, item => swatchSample(controls, item));
-        controls.element.append(h("div", { class: "cc-row-head" }, main, controls.contrast, controls.help, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
+        // One tip slot (UI-130): the row's help tip, or the More contrast marker while the list shows it, so the row's name keeps its room.
+        if (controls.help) controls.contrast.hidden = true;
+        controls.element.append(h("div", { class: "cc-row-head" }, main, h("span", { class: "cc-row-tip" }, controls.contrast, controls.help),
+          h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
           controls.tools, controls.list.element);
         return controls;
   }
@@ -519,6 +522,8 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const trueSwatches = rowSwatches ? { ...rowSwatches, swatches: rowSwatches.truth } : null;
       const enhancedList = !!rowSwatches?.enhanced.size;
       setContrastMark(controls.contrast, enhancedList);
+      // The marker takes the help tip's slot while it shows, and its tip then says both; a row without help keeps the slot for it.
+      if (controls.help) { controls.help.hidden = enhancedList; controls.contrast.hidden = !enhancedList; }
       const look = value ? swatchLook({ position: value.position, color: value.color },
         trueSwatches ?? (value.swatch ? { swatches: { [value.position]: value.swatch } as unknown as string[], icons: [], sheets: new Map(), pending: false } : null)) : null;
       controls.swatch.hidden = !look || look.kind === "none" || isOffChoice(option, value);
@@ -548,8 +553,10 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       setAttr(controls.reset, "aria-label", controls.reset.title);
       applyCapability(controls.reset, port.authoring.capability({ kind: "character.reset", part: option.part, option: option.name }));
       if (controls.help) {
-        setHelp(controls.help, staticDetail(creator, option, uncensoredOn));
+        const detail = staticDetail(creator, option, uncensoredOn);
+        setHelp(controls.help, detail);
         setAttr(controls.help, "aria-label", `About ${option.label}`);
+        if (enhancedList && detail) setHelp(controls.contrast, [CONTRAST_WORDS.markTip, detail], CONTRAST_WORDS.mark);
       }
       controls.element.classList.toggle("not-shown", notDrawn(option, uncensoredOn) || conditionalHidden);
       controls.list.element.hidden = !controls.open;

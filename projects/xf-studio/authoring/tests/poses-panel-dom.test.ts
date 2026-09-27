@@ -77,7 +77,8 @@ describe("Poses panel", () => {
     // Recent appears first, and the applied row is marked current there.
     expect(label(groups(root)[0]!)).toBe("Recent");
     expect(root.querySelectorAll(".tree-row").filter(row => row.getAttribute("aria-current") === "true").map(poseId)).toEqual(["PhotoModePoses.sera_01"]);
-    expect(root.querySelector(".poses-current")?.textContent).toBe("V holds 01.");
+    // One status line: with the pose held (marked in the tree), it shows the count again.
+    expect(root.querySelector(".poses-count")?.textContent).toBe("4 poses in 2 categories");
     // The star adds it to Favourites.
     click(rows(root).find(row => poseId(row) === "PhotoModePoses.sera_02")!.querySelector(".favourite-toggle")!);
     await settle();

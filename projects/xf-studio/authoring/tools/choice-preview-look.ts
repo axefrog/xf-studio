@@ -2,7 +2,7 @@
  * Captures of the Character panel's hairstyle pictures (choice previews phase 1) in an isolated `?verify=1` workspace with a throwaway
  * Chrome profile, against an authoring server already running on its own port (never 4317 or the person's draft), beside the style
  * guide's reference specimen. For each scheme and panel width: the Hairstyle row at size M once its pictures have settled (and S and L at
- * the first width), and the style guide's Choice preview and Preview tokens entries.
+ * every width), and the style guide's Choice preview and Preview tokens entries.
  *
  *   bun tools/choice-preview-look.ts <out dir under evidence/screenshots> [port] [--schemes light,dark] [--widths 300,480] [--tag after]
  *
@@ -40,6 +40,10 @@ for (const scheme of schemes) for (const width of args.includes("--guide-only") 
   const name = (what: string) => `${tag}-${what}-${scheme}-${width}.png`;
   try {
     await page.waitFor("document.querySelector('.dock-group') && !!window.xfStudioShell", 120000);
+    // The tiles are the subject: without the body and the idle the page stays small (the pictures come from the preview worker).
+    await page.waitFor(`window.xfStudioPresentation?.authoring.capability({ kind: "preview.setBody", enabled: false }).available`, 240000).catch(() => {});
+    for (const action of [{ kind: "preview.setBody", enabled: false }, { kind: "motion.setIdle", enabled: false }])
+      await page.evaluate(`window.xfStudioShell.runtime.dispatch(${JSON.stringify(action)})`).catch(() => undefined);
     await page.evaluate(`window.xfStudioShell.dock.reveal("character")`);
     await page.waitFor(`!!(${ROW})`, 240000);
     await page.evaluate(`(() => { const g = document.querySelector(".cc-panel")?.closest(".dock-group, .dock-column, section"); if (g) { g.style.width = "${width}px"; g.style.flex = "none"; } })()`);
@@ -51,7 +55,7 @@ for (const scheme of schemes) for (const width of args.includes("--guide-only") 
     await page.waitFor(`(() => { const r = ${ROW}; const tiles = [...r.querySelectorAll(".pv-tile")].slice(0, 24); return tiles.length > 0 && tiles.every(t => t.dataset.state !== "waiting"); })()`, 120000).catch(() => {});
     await page.wait(800);
     await shoot(page, name("hairstyle-m"), ROW, 2);
-    if (width === widths[0]) for (const value of ["s", "l"] as const) { await size(page, value); await shoot(page, name(`hairstyle-${value}`), ROW, 2); }
+    for (const value of ["s", "l"] as const) { await size(page, value); await shoot(page, name(`hairstyle-${value}`), ROW, 2); }
     await size(page, "m");
     const state = await page.evaluate(`(() => { const tiles = [...${ROW}.querySelectorAll(".pv-tile")]; const count = s => tiles.filter(t => t.dataset.state === s).length;
       return { tiles: tiles.length, ready: count("ready"), waiting: count("waiting"), none: count("none"), size: ${ROW}.querySelector(".choices")?.dataset.size }; })()`);

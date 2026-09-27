@@ -13,7 +13,7 @@ export type LoadedGradingLut = { lut: GradingLut | null; source: GradingLutSourc
 
 const neutral = (note: string): LoadedGradingLut => ({ lut: null, file: null, unreachable: true, source: { kind: "neutral", depotPath: null, archive: null, group: null,
   provider: null, alternatives: [], rule: null, size: null, note, skipped: [] } });
-const UNREACHABLE = "Colour grading: the game's LUT couldn't be loaded, so a neutral grade is shown.";
+const UNREACHABLE = "The game's colour grade couldn't be loaded, so a neutral grade is shown.";
 
 export async function loadGradingLut(fetcher: GradingLutFetch = (url, init) => fetch(url, init),
   options: { signal?: AbortSignal; wait?: (ms: number) => Promise<void>; attempts?: number } = {}): Promise<LoadedGradingLut> {

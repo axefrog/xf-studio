@@ -1,7 +1,7 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
-  Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
+  Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, previewTile, ScrollMemory, VIEW_KEY, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
@@ -79,6 +79,16 @@ const MOUNTS: Record<string, Mount> = {
     off.update(0, { disabled: true, reason: "Your V's face isn't read yet." });
     return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, make("Look sideways", { negative: "Left", positive: "Right" }, 20).element,
       make("Look up or down", { negative: "Down", positive: "Up" }, 0).element, make("Brow height", { negative: "Lower", positive: "Raise" }, -15, true).element, off.element)); },
+  "lib-scrub": () => {
+    type Curve = "linear" | "in" | "out" | "inOut";
+    let curve = "linear" as Curve;
+    const values = [0.4, 0.2, 0.6], bars = values.map(() => h("span", { class: "readout" }));
+    const show = (amount: number) => values.forEach((v, i) => { const w = amount >= 0 ? v + (1 - v) * amount : v * (1 + amount); bars[i]!.textContent = `${Math.round(w * 100)} %`; });
+    const scrub: ScrubSlider<Curve> = new ScrubSlider<Curve>({ label: "Intensity", ends: { negative: "Rest", positive: "Full" },
+      curves: [{ value: "linear", label: "Curve: Linear", icon: "easeLinear" }, { value: "in", label: "Curve: Ease in", icon: "easeIn" }, { value: "out", label: "Curve: Ease out", icon: "easeOut" }, { value: "inOut", label: "Curve: Ease in-out", icon: "easeInOut" }],
+      onCurve: next => { curve = next; scrub.update({ curve }); }, onBegin: () => {}, onPreview: p => show((p - 50) / 50), onCommit: () => {}, onCancel: () => show(0) });
+    scrub.update({ curve }); show(0);
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, scrub.element, h("div", { class: "row gap-m" }, ...bars))); },
   "lib-segmented": () => { const s: Segmented<string> = new Segmented({ label: "Show", options: [{ value: "both", label: "Both eyes" }, { value: "one", label: "Single eye" }], onSelect: v => s.update(v), compact: true });
     s.update("both"); return s.element; },
   "lib-color": () => { const c: ColorField = new ColorField({ label: "Colour", transaction: { edit: v => c.update(v) } }); c.update("#b0587a"); return c.element; },

@@ -90,6 +90,23 @@ try {
   if (await scrollTo(".expr-drawer [data-axis]")) { await page.wait(300); await snap("dark-300-gaze-separate", drawerWindow); }
   await scrollTo(".expr-drawer .group-section");
   await snap("dark-300-separate-top", drawerWindow);
+  // Adjust all › Intensity mid-drag (a live preview toward full) and out in the bleed area, dark and light, narrow.
+  for (const scheme of ["dark", "light"] as const) {
+    await theme(scheme);
+    await scrollTo(".expr-drawer");
+    await page.wait(300);
+    const range = await box(`document.querySelector(".expr-intensity input.scrub-range")`) as { x: number; y: number; width: number; height: number } | null;
+    if (range) {
+      const y = range.y + range.height / 2, from: [number, number] = [range.x + range.width / 2, y], to: [number, number] = [range.x + range.width * 0.85, y];
+      await page.drag(from, to, { steps: 10, hold: async (_x, _y, i) => { if (i === 10) { await page.wait(400); await snap(`${scheme}-300-intensity-drag`, drawerWindow); } } });
+      await page.wait(300);
+      const brow = () => page.evaluate(`document.querySelector('.expr-drawer [data-group="brows"]')?.textContent?.match(/Brow lower[^%]*%/)?.[0] ?? ""`);
+      log(`${scheme} after the drag: ${await brow()}`);
+      await page.drag(from, [to[0], y + 120], { steps: 10, hold: async (_x, _y, i) => { if (i === 10) { await page.wait(300); log(`${scheme} in the bleed area: ${await brow()}`); await snap(`${scheme}-300-intensity-bleed`, drawerWindow); } } });
+      await page.wait(300);
+      log(`${scheme} after the bleed release: ${await brow()}`);
+    }
+  }
   writeFileSync(resolve(out, "run.json"), JSON.stringify({ date: new Date().toISOString(), shots,
     console: page.console.filter(m => m.type === "error").slice(0, 20) }, null, 2));
   console.log(`Wrote ${shots.length} captures to ${out}`);

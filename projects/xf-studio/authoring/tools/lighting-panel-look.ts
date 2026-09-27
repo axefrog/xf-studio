@@ -54,5 +54,11 @@ try {
   await page.waitFor("window.xfStudioPresentation.authoring.previewState().lighting?.lut.phase !== 'loading'", 120000).catch(() => undefined);
   await page.evaluate(`(() => { const row = [...document.querySelectorAll(".light-list .item-main")].find(e => /Main Face/.test(e.textContent)); row?.click(); })()`);
   await shot("4-creator-spot");
+  // The Colour grade's help tip, which says where the game's grade comes from (UI-129), shown from the keyboard.
+  // Scrolled first: a scroll hides a showing tip.
+  await page.evaluate(`document.querySelector('.help-tip[aria-label="About Colour grade"]')?.scrollIntoView({ block: "center" })`);
+  await page.wait(500);
+  await page.evaluate(`document.querySelector('.help-tip[aria-label="About Colour grade"]')?.focus()`);
+  await shot("5-grade-tip");
   writeFileSync(resolve(out, `${tag}-console.json`), JSON.stringify(page.console.filter(m => m.type === "error" || m.type === "exception").slice(0, 20), null, 2));
 } finally { await page.close(); server.kill(); }

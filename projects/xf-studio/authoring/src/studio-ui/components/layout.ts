@@ -60,13 +60,13 @@ export class PageHeader {
   setMeta(text: string) { setText(this.meta, text); this.meta.hidden = !text; }
 }
 
-/** Key/value rows. A value may be a node (a link, a badge); `mono` sets values in the monospace token. */
-export type Property = { term: string; value: string | Node; mono?: boolean };
+/** Key/value rows. A term or value may be a node (a link, a badge, a span a panel updates in place); `mono` sets values in the monospace token. */
+export type Property = { term: string | Node; value: string | Node; mono?: boolean };
 export function propertyList(rows: readonly (Property | [string, string])[], options: { label?: string; className?: string } = {}): HTMLElement {
   return h("dl", { class: `property-list${options.className ? ` ${options.className}` : ""}`, "aria-label": options.label },
     rows.flatMap(row => {
       const { term, value, mono } = Array.isArray(row) ? { term: row[0], value: row[1], mono: false } : row;
-      return [h("dt", { text: term }), h("dd", { class: mono ? "mono" : undefined }, value)];
+      return [typeof term === "string" ? h("dt", { text: term }) : h("dt", {}, term), h("dd", { class: mono ? "mono" : undefined }, value)];
     }));
 }
 

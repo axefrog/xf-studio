@@ -20,6 +20,7 @@ export { DRAG_MIN, HeaderFitter, PanelHeader, type PanelHeaderOptions } from "./
 export { SliderWithValue, type SliderWithValueOptions } from "./slider-with-value";
 export { PairControl, type PairControlOptions, type PairEdit, type Side } from "./pair-control";
 export { BipolarSlider, type BipolarSliderOptions } from "./bipolar-slider";
+export { ScrubSlider, SCRUB_REST, type ScrubCurve, type ScrubSliderOptions } from "./scrub-slider";
 export { GroupSection, type GroupSectionOptions } from "./group-section";
 // Remembered view state: folds and scroll positions across reloads (view-state.ts, scroll-anchor.ts).
 export { RememberedSet } from "../view-state";

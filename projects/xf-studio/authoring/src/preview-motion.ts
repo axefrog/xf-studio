@@ -25,7 +25,7 @@ export type ComposedFace = Pick<FaceDriver, "holding" | "animating" | "onChange"
  *   and comes back when it stops.
  * - While an expression is held the blink keeps its settings but writes nothing: the expression's solve includes the blink, as the
  *   game adds blink tracks before its facial solve. Releasing the expression gives the bones back to the blink.
- * - A detail's bones join the face and the blink before the idle: they capture their neutral pose, then a running idle poses them.
+ * - A detail's bones join whichever motion owns the bones last: the others capture their neutral pose first, then the owner poses them.
  * - **A photo-mode pose** is the idle's rig playing a pose clip (`idle.posing`; pose-library-design.md §5.2, decision Q5): poses and
  *   expressions combine. A held expression is lent to the idle (`face.setLent`, `idle.setFaceOverride`), which composes it over the posed
  *   body as it composes its own face clip; without one the pose keeps the idle's face (V blinks and glances while holding it). A held pose
@@ -80,7 +80,18 @@ export function composePreviewMotion(idle: ComposedIdle | undefined, blink: Comp
       settle();
       return changed;
     },
-    attach(bones: readonly THREE.Object3D[]) { face?.attach(bones); blink?.attach(bones); idle?.attach(bones); },
+    /**
+     * Bind bones that join (a detail's skeleton copy, or every drawn detail again after a part swap: character-renderer.ts). Each motion
+     * captures the pose the bones arrive in as their neutral pose, and the one that owns them writes its pose as it binds, so the owner
+     * binds last: otherwise the others capture the owner's pose as neutral, put it back on detach, and every re-bind compounds it
+     * (PREV-144). The idle while enabled (the blink was reset and the face stepped aside or is lent to it), else a held expression (the
+     * blink is muted), else the blink; the idle turned off writes only its dangle chains, which no other motion binds.
+     */
+    attach(bones: readonly THREE.Object3D[]) {
+      if (idle?.enabled) { face?.attach(bones); blink?.attach(bones); idle.attach(bones); }
+      else if (faceOwns()) { blink?.attach(bones); idle?.attach(bones); face!.attach(bones); }
+      else { face?.attach(bones); idle?.attach(bones); blink?.attach(bones); }
+    },
     /** The puppet's deformation rigs for the helper joints the details bring (the idle poses them; the blink never moves them). */
     setDeformations(programs: readonly DeformationProgram[]) { idle?.setDeformations?.(programs); },
     /** The drawn parts' dangle components (hair with physics): the idle poses their chains; the blink never moves them. */

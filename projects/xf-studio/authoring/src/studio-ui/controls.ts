@@ -122,22 +122,27 @@ export class Toggle {
   private readonly note: NoteLine;
   /** The help tip beside the label, when the toggle was given `help`. */
   private readonly tip: HTMLButtonElement | null;
+  private readonly labelText: HTMLSpanElement;
   constructor(private readonly options: { label: string; help?: HelpText; onChange(checked: boolean): void; id?: string; reserveNote?: boolean;
     /** Its unavailable reason is a wait or information (muted), not a problem (warning). */
-    quietReason?: boolean }) {
+    quietReason?: boolean;
+    /** The label while mixed ("Symmetric · some regions"), so the state is said in words as well as by the mark. */
+    mixedLabel?: string }) {
     const id = options.id ?? uid("toggle");
     this.input = h("input", { id, type: "checkbox", role: "switch", class: "switch" });
     this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.tip = options.help !== undefined ? helpTip(options.label, options.help) : null;
+    this.labelText = h("span", { class: "toggle-label", text: options.label });
     // The tip sits outside the label, so pressing it never flips the switch.
     this.element = h("div", { class: "control toggle-row" },
       h("div", { class: "control-line" }, h("label", { class: "toggle", for: id }, this.input, h("span", { class: "switch-track", "aria-hidden": "true" }),
-        h("span", { class: "toggle-label", text: options.label })), this.tip), this.note.element);
+        this.labelText), this.tip), this.note.element);
     this.input.addEventListener("change", () => options.onChange(this.input.checked));
   }
   /**
-   * `mixed`: a switch over several things of which some are on (Symmetric while some face regions are mirrored). It shows a half
-   * state and reads "mixed"; ARIA's switch has no mixed value, so while mixed it is announced as a checkbox. A press turns it fully on.
+   * `mixed`: a switch over several things of which some are on (Symmetric while some face regions are mirrored). The track shows a
+   * dash instead of a thumb (never a half-slid thumb, which reads as stuck), the label says so (`mixedLabel`), and it reads "mixed";
+   * ARIA's switch has no mixed value, so while mixed it is announced as a checkbox. A press turns it fully on.
    */
   update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string; reasonOnLine?: boolean; mixed?: boolean } = {}) {
     const mixed = !!state.mixed;
@@ -146,6 +151,7 @@ export class Toggle {
     setAttr(this.input, "aria-checked", mixed ? "mixed" : undefined);
     const on = mixed ? false : checked;
     if (this.input.checked !== on) this.input.checked = on;
+    setText(this.labelText, mixed && this.options.mixedLabel ? this.options.mixedLabel : this.options.label);
     setDisabled(this.input, !!state.disabled, state.reason);
     this.note.update(this.input, !!state.disabled, state.reason, state.note, state.reasonOnLine ?? true);
   }
@@ -166,17 +172,23 @@ export class Segmented<T extends string | number> {
   private buttons: { value: T; button: HTMLButtonElement }[] = [];
   private readonly group: HTMLElement;
   private readonly note: NoteLine;
+  /** The help tip beside the label, when the group was given `help` (what the choice is; its state stays in the note). */
+  private readonly tip: HTMLButtonElement | null;
   private signature = "";
   constructor(private readonly options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean;
-    reserveNote?: boolean }) {
+    reserveNote?: boolean; help?: HelpText }) {
     const labelId = uid("seg");
     this.group = h("div", { class: "segmented", role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
       "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote);
+    this.tip = options.help !== undefined && options.showLabel !== false ? helpTip(options.label, options.help) : null;
+    const label = options.showLabel === false ? null : h("span", { class: "control-label", id: labelId }, h("span", { text: options.label }));
     this.element = h("div", { class: `control${options.compact ? " compact" : ""}` },
-      options.showLabel === false ? null : h("span", { class: "control-label", id: labelId }, h("span", { text: options.label })), this.group, this.note.element);
+      label && this.tip ? h("div", { class: "control-line" }, label, this.tip) : label, this.group, this.note.element);
     this.setOptions(options.options);
   }
+  /** Change the help tip's text (a group made with `help` only). */
+  setHelp(text: HelpText) { if (this.tip) setHelp(this.tip, text); }
   /** Replace the choices (a no-op when they are the same); focus stays on the same choice when it is still offered. */
   setOptions(options: readonly SegmentOption<T>[]) {
     const signature = JSON.stringify(options.map(option => [option.value, option.label, option.icon ?? "", option.title ?? ""]));

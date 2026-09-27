@@ -38,6 +38,8 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["cc-panel", ["choiceGroup", "compareGroups", "OTHER_MODS_GROUP", "OTHER_MODS_INDEX"]],
   // Swatch contrast enhancement's pure math (swatch-contrast.ts): the style guide draws its curve and a before/after specimen.
   ["swatch-contrast", ["CONTRAST", "contrastGain", "enhanceSwatchSet", "separationWeight"]],
+  // Easing curves' pure maths (easing.ts): Adjust all › Intensity passes its position through the chosen curve.
+  ["easing", ["centredAmount", "EASING_IDS", "EASING_LABELS"]],
   // Choice previews' pure colour matrix (choice-preview.ts): the preview tile builds its per-theme filter from the tokens with it.
   ["choice-preview", ["previewColourMatrix"]],
   // The pure input binding catalogue: hint/cursor/label derivation and key matching.

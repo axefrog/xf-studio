@@ -6,7 +6,7 @@
  */
 import { keyBinding } from "../../../input-bindings";
 import { applyCapability, button, emptyState, favouriteToggle, note, SearchField, TreeView, type TreeGroupData, type TreeRowData } from "../../../studio-ui/components";
-import { h, setText } from "../../../studio-ui/dom";
+import { h, setAttr, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { PoseBadge } from "../types";
@@ -61,17 +61,17 @@ export function posesPanel(ctx: Ctx): PanelController {
   const idle = button({ label: "Idle", icon: "play", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.clear", to: "idle" }); } });
   idle.title = "Play the idle chosen in Motion (the creator's close-up unless you chose another)";
   const frame = button({ label: "Frame V", icon: "body", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "pose.frame" }, { quiet: true }); } });
-  const current = h("p", { class: "note muted poses-current", role: "status" });
   const outfitText = h("span", {});
   const outfitToggle = button({ label: "Show them", small: true, variant: "ghost", onClick: () => {
     void ctx.dispatch({ kind: "pose.showFiltered", shown: !facade.snapshot().showFiltered }, { quiet: true });
   } });
   const outfit = h("p", { class: "note info poses-outfit" }, outfitText, " ", outfitToggle);
   const state = h("div", { class: "poses-state" });
-  const count = h("p", { class: "note muted poses-count" });
+  // One status line under the buttons: the count, or while there is one, the passing state (a pose loading, why none can play).
+  const count = h("p", { class: "note muted poses-count", role: "status" });
   tree.element.classList.add("poses-tree");
   const limits = note("Props, weapons and vehicles aren't drawn, so V poses empty-handed. Clothes don't yet make room for the body in strong poses.");
-  const element = h("div", { class: "panel-content poses-panel" }, search.element, h("div", { class: "poses-actions" }, still, idle, frame), current, outfit, state, count,
+  const element = h("div", { class: "panel-content poses-panel" }, search.element, h("div", { class: "poses-actions" }, still, idle, frame), count, outfit, state,
     tree.element, limits);
 
   /** The tree's groups as the library draws them. */
@@ -93,8 +93,10 @@ export function posesPanel(ctx: Ctx): PanelController {
       applyCapability(idle, facade.capability({ kind: "pose.clear", to: "idle" }));
       applyCapability(frame, facade.capability({ kind: "pose.frame" }));
       const held = snapshot.current;
-      setText(current, held ? (held.loading ? `Loading ${held.label}…` : `V holds ${held.label}.`)
-        : !snapshot.playable.available ? snapshot.playable.reason ?? "" : snapshot.body === "idle" ? "V plays the idle. Choose a pose to hold it." : "V stands still. Choose a pose to hold it.");
+      // Stand still and Idle show which of them V is doing (pressed), and the tree marks the pose V holds (UI-127).
+      const playable = snapshot.playable.available;
+      setAttr(still, "aria-pressed", String(!held && playable && snapshot.body !== "idle"));
+      setAttr(idle, "aria-pressed", String(!held && playable && snapshot.body === "idle"));
       // Catalogue states: one plain line and, where it helps, the one next step.
       const sKey = JSON.stringify([catalogue.phase, catalogue.message]);
       if (sKey !== stateKey) {
@@ -111,8 +113,11 @@ export function posesPanel(ctx: Ctx): PanelController {
       setText(outfitText, snapshot.showFiltered ? `${plural(hidden, "pose")} the game hides while V wears ${tagWords(poseTree.hidingTags)} ${hidden === 1 ? "is" : "are"} shown.`
         : `${plural(hidden, "pose")} ${hidden === 1 ? "is" : "are"} hidden while V wears ${tagWords(poseTree.hidingTags)}, as in the game.`);
       setText(outfitToggle.querySelector("span") ?? outfitToggle, snapshot.showFiltered ? "Hide them" : "Show them");
-      count.hidden = catalogue.phase !== "ready";
-      setText(count, query ? `${plural(poseTree.shown, "pose")} match` : `${plural(catalogue.listed, "pose")} in ${plural(catalogue.categories, "category", "categories")}`);
+      const passing = held?.loading ? `Loading ${held.label}…` : !playable ? snapshot.playable.reason ?? "" : "";
+      const listed = catalogue.phase !== "ready" ? "" : query ? `${plural(poseTree.shown, "pose")} match`
+        : `${plural(catalogue.listed, "pose")} in ${plural(catalogue.categories, "category", "categories")}`;
+      setText(count, passing || listed);
+      count.hidden = !count.textContent;
       tree.element.hidden = catalogue.phase !== "ready" && !poseTree.groups.length;
       // While searching, every group with a match is open.
       const open = new Set(query ? poseTree.groups.map(group => group.id) : snapshot.preferences.open);

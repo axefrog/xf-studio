@@ -83,7 +83,14 @@ export function readChoiceManifest(dir: string, key: string): ChoiceManifest | n
   try { return parseChoiceManifest(JSON.parse(readFileSync(file, "utf8"))); } catch { return null; }
 }
 export function writeChoiceManifest(dir: string, key: string, manifest: ChoiceManifest): void {
-  try { mkdirSync(dir, { recursive: true }); writeFileAtomic(join(dir, `${key}.json`), JSON.stringify(manifest)); }
+  try {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `${key}.json`), text = JSON.stringify(manifest);
+    // An unchanged manifest is left as it is: its size and time stamp what was derived from it (choice preview sources), so
+    // rewriting identical bytes would make those look stale and be derived again.
+    try { if (readFileSync(path, "utf8") === text) return; } catch { /* Not written yet. */ }
+    writeFileAtomic(path, text);
+  }
   catch { /* Advisory: the choice is checked by preparing it next time. */ }
 }
 

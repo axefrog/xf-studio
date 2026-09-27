@@ -199,6 +199,12 @@ describe("the Character panel's DOM", () => {
     const tips = h.root.querySelectorAll(".cc-row").filter(element => ownTip(element));
     expect(tips.length).toBe(1);
     expect((ownTip(tips[0]!) as unknown as HTMLElement).getAttribute("aria-label")).toStartWith("About ");
+    // One tip slot per row (UI-130): beside a help tip the marker is hidden until the list is enhanced; without one it keeps the slot.
+    const slot = (tips[0] as unknown as LightElement).querySelector(".cc-row-tip")!;
+    expect(slot.children).toHaveLength(2);
+    expect((slot.querySelector(".contrast-mark") as unknown as HTMLElement).hidden).toBe(true);
+    expect((ownTip(slot) as unknown as HTMLElement).hidden).toBe(false);
+    expect((row(h.root, "Eye Color").querySelector(".cc-row-tip")!.querySelector(".contrast-mark") as unknown as HTMLElement).hidden).toBe(false);
   });
 });
 

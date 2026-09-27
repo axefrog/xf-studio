@@ -11,6 +11,7 @@
  * view imports this module to bind its factories (`featureView`).
  */
 import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../studio-application";
+import type { EasingId } from "../../easing";
 import type { StudioContextHit } from "../../studio-context-targets";
 import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest } from "../../part-presets";
@@ -91,6 +92,8 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   readonly links: ProjectLinkPort;
   /** Presentation-local changes that need a repaint. */
   changed(): void;
+  /** The easing curve remembered for a multi-control operation (`scope`, e.g. `expression-intensity`): a UI preference, never Undo. */
+  readonly easing: { get(scope: string): EasingId | undefined; set(scope: string, easing: EasingId): void };
   /** Open a target's menu: the application-bound entries for the target, then the feature's items. */
   targetMenu(target: MenuTarget, menu: FeatureTargetMenu<FacadeAction<F>>, anchor: MenuAnchor, invoker?: Element): void;
   /** The sections `targetMenu` shows (for tests and the style guide). */
