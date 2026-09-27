@@ -68,6 +68,14 @@ A feature's part can be saved on its own under a name in the local library, apar
 - **Revision-guarded changes.** Rename and delete carry the revision they were shown; a stale window gets a plain conflict. Deleting is the person's own action and has no Undo.
 - **Requests, not actions.** `partPreset.list`, `partPreset.save`, `partPreset.rename` and `partPreset.delete` are the async `presets` family ([action catalogue](ui-action-catalogue.md#part-presets-and-expressions)); a feature view reaches them through its view context with its own feature filled in, and a save without a part saves the feature's live part serialized by its own codec.
 
+## Animated transitions
+
+A held expression's change can be shown as motion ([expression editor design §5.5](../animation/expression-editor-design.md#55-animated-transitions)). It is display only:
+
+- **State changes at once.** An action changes the part immediately, records the Undo step it always records (one per preset switch, one per drag) and persists as before; only what the head shows eases from the face on screen to the new one. Undo and Redo change the part at once too, and their display animates like any other whole-face change.
+- **The setting is not document state.** `transition.set` records no Undo step and never enters a look, a library row or an export; it is kept in the workspace's `preview.transitions` like the blink.
+- **Edits inside a form control are not delayed.** While a feature's form-control transaction is open, the controls it changes show at once.
+
 ## Browser workspace persistence
 
 - **Save on content changes only.** Autosave subscribes to domain and content sources (the authoring document, preferences, the collection library, preview services and view adapters), never to the whole presentation port, which also carries the save status and preview readiness. Save status is published only when it changes, and identical content is never rewritten.

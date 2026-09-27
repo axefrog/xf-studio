@@ -246,7 +246,13 @@ span.category { border-color: transparent; background: transparent; padding-left
 .slider.unknown::-moz-range-thumb { visibility: hidden; }
 .slider.unknown { --fill: 0% !important; }
 .slider::-moz-range-thumb { width: 10px; height: 14px; background: var(--bg-panel); border: 2px solid var(--signal); border-radius: 1px; }
-.slider:disabled { cursor: not-allowed; opacity: .45; }
+/* Disabled: the fill and thumb turn neutral (never a dimmed signal colour, which still reads as on), and the control's label and readout
+   read muted (.control.disabled below). */
+.slider:disabled { cursor: not-allowed; }
+.slider:disabled::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--line-strong) var(--fill), var(--line) var(--fill)); }
+.slider:disabled::-webkit-slider-thumb, .slider:disabled:hover::-webkit-slider-thumb { background: var(--bg-panel); border-color: var(--line-strong); }
+.slider:disabled::-moz-range-progress { background: var(--line-strong); }
+.slider:disabled::-moz-range-thumb { background: var(--bg-panel); border-color: var(--line-strong); }
 .slider:focus-visible { outline-offset: 1px; }
 .toggle-row { gap: 0; }
 .toggle { display: flex; align-items: center; gap: var(--sp-4); min-height: var(--control-h-sm); cursor: pointer; position: relative; }
@@ -267,6 +273,17 @@ span.category { border-color: transparent; background: transparent; padding-left
 .segment:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
 .segment[aria-pressed="true"] { background: var(--bg-panel); color: var(--text); box-shadow: inset 0 -2px 0 var(--signal); font-weight: 600; }
 .segment:disabled { opacity: .45; cursor: not-allowed; }
+/* A strip hugs its choices: in a control's column it never stretches to the panel's width. */
+.control > .segmented { align-self: flex-start; }
+/* Icon-only segments (the easing curves): square-ish, the icon centred; the label is the accessible name and tooltip. */
+.segmented.icon-only .segment { justify-content: center; min-width: calc(var(--control-h) + 2px); padding: 0 var(--sp-3); }
+/* Frameless: a strip on another control's label line (Intensity's curves); the chosen segment keeps its raised look and underline. */
+.segmented.frameless { border: 0; background: transparent; padding: 0; }
+.segmented.frameless .segment { height: 22px; }
+.segmented-control .slider-value-line .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
+.segmented-readout { white-space: nowrap; }
+/* The empty column of a slider's reset (a small icon button), so a Segmented's readout lines up with the values of the sliders around it. */
+.readout-gutter { flex: none; width: 22px; }
 /* Wrapping choices: even tiles at least as wide as the longest label (--segment-min, set by the control), as many a row as fit; a label
    wider than the row takes the row and wraps inside its tile. */
 .color-field { display: flex; gap: var(--sp-3); align-items: center; }
@@ -293,6 +310,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .slider-with-value .control-label-text { font-size: var(--fs-sm); color: var(--text-muted); }
 .slider-with-value.set .control-label-text { color: var(--text); font-weight: 600; }
 .slider-with-value.set .control-label-text::after { content: ""; width: 5px; height: 5px; margin-left: var(--sp-2); background: var(--signal); }
+/* Any disabled control: its label, marker and readout read muted, as a disabled switch's label does. */
+.control.disabled .control-label, .control.disabled .control-label-text, .control.disabled .readout { color: var(--text-muted); }
+.control.disabled .control-label-text::after { background: var(--line-strong); }
 /* Readout field (components/readout-field.ts): the one readout, typed into in place. */
 .readout-field { display: inline-flex; align-items: center; justify-content: flex-end; flex: none; min-width: 5ch; height: 20px; }
 .readout-value { cursor: text; white-space: nowrap; border-bottom: 1px dotted transparent; padding: 0 1px; }
@@ -371,7 +391,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .scrub-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 24px; min-width: 0; }
 .scrub-line .control-label-text { min-width: 0; font-size: var(--fs-sm); color: var(--text-muted); }
 .scrub-slider.moving .control-label-text { color: var(--text); font-weight: 600; }
-.scrub-curves { display: inline-flex; gap: 2px; flex: none; margin-right: var(--sp-3); }
+.scrub-line > .segmented-control { flex: none; margin-right: var(--sp-3); }
 .scrub-line .readout { flex: none; min-width: 5ch; text-align: right; }
 .scrub-track { --lo: .5; --hi: .5; position: relative; display: block; }
 .scrub-track::before { content: ""; position: absolute; top: 5px; left: 50%; width: 1px; height: 12px; margin-left: -.5px; background: var(--line-strong); pointer-events: none; }
@@ -649,6 +669,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
 .item-row.selected .item-name { font-weight: 650; }
 .item-meta { margin-left: auto; flex: none; font: var(--fs-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+/* A few words about the row in the UI face, after its name: muted, and the first thing cut short when the row is narrow. */
+.item-secondary { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); color: var(--text-muted); }
+.item-name { flex: 0 1 auto; min-width: 4ch; }
 .item-trailing { display: flex; align-items: center; gap: 1px; flex: none; }
 .item-trailing .btn { visibility: hidden; }
 .item-row:hover .item-trailing .btn, .item-row.selected .item-trailing .btn, .item-row:focus-within .item-trailing .btn { visibility: visible; }
@@ -737,8 +760,6 @@ span.category { border-color: transparent; background: transparent; padding-left
 .install-line.done { color: var(--success); } .install-line.warning { color: var(--warning); }
 .install-sheet .install-where { margin: 0 0 var(--sp-4); font-size: var(--fs-sm); color: var(--text-muted); }
 .install-changes { margin: 0 0 var(--sp-4); }
-.result-list.install-changes li { align-items: flex-start; flex-wrap: nowrap; overflow-wrap: anywhere; }
-.result-list.install-changes li > span { min-width: 0; }
 .install-notes { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .install-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); min-height: 24px; }
 .install-status { margin: 0; flex: 1 1 240px; font-size: var(--fs-sm); }
@@ -774,7 +795,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .result-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
 .result-summary { font-weight: 600; }
 .result-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-sm); }
-.result-list li { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
+/* A line never wraps its icon away from its words: the text wraps inside its own span (a narrow panel's long omission or change). */
+.result-list li { display: flex; align-items: flex-start; gap: var(--sp-3); flex-wrap: nowrap; overflow-wrap: anywhere; }
+.result-list li > span { min-width: 0; }
 .result-list .icon { width: 13px; height: 13px; flex: none; translate: 0 2px; }
 .result-list .icon:first-child { color: var(--success); }
 .omissions .result-list .icon { color: var(--warning); }
@@ -1229,7 +1252,6 @@ span.category { border-color: transparent; background: transparent; padding-left
 .menu-sep { height: 1px; background: var(--line); margin: var(--sp-2) var(--sp-3); }
 .menu-heading { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-3) var(--sp-4) var(--sp-2); font: 600 var(--fs-2xs)/1.3 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
 .menu-heading small { font: var(--fs-xs)/1.35 var(--font-ui); letter-spacing: 0; text-transform: none; color: var(--text-faint); }
-.menu-empty { padding: var(--sp-4); color: var(--text-muted); font-size: var(--fs-sm); }
 .popover { position: fixed; width: 280px; display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5); background: var(--bg-overlay); border: 1px solid var(--line-strong); box-shadow: var(--shadow); border-radius: 0 var(--bevel) 0 0; }
 .popover-title { font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
 .popover-field { display: flex; justify-content: space-between; font-size: var(--fs-sm); }

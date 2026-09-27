@@ -120,6 +120,7 @@ export class SliderWithValue {
     this.show(active ? Number(this.input.value) : value ?? Number(this.input.value));
     if (value === undefined) this.readout.show("—", "");
     setDisabled(this.input, this.disabled, state.reason);
+    this.element.classList.toggle("disabled", this.disabled);
     this.readout.setDisabled(this.disabled);
     const def = this.options.defaultValue;
     const set = def !== undefined && value !== undefined && (Math.abs(value - def) > this.options.step / 2 || !!this.text);

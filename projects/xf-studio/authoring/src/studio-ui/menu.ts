@@ -76,7 +76,15 @@ export function closeMenus(restoreFocus = true) { root?.close(restoreFocus); }
 if (typeof window !== "undefined") window.addEventListener("blur", () => closeMenus(false));
 export function menuOpen() { return !!root; }
 
+/** Whether a menu of these items offers anything to act on (an action or a submenu, available or with its reason). */
+export const hasCommands = (items: readonly MenuItem[]) => items.some(item => item.kind === "action" || item.kind === "submenu");
+/**
+ * Open a menu. A menu with nothing to act on (only headings, separators, or nothing) never opens, and nothing is closed: menus are
+ * actionable, never informational, so the owner disables its trigger with the reason instead (`hasCommands` asks first). Returns the
+ * open menu, or undefined when it didn't open.
+ */
 export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; onClose?(): void } = { label: "Menu" }) {
+  if (!hasCommands(items)) return undefined;
   closeMenus(false);
   const invoker = options.invoker ?? (document.activeElement instanceof Element ? document.activeElement : null);
   root = build(items, anchor, options.label, undefined, invoker, options.onClose);
@@ -147,7 +155,10 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
   function openChild(entry: HTMLElement, item: Extract<MenuItem, { kind: "submenu" }>, focusFirst = false) {
     if (self.child?.invoker === entry) { if (focusFirst) focusEntry(self.child, 0); return; }
     self.child?.close(false);
-    self.child = build(item.items(), entry, item.label, self, entry);
+    // A submenu with nothing to act on stays closed, as a menu does.
+    const items = item.items();
+    if (!hasCommands(items)) return;
+    self.child = build(items, entry, item.label, self, entry);
     if (focusFirst) focusEntry(self.child, 0);
   }
   element.addEventListener("keydown", event => {
@@ -169,7 +180,6 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     }
     event.stopPropagation();
   });
-  if (!entries.length) element.append(h("div", { class: "menu-empty", text: "No commands apply here." }));
   menuLayer().append(element);
   place(element, anchor, !!parent);
   if (!parent) requestAnimationFrame(() => focusEntry(self, 0));

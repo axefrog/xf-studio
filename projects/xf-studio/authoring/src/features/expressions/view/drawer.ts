@@ -12,6 +12,12 @@
  *   Shift+F10, its More button), and F2 and Delete work on a focused row; Rename edits in place (a value popover) and Delete asks first
  *   (a confirm popover), since the library can't undo it.
  * - **Save expression…** (in the Start from heading) opens a value popover with a name to accept or change.
+ * - **Transitions:** Animate changes (off by default) makes the face move from one expression to the next instead of cutting, to judge
+ *   how natural the change looks: Duration (0 to 3 s, 1 s by default; at 0 s a change shows at once) and Curve (every easing curve, one
+ *   icon each with its name and how it moves as its tooltip, the chosen one named on the label line). Off, both stay in place and read
+ *   as inactive, and the line under Curve says why once. Whole-face changes animate (Start from, Reset
+ *   all, a group or control reset, Mirror, Flip, Undo and Redo); a control being dragged follows the hand. View state of the preview
+ *   (`transition.set`), never Undo or the look.
  * - **Face:** the heading holds Symmetric (every left/right pair follows its counterpart), a More menu (mirror either side onto the other,
  *   flip the face) and Reset all (back to rest); then a search and one group section per region (count, reset). A left/right pair is a
  *   PairControl, a centre control a SliderWithValue, an opposing pair one BipolarSlider (gaze and the nostrils per side: one slider while
@@ -26,10 +32,11 @@
  * the facial preview's snapshot (the rig's controls, the installed expressions and the built-in samples) and its part presets.
  */
 import { applyCapability, button, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
-  ScrubSlider, setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, RememberedSet, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
+  ScrubSlider, Segmented, setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, RememberedSet, type MenuItem, type TreeGroupData, type TreeItemRef,
+  type TreeRowData } from "../../../studio-ui/components";
 import { COMING_SOON } from "../../../studio-ui/coming-soon";
-import { centredAmount, EASING_IDS, EASING_LABELS, type EasingId } from "../../../easing";
-import type { IconName } from "../../../studio-ui/icons";
+import { centredAmount, EASING_IDS, EASING_LABELS, easingPreset, type EasingId } from "../../../platform/api/easing";
+import { EASING_ICONS } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
@@ -53,6 +60,9 @@ const mixedNote = (axis: FacialAxisControl, part: ExpressionPart) => {
 /** Controls show their weight as a percentage (0.35 → 35 %), with whole-percent steps; the part stores 0–1. */
 const SLIDER = { min: 0, max: 100, step: 1, unit: "%", format: (percent: number) => `${Math.round(percent)} %`, defaultValue: 0, reset: true } as const;
 const percent = (weight: number | undefined) => Math.round((weight ?? 0) * 1000) / 10;
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+/** The transition's duration range (seconds; platform/core/transition-settings.ts `TRANSITION_SECONDS`, which dispatch enforces). */
+const TRANSITION_MIN = 0, TRANSITION_MAX = 3;
 
 /** One drawer entry: a centre or direction control, or a left/right pair. */
 type Entry = { element: HTMLElement; group: string; search: string; names: readonly string[];
@@ -202,14 +212,15 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   // ---- Adjust all: operations on every control in use at once (a section built to hold more of them) ----
   // Intensity: every control that is non-zero when the drag begins moves toward full (above the middle) or toward rest (below), through
   // the chosen curve; live while dragging, one Undo step on release, cancelled by Escape, a release at the middle or in the bleed area.
-  const EASE_ICONS: Record<EasingId, IconName> = { linear: "easeLinear", in: "easeIn", out: "easeOut", inOut: "easeInOut" };
+  // Its curves are the gentle four it has always offered (the catalogue's first four), inline on its label line.
+  const INTENSITY_CURVES: readonly EasingId[] = ["linear", "in", "out", "inOut"];
   const INTENSITY = "expression-intensity";
   let intensityBase: Record<string, number> = {}, scrubbing = false;
   const intensityId = "expr:intensity";
   const intensity = new ScrubSlider<EasingId>({ label: "Intensity", ends: { negative: "Rest", positive: "Full" },
     help: ["Moves every control your expression uses at once: toward full to the right, toward rest to the left. Controls at 0 stay at 0.",
       "It springs back to the middle. Release to apply (one Undo step); release at the middle, press Escape or drag away to cancel. The curve buttons choose how the change grows."],
-    curves: EASING_IDS.map(id => ({ value: id, label: `Curve: ${EASING_LABELS[id]}`, icon: EASE_ICONS[id] })),
+    curves: INTENSITY_CURVES.map(id => ({ value: id, label: `Curve: ${EASING_LABELS[id]}`, icon: EASING_ICONS[id] })),
     onCurve: id => ctx.easing.set(INTENSITY, id),
     onBegin: () => { intensityBase = { ...current.controls }; scrubbing = true; ctx.facade.controlBegin(intensityId); },
     onPreview: position => {
@@ -219,6 +230,27 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     onCommit: () => { scrubbing = false; ctx.facade.controlCommit(intensityId); },
     onCancel: () => { scrubbing = false; ctx.facade.controlCancel(intensityId); } });
   intensity.element.classList.add("expr-intensity");
+  // ---- Transitions: how the face moves from one expression to the next (the preview's view state, `transition.set`) ----
+  const setTransition = (patch: { enabled?: boolean; seconds?: number; easing?: EasingId }) =>
+    ctx.platform({ kind: "transition.set", source: "expression", ...patch });
+  const animate = new Toggle({ label: "Animate changes",
+    help: ["The face moves from one expression to the next instead of cutting, so you can judge how natural the change looks.",
+      "Choosing an expression under Start from, Reset, Mirror, Flip, Undo and Redo animate; a control you drag follows your hand. Photo mode blends from one expression to the next steadily over 1 s, which is the default here."],
+    onChange: on => { setTransition({ enabled: on }); } });
+  animate.element.classList.add("expr-animate");
+  let durationStart: number | undefined;
+  const duration = new SliderWithValue({ label: "Duration", min: TRANSITION_MIN, max: TRANSITION_MAX, step: 0.05, unit: "s", defaultValue: 1, reset: true,
+    format: seconds => `${Number(seconds.toFixed(2))} s`,
+    help: "How long a change takes. At 0 s a change shows at once.",
+    transaction: { begin: () => { durationStart = preview?.transition?.seconds; }, edit: seconds => { setTransition({ seconds }); },
+      commit: () => { durationStart = undefined; }, cancel: () => { if (durationStart !== undefined) setTransition({ seconds: durationStart }); durationStart = undefined; } } });
+  // The chosen curve's name is the readout on its label line, like Duration's value; the note line under the strip is kept for the
+  // one reason both controls are off, so nothing moves between the states.
+  const curve = new Segmented<EasingId>({ label: "Curve", iconOnly: true, reserveNote: true, compact: true, readout: id => EASING_LABELS[id], readoutGutter: true,
+    help: "How a change moves over its duration: steady, or easing in, out or both.",
+    options: EASING_IDS.map(id => ({ value: id, label: EASING_LABELS[id], icon: EASING_ICONS[id], title: `${EASING_LABELS[id]}: ${lowerFirst(easingPreset(id).hint)}` })),
+    onSelect: easing => { setTransition({ easing }); } });
+  curve.element.classList.add("expr-curve");
   const groupsHost = h("div", { class: "expr-groups" });
   const waiting = note("", "muted");
   const noControls = h("div", { class: "expr-no-match" });
@@ -228,6 +260,9 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     h("section", { class: "section", "aria-label": "Start from", "data-view-key": "expressions.start-from" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Start from" }), h("span", { class: "block-actions" }, save)),
       startSearch.element, tree.element, presetsNote),
+    h("section", { class: "section", "aria-label": "Transitions", "data-view-key": "expressions.transitions" },
+      h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Transitions" })),
+      animate.element, duration.element, curve.element),
     h("section", { class: "section", "aria-label": "Adjust all", "data-view-key": "expressions.adjust-all" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Adjust all" }),
         helpTip("Adjust all", "Operations that change every control your expression uses at once.")),
@@ -446,6 +481,17 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       default: return { text: snapshot.reason ?? "The live face preview isn't available.", tone, next: label };
     }
   }
+  /** Transitions: the preview's expression setting; off, Duration and Curve keep their place and read as inactive. */
+  function paintTransition() {
+    const setting = preview?.transition;
+    // Without the live face preview the drawer's status line says so at the top, once; a preview that doesn't animate says it here.
+    const inactive = !preview ? { disabled: true } : !setting ? { disabled: true, reason: "Animated changes aren't available here." }
+      : setting.enabled ? { disabled: false } : { disabled: true, reason: "Turn on Animate changes to set these." };
+    animate.update(!!setting?.enabled, setting ? {} : inactive);
+    duration.update(setting?.seconds ?? 1, inactive);
+    // Said once, on the strip's reserved line under both controls (one line at 300 px, so the height never changes).
+    curve.update(setting?.easing ?? "linear", undefined, inactive);
+  }
   function updatePresetsNote() {
     const list = ctx.presets.list();
     presetsNote.hidden = list.phase !== "failed";
@@ -470,6 +516,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       const inUse = scrubbing || Object.values(current.controls).some(weight => weight > 0);
       intensity.update({ curve: ctx.easing.get(INTENSITY) ?? "linear", disabled: availability.disabled || !inUse,
         reason: availability.disabled ? availability.reason : "Move a control or start from an expression first: Intensity changes the controls in use." });
+      paintTransition();
       startPoints = new Map((preview?.startPoints.items ?? []).map(point => [point.id, point]));
       paintStart(); updatePresetsNote();
       const controls = preview?.controls;

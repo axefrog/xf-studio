@@ -21,6 +21,11 @@ export type WorkspaceCapturePorts = {
   /** The view graph's stored form: undefined for the default one-view graph (whose state is the mirrored `preview`). */
   views?(): WorkspaceState["views"];
   previewSetup?(): WorkspaceState["previewSetup"];
+  /**
+   * How held expressions' changes animate (platform/core/transition-settings.ts `stored`): undefined while every source has the default,
+   * so a workspace that never changes it keeps its bytes. Stored whether or not the 3D preview is ready (it is set before the head loads).
+   */
+  transitions?(): WorkspaceState["preview"]["transitions"];
 };
 
 /** Composes durable workspace state from typed ports; the dock layout arrives with the UI preferences. */
@@ -42,7 +47,7 @@ export class WorkspaceComposer {
     const base: WorkspaceState = { ...this.initial };
     if (this.ports.views) delete base.views;
     if (!this.previewReady) return structuredClone({ ...base, ...editing,
-      preview: { ...this.initial.preview, textureSize: quality } });
+      preview: this.withTransitions({ ...this.initial.preview, textureSize: quality }) });
     const config = this.ports.preview(), motion = this.ports.motion(), original = this.initial.preview;
     const preview: WorkspaceState["preview"] = { ...original, ...config, textureSize: quality,
       blink: motion?.blink ?? original.blink, blinkPlaying: motion?.blinkPlaying ?? original.blinkPlaying,
@@ -66,6 +71,12 @@ export class WorkspaceComposer {
     if (character !== undefined) {
       if (character) { preview.character = character; preview.piercingStyle = ""; preview.piercingDefinition = ""; } else delete preview.character;
     }
-    return structuredClone({ ...base, ...editing, preview });
+    return structuredClone({ ...base, ...editing, preview: this.withTransitions(preview) });
+  }
+  private withTransitions(preview: WorkspaceState["preview"]): WorkspaceState["preview"] {
+    if (!this.ports.transitions) return preview;
+    const transitions = this.ports.transitions();
+    const { transitions: _stored, ...rest } = preview;
+    return transitions ? { ...rest, transitions } : rest;
   }
 }

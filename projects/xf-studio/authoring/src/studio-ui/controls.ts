@@ -112,6 +112,7 @@ export class Slider {
     fillRange(this.input);
     setText(this.output, value === undefined ? "—" : this.options.format(active ? Number(this.input.value) : value));
     setDisabled(this.input, !!state.disabled, state.reason);
+    this.element.classList.toggle("disabled", !!state.disabled);
     this.note.update(this.input, !!state.disabled, state.reason, state.note, state.reasonOnLine ?? true);
   }
 }
@@ -161,30 +162,48 @@ export class Toggle {
 
 export type SegmentOption<T extends string | number> = { value: T; label: string; icon?: IconName; title?: string };
 /**
- * Mutually exclusive choices shown together (style guide `c-segmented`). The choices may change after construction (`setOptions`: a
- * data-driven list such as the game's idles prepared on this computer): the buttons are rebuilt only when the list differs, and focus
- * stays on the same choice. It is for two to four short options in one row; more, or long labels, use the ChoiceList (components/
- * choice-list.ts). `update` can disable the whole group with one reason (the reason stays visible in the note line, which keeps its height
- * when `reserveNote` is set).
+ * Mutually exclusive choices shown together (style guide `c-segmented`). The strip hugs its choices: it never stretches to the panel's
+ * width and never wraps. The choices may change after construction (`setOptions`: a data-driven list such as the game's idles prepared
+ * on this computer): the buttons are rebuilt only when the list differs, and focus stays on the same choice. It is for two to four short
+ * options in one row; more, or long labels, use the ChoiceList (components/choice-list.ts). `update` can disable the whole group with one
+ * reason, which shows in the note line (kept at its height when `reserveNote` is set); its label and readout read muted while it is
+ * disabled.
+ *
+ * - `iconOnly`: each segment shows only its icon, its label being its accessible name and, unless its `title` says more, its tooltip;
+ *   for up to eight choices whose icons say what they are (the easing curves). Name the chosen one with `readout`.
+ * - `readout`: the chosen choice's name at the right of the label line, where a slider shows its value; `readoutGutter` keeps a slider
+ *   reset's column empty after it, so the name lines up with the values of sliders with a reset above or below (Duration over Curve).
+ * - `frameless`: no sunken frame (the strip sits on another control's label line, as Adjust all › Intensity's curves do); the chosen
+ *   segment keeps the same raised look and signal underline.
+ * - **Keys:** one Tab stop (the chosen choice, else the first available); Left and Right move between the choices (wrapping), Home and End
+ *   to the first and last; Enter or Space chooses. Arrows move focus without choosing, since a choice may be an edit with its own Undo step.
  */
 export class Segmented<T extends string | number> {
   readonly element: HTMLElement;
   private buttons: { value: T; button: HTMLButtonElement }[] = [];
   private readonly group: HTMLElement;
   private readonly note: NoteLine;
+  private readonly readout: HTMLElement | null;
   /** The help tip beside the label, when the group was given `help` (what the choice is; its state stays in the note). */
   private readonly tip: HTMLButtonElement | null;
   private signature = "";
+  private selected: T | undefined;
   constructor(private readonly options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean;
-    reserveNote?: boolean; help?: HelpText }) {
+    reserveNote?: boolean; help?: HelpText; iconOnly?: boolean; frameless?: boolean; readout?(value: T): string; readoutGutter?: boolean }) {
     const labelId = uid("seg");
-    this.group = h("div", { class: "segmented", role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
-      "aria-labelledby": options.showLabel === false ? undefined : labelId });
+    this.group = h("div", { class: `segmented${options.iconOnly ? " icon-only" : ""}${options.frameless ? " frameless" : ""}`, role: "group",
+      "aria-label": options.showLabel === false ? options.label : undefined, "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote);
     this.tip = options.help !== undefined && options.showLabel !== false ? helpTip(options.label, options.help) : null;
-    const label = options.showLabel === false ? null : h("span", { class: "control-label", id: labelId }, h("span", { text: options.label }));
-    this.element = h("div", { class: `control${options.compact ? " compact" : ""}` },
-      label && this.tip ? h("div", { class: "control-line" }, label, this.tip) : label, this.group, this.note.element);
+    this.readout = options.readout && options.showLabel !== false ? h("span", { class: "readout segmented-readout", "aria-hidden": "true" }) : null;
+    const text = h("span", { text: options.label });
+    const label = options.showLabel === false ? null
+      : this.readout ? h("div", { class: "slider-value-line" }, h("span", { class: "control-label-text", id: labelId }, text), this.tip, h("span", { class: "grow" }), this.readout,
+        options.readoutGutter ? h("span", { class: "readout-gutter", "aria-hidden": "true" }) : null)
+      : this.tip ? h("div", { class: "control-line" }, h("span", { class: "control-label", id: labelId }, text), this.tip)
+      : h("span", { class: "control-label", id: labelId }, text);
+    this.element = h("div", { class: `control segmented-control${options.compact ? " compact" : ""}` }, label, this.group, this.note.element);
+    this.group.addEventListener("keydown", event => this.key(event));
     this.setOptions(options.options);
   }
   /** Change the help tip's text (a group made with `help` only). */
@@ -195,24 +214,50 @@ export class Segmented<T extends string | number> {
     if (signature === this.signature) return;
     this.signature = signature;
     const focused = this.buttons.find(item => item.button === document.activeElement)?.value;
-    this.buttons = options.map(option => ({ value: option.value, button: h("button", { class: "segment", type: "button",
-      "aria-pressed": "false", title: option.title, "data-title": option.title,
-      onclick: () => this.options.onSelect(option.value) }, option.icon ? icon(option.icon) : null, h("span", { text: option.label })) }));
+    const iconOnly = !!this.options.iconOnly;
+    this.buttons = options.map(option => {
+      const title = option.title ?? (iconOnly ? option.label : undefined);
+      return { value: option.value, button: h("button", { class: "segment", type: "button", "aria-pressed": "false", title, "data-title": title,
+        "aria-label": iconOnly ? option.label : undefined, onclick: () => this.options.onSelect(option.value) },
+        option.icon ? icon(option.icon) : null, iconOnly && option.icon ? null : h("span", { text: option.label })) };
+    });
     this.group.replaceChildren(...this.buttons.map(item => item.button));
+    this.rove();
     if (focused !== undefined) this.buttons.find(item => item.value === focused)?.button.focus();
   }
   /**
-   * The selected choice, each choice's capability, and optionally the whole group's state: `disabled` with its `reason`, or a `note`
-   * under the choices (shown in the same line, so the layout never shifts between them when `reserveNote` is set).
+   * The selected choice, each choice's capability, and optionally the whole group's state: `disabled` with its `reason` (in the note
+   * line), or a `note` under the choices (shown in the same line, so the layout never shifts between them when `reserveNote` is set).
    */
   update(selected: T | undefined, capability: (value: T) => { available: boolean; reason?: string } = () => ({ available: true }),
     state: { disabled?: boolean; reason?: string; note?: string } = {}) {
+    this.selected = selected;
     for (const { value, button } of this.buttons) {
       setAttr(button, "aria-pressed", String(value === selected));
       const allowed = state.disabled ? { available: false, reason: state.reason } : capability(value);
       setDisabled(button, !allowed.available && (state.disabled || value !== selected), allowed.reason);
     }
+    this.element.classList.toggle("disabled", !!state.disabled);
+    if (this.readout) setText(this.readout, selected === undefined ? "" : this.options.readout!(selected));
     this.note.update(this.group, !!state.disabled, state.reason, state.note);
+    this.rove();
+  }
+  /** The one Tab stop: the chosen choice when it can take focus, else the first that can. */
+  private rove() {
+    const open = this.buttons.filter(item => !item.button.disabled);
+    const stop = open.find(item => item.value === this.selected) ?? open[0];
+    for (const item of this.buttons) item.button.tabIndex = item === stop ? 0 : -1;
+  }
+  private key(event: KeyboardEvent) {
+    const open = this.buttons.filter(item => !item.button.disabled).map(item => item.button);
+    const at = open.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    const next = event.key === "ArrowRight" ? (at + 1) % open.length : event.key === "ArrowLeft" ? (at - 1 + open.length) % open.length
+      : event.key === "Home" ? 0 : event.key === "End" ? open.length - 1 : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    for (const button of open) button.tabIndex = button === open[next] ? 0 : -1;
+    open[next]!.focus();
   }
 }
 
