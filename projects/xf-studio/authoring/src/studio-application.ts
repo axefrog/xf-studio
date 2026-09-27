@@ -17,7 +17,7 @@ import type { PreviewQualityActions, QualityAction } from "./preview-quality-act
 import { type ViewId, viewTitles } from "./platform/api/view-graph";
 import type { ViewGraph } from "./platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
-import type { StudioModule, ViewSummaryContribution, ViewToolContribution, ViewToolFilter } from "./platform/api";
+import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "./platform/api";
 import type { Layer, Point, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { EyeMakeupPort, EyeMakeupSpec } from "./authoring-eye-makeup";
@@ -499,6 +499,8 @@ export class StudioApplication {
   glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup.region.wording); }
   /** The registered Studio modules in catalogue order (the Modules menu's rows; visibility is the presentation's). */
   modules(): readonly StudioModule[] { return structuredClone(this.services.viewActions?.registration.modules ?? []); }
+  /** The planned modules still to come (listed as Planned in the Modules menu; never shown). */
+  plannedModules(): readonly PlannedModule[] { const registration = this.services.viewActions?.registration; return registration ? structuredClone(plannedModules(registration)) : []; }
   /** The views, what each shares, the focus and the View and lighting history (view-graph-design.md §3). Detached. */
   views() { return this.services.viewActions?.snapshot() ?? null; }
   /**
