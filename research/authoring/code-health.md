@@ -416,6 +416,18 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
+- **Component library** (claude/ui-components; [component library](ui-component-library.md)): `src/studio-ui/components/`, the one entry point for every control panels and features compose. It holds:
+  - the tab strip and panel header behind the dock;
+  - `iconButton`, `SliderWithValue`, `PairControl`, `GroupSection`, `SearchField`, `Combobox`, `TreeView` / `favouriteToggle`, `FolderSetting` and `progressBar`;
+  - the layout primitives (`stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView`);
+  - the catalogue and live specimens in `style-guide/library.ts` and `library-demo.ts`.
+
+  It comes with the Component-first rule's ratchet (`tests/ui-component-ratchet.test.ts`) and the dock's summon rule (`summonPanel`, `lastPlace` in the saved layout). Review focus:
+  - the dock's `lastPlace` parse and restore (`restorePlace`, shared with parking), and floating placement when there is no home;
+  - `HeaderFitter`'s one ResizeObserver: fit loops, and cost with many groups;
+  - `TreeView` windowing: focus kept across updates, the flat ARIA structure, trailing actions out of the tab order;
+  - `Combobox` focus and blur handling;
+  - the ratchet's scan (what it counts, and what a string or comment hides).
 - **Metal adapter and mouth occlusion** (claude/head-fixes): `src/metal-base-material.ts` (the `metal_base` template: parameters, a CPU surface reference and the Three program patch) with its `metal-base` entry in `render-templates.ts`; `src/mouth-occlusion.ts` (per-vertex light share of a part inside the head from its depth behind the drawn head, and a light-term patch any lit program takes), applied to the teeth slot by `materialAdapter`.
 - **Native mesh reader** (claude/native-meshes, [native reader](../backlog/native-archive-reader.md#phase-4-meshes) phase 4): `src/native/mesh-blob.ts` (render-blob header, per-chunk vertex layouts, stream decoding), `morph-blob.ts` (morph target header, diffs and mapping), `mesh-glb.ts` (WolvenKit's GLB conventions, rig, sparse deltas), `mesh-decode.ts` (one mesh or morph target from an archive, the base mesh from the same archive), the worker's `geometry` message (`native-decode.ts`, `native-decode-serve.ts`), `src/native-geometry-export.ts` (native first per resource, WolvenKit fallback, cache under `xfs-native-mesh:<version>`) and `NativeDecoders` (the texture decoders' holder, generalised). **A native binary decoder over untrusted mod files.** Review focus: every stream, index and diff read bounded before allocation (`chunkLayout`'s stream checks against `vertexBufferSize`, the index range, `morphTargetLayout`'s diff and mapping ends), the output estimate before decoding (`maxOutputBytes`, `estimateBytes` at 150 bytes a vertex) and the delta budget, a hostile `numVertices`/`numIndices` pair against the render buffer, the joint-count rule from the rig (only when the names cover the skin), refusals staying typed (`unsupported`/`malformed`/`over-budget`), the base-mesh read's own session budget, the transferred buffers in the worker reply, and the geometry exporter's cache entries (`geometry.json` hashes trusted after `cache.read` verified the files).
 - **Save Explorer** (claude/save-explorer, [save editor design](../save/save-editor-design.md) phase 1): **a binary reader over the person's own save files** and a new read-only host capability. Pure engines: `src/engines/save/` (the container codec: header, chunk table, LZ4, node table and tree, `SaveImage`) and `src/engines/red-object/` (FNV-1a hashes, the save's `TypeDatabase_v2`, the type oracle, the one package reader shared with `native/red-package.ts`, the `PersistencySystem2` walker, `final.redscripts` names). The feature `src/features/save-explorer/` (read model, service, facade, panel, host endpoints `GET /api/saves`, `/api/saves/file`, `/api/saves/types` on both hosts), `src/saves-host-sources.ts` (Saved Games from the registry or profile, the script bundle MO2 resolves), `src/browser-save-explorer-device.ts`, and the platform's part-less module seam (`ModuleService`, `port.module`, `moduleView`, `compose/module-services.ts`). `save-reader.ts` now reads through the container codec and the save's own type database; `saved-v.ts` holds the saved-V records the scene host reads. A deep review is due. Review focus: every bound on hostile saves (chunk and node counts, the tree builder's loops and depth, the package frame's variant detection accepting a non-package, the persistency walker's nesting and element counts, hex previews and inspector output caps), the saves endpoints' folder-name rule, link refusal and bounded reads, that no path, user name or other metadata field leaves the host, the names endpoint's size (170,000 names from a modded bundle), main-thread cost when opening a large save (1.6 s for a 7.8 MB end-game save, container expanded at once), and the module-service exception (actions outside the registry; [boundary](ui-architecture-boundary.md)).
@@ -447,6 +459,42 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **Body render** (claude/body-render): the `body` slot end to end: `planBody`, `bodyOptionDraws` and `previewInput` in `src/character-detail-plan.ts` (consumer groups, the censorship policy from the creator's own rules, what is resolved); `xfs/render-detail-8` with per-component `morphs`; the served-texture cap (`storeScaledTexture`, `halveImage` in `src/character-detail-service.ts`); the loader's body skins, carried-over body shape (`followBodyShape`, `transferDeltas` in `src/decal-underlay.ts`) and following rigid parts (`bindRigid`); the idle's nearest-segment binding for flat helper joints (`IdleAnimation.nearestDriver`); the scene host's `frameBody`, `setBody` and body clip planes; actions `camera.body` and `preview.setBody`. A new rendering capability over existing subsystems, not a new host capability; a review should look at the shape transfer's cost on large garments, the helper-joint rule's reach (it binds any flat joint of a driven skeleton within 0.25 m), the texture halving's memory on 8K maps, and that a head part never takes body shapes. [Body rendering](../../knowledge/body-rendering.md). Reviewed at `47f581c` (see Worn clothing).
 - **Diagnostics** (`src/diagnostics/`, claude/diagnostics): host log and rolling detail window, error references, page trapping and forwarding endpoint, problem-report builder (mod identities, resource extracts, ZIP), report review UI, and one-line failure hooks in the character, resolver, LUT, preview, eye-plate, package and library hosts. A new host capability and a boundary exception (ui-architecture-boundary.md item 13), so a deep review is due. [docs/diagnostics.md](../../docs/diagnostics.md). Reviewed at `972ee62` (DIAG-01..18).
 
+
+## Fixed in claude/ui-components
+
+UI-108..112: the maintainer's dock reports and the Save Explorer layout, fixed through the new component library ([component library](ui-component-library.md)). Tests:
+- `tests/dock-summon.test.ts`: the three summon cases, remembered places, focus, and header actions in a collapsed group;
+- `tests/tab-strip.test.ts`: the staging rule and fit;
+- `tests/ui-components.test.ts`: the components;
+- `tests/ui-component-ratchet.test.ts`, `tests/ui-component-library.test.ts`.
+
+The summon test and the header test failed before their fixes. Isolated `?verify=1` captures, with measurements, are in the ignored `authoring/evidence/screenshots/ui-components/`.
+
+- **UI-108 (Med):** a summoned panel landed in an arbitrary group, even a collapsed one.
+  - In the default layout, with the right column's lower group collapsed, Help was added as a tab to that group, because its `opensBeside` named the inspectors ("I summoned help, where is it?").
+  - Every route now goes through `summonPanel`: the palette, the Panels menu, the Help button, tours and reveals.
+    - A panel in an expanded group becomes the active tab.
+    - A panel in a collapsed group expands it.
+    - A panel not in the layout returns to where it was closed from (`lastPlace`, saved with the layout per size class: its group and tab position, its neighbour, or its floating window) or to its factory group. Otherwise it opens floating.
+  - Focus moves to its tab, or into the panel when the opener focuses there (Help's search).
+  - `opensBeside` and the catalogue's `homes` are removed, and the Panels menu's row for a collapsed panel now summons it.
+- **UI-109 (Med):** a group header's action buttons shrank with the header, and a crowded strip scrolled.
+  - A 24 px icon button measured 16 px, so on a narrow or collapsed header the expand button could be squeezed out of reach.
+  - Panel headers (`PanelHeader`) now keep their actions whole (`flex: none`).
+  - Tab strips (`TabStrip`, `planTabs`) condense in stages: full labels, then truncated labels, then inactive tabs icon-only (the active one last), then an overflow menu. The active tab always stays. Every tab is named by its label and titled by its label and context. They refit on every header resize.
+  - This supersedes the UI-96 decision (never bare icons), at the maintainer's request.
+- **UI-110 (Med):** controls were built ad hoc across panels.
+  - Hand-built `.btn` elements skipped the unavailable guard: toast actions, Character's Details and Show more, the empty dock, and the viewport tool toggles.
+  - Hand-built `.icon-btn` elements lacked titles and `aria-disabled` styling.
+  - Menu triggers lacked `aria-haspopup`.
+  - Three progress bar builds existed, one without `role=progressbar`.
+  - The History panel's Undo and Redo used native `disabled`, and blocked history rows had no `data-reason`.
+  - All of these are now composed from the library.
+  - The remaining 79 ad hoc controls in 17 files are the ratchet's allowlist, which may only shrink. The plan is in the library record.
+- **UI-111 (Low):** the style guide documented patterns but not a component library. Section 05 now documents every component with its full contract and a live specimen, and a test fails when an export has no complete entry. It adds "Summoning a panel" (d-summon) to the panel system.
+- **UI-112 (Low):** the Save Explorer's sections sat against each other. The title overlapped the All saves button (−8 px), the meta line touched the title, the tree met the inspector, and a node's title and hex dump had no space around them.
+  - It is recomposed from `PageHeader`, `SplitView` (with a 16 px gutter, stacking below 560 px), `blockSection`, `propertyList` and `codeBlock`.
+  - The gaps are now 13, 13, 16, 8 and 8 px. The hex dump still scrolls horizontally, and behaviour is unchanged.
 
 ## Fixed in claude/camera-zoom
 

@@ -37,7 +37,8 @@ const shot = async (name: string) => {
   await page.wait(500);
   await page.screenshot(resolve(out, `${name}.png`));
   runs[name] = { groups: await page.evaluate(measure), helpVisible: await page.evaluate(`window.xfStudioShell.dock.isVisible("help")`),
-    helpState: await page.evaluate(`window.xfStudioShell.dock.panelState("help")`) };
+    helpState: await page.evaluate(`window.xfStudioShell.dock.panelState("help")`),
+    focus: await page.evaluate(`(() => { const e = document.activeElement; return e ? (e.id || e.className || e.tagName) : null; })()`) };
 };
 try {
   await page.waitFor("document.querySelector('.dock-group') && !!window.xfStudioShell", 120000);
