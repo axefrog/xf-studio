@@ -86,9 +86,10 @@ test("export plans a set's records and table on the installed list, leaving out 
   expect(planned.expressions.map(item => [item.name, item.label, item.index])).toEqual([["Smirk", "Smirk \"left\"", 217], ["Open", "Open", 218]]);
   expect(planned.expressions[0]!.clip).toBe(`xfs_x5e7a11112222_${ID(1).replaceAll("-", "").slice(0, 12)}`);
   expect(outcome.check.omissions.map(item => [(item as { presetName: string }).presetName, item.reason])).toEqual([
-    ["Tongue out", "It uses face control your game's face rig doesn't have (tongue_x)."], ["Blank", NO_CONTROLS_REASON],
-    ["Broken", "It is damaged, so XF Studio can't read it."]]);
-  expect(outcome.check.notes[0]).toContain("added after the 217 in photo mode's list now (from An expression pack)");
+    ["Tongue out", "“Tongue out” uses a face movement your game doesn't have: Tongue x."], ["Blank", `“Blank” ${NO_CONTROLS_REASON}`],
+    ["Broken", "“Broken” is damaged, so XF Studio can't read it."]]);
+  // One note, one thing to know; the rest is guidance for Details.
+  expect(outcome.check.notes).toEqual(["Keeps the 217 expressions from An expression pack working. Build again if you add or remove expression mods."]);
   expect(outcome.xl).toEqual({ patch: { [planned.paths.patch]: ["base/characters/head/player_base_heads/appearances/head/face_rig/h0_000__basehead_face_rig_photomode.app"] } });
   expect(outcome.extras).toEqual({ tweaks: [`${PRODUCT.archive}.yaml`], overlays: [{ archive: `0${PRODUCT.archive}_table`, inventory: ["base/animations/anim_motion_database/photomode_facial_poses.csv"] }] });
   expect(outcome.inventory).toEqual([planned.paths.patch, planned.paths.sets.female, planned.paths.sets.male].sort());
@@ -102,7 +103,13 @@ test("export plans a set's records and table on the installed list, leaving out 
   const { presetSet: _mark, ...plain } = value;
   expect(EXPRESSIONS_EXPORTER.present(plain)).toBe(false);
   // Every expression unknown to the rig: nothing to package, with the reason.
-  expect(() => plan(collection([look(2, "Tongue out", expression({ tongue_x: 0.5 }))]))).toThrow(/tongue_x/);
+  // Nothing left: the refusal carries each expression and why, so the set's result can show them with their next step.
+  try { plan(collection([look(2, "Tongue out", expression({ tongue_x: 0.5 }))])); throw Error("planned"); }
+  catch (error) {
+    expect(error).toBeInstanceOf(ExportRefusal);
+    expect((error as ExportRefusal).message).toBe("Nothing in this set can become mod files yet.");
+    expect((error as ExportRefusal).omissions?.map(item => item.reason)).toEqual(["“Tongue out” uses a face movement your game doesn't have: Tongue x."]);
+  }
   try { plan(collection([look(3, "Blank", expression({}))])); } catch (error) { expect((error as ExportRefusal).code).toBe("no_exportable_content"); }
 });
 
@@ -125,7 +132,7 @@ test("for sharing, the table carries only the game's rows, fills to 1000 with th
   expect(notes({ modOrder: "modlist" })).toContain("modlist.txt");
   expect(notes({ providers: [{ name: "0xfs_c00000000000040008000000000000099_table", group: "mod", provider: "XF Expressions - Other" }] }))
     .toContain("Another XF expressions mod (XF Expressions - Other)");
-  expect(notes({ providers: [{ name: "!!first", group: "mod", provider: "Early mod" }] })).toContain("Early mod would load its expression list before this mod's");
+  expect(notes({ providers: [{ name: "!!first", group: "mod", provider: "Early mod" }] })).toContain("Early mod loads its expression list before this mod's");
 });
 
 test("the TweakXL records are one per expression, appended once, with the label quoted safely", () => {

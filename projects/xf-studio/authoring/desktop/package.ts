@@ -59,6 +59,6 @@ export async function desktopPackageRequest(request: Request, workerPath = resol
         [EXPRESSIONS_GAME_PREREQUISITE]: desktopExpressionsGame(current, dataRoot) } : {} });
     const signal = buildHost?.shutdownSignal ? AbortSignal.any([request.signal, buildHost.shutdownSignal]) : request.signal;
     const outcome = await service.run(adapter, action, input.collection, signal, action === "check" ? timeoutMs : buildHost?.deadlineMs);
-    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message }, outcome.status);
+    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message, ...(outcome.omissions ? { omissions: outcome.omissions } : {}) }, outcome.status);
   } finally { end?.(); }
 }

@@ -319,7 +319,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       { kind: "action", label: "Flip face", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "flip" } as ExpressionAction) },
       { kind: "separator" },
       // Export: saved expressions are grouped into sets, each built as a photo-mode mod (the Expression sets panel).
-      { kind: "action", label: "Expression sets…", icon: "package", run: () => ctx.reveal("expressions.sets", true) },
+      { kind: "action", label: "Export to photo mode…", icon: "package", run: () => ctx.reveal("expressions.sets", true) },
       // Decided but not built yet (coming-soon.ts): face handles and sculpting (phase 2 and later).
       ...(["expressionHandles", "expressionSculpt"] as const).map((id): MenuItem => ({ kind: "action", label: COMING_SOON[id].label,
         icon: "handles", tag: "Soon", quietReason: true, capability: { available: false, reason: COMING_SOON[id].reason }, run: () => {} })),
@@ -337,10 +337,16 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   function deletePreset(id: string, anchor: Element | { x: number; y: number }) {
     const preset = ctx.presets.list().items.find(item => item.id === id);
     if (!preset || !ctx.facade.editable().available) return;
-    openConfirmPopover(anchor, { title: "Delete saved expression", message: `Delete “${preset.name}” from your library? This can't be undone.`,
+    const inSets = ctx.presets.sets().items.filter(set => set.members.includes(id)).length;
+    openConfirmPopover(anchor, { title: "Delete saved expression", message: `Delete “${preset.name}” from your library?${inSets
+      ? ` It's also taken out of ${inSets === 1 ? "the set" : `the ${inSets} sets`} it's in.` : ""}`,
       confirm: "Delete", danger: true,
       onConfirm: () => void ctx.presets.execute({ kind: "partPreset.delete", id, revision: preset.revision }).then(outcome => {
-        report(outcome); if (outcome.ok) ctx.feedback.announce(`Deleted “${preset.name}” from your library.`); }) });
+        if (!outcome.ok) { report(outcome); return; }
+        // Undo puts it back, in its sets too, for as long as this page is open.
+        ctx.feedback.toast("info", "Expression", `Deleted “${preset.name}”.`, [{ label: "Undo", run: () => void ctx.presets.execute({ kind: "partPreset.restore", id })
+          .then(back => { if (back.ok) ctx.feedback.announce(`Restored “${preset.name}”.`); else report(back); }) }]);
+      }) });
   }
   function savePreset(anchor: Element) {
     const origin = current.origin, suggested = current.label ?? (origin?.kind === "preset" ? origin.name

@@ -33,6 +33,9 @@ export type PartPresetSetSummary = { id: string; feature: string; name: string; 
   table?: PartPresetSetTable; updatedAt: string };
 /** Most members of one set. */
 export const PART_PRESET_SET_MEMBERS = 500;
+/** What putting a deleted preset back needs: the preset as it was and where it sat in each set. */
+export type PartPresetRestore = { feature: string; id: string; name: string; part: PartEnvelope; createdAt: string;
+  memberships: { set: string; index: number }[] };
 
 /** Longest preset name. */
 export const PART_PRESET_NAME_LIMIT = 120;
@@ -95,20 +98,73 @@ export class PartPresetLibrary {
     if (row.revision !== revision) throw new LibraryError("That preset changed in another window. Look again, then try once more.", 409);
     return row;
   }
-  rename(id: string, value: unknown): { id: string; name: string; revision: number } {
-    const input = value as { name?: unknown; revision?: unknown } | null;
+  /**
+   * Rename a preset, guarded by its revision. With `part` (in any schema its feature reads) the preset's part is replaced too, in the same
+   * step: an expression's photo-mode name lives in its part, so renaming what photo mode shows changes both.
+   */
+  rename(id: string, value: unknown): { id: string; name: string; revision: number; part?: PartEnvelope } {
+    const input = value as { name?: unknown; revision?: unknown; part?: unknown } | null;
     const name = this.name(input?.name);
     return this.db.transaction(() => {
-      const row = this.current(id, input?.revision), revision = row.revision + 1;
-      this.db.query("UPDATE part_presets SET name=?, revision=?, updated_at=? WHERE id=?").run(name, revision, new Date().toISOString(), id);
-      return { id, name, revision };
+      const row = this.current(id, input?.revision), revision = row.revision + 1, now = new Date().toISOString();
+      if (input?.part === undefined) {
+        this.db.query("UPDATE part_presets SET name=?, revision=?, updated_at=? WHERE id=?").run(name, revision, now, id);
+        return { id, name, revision };
+      }
+      let part: PartEnvelope;
+      try { part = this.parts.readPart(row.feature, input.part); }
+      catch (error) { throw new LibraryError(isNewerData(error) ? "That preset was made with a newer version of XF Studio." : "That preset is damaged; nothing was saved.", 422); }
+      this.db.query("UPDATE part_presets SET name=?, revision=?, schema=?, body=?, updated_at=? WHERE id=?").run(name, revision, part.schema, JSON.stringify(part.body), now, id);
+      return { id, name, revision, part };
     }).immediate();
   }
-  delete(id: string, revision: unknown): { id: string } {
+  /**
+   * Delete a preset, guarded by its revision, and take it out of every set of its feature in the same step. The answer carries what
+   * `restore` needs to put both back (the Undo a person gets right after deleting).
+   */
+  delete(id: string, revision: unknown): { id: string; restore: PartPresetRestore } {
     return this.db.transaction(() => {
       this.current(id, revision);
+      const row = this.db.query("SELECT feature, name, schema, body, created_at AS createdAt FROM part_presets WHERE id=?").get(id) as
+        { feature: string; name: string; schema: string; body: string; createdAt: string };
+      const memberships: { set: string; index: number }[] = [];
+      for (const set of this.db.query("SELECT id, feature, name, revision, body, updated_at AS updatedAt FROM part_preset_sets WHERE feature=?").all(row.feature) as SetRow[]) {
+        const body = JSON.parse(set.body) as Record<string, unknown>;
+        const members = Array.isArray(body.members) ? body.members as unknown[] : [];
+        const index = members.indexOf(id);
+        if (index < 0) continue;
+        memberships.push({ set: set.id, index });
+        body.members = members.filter(member => member !== id);
+        this.db.query("UPDATE part_preset_sets SET revision=?, body=?, updated_at=? WHERE id=?").run(set.revision + 1, JSON.stringify(body), new Date().toISOString(), set.id);
+      }
       this.db.query("DELETE FROM part_presets WHERE id=?").run(id);
-      return { id };
+      return { id, restore: { feature: row.feature, id, name: row.name, part: { schema: row.schema, body: JSON.parse(row.body) }, createdAt: row.createdAt, memberships } };
+    }).immediate();
+  }
+  /** Put a deleted preset back under its own ID, and back in the sets it was in (where they still exist), at its old places. */
+  restore(value: unknown): PartPresetSummary {
+    const input = value as Partial<PartPresetRestore> | null;
+    const feature = this.registered(input?.feature), name = this.name(input?.name);
+    if (typeof input?.id !== "string" || !UUID.test(input.id) || !Array.isArray(input.memberships)) throw new LibraryError("That preset can't be restored.", 422);
+    let part: PartEnvelope;
+    try { part = this.parts.readPart(feature, input.part); }
+    catch { throw new LibraryError("That preset can't be restored.", 422); }
+    const id = input.id, now = new Date().toISOString(), created = typeof input.createdAt === "string" ? input.createdAt : now;
+    return this.db.transaction(() => {
+      if (this.db.query("SELECT 1 FROM part_presets WHERE id=?").get(id)) throw new LibraryError("That preset is already back.", 409);
+      this.db.query("INSERT INTO part_presets VALUES (?, ?, ?, 1, ?, ?, ?, ?)").run(feature, id, name, part.schema, JSON.stringify(part.body), created, now);
+      for (const membership of input.memberships!) {
+        const set = this.db.query("SELECT id, feature, name, revision, body, updated_at AS updatedAt FROM part_preset_sets WHERE id=? AND feature=?")
+          .get(String(membership?.set ?? ""), feature) as SetRow | null;
+        if (!set) continue;
+        const body = JSON.parse(set.body) as Record<string, unknown>;
+        const members = (Array.isArray(body.members) ? body.members as unknown[] : []).filter(member => member !== id);
+        if (members.length >= PART_PRESET_SET_MEMBERS) continue;
+        members.splice(Math.max(0, Math.min(members.length, Number(membership.index) || 0)), 0, id);
+        body.members = members;
+        this.db.query("UPDATE part_preset_sets SET revision=?, body=?, updated_at=? WHERE id=?").run(set.revision + 1, JSON.stringify(body), now, set.id);
+      }
+      return { id, feature, name, revision: 1, part, updatedAt: now };
     }).immediate();
   }
 
@@ -228,7 +284,8 @@ export async function partPresetRequest(request: Request, library: PartPresetLib
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
   if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin)) return json({ error: "Local studio requests only." }, 403);
   const sets = suffix === "/sets" || suffix.startsWith("/sets/"), rest = sets ? suffix.slice(5) : suffix;
-  if (rest && !/^\/[0-9a-f-]{36}$/.test(rest)) return json({ error: "Not found." }, 404);
+  const restoring = suffix === "/restore";
+  if (rest && !restoring && !/^\/[0-9a-f-]{36}$/.test(rest)) return json({ error: "Not found." }, 404);
   try {
     if (sets) return await setRequest(request, library, rest, url, origin, json);
     if (request.method === "GET" && !suffix) return json(library.list(url.searchParams.get("feature")));
@@ -245,6 +302,7 @@ export async function partPresetRequest(request: Request, library: PartPresetLib
     }
     if (!value || typeof value !== "object" || Array.isArray(value)) return json({ error: "Invalid JSON." }, 400);
     if (request.method === "POST" && !suffix) return json(library.save(value));
+    if (request.method === "POST" && restoring) return json(library.restore(value));
     if (request.method === "PATCH" && suffix) return json(library.rename(suffix.slice(1), value));
     return json({ error: "Method not allowed." }, 405);
   } catch (error) {

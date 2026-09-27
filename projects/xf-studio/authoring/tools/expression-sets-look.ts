@@ -86,7 +86,7 @@ for (const scheme of ["dark", "light"] as const) {
         await click(page, ".expr-sets button", "Check");
         await page.waitFor(`document.querySelector('.expr-sets .result-card') && !document.querySelector('.expr-sets .package-progress:not(.idle)')`, 60000);
         await page.wait(300);
-        if (!(await page.evaluate(`document.querySelector('.expr-sets .result-card').innerText.includes('Check again in a moment')`))) break;
+        if (!(await page.evaluate(`document.querySelector('.expr-sets .result-card').innerText.includes('check again in a moment')`))) break;
         if (attempt === 0) await panelShot(page, `${tag}-08a-check-reading.png`);
         await page.wait(5000);
       }

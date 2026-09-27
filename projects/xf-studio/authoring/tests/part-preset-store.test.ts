@@ -149,20 +149,26 @@ test("expression sets: created, renamed, filled, named for export and deleted, r
     expect(named).toMatchObject({ name: "Moody faces", modName: "XF Moody Faces", table: "sharing", revision: 3 });
     const cleared = presets.updateSet(set.id, { revision: 3, modName: "", table: "installed" });
     expect(cleared.modName).toBeUndefined(); expect(cleared.table).toBeUndefined();
-    // Deleting a saved expression leaves its place in the set (export reports it).
-    presets.delete(smile.id, 1);
-    expect(presets.listSets("expressions")[0]!.members).toEqual([frown.id, smile.id]);
+    // Deleting a saved expression takes it out of its sets in the same step; restoring puts both back, at its old place.
+    const removed = presets.delete(smile.id, 1);
+    expect(presets.listSets("expressions")[0]).toMatchObject({ members: [frown.id], revision: 5 });
+    expect(removed.restore.memberships).toEqual([{ set: set.id, index: 1 }]);
+    expect(presets.restore(removed.restore)).toMatchObject({ id: smile.id, name: "Smile", revision: 1 });
+    expect(presets.listSets("expressions")[0]).toMatchObject({ members: [frown.id, smile.id], revision: 6 });
+    expect(() => presets.restore(removed.restore)).toThrow("already back");
+    // Renaming with a part replaces the part too (an expression's photo-mode name lives there).
+    expect(presets.rename(smile.id, { name: "Smirk", revision: 1, part: expression({ lips_l_corner_up: 0.3 }) })).toMatchObject({ name: "Smirk", revision: 2 });
     // The request route: list and change through <prefix>/sets.
     const origin = "http://127.0.0.1:4999";
     const listed = await (await partPresetRequest(new Request(`${origin}/api/part-presets/sets?feature=expressions`), presets, "/api/part-presets")).json();
     expect(listed).toHaveLength(1);
     const patched = await partPresetRequest(new Request(`${origin}/api/part-presets/sets/${set.id}`, { method: "PATCH", headers: { Origin: origin,
-      "Content-Type": "application/json" }, body: JSON.stringify({ revision: 4, members: [frown.id] }) }), presets, "/api/part-presets");
+      "Content-Type": "application/json" }, body: JSON.stringify({ revision: 6, members: [frown.id] }) }), presets, "/api/part-presets");
     expect(patched.status).toBe(200);
-    const foreign = await partPresetRequest(new Request(`${origin}/api/part-presets/sets/${set.id}?revision=5`, { method: "DELETE", headers: { Origin: "http://evil" } }),
+    const foreign = await partPresetRequest(new Request(`${origin}/api/part-presets/sets/${set.id}?revision=7`, { method: "DELETE", headers: { Origin: "http://evil" } }),
       presets, "/api/part-presets");
     expect(foreign.status).toBe(403);
-    expect(presets.deleteSet(set.id, 5)).toEqual({ id: set.id });
+    expect(presets.deleteSet(set.id, 7)).toEqual({ id: set.id });
     expect(presets.listSets("expressions")).toEqual([]);
   } finally { presets.close(); temp.cleanup(); }
 });

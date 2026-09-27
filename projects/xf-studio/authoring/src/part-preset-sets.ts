@@ -4,7 +4,7 @@
  * name, and the package-only collection a set's export sends to the platform's Check and Build (feature-module platform §6), so a set
  * plans, builds, verifies and records exactly as a look collection does.
  */
-import { COLLECTION_2, modNameIssue, MOD_NAME_MAX, PACKAGE_PLAN_1, type LookCollection, type PackageBuildResult, type PackageCheckResult,
+import { COLLECTION_2, modNameIssue, type ExportOmission, MOD_NAME_MAX, PACKAGE_PLAN_1, type LookCollection, type PackageBuildResult, type PackageCheckResult,
   type PartEnvelope } from "./platform/api";
 
 export type PartPresetSetTable = "installed" | "sharing";
@@ -58,5 +58,7 @@ export function setCollection(set: PartPresetSet, presets: readonly SetMemberPre
 export type SetExportResult =
   | { kind: "check"; result: PackageCheckResult; revision: number; missing: number }
   | { kind: "build"; result: PackageBuildResult; revision: number; missing: number }
-  | { kind: "failed"; action: "check" | "build"; code: string; message: string; revision: number };
+  | { kind: "failed"; action: "check" | "build"; code: string; message: string; revision: number;
+      /** When nothing could be packaged: each expression and why (the result then shows them with their next step). */
+      omissions?: readonly ExportOmission[] };
 export type SetExportState = { busy: { id: string; action: "check" | "build" | "reveal" } | null; results: Readonly<Record<string, SetExportResult>> };

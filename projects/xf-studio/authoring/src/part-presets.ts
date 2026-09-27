@@ -4,7 +4,7 @@
  * (compose/system-families.ts), routed by the registry like the library's own requests; they never record Undo (a deleted preset is
  * gone from the library, as the person chose).
  */
-import { modNameIssue, refusal, type Capability, type PackageBuildResult, type PackageCheckResult, type PartEnvelope } from "./platform/api";
+import { modNameIssue, refusal, refusalOmissions, type Capability, type PackageBuildResult, type PackageCheckResult, type PartEnvelope } from "./platform/api";
 import { setCollection, setMembers, type PartPresetSet, type PartPresetSetList, type PartPresetSetTable, type SetExportResult,
   type SetExportState } from "./part-preset-sets";
 
@@ -13,8 +13,10 @@ export type { PartPresetSet, PartPresetSetList, PartPresetSetTable, SetExportRes
 export type PartPresetRequest =
   | { kind: "partPreset.list"; feature: string }
   | { kind: "partPreset.save"; feature: string; name: string; part: PartEnvelope }
-  | { kind: "partPreset.rename"; feature: string; id: string; name: string; revision: number }
+  | { kind: "partPreset.rename"; feature: string; id: string; name: string; revision: number; part?: PartEnvelope }
   | { kind: "partPreset.delete"; feature: string; id: string; revision: number }
+  /** Undo a delete made in this page: the preset back under its ID and in the sets it was in. */
+  | { kind: "partPreset.restore"; feature: string; id: string }
   // Sets: a named, ordered list of saved presets, exported as one mod (part-preset-sets.ts).
   | { kind: "partPresetSet.list"; feature: string }
   | { kind: "partPresetSet.create"; feature: string; name: string; members?: string[] }
@@ -31,8 +33,9 @@ export type PartPresetOutcome = { ok: true; preset?: PartPreset; set?: PartPrese
 export interface PartPresetTransport {
   list(feature: string): Promise<PartPreset[]>;
   save(input: { feature: string; name: string; part: PartEnvelope }): Promise<PartPreset>;
-  rename(id: string, input: { name: string; revision: number }): Promise<{ id: string; name: string; revision: number }>;
-  delete(id: string, revision: number): Promise<{ id: string }>;
+  rename(id: string, input: { name: string; revision: number; part?: PartEnvelope }): Promise<{ id: string; name: string; revision: number; part?: PartEnvelope }>;
+  delete(id: string, revision: number): Promise<{ id: string; restore?: PartPresetRestore }>;
+  restore?(input: PartPresetRestore): Promise<PartPreset>;
   listSets(feature: string): Promise<PartPresetSet[]>;
   createSet(input: { feature: string; name: string; members?: string[] }): Promise<PartPresetSet>;
   updateSet(id: string, input: { revision: number; name?: string; members?: string[]; modName?: string; table?: PartPresetSetTable }): Promise<PartPresetSet>;
@@ -49,9 +52,13 @@ export interface SetExportTransport {
 /** Most members a set holds. */
 export const PART_PRESET_SET_MEMBERS = 500;
 export const PART_PRESET_NAME_LIMIT = 120;
+/** What the library needs to put a deleted preset back (part-preset-store.ts `restore`). */
+export type PartPresetRestore = { feature: string; id: string; name: string; part: PartEnvelope; createdAt: string; memberships: { set: string; index: number }[] };
 
 export class PartPresetService {
   private lists = new Map<string, PartPresetList>();
+  /** Deletes this page can undo, by preset ID. */
+  private deleted = new Map<string, PartPresetRestore>();
   private setLists = new Map<string, PartPresetSetList>();
   private exports: SetExportState = { busy: null, results: {} };
   private busy = false;
@@ -95,6 +102,8 @@ export class PartPresetService {
     if (request.kind === "partPreset.save" && (!request.part || typeof request.part.schema !== "string")) return refusal("invalid_value", "There is nothing to save.");
     if ((request.kind === "partPreset.rename" || request.kind === "partPreset.delete") &&
       !this.lists.get(request.feature)?.items.some(item => item.id === request.id)) return refusal("missing_target", "That preset no longer exists.");
+    if (request.kind === "partPreset.restore" && (!this.deleted.has(request.id) || !this.transport.restore))
+      return refusal("missing_target", "That can't be undone any more.");
     return { available: true };
   }
   private setCapability(request: PartPresetRequest): Capability {
@@ -157,13 +166,24 @@ export class PartPresetService {
         return { ok: true, preset };
       }
       if (request.kind === "partPreset.rename") {
-        const renamed = await this.transport.rename(request.id, { name: request.name.trim(), revision: request.revision });
-        this.replace(request.feature, items => items.map(item => item.id === renamed.id ? { ...item, name: renamed.name, revision: renamed.revision } : item));
+        const renamed = await this.transport.rename(request.id, { name: request.name.trim(), revision: request.revision, ...(request.part ? { part: request.part } : {}) });
+        this.replace(request.feature, items => items.map(item => item.id === renamed.id
+          ? { ...item, name: renamed.name, revision: renamed.revision, ...(renamed.part ? { part: renamed.part } : {}) } : item));
         return { ok: true };
       }
+      if (request.kind === "partPreset.restore") {
+        const preset = await this.transport.restore!(this.deleted.get(request.id)!);
+        this.deleted.delete(request.id);
+        this.replace(request.feature, items => [...items.filter(item => item.id !== preset.id), preset]);
+        await this.reloadSets(request.feature);
+        return { ok: true, preset };
+      }
       if (request.kind !== "partPreset.delete") return { ok: false, code: "invalid_value", message: "Unknown command." };
-      await this.transport.delete(request.id, request.revision);
+      const removed = await this.transport.delete(request.id, request.revision);
+      if (removed.restore) this.deleted.set(request.id, removed.restore);
       this.replace(request.feature, items => items.filter(item => item.id !== request.id));
+      // Deleting a saved preset takes it out of its sets too (the library does both in one step).
+      await this.reloadSets(request.feature);
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Saved presets are unavailable right now.";
@@ -234,12 +254,18 @@ export class PartPresetService {
         : { kind: "check", result: result as PackageCheckResult, revision: set.revision, missing };
     } catch (error) {
       const code = (error as { code?: unknown })?.code;
+      const omissions = refusalOmissions((error as { omissions?: unknown })?.omissions);
       entry = { kind: "failed", action, code: typeof code === "string" ? code : "package_failed",
-        message: error instanceof Error ? error.message : "The request failed.", revision: set.revision };
+        message: error instanceof Error ? error.message : "The request failed.", revision: set.revision, ...(omissions ? { omissions } : {}) };
     }
     this.exports = { busy: null, results: { ...this.exports.results, [id]: entry } };
     this.notify();
     return entry.kind === "failed" ? { ok: false, code: entry.code, message: entry.message } : { ok: true };
+  }
+  /** Read a feature's sets again (a preset delete or restore changed their members), when they were read before. */
+  private async reloadSets(feature: string) {
+    if (!this.setLists.has(feature)) return;
+    try { this.setLists.set(feature, { phase: "ready", items: await this.transport.listSets(feature) }); } catch { /* The next ask reads them. */ }
   }
   private replaceSets(feature: string, change: (items: readonly PartPresetSet[]) => PartPresetSet[]) {
     const items = change(this.setLists.get(feature)?.items ?? []).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id));
@@ -256,9 +282,9 @@ export function setExportTransport(installEndpoint: string, fetcher: (url: strin
   return {
     package: async (action, collection) => {
       const response = await fetcher("/api/package", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, collection }) });
-      const body = await response.json().catch(() => null) as { code?: string; error?: string } | null;
+      const body = await response.json().catch(() => null) as { code?: string; error?: string; omissions?: unknown } | null;
       if (!response.ok || !body) throw Object.assign(Error(body?.error ?? "XF Studio couldn't reach its mod builder. Restart XF Studio and try again."),
-        { code: body?.code ?? "package_failed" });
+        { code: body?.code ?? "package_failed", ...(refusalOmissions(body?.omissions) ? { omissions: refusalOmissions(body?.omissions) } : {}) });
       return body as unknown as PackageCheckResult | PackageBuildResult;
     },
     reveal: async candidateId => {
@@ -284,6 +310,7 @@ export function partPresetTransport(prefix: string, fetcher: (url: string, init?
     save: input => call(prefix, send("POST", input)),
     rename: (id, input) => call(`${prefix}/${id}`, send("PATCH", input)),
     delete: (id, revision) => call(`${prefix}/${id}?revision=${revision}`, { method: "DELETE" }),
+    restore: input => call(`${prefix}/restore`, send("POST", input)),
     listSets: feature => call(`${prefix}/sets?feature=${encodeURIComponent(feature)}`, { cache: "no-store" }),
     createSet: input => call(`${prefix}/sets`, send("POST", input)),
     updateSet: (id, input) => call(`${prefix}/sets/${id}`, send("PATCH", input)),

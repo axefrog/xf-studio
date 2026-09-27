@@ -172,6 +172,6 @@ export function createPackageHandler(adapter: (action: PackageAction) => Package
         : "XF Studio couldn't prepare mod files right now. Restart XF Studio and try again. Your collection is unchanged." }, 503);
     }
     const outcome = await service.run(host, action, input.collection, request.signal);
-    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message }, outcome.status);
+    return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message, ...(outcome.omissions ? { omissions: outcome.omissions } : {}) }, outcome.status);
   };
 }

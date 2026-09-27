@@ -318,7 +318,20 @@ export type FeatureOutcome<Plan = unknown> = {
  * and diagnostics only, never the page (PIPE-93).
  */
 export class ExportRefusal extends Error {
-  constructor(readonly code: string, message: string, readonly detail?: string) { super(message); this.name = "ExportRefusal"; }
+  /**
+   * `omissions`: when nothing can be packaged because every look was left out, each look and why, so a presentation can show them with
+   * their next step (an expression set's "Nothing in this set can become mod files yet").
+   */
+  constructor(readonly code: string, message: string, readonly detail?: string, readonly omissions?: readonly ExportOmission[]) {
+    super(message); this.name = "ExportRefusal";
+  }
+}
+/** A refusal's omissions as they may cross a process or network boundary: well-formed entries only, at most 500. */
+export function refusalOmissions(value: unknown): ExportOmission[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const kept = value.slice(0, 500).filter((item): item is ExportOmission => !!item && typeof item === "object" &&
+    typeof (item as { kind?: unknown }).kind === "string" && typeof (item as { reason?: unknown }).reason === "string");
+  return kept.length ? structuredClone(kept) : undefined;
 }
 /**
  * The builder found a host prerequisite stale (eye makeup: a cached plate whose recorded UV footprint

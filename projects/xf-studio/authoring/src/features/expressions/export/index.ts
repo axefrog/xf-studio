@@ -19,6 +19,7 @@ import { dirname, join } from "node:path";
 import { COLLECTION_2, ExportRefusal, type ExportInfo, type ExportOmission, type FeatureCheck, type FeatureExporter, type FeatureOutcome,
   type GeneratedFile } from "../../../platform/api";
 import { unknownControls } from "../../../engines/facial-rig/clip";
+import { controlLabel, controlSide } from "../../../engines/facial-rig/vocabulary";
 import { EXPRESSION_PART_1, parseExpressionPart } from "../part";
 import { EXPRESSIONS_GAME_PREREQUISITE, EXPRESSION_TABLE_PATH, FACE_RIG_APP_PATH, GENDERS, readGameInputs, type GameBuilderInputs, type GameFile,
   type Gender, type GameInputs } from "./game";
@@ -42,10 +43,15 @@ const refuse = (code: string, message: string): never => { throw new ExportRefus
 /** Case-insensitive ordinal order, as the resolver sorts mod archives (knowledge/mod-loading.md). */
 const before = (a: string, b: string) => { const x = a.toLowerCase(), y = b.toLowerCase(); return x < y || (x === y && a < b); };
 
-export const NO_CONTROLS_REASON = "It has no face controls set, and photo mode already has a neutral face.";
-export const DAMAGED_REASON = "It is damaged, so XF Studio can't read it.";
-export const GAME_UNREAD_NOTE = "XF Studio is reading photo mode's expression list and your V's face rig from your game files. Check again in a moment to see "
-  + "which expressions can be packaged; Build reads them itself.";
+/** Omission reasons follow the expression's photo-mode name in quotes. */
+export const NO_CONTROLS_REASON = "has no face movements set, and photo mode already has a neutral face.";
+export const DAMAGED_REASON = "is damaged, so XF Studio can't read it.";
+/** A face control's readable name ("Inner brow raise, left"); a name the game's rig lacks reads as its words. */
+export function movementName(name: string): string {
+  const side = controlSide(name), label = controlLabel(name);
+  return side && !/, (?:left|right)$/.test(label) ? `${label}, ${side}` : label;
+}
+export const GAME_UNREAD_NOTE = "XF Studio is reading your game files: check again in a moment to see which expressions can become mod files.";
 
 export type PlannedExpression = { readonly id: string; readonly name: string; readonly revision: number; readonly label: string; readonly clip: string;
   readonly index: number | null; readonly controls: readonly (readonly [string, number])[] };
@@ -83,62 +89,61 @@ function plan(input: Parameters<FeatureExporter<ExpressionPlan>["plan"]>[0]): Ou
     const id = String(look.id ?? ""), name = typeof look.name === "string" ? look.name : "Expression";
     const envelope = look.parts?.[EXPRESSIONS_FEATURE];
     if (!envelope) continue;
-    const omit = (reason: string) => { omissions.push({ kind: "preset", presetId: id, presetName: name, reason }); };
+    let shown = name;
+    const omit = (reason: string) => { omissions.push({ kind: "preset", presetId: id, presetName: shown, reason: `“${shown}” ${reason}` }); };
     let part: ReturnType<typeof parseExpressionPart>;
     try {
       if (!UUID.test(id) || envelope.schema !== EXPRESSION_PART_1 || !Number.isInteger(look.revision)) throw Error("damaged");
       part = parseExpressionPart(envelope.body);
     } catch { omit(DAMAGED_REASON); continue; }
+    // The name photo mode shows is the one everything says (its label, else the saved expression's name).
+    shown = (part.label?.trim() || name).slice(0, 120);
     const controls = Object.entries(part.controls).filter(([, weight]) => weight > 0).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
     if (!controls.length) { omit(NO_CONTROLS_REASON); continue; }
     if (game) {
       const vector = Object.fromEntries(controls);
       const missing = [...new Set((Object.keys(GENDERS) as Gender[]).flatMap(gender => unknownControls(vector, game.rigs[gender].tracks, game.rigs[gender].main)))].sort();
-      if (missing.length) { omit(`It uses face control${missing.length === 1 ? "" : "s"} your game's face rig doesn't have (${missing.join(", ")}).`); continue; }
+      if (missing.length) { omit(`uses ${missing.length === 1 ? "a face movement" : "face movements"} your game doesn't have: ${missing.map(movementName).join(", ")}.`); continue; }
     }
-    eligible.push({ id, name, revision: look.revision as number, label: (part.label?.trim() || name).slice(0, 120), controls });
-    packaged.push({ id, name, label: (part.label?.trim() || name).slice(0, 120), controls: Object.fromEntries(controls) });
+    eligible.push({ id, name, revision: look.revision as number, label: shown, controls });
+    packaged.push({ id, name, label: shown, controls: Object.fromEntries(controls) });
   }
-  if (!eligible.length) {
-    const reasons = [...new Set(omissions.map(item => item.reason))];
-    // One reason is said once (the set's view adds that the set is unchanged); several name their expressions (the first three).
-    const each = omissions.slice(0, 3).map(item => `“${(item as { presetName: string }).presetName}”: ${item.reason}`).join(" ");
-    return refuse("no_exportable_content", `No expression in this set can become mod files. ${reasons.length === 1 ? reasons[0] : each}`);
-  }
+  if (!eligible.length)
+    throw new ExportRefusal("no_exportable_content", "Nothing in this set can become mod files yet.", undefined, omissions);
   // Clip names: the namespace and the saved expression's ID (stable across renames); the full ID if two would share a name.
   const short = eligible.map(item => `${namespace}_${compact(item.id).slice(0, 12)}`);
   const clash = new Set(short).size !== short.length;
-  const notes: string[] = [];
+  // One note says the one thing to know (a conflict first); everything else is guidance for the result's Details.
+  const warnings: string[] = [], guidance: string[] = [];
+  let summary: string | undefined;
   let carried: ExpressionPlan["carried"] = null, filler: ExpressionPlan["filler"] = null, first: number | null = null;
   const overlay = `0${archive}_table`;
-  if (!game) notes.push(GAME_UNREAD_NOTE);
+  if (!game) summary = GAME_UNREAD_NOTE;
   else {
     const source = set.table === "sharing" ? game.base : game.table;
     if (sha256(JSON.stringify(source.rows)) !== source.sha256) refuse("invalid_collection", "What XF Studio read from your game files for expressions is damaged. Build again.");
     const indices = source.rows.map(row => Number(row[0]));
     if (indices.some((value, position) => !Number.isInteger(value) || value !== position))
-      notes.push("Photo mode's expression list numbers its rows out of order, so these expressions may pick the wrong face. Tell us, with the Details below.");
+      warnings.push("Photo mode's expression list numbers its rows out of order, so these expressions may show the wrong face.");
     const next = Math.max(-1, ...indices.filter(Number.isInteger)) + 1;
     carried = { rows: source.rows.length, sha256: source.sha256, provider: source.provider, archive: source.archive };
     if (set.table === "sharing") { first = Math.max(SHARING_FIRST_INDEX, next); filler = first > next ? { from: next, to: first } : null; }
     else first = next;
     if (set.table === "installed" && game.table.provider !== game.base.provider)
-      notes.push(`Your expressions are added after the ${game.table.rows.length} in photo mode's list now (from ${game.table.provider}), so its expressions keep working. ` +
-        "Build again if you change your expression mods.");
-    if (set.table === "sharing")
-      notes.push("For sharing: the list carries only the game's own expressions beside these. With another expression mod installed, whichever list loads first decides which expressions work.");
+      summary = `Keeps the ${game.table.rows.length} expressions from ${game.table.provider} working. Build again if you add or remove expression mods.`;
+    if (set.table === "sharing") summary = "Made for sharing: it carries only the game's own expressions, so another expression mod's list may win over it.";
     // Who else provides the table, and whether this mod's list loads first.
     const others = game.providers.filter(item => item.group === "mod" && item.name.toLowerCase() !== overlay.toLowerCase());
     const xf = others.filter(item => /^0xfs_[cm][0-9a-f]{32}_table$/i.test(item.name));
-    if (xf.length) notes.push(`Another XF expressions mod (${xf.map(item => item.provider).join(", ")}) also provides photo mode's expression list. ` +
-      "Only one can be installed at a time: keep one, or put these expressions into that set.");
-    if (game.modOrder === "modlist") notes.push(`Your archive load order list (archive/pc/mod/modlist.txt) decides which expression list wins. Put ${overlay}.archive ` +
-      "first in it after installing.");
+    if (xf.length) warnings.push(`Another XF expressions mod (${xf.map(item => item.provider).join(", ")}) also provides photo mode's expression list: install only one.`);
+    if (game.modOrder === "modlist") warnings.push(`Your archive load order list decides which expression list wins: after installing, put ${overlay}.archive first in archive/pc/mod/modlist.txt.`);
     else {
       const ahead = others.filter(item => !xf.includes(item) && before(item.name, overlay));
-      if (ahead.length) notes.push(`${ahead.map(item => item.provider).join(", ")} would load its expression list before this mod's. Rename or remove it, then check again.`);
+      if (ahead.length) warnings.push(`${ahead.map(item => item.provider).join(", ")} loads its expression list before this mod's: rename or remove it, then check again.`);
     }
   }
+  const notes = [...warnings, ...(summary ? [summary] : [])].slice(0, 1);
+  guidance.push(...[...warnings, ...(summary ? [summary] : [])].slice(1));
   const expressions = eligible.map((item, position): PlannedExpression => ({ ...item, clip: clash ? `${namespace}_${compact(item.id)}` : short[position]!,
     index: first === null ? null : first + position }));
   const folder = `base/animations/xfs/expressions/${namespace}`;
@@ -158,7 +163,7 @@ function plan(input: Parameters<FeatureExporter<ExpressionPlan>["plan"]>[0]): Ou
     presets: expressions.map(item => ({ id: item.id, revision: item.revision, appearance: item.clip, ...(item.index === null ? {} : { faceId: item.index }),
       label: item.label })),
     omissions, experimental: [], notes, requirements: EXPRESSIONS_REQUIREMENTS, packagedSha256: sha256(text),
-    details: { table: set.table, overlay, carried, filler, genders: Object.keys(GENDERS) },
+    details: { table: set.table, overlay, carried, filler, genders: Object.keys(GENDERS), guidance },
   };
   return { check, plan: planned, packaged: text, inventory: [sets.female, sets.male, planned.paths.patch].sort(),
     xl: { patch: { [planned.paths.patch]: [FACE_RIG_APP_PATH] } },

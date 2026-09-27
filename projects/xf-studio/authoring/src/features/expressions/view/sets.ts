@@ -4,16 +4,18 @@
  * context (`ctx.presets`: saved expressions, sets and each set's latest Check or Build).
  *
  * - **Sets:** an ItemList of the feature's sets (select, rename in place, delete after a confirm, context menu); New set… opens a value
- *   popover with a suggested name.
- * - **In this set:** the selected set's expressions in menu order (drag or the keyboard to reorder, rename in place renames the saved
- *   expression, which is its menu label, Delete removes it from the set). Add… lists the saved expressions not in it yet; a saved
- *   expression deleted from the library stays listed as gone, with Remove, until the person removes it.
- * - **Mod:** its name (the default "XF Expressions - <set>", changeable), which expression table it carries (For my game, or For
- *   sharing), Check, then Build mod files… with the same confirm the collection's Build has, and the latest result: what can be packaged,
- *   what was left out and why, and after a Build, Show in folder. Nothing is ever added to the game or a mod manager from here.
+ *   popover with a suggested name. With no sets, the empty state says what to do next (save an expression first when there is none).
+ * - **In this set:** the selected set's expressions in menu order, by the name photo mode shows (renaming here renames that name). A row
+ *   is selected while its expression is the one in the Expression panel; clicking a row loads it there. Drag or the keyboard reorders;
+ *   Delete removes a row from the set. A saved expression deleted before sets followed deletes stays as a warning row with Remove.
+ *   Add… lists the saved expressions not in the set yet, and is unavailable, with the reason, when there are none.
+ * - **Mod:** the mod's line (its name and a menu with Rename and Use default name), what the mod is made for (your game, or sharing),
+ *   Check, then Build mod files… with the collection Build's confirm, and the latest result in the mod-package pattern: a summary, one
+ *   note, what was left out with a Start from it button, the next step after a Build (Show in folder) and a Details group. Nothing is
+ *   ever added to the game or a mod manager from here.
  */
-import { applyCapability, badge, button, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar, propertyList, section,
-  Segmented, type MenuItem } from "../../../studio-ui/components";
+import { applyCapability, badge, button, emptyState, GroupSection, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
+  section, Segmented, type MenuItem } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -21,7 +23,7 @@ import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
 import type { GenericFeatureFacade } from "../../../studio-presentation";
 import type { PartPreset, PartPresetSet, PartPresetSetTable, SetExportResult } from "../../../part-presets";
 import { defaultSetModName, setMembers, setModName } from "../../../part-preset-sets";
-import type { ExportOmission } from "../../../platform/api";
+import type { ExportOmission, PackageBuildResult, PackageCheckResult } from "../../../platform/api";
 import type { ExpressionAction } from "../core";
 import type { ExpressionPart } from "../part";
 import { EXPRESSIONS_PANEL_META } from "./contribution";
@@ -30,18 +32,21 @@ type Ctx = FeatureViewContext<GenericFeatureFacade>;
 /** The set shown, for this page's life (the first set when none is chosen or the chosen one is gone). */
 let chosenSet: string | undefined;
 
-const TABLE_OPTIONS = [
-  { value: "installed" as const, label: "For my game", title: "Keeps every expression your installed mods add to photo mode working beside these" },
-  { value: "sharing" as const, label: "For sharing", title: "For a mod to publish: carries only the game's own expressions beside these" },
-];
+const TABLE_OPTIONS = [{ value: "installed" as const, label: "My game" }, { value: "sharing" as const, label: "Sharing" }];
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-/** The menu label a saved expression shows in photo mode: its own label, else its name. */
-const menuLabel = (preset: PartPreset) => ((preset.part.body as Partial<ExpressionPart> | null)?.label?.trim() || preset.name);
+const body = (preset: PartPreset) => preset.part.body as Partial<ExpressionPart> | null;
+/** The name photo mode shows for a saved expression: its own label, else its name. */
+const shownName = (preset: PartPreset) => body(preset)?.label?.trim() || preset.name;
+/** The facts a Check or Build carries for the Details group. */
+type ExpressionDetails = { carried?: { rows: number; provider: string } | null; filler?: { from: number; to: number } | null; guidance?: string[] };
 
 export function expressionSets(ctx: Ctx): PanelController {
   const report = (outcome: { ok: boolean; message?: string }) => { if (!outcome.ok) ctx.feedback.toast("warning", "Expression sets", outcome.message ?? "That didn't work."); };
   const current = (): PartPresetSet | undefined => { const items = ctx.presets.sets().items; return items.find(item => item.id === chosenSet) ?? items[0]; };
   const saved = () => ctx.presets.list().items;
+  const presetOf = (id: string) => saved().find(item => item.id === id);
+  const rowOf = (list: ItemList<{ id: string; name: string; meta: string }>, id: string) =>
+    list.element.querySelector<HTMLElement>(`[data-id="${CSS.escape(id)}"]`) ?? list.element;
 
   // ---- Sets ----
   const newSet = button({ label: "New set…", icon: "plus", small: true, onClick: event => createSet(event.currentTarget as Element) });
@@ -50,7 +55,7 @@ export function expressionSets(ctx: Ctx): PanelController {
     onSelect: id => { chosenSet = id; ctx.changed(); },
     onMove: () => {},
     onRename: (id, name) => { const set = find(id); if (set) void ctx.presets.execute({ kind: "partPresetSet.rename", id, name, revision: set.revision }).then(report); },
-    onDelete: id => deleteSet(id, sets.element.querySelector(`[data-id="${CSS.escape(id)}"]`) ?? sets.element),
+    onDelete: id => deleteSet(id, rowOf(sets, id)),
     onMenu: (id, anchor) => setMenu(id, anchor),
     decorate: (item, row, selected) => {
       if (!row.trailing.childElementCount) row.trailing.append(button({ label: `More actions for ${item.name}`, icon: "more", iconOnly: true, variant: "ghost",
@@ -59,36 +64,45 @@ export function expressionSets(ctx: Ctx): PanelController {
       row.element.querySelector(".item-grip")?.setAttribute("hidden", "");
     },
   });
-  const setsEmpty = h("div", { class: "empty" }, h("p", { class: "empty-title", text: "No sets yet" }),
-    h("p", { class: "empty-body", text: "A set is a group of your saved expressions that becomes one photo-mode mod. Save an expression, then make a set for it." }));
+  const openExpression = button({ label: "Open Expression", icon: "character", small: true, onClick: () => ctx.reveal("expressions.controls", true) });
+  const setsEmptyHost = h("div");
   const setsNote = note("", "warning");
 
   // ---- In this set ----
   const setTitle = h("span", { text: "In this set" });
   const add = button({ label: "Add…", icon: "plus", small: true, menu: true, onClick: event => addMenu(event.currentTarget as Element) });
+  const removeFrom = (id: string) => { const set = current(); if (set) setMembersTo(set, set.members.filter(member => member !== id)); };
   const members = new ItemList<{ id: string; name: string; meta: string }>({
-    label: "Expressions in this set, in menu order", noun: "expression", maxLength: 120,
+    label: "Expressions in this set, in photo mode's order", noun: "expression", maxLength: 64,
     onSelect: id => startFrom(id),
     onMove: (id, to) => { const set = current(); if (!set) return; const next = set.members.filter(member => member !== id); next.splice(to, 0, id); setMembersTo(set, next); },
-    onRename: (id, name) => { const preset = saved().find(item => item.id === id); if (preset) void ctx.presets.execute({ kind: "partPreset.rename", id, name, revision: preset.revision }).then(report); },
-    onDelete: id => { const set = current(); if (set) setMembersTo(set, set.members.filter(member => member !== id)); },
+    onRename: (id, name) => renameShown(id, name),
+    onDelete: id => removeFrom(id),
     onMenu: (id, anchor) => memberMenu(id, anchor),
     decorate: (item, row, selected) => {
+      const missing = !presetOf(item.id);
       if (!row.trailing.childElementCount) row.trailing.append(button({ label: `Remove ${item.name} from this set`, icon: "minus", iconOnly: true, variant: "ghost",
-        small: true, onClick: () => { const set = current(); if (set) setMembersTo(set, set.members.filter(member => member !== item.id)); } }));
+        small: true, onClick: () => removeFrom(item.id) }));
       for (const control of row.trailing.querySelectorAll("button")) { control.tabIndex = selected ? 0 : -1; control.setAttribute("aria-label", `Remove ${item.name} from this set`); }
-      row.element.classList.toggle("missing", !saved().some(preset => preset.id === item.id));
+      row.trailing.hidden = missing;
+      // A saved expression deleted before deletes took it out of its sets: a warning row with Remove in view.
+      row.lead.replaceChildren(...(missing ? [icon("warning")] : []));
+      row.label.classList.toggle("muted", missing);
+      let remove = row.element.querySelector<HTMLButtonElement>(":scope > .set-remove");
+      if (missing && !remove) {
+        remove = button({ label: "Remove", small: true, variant: "quiet", className: "set-remove", onClick: () => removeFrom(item.id) });
+        row.element.insertBefore(remove, row.trailing);
+      } else if (!missing && remove) remove.remove();
     },
   });
   const membersEmpty = h("p", { class: "muted small", text: "No expressions in this set yet. Add your saved expressions; their order here is their order in photo mode." });
 
   // ---- Mod ----
-  const modName = h("strong", { class: "set-mod-name" });
-  const renameMod = button({ label: "Rename mod…", icon: "rename", small: true, variant: "quiet", onClick: event => renameModPopover(event.currentTarget as Element) });
-  const table = new Segmented<PartPresetSetTable>({ label: "Expression list", options: TABLE_OPTIONS, reserveNote: true,
+  const modLine = h("ul", { class: "result-list package-mods", "aria-label": "The mod this set builds" });
+  const table = new Segmented<PartPresetSetTable>({ label: "Made for", options: TABLE_OPTIONS, reserveNote: true,
     help: ["Photo mode keeps its expressions in one list that only one mod can provide.",
-      "For my game: the list your game uses now, with these added, so the expressions your other mods add keep working.",
-      "For sharing: the game's own list with these added, for a mod you publish. It carries no other mod's expressions, so with another expression mod installed, whichever list your mod manager loads first decides which expressions work."],
+      "My game: the list your game uses now, with these added, so the expressions your other mods add keep working.",
+      "Sharing: the game's own list with these added, for a mod you publish. With another expression mod installed, whichever list loads first decides which expressions work."],
     onSelect: value => { const set = current(); if (set && (set.table ?? "installed") !== value) void ctx.presets.execute({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision, table: value }).then(report); } });
   const check = button({ label: "Check", icon: "check", small: true, title: "See which expressions can become mod files (creates no files)", onClick: () => void run("check") });
   const build = button({ label: "Build mod files…", icon: "package", small: true, variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
@@ -97,15 +111,14 @@ export function expressionSets(ctx: Ctx): PanelController {
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   const modSection = section({ title: "Mod", help: ["Each set becomes its own mod: its expressions join photo mode's expression list, for female and male V.",
     "Build makes the files and checks them. Nothing is added to your game or mod manager: Show in folder, then copy them in by hand or zip them for a mod page."] },
-  propertyList([{ term: "Name", value: h("span", { class: "row gap-s" }, modName, renameMod) }], { label: "Mod" }),
-  table.element, h("div", { class: "row gap-s package-actions" }, check, build, progress), result);
+  modLine, table.element, h("div", { class: "row gap-s package-actions" }, check, build, progress), result);
 
   const membersSection = h("section", { class: "section", "aria-label": "In this set", "data-view-key": "expressions.set-members" },
     h("div", { class: "section-head" }, h("h3", { class: "section-title" }, setTitle), h("span", { class: "block-actions" }, add)), members.element, membersEmpty);
   const element = h("div", { class: "panel-content expr-sets" },
     h("section", { class: "section", "aria-label": "Sets", "data-view-key": "expressions.sets" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Sets" }), h("span", { class: "block-actions" }, newSet)),
-      setsNote, sets.element, setsEmpty),
+      setsNote, sets.element, setsEmptyHost),
     membersSection, modSection);
 
   function find(id: string) { return ctx.presets.sets().items.find(item => item.id === id); }
@@ -113,11 +126,20 @@ export function expressionSets(ctx: Ctx): PanelController {
     void ctx.presets.execute({ kind: "partPresetSet.setMembers", id: set.id, members: next, revision: set.revision }).then(report);
   }
   function startFrom(id: string) {
-    const preset = saved().find(item => item.id === id);
+    const preset = presetOf(id);
     if (!preset) return;
-    const body = preset.part.body as Partial<ExpressionPart> | null;
-    ctx.dispatch({ kind: "expression.startFrom", origin: { kind: "preset", id: preset.id, name: preset.name }, controls: body?.controls ?? {},
-      ...(body?.links ? { links: body.links } : {}) } as ExpressionAction);
+    const part = body(preset);
+    ctx.dispatch({ kind: "expression.startFrom", origin: { kind: "preset", id: preset.id, name: preset.name }, controls: part?.controls ?? {},
+      ...(part?.links ? { links: part.links } : {}) } as ExpressionAction);
+  }
+  /** Rename what photo mode shows: the saved expression's name, with its own label dropped so the name is what ships. */
+  function renameShown(id: string, name: string) {
+    const preset = presetOf(id);
+    if (!preset) return;
+    const part = body(preset);
+    const { label: _label, ...rest } = part ?? {};
+    void ctx.presets.execute({ kind: "partPreset.rename", id, name, revision: preset.revision,
+      ...(part?.label ? { part: { schema: preset.part.schema, body: rest } } : {}) }).then(report);
   }
   function createSet(anchor: Element) {
     const names = new Set(ctx.presets.sets().items.map(item => item.name.toLowerCase()));
@@ -159,48 +181,51 @@ export function expressionSets(ctx: Ctx): PanelController {
         capability: ctx.presets.capability({ kind: "partPresetSet.delete", id, revision: set.revision }), run: () => deleteSet(id, anchor) },
     ], anchor, { label: `${set.name} actions` });
   }
+  const outsideOf = (set: PartPresetSet) => saved().filter(preset => !set.members.includes(preset.id));
+  function addCapability(set: PartPresetSet | undefined) {
+    if (!set) return { available: false, reason: "Choose a set first." };
+    if (!saved().length) return { available: false, reason: "Save an expression in the Expression panel first." };
+    if (!outsideOf(set).length) return { available: false, reason: "Every saved expression is in this set already." };
+    return ctx.presets.capability({ kind: "partPresetSet.setMembers", id: set.id, members: set.members, revision: set.revision });
+  }
   function addMenu(anchor: Element) {
     const set = current();
-    if (!set) return;
-    const outside = saved().filter(preset => !set.members.includes(preset.id));
-    const items: MenuItem[] = outside.length
-      ? [{ kind: "heading", label: "Add a saved expression" }, ...outside.map((preset): MenuItem => ({ kind: "action", label: preset.name, icon: "plus",
-        capability: ctx.presets.capability({ kind: "partPresetSet.setMembers", id: set.id, members: [...set.members, preset.id], revision: set.revision }),
-        run: () => setMembersTo(set, [...set.members, preset.id]) })),
-        ...(outside.length > 1 ? [{ kind: "separator" } as MenuItem, { kind: "action", label: `Add all ${outside.length}`, icon: "plus",
-          run: () => setMembersTo(set, [...set.members, ...outside.map(preset => preset.id)]) } as MenuItem] : [])]
-      : [{ kind: "heading", label: "Nothing to add", detail: saved().length ? "Every saved expression is in this set already." : "Save an expression in the Expression panel first." }];
-    openMenu(items, anchor, { label: "Add to set" });
+    if (!set || !addCapability(set).available) return;
+    const outside = outsideOf(set);
+    openMenu([{ kind: "heading", label: "Add a saved expression" }, ...outside.map((preset): MenuItem => ({ kind: "action", label: shownName(preset), icon: "plus",
+      run: () => setMembersTo(set, [...set.members, preset.id]) })),
+      ...(outside.length > 1 ? [{ kind: "separator" } as MenuItem, { kind: "action", label: `Add all ${outside.length}`, icon: "plus",
+        run: () => setMembersTo(set, [...set.members, ...outside.map(preset => preset.id)]) } as MenuItem] : [])], anchor, { label: "Add to set" });
   }
   function memberMenu(id: string, anchor: Element | { x: number; y: number }) {
-    const set = current(), preset = saved().find(item => item.id === id);
+    const set = current(), preset = presetOf(id);
     if (!set) return;
     const index = set.members.indexOf(id);
     const move = (to: number) => { const next = set.members.filter(member => member !== id); next.splice(to, 0, id); setMembersTo(set, next); };
+    // Only what applies to this row: moves that can happen, and loading or renaming only while its saved expression exists.
     openMenu([
-      { kind: "heading", label: preset ? preset.name : "Deleted expression", ...(preset ? {} : { detail: "It was deleted from your library." }) },
+      { kind: "heading", label: preset ? shownName(preset) : "Deleted expression", ...(preset ? {} : { detail: "It was deleted from your library." }) },
       ...(preset ? [{ kind: "action", label: "Start from it", icon: "play", capability: ctx.facade.editable(), run: () => startFrom(id) } as MenuItem,
         { kind: "action", label: "Rename…", icon: "rename", shortcut: "F2", run: () => renameMember(id, anchor) } as MenuItem] : []),
-      { kind: "action", label: "Move up", icon: "arrowUp", capability: index > 0 ? { available: true } : { available: false, reason: "It's first already." }, run: () => move(index - 1) },
-      { kind: "action", label: "Move down", icon: "arrowDown", capability: index < set.members.length - 1 ? { available: true } : { available: false, reason: "It's last already." },
-        run: () => move(index + 1) },
+      ...(index > 0 ? [{ kind: "action", label: "Move up", icon: "arrowUp", run: () => move(index - 1) } as MenuItem] : []),
+      ...(index < set.members.length - 1 ? [{ kind: "action", label: "Move down", icon: "arrowDown", run: () => move(index + 1) } as MenuItem] : []),
       { kind: "separator" },
-      { kind: "action", label: "Remove from set", icon: "minus", shortcut: "Del", run: () => setMembersTo(set, set.members.filter(member => member !== id)) },
+      { kind: "action", label: "Remove from set", icon: "minus", shortcut: "Del", run: () => removeFrom(id) },
     ], anchor, { label: "Expression actions" });
   }
   function renameMember(id: string, anchor: Element | { x: number; y: number }) {
-    const preset = saved().find(item => item.id === id);
+    const preset = presetOf(id);
     if (!preset) return;
-    openValuePopover({ kind: "text", label: "Name", value: preset.name, maxLength: 120 }, anchor, {
-      title: "Rename saved expression", apply: "Rename",
+    openValuePopover({ kind: "text", label: "Name in photo mode", value: shownName(preset), maxLength: 64 }, anchor, {
+      title: "Rename expression", apply: "Rename",
       validate: value => ctx.presets.capability({ kind: "partPreset.rename", id, name: String(value), revision: preset.revision }),
-      commit: value => void ctx.presets.execute({ kind: "partPreset.rename", id, name: String(value).trim(), revision: preset.revision }).then(report),
+      commit: value => renameShown(id, String(value).trim()),
     });
   }
-  function renameModPopover(anchor: Element) {
+  function renameModPopover(anchor: Element | { x: number; y: number }) {
     const set = current();
     if (!set) return;
-    openValuePopover({ kind: "text", label: "Mod name (as it appears in your mod manager)", value: setModName(set), maxLength: 80 }, anchor, {
+    openValuePopover({ kind: "text", label: "Mod name", value: setModName(set), maxLength: 80 }, anchor, {
       title: "Rename mod", apply: "Rename",
       validate: value => ctx.presets.capability({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision, modName: String(value) }),
       // The default name goes back to following the set's name.
@@ -208,6 +233,15 @@ export function expressionSets(ctx: Ctx): PanelController {
         void ctx.presets.execute({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision,
           modName: name === defaultSetModName(set.feature, set.name) ? "" : name }).then(report); },
     });
+  }
+  function modMenu(anchor: Element) {
+    const set = current();
+    if (!set) return;
+    openMenu([
+      { kind: "action", label: "Rename…", icon: "rename", run: () => renameModPopover(anchor) },
+      ...(set.modName ? [{ kind: "action", label: "Use default name", icon: "reset", hint: defaultSetModName(set.feature, set.name),
+        run: () => void ctx.presets.execute({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision, modName: "" }).then(report) } as MenuItem] : []),
+    ], anchor, { label: `${setModName(set)} options`, invoker: anchor });
   }
   async function run(action: "check" | "build") {
     const set = current();
@@ -224,43 +258,63 @@ export function expressionSets(ctx: Ctx): PanelController {
     anchor, { label: "Build mod files", invoker: anchor });
   }
 
-  /** The latest Check or Build of the set shown, in the collection's result-card pattern. */
+  /** What was left out, each with the button that fixes it (load the expression to change it). */
+  function leftOut(omissions: readonly ExportOmission[]): HTMLElement | null {
+    const lines = omissions.filter((item): item is Extract<ExportOmission, { kind: "preset" }> => item.kind === "preset");
+    if (!lines.length) return null;
+    return h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Left out" }),
+      h("ul", { class: "result-list" }, lines.map(item => h("li", {}, icon("warning"), h("span", { text: item.reason }),
+        presetOf(item.presetId) ? button({ label: "Start from it", icon: "play", small: true, variant: "quiet", onClick: () => startFrom(item.presetId) }) : null))));
+  }
+  /** The facts behind the result, folded: where the expression list comes from, how it grows, and any further guidance. */
+  function details(r: PackageCheckResult | PackageBuildResult, isBuild: boolean): HTMLElement {
+    const facts = (r.products[0]?.features[0]?.details ?? {}) as ExpressionDetails, product = r.products[0];
+    const rows: string[] = [...(facts.guidance ?? [])];
+    if (facts.carried) rows.push(`Photo mode's list: ${plural(facts.carried.rows, "expression")} from ${facts.carried.provider}, then these.`);
+    if (facts.filler) rows.push(`Empty places ${facts.filler.from} to ${facts.filler.to - 1} show a neutral face, so these always sit at the same place.`);
+    if (isBuild && product) rows.push(`Files: ${(product as PackageBuildResult["products"][number]).package}`);
+    const group = new GroupSection({ title: "Details", key: "expressions.set-result-details", level: "subsection", heading: 5, expanded: false });
+    group.body.append(...rows.map(text => h("p", { class: "muted small", text })));
+    return group.element;
+  }
+  /** The latest Check or Build of the set shown, in the mod-package result pattern. */
   function renderResult(set: PartPresetSet, last: SetExportResult | undefined): HTMLElement[] {
     if (!last) return [];
     const stale = last.revision !== set.revision;
-    if (last.kind === "failed") return [h("div", { class: "result-card error" }, icon("warning"),
-      h("div", {}, h("strong", { text: last.action === "build" ? "Build didn't finish" : "Check didn't finish" }), h("p", { text: last.message }),
-        h("p", { class: "muted small", text: "Your set is unchanged." })))];
+    const staleNote = () => h("div", { class: "row gap-s" }, note("This set changed after this result.", "warning"),
+      button({ label: "Check", icon: "check", small: true, onClick: () => void run("check") }));
+    const head = (title: string) => h("div", { class: "result-head" }, h("strong", { text: title }), stale ? badge("Stale", "warning") : badge("Current", "success"));
+    if (last.kind === "failed") {
+      // Nothing could be packaged: a finished Check with what to fix, not a failure.
+      if (last.code === "no_exportable_content" && last.omissions?.length) return [h("div", { class: "result-card stale" },
+        head("Nothing in this set can become mod files yet"), leftOut(last.omissions), stale ? staleNote() : null)];
+      return [h("div", { class: "result-card error" }, icon("warning"),
+        h("div", {}, h("strong", { text: last.action === "build" ? "Build didn't finish" : "Check didn't finish" }), h("p", { text: last.message })))];
+    }
     const r = last.result, isBuild = last.kind === "build";
     const packaged = r.products.flatMap(product => product.features.flatMap(feature => feature.presets));
-    const total = r.originalPresetCount + last.missing;
-    const card = h("div", { class: `result-card ${stale ? "stale" : "ok"}` },
-      h("div", { class: "result-head" }, h("strong", { text: isBuild ? "Build result" : "Check result" }),
-        stale ? badge("Stale — set changed since", "warning") : badge("Current", "success")),
-      h("p", { class: "result-summary", text: `${packaged.length} of ${plural(total, "expression")} can become mod files.${isBuild ? "" : " This check created no files."}` }));
-    const byId = new Map(saved().map(preset => [preset.id, preset]));
-    for (const product of r.products) {
-      const block = h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: product.modName })));
-      if (!isBuild) block.append(h("ul", { class: "result-list" }, product.features.flatMap(feature => feature.presets.map(look => {
-        const preset = byId.get(look.id);
-        return h("li", {}, icon("check"), h("span", { text: preset ? menuLabel(preset) : String(look.id) }));
-      }))));
-      card.append(block);
-    }
-    for (const text of new Set(r.products.flatMap(product => product.features.flatMap(feature => feature.notes)))) card.append(note(text, "info"));
-    const omissions: ExportOmission[] = [...r.omissions, ...r.products.flatMap(product => product.features.flatMap(feature => feature.omissions))];
-    const lines = omissions.map(item => item.kind === "feature" ? `${item.label} — ${item.reason}` : `“${item.presetName}” — ${item.reason}`);
-    if (last.missing) lines.unshift(`${plural(last.missing, "expression")} deleted from your library — remove ${last.missing === 1 ? "it" : "them"} from the set`);
-    if (lines.length) card.append(h("div", { class: "omissions" }, h("span", { class: "eyebrow", text: "Left out" }),
-      h("ul", { class: "result-list" }, lines.map(text => h("li", {}, icon("warning"), h("span", { text }))))));
+    const omissions = [...r.omissions, ...r.products.flatMap(product => product.features.flatMap(feature => feature.omissions))];
+    const firstNote = r.products.flatMap(product => product.features.flatMap(feature => feature.notes))[0];
+    const modName = r.products[0]?.modName ?? setModName(set);
+    const card = h("div", { class: `result-card ${stale ? "stale" : "ok"}` }, head(isBuild ? "Build result" : "Check result"));
     if (isBuild) {
+      card.append(h("p", { class: "result-summary", text: `Built ${modName}: ${plural(packaged.length, "expression")}.` }),
+        h("p", { text: "Copy its archive and r6 folders into your game folder or mod manager." }));
       const show = button({ label: "Show in folder", icon: "folder", small: true, onClick: () => void ctx.presets.execute({ kind: "partPresetSet.reveal", id: set.id }).then(report) });
       applyCapability(show, ctx.presets.capability({ kind: "partPresetSet.reveal", id: set.id }));
       card.append(h("div", { class: "row gap-s" }, show),
-        note("Your mod was built and checked. Nothing is in your game yet: copy its archive and r6 folders into your game folder or mod manager. " +
-          "How the expressions look in photo mode hasn't been checked yet.", "info"));
+        h("p", { class: "muted small", text: "In photo mode they're at the end of the Expression list, for female and male V." }));
+    } else {
+      card.append(h("p", { class: "result-summary", text: `${packaged.length} of ${plural(r.originalPresetCount, "expression")} can become mod files. This check created no files.` }),
+        h("div", { class: "result-product" }, h("p", { class: "muted small" }, "Mod ", h("strong", { text: modName })),
+          h("ul", { class: "result-list" }, packaged.map(look => h("li", {}, icon("check"),
+            h("span", { text: String((look as { label?: unknown }).label ?? presetOf(look.id)?.name ?? look.id) }))))));
     }
-    if (stale) card.append(note("This set changed after this result. Run Check again.", "warning"));
+    if (firstNote) card.append(note(firstNote, "info"));
+    const out = leftOut(omissions);
+    if (out) card.append(out);
+    card.append(details(r, isBuild));
+    if (stale) card.append(staleNote());
     return [card];
   }
 
@@ -272,23 +326,36 @@ export function expressionSets(ctx: Ctx): PanelController {
       setsNote.hidden = list.phase !== "failed";
       setText(setsNote, list.phase === "failed" ? list.reason ?? "Your sets are unavailable right now." : "");
       sets.update(list.items.map(item => ({ id: item.id, name: item.name, meta: plural(item.members.length, "expression") })), set?.id);
-      setsEmpty.hidden = list.phase !== "ready" || list.items.length > 0;
+      const empty = list.phase === "ready" && !list.items.length;
+      const emptyKey = empty ? (presets.items.length ? "some" : "none") : "";
+      if (setsEmptyHost.dataset.state !== emptyKey) {
+        setsEmptyHost.dataset.state = emptyKey;
+        setsEmptyHost.replaceChildren(...(!empty ? [] : presets.items.length
+          ? [emptyState("No sets yet", "A set is a group of your saved expressions that becomes one photo-mode mod. Make one with New set.")]
+          : [emptyState("No sets yet", "A set is a group of saved expressions that becomes one photo-mode mod. Make an expression and save it first.", openExpression)]));
+      }
       applyCapability(newSet, ctx.presets.capability({ kind: "partPresetSet.create", name: "x" }));
       membersSection.hidden = !set; modSection.hidden = !set;
       if (!set) return;
       setText(setTitle, `In “${set.name}”`);
-      const byId = new Map(presets.items.map(preset => [preset.id, preset]));
+      // The row whose expression the Expression panel holds is selected (its Remove is then reachable from the keyboard).
+      const origin = (ctx.facade.view()?.part as ExpressionPart | undefined)?.origin;
+      const loaded = origin?.kind === "preset" && set.members.includes(origin.id) ? origin.id : undefined;
       members.update(setMembers(set, presets.items).map(member => {
-        const preset = byId.get(member.id);
-        const label = preset ? menuLabel(preset) : "";
-        return { id: member.id, name: preset?.name ?? "Deleted expression", meta: !preset ? "deleted from your library" : label !== preset.name ? `shows as “${label}”` : "" };
-      }), undefined);
+        const preset = member.preset ? presetOf(member.id) : undefined;
+        return { id: member.id, name: preset ? shownName(preset) : "Deleted expression", meta: "" };
+      }), loaded);
       membersEmpty.hidden = set.members.length > 0;
-      setText(modName, setModName(set));
-      renameMod.title = set.modName ? "Rename the mod (clear it to follow the set's name again)" : "Give the mod its own name";
+      applyCapability(add, addCapability(set));
+      const name = setModName(set);
+      if (modLine.dataset.name !== `${name}|${!!set.modName}`) {
+        modLine.dataset.name = `${name}|${!!set.modName}`;
+        modLine.replaceChildren(h("li", {}, icon("package"), h("span", {}, h("strong", { text: name }), h("span", { class: "muted", text: " · Expressions" })),
+          button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true, onClick: event => modMenu(event.currentTarget as Element) })));
+      }
       const running = exports.busy?.id === set.id ? exports.busy.action : undefined;
       table.update(set.table ?? "installed", () => ctx.presets.capability({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision }), {
-        note: (set.table ?? "installed") === "sharing" ? "Carries only the game's own expressions beside these." : "Keeps your other expression mods working." });
+        note: (set.table ?? "installed") === "sharing" ? "For a mod you publish: carries only the game's own expressions." : "Keeps your other expression mods working." });
       applyCapability(check, ctx.presets.capability({ kind: "partPresetSet.check", id: set.id }));
       applyCapability(build, ctx.presets.capability({ kind: "partPresetSet.build", id: set.id }));
       progress.classList.toggle("idle", !running || running === "reveal");

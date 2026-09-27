@@ -148,8 +148,9 @@ export const PART_PRESET_DESCRIPTORS = {
   "partPreset.list": request("workspace", "read", { feature: target("string") }),
   "partPreset.save": request("workspace", "save", { feature: target("string"), name: inputText(1, 120), part: state("object") }),
   "partPreset.rename": request("workspace", "save", { feature: target("string"), id: target("string"), name: inputText(1, 120),
-    revision: state("integer") }),
+    revision: state("integer"), part: { type: "object", required: false, from: "state" } }),
   "partPreset.delete": request("workspace", "save", { feature: target("string"), id: target("string"), revision: state("integer") }),
+  "partPreset.restore": request("workspace", "save", { feature: target("string"), id: target("string") }),
   // Sets of saved presets (part-preset-sets.ts): an expression set, exported as one mod.
   "partPresetSet.list": request("workspace", "read", { feature: target("string") }),
   "partPresetSet.create": request("workspace", "save", { feature: target("string"), name: inputText(1, 120),
