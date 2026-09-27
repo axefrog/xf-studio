@@ -7,8 +7,12 @@ import { activate, allGroups, applyDrop, closePanel, findGroup, locate, openPane
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
 
+/** A tab's tooltip: its title, what it shows, and how to move it. */
+const tabTip = (title: string, context: string) => `${title}${context ? ` · ${context}` : ""} — drag to move, right-click for layout options`;
 export type PanelSpec = {
   id: PanelId; title: string; icon: IconName; description: string;
+  /** What the panel shows, for its tab's tooltip (a view's subject); set with `DockView.retitle`. */
+  context?: string;
   element: HTMLElement;
   /** Called after each layout when the panel becomes shown or hidden. */
   visibility?(visible: boolean): void;
@@ -197,7 +201,7 @@ export class DockView {
       const spec = this.panels.get(id)!, active = id === group.active;
       const tab = h("button", { class: "dock-tab", type: "button", role: "tab", id: `dock-tab-${id}`,
         "aria-selected": String(active), "aria-controls": bodyId, tabindex: active ? "0" : "-1",
-        "data-panel": id, title: `${spec.title} — drag to move, right-click for layout options` },
+        "data-panel": id, title: tabTip(spec.title, spec.context ?? "") },
         icon(spec.icon), h("span", { class: "dock-tab-label", text: spec.title }),
         h("span", { class: "dock-tab-close", "aria-hidden": "true", title: `Close ${spec.title}`,
           onpointerdown: (event: PointerEvent) => event.stopPropagation(),
@@ -384,6 +388,21 @@ export class DockView {
     (target ?? element)?.focus();
   }
   private title(id: PanelId) { return this.panels.get(id)?.title ?? id; }
+  /**
+   * A panel's derived title and its context line (a view's name and what it shows), changed in place: the tab's label and tooltip
+   * follow, nothing is laid out again, and the panel's ID (and so every saved layout) stays the same.
+   */
+  retitle(id: PanelId, title: string, context = "") {
+    const spec = this.panels.get(id);
+    if (!spec || (spec.title === title && (spec.context ?? "") === context)) return;
+    this.panels.set(id, { ...spec, title, context });
+    const tab = this.element.querySelector<HTMLElement>(`.dock-tab[data-panel="${CSS.escape(id)}"]`);
+    if (!tab) return;
+    tab.title = tabTip(title, context);
+    const label = tab.querySelector(".dock-tab-label");
+    if (label) label.textContent = title;
+    tab.querySelector(".dock-tab-close")?.setAttribute("title", `Close ${title}`);
+  }
   private describeGroup(group: GroupNode) { return group.panels.map(id => this.title(id)).join(" · "); }
 
   // ----- Commands usable from menus, shortcuts and the command palette -----

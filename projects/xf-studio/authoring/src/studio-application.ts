@@ -14,7 +14,7 @@ import type { CharacterContextActions } from "./character-context-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
-import type { ViewId } from "./platform/api/view-graph";
+import { type ViewId, viewTitles } from "./platform/api/view-graph";
 import type { ViewGraph } from "./platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
 import type { StudioModule, ViewSummaryContribution, ViewToolContribution, ViewToolFilter } from "./platform/api";
@@ -488,6 +488,19 @@ export class StudioApplication {
   modules(): readonly StudioModule[] { return structuredClone(this.services.viewActions?.registration.modules ?? []); }
   /** The views, what each shares, the focus and the View and lighting history (view-graph-design.md §3). Detached. */
   views() { return this.services.viewActions?.snapshot() ?? null; }
+  /**
+   * Each view's title and what it shows, for its panel's tab (view-graph.ts `viewTitles`): the view's own name, else "3D view",
+   * numbered when there are several; its scene's subject (for the character scene, which V: "V (your saved V)") as context.
+   */
+  viewTitles(): { view: string; panel: string; title: string; subject: string }[] {
+    const snapshot = this.services.viewActions?.snapshot();
+    if (!snapshot) return [];
+    const titles = viewTitles(snapshot.views), origin = this.services.characterContext?.snapshot().origin;
+    const who = origin?.kind === "save" ? "your saved V" : origin?.kind === "preset" ? origin.name ? `the preset "${origin.name}"` : "a preset"
+      : "the character creator's default V";
+    return snapshot.views.map((view, index) => ({ view: view.id, panel: view.panel, title: titles[index]!,
+      subject: view.sceneKind === "character" ? `V (${who})` : "" }));
+  }
   /**
    * A view's tools (design §3.9): the platform's and the shown modules' tools for its scene kind, each with its current state, the
    * action it dispatches and that action's capability. `filter` is the presentation's module visibility and research preference,

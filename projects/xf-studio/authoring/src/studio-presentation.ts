@@ -140,6 +140,8 @@ export type StudioPresentationPort<Slot> = {
     modules(): readonly StudioModule[];
     tools(view: ViewId | undefined, filter: ViewToolFilter): readonly ViewToolEntry[];
     summaries(view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">): readonly ViewSummaryContribution[];
+    /** Each view's derived title and its scene's subject, with the panel that shows it. */
+    titles(): readonly { readonly view: ViewId; readonly panel: string; readonly title: string; readonly subject: string }[];
     /** Turn a view's tool on or off (`view.setTool` through the registry). */
     setTool(view: ViewId | undefined, tool: string, enabled: boolean): StudioDispatchResult;
   };
@@ -330,6 +332,7 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => a.views(), modules: () => a.modules(),
     tools: (view: ViewId | undefined, filter: ViewToolFilter) => a.viewTools(view, filter),
     summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
+    titles: () => a.viewTitles(),
     setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
   });
   const localSetup: StudioPresentationPort<Slot>["localSetup"] = sources.localSetup ? {

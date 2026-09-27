@@ -194,7 +194,7 @@ The head panel (`studio-ui/panels/viewports.ts`) and its duplicates:
 | `lights` | Rig kind (`studio`, `creator`; module kinds such as `sun` later) and its settings: studio lights, key angle, exposure, creator calibration. A creator rig resolves its spot lights from the scene's body sex at draw time, so one rig node can light a feminine and a masculine V correctly. | `lightingPreset`, `studioLights`, `lightAngle`, `exposure`, `creatorLighting` | Yes |
 | `display` | Per-view render settings: the **content filter** (which character slots show: brows, lashes, hair, piercings, body, clothing; and each active module's content), the stage backdrop, and a resolution scale. | `brows`, `lashes`, `hair`, `piercings`, `body` | Yes |
 | `tools` | Overlays and editing controls: each view tool's on/off state (`eye-makeup.surface`, `eye-makeup.wire`) and whether pointer editing is allowed in this view | `surface`, `wire` | No (forked) |
-| `view` | `{ id, kind: "3d", title?, scene, camera, lights, display, tools }`: one reference per slot. It is shown in a dock panel `view.<id>`, and the main view keeps panel ID `head`. | The `head` panel | — |
+| `view` | `{ id, kind: "3d", title?, scene, camera, lights, display, tools }`: one reference per slot. It is shown in a dock panel `view.<id>`, and the main view keeps panel ID `head`. Its tab is titled from the graph (`viewTitles`): its own `title`, else "3D view", numbered ("3D view 1", "3D view 2") when there are several, with its scene's subject as the tab's context ("V (your saved V)"); the panel ID and saved layouts never depend on the title. | The `head` panel | — |
 
 **Why two nodes for display and tools.** Both are per view by default, but they share differently:
 

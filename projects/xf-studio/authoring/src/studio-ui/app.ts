@@ -162,12 +162,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       lastMessage = message.id;
       // Routine raster timings are not activity; failures also surface through readiness.
       if (message.source === "preview") { if (/fail|error|unavailable|exceed/i.test(message.text)) feedback.record("warning", "Preview", message.text); }
-      else feedback.toast("warning", message.source === "uv" ? "UV map" : "Head", message.text);
+      else feedback.toast("warning", message.source === "uv" ? "UV map" : "3D view", message.text);
     }
     // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
     const notice = port.diagnostics.snapshot().notice;
     if (notice && notice.id !== lastNotice) { lastNotice = notice.id; feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref }); }
     header.update(frame); status.update(frame); setupCard.update(frame); guidance.update(frame);
+    // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
+    for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form.
     if (frame.previewSetup.setupRequests !== setupRequests) {
       setupRequests = frame.previewSetup.setupRequests;
@@ -534,7 +536,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     // Viewport keys work while that viewport has focus; the palette names the scope.
     ...port.views.tools(undefined, rt.toolFilter()).filter(tool => tool.state !== "scene").map(tool => act(`tool.${tool.id}`,
       tool.kind === "toggle" ? `${tool.on ? "Hide" : "Show"} ${tool.label.toLowerCase()}` : tool.label, tool.placement === "research" ? "Research" : "View",
-      tool.action, { icon: isIconName(tool.icon) ? tool.icon : "dot", ...(tool.binding ? { shortcut: `${shortcutLabel(tool.binding)} in Head` } : {}),
+      tool.action, { icon: isIconName(tool.icon) ? tool.icon : "dot", ...(tool.binding ? { shortcut: `${shortcutLabel(tool.binding)} in the 3D view` } : {}),
         ...(tool.keywords ? { keywords: tool.keywords } : {}) })),
     act("camera.back", "Camera: back to where it was", "View", { kind: "camera.back" }, { icon: "undo", keywords: "camera previous position jump return" }),
     act("camera.forward", "Camera: forward again", "View", { kind: "camera.forward" }, { icon: "redo", keywords: "camera next position jump" }),

@@ -63,7 +63,7 @@ function sandbox() {
     Object.assign(element.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${hgt}px` });
     host.append(element); return element;
   };
-  const targets = [make("a", "Layers", 8, 8, 200, 344), make("b", "Head", 216, 8, 330, 344), make("c", "Motion (floating)", 590, 40, 220, 170, true)];
+  const targets = [make("a", "Layers", 8, 8, 200, 344), make("b", "3D view", 216, 8, 330, 344), make("c", "Motion (floating)", 590, 40, 220, 170, true)];
   const panel = make("drag", "Lighting · drag me", 380, 170, 380, 180, true);
   panel.classList.add("sandbox-panel");
   const overlay = h("div", { class: "dock-overlay" }); host.append(overlay);
@@ -121,7 +121,7 @@ function liveDock() {
   host.replaceChildren();
   const sample = (title: string) => h("div", { class: "panel-content" }, h("h3", { class: "section-title", text: title }),
     h("p", { class: "note", text: "Drag this tab or the empty tab bar. Right-click a tab for keyboard-equivalent layout options." }));
-  const panels = ([["one", "Presets", "presets"], ["two", "Layers", "layers"], ["three", "Head", "head"], ["four", "Camera & light", "lighting"], ["five", "Motion", "motion"]] as const)
+  const panels = ([["one", "Presets", "presets"], ["two", "Layers", "layers"], ["three", "3D view", "head"], ["four", "Camera & light", "lighting"], ["five", "Motion", "motion"]] as const)
     .map(([id, title, iconName]) => ({ id, title, icon: iconName, description: `${title} sample`, element: sample(title) }));
   const initial = (): DockTree => ({ closed: [], floating: [], root: split("row", [
     split("column", [group(["one", "two"], "one", "lg-a"), group(["five"], "five", "lg-e")], [.55, .45], "ls-a"),
