@@ -24,6 +24,7 @@ import type { MenuAnchor, MenuSection } from "../menu";
 import type { PanelController } from "../panels/collection";
 import type { DispatchFeedback, Port } from "../runtime";
 import type { ViewContribution } from "./contribution";
+import type { SettingsSection } from "../settings-sections";
 
 /** The action type a facade dispatches. */
 export type FacadeAction<F> = F extends { dispatch(action: infer A): unknown } ? A : never;
@@ -84,6 +85,8 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   readonly anchors: Pick<AnchorRegistry, "register">;
   /** Open (or bring forward) a panel. */
   reveal(panel: string, focus?: boolean): void;
+  /** Open the Settings panel at one of its groups (the game folder and WolvenKit are chosen in Settings › Game and › Tools). */
+  openSettings(section?: SettingsSection): void;
   /** XF Studio's own public pages. */
   readonly links: ProjectLinkPort;
   /** Presentation-local changes that need a repaint. */
@@ -157,6 +160,8 @@ export type ModuleViewContext<F extends ModuleService = ModuleService> = {
   readonly anchors: Pick<AnchorRegistry, "register">;
   /** Open (or bring forward) a panel. */
   reveal(panel: string, focus?: boolean): void;
+  /** Open the Settings panel at one of its groups (a saves folder is chosen in Settings › Saves). */
+  openSettings(section?: SettingsSection): void;
   readonly links: ProjectLinkPort;
   /** Presentation-local changes that need a repaint. */
   changed(): void;

@@ -1,6 +1,6 @@
 /**
  * The Local setup choice of which head Build cuts the eye plate from. Pure and shared: the setting's
- * type (local-settings.ts), the eye plate service's plain messages and the Studio's Game & tools form
+ * type (local-settings.ts), the eye plate service's plain messages and the Studio's Settings › Game form
  * all name it the same way.
  */
 export type EyePlateHead = "installed" | "base-game";

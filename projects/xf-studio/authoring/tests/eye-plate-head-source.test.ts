@@ -194,7 +194,7 @@ test("a mod that changes the head's topology blocks Build with a named, actionab
   expect(blocked.code).toBe("plate_source_modded");
   expect(blocked.message).toContain("Your installed head mod Head Sculpt changes the head's shape data in a way XF Eye Artistry doesn't support yet");
   // The way round is a named Local setup choice, not an environment variable.
-  expect(blocked.message).toContain("set “Head used for the eye plate” to “The unmodified game head” under Game & tools");
+  expect(blocked.message).toContain("set “Head used for the eye plate” to “The unmodified game head” in Settings › Game");
   expect(blocked.message).not.toContain("XFS_EYE_PLATE_HEAD");
   expect(blocked.detail).toContain("audited selection");
   expect(readdirSync(cacheRoot).filter(name => !name.startsWith("status"))).toEqual([]);

@@ -38,11 +38,11 @@ const INDEX_FILE = "set-index-1.json";
 const CLIP_CACHE = 64;
 export type PoseRoute = Omit<InstallationOptions, "cacheDir" | "log">;
 
-const NEEDS_SETUP = "Poses come from your game. Choose your game folder in Game & tools.";
+const NEEDS_SETUP = "Poses come from your game. Choose your game folder in Settings › Game.";
 /** Asked for poses before the game folder is set up. */
 export class PoseSetupError extends Error { constructor() { super(NEEDS_SETUP); } }
 const PREPARING = "Reading your game's photo-mode poses…";
-const FAILED = "XF Studio couldn't read your game's photo-mode poses. Try again, or check that the game folder is right in Game & tools.";
+const FAILED = "XF Studio couldn't read your game's photo-mode poses. Try again, or check that the game folder is right in Settings › Game.";
 
 /** Cache identity of an archive: path, size and modification time. */
 function archiveIdentity(archive: MountedArchive): string {

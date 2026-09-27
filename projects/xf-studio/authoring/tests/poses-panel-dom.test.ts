@@ -1,5 +1,6 @@
 // The Poses panel over the light DOM harness and the real service with a fake host and motion: groups open and close, one click applies a
-// pose, the tree is a keyboard tree (Down from search, arrows, Right opens, Enter applies, F stars), a greyed pose says why, the outfit
+// pose, the star keeps a favourite, the tree is a keyboard tree (Down from search, arrows, Right opens, Enter applies, F stars), a greyed
+// pose says why, the outfit
 // note offers Show them, and a needs-setup catalogue offers Game & tools. It reaches the service only through its module context.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { PoseLibraryActions, poseLibraryFacade, type PoseLibraryDevice, type PoseLibraryFacade, type PoseMotionPort, type PoseStage,
@@ -44,46 +45,56 @@ function harness(options: { phase?: string; worn?: string[] } = {}) {
   return { panel, facade, root: panel.spec.element as unknown as LightElement, calls, revealed };
 }
 const key = (target: LightElement, name: string) => target.dispatchEvent(lightEvent("keydown", { key: name }));
-const rows = (root: LightElement) => root.querySelectorAll("li.pose-tree-row");
-const groups = (root: LightElement) => root.querySelectorAll("li.pose-tree-group");
+/** Items in visual order: the tree positions reused items by their offset, so page order isn't visual order. */
+const top = (item: LightElement) => Number(/translateY\((\d+)px\)/.exec((item as unknown as HTMLElement).style.transform ?? "")?.[1] ?? 0);
+const byTop = (items: LightElement[]) => [...items].sort((a, b) => top(a) - top(b));
+const rows = (root: LightElement) => byTop(root.querySelectorAll(".tree-row"));
+const groups = (root: LightElement) => byTop(root.querySelectorAll(".tree-group"));
+const label = (item: LightElement) => item.querySelector(".tree-label")?.textContent;
+const poseId = (item: LightElement) => item.dataset.id!.split("")[1];
+const click = (item: LightElement) => (item as unknown as HTMLElement).click();
 
 describe("Poses panel", () => {
   test("lists categories collapsed with counts and packs; opening one shows its poses; one click applies", async () => {
     const { root, calls, facade } = harness();
     await settle();
-    expect(groups(root).map(group => group.querySelector(".pose-tree-label")?.textContent)).toEqual(["Idle", "bv_serene_f"]);
-    expect(groups(root)[1]!.textContent).toContain("Serene Poses");
+    expect(groups(root).map(label)).toEqual(["Idle", "bv_serene_f"]);
+    expect(groups(root)[1]!.querySelector(".tree-secondary")?.textContent).toBe("Serene Poses");
     expect(groups(root).every(group => group.getAttribute("aria-expanded") === "false")).toBe(true);
     expect(root.querySelector(".poses-count")?.textContent).toBe("4 poses in 2 categories");
-    groups(root)[1]!.querySelector(".pose-tree-group-head")!.dispatchEvent(lightEvent("click"));
+    click(groups(root)[1]!);
     await settle();
-    expect(rows(root).map(row => row.querySelector(".pose-tree-label")?.textContent)).toEqual(["01", "02"]);
-    expect(rows(root)[0]!.textContent).toContain("Moves");
+    expect(rows(root).map(label)).toEqual(["01", "02"]);
+    expect(rows(root)[0]!.getAttribute("aria-label")).toContain("Moves");
     // The pose without its clip is greyed with its reason, and a click does nothing.
     expect(rows(root)[1]!.getAttribute("aria-disabled")).toBe("true");
     expect(rows(root)[1]!.getAttribute("title")).toContain("isn't installed");
-    rows(root)[1]!.dispatchEvent(lightEvent("click"));
-    rows(root)[0]!.dispatchEvent(lightEvent("click"));
+    click(rows(root)[1]!);
+    click(rows(root)[0]!);
     await settle();
     expect(calls).toEqual(["hold PhotoModePoses.sera_01"]);
     expect(facade.snapshot().current?.id).toBe("PhotoModePoses.sera_01");
-    // Recent appears first, and the applied row is marked current.
-    expect(groups(root)[0]!.querySelector(".pose-tree-label")?.textContent).toBe("Recent");
-    expect(root.querySelectorAll("li.pose-tree-row.is-current").length).toBeGreaterThan(0);
+    // Recent appears first, and the applied row is marked current there.
+    expect(label(groups(root)[0]!)).toBe("Recent");
+    expect(root.querySelectorAll(".tree-row").filter(row => row.getAttribute("aria-current") === "true").map(poseId)).toEqual(["PhotoModePoses.sera_01"]);
     expect(root.querySelector(".poses-current")?.textContent).toBe("V holds 01.");
+    // The star adds it to Favourites.
+    click(rows(root).find(row => poseId(row) === "PhotoModePoses.sera_02")!.querySelector(".favourite-toggle")!);
+    await settle();
+    expect(facade.snapshot().preferences.favourites.map(item => item.id)).toEqual(["PhotoModePoses.sera_02"]);
   });
 
   test("keyboard: Down from search enters the tree, arrows move, Right opens, Enter applies, F stars", async () => {
     const { root, calls, facade } = harness();
     await settle();
-    const search = root.querySelector("input.poses-search")!;
-    key(search, "ArrowDown");
-    const tree = root.querySelector("ul.pose-tree")!;
-    expect(lightDocument.activeElement?.querySelector(".pose-tree-label")?.textContent).toBe("Idle");
+    const input = root.querySelector("input.search-input")!;
+    key(input, "ArrowDown");
+    const tree = root.querySelector(".poses-tree")!;
+    expect(label(lightDocument.activeElement!)).toBe("Idle");
     key(tree, "ArrowRight");
     await settle();
-    key(tree, "ArrowRight");
-    expect(lightDocument.activeElement?.querySelector(".pose-tree-label")?.textContent).toBe("Standing");
+    key(tree, "ArrowDown");
+    expect(label(lightDocument.activeElement!)).toBe("Standing");
     key(tree, "ArrowDown");
     key(tree, "Enter");
     await settle();
@@ -96,15 +107,16 @@ describe("Poses panel", () => {
   test("search opens every group with a match; the outfit note offers Show them", async () => {
     const { root, facade } = harness({ worn: ["Coat"] });
     await settle();
-    const search = root.querySelector("input.poses-search")! as unknown as { value: string; dispatchEvent(event: unknown): void };
-    search.value = "serene";
-    search.dispatchEvent(lightEvent("input"));
-    expect(rows(root).map(row => row.dataset.pose)).toEqual(["PhotoModePoses.sera_01", "PhotoModePoses.sera_02"]);
+    const input = root.querySelector("input.search-input")! as unknown as { value: string; dispatchEvent(event: unknown): void };
+    input.value = "serene";
+    input.dispatchEvent(lightEvent("input"));
+    await settle(200);
+    expect(rows(root).map(poseId)).toEqual(["PhotoModePoses.sera_01", "PhotoModePoses.sera_02"]);
     expect(root.querySelector(".poses-count")?.textContent).toBe("2 poses match");
     const outfit = root.querySelector(".poses-outfit")!;
     expect(outfit.hidden).toBe(false);
     expect(outfit.textContent).toContain("1 pose is hidden while V wears a coat");
-    outfit.querySelector("button")!.dispatchEvent(lightEvent("click"));
+    click(outfit.querySelector("button")!);
     await settle();
     expect(facade.snapshot().showFiltered).toBe(true);
     expect(outfit.textContent).toContain("Hide them");
@@ -114,7 +126,7 @@ describe("Poses panel", () => {
     const { root, revealed } = harness({ phase: "needs-setup" });
     await settle();
     expect(root.querySelector(".poses-state")?.textContent).toContain("Poses come from your game");
-    root.querySelector(".poses-state")!.querySelector("button")!.dispatchEvent(lightEvent("click"));
+    click(root.querySelector(".poses-state")!.querySelector("button")!);
     expect(revealed).toEqual(["package"]);
   });
 });

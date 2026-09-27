@@ -4,7 +4,7 @@
 
 type Listener = (event: LightEvent) => void;
 export type LightEvent = { type: string; key?: string; target?: LightElement; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean;
-  defaultPrevented?: boolean; preventDefault(): void };
+  defaultPrevented?: boolean; preventDefault(): void; stopPropagation(): void };
 
 export class LightNode {
   parentNode: LightElement | null = null;
@@ -123,7 +123,7 @@ function matches(element: LightElement, selector: string): boolean {
 }
 
 export const lightEvent = (type: string, extra: Partial<LightEvent> = {}): LightEvent => ({ type, ...extra,
-  preventDefault() { this.defaultPrevented = true; } });
+  preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} });
 
 export const lightDocument = {
   body: new LightElement("body"),

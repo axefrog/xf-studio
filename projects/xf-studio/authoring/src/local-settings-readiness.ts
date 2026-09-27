@@ -51,7 +51,7 @@ function frameworkReadiness(check: FrameworkVersionCheck | undefined): Capabilit
 
 /**
  * Advisory host readiness, in plain words a person can act on (UI-83): what is missing or wrong, and the one next step. The
- * reasons are shown as they are in Game & tools, the preview setup and Build's refusals. Operations revalidate paths and
+ * reasons are shown as they are in Settings, the preview setup and Build's refusals. Operations revalidate paths and
  * versions immediately before acting.
  */
 export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatures = { updater: false, installer: false }): LocalReadiness {
