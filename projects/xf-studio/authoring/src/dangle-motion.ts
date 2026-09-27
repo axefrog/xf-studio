@@ -100,6 +100,19 @@ export class DangleRig {
     return substeps;
   }
 
+  /** Every simulated part's state (a seek's checkpoint: `restore` resumes bit for bit). */
+  snapshot(): (Float64Array | null)[] { return [...this.instances.values()].map(instance => instance.solver?.saveState() ?? null); }
+  /** Resume from a `snapshot` of these same parts, and pose their chains from it. */
+  restore(snapshot: readonly (Float64Array | null)[], deltaOf: DeltaOf) {
+    [...this.instances.values()].forEach((instance, i) => {
+      const state = snapshot[i];
+      if (!instance.solver || !state) return;
+      this.inputs(instance, deltaOf);
+      instance.solver.loadState(state);
+      this.outputs(instance, instance.solver.out);
+    });
+  }
+
   /** The input pose: V's joints by name (`G·Δ·G⁻¹·ref`), the rest from their rig parents. */
   private inputs(instance: Instance, deltaOf: DeltaOf) {
     const { spec, pose, base } = instance;
