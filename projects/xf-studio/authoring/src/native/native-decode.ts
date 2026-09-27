@@ -34,6 +34,16 @@ export interface NativeDecodeRequest {
    * document of a kind the reader was not checked on. Absent: any payload (the clothing preset, which only the native reader reads).
    */
   readonly payloads?: readonly string[];
+  /**
+   * Leave out properties whose values the reader doesn't decode (curves) rather than refusing the resource; the answer names them
+   * (`skipped`). For a caller that reads only a few known properties (the idle host's body graph), never for the resolver's documents.
+   */
+  readonly lenient?: boolean;
+  /**
+   * A deeper nesting budget than the decoder's (at most `MAX_REQUEST_DEPTH`): an animation graph's nodes nest one inside the next at their
+   * first reference, hundreds deep, where the resolver's resources stay within the default.
+   */
+  readonly maxDepth?: number;
   /** This request's time budget in a worker, when it is not the decoder's (a much larger resource than the resolver reads). */
   readonly timeoutMs?: number;
   /**
@@ -45,7 +55,7 @@ export interface NativeDecodeRequest {
 
 export type NativeDecodeOutcome =
   | { readonly ok: true; readonly document: unknown; readonly extractedSha256: string; readonly root: string; readonly name: string | null;
-    readonly notes: readonly NativeNote[]; readonly defaulted: readonly DefaultedProperty[] }
+    readonly notes: readonly NativeNote[]; readonly defaulted: readonly DefaultedProperty[]; readonly skipped?: readonly string[] }
   | { readonly ok: false; readonly kind: NativeFailureKind; readonly message: string; readonly errorName?: string; readonly stack?: string;
     /** An `unavailable` answer that will not change this session (the worker failed to start too often; NATIVE-29). */
     readonly lasting?: boolean };
@@ -95,12 +105,17 @@ export function jsonPayloadClass(document: unknown): string | null {
 }
 
 /** Read, check and decode one resource; every failure is returned with its kind. */
+/** The deepest nesting a request may ask for (`maxDepth`). */
+export const MAX_REQUEST_DEPTH = 4096;
+
 export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, request: NativeDecodeRequest, options: NativeDecodeOptions,
   depotHash: (path: string) => string): NativeDecodeOutcome {
   try {
     const bytes = pool.read(request.archivePath, request.hash);
     if (!bytes) return { ok: false, kind: "not-indexed", message: "The archive does not list the resource." };
-    const session = new DecodeSession(options.limits ?? DEFAULT_LIMITS);
+    const limits = options.limits ?? DEFAULT_LIMITS;
+    const session = new DecodeSession(request.maxDepth ? { ...limits, maxDepth: Math.min(Math.max(limits.maxDepth, request.maxDepth), MAX_REQUEST_DEPTH) } : limits);
+    session.skipUndecodable = !!request.lenient;
     const root = new Cr2wFile(bytes, session).exports[0]?.className;
     if (!root || !(options.roots.has(root) || request.roots?.includes(root))) return { ok: false, kind: "not-verified", message: `Root class ${root ?? "(none)"} is not verified.` };
     const document = readResourceJson(bytes, decompress, { buffers: "trim", header: { XfsNativeReader: options.identity } }, session);
@@ -109,7 +124,8 @@ export function decodeFromPool(pool: NativeArchivePool, decompress: Decompress, 
       if (!payload || !request.payloads.includes(payload)) return { ok: false, kind: "not-verified", message: `JsonResource payload ${payload ?? "(none)"} is not verified.` };
     }
     return { ok: true, document, extractedSha256: createHash("sha256").update(bytes).digest("hex"), root,
-      name: request.needName ? nameOf(pool.get(request.archivePath), request.hash, depotHash) : null, notes: session.notes, defaulted: session.defaultedProperties };
+      name: request.needName ? nameOf(pool.get(request.archivePath), request.hash, depotHash) : null, notes: session.notes, defaulted: session.defaultedProperties,
+      ...(session.skipped.size ? { skipped: [...session.skipped] } : {}) };
   } catch (error) {
     const kind = classifyNativeFailure(error);
     const failure = error as { name?: unknown; message?: unknown; stack?: unknown } | null;

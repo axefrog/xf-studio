@@ -295,6 +295,8 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   "detail-limits", "head-load-error", "scene-evidence",
   // The rig's motion (the dangle adapter included) and facial shapes.
   "idle-animation", "idle-catalogue", "game-blink", "preview-motion", "face-morphs", "dangle-motion",
+  // The host's idles as the page reads them: the state record, rests and ancestry (pure), and the endpoint's path.
+  "idle-body", "idle-endpoint",
   // A photo-mode pose as a body clip for the idle's rig, and the sampled pose record it reads (types only).
   "pose-clip", "pose-sample",
   // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values and lighting setups, hair profile

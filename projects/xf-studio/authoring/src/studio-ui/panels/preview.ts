@@ -374,7 +374,8 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     rt.dispatch({ kind: "motion.setContributions", body: body ?? motion.idleBody, face: face ?? motion.idleFace });
   };
   const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
-  const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value),
+  // Its reason (facial movement not in this version) is information, so it keeps the muted tone on its line.
+  const face = new Toggle({ label: "Facial movement", quietReason: true, onChange: value => setContributions(undefined, value),
     help: "Turn off either to hold that part still. The idle keeps time, so it carries on smoothly when you turn it back on." });
   // The blink's reasons (the idle blinks on its own, still loading) are information, so they keep the muted tone.
   const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, reserveNote: true, quietReason: true,
@@ -408,7 +409,10 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       source.update(motion?.pose ? POSE : motion?.idle ? motion.idleClip : STILL, undefined, unavailable.disabled ? { disabled: true, reason: unavailable.reason }
         : { note: motion?.idleLoading ? "Loading that idle; the previous one plays until it's ready."
           : motion?.pose && motion.poseLoading ? `Loading ${motion.pose.label}; V keeps her current pose until it's ready.` : "" });
-      head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
+      // Without a face idle (not in this version: DESK-02) the face toggle is off and says why; the body still moves.
+      const faceMissing = !!motion?.available && !motion.faceAvailable;
+      head.update(motion?.idleBody ?? true, unavailable);
+      face.update(faceMissing ? false : motion?.idleFace ?? true, faceMissing ? { disabled: true, reason: motion!.faceError, note: motion!.faceError } : unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);

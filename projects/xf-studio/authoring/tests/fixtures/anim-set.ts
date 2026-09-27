@@ -38,9 +38,45 @@ function keyBlock(duration: number) {
   return { bytes: w.done(), counts: { compressed: 2, raw: 2, const: 3, track: 2, constTrack: 1 } };
 }
 
+/**
+ * A SIMD key block (three frames over one second, two joints, rotations quantised to `bits`, or float32 when 0), written from the layout in
+ * anim-set.ts: joint 0 holds identity and a copied translation (0, 0, 5); joint 1 turns from a quarter turn about Z to identity and moves
+ * along X (0, 0.5, 1) through an evaluated lane (the other three lanes are padding, −1); scales constant; track 0 goes 0 → 1, track 1 holds 0.25.
+ */
+export const SIMD_FRAMES = 3;
+export function simdBlock(bits: number) {
+  const frames = SIMD_FRAMES, j4 = 4, w = new Bytes();
+  const turn = (f: number) => { const angle = Math.PI / 4 * (1 - f / (frames - 1)); return [0, 0, Math.sin(angle), Math.cos(angle)]; };
+  const rotations = (f: number) => [[0, 0, 0, 1], turn(f), [0, 0, 0, 1], [0, 0, 0, 1]];
+  if (bits > 0) {
+    const values: number[] = [];
+    for (let f = 0; f < frames; f++) {
+      const stored = rotations(f).map(q => storedRotation(q).xyz);
+      for (let axis = 0; axis < 3; axis++) for (let lane = 0; lane < j4; lane++) values.push(stored[lane]![axis]!);
+    }
+    while (values.length % 4) values.push(0);
+    const mask = 2 ** bits - 1, packed = new Uint8Array(Math.ceil(values.length * bits / 8 / 16) * 16);
+    values.forEach((value, i) => {
+      const code = Math.round((value + 1) / 2 * mask);
+      for (let b = 0; b < bits; b++) if (code & (1 << b)) { const at = i * bits + b; packed[at >> 3] |= 1 << (at & 7); }
+    });
+    w.bytes(packed);
+  } else {
+    for (let f = 0; f < frames; f++) { const all = rotations(f); for (let axis = 0; axis < 4; axis++) for (let lane = 0; lane < j4; lane++) w.f32(all[lane]![axis]!); }
+  }
+  // Evaluated translations: one group of four lanes per frame, joint 1 in lane 0.
+  for (let f = 0; f < frames; f++) for (let axis = 0; axis < 3; axis++) for (let lane = 0; lane < 4; lane++) w.f32(lane === 0 && axis === 0 ? f / (frames - 1) : 0);
+  w.f32(1).f32(1).f32(1).f32(0);
+  for (let f = 0; f < frames; f++) w.f32(f / (frames - 1)).f32(0.25).f32(0).f32(0);
+  w.f32(0).f32(0).f32(5);
+  w.i16(0);
+  w.i16(1).i16(-1).i16(-1).i16(-1);
+  return w.done();
+}
+
 /** A set (depot rig path `rigPath`) with a clip keyed in a data chunk, a second clip keyed inline, a keyless clip, a SIMD clip and a record the generic reader refuses. */
 export function animSet(options: { chunkIndex?: number; counts?: Partial<ReturnType<typeof keyBlock>["counts"]>; channel3?: boolean; names?: readonly string[];
-  rigPath?: string } = {}) {
+  rigPath?: string; simdBits?: number; simdBlock?: Uint8Array } = {}) {
   const duration = 1;
   const block = keyBlock(duration);
   const counts = { ...block.counts, ...options.counts };
@@ -58,7 +94,11 @@ export function animSet(options: { chunkIndex?: number; counts?: Partial<ReturnT
   const bufferB = f.export("animAnimationBufferCompressed", [...numbers(block.counts, 2),
     prop("inplaceCompressedBuffer", "DataBuffer", w => { w.u32(block.bytes.length).bytes(block.bytes); })]);
   const bufferC = f.export("animAnimationBufferCompressed", [prop("duration", "Float", v.f32(0.5)), prop("numFrames", "Uint32", v.u32(2))]);
-  const bufferD = f.export("animAnimationBufferSimd", []);
+  const simdBits = options.simdBits ?? 16, simdBytes = options.simdBlock ?? simdBlock(simdBits);
+  const bufferD = f.export("animAnimationBufferSimd", [prop("duration", "Float", v.f32(duration)), prop("numFrames", "Uint32", v.u32(SIMD_FRAMES)),
+    prop("numJoints", "Uint16", v.u16(2)), prop("numTracks", "Uint16", v.u16(2)), prop("numTranslationsToCopy", "Uint16", v.u16(1)),
+    prop("numTranslationsToEvalAlignedToSimd", "Uint16", v.u16(4)), prop("quantizationBits", "Uint16", v.u16(simdBits)),
+    prop("isScaleConstant", "Bool", v.bool(true)), prop("inplaceCompressedBuffer", "DataBuffer", w => { w.u32(simdBytes.length).bytes(simdBytes); })]);
   const animation = (name: string, buffer: number, extra: ReturnType<typeof prop>[] = []) => f.export("animAnimation",
     [prop("name", "CName", v.cname(name)), prop("duration", "Float", v.f32(duration)), prop("animBuffer", "handle:animIAnimationBuffer", v.handle(buffer)), ...extra]);
   // Curve data the generic reader refuses: skipped, since the decoder reads only the records it needs.
@@ -98,11 +138,15 @@ function rebuildWithRootFirst(f: Cr2wBuilder): Uint8Array {
   return g.build();
 }
 
-export function rig(names: readonly string[] = ["Root", "Trajectory", "Hips"]) {
+export function rig(names: readonly string[] = ["Root", "Trajectory", "Hips"], options: { aPose?: boolean } = {}) {
   const f = new Cr2wBuilder();
   const bones = [...names], parents = bones.map((_, i) => i === 0 ? -1 : 0);
+  // The A pose: each bone raised by 10 cm more than its reference, turned a quarter about Z (the scale left out: its default, 1).
+  const aPose = options.aPose ? [prop("aPoseLS", "array:QsTransform", v.array(bones.map((_, i) => v.struct([
+    prop("Translation", "Vector4", v.struct([prop("Z", "Float", v.f32(i + 0.1))])),
+    prop("Rotation", "Quaternion", v.struct([prop("k", "Float", v.f32(Math.SQRT1_2)), prop("r", "Float", v.f32(Math.SQRT1_2))]))]))))] : [];
   f.export("animRig", [prop("boneNames", "array:CName", v.array(bones.map(b => v.cname(b)))), prop("trackNames", "array:CName", v.array(["a", "b"].map(t => v.cname(t)))),
-    prop("referenceTracks", "array:Float", v.array([v.f32(1), v.f32(0)]))], w => {
+    prop("referenceTracks", "array:Float", v.array([v.f32(1), v.f32(0)])), ...aPose], w => {
     for (const p of parents) w.i16(p);
     bones.forEach((_, i) => { w.f32(0).f32(0).f32(i).f32(0); w.f32(0).f32(0).f32(0).f32(1); w.f32(1).f32(1).f32(1).f32(0); });
   });

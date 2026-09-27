@@ -30,7 +30,7 @@ import { NativeMalformedError, NativeUnsupportedError } from "./native-errors";
 import { Cursor } from "./red-values";
 
 /** Version of the decoder's output; part of the clip cache identity. */
-export const ANIM_DECODER_VERSION = 2;
+export const ANIM_DECODER_VERSION = 3;
 
 type Vec3 = readonly [number, number, number];
 type Quat = readonly [number, number, number, number];
@@ -41,6 +41,11 @@ export interface AnimRig {
   readonly parents: readonly number[];
   /** Local reference transform per bone. */
   readonly reference: readonly RigTransform[];
+  /**
+   * The rig's A pose, local to each parent (`aPoseLS`), when it holds one per bone: the pose the body meshes are bound in and the rest
+   * WolvenKit's clip export gives the skeleton's nodes [resource: `woman_base.rig`; offline: the idle export's nodes].
+   */
+  readonly aPose?: readonly RigTransform[];
   readonly tracks: readonly string[];
   readonly referenceTracks: readonly number[];
 }
@@ -55,7 +60,10 @@ export interface AnimClipInfo {
   readonly buffer: "compressed" | "simd" | string | null;
   readonly animationType: string;
   readonly motionExtraction: boolean;
-  /** Keys that change over the clip (compressed and raw), as the buffer counts them: 0 for a clip whose every channel is constant. */
+  /**
+   * Keys that change over the clip (compressed and raw), as the buffer counts them: 0 for a clip whose every channel is constant. A SIMD
+   * clip counts every frame of every joint (frames × joints; 0 for a single frame).
+   */
   readonly animatedKeys: number;
 }
 export interface AnimSetIndex {
@@ -69,8 +77,8 @@ export interface JointKey {
   readonly channel: KeyChannel;
   readonly time: number;
   readonly value: readonly number[];
-  /** How the file stores it: quantised to 16 bits (`compressed`), or float32 (`raw`, `const`). */
-  readonly stored: "compressed" | "raw" | "const";
+  /** How the file stores it: quantised to 16 bits (`compressed`), float32 (`raw`, `const`), or a SIMD clip's frame (`simd`). */
+  readonly stored: "compressed" | "raw" | "const" | "simd";
 }
 export interface TrackKey { readonly track: number; readonly time: number; readonly value: number }
 export interface AnimClip extends AnimClipInfo {
@@ -199,6 +207,30 @@ class Records {
     if (!entry) throw new Cr2wError(`CR2W import ${index - 1} does not exist.`);
     return entry.path.replace(/^['"/\\ ]+|['"/\\ ]+$/g, "").toLowerCase().replace(/[/\\]+/g, "\\") || null;
   }
+  /**
+   * An `array:QsTransform` (each a struct of `Translation` and `Scale` Vector4s, `X`…`W`, and a `Rotation` Quaternion, `i` `j` `k` `r`; a
+   * left-out component is its default, 0, or 1 for the rotation's `r` and the scale), or none when absent.
+   */
+  transforms(fields: Map<string, Field>, name: string): RigTransform[] {
+    const field = fields.get(name);
+    if (!field) return [];
+    if (field.type !== "array:QsTransform") throw new NativeUnsupportedError(`${name} is stored as ${field.type}, not a transform list.`);
+    const c = field.cursor.span(field.cursor.pos, field.cursor.end);
+    const count = c.u32();
+    if (count > c.remaining) throw new NativeMalformedError(`${name}: ${count} transforms cannot fit.`);
+    const out: RigTransform[] = [];
+    for (let i = 0; i < count; i++) {
+      const transform = this.body(c, name);
+      const read = (key: string, names: readonly string[], fallbacks: readonly number[]) => {
+        const inner = this.struct(transform, key);
+        return names.map((component, k) => inner ? this.float(inner, component, fallbacks[k]) : fallbacks[k]!);
+      };
+      const t = read("Translation", ["X", "Y", "Z"], [0, 0, 0]), r = read("Rotation", ["i", "j", "k", "r"], [0, 0, 0, 1]);
+      const s = read("Scale", ["X", "Y", "Z"], [1, 1, 1]);
+      out.push({ translation: [t[0]!, t[1]!, t[2]!], rotation: [r[0]!, r[1]!, r[2]!, r[3]!], scale: [s[0]!, s[1]!, s[2]!] });
+    }
+    return out;
+  }
   /** A nested struct value's records. */
   struct(fields: Map<string, Field>, name: string): Map<string, Field> | null {
     const field = fields.get(name);
@@ -256,7 +288,9 @@ export function readAnimRig(bytes: Uint8Array, session = new DecodeSession()): A
     return { translation: t, rotation: r, scale: s };
   });
   for (const [i, parent] of parents.entries()) if (parent >= bones.length || parent < -1 || parent === i) throw new NativeMalformedError(`Bone ${i} names parent ${parent}.`);
-  return { bones, parents, reference, tracks: records.names(root.fields, "trackNames"), referenceTracks: records.floats(root.fields, "referenceTracks") };
+  const aPose = records.transforms(root.fields, "aPoseLS");
+  return { bones, parents, reference, ...(aPose.length === bones.length ? { aPose } : {}), tracks: records.names(root.fields, "trackNames"),
+    referenceTracks: records.floats(root.fields, "referenceTracks") };
 }
 
 interface ClipEntry { info: AnimClipInfo; buffer: number }
@@ -285,7 +319,9 @@ function clipEntries(records: Records): { rig: string | null; entries: ClipEntry
       buffer: kind,
       animationType: records.cname(animation.fields, "animationType", "Normal"),
       motionExtraction: records.handle(animation.fields, "motionExtraction") >= 0,
-      animatedKeys: b ? records.uint(b, "numAnimKeys") + records.uint(b, "numAnimKeysRaw") : 0,
+      // A SIMD clip stores every frame of every joint; whether any of them changes is known only once decoded.
+      animatedKeys: !b ? 0 : kind === "simd" ? (records.uint(b, "numFrames") > 1 ? records.uint(b, "numFrames") * records.uint(b, "numJoints") : 0)
+        : records.uint(b, "numAnimKeys") + records.uint(b, "numAnimKeysRaw"),
     } });
   }
   return { rig: records.reference(root.fields, "rig"), entries, chunks: records.chunkBuffers(root.fields, "animationDataChunks") };
@@ -303,19 +339,12 @@ function rotation(x: number, y: number, z: number, negative: boolean): Quat {
   return [x * scale, y * scale, z * scale, negative ? -w : w];
 }
 
-/** Decode the first clip named `name` in a set (null when the set has none). Throws `NativeUnsupportedError` for a non-compressed buffer. */
-export function decodeAnimClip(bytes: Uint8Array, name: string, decompress: Decompress, session = new DecodeSession()): AnimClip | null {
-  const records = new Records(bytes, session);
-  const { entries, chunks } = clipEntries(records);
-  const entry = entries.find(candidate => candidate.info.name === name);
-  if (!entry) return null;
-  if (entry.info.buffer !== "compressed") throw new NativeUnsupportedError(`${name}: a ${entry.info.buffer ?? "missing"} animation buffer is not decoded.`);
-  const b = records.export(entry.buffer).fields;
-  const counts = { compressed: records.uint(b, "numAnimKeys"), raw: records.uint(b, "numAnimKeysRaw"), const: records.uint(b, "numConstAnimKeys"),
-    track: records.uint(b, "numTrackKeys"), constTrack: records.uint(b, "numConstTrackKeys") };
-  const total = counts.compressed + counts.raw + counts.const + counts.track + counts.constTrack;
-  if (total > MAX_KEYS) throw new NativeMalformedError(`${name} declares ${total} keys.`);
-  const need = counts.compressed * 10 + counts.raw * 16 + counts.const * 16 + counts.track * 8 + counts.constTrack * 8;
+/**
+ * The clip's key block: inline (possibly a `KARK` Oodle stream), deferred, or in the set's data chunk at `dataAddress`. `need` is the byte
+ * count the header declares; a clip that declares none may have no block at all.
+ */
+function keyBlock(records: Records, b: Map<string, Field>, name: string, chunks: readonly number[], decompress: Decompress, session: DecodeSession,
+  need: number): Uint8Array {
   let block = records.buffer(b, "inplaceCompressedBuffer", decompress);
   if (block && block.length >= KARK_HEADER_SIZE) {
     const view = new DataView(block.buffer, block.byteOffset, block.byteLength);
@@ -327,17 +356,34 @@ export function decodeAnimClip(bytes: Uint8Array, name: string, decompress: Deco
     const chunk = address ? records.uint(address, "unkIndex", NONE) : NONE, offset = address ? records.uint(address, "fsetInBytes", NONE) : NONE,
       size = address ? records.uint(address, "zeInBytes", NONE) : NONE;
     if (chunk === NONE || offset === NONE || size === NONE) {
-      if (need === 0) block = new Uint8Array(0);
-      else throw new NativeMalformedError(`${name} has keys but no key data.`);
-    } else {
-      const bufferIndex = chunks[chunk];
-      if (bufferIndex === undefined || bufferIndex < 0) throw new NativeMalformedError(`${name} names data chunk ${chunk}, which the set lacks.`);
-      const data = records.file.bufferBytes(bufferIndex, decompress);
-      if (offset + size > data.length) throw new NativeMalformedError(`${name}'s keys lie outside data chunk ${chunk}.`);
-      block = data.subarray(offset, offset + size);
+      if (need === 0) return new Uint8Array(0);
+      throw new NativeMalformedError(`${name} has keys but no key data.`);
     }
+    const bufferIndex = chunks[chunk];
+    if (bufferIndex === undefined || bufferIndex < 0) throw new NativeMalformedError(`${name} names data chunk ${chunk}, which the set lacks.`);
+    const data = records.file.bufferBytes(bufferIndex, decompress);
+    if (offset + size > data.length) throw new NativeMalformedError(`${name}'s keys lie outside data chunk ${chunk}.`);
+    block = data.subarray(offset, offset + size);
   }
   if (need > block.length) throw new NativeMalformedError(`${name} declares ${need} bytes of keys in a ${block.length}-byte block.`);
+  return block;
+}
+
+/** Decode the first clip named `name` in a set (null when the set has none). Throws `NativeUnsupportedError` for another buffer class. */
+export function decodeAnimClip(bytes: Uint8Array, name: string, decompress: Decompress, session = new DecodeSession()): AnimClip | null {
+  const records = new Records(bytes, session);
+  const { entries, chunks } = clipEntries(records);
+  const entry = entries.find(candidate => candidate.info.name === name);
+  if (!entry) return null;
+  if (entry.info.buffer === "simd") return decodeSimdClip(records, entry, chunks, decompress, session);
+  if (entry.info.buffer !== "compressed") throw new NativeUnsupportedError(`${name}: a ${entry.info.buffer ?? "missing"} animation buffer is not decoded.`);
+  const b = records.export(entry.buffer).fields;
+  const counts = { compressed: records.uint(b, "numAnimKeys"), raw: records.uint(b, "numAnimKeysRaw"), const: records.uint(b, "numConstAnimKeys"),
+    track: records.uint(b, "numTrackKeys"), constTrack: records.uint(b, "numConstTrackKeys") };
+  const total = counts.compressed + counts.raw + counts.const + counts.track + counts.constTrack;
+  if (total > MAX_KEYS) throw new NativeMalformedError(`${name} declares ${total} keys.`);
+  const need = counts.compressed * 10 + counts.raw * 16 + counts.const * 16 + counts.track * 8 + counts.constTrack * 8;
+  const block = keyBlock(records, b, name, chunks, decompress, session, need);
   const c = new Cursor(block);
   const duration = entry.info.duration;
   const keys: JointKey[] = [], constKeys: JointKey[] = [], trackKeys: TrackKey[] = [], constTrackKeys: TrackKey[] = [];
@@ -364,6 +410,126 @@ export function decodeAnimClip(bytes: Uint8Array, name: string, decompress: Deco
   return { ...entry.info, keys, constKeys, trackKeys, constTrackKeys, counts };
 }
 
+const ceil = (value: number, step: number) => Math.ceil(value / step) * step;
+/**
+ * A SIMD clip (`animAnimationBufferSimd`): every frame of every joint, laid out for four-wide vector evaluation. Written from the layout
+ * below [resource: `ui_female.anims` of game 2.31, whose body idles are SIMD; source: the order of the sections in WolvenKit's SIMD reader
+ * (`AnimSIMD.cs` at 11720772), read as documentation only]. With F frames, J = numJoints − numExtraJoints joints and J4 that rounded up to a
+ * multiple of four, E = numTranslationsToEvalAlignedToSimd, C = numTranslationsToCopy and T = numTracks, the block holds, in order:
+ *
+ * 1. **Rotations**, per frame, per group of four joints: the four x, the four y, the four z (and, unquantised, the four w). Quantised
+ *    (`quantizationBits` q > 0): F·J4·3 values, rounded up to a multiple of four, packed q bits each from the least significant bit, value v
+ *    meaning v / (2^q − 1) · 2 − 1, the section padded to 16 bytes; w is rebuilt as the compressed format's (xyz · sqrt(2 − d), w = 1 − d, so
+ *    never negative), then normalised. Unquantised: float32.
+ * 2. **Evaluated translations**: F·E·3 float32, per frame per group of four: x×4, y×4, z×4.
+ * 3. **Scales**: one float32 (x, y, z, padding) for every joint and frame when `isScaleConstant`, else F·J4·3 float32 grouped as rotations.
+ * 4. **Float tracks** (T > 0): one float32 for every track and frame when `isTrackConstant`, else per frame T float32 padded to a multiple
+ *    of four.
+ * 5. **Copied translations**: C × three float32, each one joint's on every frame.
+ * 6. **Joint indices**: C int16 for the copied translations, then E int16 for the evaluated ones (−1 marks a padding lane).
+ *
+ * Frame i is at i · duration / (F − 1). A channel with the same value on every frame becomes a constant key, the others one key per frame
+ * (`stored: "simd"`), so the sampler interpolates between frames as between compressed keys. A joint that neither translation list names
+ * keeps the rig's reference translation when sampled [hypothesis: the engine starts the evaluation from the reference pose].
+ */
+function decodeSimdClip(records: Records, entry: ClipEntry, chunks: readonly number[], decompress: Decompress, session: DecodeSession): AnimClip {
+  const name = entry.info.name, b = records.export(entry.buffer).fields;
+  const frames = records.uint(b, "numFrames"), joints = records.uint(b, "numJoints") - records.uint(b, "numExtraJoints");
+  const tracks = records.uint(b, "numTracks"), evaluated = records.uint(b, "numTranslationsToEvalAlignedToSimd"), copied = records.uint(b, "numTranslationsToCopy");
+  const q = records.uint(b, "quantizationBits"), scaleConstant = records.uint(b, "isScaleConstant") !== 0, trackConstant = records.uint(b, "isTrackConstant") !== 0;
+  if (joints < 0) throw new NativeMalformedError(`${name} has more extra joints than joints.`);
+  if (q > 16) throw new NativeMalformedError(`${name} quantises rotations to ${q} bits.`);
+  if (evaluated % 4) throw new NativeMalformedError(`${name} evaluates ${evaluated} translations, not a multiple of four.`);
+  const j4 = ceil(joints, 4), values = frames * j4 * 3;
+  if (frames * (j4 + evaluated + copied + tracks) > MAX_KEYS) throw new NativeMalformedError(`${name} declares ${frames} frames of ${joints} joints.`);
+  const rotationBytes = q > 0 ? ceil(ceil(values, 4) * q / 8, 16) : frames * j4 * 16;
+  const trackBytes = tracks === 0 ? 0 : trackConstant ? 4 : frames * ceil(tracks, 4) * 4;
+  const need = rotationBytes + frames * evaluated * 12 + (scaleConstant ? 16 : values * 4) + trackBytes + copied * 14 + evaluated * 2;
+  const block = keyBlock(records, b, name, chunks, decompress, session, need);
+  const c = new Cursor(block);
+  const duration = entry.info.duration, step = frames > 1 ? duration / (frames - 1) : 0;
+  // Every frame's value per joint channel (flat), folded into a constant key at the end when it never changes.
+  const series = new Map<string, { joint: number; channel: KeyChannel; width: number; values: Float64Array }>();
+  const lane = (joint: number, channel: KeyChannel, width: number) => {
+    const id = `${joint}|${channel}`;
+    let known = series.get(id);
+    if (!known) { known = { joint, channel, width, values: new Float64Array(frames * width) }; series.set(id, known); }
+    return known.values;
+  };
+  // 1. Rotations.
+  if (q > 0) {
+    const mask = 2 ** q - 1;
+    const unpack = (index: number) => {
+      const bit = index * q, at = bit >> 3;
+      let word = 0;
+      for (let k = 0; k < 3 && at + k < rotationBytes; k++) word |= block[at + k]! << (8 * k);
+      return ((word >>> (bit & 7)) & mask) / mask * 2 - 1;
+    };
+    for (let f = 0; f < frames; f++) for (let g = 0; g < j4; g += 4) for (let l = 0; l < 4 && g + l < joints; l++) {
+      const base = (f * j4 + g) * 3, r = rotation(unpack(base + l), unpack(base + 4 + l), unpack(base + 8 + l), false), n = Math.hypot(...r) || 1;
+      lane(g + l, "rotation", 4).set([r[0] / n, r[1] / n, r[2] / n, r[3] / n], f * 4);
+    }
+    c.pos = rotationBytes;
+  } else {
+    for (let f = 0; f < frames; f++) for (let g = 0; g < j4; g += 4) {
+      const group = Array.from({ length: 16 }, () => c.f32());
+      for (let l = 0; l < 4 && g + l < joints; l++) lane(g + l, "rotation", 4).set([group[l]!, group[4 + l]!, group[8 + l]!, group[12 + l]!], f * 4);
+    }
+  }
+  // 2. Evaluated translations (their joints are named at the end of the block).
+  const evaluatedValues = Array.from({ length: frames * evaluated * 3 }, () => c.f32());
+  // 3. Scales.
+  if (scaleConstant) {
+    const s = [c.f32(), c.f32(), c.f32()]; c.f32();
+    for (let joint = 0; joint < joints; joint++) { const out = lane(joint, "scale", 3); for (let f = 0; f < frames; f++) out.set(s, f * 3); }
+  } else {
+    for (let f = 0; f < frames; f++) for (let g = 0; g < j4; g += 4) {
+      const group = Array.from({ length: 12 }, () => c.f32());
+      for (let l = 0; l < 4 && g + l < joints; l++) lane(g + l, "scale", 3).set([group[l]!, group[4 + l]!, group[8 + l]!], f * 3);
+    }
+  }
+  // 4. Float tracks.
+  const trackKeys: TrackKey[] = [], constTrackKeys: TrackKey[] = [];
+  if (tracks > 0 && trackConstant) {
+    const value = c.f32();
+    for (let track = 0; track < tracks; track++) constTrackKeys.push({ track, time: 0, value });
+  } else if (tracks > 0) {
+    const perTrack = Array.from({ length: tracks }, () => new Float64Array(frames));
+    for (let f = 0; f < frames; f++) {
+      for (let track = 0; track < tracks; track++) perTrack[track]![f] = c.f32();
+      c.pos += (ceil(tracks, 4) - tracks) * 4;
+    }
+    perTrack.forEach((all, track) => {
+      if (all.every(value => value === all[0])) constTrackKeys.push({ track, time: 0, value: all[0] ?? 0 });
+      else all.forEach((value, f) => trackKeys.push({ track, time: f * step, value }));
+    });
+  }
+  // 5 and 6. Copied translations, then both joint lists.
+  const copiedValues = Array.from({ length: copied * 3 }, () => c.f32());
+  const copiedJoints = Array.from({ length: copied }, () => c.i16()), evaluatedJoints = Array.from({ length: evaluated }, () => c.i16());
+  copiedJoints.forEach((joint, i) => {
+    if (joint < 0 || joint >= joints) return;
+    const out = lane(joint, "position", 3), value = copiedValues.slice(i * 3, i * 3 + 3);
+    for (let f = 0; f < frames; f++) out.set(value, f * 3);
+  });
+  for (let f = 0; f < frames; f++) for (let g = 0; g < evaluated; g += 4) for (let l = 0; l < 4; l++) {
+    const joint = evaluatedJoints[g + l]!;
+    if (joint < 0 || joint >= joints) continue;
+    const base = (f * evaluated + g) * 3;
+    lane(joint, "position", 3).set([evaluatedValues[base + l]!, evaluatedValues[base + 4 + l]!, evaluatedValues[base + 8 + l]!], f * 3);
+  }
+  const keys: JointKey[] = [], constKeys: JointKey[] = [];
+  const ordered = [...series.values()].sort((x, y) => x.joint - y.joint || CHANNELS.indexOf(x.channel) - CHANNELS.indexOf(y.channel));
+  for (const { joint, channel, width, values: all } of ordered) {
+    let constant = true;
+    for (let i = width; i < all.length && constant; i++) constant = all[i] === all[i % width];
+    if (constant) { constKeys.push({ joint, channel, time: 0, value: Array.from(all.subarray(0, width)), stored: "simd" }); continue; }
+    for (let f = 0; f < frames; f++) keys.push({ joint, channel, time: f * step, value: Array.from(all.subarray(f * width, f * width + width)), stored: "simd" });
+  }
+  return { ...entry.info, joints, tracks, keys, constKeys, trackKeys, constTrackKeys,
+    counts: { compressed: 0, raw: keys.length, const: constKeys.length, track: trackKeys.length, constTrack: constTrackKeys.length } };
+}
+
 export interface SampledJoint { translation?: Vec3; rotation?: Quat; scale?: Vec3 }
 export interface ClipSample {
   /** Channels the clip keys, by joint index; a joint or channel it doesn't key keeps the rig's reference. */
@@ -387,38 +553,56 @@ function slerp(a: Quat, b: Quat, t: number): Quat {
  * shortest-path slerp), a constant key otherwise; float tracks likewise. An animated key of a channel wins over a constant key of it.
  */
 export function sampleClip(clip: AnimClip, time: number): ClipSample {
-  const t = Math.min(Math.max(time, 0), clip.duration);
+  return clipSampler(clip)(time);
+}
+
+/** A binary search: the first index whose key time is at or past `t` (the list's length when none is). */
+function firstAtOrAfter(list: readonly { time: number }[], t: number): number {
+  let low = 0, high = list.length;
+  while (low < high) { const mid = (low + high) >> 1; if (list[mid]!.time < t) low = mid + 1; else high = mid; }
+  return low;
+}
+
+/**
+ * `sampleClip` for many times of one clip: the keys are grouped and sorted once (a SIMD idle has tens of thousands of frame keys, and
+ * sampling every frame through `sampleClip` would regroup them all each time).
+ */
+export function clipSampler(clip: AnimClip): (time: number) => ClipSample {
   const groups = new Map<string, JointKey[]>();
   for (const key of clip.keys) { const id = `${key.joint}|${key.channel}`; const list = groups.get(id); if (list) list.push(key); else groups.set(id, [key]); }
-  const joints = new Map<number, SampledJoint>();
-  const put = (joint: number, channel: KeyChannel, value: readonly number[]) => {
-    const entry = joints.get(joint) ?? {};
-    if (channel === "rotation") entry.rotation = value as unknown as Quat; else if (channel === "position") entry.translation = value as unknown as Vec3; else entry.scale = value as unknown as Vec3;
-    joints.set(joint, entry);
-  };
-  for (const key of clip.constKeys) if (!groups.has(`${key.joint}|${key.channel}`)) put(key.joint, key.channel, key.value);
-  for (const list of groups.values()) {
-    list.sort((a, b) => a.time - b.time);
-    const { joint, channel } = list[0]!;
-    let next = list.findIndex(key => key.time >= t);
-    if (next < 0) next = list.length - 1;
-    const after = list[next]!, before = list[Math.max(0, next - 1)]!;
-    if (after === before || after.time <= before.time || t <= before.time) { put(joint, channel, t <= before.time ? before.value : after.value); continue; }
-    const f = (t - before.time) / (after.time - before.time);
-    put(joint, channel, channel === "rotation" ? slerp(before.value as unknown as Quat, after.value as unknown as Quat, f)
-      : before.value.map((v, i) => v + (after.value[i]! - v) * f));
-  }
-  const tracks = new Map<number, number>();
-  for (const key of clip.constTrackKeys) tracks.set(key.track, key.value);
+  for (const list of groups.values()) list.sort((a, b) => a.time - b.time);
+  const constants = clip.constKeys.filter(key => !groups.has(`${key.joint}|${key.channel}`));
   const trackGroups = new Map<number, TrackKey[]>();
   for (const key of clip.trackKeys) { const list = trackGroups.get(key.track); if (list) list.push(key); else trackGroups.set(key.track, [key]); }
-  for (const [track, list] of trackGroups) {
-    list.sort((a, b) => a.time - b.time);
-    let next = list.findIndex(key => key.time >= t);
-    if (next < 0) next = list.length - 1;
-    const after = list[next]!, before = list[Math.max(0, next - 1)]!;
-    tracks.set(track, after === before || after.time <= before.time || t <= before.time ? (t <= before.time ? before.value : after.value)
-      : before.value + (after.value - before.value) * (t - before.time) / (after.time - before.time));
-  }
-  return { joints, tracks };
+  for (const list of trackGroups.values()) list.sort((a, b) => a.time - b.time);
+  return time => {
+    const t = Math.min(Math.max(time, 0), clip.duration);
+    const joints = new Map<number, SampledJoint>();
+    const put = (joint: number, channel: KeyChannel, value: readonly number[]) => {
+      const entry = joints.get(joint) ?? {};
+      if (channel === "rotation") entry.rotation = value as unknown as Quat; else if (channel === "position") entry.translation = value as unknown as Vec3; else entry.scale = value as unknown as Vec3;
+      joints.set(joint, entry);
+    };
+    for (const key of constants) put(key.joint, key.channel, key.value);
+    for (const list of groups.values()) {
+      const { joint, channel } = list[0]!;
+      let next = firstAtOrAfter(list, t);
+      if (next >= list.length) next = list.length - 1;
+      const after = list[next]!, before = list[Math.max(0, next - 1)]!;
+      if (after === before || after.time <= before.time || t <= before.time) { put(joint, channel, t <= before.time ? before.value : after.value); continue; }
+      const f = (t - before.time) / (after.time - before.time);
+      put(joint, channel, channel === "rotation" ? slerp(before.value as unknown as Quat, after.value as unknown as Quat, f)
+        : before.value.map((v, i) => v + (after.value[i]! - v) * f));
+    }
+    const tracks = new Map<number, number>();
+    for (const key of clip.constTrackKeys) tracks.set(key.track, key.value);
+    for (const [track, list] of trackGroups) {
+      let next = firstAtOrAfter(list, t);
+      if (next >= list.length) next = list.length - 1;
+      const after = list[next]!, before = list[Math.max(0, next - 1)]!;
+      tracks.set(track, after === before || after.time <= before.time || t <= before.time ? (t <= before.time ? before.value : after.value)
+        : before.value + (after.value - before.value) * (t - before.time) / (after.time - before.time));
+    }
+    return { joints, tracks };
+  };
 }

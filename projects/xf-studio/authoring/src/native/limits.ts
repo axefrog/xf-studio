@@ -109,6 +109,12 @@ export class DecodeSession {
   private readonly notesByKey = new Map<string, NativeNote & { count: number }>();
   private readonly defaultedByProperty = new Map<string, { property: string; paths: string[]; count: number }>();
   readonly watched: ReadonlySet<string>;
+  /**
+   * Leave out a property whose value this reader doesn't decode (a curve) instead of refusing the resource, naming it in `skipped`. Only a
+   * caller that reads a few known properties of a resource the resolver never serves asks for it (the idle host's body graph).
+   */
+  skipUndecodable = false;
+  readonly skipped = new Set<string>();
 
   constructor(readonly limits: NativeLimits = DEFAULT_LIMITS, watched: readonly string[] = DEFAULT_WATCHED_PROPERTIES) {
     this.watched = new Set(watched);

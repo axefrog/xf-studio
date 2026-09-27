@@ -1,0 +1,151 @@
+// The game's preview idles read natively (idle-body.ts, idle-host.ts, idle-server.ts, platform/scene/idle-source.ts), over a synthetic body
+// graph in the reader's JSON shape and synthetic rigs (no game data): which clips loop on which screen, the catalogue, the rests and
+// ancestry, the host's disk cache and prepared faces, and the endpoint's refusals. The real game is compared in native-idle-oracle.test.ts.
+import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import * as THREE from "three";
+import { EYES_SECTION_ID, idleCatalogue, previewIdles, restJoints, rigAncestry, type GraphIdle } from "../src/idle-body";
+import { IDLE_HOST_VERSION, IdleHost, IdleSetupError } from "../src/idle-host";
+import { createIdleHandler } from "../src/idle-server";
+import type { IdleEntry } from "../src/idle-catalogue";
+import { restSkeleton } from "../src/platform/scene/idle-source";
+
+const name = (value: string) => ({ $type: "CName", $storage: "string", $value: value });
+let handles = 0;
+const node = (data: Record<string, unknown>) => ({ HandleId: String(handles++), Data: data });
+const anim = (clip: string, looped = 1) => node({ $type: "animAnimNode_SkAnim", animation: name(clip), isLooped: looped });
+const state = (title: string, input: unknown) => node({ $type: "animAnimNode_State", name: name(title), inputNode: input });
+const condition = (flag: string) => node({ $type: "animAnimStateTransitionCondition_BoolFeature", featureName: name("Paperdoll"), featurePropertyName: name(flag) });
+
+/** A body graph like the paperdoll's: a screens switch over two state machines, a clip it plays directly and a weapon idle deeper down. */
+function graph() {
+  handles = 0;
+  const creator = node({ $type: "animAnimNode_StateMachine", states: [state("closeup", anim("ui_closeup_shot")), state("fullbody", anim("ui_fullbody_shot")),
+    state("showcase", anim("ui_closeup_to_fullbody", 0))], transitions: [condition("characterCreation_Eyes"), condition("characterCreation_Head")] });
+  const inventory = node({ $type: "animAnimNode_StateMachine", states: [state("Idle", anim("UI_full_shot"))], transitions: [condition("inventoryScreen_Legs")] });
+  const weapons = node({ $type: "animAnimNode_Blend", input: anim("handgun_idle") });
+  const screens = node({ $type: "animAnimNode_Switch", inputs: [creator, inventory, anim("ui_gender_selection"), weapons] });
+  // A second reference to a node already written is a HandleRefId, as the reader writes it.
+  return { $type: "animAnimGraph", rootNode: screens, debug: { HandleRefId: creator.HandleId } };
+}
+
+const entries: GraphIdle[] = previewIdles(graph()).entries;
+const durations = new Map([["ui_closeup_shot", 12.3333], ["ui_fullbody_shot", 15.7333], ["UI_full_shot", 11.0667], ["ui_gender_selection", 15.6333]]);
+const source = { graph: "g", set: "s", rig: "r" };
+
+describe("the preview idles in a body graph", () => {
+  test("each state's looping clip, the switch's own looping clip, the flags each machine tests; one-shots out, weapon idles left", () => {
+    const { entries, left } = previewIdles(graph());
+    // In the graph walk's order (the catalogue sorts them for the Motion panel).
+    expect(entries.map(entry => [entry.id, entry.clip, entry.screen, entry.state, entry.flags.join(",")]).sort((a, b) => a[0]!.localeCompare(b[0]!))).toEqual([
+      ["closeup", "ui_closeup_shot", "creator", "closeup", "characterCreation_Eyes,characterCreation_Head"],
+      ["fullbody", "ui_fullbody_shot", "creator", "fullbody", "characterCreation_Eyes,characterCreation_Head"],
+      ["gender-selection", "ui_gender_selection", "gender", "switch input", ""],
+      ["inventory", "UI_full_shot", "inventory", "Idle", "inventoryScreen_Legs"]]);
+    expect(left.map(item => item.clip)).toEqual(["handgun_idle"]);
+    expect(entries.find(entry => entry.id === "closeup")!.evidence).toContain("state `closeup`");
+  });
+
+  test("the catalogue: lengths from the set, the creator's puppet for the creator's screens, no face without a prepared one", () => {
+    const catalogue = idleCatalogue({ entries, left: [], durations, source });
+    expect(catalogue.idles.map(entry => [entry.id, entry.label, entry.body, entry.duration, entry.puppet, entry.face])).toEqual([
+      ["closeup", "Creator close-up", "cc-idle-body.glb", 12.333, "creator", null], ["fullbody", "Creator full body", "cc-idle-body-ui_fullbody_shot.glb", 15.733, "creator", null],
+      ["inventory", "Inventory", "cc-idle-body-ui_full_shot.glb", 11.067, null, null],
+      ["gender-selection", "Gender selection", "cc-idle-body-ui_gender_selection.glb", 15.633, "creator", null]]);
+    // A clip no set holds is left out.
+    expect(idleCatalogue({ entries, left: [], durations: new Map([["ui_closeup_shot", 12]]), source }).idles.map(entry => entry.id)).toEqual(["closeup"]);
+  });
+
+  test("a prepared face joins its entry, and the eyes section appears only with its own prepared face", () => {
+    const face = (id: string, file: string, extra: Partial<IdleEntry> = {}) => [id, { id, label: "Creator close-up, eyes section", clip: "ui_closeup_shot", body: "x.glb",
+      duration: 1, screen: "creator", state: "closeup (eyes one-shot)", flags: ["characterCreation_Eyes"], face: { clip: "c", file }, puppet: "creator",
+      evidence: "e", ...extra } as IdleEntry] as const;
+    const faces = new Map([face("closeup", "cc-idle-face.glb"), face(EYES_SECTION_ID, "cc-idle-face-eyes-section.glb", { face: { clip: "c", file: "cc-idle-face-eyes-section.glb", loopFrom: 4.5 } })]);
+    const catalogue = idleCatalogue({ entries, left: [], durations, source, faces });
+    expect(catalogue.idles.map(entry => [entry.id, entry.face?.file ?? null])).toEqual([["closeup", "cc-idle-face.glb"],
+      [EYES_SECTION_ID, "cc-idle-face-eyes-section.glb"], ["fullbody", null], ["inventory", null], ["gender-selection", null]]);
+    expect(catalogue.idles[1]!.body).toBe("cc-idle-body.glb");
+    expect(catalogue.idles[1]!.face?.loopFrom).toBe(4.5);
+  });
+});
+
+describe("rests, ancestry and the page's skeleton", () => {
+  const rig = { bones: ["Root", "Hips", "Spine"], parents: [-1, 0, 1],
+    reference: [0, 1, 2].map(() => ({ translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] })),
+    aPose: [{ translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }, { translation: [0, 0, 1], rotation: [0, 0, Math.SQRT1_2, Math.SQRT1_2], scale: [1, 1, 1] },
+      { translation: [0.5, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }] };
+  test("the rest is the rig's A pose where it has one, else its reference; roots hang under Armature", () => {
+    const joints = restJoints(rig);
+    expect(joints.map(joint => [joint.bone, joint.parent, joint.translation])).toEqual([["Root", null, [0, 0, 0]], ["Hips", "Root", [0, 0, 1]], ["Spine", "Hips", [0.5, 0, 0]]]);
+    expect(restJoints({ ...rig, aPose: undefined })[1]!.translation).toEqual([0, 0, 0]);
+    expect(rigAncestry(joints)).toEqual({ Armature: null, Root: "Armature", Hips: "Root", Spine: "Hips" });
+  });
+
+  test("the page builds bones in glTF axes (game Z up → Y up) under an Armature node", () => {
+    const skeleton = restSkeleton(restJoints(rig));
+    expect(skeleton.name).toBe("Armature");
+    const spine = skeleton.getObjectByName("Spine")!;
+    expect(spine).toBeInstanceOf(THREE.Bone);
+    // Hips 1 m up (game Z → glTF Y), turned a quarter about game Z (glTF −Y); Spine 0.5 m along the hips' X, which that turn points along game Y (glTF −Z).
+    const at = new THREE.Vector3().setFromMatrixPosition(spine.matrixWorld);
+    expect(at.x).toBeCloseTo(0, 6); expect(at.y).toBeCloseTo(1, 6); expect(at.z).toBeCloseTo(-0.5, 6);
+  });
+});
+
+describe("the idle host and its endpoint", () => {
+  const route = { gameRoot: "G", launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null };
+  test("without a game folder it needs setup; a disk cache answers without opening the game; a prepared face joins while its file is there", async () => {
+    const root = mkdtempSync(join(tmpdir(), "xfs-idles-"));
+    try {
+      expect((await new IdleHost({ route: () => null, fingerprint: () => "f", resolverCache: root }).state()).phase).toBe("needs-setup");
+      const assets = join(root, "assets");
+      mkdirSync(assets);
+      let opened = 0;
+      const host = new IdleHost({ route: () => route, fingerprint: () => "fp", resolverCache: join(root, "cache"), preparedAssets: () => assets,
+        open: () => { opened++; throw Error("not in this test"); } });
+      // Seed the cache under the host's own key.
+      const key = (host as unknown as { key(): string }).key();
+      mkdirSync(join(root, "cache", "idles", key), { recursive: true });
+      const joints = [{ bone: "Root", parent: null, translation: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }];
+      writeFileSync(join(root, "cache", "idles", key, "idles.json"), JSON.stringify({ version: IDLE_HOST_VERSION, idles: { entries, left: [],
+        durations: Object.fromEntries(durations), source, rig: { path: "r", joints }, face: { path: "f", joints }, clips: {} } }));
+      const state = await host.state();
+      expect(opened).toBe(0);
+      if (state.phase !== "ready" || state.source !== "game") throw Error("not ready");
+      expect(state.catalogue.idles.map(entry => entry.face)).toEqual([null, null, null, null]);
+      expect(state.ancestry).toEqual({ Armature: null, Root: "Armature" });
+      // A developer preparation's face for the close-up, then its file.
+      writeFileSync(join(assets, "cc-idle-catalogue.json"), JSON.stringify({ schema: "xfs/idle-catalogue-1", source, left: [], idles: [{ id: "closeup", label: "Creator close-up",
+        clip: "ui_closeup_shot", body: "cc-idle-body.glb", duration: 12.333, screen: "creator", state: "closeup", flags: [], face: { clip: "ui_closeup_shot", file: "cc-idle-face.glb" },
+        puppet: "creator", evidence: "e" }] }));
+      expect(((await host.state()) as { catalogue: { idles: IdleEntry[] } }).catalogue.idles[0]!.face).toBeNull();
+      writeFileSync(join(assets, "cc-idle-face.glb"), "glb");
+      expect(((await host.state()) as { catalogue: { idles: IdleEntry[] } }).catalogue.idles[0]!.face?.file).toBe("cc-idle-face.glb");
+      // A body whose clip the cache can't place is null, not an error.
+      expect(await host.body("closeup")).toBeNull();
+      // The Python oracle's source answers with the preparation alone.
+      const prepared = await new IdleHost({ route: () => route, fingerprint: () => "fp", resolverCache: join(root, "cache"), preparedAssets: () => assets, source: "prepared" }).state();
+      expect(prepared.phase === "ready" && prepared.source).toBe("prepared");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("the endpoint: other origins refused, ids checked, a missing idle 404, no game folder 409, a failure 503", async () => {
+    const ready = { schema: "xfs/idle-state-1", phase: "needs-setup", message: "m" } as const;
+    let body: () => Promise<unknown> = async () => null;
+    const handler = createIdleHandler({ state: async () => ready, body: (() => body()) as never });
+    const get = (path: string, headers: Record<string, string> = {}) => handler(new Request(`http://127.0.0.1:4485/api/idles${path}`, { headers }));
+    expect((await get("")).status).toBe(200);
+    expect((await get("", { Origin: "http://evil.test" })).status).toBe(403);
+    expect((await handler(new Request("http://localhost:4485/api/idles"))).status).toBe(403);
+    expect((await get("?body=Not%20an%20id")).status).toBe(400);
+    expect((await get("?body=closeup")).status).toBe(404);
+    body = async () => { throw new IdleSetupError(); };
+    expect((await get("?body=closeup")).status).toBe(409);
+    body = async () => { throw Error("boom"); };
+    const failed = await get("?body=closeup");
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toContain("boom");
+  });
+});

@@ -24,7 +24,7 @@ import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLIN
  */
 export const GAME_BLINK_ASSET = "/assets/game-blink.glb";
 export const GAME_BLINK_SCHEMA = "xfs/game-blink-1";
-export { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD, IDLE_MASCULINE } from "./game-blink-messages";
+export { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD, IDLE_FACE_MISSING, IDLE_MASCULINE } from "./game-blink-messages";
 /** How far (metres) a target bone's bind may sit from its rig joint's rest: 0.1 mm. The derived head matches to about 0.0003 mm. */
 export const BLINK_BIND_TOLERANCE = 1e-4;
 

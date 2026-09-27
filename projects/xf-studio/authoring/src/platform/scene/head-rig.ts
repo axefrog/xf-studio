@@ -4,8 +4,9 @@ import { extendSkin } from "../../skin";
 import type { SavedV } from "../../saved-v";
 import { IdleAnimation } from "../../idle-animation";
 import type { PoseClip } from "../../pose-clip";
-import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_ASSET, parseIdleCatalogue, type IdleCatalogue } from "../../idle-catalogue";
-import { activeEyeShape, GAME_BLINK_MISSING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../game-blink";
+import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, type IdleCatalogue, type IdleEntry } from "../../idle-catalogue";
+import { activeEyeShape, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../game-blink";
+import { loadIdleSource, type IdleSource } from "./idle-source";
 import { composePreviewMotion } from "../../preview-motion";
 import { FaceDriver, type FacePose, type FaceRigJoint } from "./face-driver";
 import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../eye-material";
@@ -22,7 +23,10 @@ import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMo
  */
 
 /** The rig's motion and why a part of it is missing (plain words for the motion panel). */
-export type RigMotionAssets = { idle?: IdleAnimation; idleError: string; blink?: GameBlink; blinkError: string;
+export type RigMotionAssets = { idle?: IdleAnimation; idleError: string;
+  /** Why the idle's face holds still while its body moves (empty when a face clip plays, or when there is no idle at all). */
+  faceError?: string;
+  blink?: GameBlink; blinkError: string;
   /** The game's preview idles prepared on this computer (idle-catalogue.ts); the built-in close-up entry when no catalogue was prepared. */
   idles?: IdleCatalogue;
   /** Load and play one of them (its body clip and baked face) on the idle's rigs; rejects with a plain reason when its files aren't there. */
@@ -35,44 +39,36 @@ export type RigMotionAssets = { idle?: IdleAnimation; idleError: string; blink?:
 /** The core eye as the motion loader may re-rig it (a rigid eye gets a gaze joint per side; the rig keeps the replacement). */
 export type CoreEye = { readonly mesh: THREE.Mesh; readonly material: THREE.Material; replace(next: THREE.SkinnedMesh): void };
 /**
- * Loads the rig's motion onto the scene's bones for a core head's body. The default reads the game idle and blink assets; probes inject
- * their own.
+ * Loads the rig's motion onto the scene's bones for a core head's body. The default reads the game idle from the host and the blink asset;
+ * probes inject their own.
  */
 export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody) => Promise<RigMotionAssets>;
 
 /**
- * The game idle (with the eyeballs given gaze joints when the core eye is rigid) and the game's blink. The prepared idle is the feminine
- * V's, so a masculine head holds still (`IDLE_MASCULINE`); the blink checks its own joints against the head (game-blink.ts).
+ * The game idle (with the eyeballs given gaze joints when the core eye is rigid) and the game's blink. The idle comes from the host
+ * (idle-source.ts): read from the player's game files, its body moves; its face moves only where a face clip was prepared on this computer
+ * (the facial solver isn't part of the app yet), and otherwise holds still (`faceError`). The idle is the feminine V's, so a masculine head
+ * holds still (`IDLE_MASCULINE`); the blink checks its own joints against the head (game-blink.ts).
  */
 export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") => {
-  let idle: IdleAnimation | undefined, idleError = "";
+  let idle: IdleAnimation | undefined, idleError = "", faceError = "";
+  let source: IdleSource | undefined;
   // The first idle's clips, as loaded with the rig (so returning to it from a pose loads nothing).
-  let firstClips: { body: THREE.AnimationClip; face: THREE.AnimationClip } | undefined;
-  // The catalogue of the game's preview idles, when one was prepared; else the close-up idle alone (an older preparation).
-  let idles: IdleCatalogue = BUILT_IN_CATALOGUE;
-  try {
-    const response = await fetch(IDLE_CATALOGUE_ASSET);
-    if (response.ok) idles = parseIdleCatalogue(await response.json());
-  } catch { idles = BUILT_IN_CATALOGUE; }
-  const first = idles.idles.find(entry => entry.id === DEFAULT_IDLE) ?? idles.idles[0]!;
+  let firstBody: THREE.AnimationClip | undefined;
   try {
     if (body !== "female") throw Error(IDLE_MASCULINE);
-    const [motion, facial, binding] = await Promise.all([
-      new GLTFLoader().loadAsync(`/assets/${first.body}`),
-      new GLTFLoader().loadAsync(`/assets/${first.face?.file ?? "cc-idle-face.glb"}`),
-      fetch("/assets/cc-idle-binding.json").then(r => { if (!r.ok) throw Error("Idle binding data unavailable"); return r.json(); }),
-    ]);
-    const clip = motion.animations.find(a => a.name === first.clip) ?? motion.animations.find(a => a.name === binding.clip);
-    if (!clip) throw Error("Expected character-creator close-up clip is missing");
-    const faceClip = facial.animations.find(a => a.name === `${first.face?.clip ?? "ui_closeup_shot"}_face`);
-    if (!faceClip) throw Error("Solved facial idle clip is missing");
+    source = await loadIdleSource();
+    const first = source.first;
+    const [clip, facial] = await Promise.all([source.body(first), source.face(first).catch(() => null)]);
+    if (!facial) faceError = IDLE_FACE_MISSING;
     // The legacy eyeball preview is rigid geometry. Give each disconnected eye
     // one authoritative eye-joint influence so gaze rotates around the game pivot.
     const eyes = eye.mesh;
-    if (!(eyes instanceof THREE.SkinnedMesh)) {
-      facial.scene.updateMatrixWorld(true); scene.updateMatrixWorld(true);
+    const pivots = facial?.scene ?? source.faceRest;
+    if (!(eyes instanceof THREE.SkinnedMesh) && pivots) {
+      pivots.updateMatrixWorld(true); scene.updateMatrixWorld(true);
       const eyeBones = ["l_J_eye_JNT","r_J_eye_JNT"].map(name => {
-        const reference = facial.scene.getObjectByName(name);
+        const reference = pivots.getObjectByName(name);
         if (!reference) throw Error(`Missing gaze pivot ${name}`);
         const bone = new THREE.Bone(); bone.name=name;
         reference.matrixWorld.decompose(bone.position,bone.quaternion,bone.scale);
@@ -108,12 +104,12 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     }
     const targets: THREE.Object3D[] = [];
     scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
-    idle = new IdleAnimation(motion.scene, clip, targets, binding.ancestry, { source: facial.scene, clip: faceClip,
-      ...(first.face?.loopFrom !== undefined ? { loopFrom: first.face.loopFrom } : {}) });
-    firstClips = { body: clip, face: faceClip };
+    idle = new IdleAnimation(source.skeleton, clip, targets, source.ancestry, facial ? { source: facial.scene, clip: facial.clip,
+      ...(first.face?.loopFrom !== undefined ? { loopFrom: first.face.loopFrom } : {}) } : undefined);
+    firstBody = clip;
     if (!idle.bindings.length) throw Error("Idle rig has no matching bones");
   } catch (error) {
-    idle = undefined; idleError = (error as Error).message;
+    idle = undefined; idleError = (error as Error).message; faceError = "";
   }
   // The game's own blink (game-blink.ts), bound by name to every rig bone present now (the eyeball joints above included);
   // each V's details join it with the idle. Without the local asset the blink controls stay off with plain guidance.
@@ -126,39 +122,35 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
   } catch (error) {
     blink = undefined; blinkError = (error as Error).message || GAME_BLINK_MISSING;
   }
-  // Another idle: its body clip (and baked face) loaded once, then played on the same rigs (the clips share the rigs' joint names).
-  const loaded = new Map<string, Promise<THREE.AnimationClip | undefined>>();
-  if (firstClips) {
-    loaded.set(`${first.body}|${first.clip}`, Promise.resolve(firstClips.body));
-    loaded.set(`${first.face?.file ?? "cc-idle-face.glb"}|${first.face?.clip ?? "ui_closeup_shot"}_face`, Promise.resolve(firstClips.face));
-  }
-  const clipOf = (file: string, name: string) => {
-    const key = `${file}|${name}`;
-    let pending = loaded.get(key);
+  const idles: IdleCatalogue = source?.catalogue ?? BUILT_IN_CATALOGUE;
+  // Another idle: its body clip loaded once, then played on the same rigs (the clips share the rigs' joint names).
+  const loaded = new Map<string, Promise<THREE.AnimationClip>>();
+  if (firstBody && source) loaded.set(source.first.id, Promise.resolve(firstBody));
+  const bodyOf = (entry: IdleEntry) => {
+    let pending = loaded.get(entry.id);
     if (!pending) {
-      pending = new GLTFLoader().loadAsync(`/assets/${file}`).then(gltf => gltf.animations.find(a => a.name === name));
-      pending.catch(() => loaded.delete(key));
-      loaded.set(key, pending);
+      pending = source!.body(entry);
+      pending.catch(() => loaded.delete(entry.id));
+      loaded.set(entry.id, pending);
     }
     return pending;
   };
-  let idleId = first.id;
+  let idleId = source?.first.id ?? DEFAULT_IDLE;
   const selectIdle = async (id: string) => {
     const entry = idles.idles.find(item => item.id === id);
-    if (!idle || !entry) throw Error("That idle isn't one of the game's idles prepared on this computer.");
-    // An idle with no face of its own keeps the close-up's face loop (the default idle's).
-    const faceRef = entry.face ?? first.face;
-    const [body, face] = await Promise.all([clipOf(entry.body, entry.clip), faceRef ? clipOf(faceRef.file, `${faceRef.clip}_face`) : undefined]);
-    if (!body) throw Error("That idle's motion couldn't be read from its prepared file.");
-    idle.setClips(body, face, face ? faceRef?.loopFrom : undefined);
+    if (!idle || !entry || !source) throw Error("That idle isn't one of the game's idles on this computer.");
+    // An idle with no face of its own keeps the close-up's face loop (the default idle's), where one was prepared.
+    const faceEntry = entry.face ? entry : source.first;
+    const [bodyClip, face] = await Promise.all([bodyOf(entry), idle.facial ? source.face(faceEntry) : Promise.resolve(null)]);
+    idle.setClips(bodyClip, face?.clip, face ? faceEntry.face?.loopFrom : undefined);
     idleId = id;
   };
   const selectPose = async (pose: PoseClip | null) => {
-    if (!idle) throw Error("V's motion isn't prepared on this computer, so she can't hold a pose.");
+    if (!idle) throw Error("V's motion couldn't be read, so she can't hold a pose.");
     if (pose) idle.setClips(pose.clip, undefined, undefined, { pose: true, moves: pose.moves });
     else if (idle.posing) await selectIdle(idleId);
   };
-  return { idle, idleError, blink, blinkError, idles, selectIdle, selectPose };
+  return { idle, idleError, faceError, blink, blinkError, idles, selectIdle, selectPose };
 };
 
 export type HeadRig = Awaited<ReturnType<typeof createHeadRig>>;

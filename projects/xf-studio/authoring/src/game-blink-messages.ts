@@ -16,10 +16,15 @@ export const BLINK_REPEAT_SECONDS = 2.45;
  */
 export const IDLE_MASCULINE = "The character creator's idle for a masculine V isn't part of this version of XF Studio yet, so he holds still. Everything else works.";
 /**
- * The blink asset was never prepared on this computer (or can't be fetched). Preparing it needs developer tools, so a person is
- * told plainly that it isn't there, with nothing to do (UI-86).
+ * The idle's face isn't in this version: the body idle is read from the game files, but its face needs the facial solver, which the app
+ * doesn't have yet. So the body moves and the face holds still, and the Motion panel says so (DESK-02).
  */
-export const GAME_BLINK_MISSING = "The game's blink isn't part of this version of XF Studio yet. The idle blinks on its own.";
+export const IDLE_FACE_MISSING = "Facial movement isn't in this version of XF Studio yet, so V's face holds still while her body moves.";
+/**
+ * The blink asset was never prepared on this computer (or can't be fetched). Preparing it needs developer tools, so a person is
+ * told plainly that it isn't there, with nothing to do (UI-86). It claims nothing about the idle, whose face may hold still too (DESK-04).
+ */
+export const GAME_BLINK_MISSING = "The game's blink isn't part of this version of XF Studio yet.";
 /** The asset is there but isn't a readable blink (cut short, overwritten, not a GLB). */
 export const GAME_BLINK_DAMAGED = "The prepared blink is damaged; prepare it again.";
 /** The asset reads, but none of its joints are in the preview head's skeleton. */

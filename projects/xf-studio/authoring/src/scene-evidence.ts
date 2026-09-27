@@ -16,6 +16,8 @@ export function coreSceneEvidence(input: {
   eyeShape: { choices: number; eyesFollow: boolean; eyeMorphTargets: number };
   profileEncoding: string;
   idle?: IdleAnimation; idleError: string;
+  /** Why the idle's face holds still while its body moves (empty when it moves, or with no idle). */
+  faceError?: string;
 }) {
   const { idle } = input;
   const vertices = (mesh: THREE.Mesh) => mesh.geometry.getAttribute("position").count;
@@ -30,7 +32,7 @@ export function coreSceneEvidence(input: {
       repeatSeconds: input.blink?.repeatSeconds, rig: input.blink?.description.rig, mappedBones: input.blink?.bindings.length ?? 0 },
     eyeShape: input.eyeShape,
     profileEncoding: input.profileEncoding,
-    idle: { available: !!idle, error: input.idleError, clip: idle?.clip.name, duration: idle?.clip.duration,
+    idle: { available: !!idle, error: input.idleError, faceError: input.faceError ?? "", clip: idle?.clip.name, duration: idle?.clip.duration,
       mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
       faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },
   };

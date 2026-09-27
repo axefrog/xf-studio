@@ -286,7 +286,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   invalidate();
   const evidence = coreSceneEvidence({ coreDetail, meshes: rig.meshes, blink, blinkError: motion.blinkError,
     eyeShape: { choices: rig.eyeShapeChoices.length, eyesFollow: rig.eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
-    profileEncoding: character.profileEncoding, idle, idleError: motion.idleError });
+    profileEncoding: character.profileEncoding, idle, idleError: motion.idleError, faceError: motion.faceError ?? "" });
   const api = {
     /** Whose core head this scene shows. */
     body: core.body,

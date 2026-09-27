@@ -24,7 +24,7 @@ const HOST_ADAPTERS = ["anim-decode", "archive-reader", "mesh-decode", "native-d
  * (pose-catalogue-host.ts; the decoding stays in the worker), and the Save Explorer's host sources, which hand the shipped engine type
  * list (`rtti-type-source`, pure data) to the saves endpoint (saves-host-sources.ts).
  */
-const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "native-geometry-export", "native-texture-export", "pose-catalogue-host", "resolver-host", "saves-host-sources"];
+const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "idle-host", "native-geometry-export", "native-texture-export", "pose-catalogue-host", "resolver-host", "saves-host-sources"];
 /**
  * Host and page globals (code-scan.ts PAGE_GLOBALS, except that `document` is the red model's own word here, a decoded resource,
  * so only the DOM's members of it count).

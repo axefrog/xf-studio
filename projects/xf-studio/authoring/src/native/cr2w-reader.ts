@@ -70,7 +70,14 @@ export class Cr2wDecoder implements ValueContext {
       if (size < 4 || end > cursor.end) throw new Cr2wError(`${object.type}.${name}: record size ${size} is out of range.`);
       noteStoredType(this.session, object.type, types, name, type);
       const inner = cursor.span(cursor.pos, end);
-      const value = object.fields[name] = readValue(this, inner, type, `${object.type}.${name}`);
+      let value: unknown;
+      try { value = readValue(this, inner, type, `${object.type}.${name}`); } catch (error) {
+        if (!this.session.skipUndecodable || !(error instanceof NativeUnsupportedError)) throw error;
+        if (this.session.skipped.size < 64) this.session.skipped.add(`${object.type}.${name} (${type})`);
+        cursor.pos = end;
+        continue;
+      }
+      object.fields[name] = value;
       if (inner.pos !== end && Array.isArray(value) && type.startsWith("array:")) this.readPastCount(inner, value, type, `${object.type}.${name}`);
       if (inner.pos !== end) throw new Cr2wError(`${object.type}.${name} (${type}) read ${inner.pos - start} of ${size} bytes.`);
       cursor.pos = end;
