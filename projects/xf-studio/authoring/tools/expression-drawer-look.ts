@@ -30,10 +30,11 @@ const snap = async (name: string, selector: string) => {
   await page.screenshot(resolve(out, `${name}.png`), clip as never);
   shots.push(name);
 };
-/** The theme for the next captures: the emulated system scheme and the root's theme attribute, so a stored preference can't win. */
+/** The theme for the next captures: the emulated system scheme and the workspace's theme choice, as the app's theme controller applies it. */
 const theme = async (scheme: "light" | "dark") => {
   await page.colorScheme(scheme);
-  await page.evaluate(`document.documentElement.dataset.theme = ${JSON.stringify(scheme)}`);
+  // What the app's theme controller sets for a resolved theme (app.ts themeController), in case a stored preference holds the other one.
+  await page.evaluate(`(() => { const root = document.documentElement; root.dataset.theme = ${JSON.stringify(scheme)}; root.style.colorScheme = ${JSON.stringify(scheme)}; })()`);
   await page.wait(300);
 };
 const drawerWindow = `document.querySelector(".expr-drawer")?.closest(".dock-window, .dock-group")`;
@@ -67,7 +68,11 @@ try {
       // The Gaze group, opened.
       await page.evaluate(`(() => { const g = document.querySelector('.expr-drawer [data-group="eyes"], .expr-drawer [data-group="gaze"]'); const b = g?.querySelector(".expander"); if (b?.getAttribute("aria-expanded") === "false") b.click(); })()`);
       await page.wait(300);
-      if (await scrollTo(".expr-drawer [data-axis]")) { await page.wait(300); await snap(`${tag}-gaze`, drawerWindow); }
+      if (await scrollTo(".expr-drawer [data-axis]")) {
+        await page.wait(300);
+        log(`${tag} gaze theme: ${await page.evaluate(`[document.documentElement.dataset.theme, matchMedia("(prefers-color-scheme: dark)").matches, getComputedStyle(document.querySelector(".expr-drawer")).backgroundColor, getComputedStyle(document.querySelector(".expr-drawer")).colorScheme].join(" ")`)}`);
+        await snap(`${tag}-gaze`, drawerWindow);
+      }
       // Beside the Character panel at the same width.
       await page.evaluate(`window.xfStudioShell.dock.moveTo("character", { kind: "float", x: ${1400 - 2 * width}, y: 30, w: ${width}, h: 900 }, "")`);
       await page.wait(900);
