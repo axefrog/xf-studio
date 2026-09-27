@@ -19,7 +19,9 @@ import { asArray, cname, HandleScope, isObject, type Json, type JsonObject } fro
 
 export const DANGLE_SPEC = "xfs/dangle-spec-1";
 /** Bounds on what a spec may hold (a graph is data from a mod as much as from the game). */
-export const DANGLE_LIMITS = Object.freeze({ joints: 512, particles: 256, constraints: 2048, shapes: 64, notes: 16 });
+export const DANGLE_LIMITS = Object.freeze({ joints: 512, particles: 256, constraints: 2048, shapes: 64, notes: 16,
+  /** Entries the constraint walk may visit, groups and empty entries included (the vanilla `hh_033` graph visits 65). */
+  constraintVisits: 8192 });
 
 export type Vec3 = [number, number, number];
 /** A rigid transform: translation then rotation quaternion `[x, y, z, w]`. */
@@ -69,6 +71,13 @@ export type DangleSpec = {
 
 export class DangleSpecError extends Error {}
 
+/** What the browser's parse accepts (and so what the host's compile must never store past). */
+const MAX_NAME = 256, MAX_PATH = 512, MAX_NOTE = 300;
+/** Metres: no rig joint, reference joint or constraint frame lies further out (a rig is a character's size). */
+const MAX_TRANSLATION = 1000;
+
+/** A name or type from the file, clipped for a note (the browser refuses a note over 300 characters). */
+const label = (text: string) => text.length > 64 ? `${text.slice(0, 61)}...` : text;
 const num = (value: Json | undefined, fallback = 0) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
 const bool = (value: Json | undefined, fallback: boolean) => typeof value === "boolean" ? value : typeof value === "number" ? value !== 0 : fallback;
 const vec3 = (value: Json | undefined, fallback: Vec3): Vec3 => isObject(value) ? [num(value.X, fallback[0]), num(value.Y, fallback[1]), num(value.Z, fallback[2])] : fallback;
@@ -126,12 +135,16 @@ export function compileDangleSpec(rig: JsonObject, graph: JsonObject | null, pat
     throw new DangleSpecError(`The rig lists ${names.length} bones and ${parents.length} parents.`);
   const locals = asArray(rig.boneTransforms);
   if (locals.length !== names.length) throw new DangleSpecError("The rig has no reference pose for its bones.");
+  // The browser's parse (below) is the contract: a spec the host stores must read back whole (PREV-139).
+  if (paths.rig.length > MAX_PATH || paths.graph.length > MAX_PATH) throw new DangleSpecError("The rig's or graph's path is too long to record.");
   const notes: string[] = [];
   let scaled = false;
   const joints = names.map((name, i) => {
     const parent = parents[i]!;
-    if (!(parent >= -1 && parent < i)) throw new DangleSpecError(`The rig's bone ${name} names parent ${parent}.`);
+    if (!(Number.isInteger(parent) && parent >= -1 && parent < i)) throw new DangleSpecError(`The rig's bone ${label(name)} names parent ${parent}.`);
+    if (name.length > MAX_NAME) throw new DangleSpecError(`The rig names a bone ${label(name)} longer than ${MAX_NAME} characters.`);
     const local = transform(locals[i]);
+    if (local.t.slice(0, 3).some(x => Math.abs(x) > MAX_TRANSLATION)) throw new DangleSpecError(`The rig places its bone ${label(name)} more than ${MAX_TRANSLATION} m away.`);
     scaled ||= local.scaled;
     return { name, parent, local: local.t };
   });
@@ -139,13 +152,14 @@ export function compileDangleSpec(rig: JsonObject, graph: JsonObject | null, pat
   for (const joint of joints) composed.push(joint.parent < 0 ? joint.local.slice() as Transform : composeTransforms(composed[joint.parent]!, joint.local));
   const stored = asArray(rig.referencePoseMS);
   const reference = stored.length === names.length ? stored.map(value => transform(value).t) : composed;
+  if (reference.some(t => t.slice(0, 3).some(x => Math.abs(x) > MAX_TRANSLATION))) throw new DangleSpecError(`The rig's reference pose reaches more than ${MAX_TRANSLATION} m away.`);
   if (scaled) notes.push("The rig scales some of its joints; the preview simulates them unscaled.");
   const spec: DangleSpec = { schema: DANGLE_SPEC, rig: paths.rig, graph: paths.graph, joints, reference, simulation: null, notes };
   if (!graph) { notes.push("Its animation graph couldn't be read, so it hangs still."); return spec; }
   try { spec.simulation = readSimulation(graph, names); }
   catch (error) {
     if (!(error instanceof Unsupported)) throw error;
-    notes.push(error.message);
+    notes.push(error.message.slice(0, MAX_NOTE));
   }
   return spec;
 }
@@ -166,7 +180,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
     seen.add(node);
     const type: string = String(node.$type ?? "");
     if (type === "animAnimNode_Dangle") dangles.push(node);
-    else if (!SPINE.has(type)) throw new Unsupported(`Its animation graph uses ${type.replace(/^animAnimNode_/, "") || "a node"} XF Studio doesn't run yet, so it hangs still.`);
+    else if (!SPINE.has(type)) throw new Unsupported(`Its animation graph uses ${label(type.replace(/^animAnimNode_/, "")) || "a node"} XF Studio doesn't run yet, so it hangs still.`);
     for (const key of ["inputLinks", "inputs", "poseLinks"]) if (asArray(node[key]).length) throw new Unsupported("Its animation graph blends poses, which XF Studio doesn't run yet, so it hangs still.");
     const link: Json | undefined = type === "animAnimNode_Output" ? node.node : node.inputLink;
     node = isObject(link) ? scope.data(link.node) : null;
@@ -176,7 +190,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
   const simulation = scope.data(dangles[0]!.dangleConstraint);
   const kind = String(simulation?.$type ?? "");
   if (!simulation || kind !== "animDangleConstraint_SimulationDyng")
-    throw new Unsupported(`It uses a ${kind.replace(/^animDangleConstraint_Simulation/, "").toLowerCase() || "different"} simulation XF Studio doesn't run yet, so it hangs still.`);
+    throw new Unsupported(`It uses a ${label(kind.replace(/^animDangleConstraint_Simulation/, "").toLowerCase()) || "different"} simulation XF Studio doesn't run yet, so it hangs still.`);
   // Branches of the solver the executable read didn't cover (knowledge §5.5, §5.7): left rigid rather than guessed.
   for (const flag of ["dangleAltersTransformsOfItsChildren", "parentRotationAltersTransformsOfDangleAndItsChildren",
     "parentRotationAltersTransformsOfNonDanglesAndItsChildren", "HACK_checkDangleTeleport"])
@@ -190,7 +204,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
   const jointOf = (value: Json | undefined, what: string) => {
     const name = cname(isObject(value) && "name" in value ? value.name : value);
     const found = index.get(name);
-    if (found === undefined) throw new Unsupported(`Its simulation's ${what} names ${name || "no joint"}, which its rig doesn't have, so it hangs still.`);
+    if (found === undefined) throw new Unsupported(`Its simulation's ${what} names ${label(name) || "no joint"}, which its rig doesn't have, so it hangs still.`);
     return found;
   };
   const container = isObject(simulation.particlesContainer) ? simulation.particlesContainer : {};
@@ -214,17 +228,28 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
   });
   const particleAt = (value: Json | undefined, what: string) => {
     const joint = jointOf(value, what), found = particleOf.get(joint);
-    if (found === undefined) throw new Unsupported(`Its simulation's ${what} names ${names[joint]}, which has no particle, so it hangs still.`);
+    if (found === undefined) throw new Unsupported(`Its simulation's ${what} names ${label(names[joint]!)}, which has no particle, so it hangs still.`);
     return found;
   };
 
+  // The walk is bounded by work, not only by depth and leaf count (PREV-129): a group (Multi) may be reached once only, since handles let
+  // a small file list one group many times at every level (fan-out F costs F^depth visits), and every entry visited, empty or not,
+  // counts against a budget.
   const constraints: DangleConstraint[] = [];
+  const groups = new Set<JsonObject>();
+  let visits = 0;
   const visit = (value: Json | undefined, depth: number) => {
+    if (++visits > DANGLE_LIMITS.constraintVisits) throw new Unsupported("Its simulation lists more constraints than the preview runs, so it hangs still.");
     const constraint = scope.data(value) ?? (isObject(value) && typeof value.$type === "string" ? value : null);
     if (!constraint) return;
     if (depth > 8) throw new Unsupported("Its simulation nests its constraints too deeply, so it hangs still.");
     const type = String(constraint.$type ?? "");
-    if (type === "animDyngConstraintMulti") { for (const inner of asArray(constraint.innerConstraints)) visit(inner, depth + 1); return; }
+    if (type === "animDyngConstraintMulti") {
+      if (groups.has(constraint)) throw new Unsupported("Its simulation lists one group of constraints more than once, so it hangs still.");
+      groups.add(constraint);
+      for (const inner of asArray(constraint.innerConstraints)) visit(inner, depth + 1);
+      return;
+    }
     if (constraints.length >= DANGLE_LIMITS.constraints) throw new Unsupported("Its simulation has more constraints than the preview runs, so it hangs still.");
     if (type === "animDyngConstraintLink") {
       const kind = member(constraint.linkType, LINK_TYPES, LINK_KINDS, "fixed");
@@ -248,7 +273,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
       if (!(radius > 0)) throw new Unsupported("Its simulation has an ellipsoid of no size, which XF Studio doesn't run yet, so it hangs still.");
       constraints.push({ kind: "ellipsoid", particle: particleAt(constraint.bone, "ellipsoid"), frame: transform(constraint.ellipsoidTransformLS).t, radius,
         scale1: num(constraint.constraintScale1, 1), scale2: num(constraint.constraintScale2, 1) });
-    } else throw new Unsupported(`Its simulation uses a ${type.replace(/^animDyngConstraint/, "").toLowerCase() || "different"} constraint XF Studio doesn't run yet, so it hangs still.`);
+    } else throw new Unsupported(`Its simulation uses a ${label(type.replace(/^animDyngConstraint/, "").toLowerCase()) || "different"} constraint XF Studio doesn't run yet, so it hangs still.`);
   };
   visit(simulation.dyngConstraint, 0);
 
@@ -264,13 +289,46 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
   const substepTime = num(simulation.substepTime, 0.01);
   if (!(substepTime > 1e-4 && substepTime <= 1)) throw new Unsupported("Its simulation's substep is out of range, so it hangs still.");
   const link = isObject(container.externalForceWsLink) ? container.externalForceWsLink : null;
-  return {
+  const result: DangleSimulation = {
     substepTime, iterations: Math.max(0, Math.min(16, Math.round(num(simulation.solverIterations, 1)))), alpha: Math.max(0, Math.min(1, num(simulation.alpha, 1))),
     lookAt: bool(simulation.rotateParentToLookAtDangle, true), gravity: num(container.gravityWS, 9.81),
     externalForce: vec3(container.externalForceWS, [0, 0, 0]), externalLinked: !!(link && scope.data(link.node)),
     particles, constraints, shapes,
   };
+  const problem = rangeProblem(result);
+  if (problem) throw new Unsupported(`Its simulation ${problem}, which XF Studio can't run stably, so it hangs still.`);
+  return result;
 }
+
+/**
+ * Ranges a simulation's values must lie in for the solver to stay finite (PREV-130). Finite but extreme values overflow (a mass of
+ * 1e-320 makes `damping / mass` infinite), divide by zero (an ellipsoid scale of 0) or break the explicit integration's stability (a
+ * pull spring stiffer than `(pull / mass) · h² ≤ 1`, a quarter of velocity Verlet's bound). Every vanilla and inspected modded value is
+ * far inside them: masses 0.1–1, damping 0.1–4, pull 0–30, gravity 9.81, link bounds 100 %. Null when every value is in range.
+ */
+export function rangeProblem(sim: DangleSimulation): string | null {
+  const within = (x: number, lo: number, hi: number) => x >= lo && x <= hi;
+  const near = (t: readonly number[]) => t.slice(0, 3).every(x => Math.abs(x) <= MAX_TRANSLATION);
+  const h2 = sim.substepTime * sim.substepTime;
+  if (!(Math.abs(sim.gravity) <= RANGES.force) || !sim.externalForce.every(x => Math.abs(x) <= RANGES.force)) return "has forces out of range";
+  for (const p of sim.particles) {
+    if (!within(p.mass, RANGES.mass[0], RANGES.mass[1])) return "has a particle mass out of range";
+    if (!within(p.damping, 0, RANGES.damping) || !within(p.pull, 0, RANGES.pull)) return "has a particle's damping or pull out of range";
+    if ((p.pull / p.mass) * h2 > 1) return "has a pull spring too stiff for its substep";
+    if (!within(p.radius, 0, RANGES.size) || !within(p.height, 0, RANGES.size)) return "has a particle capsule out of range";
+  }
+  for (const c of sim.constraints) {
+    if (c.kind === "link" && !(within(c.lower, 0, RANGES.linkPercent) && within(c.upper, 0, RANGES.linkPercent))) return "has link bounds out of range";
+    if (c.kind === "cone" && !(within(c.halfAngle, 0, 180) && within(c.radius, 0, RANGES.size) && within(c.height, 0, RANGES.size) && near(c.frame)))
+      return "has a cone out of range";
+    if (c.kind === "ellipsoid" && !(within(c.radius, 1e-4, RANGES.size) && within(c.scale1, RANGES.scale[0], RANGES.scale[1])
+      && within(c.scale2, RANGES.scale[0], RANGES.scale[1]) && near(c.frame))) return "has an ellipsoid out of range";
+  }
+  for (const s of sim.shapes) if (!(within(s.radius, 0, RANGES.size) && s.extents.every(x => within(x, 0, RANGES.size)) && near(s.frame))) return "has a collision shape out of range";
+  return null;
+}
+/** The value ranges `rangeProblem` enforces (SI units; link bounds in percent of the rest length). */
+export const RANGES = Object.freeze({ mass: [1e-3, 1e3] as const, damping: 1e3, pull: 1e4, force: 1e3, size: 10, linkPercent: 1e4, scale: [1e-3, 1e3] as const });
 
 /**
  * A spec as the browser reads it back from the host: every index in range, every number finite, within the bounds. Throws
@@ -279,18 +337,19 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
 export function parseDangleSpec(value: unknown): DangleSpec {
   const fail = (why: string): never => { throw new DangleSpecError(`The dangle spec is invalid: ${why}.`); };
   const s = value as DangleSpec;
-  if (!s || s.schema !== DANGLE_SPEC || typeof s.rig !== "string" || typeof s.graph !== "string" || s.rig.length > 512 || s.graph.length > 512) fail("not a spec");
+  if (!s || s.schema !== DANGLE_SPEC || typeof s.rig !== "string" || typeof s.graph !== "string" || s.rig.length > MAX_PATH || s.graph.length > MAX_PATH) fail("not a spec");
   if (!Array.isArray(s.joints) || !s.joints.length || s.joints.length > DANGLE_LIMITS.joints) fail("joint count");
   const n = s.joints.length;
   const finite = (x: unknown) => typeof x === "number" && Number.isFinite(x) ? x : fail("a number");
   const vector = (v: unknown) => Array.isArray(v) && v.length === 3 ? v.map(finite) as Vec3 : fail("a vector");
-  const rigid = (v: unknown) => Array.isArray(v) && v.length === 7 ? v.map(finite) as Transform : fail("a transform");
+  const rigid = (v: unknown) => Array.isArray(v) && v.length === 7 && v.slice(0, 3).every(x => Math.abs(finite(x)) <= MAX_TRANSLATION) ? v.map(finite) as Transform
+    : fail("a transform");
   const list = <T>(items: unknown, max: number, read: (item: any, i: number) => T) => Array.isArray(items) && items.length <= max ? items.map(read) : fail("a list");
-  const joints = s.joints.map((j, i) => ({ name: typeof j?.name === "string" && j.name.length <= 256 ? j.name : fail("a name"),
+  const joints = s.joints.map((j, i) => ({ name: typeof j?.name === "string" && j.name.length <= MAX_NAME ? j.name : fail("a name"),
     parent: j?.parent === -1 || (Number.isInteger(j?.parent) && j.parent >= 0 && j.parent < i) ? j.parent : fail("a parent"), local: rigid(j?.local) }));
   const reference = list(s.reference, n, rigid);
   if (reference.length !== n) fail("reference pose");
-  const notes = list(s.notes, DANGLE_LIMITS.notes, note => typeof note === "string" && note.length <= 300 ? note : fail("a note"));
+  const notes = list(s.notes, DANGLE_LIMITS.notes, note => typeof note === "string" && note.length <= MAX_NOTE ? note : fail("a note"));
   let simulation: DangleSimulation | null = null;
   if (s.simulation !== null) {
     const m = s.simulation;
@@ -321,6 +380,8 @@ export function parseDangleSpec(value: unknown): DangleSpec {
     simulation = { substepTime, iterations, alpha: Math.max(0, Math.min(1, finite(m.alpha))), lookAt: typeof m.lookAt === "boolean" ? m.lookAt : fail("a flag"),
       gravity: finite(m.gravity), externalForce: vector(m.externalForce), externalLinked: typeof m.externalLinked === "boolean" ? m.externalLinked : fail("a flag"),
       particles, constraints, shapes };
+    const problem = rangeProblem(simulation);
+    if (problem) fail(`the simulation ${problem}`);
   }
   return { schema: DANGLE_SPEC, rig: s.rig, graph: s.graph, joints, reference, simulation, notes };
 }
