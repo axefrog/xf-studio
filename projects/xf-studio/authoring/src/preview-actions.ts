@@ -10,7 +10,7 @@ import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENS
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
 import type { GradingLutSource } from "./grading-lut";
 import { refusal, type ReasonCode } from "./platform/api";
-import { addLight, aimLightAtHead, BUILT_IN_SETUP_IDS, builtInInfo, colourHex, createSetup, deleteSetup, differsFromBase, editShownSetup,
+import { addLight, aimLightAtHead, duplicateLight, moveLight, BUILT_IN_SETUP_IDS, builtInInfo, colourHex, createSetup, deleteSetup, differsFromBase, editShownSetup,
   findUserSetup, isBuiltInSetup, LIGHT_NUMBER_KEYS, LIGHT_RANGES, LIGHT_TYPES, lightingSource, lightPlacement, LIGHTING_LIMITS, parseColourHex,
   removeLight, renameLight, renameSetup, resetSetup, rigKindOf, SETUP_BACKDROPS, SETUP_DISPLAYS, SETUP_ENVIRONMENT_RANGE,
   SETUP_EXPOSURE_RANGES, setLightColour, setLightNumber, setLightShadows, setLightType, setSetupDisplay, setupBase, setupDefinition,
@@ -55,6 +55,8 @@ type PreviewActionBody =
   | { kind: "preview.aimLightAtHead"; light: string }
   | { kind: "preview.addLight"; type: LightType }
   | { kind: "preview.removeLight"; light: string }
+  | { kind: "preview.moveLight"; light: string; index: number }
+  | { kind: "preview.duplicateLight"; light: string }
   /** The key light's azimuth (the shown setup's `key` light, else its first directional light): scripts and evidence tools. */
   | { kind: "preview.setKeyAngle"; degrees: number }
   | { kind: "preview.setEyeShape"; index: number }
@@ -115,10 +117,10 @@ const NO_LIGHTING = "Lighting controls are unavailable in this preview.";
 /** Actions that change the shown setup's values: on a built-in they fork it first. */
 const SETUP_EDITS = new Set<PreviewAction["kind"]>(["preview.setExposure", "preview.setRoomLight", "preview.setBackdrop", "preview.setDisplayTransform",
   "preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType", "preview.renameLight", "preview.aimLightAtHead",
-  "preview.addLight", "preview.removeLight", "preview.setKeyAngle"]);
+  "preview.addLight", "preview.removeLight", "preview.moveLight", "preview.duplicateLight", "preview.setKeyAngle"]);
 /** Actions that name one of the shown setup's lights. */
 const LIGHT_ACTIONS = new Set<PreviewAction["kind"]>(["preview.setLight", "preview.setLightColour", "preview.setLightShadows", "preview.setLightType",
-  "preview.renameLight", "preview.aimLightAtHead", "preview.removeLight"]);
+  "preview.renameLight", "preview.aimLightAtHead", "preview.removeLight", "preview.moveLight", "preview.duplicateLight"]);
 const LIGHT_NUMBER_LABELS: Record<LightNumberKey, string> = { azimuth: "direction", elevation: "height", distance: "distance", intensity: "strength",
   cone: "cone", softness: "cone softness" };
 
@@ -429,6 +431,12 @@ export class PreviewActions {
         if (!LIGHT_TYPES.includes(action.type)) return refusal("invalid_value", "That kind of light doesn't exist.");
         return shown.lights.length >= LIGHTING_LIMITS.lights
           ? refusal("unavailable", `A setup holds at most ${LIGHTING_LIMITS.lights} lights. Remove one first.`) : undefined;
+      case "preview.moveLight":
+        return Number.isInteger(action.index) && action.index >= 0 && action.index < shown.lights.length ? undefined
+          : refusal("invalid_value", "That place isn't in the list of lights.");
+      case "preview.duplicateLight":
+        return shown.lights.length >= LIGHTING_LIMITS.lights
+          ? refusal("unavailable", `A setup holds at most ${LIGHTING_LIMITS.lights} lights. Remove one first.`) : undefined;
       case "preview.setKeyAngle":
         if (!Number.isFinite(action.degrees) || action.degrees < 0 || action.degrees > 360) return refusal("invalid_value", "Key light angle must be between 0° and 360°.");
         return this.keyLight(shown) ? undefined : refusal("unavailable", "This setup has no directional light to turn.");
@@ -466,6 +474,8 @@ export class PreviewActions {
       case "preview.aimLightAtHead": this.editShown(view, `Aim ${lightName(action.light)} at the head`, setup => aimLightAtHead(setup, action.light)); break;
       case "preview.addLight": this.editShown(view, `Add a ${action.type} light`, setup => addLight(setup, action.type).setup); break;
       case "preview.removeLight": this.editShown(view, `Remove ${lightName(action.light)}`, setup => removeLight(setup, action.light)); break;
+      case "preview.moveLight": this.editShown(view, `Move ${lightName(action.light)} in the list`, setup => moveLight(setup, action.light, action.index)); break;
+      case "preview.duplicateLight": this.editShown(view, `Duplicate ${lightName(action.light)}`, setup => duplicateLight(setup, action.light).setup); break;
       case "preview.setKeyAngle": {
         const key = this.keyLight(this.shownSetup(view))!;
         this.editShown(view, "Key light direction", setup => setLightNumber(setup, key.id, "azimuth", action.degrees), `light.${key.id}.place`); break;

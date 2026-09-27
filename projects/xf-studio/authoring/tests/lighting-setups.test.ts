@@ -487,3 +487,12 @@ test("creator lights carry the game's own values, kept through the edits they st
   damaged.setups[0].setup.lights[1].game.unit = "candela";
   expect(parseSetupLibrary(damaged)).toBeUndefined();
 });
+
+test("lights can be reordered and duplicated (the copy casts no shadow until asked)", () => {
+  const { actions } = setup();
+  actions.dispatch({ kind: "preview.moveLight", light: "rim", index: 0 });
+  expect(actions.lightingSetups().shown.lights.map(light => light.id)).toEqual(["rim", "key", "fill"]);
+  actions.dispatch({ kind: "preview.duplicateLight", light: "key" });
+  expect(actions.lightingSetups().shown.lights.map(light => [light.name, light.shadows])).toEqual([["Rim", true], ["Key", true], ["Key copy", false], ["Fill", false]]);
+  expect(actions.capability({ kind: "preview.moveLight", light: "key", index: 9 }).available).toBe(false);
+});

@@ -96,6 +96,8 @@ export const ACTION_DESCRIPTORS = {
   "preview.aimLightAtHead": inView("viewport", "workspace", "none", { light: target("string") }),
   "preview.addLight": inView("viewport", "workspace", "none", { type: enumerated(LIGHT_TYPES) }),
   "preview.removeLight": inView("viewport", "workspace", "none", { light: target("string") }),
+  "preview.moveLight": inView("viewport", "workspace", "none", { light: target("string"), index: input("integer", 0, LIGHTING_LIMITS.lights - 1) }),
+  "preview.duplicateLight": inView("viewport", "workspace", "none", { light: target("string") }),
   "preview.setKeyAngle": inView("viewport", "workspace", "none", { degrees: input("number", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) }),
   "preview.setEyeShape": inView("viewport", "workspace", "none", { index: input("integer", 0, 21) }),
   "preview.setPiercings": inView("viewport", "workspace", "none", { enabled: input("boolean") }),

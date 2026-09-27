@@ -348,6 +348,30 @@ export const setLightType = (setup: LightingSetup, id: string, type: LightType) 
 export const renameLight = (setup: LightingSetup, id: string, name: string) => mapLight(setup, id, light => ({ ...light, name: name.trim() }));
 export const aimLightAtHead = (setup: LightingSetup, id: string) => mapLight(setup, id, light => ({ ...light, target: [...setup.focus] as unknown as Vec3 }));
 export const removeLight = (setup: LightingSetup, id: string): LightingSetup => ({ ...setup, lights: setup.lights.filter(light => light.id !== id) });
+/** Move a light to an index in the list (the order the editor shows; within a type it is also Three's order). */
+export function moveLight(setup: LightingSetup, id: string, index: number): LightingSetup {
+  const light = setup.lights.find(item => item.id === id);
+  if (!light) return setup;
+  const rest = setup.lights.filter(item => item.id !== id);
+  rest.splice(Math.max(0, Math.min(rest.length, index)), 0, light);
+  return { ...setup, lights: rest };
+}
+/** A copy of a light just after it, "<name> copy", with a new ID and no shadows (the budget is the person's to spend). */
+export function duplicateLight(setup: LightingSetup, id: string): { setup: LightingSetup; id: string } {
+  const at = setup.lights.findIndex(item => item.id === id);
+  if (at < 0) return { setup, id };
+  const ids = new Set(setup.lights.map(light => light.id)), names = new Set(setup.lights.map(light => light.name));
+  let n = setup.lights.length + 1;
+  while (ids.has(`light-${n}`)) n++;
+  const source = setup.lights[at]!, base = `${source.name} copy`.slice(0, LIGHTING_LIMITS.name);
+  let name = base;
+  for (let k = 2; names.has(name); k++) name = `${base.slice(0, LIGHTING_LIMITS.name - String(k).length - 1)} ${k}`;
+  const copy: SetupLight = { ...structuredClone(source), id: `light-${n}`, name, shadows: false,
+    ...(source.game ? { game: { ...source.game, localShadows: false, contactShadows: "none" as const } } : {}) };
+  const lights = [...setup.lights];
+  lights.splice(at + 1, 0, copy);
+  return { setup: { ...setup, lights }, id: copy.id };
+}
 /**
  * A new white light aimed at the head, from the front and V's right, 30° up: a directional light at the key's distance, or a spot light
  * 1 m out whose strength gives the studio key's light at the head (2.5 at 1 m with inverse-square decay). No shadows until asked.
