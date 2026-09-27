@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD, GAME_BLINK_SCHEMA,
   GameBlink, loadGameBlink, parseGameBlink, type BlinkTimer, type GameBlinkDescription } from "../src/game-blink";
 import { IdleAnimation } from "../src/idle-animation";
+import { FaceDriver } from "../src/platform/scene/face-driver";
 import { MotionActions, type MotionPort } from "../src/motion-actions";
 import { composePreviewMotion } from "../src/preview-motion";
 import { createRenderScheduler } from "../src/render-scheduler";
@@ -310,4 +311,77 @@ test("a saved Closure and Play blink come back on reload; the Motion note says w
   expect(blinkNoteLine(missing.snapshot())).toBe(GAME_BLINK_MISSING);
   const damaged = new MotionActions(freshWorkspace().preview, { ...port, blink: { available: false, error: GAME_BLINK_DAMAGED } });
   expect(damaged.capability({ kind: "motion.setBlink", value: .2 }).reason).toBe(GAME_BLINK_DAMAGED);
+});
+
+/**
+ * A part swap under a held pose (PREV-144): a hairstyle change re-binds every drawn detail (character-renderer.ts detaches the previous
+ * V's bones and attaches the next V's, kept components included). Each motion captures a bone's neutral pose as it binds, so whichever
+ * writes the bones as it binds (the held expression, a held closure) must bind last, or the others capture its pose as neutral, restore
+ * it on detach, and every swap compounds it.
+ */
+function swapScene() {
+  const { source, description, closure, clip } = rig();
+  const head = flat([["l_J_eye_lid_up_rowA_1_JNT", rowRest], ["l_J_eye_JNT", CENTRE.clone()]]);
+  const body = new THREE.Group(), driver = Object.assign(new THREE.Bone(), { name: "Head" }); body.add(driver);
+  const idleClip = new THREE.AnimationClip("idle", 2, [new THREE.VectorKeyframeTrack("Head.position", [0, 1, 2], [0, 0, 0, .05, 0, 0, 0, 0, 0])]);
+  const ancestry = { "l_J_eye_lid_up_rowA_1_JNT": "Head", "l_J_eye_JNT": "Head", "l_J_eye_lid_lashes_up_rowA_1_JNT": "Head" };
+  const idle = new IdleAnimation(body, idleClip, head.bones, ancestry);
+  const blink = new GameBlink(source, parseGameBlink(description, [closure, clip]), head.bones, undefined, { set: () => 0, clear: () => {} });
+  const face = new FaceDriver(head.bones);
+  face.setRig([{ name: "l_J_eye_lid_up_rowA_1_JNT", parent: -1, t: rowRest.toArray(), r: [0, 0, 0, 1], s: [1, 1, 1] },
+    { name: "l_J_eye_JNT", parent: -1, t: CENTRE.toArray(), r: [0, 0, 0, 1], s: [1, 1, 1] }]);
+  const motion = composePreviewMotion(idle, blink, face);
+  /** A detail's own skeleton copy: the lid row with its lash child, and the eye joint. */
+  const detail = () => {
+    const part = flat([["l_J_eye_lid_up_rowA_1_JNT", rowRest], ["l_J_eye_JNT", CENTRE.clone()]]);
+    const lash = Object.assign(new THREE.Bone(), { name: "l_J_eye_lid_lashes_up_rowA_1_JNT" }); lash.position.copy(LASH);
+    part.bones[0]!.add(lash); part.root.updateMatrixWorld(true);
+    return [...part.bones, lash];
+  };
+  const kept = detail(), hairs = [detail(), detail()];
+  let shown = 0;
+  motion.attach([...kept, ...hairs[0]!]);
+  const everything = () => [...head.bones, ...kept, ...hairs.flat()];
+  const worldPose = () => everything().map(bone => { bone.updateWorldMatrix(true, false); return [...bone.matrixWorld.elements]; });
+  return { head, idle, blink, face, motion, kept, hairs, everything, worldPose,
+    /** Change hairstyle as setCharacterDetails does: every drawn bone leaves, the kept ones and the other hair join. */
+    swap() { motion.detach([...kept, ...hairs[shown]!]); shown = 1 - shown; motion.attach([...kept, ...hairs[shown]!]); } };
+}
+const expression = { frames: [new Map([[0, { t: rowRest.clone().add(new THREE.Vector3(.001, .002, -.001)).toArray(),
+  r: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), .25).toArray() }]])] };
+
+test("alternating hairstyles under a held expression never drifts the face, idle off (PREV-144)", () => {
+  const scene = swapScene(), rest = scene.worldPose();
+  scene.face.hold(expression); scene.motion.faceChanged();
+  scene.swap();
+  const once = scene.worldPose();
+  expect(maxDifference(once, rest)).toBeGreaterThan(1e-4); // the expression shows
+  for (let i = 0; i < 20; i++) scene.swap(); // an even count: the hairstyle shown after one swap again
+  expect(maxDifference(scene.worldPose(), once)).toBeLessThan(1e-9);
+  scene.face.release(); scene.motion.faceChanged();
+  expect(maxDifference(scene.worldPose(), rest)).toBeLessThan(1e-12);
+});
+
+test("alternating hairstyles while the idle plays over a held expression never drifts the face (PREV-144)", () => {
+  const scene = swapScene(), rest = scene.worldPose();
+  scene.face.hold(expression); scene.motion.faceChanged();
+  const held = scene.worldPose();
+  scene.motion.setIdle(true);
+  scene.motion.advance(.4);
+  for (let i = 0; i < 20; i++) { scene.swap(); scene.motion.advance(.1); }
+  scene.motion.setIdle(false);
+  expect(maxDifference(scene.worldPose(), held)).toBeLessThan(1e-9);
+  scene.face.release(); scene.motion.faceChanged();
+  expect(maxDifference(scene.worldPose(), rest)).toBeLessThan(1e-12);
+});
+
+test("alternating hairstyles under a held blink closure never drifts the lids (PREV-144)", () => {
+  const scene = swapScene(), rest = scene.worldPose();
+  scene.blink.setClosure(.6);
+  const closed = scene.worldPose();
+  expect(maxDifference(closed, rest)).toBeGreaterThan(1e-4);
+  for (let i = 0; i < 20; i++) scene.swap();
+  expect(maxDifference(scene.worldPose(), closed)).toBeLessThan(1e-9);
+  scene.blink.setClosure(0);
+  expect(maxDifference(scene.worldPose(), rest)).toBeLessThan(1e-12);
 });
