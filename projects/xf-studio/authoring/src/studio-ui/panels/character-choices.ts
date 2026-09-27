@@ -32,7 +32,7 @@
  * - **Pictures of shape choices** (choice-previews-design.md): a row whose option has a picture kind (a hairstyle) shows its choices as
  *   preview tiles (components/choice-preview.ts) in one of three layouts (`previews.layout`, §7.1): a **grid** of three sizes
  *   (`previews.size`), a **list** of 32 px rows (thumbnail, label, and the source where its heading doesn't say it: "Other mods") or
- *   **details** (64 px rows with the prepared state, and the large picture of the choice under the pointer, else the focused one, else
+ *   **details** (the same small rows with the prepared state where it isn't ready yet, and the large picture of the choice under the pointer, else the focused one, else
  *   the V's, which never scrolls away: beside the list from a 440 px row, a compact block kept under the row's top edge below that). A picture arriving fills its tile in place and never moves the layout; the label stays the tile's accessible name,
  *   tooltip and (except at size S) visible caption. Switching layout keeps focus on the same choice and brings it into view.
  * - **Turntables** (grid L and details): the picture under the pointer turns slowly after a dwell and turns by hand when dragged (a drag
@@ -108,8 +108,8 @@ const FETCH_SHOWN: Partial<Record<ChoiceFetch, { mark: string; words: string }>>
   n: { mark: "pending", words: "not prepared yet" }, q: { mark: "pending", words: "not prepared yet" },
   f: { mark: "fetching", words: "being prepared" }, x: { mark: "failed", words: "couldn't be prepared ahead; choosing it tries again" },
 };
-/** The prepared state as the details layout writes it beside a choice. */
-const FETCH_STATE: Partial<Record<ChoiceFetch, string>> = { r: "Ready", n: "Not prepared yet", q: "Not prepared yet", f: "Being prepared",
+/** The prepared state as the details layout writes it beside a choice, in the Character legend's words; nothing once it is ready. */
+const FETCH_STATE: Partial<Record<ChoiceFetch, string>> = { n: "Not prepared yet", q: "Not prepared yet", f: "Preparing",
   x: "Couldn't be prepared ahead" };
 
 /** What decides whether a list is grouped, and how: another of it rebuilds the list. */

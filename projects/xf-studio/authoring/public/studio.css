@@ -895,19 +895,17 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* The list and details texts (components/choice-preview.ts `setMeta`) show only in those layouts. */
 .pv-text { display: contents; }
 .pv-meta, .pv-state { display: none; }
-/* List (32 px rows: thumbnail, label, source) and details (64 px rows with the prepared state) (choice-previews-design.md §7.1). */
+/* List and details: 32 px rows (thumbnail, label, source where no heading says it; details adds the prepared state until ready) (§7.1). */
 .choices.previews[data-layout="list"], .choices.previews[data-layout="details"] { --pv-columns: minmax(0, 1fr); gap: 2px; }
-.choices.previews[data-layout="list"] { --pv-size: 28px; } .choices.previews[data-layout="details"] { --pv-size: 64px; }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) { --pv-size: 28px; }
 .choices.previews[data-layout="list"] .cc-maker-items, .choices.previews[data-layout="details"] .cc-maker-items { gap: 2px; }
 .choices.previews:is([data-layout="list"], [data-layout="details"]) .choice.preview-choice { padding: 2px; contain-intrinsic-size: auto calc(var(--pv-size) + 4px); }
 .choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-tile { flex-direction: row; align-items: center; gap: var(--sp-3); }
 .choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-frame { flex: none; width: var(--pv-size); }
-.choices.previews[data-layout="list"] .pv-text { display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; flex: 1; }
-.choices.previews[data-layout="list"] .pv-label { flex: 1 1 auto; font-size: var(--fs-sm); color: var(--text); }
-.choices.previews[data-layout="list"] .pv-meta { display: block; flex: 0 1 auto; max-width: 45%; }
-.choices.previews[data-layout="details"] .pv-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-.choices.previews[data-layout="details"] .pv-label { font-size: var(--fs-md); color: var(--text); }
-.choices.previews[data-layout="details"] :is(.pv-meta, .pv-state) { display: block; }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-text { display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; flex: 1; }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) .pv-label { flex: 1 1 auto; font-size: var(--fs-sm); color: var(--text); }
+.choices.previews:is([data-layout="list"], [data-layout="details"]) :is(.pv-meta, .pv-state) { display: block; flex: 0 1 auto; max-width: 45%; }
+.choices.previews[data-layout="list"] .pv-state { display: none; }
 .pv-meta, .pv-state { overflow: hidden; font-size: var(--fs-2xs); line-height: 1.35; color: var(--text-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .pv-state:empty { display: none !important; }
 /* Group headings stay in view while their choices scroll past (§7.3). */

@@ -48,7 +48,7 @@ describe("layouts", () => {
     view.update(input("details"));
     expect(element.getAttribute("data-layout")).toBe("details");
     expect(item(2).querySelector(".pv-state")!.textContent).toBe("Not prepared yet");
-    expect(item(0).querySelector(".pv-state")!.textContent).toBe("Ready");
+    expect(item(0).querySelector(".pv-state")!.textContent).toBe("");
   });
 
   test("a row's source shows only where its heading doesn't say it: the pooled 'Other mods', not under its maker's own heading", async () => {

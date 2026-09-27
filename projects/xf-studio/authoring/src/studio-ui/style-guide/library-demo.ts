@@ -289,7 +289,7 @@ function turning(pictures: string[]) {
 function choiceLayoutsSpecimen() {
   const pictures = [syntheticPreview(0), syntheticPreview(1), syntheticPreview(2)], strip = syntheticPreview(1, 24);
   const names = ["Bob", "Braids", "Bun", "Curly", "Pixie"], sources = ["From the game", "From Sample Hair Pack", "From the game", "From Sample Hair Pack", "From the game"];
-  const states = ["Ready", "Ready", "Being prepared", "Not prepared yet", "Ready"];
+  const states = ["", "", "Preparing", "Not prepared yet", ""];
   const host = h("div", { class: "cc-choice-list" });
   let layout: "grid" | "list" | "details" = "details", size: "s" | "m" | "l" = "m", shown = 1;
   const stage = previewStage({ glyph: "head" });
