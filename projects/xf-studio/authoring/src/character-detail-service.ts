@@ -416,7 +416,9 @@ export class CharacterPreparationCache {
   readonly layerTemplates = new RunMap<string, { values: TemplateValues; source: RenderSourceRef } | null>();
   readonly gamma = new RunMap<string, boolean | null>();
   /** Exports by `archive id|depot path` (lower case). A tool failure is never kept, so the next preparation tries again. */
-  readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null }>();
+  readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null;
+    /** A plain line from XF Studio's mesh reader (native-geometry-export.ts), when it read the shape differently from the file as it stands. */
+    readerNote?: string | null }>();
   /** A texture's PNG, and mip 0's size in the game files when the PNG is a smaller mip of it (XF Studio's texture reader). */
   readonly textures = new RunMap<string, { png: string; gameSize?: { width: number; height: number } }>();
   readonly masks = new RunMap<string, { layers: string[] }>();
@@ -564,9 +566,15 @@ type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<str
   toolFailures: Set<string>; toolLabel: string | undefined;
   /** Where the time went, for the preparation's log line (PIPE-103): the first exports, the reads beside them, the layer maps after. */
   stages: string[] };
+type NativeCounts = { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number };
 /** The native texture reader's counts of an exporter that has one (native-texture-export.ts), copied. */
 const nativeTextureCounts = (exporter: GameAssetExporter) => {
-  const stats = (exporter as { nativeTextures?: { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number } }).nativeTextures;
+  const stats = (exporter as { nativeTextures?: NativeCounts }).nativeTextures;
+  return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
+};
+/** The native mesh reader's counts of an exporter that has one (native-geometry-export.ts), copied. */
+const nativeGeometryCounts = (exporter: GameAssetExporter) => {
+  const stats = (exporter as { nativeGeometry?: NativeCounts }).nativeGeometry;
   return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
 };
 /** Exports asked of the exporter, and how many of them its own disk cache answered (the rest ran WolvenKit). */
@@ -666,7 +674,7 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   const settle = <T>(work: Promise<T>) => work.then(value => ({ value }), (error: unknown) => ({ error }));
   const began = performance.now(), seconds = (from: number) => `${((performance.now() - from) / 1000).toFixed(2)} s`;
   const tally: ExportTally = { asked: 0, cached: 0 }, stages: string[] = [];
-  const texturesBefore = nativeTextureCounts(ctx.exporter);
+  const texturesBefore = nativeTextureCounts(ctx.exporter), geometryBefore = nativeGeometryCounts(ctx.exporter);
   const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt.values()].map(at => ({ kind: "geometry" as const, at })),
     ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures, tally)
     .finally(() => { stages.push(`exports ${seconds(began)}`); }));
@@ -748,6 +756,11 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   if (textures && texturesBefore) {
     const decoded = textures.decoded - texturesBefore.decoded, cachedNative = textures.cached - texturesBefore.cached, fellBack = textures.fellBack - texturesBefore.fellBack;
     if (decoded || cachedNative || fellBack) stages.push(`textures read natively: ${decoded} decoded in ${((textures.decodeMs - texturesBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit; WolvenKit exports ${((textures.innerMs - texturesBefore.innerMs) / 1000).toFixed(2)} s beside them`);
+  }
+  const geometry = nativeGeometryCounts(ctx.exporter);
+  if (geometry && geometryBefore) {
+    const decoded = geometry.decoded - geometryBefore.decoded, cachedNative = geometry.cached - geometryBefore.cached, fellBack = geometry.fellBack - geometryBefore.fellBack;
+    if (decoded || cachedNative || fellBack) stages.push(`meshes read natively: ${decoded} decoded in ${((geometry.decodeMs - geometryBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit`);
   }
   for (const outcome of [first, exportedLater, readsDone, laterReads]) if ("error" in outcome) throw outcome.error;
   const toolLabel = ("value" in first ? first.value : undefined) ?? ("value" in exportedLater ? exportedLater.value : undefined);
@@ -1055,6 +1068,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       return tool ? "tool" : "export";
     }
     if (exported.repair) note(`${component.component}: WolvenKit couldn't export its shape as it is, so it was exported from a repaired copy: ${exported.repair}.`);
+    if (exported.readerNote) note(`${component.component}: ${exported.readerNote}.`);
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
       const chunkTextures: Record<string, RenderTexture> = {};

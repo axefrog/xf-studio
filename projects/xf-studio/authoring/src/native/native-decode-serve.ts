@@ -8,7 +8,9 @@
 import { depotHash } from "../depot-path";
 import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
-import { decodeFromPool, type NativeDecodeOptions, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerInit, type WorkerReply, type WorkerTextureMessage } from "./native-decode";
+import { decodeGeometryFromPool } from "./mesh-decode";
+import { decodeFromPool, type NativeDecodeOptions, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerGeometryMessage, type WorkerInit, type WorkerReply,
+  type WorkerTextureMessage } from "./native-decode";
 import { decodeTextureFromPool } from "./texture-decode";
 
 export interface WorkerScope {
@@ -32,7 +34,7 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
   };
   const reply = (message: WorkerReply, transfer?: Transferable[]) => transfer ? scope.postMessage(message, transfer) : scope.postMessage(message);
   scope.addEventListener("message", event => {
-    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerCloseMessage;
+    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerGeometryMessage | WorkerCloseMessage;
     if (message.type === "close") {
       // Idle: release the library (so a game update can replace it) and exit (NATIVE-42).
       const current = state;
@@ -60,6 +62,18 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
         // A texture leaves tens of MB of garbage (the resource and its texture data): ask for a collection before the next one.
         (globalThis as { Bun?: { gc?: (force: boolean) => void } }).Bun?.gc?.(false);
       });
+    }
+    if (message.type === "geometry") {
+      const outcome = state ? decodeGeometryFromPool(state.pool, state.decompress, message.request)
+        : { ok: false as const, kind: "internal" as const, message: "The native decoder worker was not initialised." };
+      // The GLB and the raw file move to the host instead of being copied (a head's morph target is tens of MB together); a buffer is
+      // moved only when the array spans all of it (otherwise it is copied).
+      const whole = (bytes: Uint8Array) => bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength;
+      const transfer: ArrayBuffer[] = [];
+      if (outcome.ok) for (const bytes of [outcome.geometry.glb, outcome.geometry.raw])
+        if (whole(bytes) && !transfer.includes(bytes.buffer as ArrayBuffer)) transfer.push(bytes.buffer as ArrayBuffer);
+      reply({ type: "outcome", id: message.id, outcome }, transfer.length ? transfer : undefined);
+      (globalThis as { Bun?: { gc?: (force: boolean) => void } }).Bun?.gc?.(false);
     }
   });
 }

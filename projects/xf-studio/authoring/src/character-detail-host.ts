@@ -12,7 +12,8 @@ import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import type { CharacterRequest } from "./character-detail-request";
 import type { GameAssetExporter } from "./game-asset-export";
 import { createWolvenKitGameAssetExporter } from "./game-asset-export-wolvenkit";
-import { createNativeFirstExporter, NativeTextureDecoders, type TextureDecoder } from "./native-texture-export";
+import { createNativeGeometryExporter, type GeometryDecoder, NATIVE_GEOMETRY_TIMEOUT_MS } from "./native-geometry-export";
+import { createNativeFirstExporter, NativeDecoders, type TextureDecoder } from "./native-texture-export";
 import { acquireInstallation, installationRouteKey, installations, type InstallationRegistry } from "./installation-registry";
 import { CreatorCatalogueHost, structuralInput } from "./cc-catalogue-service";
 import type { LaunchRoute } from "./local-settings";
@@ -86,6 +87,11 @@ export type CharacterDetailHostOptions = {
    * `exporter` (a test seam), none unless given here. `false`: never.
    */
   textureDecoder?: ((gameRoot: string) => Promise<TextureDecoder | null>) | false;
+  /**
+   * The game folder's mesh decoder (native-geometry-export.ts): meshes and morph targets are read by XF Studio's own reader first and by
+   * the exporter per resource it refuses. Defaults as `textureDecoder` (a decode worker of its own per game folder).
+   */
+  geometryDecoder?: ((gameRoot: string) => Promise<GeometryDecoder | null>) | false;
   /** Test seam over the service call. */
   prepare?: (options: PrepareCharacterOptions) => ReturnType<typeof prepareCharacterDetails>;
   /** Test seam over the creator catalogue. */
@@ -203,12 +209,22 @@ export class CharacterDetailHost {
     const decoder = this.options.textureDecoder === false ? null
       : this.options.textureDecoder ?? (this.options.exporter ? null : (gameRoot: string) => this.textureDecoders.get(gameRoot));
     // Textures natively first, served from their largest mip within the preview's size, WolvenKit per texture it refuses (PIPE-104).
-    return decoder ? createNativeFirstExporter(inner, { cacheRoot: exports, maxSide: SERVED_TEXTURE_MAX, decoder }) : inner;
+    const textured = decoder ? createNativeFirstExporter(inner, { cacheRoot: exports, maxSide: SERVED_TEXTURE_MAX, decoder }) : inner;
+    const geometryDecoder = this.options.geometryDecoder === false ? null
+      : this.options.geometryDecoder ?? (this.options.exporter ? null : (gameRoot: string) => this.geometryDecoders.get(gameRoot));
+    // Meshes and morph targets natively first, WolvenKit per resource the reader refuses (native reader phase 4).
+    return geometryDecoder ? createNativeGeometryExporter(textured, { cacheRoot: exports, decoder: geometryDecoder }) : textured;
   }
   /** One texture decode worker per game folder, opened when first asked for (native-texture-export.ts). */
-  private decoders: NativeTextureDecoders | null = null;
-  private get textureDecoders(): NativeTextureDecoders {
-    return this.decoders ??= new NativeTextureDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log });
+  private decoders: NativeDecoders | null = null;
+  private get textureDecoders(): NativeDecoders {
+    return this.decoders ??= new NativeDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log });
+  }
+  /** One mesh decode worker per game folder, beside the texture one, so meshes and textures decode side by side. */
+  private meshDecoders: NativeDecoders | null = null;
+  private get geometryDecoders(): NativeDecoders {
+    return this.meshDecoders ??= new NativeDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log, timeoutMs: NATIVE_GEOMETRY_TIMEOUT_MS,
+      label: { reader: "mesh reader", what: "meshes" } });
   }
 
   private get storeRoot() { return join(this.options.cacheRoot, "characters"); }
