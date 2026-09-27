@@ -20,6 +20,8 @@ const port = +portArg;
 const { server } = await startServer(port);
 const page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1440, height: 960, scheme: "dark", debugPort: port + 5000 });
 const shots: string[] = [];
+const t0 = Date.now();
+const log = (what: string) => console.log(`${((Date.now() - t0) / 1000).toFixed(1)} s: ${what}`);
 const box = (selector: string) => page.evaluate(`(() => { const e = ${selector}; if (!e) return null; const r = e.getBoundingClientRect();
   return { x: Math.max(0, r.x), y: Math.max(0, r.y), width: Math.min(r.width, innerWidth - Math.max(0, r.x)), height: Math.min(r.height, innerHeight - Math.max(0, r.y)) }; })()`);
 const snap = async (name: string, selector: string) => {
@@ -33,15 +35,18 @@ const scrollTo = (selector: string) => page.evaluate(`(() => { const e = documen
 const clickRow = (text: string) => page.evaluate(`(() => { const row = [...document.querySelectorAll(".expr-drawer .tree-row")].find(r => r.textContent.includes(${JSON.stringify(text)})); row?.click(); return !!row; })()`);
 try {
   await page.waitFor("document.querySelector('.dock-group') && !!window.xfStudioShell && !!window.xfStudioPresentation", 120000);
+  log("page ready");
   await page.evaluate(MASK_VIEWPORTS);
   // The body isn't needed for the face (and is masked anyway): turning it off keeps Chrome's memory small.
   await page.waitFor(`window.xfStudioPresentation.authoring.capability({ kind: "preview.setBody", enabled: false }).available`, 240000).catch(() => {});
   await page.evaluate(`window.xfStudioPresentation.authoring.dispatch({ kind: "preview.setBody", enabled: false })`).catch(() => {});
+  log("body off");
   await page.evaluate(`window.xfStudioShell.runtime.modules.set("expressions", true)`);
   await page.wait(800);
   await page.evaluate(`window.xfStudioShell.dock.reveal("expressions.controls")`);
   await page.waitFor(`document.querySelectorAll(".expr-drawer .group-section").length > 0`, 300000);
   await page.waitFor(`document.querySelectorAll(".expr-drawer .tree-row").length > 0`, 120000).catch(() => {});
+  log("drawer built");
   // A natural sample, so several controls are set (the set state, counts and resets show).
   await clickRow("Warm smile");
   await page.wait(1500);
@@ -52,7 +57,7 @@ try {
       await page.evaluate(`window.xfStudioShell.dock.moveTo("expressions.controls", { kind: "float", x: ${1420 - width}, y: 30, w: ${width}, h: 900 }, "")`);
       await page.wait(700);
       await scrollTo(".expr-drawer");
-      await snap(`${tag}-top`, drawerWindow);
+      await snap(`${tag}-top`, drawerWindow); log(`${tag} top`);
       // The Gaze group, opened.
       await page.evaluate(`(() => { const g = document.querySelector('.expr-drawer [data-group="eyes"], .expr-drawer [data-group="gaze"]'); const b = g?.querySelector(".expander"); if (b?.getAttribute("aria-expanded") === "false") b.click(); })()`);
       await page.wait(300);
