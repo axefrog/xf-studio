@@ -12,10 +12,11 @@ export const EYE_MAKEUP_MODULE: StudioModule = Object.freeze({
 
 export const EYE_MAKEUP_VIEW_TOOLS: readonly ViewToolContribution[] = Object.freeze([
   { id: "eye-makeup.surface", module: "eye-makeup", label: "Surface controls", title: "Show editable controls on the head", icon: "handles",
-    order: 30, scenes: ["character"], placement: "toolbar", kind: "toggle", state: "tools", keywords: "handles points edit on head" },
+    order: 30, scenes: ["character"], placement: "toolbar", kind: "toggle", state: "tools", dispatches: "view.setTool", editing: true,
+    keywords: "handles points edit on head" },
   // A research tool (UI-85): shown in the toolbar, the menus, the palette and Camera & light only with research tools on.
   { id: "eye-makeup.wire", module: "eye-makeup", label: "Plate wireframe", icon: "wire", order: 40, scenes: ["character"],
-    placement: "research", kind: "toggle", state: "tools", keywords: "mesh triangles plate research" },
+    placement: "research", kind: "toggle", state: "tools", dispatches: "view.setTool", keywords: "mesh triangles plate research" },
 ]);
 
 export const EYE_MAKEUP_SUMMARY: ViewSummaryContribution = Object.freeze({ module: "eye-makeup", scenes: ["character"] });

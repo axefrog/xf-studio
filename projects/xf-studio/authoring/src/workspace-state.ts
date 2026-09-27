@@ -12,17 +12,16 @@ import type { LiveFeatureState } from "./platform/core/live-features";
 import { parseFieldSelection, type FieldSelection } from "./engines/layered-makeup/field-selection";
 import { defaultUVView, parseUVView, type UVView } from "./uv-view";
 import { DEFAULT_PREVIEW_TEXTURE_SIZE, parsePreviewTextureSize, type PreviewTextureSize } from "./preview-quality";
-import { MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE } from "./camera-framing";
 import {parseGlitterChoices, type GlitterChoices} from "./engines/layered-makeup/glitter-model";
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 import { isCreatorName } from "./creator-names";
 import { storedCharacterOf, type StoredCharacter } from "./character-context-actions";
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
-import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
+import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import type { ViewGraphData } from "./platform/api/view-graph";
 import { parseViewGraph } from "./platform/core/view-graph";
-import { isDefaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "./preview-view-graph";
+import { EYE_SHAPE_RANGE, isDefaultViewGraph, STUDIO_VIEW_GRAPH_RULES, validCameraPose } from "./preview-view-graph";
 
 export type CameraState = { position: number[]; target: number[]; fov: number };
 export type LibraryState = { selected: string; name: string; current?: { id: string; revision: number } };
@@ -195,7 +194,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     // The character context: the V's source and the choices set on it, validated; anything unreadable is dropped.
     const character = storedCharacterOf((p as { character?: unknown }).character);
     if (character) state.preview.character = character;
-    for (const [key, min, max] of [["eyeShape", 0, 21], ["exposure", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max], ["lightAngle", 0, 360],
+    // The same ranges as the view graph's node codecs (CORE-96).
+    for (const [key, min, max] of [["eyeShape", EYE_SHAPE_RANGE.min, EYE_SHAPE_RANGE.max], ["exposure", STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max],
+      ["lightAngle", STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max],
       ["blink", 0, 1], ["idleTime", 0, Number.MAX_SAFE_INTEGER]] as const)
       if (finite(p[key], min, max)) state.preview[key] = p[key];
     state.preview.eyeShape = Math.round(state.preview.eyeShape);
@@ -208,12 +209,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
       elevation: lights.elevation, fill: lights.fill, rim: lights.rim, neutral: lights.neutral };
     if (state.preview.idle) { state.preview.blinkPlaying = false; state.preview.blink = 0; }
     else state.preview.idlePaused = false;
-    const c = p.camera, vector = (x: unknown): x is number[] =>
-      Array.isArray(x) && x.length === 3 && x.every(n => finite(n, -100, 100));
-    if (c && vector(c.position) && vector(c.target) && finite(c.fov, 10, 90)) {
-      const distance = Math.hypot(...c.position.map((n, i) => n - c.target[i]));
-      if (distance >= MIN_CAMERA_DISTANCE - .001 && distance <= MAX_CAMERA_DISTANCE + .001) state.preview.camera = structuredClone(c);
-    }
+    if (validCameraPose(p.camera)) state.preview.camera = structuredClone(p.camera);
   }
   // A damaged graph, or the default one written anyway, falls back to the default graph over `preview`.
   const views = v.views !== undefined ? parseViewGraph(v.views, STUDIO_VIEW_GRAPH_RULES) : undefined;

@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.2.0
+  VERSION 0.3.0
   LANGUAGES CXX RC
 )
 
@@ -92,6 +92,7 @@ add_library(xfb_core STATIC
   src/core/Config.cpp
   src/core/Dispatcher.cpp
   src/core/GameThreadQueue.cpp
+  src/core/LivePose.cpp
   src/core/Log.cpp
   src/core/OptionsExchange.cpp
   src/core/Params.cpp
@@ -114,6 +115,7 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/Main.cpp
   src/plugin/Natives.cpp
   src/plugin/GameHandlers.cpp
+  src/plugin/LivePoseMemory.cpp
   src/plugin/ScriptCall.cpp
   src/plugin/Plugin.cpp
   src/plugin/Resource.rc

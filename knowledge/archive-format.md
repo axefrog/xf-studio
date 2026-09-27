@@ -1,6 +1,6 @@
 # Archive and resource formats
 
-**Maturity: Draft.** How a game `.archive` stores resources, how the mesh render blobs hold vertices (§11), how a resource's CR2W bytes encode its objects, and how XF Studio's native reader turns them into the same JSON documents the resolver used to read only from WolvenKit (the resolver now reads natively first, §9). Everything here was checked against game 2.31's own archives and installed mods, with WolvenKit CLI 9.0.1 as the reference. It is offline evidence: it says what the files hold, not what the engine does with them.
+**Maturity: Draft.** How a game `.archive` stores resources, how the mesh render blobs hold vertices (§12), how a resource's CR2W bytes encode its objects, and how XF Studio's native reader turns them into the same JSON documents the resolver used to read only from WolvenKit (the resolver now reads natively first, §9). Everything here was checked against game 2.31's own archives and installed mods, with WolvenKit CLI 9.0.1 as the reference. It is offline evidence: it says what the files hold, not what the engine does with them.
 
 Grades follow the [knowledge base](README.md) legend. **[resource]** here means the native reader decoded the bytes and the result matched WolvenKit's output, byte for byte or leaf for leaf; **[source]** means the layout is described in a community tool or SDK listed under [Sources](#sources), and this page only restates format facts. XF Studio's reader is written from those facts and from the bytes. It contains no code from WolvenKit, which is GPL-3.0 and serves only as a documentation source and a test oracle.
 
@@ -207,7 +207,7 @@ Mod archives are untrusted input, and every size and count in them is chosen by 
 
 ## 9. Where this lives in XF Studio
 
-`projects/xf-studio/authoring/src/native/` holds the code. `rdar-archive.ts`, `kark.ts`, `oodle.ts` and `archive-reader.ts` cover §1–2; `cr2w-file.ts`, `cr2w-reader.ts`, `red-values.ts` and `red-package.ts` cover §3–5; `red-json-writer.ts`, `red-defaults.ts`, `json-numbers.ts` and `resource-document.ts` cover §6. `native-errors.ts` and `limits.ts` hold the typed failures and budgets of §8. `native-decode.ts` and `native-decode-worker.ts` hold the in-process and worker decoders, and `native-fetch-port.ts` the `NativeFirstFetcher`. Textures (§10): `bcn.ts` (block formats), `xbm-texture.ts` (the layout, the served mip, rows) and `texture-decode.ts` (one texture to its PNG, in the worker); `src/native-texture-export.ts` wraps the character details' exporter, natively first and WolvenKit per texture ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)). Meshes (§11): `mesh-blob.ts` (the render blob and vertex streams), `morph-blob.ts` (morph targets), `mesh-glb.ts` (WolvenKit's GLB conventions) and `mesh-decode.ts` (one mesh from an archive, in the worker); `src/native-geometry-export.ts` wraps the exporter for geometry the same way. The resolver reads through it: one decoder per game folder, native first and WolvenKit per resource ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)); the creator catalogue's on-screen texts go through the same fetch port (`ResolverFetcher.fetchJsonResource`, at background priority), and the clothing host decodes the item visual-tag preset ([worn clothing §4.1](clothing.md#41-where-visual-tags-come-from-source-wiki)) in a worker of its own. The [backlog page](../research/backlog/native-archive-reader.md) holds the measurements and the texture and mesh phases.
+`projects/xf-studio/authoring/src/native/` holds the code. `rdar-archive.ts`, `kark.ts`, `oodle.ts` and `archive-reader.ts` cover §1–2; `cr2w-file.ts`, `cr2w-reader.ts`, `red-values.ts` and `red-package.ts` cover §3–5; `red-json-writer.ts`, `red-defaults.ts`, `json-numbers.ts` and `resource-document.ts` cover §6. `native-errors.ts` and `limits.ts` hold the typed failures and budgets of §8. `native-decode.ts` and `native-decode-worker.ts` hold the in-process and worker decoders, and `native-fetch-port.ts` the `NativeFirstFetcher`. Textures (§10): `bcn.ts` (block formats), `xbm-texture.ts` (the layout, the served mip, rows) and `texture-decode.ts` (one texture to its PNG, in the worker); `src/native-texture-export.ts` wraps the character details' exporter, natively first and WolvenKit per texture ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)). Animation sets and rigs (§11): `anim-set.ts` (pure) and `anim-decode.ts` (the index, clip and rig requests the decode worker answers). Meshes (§12): `mesh-blob.ts` (the render blob and vertex streams), `morph-blob.ts` (morph targets), `mesh-glb.ts` (WolvenKit's GLB conventions) and `mesh-decode.ts` (one mesh from an archive, in the worker); `src/native-geometry-export.ts` wraps the exporter for geometry the same way. The resolver reads through it: one decoder per game folder, native first and WolvenKit per resource ([mod loading §6](mod-loading.md#6-implementation-and-reproduction)); the creator catalogue's on-screen texts go through the same fetch port (`ResolverFetcher.fetchJsonResource`, at background priority), and the clothing host decodes the item visual-tag preset ([worn clothing §4.1](clothing.md#41-where-visual-tags-come-from-source-wiki)) in a worker of its own. The [backlog page](../research/backlog/native-archive-reader.md) holds the measurements and the texture and mesh phases.
 
 ## 10. Textures (`.xbm`)
 
@@ -255,11 +255,20 @@ A native module was not needed: the slowest map decodes in about half a second. 
 
 `.mlmask` layer masks stay with WolvenKit. Their layers sit in a tiled atlas with a tile table and a low-resolution fallback, which WolvenKit's exporter reconstructs [source: WolvenKit's multilayer-mask exporter, studied only]. A layered material has one mask (the default V has one, a cyberware part's), so it costs little beside the maps.
 
-## 11. Meshes (`.mesh`, `.morphtarget`)
+## 11. Animation sets and rigs (`.anims`, `.rig`)
+
+The pose library reads animation sets natively ([poses §3](poses.md#3-what-a-pose-clip-holds) holds the key format; offline evidence on game 2.31 and the reference MO2 route, 27 September 2026).
+
+- **Read record by record, not as a document.** An `animAnimSet` is a root export holding `animations` (handles to `animAnimSetEntry` → `animAnimation` → an animation buffer export), `animationDataChunks` (structs holding a deferred buffer each) and `rig` (`rRef:animRig`). Some sets carry values the document reader refuses (`curveData:Float` in a clip's additional tracks: open question 5), so `anim-set.ts` walks each export's property records and decodes only the ones a pose needs, stepping over the rest by their record size. A set then lists in well under a millisecond per clip, and listing never reads a key block [resource].
+- **Defaults.** An omitted `animationType` is `Normal` (the enum's first member); omitted `animAnimDataAddress` fields are 0xFFFFFFFF, meaning no chunk [source: WolvenKit's generated classes, from the game's RTTI].
+- **Rigs have trailing data.** An `animRig` keeps one i16 parent index and one 48-byte reference transform per bone after its property terminator (§3's "other trailing data"), so the document reader refuses rigs; `readAnimRig` reads that table and requires it to be exactly as long as `boneNames` says [resource] [source: WolvenKit's rig appendix reader, as documentation].
+- **Budgets.** Every key count is checked against the key block's length before anything is allocated, a chunk index against the set's chunk list, and a key's channel against the three that exist; a clip may declare at most four million keys [resource: `tests/anim-set.test.ts`].
+
+## 12. Meshes (`.mesh`, `.morphtarget`)
 
 The mesh reader (phase 4) turns a `CMesh` or `MorphTargetMesh` into the GLB the preview has always been served, WolvenKit 9.0.1's `uncook --mesh-export-type MeshOnly` export (the LOD filter and garment support on, no materials). Offline evidence on game 2.31 and the reference MO2 route, 27 September 2026; the conventions were read in WolvenKit's `MeshTools`, `MorphTargetTools` and `RigTools` as documentation and checked against its output ([Sources](#sources)).
 
-### 11.1 The render blob
+### 12.1 The render blob
 
 | Where | What | Grade |
 |---|---|---|
@@ -273,7 +282,7 @@ The mesh reader (phase 4) turns a `CMesh` or `MorphTargetMesh` into the GLB the 
 - **Garment support.** `meshMeshParamGarmentSupport` or `garmentMeshParamGarment` among `CMesh.parameters` turns the stream-0 offset into the `GarmentSupport` morph target; `garmentMeshParamGarment.chunks[i].garmentFlags` holds four bytes a vertex (support weight, cap, two unused), which become `_GARMENTSUPPORTWEIGHT` and `_GARMENTSUPPORTCAP`. A buffer shorter than its vertices (the KS UV framework's arm) is left out, as WolvenKit's repaired copy leaves it [resource].
 - Non-finite floats appear in real files: a head decal's morph target stores `-inf` position scales for targets with no diffs [resource].
 
-### 11.2 WolvenKit's GLB conventions
+### 12.2 WolvenKit's GLB conventions
 
 - **Chunks:** only `lodMask` exactly 1, one mesh and node each, named `submesh_NN_LOD_1` by chunk index. A chunk whose first triangle recurs later (double-sided) keeps only the triangles whose face normal points against the mean of its vertices' normals, and is named `…_doubled` (185 of the 559 cached exports).
 - **Space:** (x, y, z) → (x, z, −y) for positions, normals, tangents, joints and deltas; winding swapped (i1, i0, i2); normals and tangents normalised after the swap; UV0 flipped (v → 1 − v), UV1 as stored; colours bytes / 255.
@@ -282,11 +291,11 @@ The mesh reader (phase 4) turns a `CMesh` or `MorphTargetMesh` into the GLB the 
 - `extras.materialNames` per chunk from every appearance, a short list padded by repeating from after the first occurrence of its last name; `@…` suffixes cut. Mesh GLBs carry `extras.experimentalMergedMeshes: false`, morph GLBs none.
 - **Encoding differences that don't change values:** the reader writes morph deltas as sparse accessors (the vertices a target moves), one buffer view per accessor in order; WolvenKit writes them dense. The preview's chunk copy (`keepGlbMeshes`) stores them sparse anyway.
 
-### 11.3 Arithmetic
+### 12.3 Arithmetic
 
 Every vertex value is computed in single precision step by step (`Math.fround`), as the C# does: position short / 32767, times scale, plus offset; normalisation as √((x² + y²) + z²) then each component divided; weights summed in order and multiplied by 1/sum. That makes all vertex data bit-identical. Joint transforms and inverse bind matrices are computed in double precision and rounded once, so they differ from WolvenKit's float arithmetic (System.Numerics `Matrix4x4.Invert`, `Quaternion.CreateFromRotationMatrix`) by rounding.
 
-### 11.4 Evidence and cost
+### 12.4 Evidence and cost
 
 | Check | Result |
 |---|---|
@@ -298,14 +307,15 @@ Every vertex value is computed in single precision step by step (`Math.fround`),
 
 The reader refuses (and WolvenKit exports): cloth parameters (`meshMeshParamCloth`, `…_Graphical`; none in the reference set), 32-bit indices, positions not `PT_Short4N` and other packings of the decoded usages, per-vertex data past stream 4, an index past its chunk, a skin addressing joints past its rig. The mesh reader's output rules are versioned (`NATIVE_MESH_VERSION`, part of its cache identity).
 
+
 ## Open questions
 
 1. The engine's own defaults for omitted properties (read them from the RTTI at runtime through the bridge, instead of learning from WolvenKit output).
 2. How does the engine treat a property whose stored type disagrees with the RTTI (`castShadows` as `Bool`)? Skip, convert, or fail the resource? The reader reports such properties (§6.5). And does it read an array record past its count, as WolvenKit does?
 3. Does the engine skip drawing a render chunk whose `renderMask` lacks `MCF_RenderInScene`? The resolver assumes so (the vanilla hair `*_shadow` meshes store only `MCF_RenderInShadows`), and an omitted mask is the class default, no flags (§6.5), so it applies there too; no runtime check yet.
 4. The meaning of the index CRC, and whether the engine checks the per-entry SHA-1. It is the extracted file's SHA-1 in game archives but not in most mod archives (§1.2), which suggests the engine does not check it [hypothesis].
-5. `curveData` encoding (needed for `.env` and animation-adjacent resources).
-6. `.mlmask` layers (§10.4), cloth parameters and the `.Material.json` materials file (§11). Does `platformMipBiasPC` alone decide how many mips the PC blob drops (§10.1)? Which LOD does the engine draw for the player at creator distance (the export takes `lodMask` 1 only), and does it read a `rendChunk` count of diffs whose mapping count is zero as none (§11.2, WolvenKit's reading)?
+5. `curveData` encoding (needed for `.env` and animation-adjacent resources). Animation sets step around it (§11).
+6. `.mlmask` layers (§10.4), cloth parameters and the `.Material.json` materials file (§12). Does `platformMipBiasPC` alone decide how many mips the PC blob drops (§10.1)? Which LOD does the engine draw for the player at creator distance (the export takes `lodMask` 1 only), and does it read a `rendChunk` count of diffs whose mapping count is zero as none (§12.2, WolvenKit's reading)?
 
 ## Sources
 
@@ -315,7 +325,7 @@ Format facts were learned from the following, at these commits, without copying 
 - Cyberpunk 2077 Modding Wiki at `be2f44eed841`: `for-mod-creators-theory/files-and-what-they-do/file-formats/README.md` §Archive Format (tables, no images; section history by manavortex, muad_ and Zhincore).
 - RED4ext.SDK ([GitHub](https://github.com/wopss/RED4ext.SDK), MIT) at `ad7277714ad3`: `include/RED4ext/ResourcePath.hpp`, `include/RED4ext/Hashing/FNV1a.hpp`.
 - Khronos Data Format Specification 1.3 ([HTML](https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html), CC BY 4.0; copy fetched 27 September 2026, SHA-256 `2d9850c6c657…`): §18 S3TC (BC1, BC3), §19 RGTC (BC4, BC5) and §20.1 BPTC (BC7), with Tables 109–120 (modes, partitions, anchors, weights). The BC7 tables in `bcn.ts` were checked against the parsed tables, entry for entry.
-- WolvenKit at `11720772`, as documentation for the mesh export conventions (§11): `WolvenKit.Modkit/RED4/Tools/MeshTools.cs` (`GetMeshesinfo`, `ContainRawMesh`, `RemoveDoubleFaces`, `GetOrphanRig`, `WriteGarmentParametersToMesh`, `AddSubMeshesToModel`), `MorphTargetTools.cs`, `RigTools.cs` (`ExportNodes`), `Tools/Common/StructFunctions.cs` (`TenBitShifted`, `TenBitUnsigned`, `hfconvert`) and `WolvenKit.Common/Model/Arguments/ExportArgs.cs` (the defaults: LOD filter and garment support on). Its CLI 9.0.1 is the GLB oracle.
+- WolvenKit at `11720772`, as documentation for the mesh export conventions (§12): `WolvenKit.Modkit/RED4/Tools/MeshTools.cs` (`GetMeshesinfo`, `ContainRawMesh`, `RemoveDoubleFaces`, `GetOrphanRig`, `WriteGarmentParametersToMesh`, `AddSubMeshesToModel`), `MorphTargetTools.cs`, `RigTools.cs` (`ExportNodes`), `Tools/Common/StructFunctions.cs` (`TenBitShifted`, `TenBitUnsigned`, `hfconvert`) and `WolvenKit.Common/Model/Arguments/ExportArgs.cs` (the defaults: LOD filter and garment support on). Its CLI 9.0.1 is the GLB oracle.
 - WolvenKit at `11720772`, as documentation: `WolvenKit.Common/RED4/CommonFunctions.cs` (`GetDXGIFormat`, compression to format), `WolvenKit.Modkit/RED4/Uncook.cs` (`UncookXBM`, flipped on export) and `WolvenKit.Common/DDS/Texconv.cs`.
 - Cyber Engine Tweaks at `9a8522f2a3d6`: `src/reverse/TweakDB/ResourcesList.cpp` (the `OodleLZ_Decompress` call).
 - red4ext-rs at `d419d98d8b81`: `src/types/res.rs` (path sanitizing).

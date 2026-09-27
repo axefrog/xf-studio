@@ -1,6 +1,6 @@
 /**
  * A mesh resource's render blob (`rendRenderMeshBlob`): its header, per-chunk vertex layouts and the vertex and index streams, decoded
- * from the red model (red-model.ts). Pure. knowledge/archive-format.md §11 documents the layout and the evidence.
+ * from the red model (red-model.ts). Pure. knowledge/archive-format.md §12 documents the layout and the evidence.
  *
  * - `CMesh.renderResourceBlob` (and `MorphTargetMesh.blob.baseBlob`) is a handle to a `rendRenderMeshBlob`: `header` and
  *   `renderBuffer`, one buffer holding every chunk's vertex streams (`vertexBufferSize` bytes) followed by the index streams

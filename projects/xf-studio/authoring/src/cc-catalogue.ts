@@ -30,6 +30,10 @@ import { displayLabel, type DisplayLabel, type TextTable } from "./game-text";
 import { type CreatorPresentation, type IconRef, iconKey } from "./cc-presentation";
 
 export const CC_CATALOGUE_SCHEMA = "xfs/cc-catalogue-1" as const;
+/** The game's own "Off" label: the on-screen text key the creator's Off choices name (`Common-Off`, text "OFF" in English) [resource]. */
+export const OFF_TEXT_KEY = "Common-Off";
+/** Is a choice's label the creator's Off: the game's Off text, or "Off" written out. */
+export const isOffLabel = (label: Pick<DisplayLabel, "key" | "text">) => label.key === OFF_TEXT_KEY || /^off$/i.test(label.key.trim());
 export type BodyGender = "female" | "male";
 export type Rgba = readonly [number, number, number, number];
 
@@ -106,8 +110,17 @@ export interface CcChoice {
   readonly key: string;
   readonly position: number;
   readonly label: DisplayLabel;
-  /** Choosing it adds nothing: no appearance and no morph (the creator's "Off" or the base shape). */
+  /**
+   * Choosing it adds nothing: no appearance and no morph. Structural only (the save stores no entry for it): it is not what the creator
+   * calls Off (the base face shape, the first nipples in the skin, a default breast size add nothing too). See `labelledOff`.
+   */
   readonly off: boolean;
+  /**
+   * The creator labels it Off: its label is the game's Off text (`OFF_TEXT_KEY`) or reads "Off" as written. The creator shows a choice's
+   * `localizedName` and nothing else, so this is the only Off a player sees; it may add something (the game's Off nipples and genitals
+   * add an appearance).
+   */
+  readonly labelledOff: boolean;
   readonly provenance: CcProvenance;
   readonly swatch: CcSwatch | null;
   /** Switchers: the option names this choice activates (a portable identity across installations). */
@@ -277,7 +290,8 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
       const activates = option.type === "switcher" ? [...(choice as { names: string[] }).names] : [];
       const off = option.type === "switcher" ? emitsNothing(part, activates) : option.type === "appearance" ? !key || !option.resource : !key;
       // Without a text, a definition reads by its last `__` part (`he_000_pwa__basehead__12_gradient_brown` → `Gradient brown`).
-      return { key, position, label: label(choice.localizedName, key.split("__").pop() || choice.localizedName || "none"), off,
+      const text = label(choice.localizedName, key.split("__").pop() || choice.localizedName || "none");
+      return { key, position, label: text, off, labelledOff: isOffLabel(text),
         provenance: provenance(choice.providedBy),
         swatch: option.type === "appearance" && (shown?.color || icon)
           ? { color: shown?.color ?? null, iconRecord: icon, icon: icon ? inputs.presentation?.icons.get(icon) ?? null : null } : null,

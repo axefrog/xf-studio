@@ -17,7 +17,7 @@ One typed catalogue, [`input-bindings.ts`](../../projects/xf-studio/authoring/sr
 | `GESTURE_BINDINGS` | What ends an active gesture (Release, a wheel pause) | Hints during a gesture |
 | `KEY_BINDINGS` scope `tour` | Esc (skip), → and Enter (next; Done on the last step) and ← (back) inside a guided tour's card. Esc also stops a tour elsewhere unless a gesture, menu, dialog or text field uses it | `tourKey()` in the guidance overlay and the shell's tour Esc handler |
 | `PANEL_POINTER_BINDINGS` | Dock and row pointer modifiers (Ctrl-drag floats a panel freely) | `panelModifiersHeld()` in the dock |
-| `MODIFIER_SUMMARIES` | What each modifier unlocks per viewport ("Hold Shift: shape tools") | Hint discovery |
+| `MODIFIER_SUMMARIES` | What each modifier unlocks per viewport ("Hold Shift: shape tools"); `CAMERA_MODIFIER_SUMMARIES` for a viewport that offers no editing tool | Hint discovery |
 
 - **Targets.** `point`, `tangent`, `warp-origin`, `warp-vector`, `shape` (the makeup targets) and `empty` (background or skin on the head, empty space in the UV map). When editing is unavailable (no layer, a hidden layer, or Surface controls off), everything resolves as `empty`.
 - **Modifiers.** Matching is exact: Ctrl, Alt and Shift, with Cmd/Meta counted as Ctrl. An unbound input does nothing. Bindings that ignore modifiers (right-drag pan, the context menu) list every combination.
@@ -68,6 +68,7 @@ The presentation reads the combined read-only snapshot through `port.viewport.in
   - While a modifier is held, the bindings for that exact set. Esc is added once the modifier arms an edit of the makeup under the pointer.
   - During a gesture, its name with Release or Pause and Esc.
   - A note when editing is blocked.
+  - In a 3D view that offers no editing tool (the view tool marked `editing`, Surface controls, isn't derived because its module is hidden), camera input only: no block note, no "Hold Shift: shape tools" and no Shift no-ops, so the strip never points at a tool or panel that isn't there (UI-102).
 
   Held modifiers are ignored while the pointer is outside that viewport.
 

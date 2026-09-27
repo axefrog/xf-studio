@@ -1,7 +1,7 @@
 /**
  * A mesh or morph target resource as the GLB the preview has always been served: WolvenKit 9.0.1's `uncook` export (`MeshOnly`, the
  * LOD filter on, garment support on, no materials), rebuilt from the decoded render blob (mesh-blob.ts, morph-blob.ts). Pure.
- * knowledge/archive-format.md §11 lists the conventions with their evidence; tools/native-mesh-oracle.ts compares the result with
+ * knowledge/archive-format.md §12 lists the conventions with their evidence; tools/native-mesh-oracle.ts compares the result with
  * WolvenKit's GLBs vertex for vertex.
  *
  * Conventions (WolvenKit's, studied as documentation in its `MeshTools`, `MorphTargetTools` and `RigTools`, and checked against its
@@ -24,7 +24,7 @@
  * - `extras.materialNames` lists each mesh appearance's material for the chunk (a short list repeats its tail, as WolvenKit fills it).
  *
  * The arithmetic is single precision at every step, so the vertex data is bit-identical to WolvenKit's; the joints' transforms and
- * inverse bind matrices are computed in double precision and differ from WolvenKit's by float rounding (oracle: §11.4).
+ * inverse bind matrices are computed in double precision and differ from WolvenKit's by float rounding (oracle: §12.4).
  */
 import { GlbWriter, type GltfJson } from "../glb";
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "./native-errors";

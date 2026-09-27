@@ -13,6 +13,8 @@
 
 #include <cstdint>
 #include <optional>
+#include <array>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -225,6 +227,46 @@ struct GameOptionsRequest
 std::vector<std::string> SettingsGroups();
 std::vector<std::string> DefaultRenderOptions();
 GameOptionsRequest ParseGameOptions(const json& aParams);
+
+// photo.pose.set: one of
+//   {record: "PhotoModePoses.<id>" or "<id>"}                 the pose record (its labels, found in the menu)
+//   {pose: "<on-screen label>", category: "<on-screen label>"} labels as the menu shows them (category optional)
+//   {category_value: n, pose_value: n}                         option data, as photo.state lists it (the undo)
+// Selecting goes through the menu (attribute 5 then 6), as photo.expression.set does.
+struct PoseSetRequest
+{
+    std::string record;
+    std::string pose;
+    std::string category;
+    int32_t categoryValue = -1;
+    int32_t poseValue = -1;
+};
+PoseSetRequest ParsePoseSet(const json& aParams);
+
+// pose.live.read: {set, clip, expect_hash}: a loaded animation set by depot path (letters, digits, '_',
+// '-', '.', and backslash or '/' separators, ending .anims) and a clip in it; both default to the XF
+// carrier (core/LivePose.hpp). expect_hash is the offline decode's keys hash, compared and reported.
+// Read-only.
+struct PoseLiveReadRequest
+{
+    std::string set;
+    std::string clip;
+    std::string expectHash;
+};
+PoseLiveReadRequest ParsePoseLiveRead(const json& aParams);
+
+// pose.live.apply: {joints: {"<joint name or index>": [x, y, z, w], ...}, hips: [x, y, z]} or
+// {restore: true}. Rotations are unit quaternions (a length within 1% of 1, normalised here), at most
+// 128 joints; hips is the Hips joint's translation in metres (each within 3 m). Writes the XF carrier
+// clip only, and only with [bridge] allow_live_pose = true (LivePoseAllowed).
+struct PoseLiveApplyRequest
+{
+    bool restore = false;
+    std::vector<std::pair<std::string, std::array<float, 4>>> joints; // name or decimal index -> rotation
+    std::optional<std::array<float, 3>> hips;
+};
+PoseLiveApplyRequest ParsePoseLiveApply(const json& aParams);
+bool LivePoseAllowed(bool aConfigFlag); // throws live_pose_disabled when the flag is off
 
 // player.appearance: {option, check: [{group, option, fpp}]}.
 struct AppearanceCheck

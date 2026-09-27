@@ -103,7 +103,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   const badge = readinessBadge(view.view);
   const context = h("span", { class: "viewport-context" });
   const toolbar = viewToolbar(rt);
-  const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `Head preview. ${keyDescription("head")}` });
+  const element = h("div", { class: "viewport-panel", tabindex: "0", "aria-label": `3D view. ${keyDescription("head")}` });
   const hints = new ViewportInputHints(port.viewport, "head", slot, element);
   // Quiet, overlaid status for the V's skin, face details, eyes, brows, lashes, hair, piercings and body: progress while they prepare, one plain line
   // when something can't be shown, with its one next step when it waits for WolvenKit (NATIVE-47). Absolutely placed, so it never moves the

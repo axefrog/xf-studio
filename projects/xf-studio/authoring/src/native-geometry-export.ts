@@ -6,7 +6,7 @@
  * decode worker of its own, to the GLB the preview has always been served, with the extracted resource as its `raw` file.
  *
  * - **The same GLB.** The vertex data is WolvenKit's, bit for bit, and the structure (chunk meshes and names, joints, skin, targets,
- *   extras) is the same; morph deltas are stored sparse. knowledge/archive-format.md §11 has the conventions and the oracle.
+ *   extras) is the same; morph deltas are stored sparse. knowledge/archive-format.md §12 has the conventions and the oracle.
  * - **Cache.** Native GLBs live in the exporter's own cache folder (so the prepared-files budget and Clear cover them), keyed by the depot
  *   hash, the archive's fingerprint and the mesh reader's identity (`NATIVE_MESH_IDENTITY`), never WolvenKit's.
  * - **A morph target's skin** comes from its base mesh where the game finds it: the request's `bases` (the resolver's winning archive

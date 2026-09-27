@@ -89,15 +89,47 @@ struct CreatorOpenOps
     std::function<json()> open;
     // Game thread: the game's phase now (game.status's phase).
     std::function<std::string()> phase;
-    // Game thread: withdraws a request that didn't open the screen in time.
-    std::function<void()> cancel;
+    // Game thread: withdraws a request that didn't open the screen in time. Answers
+    // {withdrawn: true} when the request was still waiting (nothing can open now), {taken: true} when
+    // the menu had already picked it up (the screen may still be opening), or {} when the game
+    // couldn't say (the cancel itself failed).
+    std::function<json()> cancel;
     std::function<void(std::chrono::milliseconds)> sleep;
 };
 
 // cc.open: prepare, settle, open, then wait until the phase is character_menu (aRequest.timeoutMs).
-// The result carries the undo (cc.back, which discards every change and closes the screen). On a
-// timeout the request is withdrawn and creator_open_timeout thrown; nothing is left pending.
+// The result carries the undo (cc.back, which discards every change and closes the screen).
+//  - A refusal from open() (stage 2, after prepare took the save lock) says that saving stays locked
+//    until a save is loaded (RB-46).
+//  - Anything that throws once open() has started (open itself, a phase poll) withdraws the request
+//    before the error goes back (RB-43), and says whether the withdrawal worked.
+//  - On a timeout the request is withdrawn. Only when the withdrawal says the request was still
+//    waiting is the answer creator_open_timeout ("nothing opened"). When the menu had already taken
+//    it, the phase is polled a little longer (kCreatorLateOpen) and a late screen counts as opened;
+//    otherwise, or when the game couldn't say, the answer is creator_open_uncertain, which tells the
+//    caller to check the phase and use cc.back (RB-42).
+inline constexpr int32_t kCreatorLateOpenMs = 2000;
 json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOps& aOps);
+
+// What PoseSet needs from the game. Each step throws MethodError to refuse.
+struct PoseSetOps
+{
+    // Game thread: finds the requested category in the photo-mode menu (attribute 5), notes the menu's
+    // category and pose before the call ({before_category, before_pose, before_known}), and selects the
+    // category if it isn't selected already ({changed, category_value, category_text}).
+    std::function<json()> category;
+    // Waits a few game ticks, so photo mode can rebuild the pose list for a newly selected category.
+    std::function<void()> settle;
+    // Game thread: selects the requested pose (attribute 6) in the current list ({changed, pose_value,
+    // pose_text}).
+    std::function<json()> pose;
+    // Game thread: selects this category again after a failure (option data).
+    std::function<void(int32_t aCategoryValue)> restoreCategory;
+};
+
+// photo.pose.set: category, settle (only after a change), pose. The undo selects the earlier category
+// and pose by option data; a failure after the category changed puts the category back.
+json PoseSet(const PoseSetOps& aOps);
 
 // Bridge thread: waits until the game thread has drained the queue aTicks more times (one drain
 // per engine tick), up to aTimeout. False on timeout (or a closed queue).
@@ -112,6 +144,11 @@ public:
     void MarkWrite();
     bool WritesUsed() const;
     bool Done() const;
+    // True while a kill switch restore is still owed: a write ran and the restore hasn't run yet.
+    bool Pending() const;
+    // Re-arm (a fresh bridge after the kill switch): forget the last generation's writes, so the next
+    // kill switch restores again. Only once nothing is owed (Pending() false); returns false otherwise.
+    bool Reset();
 
     // Game thread, once per tick. Runs aRestore when aReady, a write ran and it hasn't run yet.
     // Never throws: a failing restore is reported through aOnError and is not retried.

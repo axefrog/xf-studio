@@ -39,6 +39,9 @@ export class LightElement extends LightNode {
   }
   get children(): LightElement[] { return this.childNodes.filter((node): node is LightElement => node instanceof LightElement); }
   get childElementCount() { return this.children.length; }
+  get parentElement(): LightElement | null { return this.parentNode; }
+  /** No layout: every box is empty at the origin. */
+  getBoundingClientRect() { return { x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; }
   /** A select's options. */
   get options(): LightElement[] { return this.children.filter(child => child.tagName === "option"); }
   /** A dialog's open state (`showModal` and `close`). */

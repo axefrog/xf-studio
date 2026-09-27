@@ -1,7 +1,7 @@
 // Native mesh reader (phase 4): the render blob's layout and its refusals, WolvenKit's GLB conventions (space, UVs, skin, double-sided
 // chunks, garment support, material names, joints), morph targets (sparse deltas, mapping padding, base-mesh joints), the worker's
 // geometry message, the native-first exporter and a mutation fuzz. Synthetic data only; the real-data comparison with WolvenKit's GLBs
-// is tools/native-mesh-oracle.ts (knowledge/archive-format.md §11).
+// is tools/native-mesh-oracle.ts (knowledge/archive-format.md §12).
 import { afterAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
