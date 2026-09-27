@@ -1,6 +1,6 @@
 # Pose library for the full-body view: design study
 
-**Status: design ready, 27 September 2026; nothing built.** It answers the [backlog entry](../backlog/README.md) asking for the full-body V in any photo-mode pose, vanilla or modded, from its own searchable panel with starred favourites. The facts it rests on are consolidated in [poses](../../knowledge/poses.md); this page adds the design, the phases, the risks and the questions. Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]**, **[resource]**, **[wiki]**, **[runtime]**, **[offline]** and **[hypothesis]**. No game session was run for this study. The evidence and its provenance are in the last section.
+**Status: P0 (readers) and P1 (catalogue) built, 27 September 2026 (`claude/pose-readers`); P2 and P3 not started** (see §8). It answers the [backlog entry](../backlog/README.md) asking for the full-body V in any photo-mode pose, vanilla or modded, from its own searchable panel with starred favourites. The facts it rests on are consolidated in [poses](../../knowledge/poses.md); this page adds the design, the phases, the risks and the questions. Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]**, **[resource]**, **[wiki]**, **[runtime]**, **[offline]** and **[hypothesis]**. No game session was run for this study. The evidence and its provenance are in the last section.
 
 ## 1. Summary
 
@@ -11,8 +11,8 @@
 | How do mods add poses? | Through the same two files. A TweakXL YAML adds pose and category records and appends them to the lists. An ArchiveXL `.xl` `animations:` entry adds the `.anims` set to the photo-mode entities, usually through ArchiveXL's `photomode_wa.ent` scope. The reference profile has 44 such packs, adding about 1,510 female entries. Everything is discoverable offline from files the game loads [resource]. |
 | What is invisible to photo mode? | Appearance Menu Mod's custom-pose Lua files (a workspot entity plus clip names). Four installed packs are AMM-only; most AMM packs ship photo-mode records too. Poses added at runtime by CET or redscript are also invisible to photo mode [resource]. |
 | How would the Studio play one? | Sample the clip once at the record's `animationTime` (0 for 2,052 of 2,079 mod records) and drive the body joints the way the creator idle's body clip already does. A static frame is what photo mode shows for nearly every pose [resource]. |
-| Is a native decoder needed? | Not a native module. The key stream is a small, fixed layout: 12-byte keys with quantised values, plus float keys, inside the anim set's data chunks. A TypeScript decoder beside the existing native archive and CR2W reader is enough. Today's idle path decodes through WolvenKit's exporter (`anim-export`), not the IO Suite solver. The solver is only for faces [source] [resource]. |
-| Performance | Listing is metadata only: TweakDB flats, a few dozen YAML and `.xl` files, and texts. A clip is about 3 KB and decodes on demand; sets are fetched lazily and cached by archive identity. About 1,650 poses for this profile's female V [resource; timing not measured]. |
+| Is a native decoder needed? | Not a native module. The key stream is a small, fixed layout: 10-byte keys with quantised values, 16-byte float keys and 8-byte track keys, inside the anim set's data chunks. A TypeScript decoder beside the existing native archive and CR2W reader is enough (built: `src/native/anim-set.ts`). Today's idle path decodes through WolvenKit's exporter (`anim-export`), not the IO Suite solver. The solver is only for faces [source] [resource]. |
+| Performance | Listing is metadata only: TweakDB flats, the TweakXL and `.xl` files, texts and the sets' clip indexes, cached by archive identity. A clip is about 3 KB and decodes on demand. 1,642 poses for this profile's female V: 1.3 s once the route is open, 3.7 s in a fresh process with warm caches, 7.7 s with empty caches [offline, 27 September 2026]. |
 
 **Two findings that shape the design:**
 
@@ -81,7 +81,9 @@ type PoseEntry = {
 };
 ```
 
-A record whose clip isn't found in the puppet's sets gets `clip: null`. It is not listed, and the diagnostics count it ("3 poses name animations that aren't installed"). That is the honest view of what the game can play [hypothesis: in game such a pose leaves V unchanged].
+A record whose clip isn't found in the puppet's sets gets `clip: null` and is counted in the diagnostics ("1 pose names an animation that isn't installed"). As built, the catalogue still lists it, so that its lists match the menu's for the G1 check; the Poses panel (P3) decides whether to hide it or show it disabled [hypothesis: in game such a pose leaves V unchanged].
+
+As built (P1), the entry is `PoseEntry` in `src/pose-catalogue.ts`: the fields above, with `badges` (`holds`, `vehicle`, `moves`: a clip of more than 3 frames with keys that change; most multi-frame mod clips have none), `lookAtOffForGarmentTags`, and the clip's frames, length, decodability and the number of other sets holding its name. Categories are matched by the record name first, then `categoryName` ([poses §5](../../knowledge/poses.md#5-how-mods-add-poses)).
 
 ### 4.3 The clip index
 
@@ -94,9 +96,9 @@ A record whose clip isn't found in the puppet's sets gets `clip: null`. It is no
 ### 5.1 Decoding
 
 - **Format** [source: WolvenKit `animAnimationBufferCompressed.cs` read-only at `11720772`; [resource]]:
-  - Animated keys are 12 bytes each: normalised 16-bit time, then 16 bits of bone index (13 bits), component (2 bits: position, rotation, scale) and quaternion *w* sign, then three 16-bit values quantised to [−1, 1]. A rotation's *w* is rebuilt from *x*, *y* and *z*.
-  - Raw and constant keys carry three float32 values.
-  - Float-track keys come last.
+  - Animated keys are 10 bytes each: normalised 16-bit time, then 16 bits of bone index (13 bits), component (2 bits: position, rotation, scale) and quaternion *w* sign, then three 16-bit values quantised to [−1, 1]. A rotation's *w* is rebuilt from *x*, *y* and *z*.
+  - Raw and constant keys are 16 bytes and carry three float32 values.
+  - Float-track keys come last (8 bytes each). The full layout is in [poses §3](../../knowledge/poses.md#3-what-a-pose-clip-holds).
   - The key block sits in the set's `animationDataChunks[unkIndex]` at `fsetInBytes`, or inline (possibly Oodle-compressed, which the native reader already handles).
 - **Written from the format, not ported.** The decoder is written as a small MIT module from this description, in `native/`, beside the CR2W reader. No WolvenKit code is transliterated; WolvenKit is GPL-3.0 and is used as an external tool only. Its exporter (`anim-export`) serves as the **parity oracle**: the same clip through both must agree per joint within 1e-5.
 - **Shared with expressions.** The [expression editor design](expression-editor-design.md#33-start-points-every-installed-expression-found-the-way-the-game-finds-it) needs the same decoder for face float tracks. Face clips sometimes use `animAnimationBufferSimd` (5 of 444 Mega Pack clips; three `ui_female_face` clips). Poses need the compressed format only: every body pose clip surveyed uses it. The SIMD reader comes later, with WolvenKit as the fallback.
@@ -176,6 +178,14 @@ It is not a feature module: nothing is authored or exported. Authoring **new** p
 | **P5 Extras** | Animated poses (loop, pause), look-at preset (head to camera), skeleton silhouettes, SIMD clips | P3 | 3–5 days |
 
 P0 to P3 is the first usable release: about two and a half weeks for one agent, or less with the TweakXL reader in parallel. P4 is the fidelity track.
+
+**Phase status (27 September 2026).**
+
+| Phase | Status |
+|---|---|
+| P0 | **Done** (`claude/pose-readers`). The compressed decoder, rig reader and sampler (`src/native/anim-set.ts`, served by the decode worker through `anim-decode.ts`) agree with WolvenKit's export on 21 clips, 13,548 keys, worst 1.7 × 10⁻⁷ ([poses §9](../../knowledge/poses.md#9-where-this-lives-in-xf-studio)); `array:String` and `Vector3` flats; ArchiveXL `animations:`; the shared TweakXL overlay now keeps scalar text and item tags (`tweakxl-yaml.ts`) and applies list operations. Not built: `.tweak` files, the `$base` chain of mutated lists, SIMD clips |
+| P1 | **Done** (`claude/pose-readers`). `src/pose-catalogue.ts`, `pose-catalogue-host.ts` (set indexes cached on disk by archive identity; clips decoded on demand and kept in memory), `/api/poses` on both hosts, `PoseActions` with `POSE_DESCRIPTORS`, and an opt-in oracle test on the local install (the 141 distinct vanilla poses all resolve and decode). Reference profile: 1,642 female poses in 90 categories, 477 male |
+| P2–P5 | Not started. P2 needs the view graph's body source; P3 the panel |
 
 ## 9. Risks
 

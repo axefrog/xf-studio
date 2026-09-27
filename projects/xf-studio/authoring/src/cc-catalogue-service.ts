@@ -6,7 +6,9 @@
  *   and the options whose choices match a search (UI-72);
  * - the character context's view: every row's current choice, the V's own, and what couldn't be honoured (`deriveCharacter`);
  * - a portable preset of the choices a person set, checked for personal data before it is written (CORE-56);
- * - the creator choices an earlier build's tried piercing style stands for (CORE-74).
+ * - the creator choices an earlier build's tried piercing style stands for (CORE-74);
+ * - each colour row's swatches, derived from the resources that win for its choices (cc-swatch-host.ts), and its creator icons
+ *   (cc-icon-host.ts): worked out in the background once the catalogue is ready, the rows the panel opens first.
  *
  * The installation fingerprint (the route, its stamps, WolvenKit's identity and the registry's generation) and the game's on-screen
  * language (its own settings; NATIVE-51) decide when a catalogue is stale; a new one is built on the next question. One build runs at a
@@ -26,16 +28,17 @@
  * Read-only towards the game and the mod manager.
  */
 import { createHash } from "node:crypto";
-import { type BodyGender, buildCatalogue, CatalogueIndex, userFacing } from "./cc-catalogue";
+import { type BodyGender, buildCatalogue, CatalogueIndex, type CcCatalogue, userFacing } from "./cc-catalogue";
 import { type CatalogueLabels, type CatalogueLoad, currentGameLanguage, loadCreatorCatalogue } from "./cc-catalogue-host";
-import { choicePage, type CcChoicePage, type CcChoiceSearch, type CcPanel, type CreatorState, type CreatorValue, type CreatorView, panelProjection,
-  searchChoices } from "./cc-panel";
+import { choicePage, type CcChoicePage, type CcChoiceSearch, type CcIconSheet, type CcPanel, type CcSwatches, type CreatorState, type CreatorValue,
+  type CreatorView, type ModMaker, panelProjection, searchChoices } from "./cc-panel";
 import { type CcPreset, type CcPresetEntry, writeCcPreset } from "./cc-preset";
 import { catalogueCoverage } from "./cc-render-coverage";
 import { type CharacterChoice, type CharacterSource, deriveCharacter, presetOfChoices, recoverSave, type SavedDescriptors } from "./character-context";
 import { type CharacterRequest, savedOfRequest } from "./character-detail-request";
 import { type CharacterInput, customLabel, type loadMergedCco } from "./character-resolver";
 import { personalDataIn } from "./private-data";
+import { modMakers } from "./mod-makers";
 import type { Installation, InstallationOptions } from "./resolver-host";
 
 export type CreatorRoute = Omit<InstallationOptions, "cacheDir" | "log">;
@@ -50,10 +53,34 @@ export type CreatorHostOptions = {
   load?: (installation: Installation, route: CreatorRoute, gender: BodyGender) => Promise<CatalogueLoad>;
   /** Test seam over the clock (ms). */
   now?: () => number;
+  /**
+   * The swatch and icon work for a built catalogue (default: cc-swatch-host.ts and cc-icon-host.ts on the installation it was built from;
+   * none for an installation without a resource graph, such as a test's).
+   */
+  swatches?: (installation: Installation, route: CreatorRoute, catalogue: CcCatalogue, gender: BodyGender) => SwatchSource | null | Promise<SwatchSource | null>;
+  /**
+   * Who made each mod, by provider name, for the panel's groups (default: mod-makers.ts on the installation; none for an installation
+   * without a mount plan, such as a test's).
+   */
+  makers?: (installation: Installation, route: CreatorRoute) => ReadonlyMap<string, ModMaker> | Promise<ReadonlyMap<string, ModMaker>>;
+  /** How long after a catalogue is ready its swatches start being worked out in the background (ms; default 1,500). */
+  swatchDelayMs?: number;
   /** The game's on-screen language, part of the catalogue's key (default: the game's own settings, `currentGameLanguage`). */
   language?: () => string | null;
   log?: (message: string) => void;
 };
+
+/** A built catalogue's swatches and icons (cc-swatch-host.ts, cc-icon-host.ts), by option ID and choice position. */
+export interface SwatchSource {
+  /** A colour row's swatches and icons by position (asking puts that row first), or null for an option that isn't one. */
+  answer(option: string): { swatches: readonly string[]; icons: readonly string[]; sheets: readonly CcIconSheet[]; pending: boolean } | null;
+  /** One choice's swatch, when worked out. */
+  swatchOf(option: string, position: number): string | null;
+  /** An icon sheet's PNG by its ID and key, or null. */
+  sheet?(id: number, key: string): Uint8Array | null;
+  start(): void;
+  stop(): void;
+}
 
 type Loaded = {
   source: CharacterSource & { index: CatalogueIndex };
@@ -63,6 +90,7 @@ type Loaded = {
   recovered: Map<string, ReturnType<typeof recoverSave>>;
   /** Labels that couldn't be read, and the next step (NATIVE-46). */
   labels: CatalogueLabels | null;
+  swatches: SwatchSource | null;
 };
 type Entry = { fingerprint: string; promise: Promise<Loaded>; loaded: Loaded | null; error: string | null;
   /** Failed (or retryable-label) builds in a row for this fingerprint, and when a question may build again. */
@@ -151,6 +179,7 @@ export class CreatorCatalogueHost {
     const previous = same && retryable(known!.loaded) ? known!.loaded : null;
     const entry: Entry = { fingerprint, promise: null as unknown as Promise<Loaded>, loaded: null, error: null, failures: same ? known!.failures : 0, retryAt: 0 };
     entry.promise = this.build(route, gender, fingerprint).then(loaded => {
+      if (known?.loaded && known.loaded !== loaded && known.loaded !== previous) known.loaded.swatches?.stop();
       entry.loaded = loaded;
       if (retryable(loaded)) this.backoff(entry); else entry.failures = 0;
       return loaded;
@@ -176,10 +205,18 @@ export class CreatorCatalogueHost {
     // A rebuild that read labels the last one couldn't is another identity, so the panel takes it up (NATIVE-46).
     const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}\n` +
       `${load.labels?.next ?? ""}\n${++this.builds}`).digest("hex").slice(0, 24);
-    const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity);
+    let makers: ReadonlyMap<string, ModMaker> = new Map();
+    try { makers = await (this.options.makers ?? ((inst: Installation, r: CreatorRoute) => inst.plan ? modMakers(inst, r.gameRoot) : new Map()))(installation, route); }
+    catch (error) { this.options.log?.(`Mod authors won't be shown: ${(error as Error)?.message ?? error}`); }
+    const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity, makers);
     this.options.log?.(`Creator options (${gender}) read in ${((performance.now() - started) / 1000).toFixed(1)} s: ${panel.counts.options} options, ` +
       `${panel.counts.choices} choices, ${JSON.stringify(panel).length} bytes to the panel.`);
-    return { source: { catalogue: load.catalogue, cco: load.source.cco, index }, panel, mods, recovered: new Map(), labels: load.labels ?? null };
+    let swatches: SwatchSource | null = null;
+    try { swatches = await (this.options.swatches ?? defaultSwatches(this.options))(installation, route, load.catalogue, gender); }
+    catch (error) { this.options.log?.(`Creator swatches won't be shown: ${(error as Error)?.message ?? error}`); }
+    // Worked out in the background once the panel has its first paint; a row the panel opens goes first.
+    if (swatches) { const started = swatches; setTimeout(() => started.start(), this.options.swatchDelayMs ?? 1500); }
+    return { source: { catalogue: load.catalogue, cco: load.source.cco, index }, panel, mods, recovered: new Map(), labels: load.labels ?? null, swatches };
   }
 
   /**
@@ -214,6 +251,18 @@ export class CreatorCatalogueHost {
     const loaded = await this.ensure(gender);
     return choicePage(loaded.source.index, loaded.mods, option, offset, { identity: loaded.panel.identity, query });
   }
+  /** A colour row's swatches and icons (asking puts it first), or null for an option that isn't a colour row. */
+  async swatches(gender: BodyGender, option: string): Promise<CcSwatches | null> {
+    const loaded = await this.ensure(gender);
+    const answer = loaded.swatches?.answer(option);
+    if (!answer) return loaded.source.index.byOptionId(option) ? { identity: loaded.panel.identity, option, pending: false, swatches: [], icons: [], sheets: [] } : null;
+    return { identity: loaded.panel.identity, option, ...answer };
+  }
+  /** An icon sheet's PNG, or null. */
+  async sheet(gender: BodyGender, id: number, key: string): Promise<Uint8Array | null> {
+    const loaded = await this.ensure(gender);
+    return loaded.swatches?.sheet?.(id, key) ?? null;
+  }
   /** The options with a choice matching a search. */
   async search(gender: BodyGender, query: string): Promise<CcChoiceSearch> {
     const loaded = await this.ensure(gender);
@@ -229,7 +278,9 @@ export class CreatorCatalogueHost {
     for (const [id, value] of Object.entries(view.values)) {
       const option = index.byOptionId(id)!;
       const current = option.choices[value.position] ?? index.choice(option, value.choice), own = index.choice(option, value.own);
-      values[id] = { ...value, label: current?.label.text ?? value.choice, color: hex(current?.swatch?.color), ownLabel: own?.label.text ?? value.own };
+      const swatch = current ? loaded.swatches?.swatchOf(id, current.position) ?? null : null;
+      values[id] = { ...value, label: current?.label.text ?? value.choice, color: hex(current?.swatch?.color), ownLabel: own?.label.text ?? value.own,
+        ...(swatch ? { swatch } : {}) };
     }
     return { ...view, identity: loaded.panel.identity, values, faceMorphs: faceGroup(derived.morphs) };
   }
@@ -289,6 +340,20 @@ export class CreatorCatalogueHost {
     const loaded = await this.ensure(gender);
     return loaded.source.catalogue.options.filter(option => userFacing(option)).map(option => option.id);
   }
+}
+
+/** The swatch and icon work on the installation a catalogue was built from (none without a resource graph). */
+function defaultSwatches(options: CreatorHostOptions) {
+  return async (installation: Installation, route: CreatorRoute, catalogue: CcCatalogue, gender: BodyGender): Promise<SwatchSource | null> => {
+    if (!installation.graph) return null;
+    const { creatorSwatchSource } = await import("./cc-icon-host");
+    return creatorSwatchSource(installation, catalogue, { cacheDir: options.resolverCache, gender,
+      routeKey: `${route.gameRoot}
+${route.launchRoute}
+${route.mo2Root ?? ""}
+${route.mo2ProfileId ?? ""}
+${route.manualModRoot ?? ""}`, log: options.log });
+  };
 }
 
 /** The route isn't set up (no game folder; WolvenKit is optional for the catalogue). */

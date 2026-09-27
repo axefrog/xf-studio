@@ -25,6 +25,7 @@ import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-w
 import { collectionTransport } from "./collection-transport";
 import { GlitterMeasurements } from "./glitter-measurements";
 import type { LocalSetupActions } from "./local-setup-actions";
+import type { DesktopAppActions } from "./desktop-app";
 import { emptyPresentationStatus, PresentationStatusSource, type AdapterMessage } from "./presentation-status";
 import type { Layer } from "./engines/layered-makeup/recipe";
 import type { SavedAppearanceActions } from "./saved-appearance-actions";
@@ -63,6 +64,8 @@ export type StudioHost = {
   openSetup?: () => void;
   /** The host's About view (version, licences, updates); the Studio offers it in Help and the command palette (UI-87). */
   about?: () => void;
+  /** "Get the desktop app": localhost only; the desktop app leaves it out, so it offers nothing about itself. */
+  desktopApp?: DesktopAppActions;
   /** Called once the Studio is mounted, with what the host may ask of it (the desktop's welcome and About open Game & tools). */
   onMounted?: (studio: { openGameSetup(): void }) => void;
   /** Lets the host ask for an immediate workspace save (the desktop does before closing). */
@@ -218,7 +221,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }
     } },
-    previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about,
+    previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about, desktopApp: host.desktopApp,
     transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
     onRecipeImported: persist,

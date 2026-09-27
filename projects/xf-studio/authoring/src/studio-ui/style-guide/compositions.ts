@@ -51,7 +51,7 @@ export function compositions() {
     <div class="mock-dock wide-3 portrait-stage">
       <div class="mock-col">${group([["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Chrome dusk", "3 layers", { preset: true, selected: true })}${row("Soft day", "1 layer", { preset: true })}</ol></div>`, { condensed: true })}
         ${group([["Layers", "layers"]], 0, `<div class="panel-content"><ol class="item-list">${row("Glitter veil", "Glitter · 60%", { swatch: "#8c6fb0", finish: "glitter", warn: true })}${row("Petal wash", "Matte · 85%", { swatch: "#b0587a", selected: true })}${row("Base", "Satin · 70%", { swatch: "#6b4450", finish: "regular" })}</ol></div>`)}</div>
-      <div class="mock-col">${group([["Head", "head"]], 0, stage("Chrome dusk › Petal wash"))}</div>
+      <div class="mock-col">${group([["3D view", "head"]], 0, stage("Chrome dusk › Petal wash"))}</div>
       <div class="mock-col" style="grid-template-rows: minmax(0, 2fr) minmax(0, 3fr)">${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}
         ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"], ["Motion", "motion"], ["Preview quality", "quality"]], 0, `<div class="panel-content"><div class="layer-strip"><span class="swatch" style="--swatch:#b0587a"></span><div><strong>Petal wash</strong><span class="muted">2 of 3 from front</span></div></div>${slider("Opacity", .85, "85%")}</div>`, { condensed: true })}</div>
     </div><footer class="status-bar"><button type="button" class="status-item status-message" data-tone="success">Saved “Chrome dusk” · version 4.</button><span class="grow"></span><span class="status-item ready-badge" data-phase="ready">Preview 1K · ready</span></footer></div>`;
@@ -63,13 +63,13 @@ export function compositions() {
     ${group([["Mod package", "package"]], 0, `<div class="panel-content"><section class="section"><h3 class="section-title">Mod package</h3><p class="note">Creates private mod files for ONE in-game eye-makeup selector (plus Off) from the current draft, including unsaved edits.</p><div class="row wrap gap-s">${btn("Check mod export", { icon: "check" })}${btn("Build mod files…", { icon: "package", variant: "primary" })}</div></section>
       <div class="result-card ok"><div class="result-head"><strong>Check result</strong>${badge("Current", "success")}</div><p class="result-summary">3 of 4 presets can become mod files. This check created no files.</p><ul class="result-list"><li>${i("check")}<span>Chrome dusk</span></li><li>${i("check")}<span>Soft day</span></li></ul><div class="omissions"><span class="eyebrow">Omitted from the package</span><ul class="result-list"><li>${i("warning")}<span>Whole preset “Glitter night” — No active exportable layers remain.</span></li></ul></div></div></div>`)}
     ${group([["Layers", "layers"]], 0, `<div class="panel-content"><ol class="item-list">${row("Glitter veil", "Glitter · 60%", { swatch: "#8c6fb0", finish: "glitter", warn: true, selected: true })}</ol><div class="export-line">${badge("Preview only", "warning")}<span class="small">Preview only for now. Check and Build leave out layers with this finish and tell you which.</span></div></div>`)}</div></div>`;
-  const compact = `<div class="mock-shell compact-mock">${mockHeader("Chrome dusk")}<div class="mock-dock compact-2"><div class="mock-row stage-row">${group([["Head", "head"]], 0, stage("Petal wash"))}${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}</div>
+  const compact = `<div class="mock-shell compact-mock">${mockHeader("Chrome dusk")}<div class="mock-dock compact-2"><div class="mock-row stage-row">${group([["3D view", "head"]], 0, stage("Petal wash"))}${group([["UV map", "uv"]], 0, `<div class="uv-well"></div>`)}</div>
     <div class="mock-row">${group([["Layers", "layers"], ["Presets", "presets"], ["Library", "library"], ["Mod package", "package"]], 0, `<div class="panel-content"><ol class="item-list">${row("Petal wash", "Matte", { swatch: "#b0587a", selected: true })}</ol></div>`, { condensed: true })}
     ${group([["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]], 0, `<div class="panel-content">${slider("Opacity", .85, "85%")}</div>`, { condensed: true })}</div></div></div>`;
   const future = `<div class="mock-shell future-mock">${mockHeader("Arched brows — draft", "Not saved yet", "Eyebrows (future)")}
     <div class="future-banner">${i("info")}<span>Future direction — illustration only. Eyebrow authoring is not built and needs discussion before any data model is chosen.</span></div>
     <div class="mock-dock wide-3"><div class="mock-col">${group([["Brow sets", "presets"], ["Library", "library"]], 0, `<div class="panel-content"><ol class="item-list">${row("Arched brows", "draft", { preset: true, selected: true })}</ol></div>`)}</div>
-    <div class="mock-col">${group([["Head", "head"]], 0, stage("Brows · Arched brows"))}</div>
+    <div class="mock-col">${group([["3D view", "head"]], 0, stage("Brows · Arched brows"))}</div>
     <div class="mock-col">${group([["Brow shape", "shape"], ["Brow material", "finish"]], 0, `<div class="panel-content">${segmented("Hair density", ["Sparse", "Natural", "Full"], 1)}${note("Its own concepts — not makeup layers or makeup finish families.")}</div>`)}</div></div></div>`;
   return section("compositions", "06", "Compositions",
     `Representative arrangements built from the patterns above. They are starting points users can rearrange, not fixed screens.`, [
@@ -124,7 +124,7 @@ export function futures() {
     pattern({ id: "x-compare", title: "A/B comparison view", status: "future",
       specimen: `<div class="compare-demo"><div class="viewport-panel"><span class="viewport-context">A · Satin</span></div><div class="viewport-panel"><span class="viewport-context">B · Metallic</span></div></div>`,
       what: "Two synchronized stages comparing finishes, presets or lighting.",
-      when: "As a panel that can dock beside the Head panel.",
+      when: "As a panel that can dock beside the 3D view.",
       drives: "Missing API: a second renderer/viewport port." }),
     pattern({ id: "x-provenance", title: "Asset provenance panel", status: "future",
       specimen: `<div class="fact-list" style="max-width:360px"><div class="fact"><span class="fact-mark">${i("check")}</span><div><strong>Eye diffuse · Kala 16</strong><p class="muted small">Hash-verified local manifest · archive winner unproven</p></div></div></div>`,

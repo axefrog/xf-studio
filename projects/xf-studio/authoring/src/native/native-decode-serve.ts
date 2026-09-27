@@ -8,8 +8,9 @@
 import { depotHash } from "../depot-path";
 import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
-import { decodeFromPool, type NativeDecodeOptions, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerInit, type WorkerReply, type WorkerTextureMessage } from "./native-decode";
+import { decodeFromPool, type NativeDecodeOptions, type WorkerAnimMessage, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerInit, type WorkerReply, type WorkerTextureMessage } from "./native-decode";
 import { decodeTextureFromPool } from "./texture-decode";
+import { decodeAnimFromPool } from "./anim-decode";
 
 export interface WorkerScope {
   addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
@@ -32,7 +33,7 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
   };
   const reply = (message: WorkerReply, transfer?: Transferable[]) => transfer ? scope.postMessage(message, transfer) : scope.postMessage(message);
   scope.addEventListener("message", event => {
-    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerCloseMessage;
+    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerAnimMessage | WorkerCloseMessage;
     if (message.type === "close") {
       // Idle: release the library (so a game update can replace it) and exit (NATIVE-42).
       const current = state;
@@ -46,6 +47,11 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
     }
     if (message.type === "decode") {
       const outcome = state ? decodeFromPool(state.pool, state.decompress, message.request, state.options, depotHash)
+        : { ok: false as const, kind: "internal" as const, message: "The native decoder worker was not initialised." };
+      reply({ type: "outcome", id: message.id, outcome });
+    }
+    if (message.type === "anim") {
+      const outcome = state ? decodeAnimFromPool(state.pool, state.decompress, message.request, state.options.limits)
         : { ok: false as const, kind: "internal" as const, message: "The native decoder worker was not initialised." };
       reply({ type: "outcome", id: message.id, outcome });
     }

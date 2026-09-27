@@ -4,6 +4,8 @@ import { CATEGORY_LIST_RECORD, iconKey, readCreatorPresentation } from "../src/c
 import { fnv1a64 } from "../src/depot-path";
 import { displayLabel, isTextKey, readableName, readOnscreenEntries, TextTable } from "../src/game-text";
 import { childId, crc32, TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/tweakdb-flats";
+import { readTweakOverlay } from "../src/tweakxl-overlay";
+import { depotHash } from "../src/depot-path";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 
@@ -49,6 +51,16 @@ function blob(flats: { cname?: [string, string][]; ids?: [string, number][]; lis
 }
 
 describe("TweakDB flats", () => {
+  test("the creator's icons take the overlay first, with the file that defined each", () => {
+    const tweakdb = new TweakDbBlob(blob({}));
+    const overlay = readTweakOverlay([{ path: "r6/tweaks/pack.yaml", provider: "A mod", text: "OptionsIcons.Mod:\n  $type: UIIcon\n  atlasResourcePath: pack\\a.inkatlas\n  atlasPartName: p1\n" }]);
+    const presentation = readCreatorPresentation(tweakdb, ["OptionsIcons.Mod", "OptionsIcons.Gone"], "test", overlay);
+    expect(presentation.icons.get("OptionsIcons.Mod")).toEqual({ record: "OptionsIcons.Mod", atlas: { hash: depotHash("pack\\a.inkatlas"), path: "pack\\a.inkatlas" },
+      part: "p1", from: "r6/tweaks/pack.yaml" });
+    expect(presentation.icons.has("OptionsIcons.Gone")).toBe(false);
+    expect(presentation.gaps.some(gap => gap.code === "icons-not-in-tweakdb" && gap.detail.includes("TweakXL files"))).toBe(true);
+  });
+
   test("CRC-32 matches the standard check value and continues like zlib", () => {
     expect(crc32(bytes("123456789"))).toBe(0xcbf43926);
     expect(crc32(bytes("56789"), crc32(bytes("1234")))).toBe(0xcbf43926);

@@ -1,7 +1,9 @@
 import type { CollectionRequest } from "./collection-service";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
+import type { DesktopAppAction } from "./desktop-app";
 import type { ModInstallAction } from "./mod-install-actions";
+import type { PoseAction } from "./pose-actions";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
@@ -19,7 +21,7 @@ export type ActionScope = StudioTarget["kind"] | "file" | "host";
 export type { PayloadSchema, UndoPolicy, ValueSchema } from "./platform/api";
 export type ActionDescriptor = PlatformActionDescriptor<ActionScope>;
 export type RequestDescriptor = { scope: readonly ActionScope[]; payload: PayloadSchema;
-  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal"; async: true;
+  effect: "read" | "save" | "download" | "import" | "package" | "derive" | "install-tool" | "install-mod" | "reveal" | "launch"; async: true;
   cancellable: boolean };
 
 const desc = (scope: ActionScope | readonly ActionScope[], effect: ActionDescriptor["effect"], undo: UndoPolicy,
@@ -104,6 +106,8 @@ export const ACTION_DESCRIPTORS = {
     enabled: input("boolean") }),
   "view.undo": desc("workspace", "workspace", "none"),
   "view.redo": desc("workspace", "workspace", "none"),
+  // A released slider: the next light or display change starts a new View and lighting step (CORE-95).
+  "view.endEdit": desc("workspace", "workspace", "none"),
 } satisfies Record<StudioAction["kind"], ActionDescriptor>;
 
 const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDescriptor["effect"],
@@ -129,6 +133,18 @@ export const DETECTION_DESCRIPTORS = {
 } satisfies Record<InstallDetectionAction["kind"], RequestDescriptor>;
 
 /**
+ * "Get the desktop app" on localhost (`StudioPresentationPort.desktopApp`; the desktop app has none). `refresh` reads whether the
+ * app is installed, whether this checkout built a setup program and whether a release exists. `install` is the person's consent
+ * to run the setup they were shown, named by its `installer` ID (the host refuses one that changed); `open` starts the installed
+ * app. The host decides every path; none changes a recipe, the library or Undo.
+ */
+export const DESKTOP_APP_DESCRIPTORS = {
+  "desktopApp.refresh": request("host", "read"),
+  "desktopApp.install": request("host", "launch", { installer: target("string") }),
+  "desktopApp.open": request("host", "launch"),
+} satisfies Record<DesktopAppAction["kind"], RequestDescriptor>;
+
+/**
  * "Add to my mod manager" after Build (UI-82; `StudioPresentationPort.modInstall`). `review` reads the host's plan; `apply` is the
  * person's consent to that reviewed plan (the host refuses a plan that no longer matches); `reveal` opens the build's folder.
  * The product names a mod of the latest Build; the host decides every path. None changes a recipe, the library or Undo.
@@ -138,6 +154,17 @@ export const MOD_INSTALL_DESCRIPTORS = {
   "modInstall.apply": request("host", "install-mod", { product: target("string") }),
   "modInstall.reveal": request("host", "reveal", { product: target("string") }),
 } satisfies Record<ModInstallAction["kind"], RequestDescriptor>;
+
+/**
+ * The photo-mode pose catalogue (pose-library-design.md §7; `PoseActions`, for the Poses panel to come). All read the host's own game
+ * files on its own launch route: the catalogue for a body gender, one pose's sampled clip, and Try again. None changes a recipe, the
+ * library, the workspace or Undo.
+ */
+export const POSE_DESCRIPTORS = {
+  "poses.load": request("host", "read", { bodyGender: enumerated(["female", "male"], "state") }),
+  "poses.sample": request("host", "read", { bodyGender: enumerated(["female", "male"], "state"), id: target("string") }),
+  "poses.retry": request("host", "read", { bodyGender: enumerated(["female", "male"], "state") }),
+} satisfies Record<PoseAction["kind"], RequestDescriptor>;
 
 /** Gesture payloads are proposals inside one opaque session, not standalone commands (eye makeup's, eye-makeup-descriptors.ts). */
 export const GESTURE_DESCRIPTORS = EYE_MAKEUP_GESTURE_DESCRIPTORS satisfies Record<StudioGestureProposal["kind"], ActionDescriptor>;

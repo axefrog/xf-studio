@@ -3,9 +3,12 @@ import { trustedFixture } from "./studio-presentation-fixture";
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "diagnostics", "feature", "features", "files", "installDetection", "library", "links", "localSetup", "modInstall", "module", "preferences",
+  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "desktopApp", "diagnostics", "feature", "features", "files", "installDetection", "library", "links", "localSetup", "modInstall", "module", "preferences",
     "previewReadiness", "previewSetup", "snapshot", "status", "subscribe", "viewport", "views"]);
   expect("document" in shell.authoring).toBe(false);
+  // No desktop-app offer without a host that has one (the desktop app, fixtures): nothing about it is shown.
+  expect(shell.desktopApp.offered()).toBe(false);
+  expect(shell.desktopApp.capability({ kind: "desktopApp.refresh" }).available).toBe(false);
   let notifications = 0; const unsubscribe = shell.subscribe(() => notifications++);
   const initial = shell.snapshot(), firstLayer = initial.authoring.document.recipe.layers[0];
   expect(initial.previewReadiness).toMatchObject({ phase: "ready", size: 1024 });

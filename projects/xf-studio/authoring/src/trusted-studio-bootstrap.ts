@@ -1,3 +1,4 @@
+import type { DesktopAppActions } from "./desktop-app";
 import { CollectionApplication } from "./collection-application";
 import type { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import type { CollectionTransport } from "./collection-service";
@@ -37,6 +38,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   modInstall?: ModInstallActions;
   /** The 3D preview setup service the presentation drives (card, consent, head pane). */
   previewSetup?: PreviewSetupActions;
+  /** "Get the desktop app" (localhost only). */
+  desktopApp?: DesktopAppActions;
   /** Opens XF Studio's own public pages for the Help view. */
   links?: ProjectLinkPort;
   /** The host's About view (the desktop app's). */
@@ -93,7 +96,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
-    links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules });
+    desktopApp: options.desktopApp, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

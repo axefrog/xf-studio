@@ -2,15 +2,24 @@
 // link family or mod, and the pure modules keep file and process access in the host adapter (AGENTS.md: no per-mod adapters).
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { DETAIL_SLOTS } from "../src/render-detail";
 
 const MODULES = ["cc-catalogue", "cc-presentation", "cc-render-coverage", "cc-preset", "character-context", "game-text", "tweakdb-flats", "cc-panel",
   "character-context-actions", "browser-cc-catalogue-device", "studio-ui/panels/character", "studio-ui/panels/character-choices", "cc-catalogue-host",
   "cc-catalogue-service", "cc-catalogue-server", "creator-names", "character-follow",
+  // Swatches, icons, the TweakXL overlay and the panel's hierarchy (Next 1, 3 and 4 of the cc-controls backlog).
+  "cc-swatch", "cc-swatch-host", "cc-icons", "cc-icon-host", "tweakxl-overlay", "character-panel-sections",
   // The composition root that wires the context to the preview (UI-71).
   "browser-head-attachment"];
 const HOST = new Set(["cc-catalogue-host", "cc-catalogue-service", "cc-catalogue-server", "browser-cc-catalogue-device", "studio-ui/panels/character",
+  "cc-swatch-host", "cc-icon-host",
   "studio-ui/panels/character-choices", "browser-head-attachment"]);
 const PURE = MODULES.filter(name => !HOST.has(name));
+/**
+ * The panel's hierarchy names the preview's own details (render-detail.ts `DETAIL_SLOTS`: "eyes", "piercings", …), which it matches to
+ * rows through their creator slots; two of those words are also vanilla option names, which is not naming an option.
+ */
+const PREVIEW_WORDS: Readonly<Record<string, ReadonlySet<string>>> = { "character-panel-sections": new Set(DETAIL_SLOTS) };
 const source = (name: string) => readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
 /** Code without comments, so prose may explain the rules with examples. */
 const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");
@@ -35,7 +44,7 @@ test("the inventory of vanilla names is loaded", () => {
 
 test("no catalogue or context module names a vanilla option, link family or mod", () => {
   const offenders = MODULES.flatMap(name => literals(source(name))
-    .filter(text => vanilla.has(text) || MOD_TOKENS.test(text)).map(text => `${name}: "${text}"`));
+    .filter(text => (vanilla.has(text) && !PREVIEW_WORDS[name]?.has(text)) || MOD_TOKENS.test(text)).map(text => `${name}: "${text}"`));
   expect(offenders).toEqual([]);
 });
 

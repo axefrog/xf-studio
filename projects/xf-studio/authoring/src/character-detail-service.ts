@@ -204,7 +204,8 @@ export function templateIdentity(root: JsonObject | null | undefined): { name: s
  * Every material template the plan meets, read once per installation: its own name and priority (a mod's copy of a vanilla template
  * keeps the name the engine finds programs by), and, for the templates the renderer draws, their parameter defaults.
  */
-async function loadTemplates(graph: ResourceGraph, templates: Iterable<Provenance>, cache: CharacterPreparationCache): Promise<void> {
+export async function loadTemplates(graph: ResourceGraph, templates: Iterable<Provenance>,
+  cache: { readonly identities: Map<string, { name: string | null; priority: string | null }>; readonly defaults: Map<string, ResolvedParam[]> }): Promise<void> {
   // Read together, so templates not read yet share one extraction batch.
   const wanted = new Map<string, Provenance>();
   for (const template of templates) {

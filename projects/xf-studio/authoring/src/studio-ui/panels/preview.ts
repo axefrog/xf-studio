@@ -64,6 +64,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     rt.report(action.kind, result);
     return result;
   };
+  // A released slider (or the end of a keyboard burst) ends its View and lighting step: the next drag is a step of its own (CORE-95).
+  const endEdit = () => { port.authoring.dispatch({ kind: "view.endEdit" }); };
   const preset = new Segmented<LightingPreset>({ label: "Lighting", options: [
     { value: "studio", label: "Studio", title: "The Studio's soft authoring light" },
     { value: "creator", label: "Character creator", title: "The game's creator and mirror lighting, for comparing with the game" }],
@@ -82,7 +84,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const log = (value: number) => Math.log10(value), exposureRange = rt.range("preview.setCreatorLighting", "value", "exposure");
   const creatorExposure = new Slider({ label: "Creator exposure (k)", min: log(exposureRange.min), max: log(exposureRange.max), step: .01,
     format: value => (10 ** value).toPrecision(3),
-    transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setCreatorLighting", key: "exposure", value: Number((10 ** value).toPrecision(4)) }); },
+      commit: endEdit, cancel: endEdit } });
   const resetCalibration = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
     title: "Put the intensity reading, cone angles and creator exposure back to their defaults",
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
@@ -120,14 +123,14 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const studioExposureRange = rt.range("preview.setExposure", "value"), stops = (value: number) => Math.log2(value);
   const exposure = new Slider({ label: "Exposure", min: stops(studioExposureRange.min), max: stops(studioExposureRange.max), step: .05,
     format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
-    transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); }, commit: endEdit, cancel: endEdit } });
   const angle = new Slider({ label: "Key light direction", ...rt.range("preview.setKeyAngle", "degrees"), step: 1,
     format: value => { const degrees = Math.round(value) % 360; return `${Math.round(value)}° ${degrees === 0 ? "front" : degrees === 180 ? "behind"
       : degrees < 180 ? "from V's right" : "from V's left"}`; },
-    transaction: { edit: degrees => { edit({ kind: "preview.setKeyAngle", degrees }); } } });
+    transaction: { edit: degrees => { edit({ kind: "preview.setKeyAngle", degrees }); }, commit: endEdit, cancel: endEdit } });
   const studioSlider = (key: StudioLightKey, label: string, format: (value: number) => string, step: number) => new Slider({ label,
     ...rt.range("preview.setStudioLight", "value", key), step, format,
-    transaction: { edit: value => { edit({ kind: "preview.setStudioLight", key, value }); } } });
+    transaction: { edit: value => { edit({ kind: "preview.setStudioLight", key, value }); }, commit: endEdit, cancel: endEdit } });
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   const elevation = studioSlider("elevation", "Key light height", value => `${Math.round(value)}°`, 1);
   const keyStrength = studioSlider("key", "Key light strength", percent, .05);

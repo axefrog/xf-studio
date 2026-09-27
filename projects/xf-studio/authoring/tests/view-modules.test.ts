@@ -4,18 +4,19 @@
  * size class; collapsed groups; the modules preference.
  */
 import { expect, test } from "bun:test";
-import { deriveViewSummaries, deriveViewTools, moduleRegistrationIssues, type ModuleRegistration, type ViewToolContribution } from "../src/platform/api";
+import { deriveViewSummaries, deriveViewTools, moduleRegistrationIssues, viewTitles, type ModuleRegistration, type ViewToolContribution } from "../src/platform/api";
 import { PLATFORM_VIEW_TOOLS } from "../src/platform/core/view-tools";
 import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
-import { activate, allGroups, applyDrop, closePanel, locate, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
+import { activate, allGroups, applyDrop, closePanel, locate, openShares, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
 import { parseUIPreferences, UIPreferenceActions } from "../src/ui-preferences";
 import { EYE_MAKEUP_GRANDFATHERED_PANELS } from "../src/features/eye-makeup/view/contribution";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { PreviewActions, type PreviewPort } from "../src/preview-actions";
 
 const ids = (tools: readonly ViewToolContribution[]) => tools.map(tool => tool.id);
 
@@ -31,7 +32,7 @@ test("a view's tools: the platform's always, a module's only while it shows, res
   const world: ModuleRegistration = { ...STUDIO_MODULE_REGISTRATION, scenes: ["character", "location"],
     modules: [...STUDIO_MODULE_REGISTRATION.modules, { id: "world", label: "World", icon: "category", group: "world", stage: "preview", shownByDefault: false, description: "" }],
     tools: [...STUDIO_MODULE_REGISTRATION.tools, { id: "world.radius", module: "world", label: "Streaming radius", icon: "dot", order: 5, scenes: ["location"],
-      placement: "toolbar", kind: "menu", state: "scene" }] };
+      placement: "toolbar", kind: "menu", state: "scene", dispatches: "world.setRadius" }] };
   expect(moduleRegistrationIssues(world)).toEqual([]);
   expect(ids(deriveViewTools(world, "location", { modules: ["eye-makeup", "world"], research: true }))).toEqual(["world.radius"]);
   expect(ids(deriveViewTools(world, "location", { modules: ["eye-makeup"], research: true }))).toEqual([]);
@@ -46,34 +47,85 @@ test("rule 7: the module registration is complete, and an incomplete one says wh
   const broken: ModuleRegistration = { ...STUDIO_MODULE_REGISTRATION,
     modules: [...STUDIO_MODULE_REGISTRATION.modules, STUDIO_MODULE_REGISTRATION.modules[0]],
     tools: [...STUDIO_MODULE_REGISTRATION.tools, { ...PLATFORM_VIEW_TOOLS[0] }, { id: "poses.menu", module: "poses", label: "Poses", icon: "dot", order: 1,
-      scenes: ["character"], placement: "toolbar", kind: "menu", state: "scene" }, { id: "surface", module: "eye-makeup", label: "x", icon: "dot", order: 1,
-      scenes: ["garage"], placement: "menu", kind: "toggle", state: "tools" }],
+      scenes: ["character"], placement: "toolbar", kind: "menu", state: "scene", dispatches: "poses.apply" }, { id: "surface", module: "eye-makeup", label: "x",
+      icon: "dot", order: 1, scenes: ["garage"], placement: "menu", kind: "toggle", state: "tools", dispatches: "view.setTool" },
+    // Tools name the action they dispatch; a toggle in the tools node dispatches view.setTool, and only such a toggle turns on editing.
+    { id: "eye-makeup.mute", module: "eye-makeup", label: "x", icon: "dot", order: 1, scenes: ["character"], placement: "menu", kind: "toggle", state: "scene" } as never,
+    { id: "eye-makeup.frame", module: "eye-makeup", label: "x", icon: "dot", order: 1, scenes: ["character"], placement: "menu", kind: "action", state: "tools",
+      dispatches: "camera.front" },
+    { id: "eye-makeup.edit", module: "eye-makeup", label: "x", icon: "dot", order: 1, scenes: ["character"], placement: "menu", kind: "action", state: "camera",
+      dispatches: "camera.front", editing: true }],
     summaries: [{ module: "nobody", scenes: ["character"] }] };
   expect(moduleRegistrationIssues(broken)).toEqual(["module eye-makeup is registered twice", "tool camera.front is registered twice",
     "tool poses.menu names unregistered module poses", "tool surface is not prefixed with its module eye-makeup", "tool surface names an unregistered scene kind",
+    "tool eye-makeup.mute names no action to dispatch",
+    "tool eye-makeup.frame must be a toggle dispatching view.setTool exactly when its state is the view's tools node",
+    "tool eye-makeup.edit turns on editing but isn't held in the view's tools node",
     "summary names unregistered module nobody"]);
 });
 
+/** A preview device that records what it was told (surface and wire), for the tools a head applies. */
+function recordingPreviewPort(calls: string[]): PreviewPort {
+  const camera = { position: [0, 1.6, -0.6], target: [0, 1.6, 0.005], fov: 30 };
+  return { cameraState: () => camera, front: () => false, setFov: () => false, endFovGesture: () => {}, restoreCamera: () => {},
+    setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: enabled => calls.push(`surface:${enabled}`),
+    setWire: enabled => calls.push(`wire:${enabled}`), setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setEyeShape: () => {},
+    setPiercings: () => {}, setDetail: () => {} };
+}
+
 test("the application resolves each tool's state and action; view.setTool edits the view's tools node, and a hidden module's tool stays dispatchable", () => {
-  const { app, views } = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  const workspace = freshWorkspace();
+  const { app, views } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
   const tools = app.viewTools(undefined, { modules: ["eye-makeup"], research: false });
   expect(tools.map(tool => [tool.id, tool.action.kind, tool.on])).toEqual([["camera.front", "camera.front", undefined], ["camera.body", "camera.body", undefined],
     ["eye-makeup.surface", "view.setTool", true], ["motion.idle", "motion.setIdle", false]]);
   // Idle hides where the head has no idle; the camera tools act on the view they belong to.
   expect(tools.find(tool => tool.id === "motion.idle")?.shown).toBe(false);
   expect(tools[0].action).toEqual({ kind: "camera.front", view: "main" });
+  // Before the 3D view is ready a toggle would reach no device and not be saved: it waits, and says so (UI-106).
+  expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: false })).toMatchObject({ available: false, code: "not_ready" });
+  app.attach({ preview: new PreviewActions(workspace.preview, recordingPreviewPort([]), views) });
   // Toggle Surface controls: the graph's tools node changes; no View and lighting step is recorded.
   expect(app.dispatch({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: false })).toEqual({ ok: true, result: undefined });
   expect(views.state("main", "tools")).toEqual({ on: { "eye-makeup.surface": false, "eye-makeup.wire": false } });
   expect(views.history().depth).toBe(0);
+  // A slider's drag is one View and lighting step until it is released (view.endEdit), however long it pauses (CORE-95).
+  for (const value of [1.3, 1.4]) app.dispatch({ kind: "preview.setExposure", value });
+  expect(app.dispatch({ kind: "view.endEdit" })).toMatchObject({ ok: true });
+  app.dispatch({ kind: "preview.setExposure", value: 1.5 });
+  expect(views.history()).toMatchObject({ undo: "Exposure", depth: 2 });
   // Even with eye makeup hidden (the presentation's filter), its action is still valid: visibility is presentation state.
   expect(app.viewTools(undefined, { modules: [], research: true }).map(tool => tool.id)).not.toContain("eye-makeup.wire");
   expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true }).available).toBe(true);
   expect(app.capability({ kind: "view.setTool", tool: "camera.front", enabled: true })).toMatchObject({ available: false, code: "invalid_value" });
   expect(app.capability({ kind: "view.setTool", tool: "eye-makeup.wire", enabled: true, view: "gone" })).toMatchObject({ available: false, code: "missing_target" });
-  expect(app.capability({ kind: "view.undo" })).toMatchObject({ available: false });
+  expect(app.capability({ kind: "view.undo" })).toMatchObject({ available: true });
   expect(app.modules().map(module => module.id)).toEqual(["eye-makeup", "save-explorer"]);
   expect(app.views()?.views.map(view => [view.id, view.panel, view.sceneKind])).toEqual([["main", "head", "character"]]);
+});
+
+test("a tool the presentation withdraws keeps its state but reaches no device until it is offered again (UI-102)", () => {
+  const workspace = freshWorkspace(), calls: string[] = [];
+  workspace.preview.wire = true;
+  const { app, views } = createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  // Research tools are hidden before the head loads: the head starts with the wireframe it stored, then turns it off at once.
+  app.withdrawViewTools(["eye-makeup.wire", "no.such-tool"]);
+  const preview = new PreviewActions(workspace.preview, recordingPreviewPort(calls), views);
+  app.attach({ preview });
+  expect(calls).toEqual(["wire:false"]);
+  // Eye makeup is hidden: Surface controls stops drawing and editing, while the view keeps (and saves) the choice.
+  app.withdrawViewTools(["eye-makeup.wire", "eye-makeup.surface"]);
+  expect(calls).toEqual(["wire:false", "surface:false"]);
+  expect(views.state("main", "tools")).toEqual({ on: { "eye-makeup.surface": true, "eye-makeup.wire": true } });
+  expect(preview.snapshot()).toMatchObject({ surface: true, wire: true });
+  expect(views.history().depth).toBe(0);
+  // A choice made while withdrawn is kept and reaches the device only once the tool is offered again.
+  app.dispatch({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: false });
+  app.dispatch({ kind: "view.setTool", tool: "eye-makeup.surface", enabled: true });
+  expect(calls).toEqual(["wire:false", "surface:false"]);
+  app.withdrawViewTools([]);
+  expect(calls).toEqual(["wire:false", "surface:false", "surface:true", "wire:true"]);
+  preview.dispose();
 });
 
 /** A node without its generated IDs, sizes rounded. */
@@ -141,6 +193,22 @@ test("a collapsed group keeps its flag through a save and restore, and expanding
   const read = parseTree(JSON.parse(JSON.stringify(collapsed)), STUDIO_CATALOGUE.ids, factory)!;
   expect(locate(read, "character")!.group.collapsed).toBe(true);
   expect("collapsed" in locate(setCollapsed(read, inspect, false), "character")!.group).toBe(false);
+});
+
+test("a view's title comes from the graph: its own name, else \"3D view\", numbered when there are several; the panel ID never changes", () => {
+  expect(viewTitles([{ id: "main" }])).toEqual(["3D view"]);
+  expect(viewTitles([{ id: "main" }, { id: "side" }, { id: "close", title: "Close-up" }])).toEqual(["3D view 1", "3D view 2", "Close-up"]);
+  const { app } = createTrustedAuthoringCore(freshWorkspace(), { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
+  // Without a character context the scene still shows a V: the creator's default one.
+  expect(app.viewTitles()).toEqual([{ view: "main", panel: "head", title: "3D view", subject: "V (the character creator's default V)" }]);
+  expect(STUDIO_CATALOGUE.meta.head?.title).toBe("3D view");
+});
+
+test("a collapsed group's neighbours share all of its split's space, whatever their stored shares", () => {
+  // Flex grow factors summing to less than 1 would leave the collapsed group's share empty.
+  expect(openShares([0.42, 0.58], [false, true])).toEqual([1, 0]);
+  expect(openShares([0.2, 0.3, 0.5], [false, true, false]).map(share => +share.toFixed(4))).toEqual([0.2857, 0, 0.7143]);
+  expect(openShares([0.5, 0.5], [false, false])).toEqual([0.5, 0.5]);
 });
 
 test("module visibility is a bounded presentation preference, stored only where the person chose", () => {

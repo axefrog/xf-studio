@@ -82,7 +82,7 @@
   "savedV.clear",
   "character.setOption",
   "character.setOptions",
-  "character.hideOwnMakeup",
+  "character.setOwnMakeup",
   "character.reset",
   "character.resetAll",
   "character.useDefault",
@@ -99,7 +99,8 @@
   "character.redoClothing",
   "view.setTool",
   "view.undo",
-  "view.redo"
+  "view.redo",
+  "view.endEdit"
  ],
  "actionDescriptors": {
   "history.undo": {
@@ -2369,13 +2370,19 @@
     }
    }
   },
-  "character.hideOwnMakeup": {
+  "character.setOwnMakeup": {
    "scope": [
     "viewport"
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "shown": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
   },
   "character.reset": {
    "scope": [
@@ -2596,6 +2603,14 @@
    "payload": {}
   },
   "view.redo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "view.endEdit": {
    "scope": [
     "workspace"
    ],
@@ -3349,7 +3364,7 @@
    "async": false
   },
   {
-   "id": "character.hideOwnMakeup",
+   "id": "character.setOwnMakeup",
    "family": "action",
    "scope": [
     "viewport"
@@ -3503,6 +3518,15 @@
   },
   {
    "id": "view.redo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.endEdit",
    "family": "action",
    "scope": [
     "workspace"

@@ -65,7 +65,7 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
  */
 export const VIEWS_FAMILY: SystemFamily<ViewAction, ActionScope, typeof VIEWS_ID> = Object.freeze({
   owner: "system", id: VIEWS_ID, label: "Views", needsScene: true, thrown: "unavailable",
-  actions: actionTable<ViewAction, ActionScope>(ACTION_DESCRIPTORS, { "view.setTool": true, "view.undo": true, "view.redo": true }),
+  actions: actionTable<ViewAction, ActionScope>(ACTION_DESCRIPTORS, { "view.setTool": true, "view.undo": true, "view.redo": true, "view.endEdit": true }),
 });
 
 export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTION_ID> = Object.freeze({

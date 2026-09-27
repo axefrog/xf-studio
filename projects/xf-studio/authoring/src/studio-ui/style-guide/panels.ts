@@ -33,7 +33,7 @@ export function panelSystem() {
       specimen: `<div class="demo-split"><div class="dock-split" data-axis="row" style="height:120px">
         <div class="dock-cell" style="flex:1 1 0">${group([["Layers", "layers"]], 0, "")}</div>
         <div class="dock-splitter active" role="separator" aria-orientation="vertical"></div>
-        <div class="dock-cell" style="flex:1.4 1 0">${group([["Head", "head"]], 0, "")}</div></div></div>`,
+        <div class="dock-cell" style="flex:1.4 1 0">${group([["3D view", "head"]], 0, "")}</div></div></div>`,
       what: "Rows and columns of groups with 4 px splitters. Hover or focus shows the cyan track; dragging resizes the two neighbours only.",
       when: "Any docked arrangement. Minimum group size is 150 × 96 px.",
       a11y: "Splitters are focusable separators: arrow keys move 4 %, Enter or double-click equalises the pair." }),
@@ -64,7 +64,7 @@ export function panelSystem() {
       what: "The production resolver running on three sample groups. The dragged panel is deliberately large so it overlaps targets while the cursor stays outside them.",
       when: "Use it to reason about new guide placements before changing snap.ts; keep the unit tests in tests/dock-layout.test.ts in step." }),
     pattern({ id: "d-max", title: "Maximized group and empty dock", status: "implemented",
-      specimen: `<div class="row gap-m align-end"><div style="width:220px;height:120px;position:relative">${group([["Head", "head"]], 0, `<div class="panel-content"><p class="note">Maximized · Restore button in the tab bar</p></div>`, { style: "height:100%" })}</div>
+      specimen: `<div class="row gap-m align-end"><div style="width:220px;height:120px;position:relative">${group([["3D view", "head"]], 0, `<div class="panel-content"><p class="note">Maximized · Restore button in the tab bar</p></div>`, { style: "height:100%" })}</div>
         <div class="dock-empty" style="width:220px;height:120px"><p>Every panel is floating or closed.</p><button type="button" class="btn small"><span>Reset layout</span></button></div></div>`,
       what: "Double-click a tab bar (or use its menu) to maximize a group over the dock; floating windows stay available. If every panel is floating or closed, the dock shows an explanation and Reset.",
       when: "Maximize for close inspection of the head or UV map; restore the same way." }),

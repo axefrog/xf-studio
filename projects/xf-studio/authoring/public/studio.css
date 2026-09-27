@@ -240,7 +240,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* Condensed strips keep the active tab's full label; the others keep a short visible label (never icon-only, UI-96), and the
    strip scrolls when even that doesn't fit. */
 .dock-tabs.condensed .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
+.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
 .dock-tab:hover { color: var(--text); background: var(--bg-hover); }
 .dock-tab[aria-selected="true"] { color: var(--text); background: var(--bg-panel); }
 .dock-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--indicator); }
@@ -263,11 +263,18 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-window { position: absolute; display: flex; flex-direction: column; pointer-events: auto; box-shadow: var(--shadow); background: var(--bg-panel); border: 1px solid var(--line-strong);
   border-radius: 0 var(--bevel) 0 0; min-width: 0; }
 .dock-window .dock-group { border: 0; }
-/* A collapsed group keeps only its tab bar; its cell takes no share of the split, so the neighbours fill the space. */
-.dock-group.collapsed { flex: none; }
-.dock-cell[data-collapsed] > .dock-group.collapsed { flex: none; }
-.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tabbar { writing-mode: vertical-rl; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
-.dock-cell[data-collapsed="row"] > .dock-group.collapsed .dock-tab-label { max-width: none; }
+/* A collapsed group keeps only its tab bar and folds along the axis that takes its space (view-graph-design.md §4.4): along a
+   column it is a header row spanning its column; along a row (a single group, or a column whose groups all collapsed) a
+   full-height vertical strip. A folded cell takes no share of its split, so the neighbours fill the space. */
+.dock-group.collapsed[data-fold="row"] { flex: none; }
+.dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
+/* A strip shorter than its tabs condenses them like a crowded bar and scrolls the rest; its buttons stay in reach. */
+.dock-group.collapsed[data-fold="row"] .dock-tabs { min-height: 0; overflow: hidden auto; }
+.dock-group.collapsed[data-fold="row"] .dock-tab-label { max-width: none; }
+.dock-group.collapsed[data-fold="row"] .dock-tabbar-fill { min-width: 0; min-height: 24px; }
+.dock-cell[data-collapsed] > .dock-split { flex: none; }
+.dock-split > .dock-splitter.inert { cursor: default; }
+.dock-split > .dock-splitter.inert:hover::after { background: transparent; }
 .dock-window.collapsed { height: auto !important; }
 .dock-collapse-btn[aria-expanded="false"] { color: var(--signal); }
 .dock-window .dock-tabbar-fill { cursor: move; }
@@ -443,6 +450,16 @@ span.category { border-color: transparent; background: transparent; padding-left
 .install-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); min-height: 24px; }
 .install-status { margin: 0; flex: 1 1 240px; font-size: var(--fs-sm); }
 .install-status.warning { color: var(--warning); }
+/* "Get the desktop app" (localhost only): what was found and the one next step. */
+.desktop-app-lead { margin: 0 0 var(--sp-4); }
+.desktop-app-detail { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.desktop-app-detail p { margin: 0; }
+.desktop-app-detail > .btn { justify-self: start; }
+.desktop-app-sheet h2:focus { outline: none; }
+.desktop-app-file { display: flex; align-items: flex-start; gap: var(--sp-3); overflow-wrap: anywhere; }
+.desktop-app-build { display: grid; gap: var(--sp-3); }
+.desktop-app-command { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); }
+.desktop-app-command code { flex: 1; min-width: 0; font-size: var(--fs-sm); }
 /* Game & tools: one form saved as it changes (UI-83). */
 .setup-section > .control, .setup-section > .row, .setup-section .setup-mo2, .setup-section .setup-direct { margin-top: var(--sp-4); }
 .setup-status { margin: var(--sp-4) 0 0; font-size: var(--fs-sm); padding: var(--sp-3) var(--sp-4); border-left: 2px solid var(--line-strong); background: var(--bg-raised); }
@@ -480,8 +497,22 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-quick { padding: var(--sp-4); border: 1px solid var(--line); background: var(--bg-raised); border-radius: 0 var(--bevel) 0 0; }
 .cc-quick .btn { align-self: flex-start; }
 .cc-search { height: var(--control-h); }
+.cc-find { display: flex; flex-direction: column; }
+.cc-groups { display: flex; flex-direction: column; gap: var(--sp-7); }
+.cc-group { display: flex; flex-direction: column; gap: var(--sp-3); }
+.cc-heading { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--control-h-sm); }
+.cc-group-head { border-bottom: 1px solid var(--line); padding-bottom: var(--sp-2); }
+.cc-group-title { margin: 0; flex: 1; font: 600 var(--fs-md)/1.2 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
+.cc-heading-toggle { flex: none; gap: var(--sp-2); min-height: 0; }
+.cc-heading-toggle .toggle-label { font-size: var(--fs-xs); color: var(--text-muted); }
+.cc-heading-toggle.unavailable { cursor: not-allowed; }
+.cc-heading-toggle.unavailable .switch-track, .cc-heading-toggle.unavailable .toggle-label { opacity: .45; }
+/* One line reserved under a heading with a switch: its note, or why it can't change (never appears or vanishes). */
+.cc-heading-note { margin: 0 0 var(--sp-1); height: calc(var(--fs-xs) * 1.42); font-size: var(--fs-xs); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-control { display: flex; flex-direction: column; gap: var(--sp-1); margin-bottom: var(--sp-2); }
 .cc-sections { display: flex; flex-direction: column; gap: var(--sp-5); }
-.cc-section-title { margin: 0 0 var(--sp-2); font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+.cc-section-title { margin: 0; flex: 1; font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); }
+.cc-section-head { margin-bottom: var(--sp-1); }
 .cc-rows { display: flex; flex-direction: column; border-top: 1px solid var(--line-soft); }
 .cc-row { display: flex; flex-direction: column; border-bottom: 1px solid var(--line-soft); }
 .cc-row-head { display: flex; align-items: center; gap: var(--sp-2); min-height: var(--row-h); }
@@ -512,8 +543,27 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-choice.swatch-choice { padding: 2px; aspect-ratio: 1; min-width: 0; }
 .cc-choice.swatch-choice .swatch { width: 100%; height: 100%; }
 .cc-choice.swatch-choice .swatch[data-empty] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line) 3px 4px); }
-.cc-choice.swatch-choice.off, .cc-choice.swatch-choice:has(.cc-choice-label) { aspect-ratio: auto; grid-column: span 2; }
+.cc-choice.swatch-choice.off { aspect-ratio: auto; grid-column: span 2; }
+/* A swatch derived from what wins for the choice: one colour, a root-to-tip gradient, or the game's icon cut from a sheet (cc-swatch.ts, cc-icons.ts). */
+.cc-choice.swatch-choice .swatch, .cc-row-swatch { background-color: var(--swatch); background-image: var(--swatch-image, none); background-size: var(--swatch-size, auto);
+  background-position: var(--swatch-position, 0 0); background-repeat: no-repeat; }
+.cc-choice.swatch-choice .swatch[data-empty="waiting"] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line-soft) 3px 4px); opacity: .7; }
 .cc-choice.swatch-choice .cc-choice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Grid, not a flex column: a flex column sizes a group of aspect-ratio swatches too tall. */
+.cc-choices.grouped { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.cc-maker-items { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.cc-choices.grid .cc-maker-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
+.cc-maker-items[hidden], .cc-maker-lead:empty { display: none; }
+.cc-maker { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.cc-maker-head { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 20px; padding: 0; border: 0; background: transparent; color: var(--text-muted);
+  font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; text-align: left; cursor: pointer; }
+.cc-maker-head:hover { color: var(--text); }
+.cc-maker-chevron { flex: none; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translate(-1px, -1px); }
+.cc-maker-head[aria-expanded="false"] .cc-maker-chevron { transform: rotate(-45deg); }
+.cc-maker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-maker-count { flex: none; color: var(--text-faint); font-family: var(--font-mono); letter-spacing: 0; }
+.cc-maker-head[data-chosen][aria-expanded="false"] .cc-maker-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: var(--sp-2);
+  border-radius: 50%; background: var(--signal); vertical-align: middle; }
 .cc-choices-status { margin: 0 var(--sp-3) var(--sp-3) calc(var(--sp-3) + 12px + var(--sp-3)); }
 .cc-more { margin: 0 0 var(--sp-3) calc(var(--sp-3) + 12px + var(--sp-3)); align-self: flex-start; }
 .cc-row-swatch { width: 12px; height: 12px; }
