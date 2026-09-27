@@ -74,7 +74,7 @@ export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTIO
   owner: "system", id: MOTION_ID, label: "Motion", needsScene: true, thrown: "unavailable",
   actions: actionTable<MotionAction, ActionScope>(ACTION_DESCRIPTORS, {
     "motion.setIdle": true, "motion.setIdleClip": true, "motion.setPaused": true, "motion.setContributions": true,
-    "motion.setBlink": true, "motion.playBlink": true }, { "motion.setBlink": { value: "fraction" } }),
+    "motion.setBlink": true, "motion.playBlink": true, "motion.setPhysics": true }, { "motion.setBlink": { value: "fraction" } }),
 });
 
 /** Preview quality works without the scene (it sizes generated textures), but its device failures are `unavailable`. */

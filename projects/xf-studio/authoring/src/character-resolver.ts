@@ -81,6 +81,13 @@ export interface ResolvedComponent {
   readonly meshAppearanceResolved: { readonly requested: string; readonly used: string | null; readonly expandedFrom: string | null; readonly patchedFrom: string | null } | null;
   readonly materials: readonly ResolvedChunkMaterial[];
   readonly notes: readonly RuleNote[];
+  /** A skinned mesh's skeleton: the component its `skinning` binding names (a dangle component for hair with physics). */
+  readonly skinning?: string;
+  /**
+   * An animated component (a dangle part's simulation, knowledge/hair-physics.md §2.1): its rig and graph, and the components its
+   * `controlBinding` and `parentTransform` bindings name.
+   */
+  readonly animated?: { readonly rig: Provenance | null; readonly graph: Provenance | null; readonly controlBinding: string; readonly parentTransform: string };
 }
 export interface ResolvedAppearance {
   readonly option: string;
@@ -433,8 +440,12 @@ async function resolveChunkMaterial(ctx: Context, target: MeshModel, source: Mes
 async function resolveComponent(ctx: Context, component: ComponentModel, origin: ResolvedComponent["origin"], overriddenBy: string[],
   morphs: readonly { region: string; target: string }[]): Promise<ResolvedComponent> {
   const notes: RuleNote[] = [];
+  const animated = component.animated;
   const base = { name: component.name, type: component.type, origin, meshAppearance: component.meshAppearance,
-    chunkMask: component.chunkMask, overriddenBy, morphRegions: {}, appliedMorphs: [], meshAppearanceResolved: null, materials: [] };
+    chunkMask: component.chunkMask, overriddenBy, morphRegions: {}, appliedMorphs: [], meshAppearanceResolved: null, materials: [],
+    ...(component.skinning ? { skinning: component.skinning } : {}),
+    ...(animated ? { animated: { rig: animated.rig ? ctx.graph.provenance(animated.rig) : null, graph: animated.graph ? ctx.graph.provenance(animated.graph) : null,
+      controlBinding: animated.controlBinding, parentTransform: animated.parentTransform } } : {}) };
   if (!isRenderable(component.type)) return { ...base, geometry: null, notes };
   let morph = null, meshRef: DepotRef | null = component.mesh, renderChunks: number | null = null;
   let chunkLods: readonly number[] | null = null, chunkScene: readonly boolean[] | null = null;

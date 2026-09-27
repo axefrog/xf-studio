@@ -264,7 +264,7 @@ export function createCharacterRenderer(input: {
       const drawn = new Set(next?.components.map(item => item.component.slot) ?? []);
       pool.releaseWhere(item => !drawn.has(item.component.slot));
     };
-    if (!next) { rigMotion.setDeformations?.([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
+    if (!next) { rigMotion.setDeformations?.([]); rigMotion.setDangles?.([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
@@ -308,6 +308,8 @@ export function createCharacterRenderer(input: {
     // The puppet's deformation rigs first, so the body's helper joints bind to the joints the rigs solve; the blink binds before the
     // idle: it must capture the details' neutral pose before a playing idle poses them.
     rigMotion.setDeformations?.(next.rigs ?? []);
+    // Parts skinned to a dangle component: their chains follow their own rig (and its simulation with physics on), before they bind.
+    rigMotion.setDangles?.(drawnDetails().flatMap(item => item.dangle ? [{ key: item.component.id, spec: item.dangle, bones: item.bones }] : []));
     rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: [...skinLimits(), ...bakeLimits] };
@@ -367,6 +369,8 @@ export function createCharacterRenderer(input: {
     /** Meshes of the drawn V that follow the facial shapes with the head (the body has its own shapes: `RenderComponent.morphs`). */
     drawnMeshes: () => drawnDetails().filter(item => item.component.slot !== "body" && item.component.slot !== "clothing").flatMap(item => item.meshes),
     /** Whether the V's resolved body shows now (the viewer hasn't hidden it and it loaded): the scene's depth range then covers it. */
+    /** Whether a V's details are shown (none while the first V is still being prepared). */
+    hasDetails: () => !!characterDetails,
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
     /** Release the V and every kept part (the scene is going away). */
