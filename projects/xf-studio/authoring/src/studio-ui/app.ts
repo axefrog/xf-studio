@@ -121,7 +121,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     announce: message => feedback.announce(message),
     beforeLayout: () => port.viewport.cancelInput(),
     afterLayout: () => requestAnimationFrame(() => port.viewport.resize()),
-    homes: catalogue.homes,
   });
   rt.dock = dock;
   /**
@@ -480,7 +479,7 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
     return { kind: "action", label: meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
       hint: `${STATE[state]} · ${meta?.description ?? ""}`,
       ...(state === "parked" ? { capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
-      run: () => state === "collapsed" ? dock.toggleCollapse(id) : dock.toggle(id) };
+      run: () => state === "collapsed" ? dock.reveal(id) : dock.toggle(id) };
   };
   const owned = new Set(rt.modules.list.flatMap(module => rt.modules.panels(module)));
   const items: MenuItem[] = [{ kind: "heading", label: "Panels", detail: `${dock.sizeClass === "wide" ? "Wide" : "Compact"} layout · each size keeps its own arrangement` },

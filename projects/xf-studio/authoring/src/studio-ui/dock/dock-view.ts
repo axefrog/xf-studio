@@ -2,9 +2,12 @@ import { keyBinding, panelModifiersHeld } from "../../input-bindings";
 import { clamp, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
-import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate, openPanel,
+import { HeaderFitter, PanelHeader } from "../components/panel-header";
+import { iconButton } from "../components/icon-button";
+import { TabStrip } from "../components/tab-strip";
+import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate,
   openShares, parkPanels, raiseWindow, recoverWindows, revealPanel, setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, splitShares, splitterPair,
-  unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
+  summonPanel, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
   type DragSource, type DropTarget, type GroupNode, type PanelId, type Rect, type Side, type SizeClass } from "./layout";
 import { previewRect, resolveDrop, type DropGeometry, type DropResolution, type TargetGroup } from "./snap";
 
@@ -27,8 +30,6 @@ export type DockViewOptions = {
   announce(message: string): void;
   beforeLayout?(): void;
   afterLayout?(): void;
-  /** Panels closed by default open beside the first of these that is open. */
-  homes?: Readonly<Record<PanelId, readonly PanelId[]>>;
   /** Someone asked to open a panel this dock doesn't hold now (its module is hidden): the shell offers to show it. */
   withdrawn?(id: PanelId): void;
 };
@@ -50,6 +51,9 @@ export class DockView {
   private moveMode?: { windowId: string; cleanup(): void };
   /** The folded nodes of the tree being rendered and the axis each folded along (`foldAxes`). */
   private folds = new Map<string, "row" | "column">();
+  /** Each rendered group's header (its tab strip condenses to fit, components/panel-header.ts). */
+  private headers = new Map<string, PanelHeader>();
+  private readonly fitter = new HeaderFitter();
 
   constructor(private options: DockViewOptions) {
     for (const panel of options.panels) this.panels.set(panel.id, panel);
@@ -153,6 +157,7 @@ export class DockView {
     const shown = new Set<PanelId>();
     this.surface.replaceChildren();
     this.floatingLayer.replaceChildren();
+    this.headers.clear();
     this.folds = new Map([...foldAxes(tree.root), ...tree.floating.flatMap(window => [...foldAxes(window.node)])]);
     const maximized = tree.maximized ? findGroup(tree, tree.maximized)?.group : undefined;
     if (maximized) this.surface.append(this.renderGroup(maximized, false, shown, true));
@@ -165,7 +170,7 @@ export class DockView {
     tree.floating.forEach((window, index) => this.floatingLayer.append(this.renderWindow(window, index, shown)));
     const previous = this.visible;
     this.visible = shown;
-    this.condenseTabs();
+    this.fitter.track([...this.headers.values()]);
     this.options.afterLayout?.();
     for (const panel of this.panels.values()) {
       const now = shown.has(panel.id);
@@ -174,17 +179,8 @@ export class DockView {
     if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   }
 
-  /**
-   * Inactive tabs shorten their labels when a strip overflows (never to bare icons, UI-96); the active label stays whole. A group
-   * folded to a vertical strip measures along its height.
-   */
-  condenseTabs() {
-    for (const strip of this.element.querySelectorAll<HTMLElement>(".dock-tabs")) {
-      strip.classList.remove("condensed");
-      const bar = strip.parentElement!, vertical = strip.closest<HTMLElement>(".dock-group")?.dataset.fold === "row";
-      if (vertical ? strip.scrollHeight > bar.clientHeight - 64 : strip.scrollWidth > bar.clientWidth - 64) strip.classList.add("condensed");
-    }
-  }
+  /** Fit every header's tab strip to its group again (a window resize; the headers also refit themselves when their size changes). */
+  condenseTabs() { this.fitter.fitAll(); }
   private renderNode(node: DockNode, floating: boolean, shown: Set<PanelId>): HTMLElement {
     if (node.kind === "group") return this.renderGroup(node, floating, shown);
     const element = h("div", { class: "dock-split", "data-axis": node.axis, "data-split": node.id });
@@ -204,56 +200,55 @@ export class DockView {
   }
 
   private renderGroup(group: GroupNode, floating: boolean, shown: Set<PanelId>, maximized = false): HTMLElement {
-    const titles = group.panels.map(id => this.panels.get(id)?.title ?? id);
+    const titles = group.panels.map(id => this.panels.get(id)?.title ?? id), names = titles.join(", ");
     const bodyId = `dock-body-${group.id}`;
-    const tablist = h("div", { class: "dock-tabs", role: "tablist", "aria-label": `${titles.join(", ")} panels` });
-    for (const id of group.panels) {
-      const spec = this.panels.get(id)!, active = id === group.active;
-      const tab = h("button", { class: "dock-tab", type: "button", role: "tab", id: `dock-tab-${id}`,
-        "aria-selected": String(active), "aria-controls": bodyId, tabindex: active ? "0" : "-1",
-        "data-panel": id, title: tabTip(spec.title, spec.context ?? "") },
-        icon(spec.icon), h("span", { class: "dock-tab-label", text: spec.title }),
-        h("span", { class: "dock-tab-close", "aria-hidden": "true", title: `Close ${spec.title}`,
-          onpointerdown: (event: PointerEvent) => event.stopPropagation(),
-          onclick: (event: MouseEvent) => { event.stopPropagation(); this.close(id); } }, icon("close")));
+    const fold = group.collapsed && !maximized ? this.folds.get(group.id) ?? "column" : undefined;
+    const orientation = fold === "row" ? "vertical" : "horizontal";
+    // The tab strip (components/tab-strip.ts) emits intents; the dock turns them into layout operations.
+    const strip = new TabStrip({ label: `${names} panels`, orientation, idPrefix: "dock-tab-", controls: bodyId,
+      tabData: item => ({ "data-panel": item.id }),
       // A tab of a collapsed group expands it (showing that tab): the strip is the whole group, so any of it opens it.
-      tab.addEventListener("click", () => {
+      onSelect: id => {
         if (group.collapsed) this.update(revealPanel(this.tree, id), `${this.describeGroup(group)} expanded`);
-        else if (!active) this.update(activate(this.tree, id), undefined);
-      });
-      tab.addEventListener("auxclick", event => { if (event.button === 1) { event.preventDefault(); this.close(id); } });
-      tab.addEventListener("keydown", event => this.tabKey(event, group, id));
-      tab.addEventListener("contextmenu", event => { event.preventDefault(); this.openPanelMenu(id, { x: event.clientX, y: event.clientY }, tab); });
-      tab.addEventListener("pointerdown", event => this.pointerDown(event, { kind: "panel", panelId: id }, tab));
-      tablist.append(tab);
-    }
+        else if (id !== group.active) this.update(activate(this.tree, id), undefined);
+        else return;
+        this.focusTab(id);
+      },
+      onClose: id => this.close(id),
+      onAuxClick: (event, id) => { if (event.button === 1) { event.preventDefault(); this.close(id); } },
+      onKeyDown: (event, id) => this.tabKey(event, group, id),
+      onContextMenu: (event, id, tab) => { event.preventDefault(); this.openPanelMenu(id, { x: event.clientX, y: event.clientY }, tab); },
+      onPointerDown: (event, id, tab) => this.pointerDown(event, { kind: "panel", panelId: id }, tab),
+    });
+    strip.update(group.panels.map(id => {
+      const spec = this.panels.get(id)!;
+      return { id, label: spec.title, icon: spec.icon, tooltip: tabTip(spec.title, spec.context ?? ""), closable: id === group.active };
+    }), group.active);
     const window = floating ? this.tree.floating.find(item => findGroup({ root: item.node, floating: [], closed: [] }, group.id)) : undefined;
     const soleWindowGroup = window && window.node.kind === "group";
-    const fill = h("div", { class: "dock-tabbar-fill", title: soleWindowGroup ? "Drag to move this floating panel" : "Drag to move this whole group" });
-    fill.addEventListener("pointerdown", event => this.pointerDown(event,
-      soleWindowGroup ? { kind: "window", windowId: window!.id } : { kind: "group", groupId: group.id }, fill));
-    if (!floating) fill.addEventListener("dblclick", () => this.toggleMaximize(group.id));
-    const menuButton = h("button", { class: "icon-btn dock-menu-btn", type: "button", "aria-label": `Layout options for ${titles.join(", ")}`,
-      "aria-haspopup": "menu", title: "Layout options" }, icon("more"));
-    menuButton.addEventListener("click", () => this.openPanelMenu(group.active, menuButton, menuButton));
-    const restore = maximized ? h("button", { class: "icon-btn", type: "button", "aria-label": "Restore layout", title: "Restore layout",
-      onclick: () => this.toggleMaximize(group.id) }, icon("restore")) : null;
-    // Collapse and expand: a button on every group's tab bar (keyboard reachable), never while it fills the workspace alone.
+    const restore = maximized ? iconButton({ label: "Restore layout", icon: "restore", onClick: () => this.toggleMaximize(group.id) }) : null;
+    // Collapse and expand: a button on every group's header (keyboard reachable), never while it fills the workspace alone.
     const blocked = this.collapseBlocked(group.active);
-    const collapse = maximized || (blocked && !group.collapsed) ? null : h("button", { class: "icon-btn dock-collapse-btn", type: "button",
-      "aria-label": `${group.collapsed ? "Expand" : "Collapse"} ${titles.join(", ")}`, "aria-expanded": String(!group.collapsed),
-      title: group.collapsed ? "Expand" : "Collapse (the tab bar stays)",
-      onclick: () => this.toggleCollapse(group.active) }, icon(group.collapsed ? "chevronRight" : "chevronDown"));
+    const collapse = maximized || (blocked && !group.collapsed) ? null : iconButton({ label: `${group.collapsed ? "Expand" : "Collapse"} ${names}`,
+      icon: group.collapsed ? "chevronRight" : "chevronDown", expanded: !group.collapsed, className: "dock-collapse-btn",
+      title: group.collapsed ? "Expand" : "Collapse (the tab bar stays)", onClick: () => this.toggleCollapse(group.active) });
+    const menuButton: HTMLButtonElement = iconButton({ label: `Layout options for ${names}`, icon: "more", menu: true, title: "Layout options", className: "dock-menu-btn",
+      onClick: () => this.openPanelMenu(group.active, menuButton, menuButton) });
+    const header = new PanelHeader({ strip, orientation, actions: [restore, collapse, menuButton],
+      drag: { title: soleWindowGroup ? "Drag to move this floating panel" : "Drag to move this whole group",
+        onPointerDown: (event, handle) => this.pointerDown(event, soleWindowGroup ? { kind: "window", windowId: window!.id } : { kind: "group", groupId: group.id }, handle),
+        onDoubleClick: floating ? undefined : () => this.toggleMaximize(group.id) } });
+    this.headers.set(group.id, header);
     const body = h("div", { class: "dock-body", role: "tabpanel", id: bodyId, "aria-labelledby": `dock-tab-${group.active}` });
     const active = this.panels.get(group.active);
     // A collapsed group's panel is not shown (it keeps its state and repaints when expanded).
     if (active && !group.collapsed) { body.append(active.element); shown.add(active.id); }
     body.hidden = !!group.collapsed;
     const element = h("section", { class: `dock-group${floating ? " floating" : ""}${maximized ? " maximized" : ""}${group.collapsed ? " collapsed" : ""}`,
-      "data-group": group.id, "aria-label": `${titles.join(", ")} group`,
+      "data-group": group.id, "aria-label": `${names} group`,
       // How it folds (view-graph-design.md §4.4): along a column a full-width header row, along a row a vertical strip.
-      ...(group.collapsed && !maximized ? { "data-fold": this.folds.get(group.id) ?? "column" } : {}) },
-      h("div", { class: "dock-tabbar" }, tablist, fill, restore, collapse, menuButton), body);
+      ...(fold ? { "data-fold": fold } : {}) },
+      header.element, body);
     element.addEventListener("focusin", () => element.classList.add("focus-within"));
     element.addEventListener("focusout", () => element.classList.remove("focus-within"));
     return element;
@@ -421,22 +416,41 @@ export class DockView {
     const spec = this.panels.get(id);
     if (!spec || (spec.title === title && (spec.context ?? "") === context)) return;
     this.panels.set(id, { ...spec, title, context });
-    const tab = this.element.querySelector<HTMLElement>(`.dock-tab[data-panel="${CSS.escape(id)}"]`);
-    if (!tab) return;
-    tab.title = tabTip(title, context);
-    const label = tab.querySelector(".dock-tab-label");
-    if (label) label.textContent = title;
-    tab.querySelector(".dock-tab-close")?.setAttribute("title", `Close ${title}`);
+    const at = locate(this.tree, id);
+    if (at) this.headers.get(at.group.id)?.strip.retitle(id, title, tabTip(title, context));
   }
   private describeGroup(group: GroupNode) { return group.panels.map(id => this.title(id)).join(" · "); }
 
   // ----- Commands usable from menus, shortcuts and the command palette -----
+  /**
+   * Summon a panel (the palette, the Panels menu, Help, guidance, any reveal) so it is shown and focused wherever it ends up
+   * (`summonPanel`): in an expanded group its tab becomes active; in a collapsed group the group expands; a panel not in the layout
+   * goes back to its obvious home (where it was closed from, or its factory group) or else opens floating, never into an arbitrary
+   * group. Focus moves to its tab, unless the caller focuses something inside the panel (`focus: false`, as Help focuses its search).
+   */
   reveal(id: PanelId, focus = true) {
     if (!this.panels.has(id)) { this.options.withdrawn?.(id); return; }
-    const opened = this.isOpen(id) ? this.tree : openPanel(this.tree, id, this.siblingsInDefault(id), this.area());
-    const tree = showPanelDocked(revealPanel(opened, id), id);
-    this.update(tree, this.isOpen(id) ? undefined : `${this.title(id)} opened`);
-    if (focus) requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
+    const before = locate(this.tree, id);
+    const tree = summonPanel(this.tree, id, this.options.defaults(this.sizeClass), this.floatRect(undefined, true));
+    const after = locate(tree, id);
+    this.update(tree, !before ? `${this.title(id)} opened ${after?.windowId ? "in a floating window" : `in ${this.describeGroup(after!.group)}`}`
+      : before.group.collapsed ? `${this.describeGroup(before.group)} expanded, showing ${this.title(id)}` : undefined);
+    if (focus) this.focusTab(id);
+  }
+  /** Move focus to a panel's tab once the layout it just got has rendered. */
+  private focusTab(id: PanelId) {
+    requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
+  }
+  /**
+   * Where a panel floats: over the middle of the workspace at a readable size, staggered past the windows already open. A summoned
+   * panel (`tall`) gets most of the workspace's height, so a reading panel such as Help shows a useful page at once.
+   */
+  private floatRect(source?: Rect, tall = false): Rect {
+    const area = this.area(), rect = source ?? { x: 0, y: 0, w: tall ? 380 : 340, h: 420 };
+    const w = clamp(Math.max(Math.min(rect.w, 400), 340), MIN_WINDOW.w, Math.max(MIN_WINDOW.w, area.w - 40));
+    const hgt = clamp(tall ? Math.min(620, area.h - 120) : Math.max(Math.min(rect.h, 480), 380), MIN_WINDOW.h, Math.max(MIN_WINDOW.h, area.h - 40));
+    const offset = (this.tree.floating.length % 5) * 24;
+    return { x: clamp(area.w / 2 - w / 2 + offset, 8, Math.max(8, area.w - w - 8)), y: clamp(80 + offset, 8, Math.max(8, area.h - hgt - 8)), w, h: hgt };
   }
   close(id: PanelId) {
     if (!this.panels.has(id)) return;
@@ -446,13 +460,9 @@ export class DockView {
   }
   toggle(id: PanelId) { if (this.isOpen(id)) this.close(id); else this.reveal(id); }
   float(id: PanelId) {
-    const at = locate(this.tree, id), area = this.area();
-    const rect = this.groupRect(at?.group.id) ?? { x: 0, y: 0, w: 340, h: 420 };
-    const w = clamp(Math.max(Math.min(rect.w, 400), 340), MIN_WINDOW.w, area.w - 40), hgt = clamp(Math.max(Math.min(rect.h, 480), 380), MIN_WINDOW.h, area.h - 40);
-    const offset = (this.tree.floating.length % 5) * 24;
-    this.update(applyDrop(this.tree, { kind: "panel", panelId: id },
-      { kind: "float", x: clamp(area.w / 2 - w / 2 + offset, 8, area.w - w - 8), y: clamp(80 + offset, 8, area.h - hgt - 8), w, h: hgt }),
-    `${this.title(id)} is floating. Use Move window from its menu to reposition it with the keyboard.`);
+    const at = locate(this.tree, id);
+    this.update(applyDrop(this.tree, { kind: "panel", panelId: id }, { kind: "float", ...this.floatRect(this.groupRect(at?.group.id)) }),
+      `${this.title(id)} is floating. Use Move window from its menu to reposition it with the keyboard.`);
   }
   moveTo(id: PanelId, target: DropTarget, message: string) {
     this.update(showPanelDocked(applyDrop(this.tree, { kind: "panel", panelId: id }, target, this.groupRect(locate(this.tree, id)?.group.id)), id), message);
@@ -464,10 +474,6 @@ export class DockView {
   }
   reset() {
     this.update(this.options.defaults(this.sizeClass), `${this.sizeClass === "wide" ? "Wide" : "Compact"} layout reset`);
-  }
-  private siblingsInDefault(id: PanelId) {
-    const home = locate(this.options.defaults(this.sizeClass), id);
-    return home ? home.group.panels.filter(item => item !== id) : [...this.options.homes?.[id] ?? []];
   }
   private groupRect(groupId?: string): Rect | undefined {
     if (!groupId) return;

@@ -13,7 +13,7 @@ import type { IconName } from "../icons";
  * Where a panel sits in the shell's factory layouts. The shell maps slots to tab groups per size class
  * (`layout-defaults.ts`): `collection` and `stack` are the left column (one tab group in compact),
  * `stage` the 3D head, `canvas` the flat editor beside it and `inspect` the inspectors. `closed` panels
- * start closed and open beside `opensBeside`.
+ * start closed; summoned, one opens floating (it has no home in a group; dock/layout.ts `summonPanel`).
  */
 export type ShellSlot = "collection" | "stack" | "stage" | "canvas" | "inspect";
 
@@ -32,8 +32,6 @@ export type PanelContribution = {
    */
   readonly order: number;
   readonly slot: ShellSlot | "closed";
-  /** A closed-by-default panel opens beside the first of these that is open. */
-  readonly opensBeside?: readonly string[];
   /**
    * Repainted at most every 400 ms and never during a gesture: its reads re-validate the whole draft
    * (library and package capabilities).
@@ -70,8 +68,6 @@ export function viewCatalogue(views: readonly ViewContribution[]) {
     panels,
     ids: panels.map(panel => panel.id),
     meta: Object.fromEntries(panels.map(({ id, title, icon, description }) => [id, { title, icon, description }])) as Record<string, PanelMeta>,
-    homes: Object.fromEntries(panels.filter(panel => panel.opensBeside).map(panel => [panel.id, panel.opensBeside!])) as
-      Readonly<Record<string, readonly string[]>>,
     heavy: panels.filter(panel => panel.heavy).map(panel => panel.id),
     activity: views.flatMap(view => view.activity),
   };

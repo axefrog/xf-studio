@@ -45,7 +45,7 @@ const GRANDFATHERED = ["presets", "layers", "history", "library", "package", "he
   "edge", "warp", "character", "lighting", "motion", "quality", "activity", "help"];
 const area = { x: 0, y: 0, w: 1600, h: 900 };
 
-test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layouts and homes exactly", () => {
+test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layouts exactly", () => {
   expect([...HISTORICAL.ids] as string[]).toEqual(GRANDFATHERED);
   expect(defaultWide(HISTORICAL)).toEqual(BEFORE.wide());
   expect(defaultCompact(HISTORICAL)).toEqual(BEFORE.compact());
@@ -55,7 +55,6 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   const parked = defaultDockStateFor(STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
   expect([parked.wide.root, parked.wide.floating, parked.wide.closed]).toEqual([BEFORE.wide().root, BEFORE.wide().floating, BEFORE.wide().closed]);
   expect([parked.compact.root, parked.compact.closed]).toEqual([BEFORE.compact().root, BEFORE.compact().closed]);
-  expect(STUDIO_CATALOGUE.homes).toEqual({ help: ["finish", "layers"] });
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
   expect(PANEL_META["package"].title).toBe("Mod package");

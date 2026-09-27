@@ -178,7 +178,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .expand-all[data-expand="true"] .icon:last-child, .expand-all[data-expand="false"] .icon:first-child { display: none; }
 @media (prefers-reduced-motion: reduce) { .expander-chevron { transition: none; } }
 .icon-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 0; background: transparent; color: var(--text-muted); border-radius: var(--radius); padding: 0; }
-.icon-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.icon-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-hover); color: var(--text); }
+.icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.icon-btn[aria-pressed="true"] { color: var(--signal); }
 .icon-btn.small { width: 22px; height: 22px; }
 .chip { display: inline-flex; align-items: center; gap: var(--sp-2); height: 20px; padding: 0 var(--sp-4); border: 1px solid var(--line); border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm);
   font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
@@ -267,29 +269,40 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-splitter:focus-visible { outline: none; }
 .dock-group { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line); overflow: hidden; }
 .dock-group.focus-within { border-color: var(--signal-line); }
-.dock-tabbar { display: flex; align-items: stretch; height: var(--tab-h); flex: none; background: var(--bg-sunken); border-bottom: 1px solid var(--line); padding-right: var(--sp-2); }
-.dock-tabs { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.dock-tabs::-webkit-scrollbar { display: none; }
+/* Panel header (components/panel-header.ts): the tab strip, a drag area, then the actions. The actions never shrink or scroll, so
+   collapse, expand and the layout menu stay whole and in reach however narrow the group; the tab strip gives up space first. */
+.dock-tabbar { display: flex; align-items: stretch; height: var(--tab-h); flex: none; min-inline-size: 0; background: var(--bg-sunken); border-bottom: 1px solid var(--line); padding-right: var(--sp-2); }
+.panel-header-actions { flex: none; display: flex; align-items: center; }
+.panel-header-actions > * { flex: none; }
+/* Tab strip (components/tab-strip.ts): it condenses in stages rather than overflowing: full labels, then the inactive labels cut
+   short, then the inactive tabs icon-only, then the tabs that still don't fit in its "more tabs" menu. */
+.tab-strip { display: flex; align-items: stretch; flex: 0 1 auto; min-inline-size: 0; overflow: hidden; }
+.dock-tabs { display: flex; min-inline-size: 0; overflow: hidden; }
+.tab-strip-more { align-self: center; }
+.tab-strip-more[hidden], .dock-tab[hidden] { display: none; }
 .dock-tab { position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-5); border: 0; border-right: 1px solid var(--line-soft); background: transparent;
   color: var(--text-muted); white-space: nowrap; font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .09em; text-transform: uppercase; touch-action: none; flex: none; }
 .dock-tab[aria-selected="true"] { padding-right: var(--sp-3); }
-/* Condensed strips keep the active tab's full label; the others keep a short visible label (never icon-only, UI-96), and the
-   strip scrolls when even that doesn't fit. */
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
-.dock-tabs.condensed .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
+.tab-strip:not([data-stage="full"]) .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
+.tab-strip[data-stage="truncated"] .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; letter-spacing: .04em; }
+.tab-strip:is([data-stage="icons"], [data-stage="overflow"]) .dock-tab:not([aria-selected="true"]) .dock-tab-label { display: none; }
+.tab-strip:is([data-stage="icons"], [data-stage="overflow"]) .dock-tab[aria-selected="true"] .dock-tab-label { max-inline-size: 9em; }
+/* The tightest headers: the active tab keeps its icon and indicator only (its name stays its tooltip and accessible name). */
+.tab-strip.active-icon .dock-tab[aria-selected="true"] { padding: 0 var(--sp-3); }
+.tab-strip.active-icon .dock-tab[aria-selected="true"] :is(.dock-tab-label, .dock-tab-close) { display: none; }
 .dock-tab:hover { color: var(--text); background: var(--bg-hover); }
 .dock-tab[aria-selected="true"] { color: var(--text); background: var(--bg-panel); }
 .dock-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--indicator); }
 .dock-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; top: 0; width: 8px; height: 4px; background: var(--accent); }
 .dock-tab[aria-selected="true"] .icon { color: var(--accent-text); }
 .dock-tab .icon { width: 14px; height: 14px; }
-.dock-tab-label { overflow: hidden; text-overflow: ellipsis; }
+.dock-tab-label { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .dock-tab-close { display: none; place-items: center; width: 18px; height: 18px; color: var(--text-faint); border-radius: var(--radius); }
 .dock-tab-close .icon { width: 11px; height: 11px; }
 .dock-tab[aria-selected="true"] .dock-tab-close { display: inline-grid; }
 .dock-tab-close:hover { background: var(--bg-active); color: var(--text); }
 .dock-tab:focus-visible { outline-offset: -2px; }
-.dock-tabbar-fill { flex: 1; min-width: 24px; cursor: grab; touch-action: none; }
+.dock-tabbar-fill { flex: 1; min-inline-size: 24px; cursor: grab; touch-action: none; }
 .dock-tabbar .icon-btn { align-self: center; }
 .dock-body { position: relative; flex: 1; min-height: 0; overflow: auto; }
 .dock-group.maximized { position: absolute; inset: 0; z-index: 5; }
@@ -304,10 +317,7 @@ span.category { border-color: transparent; background: transparent; padding-left
    full-height vertical strip. A folded cell takes no share of its split, so the neighbours fill the space. */
 .dock-group.collapsed[data-fold="row"] { flex: none; }
 .dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
-/* A strip shorter than its tabs condenses them like a crowded bar and scrolls the rest; its buttons stay in reach. */
-.dock-group.collapsed[data-fold="row"] .dock-tabs { min-height: 0; overflow: hidden auto; }
-.dock-group.collapsed[data-fold="row"] .dock-tab-label { max-width: none; }
-.dock-group.collapsed[data-fold="row"] .dock-tabbar-fill { min-width: 0; min-height: 24px; }
+/* A strip shorter than its tabs condenses them in the same stages as a crowded bar; its buttons stay in reach. */
 .dock-cell[data-collapsed] > .dock-split { flex: none; }
 .dock-split > .dock-splitter.inert { cursor: default; }
 .dock-split > .dock-splitter.inert:hover::after { background: transparent; }

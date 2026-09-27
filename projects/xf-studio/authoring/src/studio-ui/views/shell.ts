@@ -29,8 +29,8 @@ export const SHELL_VIEW = {
       description: "Resolution of generated preview textures, readiness and resource use." },
     { id: "activity", title: "Activity", icon: "activity", order: 160, slot: "closed",
       description: "Session log of results, warnings and errors." },
-    // Help reads beside the inspectors rather than covering the head or the collection.
-    { id: "help", title: "Help", icon: "help", order: 170, slot: "closed", opensBeside: ["finish", "layers"],
+    // Help has no home in a group: summoned, it opens floating over the workspace (dock/layout.ts `summonPanel`).
+    { id: "help", title: "Help", icon: "help", order: 170, slot: "closed",
       description: "Guided tours, answers to common questions and every keyboard and mouse shortcut." },
   ],
   activity: [
