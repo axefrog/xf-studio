@@ -41,15 +41,28 @@ describe("layouts", () => {
     view.update(input("list"));
     expect(listbox.getAttribute("data-layout")).toBe("list");
     expect(listbox.hasAttribute("data-size")).toBe(false);
-    // The same items (focus and scroll stay with them), now with their source.
+    // The same items (focus and scroll stay with them); a row with one maker says its source once, in the row, not on every choice.
     expect(item(1)).toBe(before);
-    expect(item(1).querySelector(".pv-meta")!.textContent).toBe("From Sample Hair Pack");
-    expect(item(0).querySelector(".pv-meta")!.textContent).toBe("From the game");
+    expect(item(1).querySelector(".pv-meta")!.textContent).toBe("");
     expect(item(2).querySelector(".pv-state")!.textContent).toBe("");
     view.update(input("details"));
     expect(element.getAttribute("data-layout")).toBe("details");
     expect(item(2).querySelector(".pv-state")!.textContent).toBe("Not prepared yet");
     expect(item(0).querySelector(".pv-state")!.textContent).toBe("Ready");
+  });
+
+  test("a row's source shows only where its heading doesn't say it: the pooled 'Other mods', not under its maker's own heading", async () => {
+    const { ChoiceList } = await import("../src/studio-ui/panels/character-choices");
+    const { BASE_GAME_GROUP } = await import("../src/cc-panel");
+    const view = new ChoiceList("g", () => {});
+    lightDocument.body.append(view.element as unknown as LightElement);
+    const grouped = { list: [BASE_GAME_GROUP, { label: "Sample Hair Pack", kind: "mod" as const }, { label: "Other Pack", kind: "mod" as const }], modGroups: [1, 2], pooled: [2] };
+    const mixed = choices.map(choice => ({ ...choice, mod: choice.position === 5 ? 1 : choice.mod }));
+    view.update({ ...input("list"), choices: mixed, mods: ["Sample Hair Pack", "Other Pack"], groups: grouped });
+    const meta = (position: number) => (view.element as unknown as LightElement).querySelector(`[data-position="${position}"]`)!.querySelector(".pv-meta")!.textContent;
+    expect(meta(0)).toBe("");
+    expect(meta(1)).toBe("");
+    expect(meta(5)).toBe("From Other Pack");
   });
 
   test("details: the large picture sits outside the listbox and shows the hovered choice, else the focused one, else the V's", async () => {

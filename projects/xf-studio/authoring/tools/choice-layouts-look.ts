@@ -40,6 +40,13 @@ async function tileCentre(page: Session, nth: number, selector = ".pv-tile[data-
     ${scroll ? `f.scrollIntoView({ block: "center" });` : ""} const r = f.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2, position: Number(f.closest(".choice").dataset.position) }; })()`);
 }
+/** The panel's scrolling view after bringing the row to its top and scrolling `rows` rows further (sticky headings and the details picture show). */
+async function scrolledShot(page: Session, file: string, px: number) {
+  const box = await page.evaluate(`(() => { const row = ${ROW}; row.scrollIntoView({ block: "start" }); const body = row.closest(".dock-body");
+    body.scrollTop += ${px}; const r = body.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: Math.min(r.height, innerHeight - r.y) }; })()`);
+  await page.wait(400);
+  if (box) await page.screenshot(resolve(out, file), box);
+}
 const stats = (page: Session) => page.evaluate(`(() => { const s = window.xfsChoicePreviews?.stats; return s && { spun: s.spun, spinStored: s.spinStored,
   spinMs: s.spinMs, spinWaitMs: s.spinWaitMs, spinTimings: s.spinTimings, drawn: s.drawn, stored: s.stored,
   firstTurnMs: [...(window.xfsSpinMeasures ?? [])], heap: performance.memory?.usedJSHeapSize ?? null }; })()`);
@@ -65,6 +72,14 @@ for (const scheme of schemes) for (const width of widths) {
     await page.waitFor(`(() => { const tiles = [...${ROW}.querySelectorAll(".pv-tile")].slice(0, 24); return tiles.length > 0 && tiles.every(t => t.dataset.state !== "waiting"); })()`, 120000).catch(() => {});
     await page.wait(800);
     const before = await stats(page);
+    if (args.includes("--gate")) {
+      // The gate's recapture: details scrolled a few rows (the picture stays, the headings stick), and list scrolled at the narrow width.
+      await segment(page, "Details");
+      await scrolledShot(page, name("gate-details-scrolled"), 5 * 70);
+      if (width <= 300) { await segment(page, "List"); await scrolledShot(page, name("gate-list-scrolled"), 8 * 34); }
+      await segment(page, "Grid");
+      continue;
+    }
     const clicksOnly = args.includes("--clicks-only");
     if (!clicksOnly) {
     await segment(page, "List");

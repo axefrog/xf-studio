@@ -317,7 +317,7 @@ function choiceLayoutsSpecimen() {
     sizes.element.hidden = layout !== "grid";
     list.dataset.layout = layout; host.dataset.layout = layout;
     if (layout === "grid") list.dataset.size = size; else delete list.dataset.size;
-    tiles.forEach(({ tile }, n) => { tile.spinnable(layout === "details" || (layout === "grid" && size === "l")); tile.setMeta(layout === "grid" ? "" : sources[n]!, layout === "details" ? states[n]! : ""); });
+    tiles.forEach(({ tile }, n) => { tile.spinnable(layout === "details" || (layout === "grid" && size === "l")); tile.setMeta(layout !== "grid" && n >= 3 ? sources[n]! : "", layout === "details" ? states[n]! : ""); });
     if (layout === "details") { if (stage.element.parentNode !== body) body.insertBefore(stage.element, list); } else stage.element.remove();
     stage.show({ label: names[shown]!, source: sources[shown]!, url: shown === 3 ? null : pictures[shown % 3]!, none: false, spin: shown === 3 ? null : strip, frames: 24, looking });
   }

@@ -912,19 +912,26 @@ span.category { border-color: transparent; background: transparent; padding-left
 .pv-state:empty { display: none !important; }
 /* Group headings stay in view while their choices scroll past (§7.3). */
 .choices.previews .cc-maker-head { position: sticky; top: 0; z-index: 1; background: var(--bg-panel); }
-/* The details layout's large picture: above the list in a narrow row, beside it (and kept in view) from 520 px. */
-.cc-choice-list[data-layout="details"] { container-type: inline-size; }
-.cc-choice-list[data-layout="details"] .cc-choice-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
-.pv-stage { padding: var(--sp-2) var(--sp-3) 0 var(--cc-indent); }
-.pv-stage .pv-tile { width: min(100%, 200px); }
+/* The details layout's large picture never scrolls away (UI-136): below 440 px a compact block (picture at most 140 px or 40 % of the
+   window's height, name and source beside it) kept at the top while the list scrolls beneath, with the maker headings sticking under it;
+   from 440 px a 180 px picture kept at the top of a column beside the list. */
+.cc-choice-list[data-layout="details"] { container-type: inline-size; --pv-stage: min(140px, 40vh); }
+.cc-choice-list[data-layout="details"] .cc-choice-body { display: grid; grid-template-columns: minmax(0, 1fr); }
+.pv-stage { position: sticky; top: 0; z-index: 2; padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--cc-indent); background: var(--bg-panel);
+  border-bottom: 1px solid var(--line-soft); }
+.pv-stage .pv-tile { flex-direction: row; align-items: center; gap: var(--sp-3); }
+.pv-stage .pv-frame { flex: none; width: var(--pv-stage); }
 .pv-stage .pv-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .pv-stage .pv-label { font-size: var(--fs-md); color: var(--text); }
 .pv-stage .pv-meta { display: block; }
-@container (min-width: 520px) {
-  .cc-choice-list[data-layout="details"] .cc-choice-body { grid-template-columns: 256px minmax(0, 1fr); align-items: start; }
-  .pv-stage { position: sticky; top: 0; z-index: 1; padding-right: 0; }
-  .pv-stage .pv-tile { width: 100%; }
+.cc-choice-list[data-layout="details"] .choices.previews .cc-maker-head { top: calc(var(--pv-stage) + 2 * var(--sp-2) + 1px); }
+@container (min-width: 440px) {
+  .cc-choice-list[data-layout="details"] { --pv-stage: 180px; }
+  .cc-choice-list[data-layout="details"] .cc-choice-body { grid-template-columns: calc(var(--pv-stage) + var(--cc-indent) + var(--sp-3)) minmax(0, 1fr); align-items: start; }
+  .pv-stage { padding-right: var(--sp-3); border-bottom: 0; }
+  .pv-stage .pv-tile { flex-direction: column; align-items: stretch; }
   .cc-choice-list[data-layout="details"] .cc-choices { padding-left: 0; }
+  .cc-choice-list[data-layout="details"] .choices.previews .cc-maker-head { top: 0; }
 }
 /* The turntable (components/choice-preview.ts PreviewSpin): the strip's frame under the angle and the next one blended over the still;
    one colour matrix on the layer, which clips the strip to the frame. */

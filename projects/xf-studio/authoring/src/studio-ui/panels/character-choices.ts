@@ -31,9 +31,9 @@
  *   last, its choices sorted by label (cc-panel.ts `pooled`); each choice's mod is in its tooltip and description as everywhere.
  * - **Pictures of shape choices** (choice-previews-design.md): a row whose option has a picture kind (a hairstyle) shows its choices as
  *   preview tiles (components/choice-preview.ts) in one of three layouts (`previews.layout`, §7.1): a **grid** of three sizes
- *   (`previews.size`), a **list** of 32 px rows (thumbnail, label, source) or **details** (64 px rows with the prepared state, and the
- *   large picture of the choice under the pointer, else the focused one, else the V's, beside the list when the row is wide enough and
- *   above it otherwise). A picture arriving fills its tile in place and never moves the layout; the label stays the tile's accessible name,
+ *   (`previews.size`), a **list** of 32 px rows (thumbnail, label, and the source where its heading doesn't say it: "Other mods") or
+ *   **details** (64 px rows with the prepared state, and the large picture of the choice under the pointer, else the focused one, else
+ *   the V's, which never scrolls away: beside the list from a 440 px row, a compact block kept under the row's top edge below that). A picture arriving fills its tile in place and never moves the layout; the label stays the tile's accessible name,
  *   tooltip and (except at size S) visible caption. Switching layout keeps focus on the same choice and brings it into view.
  * - **Turntables** (grid L and details): the picture under the pointer turns slowly after a dwell and turns by hand when dragged (a drag
  *   never chooses). The list says which choice it wants turning (`onSpin`: the hovered tile in L; in details the one the large picture
@@ -210,7 +210,9 @@ export class ChoiceList {
     entry.tile.spinnable(!entry.choice.off && this.turns());
     entry.tile.setSpin(row?.spins.get(position) ?? null, row?.frames ?? 1);
     const state = this.layout === "details" ? FETCH_STATE[input.preparing && position === input.selected ? "f" : input.fetch?.get(position) ?? "r"] ?? "" : "";
-    entry.tile.setMeta(this.layout === "grid" ? "" : entry.from, entry.choice.off ? "" : state);
+    // A choice's source only where its heading doesn't already say it (the pooled "Other mods"; a row with one maker has its source in the row).
+    const source = this.layout !== "grid" && entry.group?.index === OTHER_MODS_INDEX ? entry.from : "";
+    entry.tile.setMeta(source, entry.choice.off ? "" : state);
   }
   /** Whether pictures turn in this layout (the large grid and details). */
   private turns() { return this.layout === "details" || (this.layout === "grid" && this.pictures?.size === "l"); }
