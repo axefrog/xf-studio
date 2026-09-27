@@ -1,7 +1,8 @@
 import type { PreviewTextureSize } from "../../preview-quality";
 import { applyCapability, badge, button, emptyState, note, section, Segmented, SelectField, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
-import { helpTip } from "../help-tip";
+import { helpTip, setHelp } from "../help-tip";
+import { comingSoon, liveFeatures } from "../coming-soon";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -13,8 +14,8 @@ import type { MotionState } from "../../motion-actions";
 import type { DetailLimit, DetailNotice } from "../../detail-limits";
 import type { StudioLightKey, StudioSetupId } from "../../studio-lighting";
 
-/** The field-of-view line: what the slider does, in plain words (UI-85). */
-const FOV_NOTE = "The camera moves closer or further as you change the lens angle, so your V's face stays the same size.";
+/** What the field-of-view slider does, in plain words (UI-85): its help tip. The line under it is kept for limits and loading. */
+const FOV_HELP = "Changing the lens angle moves the camera, so your V's face stays the same size.";
 const enableReason = (rt: StudioRuntime, action: Parameters<StudioRuntime["port"]["authoring"]["capability"]>[0]) => rt.port.authoring.capability(action);
 type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
 const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", teeth: "Teeth", piercings: "Piercings", body: "Body", clothing: "Clothes" } as const;
@@ -49,12 +50,14 @@ export function characterDetailLine(details: DetailStatus | undefined): { done: 
 
 /** One plain line about the lighting preset and where its colour grade came from. */
 export function lightingPresetLine(preset: LightingPreset | undefined, status: LightingStatus | null | undefined): string {
-  if (preset !== "creator") return "The Studio's own lighting, for authoring. Pick a setup, then adjust it as you like.";
+  // Studio lighting needs no line (its segment's tooltip says what it is); creator lighting states where its colour grade came from.
+  if (preset !== "creator") return "";
   const lut = status?.lut;
-  const grade = !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
-  return [`The game's character-creator lights (${status?.sex === "male" ? "male" : "female"} rig) on black, with fixed exposure.`, grade,
-    "Shadows are not simulated, and light strengths are still being calibrated."].filter(Boolean).join(" ");
+  return !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
 }
+/** What the two lighting presets are (the Light heading's help tip). */
+const LIGHT_HELP = ["Studio: soft authoring light you can adjust. Character creator: the game's creator lights for your V's body, on black, with fixed exposure.",
+  "Shadows aren't drawn yet, and the creator's light strengths are still being calibrated."];
 
 export function lightingPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -72,6 +75,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     { value: "creator", label: "Character creator", title: "The game's creator and mirror lighting, for comparing with the game" }],
   onSelect: value => rt.dispatch({ kind: "preview.setLightingPreset", preset: value }) });
   const presetNote = note("");
+  const live = liveFeatures(port);
   const creatorFace = button({ label: "Creator face", icon: "front", small: true, title: "The creator's face-page camera: 15° lens, 1.2 m",
     onClick: () => rt.dispatch({ kind: "camera.creatorFraming", page: "face" }) });
   const creatorHair = button({ label: "Creator hair", icon: "front", small: true, title: "The creator's hair-page camera: 15° lens, 2 m",
@@ -95,13 +99,15 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
       helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
     intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
-  const fovNote = note("");
-  const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
+  // The line under the slider (reserved, UI-90): only a framing limit or why the camera can't move yet.
+  const fovNote = h("small", { class: "control-note info empty" });
+  const fovLine = (text: string) => { setText(fovNote, text); fovNote.classList.toggle("empty", !text); };
+  const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`, help: FOV_HELP,
     transaction: {
       edit: value => {
         const result = edit({ kind: "camera.setFov", degrees: value });
         const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
-        setText(fovNote, limited ? "Framing reached the camera limit. Pan or use Front view to bring your V back." : FOV_NOTE);
+        fovLine(limited ? "The camera is at its limit. Pan, or use Front view to bring your V back." : "");
       },
       commit: () => { edit({ kind: "camera.endFovGesture" }); },
       cancel: () => { edit({ kind: "camera.endFovGesture" }); },
@@ -109,12 +115,12 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const front = button({ label: "Front view", icon: "front", small: true, onClick: () => {
     const result = edit({ kind: "camera.front" });
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
-    if (limited) setText(fovNote, "This pane is too narrow to fit the full Front view within the camera range. Widen the pane or increase FOV.");
+    if (limited) fovLine("Too narrow for the whole front view. Widen the panel or raise the field of view.");
   } });
   const bodyView = button({ label: "Whole body", icon: "body", small: true, title: "Frame your V's whole body", onClick: () => {
     const result = edit({ kind: "camera.body" });
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
-    if (limited) setText(fovNote, "This pane is too narrow to fit the whole body within the camera range. Widen the pane or increase FOV.");
+    if (limited) fovLine("Too narrow for the whole body. Widen the panel or raise the field of view.");
   } });
   // Studio stage: named setups, then each control on its own (studio-lighting.ts). Exposure is in stops, on a log scale.
   // The setups arrive with the preview's read model (StudioApplication.previewState().studioSetups).
@@ -130,16 +136,17 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     format: value => { const degrees = Math.round(value) % 360; return `${Math.round(value)}° ${degrees === 0 ? "front" : degrees === 180 ? "behind"
       : degrees < 180 ? "from V's right" : "from V's left"}`; },
     transaction: { edit: degrees => { edit({ kind: "preview.setKeyAngle", degrees }); }, commit: endEdit, cancel: endEdit } });
-  const studioSlider = (key: StudioLightKey, label: string, format: (value: number) => string, step: number) => new Slider({ label,
+  const studioSlider = (key: StudioLightKey, label: string, format: (value: number) => string, step: number, help?: string) => new Slider({ label, help,
     ...rt.range("preview.setStudioLight", "value", key), step, format,
     transaction: { edit: value => { edit({ kind: "preview.setStudioLight", key, value }); }, commit: endEdit, cancel: endEdit } });
   const percent = (value: number) => `${Math.round(value * 100)}%`;
   const elevation = studioSlider("elevation", "Key light height", value => `${Math.round(value)}°`, 1);
   const keyStrength = studioSlider("key", "Key light strength", percent, .05);
-  const environmentStrength = studioSlider("environment", "Room light (ambient and reflections)", percent, .05);
+  const environmentStrength = studioSlider("environment", "Room light", percent, .05, "Ambient light and reflections from the room.");
   const fillStrength = studioSlider("fill", "Fill light strength", percent, .05);
   const rimStrength = studioSlider("rim", "Rim light strength", percent, .05);
-  const neutral = new Toggle({ label: "Untinted lights", onChange: enabled => rt.dispatch({ kind: "preview.setStudioNeutral", enabled }) });
+  const neutral = new Toggle({ label: "Untinted lights", help: "Grey lights of the same brightness instead of the warm key and cool fill, for judging colour.",
+    onChange: enabled => rt.dispatch({ kind: "preview.setStudioNeutral", enabled }) });
   const resetStudio = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
     title: "Put every studio light and the exposure back to Soft studio",
     onClick: () => rt.dispatch({ kind: "preview.resetStudioLighting" }) });
@@ -151,12 +158,19 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const toggles = new Map<string, Toggle>();
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
+  // Skin scattering quality (shader-skin.md §11, "a viewing preference beside the lighting presets"): Coming soon until it lands.
+  const scatterEntry = comingSoon("lighting.subsurface", live);
+  const scatter = scatterEntry ? new Segmented<string>({ label: scatterEntry.label, showLabel: false, onSelect: () => {},
+    options: [{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }] }) : undefined;
+  scatter?.update(undefined, () => ({ available: false, reason: scatterEntry!.reason }));
+  const scatterControl = scatterEntry && scatter ? h("div", { class: "control" }, h("div", { class: "control-line" },
+    h("span", { class: "control-label", text: scatterEntry.label }), helpTip(scatterEntry.label, scatterEntry.reason)), scatter.element) : null;
   const element = h("div", { class: "panel-content" },
-    section({ title: "Camera", help: ["Camera and light are workspace settings: they persist locally and never enter recipes, the look's Undo or export.",
-      "Undo here (Ctrl+Z) steps back through view and lighting changes, which keep their own history."] }, fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
-    section("Light", preset.element, presetNote, studioControls),
+    section({ title: "Camera", help: ["Camera and light are saved with your workspace; they never change your looks or your mod.",
+      "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
+    section({ title: "Light", help: LIGHT_HELP }, preset.element, presetNote, studioControls),
     diagnostics,
-    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)));
+    section("Display", toolToggles, normals.element, scatterControl, h("div", { class: "research-only" }, optics.element, opticsNote)));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
@@ -174,8 +188,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       const lights = preview?.studioLights;
       for (const [slider, key] of [[elevation, "elevation"], [keyStrength, "key"], [environmentStrength, "environment"], [fillStrength, "fill"],
         [rimStrength, "rim"]] as const) slider.update(lights?.[key], studioOnly({ kind: "preview.setStudioLight", key, value: lights?.[key] ?? 0 }));
-      neutral.update(!!lights?.neutral, { ...studioOnly({ kind: "preview.setStudioNeutral", enabled: !lights?.neutral }),
-        note: "Grey lights of the same brightness instead of the warm key and cool fill, for judging colour." });
+      neutral.update(!!lights?.neutral, studioOnly({ kind: "preview.setStudioNeutral", enabled: !lights?.neutral }));
       const offered = frame.preview.studioSetups, matched = offered?.active ?? null;
       const setupKey = JSON.stringify(offered?.setups ?? []);
       if (setupRow.dataset.key !== setupKey) {
@@ -193,6 +206,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       applyCapability(resetStudio, ready ? port.authoring.capability({ kind: "preview.resetStudioLighting" }) : { available: false, reason: loading.reason });
       preset.update(preview?.lightingPreset, value => ready ? port.authoring.capability({ kind: "preview.setLightingPreset", preset: value }) : { available: false, reason: loading.reason });
       setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
+      presetNote.hidden = !presetNote.textContent;
       applyCapability(creatorFace, port.authoring.capability({ kind: "camera.creatorFraming", page: "face" }));
       applyCapability(creatorHair, port.authoring.capability({ kind: "camera.creatorFraming", page: "hair" }));
       const creator = preview?.creatorLighting;
@@ -202,8 +216,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
         note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
       applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       // The panel's loading reason is said once, in the line that is always there (UI-90).
-      if (!ready) setText(fovNote, loading.reason);
-      else if (!fovNote.textContent || fovNote.textContent === loading.reason) setText(fovNote, FOV_NOTE);
+      if (!ready) fovLine(loading.reason);
+      else if (fovNote.textContent === loading.reason) fovLine("");
       // Research tools (UI-85): the calibration and the display studies show only when asked for.
       const research = !!frame.preferences?.researchTools;
       diagnostics.hidden = !research;
@@ -244,9 +258,11 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     rt.dispatch({ kind: "motion.setContributions", body: body ?? motion.idleBody, face: face ?? motion.idleFace });
   };
   const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
-  const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value) });
-  const idleNote = note("");
-  const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
+  // The idle's one line (UI-90): a reserved note under the last switch that says only what matters now (loading, or why motion is off).
+  const face = new Toggle({ label: "Facial movement", reserveNote: true, onChange: value => setContributions(undefined, value),
+    help: "Turn off either to hold that part still. The idle keeps time, so it carries on smoothly when you turn it back on." });
+  const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, reserveNote: true,
+    format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
     transaction: { edit: value => { const action = { kind: "motion.setBlink" as const, value }; rt.report(action.kind, port.authoring.dispatch(action)); } } });
   const play = button({ label: "Play blink", icon: "play", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.playBlink", playing: !motion?.blinkPlaying });
@@ -255,9 +271,10 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   // person is never sent to a developer guide.
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
-  const element = h("div", { class: "panel-content" },
-    section("Game idle", source.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
-    section("Blink", blinkControls, blinkNote));
+  const idleSection = section({ title: "Game idle", help: IDLE_HELP }, source.element, h("div", { class: "row" }, pause), head.element, face.element);
+  const blinkSection = section({ title: "Blink", help: blinkHelp(undefined) }, blinkControls, blinkNote);
+  const blinkTip = blinkSection.querySelector<HTMLElement>(".help-tip")!;
+  const element = h("div", { class: "panel-content" }, idleSection, blinkSection);
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
@@ -267,45 +284,48 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
       source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label }))],
         motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
-      head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
+      head.update(motion?.idleBody ?? true, unavailable);
+      face.update(motion?.idleFace ?? true, { ...unavailable, note: motion?.available && motion.idleLoading ? "Loading that idle; the previous one plays until it's ready." : undefined });
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
-      setText(idleNote, !motion?.available ? unavailable.reason : motion.idleLoading ? "Loading that idle; the previous one plays until it's ready."
-        : motion.idle
-        ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
-        : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
       blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
       setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
       blinkControls.hidden = !!motion && !motion.blinkAvailable;
       setText(blinkNote, blinkNoteLine(motion));
+      blinkNote.hidden = !blinkNote.textContent;
+      setHelp(blinkTip, blinkHelp(motion));
     },
   };
 }
 
-/** The Motion panel's blink note: why the blink is off, or what it plays and how often. */
-export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError" | "blinkRepeatSeconds"> | undefined): string {
-  if (!motion) return "";
+/** What the game idles are (the Game idle heading's help tip). */
+const IDLE_HELP = ["Idles the game plays on V in its character creator and inventory, made from your game files.",
+  "Their timing may differ slightly from the game's."];
+/** What the blink is and how its controls work (the Blink heading's help tip). */
+export function blinkHelp(motion: Pick<MotionState, "blinkRepeatSeconds"> | undefined): string[] {
+  const every = motion ? `, every ${Number(motion.blinkRepeatSeconds.toFixed(2))} s` : "";
+  return ["The game's own blink, made from your game files: lids, lashes, brows and makeup move together.",
+    `Closure scrubs the closing half. Play blink plays it at the game's speed${every}.`];
+}
+/** The Motion panel's blink line: why the blink isn't available, or nothing (what it is lives in the heading's help tip). */
+export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blinkError"> | undefined): string {
   // Not prepared: one plain line and nothing to do (UI-86). A damaged or mismatched one says so (it was prepared, and can be again).
-  if (!motion.blinkAvailable) return motion.blinkError ?? "";
-  const seconds = Number(motion.blinkRepeatSeconds.toFixed(2));
-  return "The game's own normal blink, solved from your game files: lids, lashes, brows and makeup move together. Closure scrubs its closing half; "
-    + `Play blink plays it at the game's speed, repeated every ${seconds} s (a Studio choice: the idle's average blink spacing). `
-    + "Off while the idle plays, which blinks on its own.";
+  return motion && !motion.blinkAvailable ? motion.blinkError ?? "" : "";
 }
 
 export function qualityPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   const sizes: PreviewTextureSize[] = [512, 1024, 2048, 4096];
-  const tiers = new Segmented<PreviewTextureSize>({ label: "Generated texture resolution", options: sizes.map(size => ({ value: size, label: size === 512 ? "512" : `${size / 1024}K` })),
+  const tiers = new Segmented<PreviewTextureSize>({ label: "Texture size", options: sizes.map(size => ({ value: size, label: size === 512 ? "512" : `${size / 1024}K` })),
     onSelect: size => rt.dispatch({ kind: "quality.set", size }) });
   const stateLine = h("div", { class: "quality-state" });
   const rebuild = button({ label: "Rebuild preview", icon: "refresh", small: true, onClick: () => rt.dispatch({ kind: "quality.rebuild" }) });
   const element = h("div", { class: "panel-content" },
-    section({ title: "Makeup preview textures", help: ["Applies to generated masks and optical maps only. Head, eye and imported textures keep their detail.",
-      "Preview quality is a local preference: it never changes recipes, Undo, library revisions or the 2048² export."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)));
+    section({ title: "Makeup preview textures", help: ["The size of the makeup textures in the 3D view. The head and eyes keep their own detail.",
+      "Saved on this computer; your looks and your mod are unchanged."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)));
   return {
     spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
@@ -318,7 +338,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
         const text = readinessText(frame);
         stateLine.replaceChildren(badge(text.label, readiness.phase === "ready" ? "success" : readiness.phase === "updating" ? "info" : "error"),
           h("span", { class: "small", text: text.detail }),
-          h("span", { class: "muted small", text: `The makeup textures use about ${Math.ceil(readiness.estimatedBytes / 1048576)} MB of memory at this size.` }));
+          h("span", { class: "muted small", text: `About ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB of memory at this size.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));
     },
@@ -330,7 +350,7 @@ export function activityPanel(rt: StudioRuntime): PanelController {
   const empty = emptyState("Nothing yet", "Saves, checks, imports, exports and errors appear here for this session.");
   // What the log keeps, in a help tip on its heading (help-tip.ts).
   const head = h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow", text: "This session" }),
-    helpTip("the activity log", "This log lasts only until XF Studio closes. Results that matter (library revisions, package manifests) are stored by their own services.")));
+    helpTip("the activity log", "This log is cleared when XF Studio closes. Your saved versions and built mods are kept elsewhere.")));
   let count = -1;
   const element = h("div", { class: "panel-content" }, head, empty, list);
   const draw = () => {
