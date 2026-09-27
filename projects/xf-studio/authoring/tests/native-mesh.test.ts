@@ -382,7 +382,7 @@ test("the native-first exporter reads meshes itself, caches them by its identity
   const ok = answer!.geometry.get("base\\m\\ok.mesh")! as { glb: string; raw: string; rawSha256: string; cached: boolean; complete: boolean; readerNote?: string | null };
   expect([ok.cached, ok.complete, ok.readerNote]).toEqual([false, true, null]);
   expect(parseGlb(new Uint8Array(readFileSync(ok.glb))).json.meshes[0].name).toBe("submesh_00_LOD_1");
-  expect(new Uint8Array(readFileSync(ok.raw))).toEqual(pool.read(archive, depotHash("base\\m\\ok.mesh"))!);
+  expect(Array.from(readFileSync(ok.raw))).toEqual(Array.from(pool.read(archive, depotHash("base\\m\\ok.mesh"))!));
   expect((answer!.geometry.get("base\\m\\short.mesh") as { readerNote?: string }).readerNote).toContain("garment support data is shorter");
   expect(answer!.geometry.get("base\\m\\cloth.mesh")!.glb).toBe(glbFile);
   // WolvenKit was asked for the textures (geometry removed), then for the refused mesh alone.
