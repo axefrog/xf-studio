@@ -1,7 +1,8 @@
 /**
- * The layered-makeup engine's per-layer optical models (feature-module platform §2, CORE-09). A layer's optical
- * blocks name their own model: `flakes.model` (a Glitter model; classic flakes store none) and `optics.model`
- * (the game-matched finish model, with its Colour-shift settings). Each model is registered once, with its
+ * The layered-makeup engine's per-layer models (feature-module platform §2, CORE-09). A layer's optical blocks name
+ * their own model: `flakes.model` (a Glitter model; classic flakes store none), `optics.model` (the game-matched
+ * finish model, with its Colour-shift settings) and each effect's `effects.<name>.model` (`effects.mottle`, whose
+ * slot is `mottle`). Each model is registered once, with its
  * validator; a feature registers the models its layers may hold (its region's `models`) and passes that registry
  * to every read and edit.
  *
@@ -18,9 +19,14 @@ import type { Finish } from "./finish";
 import { hasGameOptics } from "./finish-export";
 import { NewerDataError } from "../../platform/api";
 import { validStudioIrregularSettings } from "./flake-field";
+import { MOTTLE_MODEL, validMottle } from "./mottle";
 
-/** Which optical block of a layer a model describes. */
-export type ModelSlot = "flakes" | "optics";
+/** Which block of a layer a model describes: an optical block, or an effect (`mottle` is `effects.mottle`). */
+export type ModelSlot = "flakes" | "optics" | "mottle";
+/** Every model slot, in validation order. */
+export const MODEL_SLOTS: readonly ModelSlot[] = Object.freeze(["flakes", "optics", "mottle"]);
+/** The effects a layer's `effects` may hold, each its own model slot. */
+const EFFECT_SLOTS: ReadonlySet<string> = new Set(["mottle"]);
 export interface LayerModel {
   readonly slot: ModelSlot;
   /** The stored model ID. Absent for classic flakes, the one model stored without a `model` field. */
@@ -28,7 +34,13 @@ export interface LayerModel {
   /** Whether `value` is a valid block of this model on a layer with this finish. */
   valid(value: unknown, finish: Finish): boolean;
 }
-type OpticalLayer = { finish: Finish; flakes?: unknown; optics?: unknown };
+type OpticalLayer = { finish: Finish; flakes?: unknown; optics?: unknown; effects?: unknown };
+/** A layer's block in `slot` (undefined when absent). */
+export function slotValue(layer: { flakes?: unknown; optics?: unknown; effects?: unknown }, slot: ModelSlot): unknown {
+  if (slot !== "mottle") return layer[slot];
+  const effects = layer.effects;
+  return record(effects) ? effects.mottle : undefined;
+}
 
 const num = (x: unknown, a: number, b: number) => typeof x === "number" && Number.isFinite(x) && x >= a && x <= b;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -53,6 +65,8 @@ export const GAME_MATCHED_OPTICS: LayerModel = Object.freeze({ slot: "optics", i
   return keys === "model,shift" && record(s) && Object.keys(s).sort().join() === "color,strength" &&
     typeof s.color === "string" && /^#[0-9a-f]{6}$/i.test(s.color) && num(s.strength, 0, 1);
 } });
+/** Mottle (`mottle-1`): skin-scale breakup of a layer's coverage, on any finish (mottle.ts). */
+export const MOTTLE_1: LayerModel = Object.freeze({ slot: "mottle", id: MOTTLE_MODEL, valid: (value: unknown) => validMottle(value) });
 
 export class LayerModelRegistry {
   private readonly models = new Map<string, LayerModel>();
@@ -77,10 +91,20 @@ export class LayerModelRegistry {
    * registry does not know is named as coming from a newer build.
    */
   check(layer: OpticalLayer, holds?: (model: LayerModel) => boolean) {
-    if (!holds) for (const slot of ["flakes", "optics"] as const) {
-      const value = layer[slot];
+    if (layer.effects !== undefined) {
+      const effects = layer.effects;
+      if (!record(effects) || !Object.keys(effects).length) throw Error("Invalid layer effects.");
+      for (const name of Object.keys(effects)) if (!EFFECT_SLOTS.has(name)) {
+        // An effect this build does not know is a newer build's; an older form never holds one.
+        if (!holds) throw new NewerDataError(`This look uses a layer effect from a newer version of XF Studio (${name}).`);
+        throw Error("Invalid layer effects.");
+      }
+    }
+    if (!holds) for (const slot of MODEL_SLOTS) {
+      const value = slotValue(layer, slot);
       if (record(value) && typeof value.model === "string" && value.model && !this.of(slot, value))
-        throw new NewerDataError(`This look uses a finish model from a newer version of XF Studio (${value.model}).`);
+        throw new NewerDataError(slot === "mottle" ? `This look uses a mottle model from a newer version of XF Studio (${value.model}).`
+          : `This look uses a finish model from a newer version of XF Studio (${value.model}).`);
     }
     if (layer.flakes !== undefined) {
       const f = layer.flakes;
@@ -93,6 +117,11 @@ export class LayerModelRegistry {
       const model = this.of("optics", layer.optics);
       if (!model || !model.valid(layer.optics, layer.finish) || (holds && !holds(model)))
         throw Error("Invalid game-matched finish settings.");
+    }
+    const mottle = slotValue(layer, "mottle");
+    if (record(layer.effects) && "mottle" in layer.effects) {
+      const model = this.of("mottle", mottle);
+      if (!model || !model.valid(mottle, layer.finish) || (holds && !holds(model))) throw Error("Invalid mottle settings.");
     }
   }
 }

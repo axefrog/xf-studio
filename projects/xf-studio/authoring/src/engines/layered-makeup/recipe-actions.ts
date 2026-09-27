@@ -14,6 +14,8 @@ import type { LayerModelRegistry } from "./layer-models";
 import { editSoftness, type SoftnessCommand } from "./softness-edit";
 import { refuse, type ValidationIssue } from "../../validation-issues";
 import { refusal, type ReasonCode } from "../../platform/api";
+import { DEFAULT_STREAK_ANGLE, DEFAULT_STREAK_LENGTH, mottlePreset, mottleSeed, MOTTLE_PRESET_IDS, nextMottleSeed, type Mottle,
+  type MottlePresetId } from "./mottle";
 
 export type RecipeActionState = { recipe: Recipe; active: number; selected: number; fieldSelection: FieldSelection };
 export type RecipeAction =
@@ -41,7 +43,17 @@ export type RecipeAction =
   | { kind: "point.setTangent"; layerId: string; index: number; side: "in" | "out"; du: number; dv: number }
   | { kind: "shape.transform"; layerId: string; command: ShapeCommand; pivotIndex?: number }
   | { kind: "field.setOrigin"; layerId: string; fieldId: string; u: number; v: number }
-  | { kind: "field.setVector"; layerId: string; fieldId: string; du: number; dv: number };
+  | { kind: "field.setVector"; layerId: string; fieldId: string; du: number; dv: number }
+  /** Mottle (`mottle-1`): turn it on (from the Powder preset, with a seed from the layer ID) or off. */
+  | { kind: "effect.mottle.enable"; layerId: string; enabled: boolean }
+  /** Set one mottle setting. */
+  | { kind: "effect.mottle.set"; layerId: string; key: MottleKey; value: number | string }
+  /** A new pattern with the same look: the next seed after the layer's (deterministic, so replay gives the same seed). */
+  | { kind: "effect.mottle.shuffle"; layerId: string }
+  /** Set every mottle setting but the seed from a preset (turning mottle on if it is off). */
+  | { kind: "effect.mottle.preset"; layerId: string; preset: MottlePresetId };
+/** The settings `effect.mottle.set` changes: the numbers, `where`, and `streaks` ("off", "angle", "edge"). */
+export type MottleKey = "amount" | "grain" | "clumping" | "where" | "streaks" | "angle" | "length" | "seed";
 /** Every recipe action kind. Typed as a record over the union so the compiler rejects a missing
  * or unknown kind; the application routes and labels recipe actions from this list. */
 const RECIPE_ACTION_KIND_TABLE: Record<RecipeAction["kind"], true> = {
@@ -51,6 +63,7 @@ const RECIPE_ACTION_KIND_TABLE: Record<RecipeAction["kind"], true> = {
   "layer.setFinish": true, "layer.useGameOptics": true, "layer.setShift": true, "glitter.selectModel": true,
   "glitter.setClassic": true, "glitter.setIrregular": true, "glitter.setDirect": true, "point.move": true,
   "point.insert": true, "point.setTangent": true, "shape.transform": true, "field.setOrigin": true, "field.setVector": true,
+  "effect.mottle.enable": true, "effect.mottle.set": true, "effect.mottle.shuffle": true, "effect.mottle.preset": true,
 };
 export const RECIPE_ACTION_KINDS: ReadonlySet<string> = new Set(Object.keys(RECIPE_ACTION_KIND_TABLE));
 /** Whole-shape transform about a contour point (the selected point unless `pivotIndex` is given). */
@@ -158,6 +171,18 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
     return refuse({ code: "mode", field: "optics", message: "Select a game-matched Colour-shifting layer first." });
   if (action.kind === "glitter.selectModel" && !glitterModels.includes(action.model))
     return refuse({ code: "format", field: "model", message: "Unknown Glitter model." });
+  if (action.kind === "effect.mottle.preset" && !MOTTLE_PRESET_IDS.includes(action.preset))
+    return refuse({ code: "format", field: "preset", message: "Unknown mottle preset." });
+  if (action.kind === "effect.mottle.shuffle" && !layer.effects?.mottle)
+    return refuse({ code: "mode", field: "effects", message: "Turn on mottle first." });
+  if (action.kind === "effect.mottle.set") {
+    const mottle = layer.effects?.mottle;
+    if (!mottle) return refuse({ code: "mode", field: "effects", message: "Turn on mottle first." });
+    if (action.key === "angle" && mottle.streaks?.mode !== "angle")
+      return refuse({ code: "mode", field: "streaks", message: "Choose angled streaks to set their angle." });
+    if (action.key === "length" && !mottle.streaks)
+      return refuse({ code: "mode", field: "streaks", message: "Turn on streaks to set their length." });
+  }
   return { available: true };
 }
 
@@ -272,6 +297,16 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
     changed.fields = layer.fields.map(field => field.id === action.fieldId ? { ...field, u: action.u, v: action.v } : field);
   } else if (action.kind === "field.setVector") {
     changed.fields = layer.fields.map(field => field.id === action.fieldId ? { ...field, du: action.du, dv: action.dv } : field);
+  } else if (action.kind === "effect.mottle.preset") {
+    changed = withMottle(layer, mottlePreset(action.preset, layer.effects?.mottle?.seed ?? mottleSeed(layer.id)));
+  } else if (action.kind === "effect.mottle.enable") {
+    if (action.enabled === !!layer.effects?.mottle) return unchanged();
+    changed = withMottle(layer, action.enabled ? mottlePreset("powder", mottleSeed(layer.id)) : undefined);
+  } else if (action.kind === "effect.mottle.set") {
+    changed = withMottle(layer, setMottle(layer.effects!.mottle!, action.key, action.value));
+  } else if (action.kind === "effect.mottle.shuffle") {
+    const mottle = layer.effects!.mottle!;
+    changed = withMottle(layer, { ...mottle, seed: nextMottleSeed(mottle.seed) });
   }
   if (effect !== "selection") {
     const layers = next.recipe.layers.map((entry, i) => i === index ? changed : entry);
@@ -282,6 +317,27 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
   }
   const changedState = JSON.stringify(next) !== JSON.stringify(state);
   return { state: next, choices: nextChoices, effect: { kind: effect, layerIndex: index }, changed: changedState };
+}
+
+/** The layer with its mottle replaced (or removed with its `effects` when none is left: an unmottled layer has no `effects`). */
+function withMottle(layer: Layer, mottle: Mottle | undefined): Layer {
+  const { effects, ...rest } = layer, others = { ...effects };
+  delete others.mottle;
+  const next = mottle ? { ...others, mottle } : others;
+  return Object.keys(next).length ? { ...rest, effects: next } : rest;
+}
+/** One mottle setting changed; values are validated with the whole recipe afterwards. */
+function setMottle(current: Mottle, key: MottleKey, value: number | string): Mottle {
+  const next: Mottle = structuredClone(current);
+  if (key === "streaks") {
+    const length = current.streaks?.length ?? DEFAULT_STREAK_LENGTH;
+    if (value === "off") delete next.streaks;
+    else if (value === "angle") next.streaks = { mode: "angle", angle: current.streaks?.mode === "angle" ? current.streaks.angle : DEFAULT_STREAK_ANGLE, length };
+    else if (value === "edge") next.streaks = { mode: "edge", length };
+    else throw Error("Streaks are off, at an angle or across the edge.");
+  } else if (key === "angle" || key === "length") (next.streaks as Record<string, unknown>)[key] = value;
+  else (next as Record<string, unknown>)[key] = value;
+  return next;
 }
 
 /** Why an irregular Glitter density and flake size can't go together, in the person's terms (the limits are `flake-field`'s). */

@@ -24,6 +24,8 @@ const nested: Record<string, string> = {
   translate: "Move shape", rotate: "Rotate shape", scale: "Scale shape",
 };
 
+const mottleLabel: Record<string, string> = { amount: "Mottle amount", grain: "Mottle grain", clumping: "Mottle clumping",
+  where: "Mottle placement", streaks: "Mottle streaks", angle: "Streak angle", length: "Streak length", seed: "Mottle pattern" };
 /** Label for a discrete or form-control recipe edit. */
 export function historyLabel(action: RecipeAction | LayerAction): HistoryLabel {
   if (action.kind === "layer.edit") return { label: layerCommand[action.command.kind] ?? "Layer change",
@@ -32,6 +34,11 @@ export function historyLabel(action: RecipeAction | LayerAction): HistoryLabel {
     actionKind: action.kind, layerId: action.id };
   if (action.kind === "layer.setShift") return { label: action.key === "strength" ? "Shift strength" : "Shift colour",
     actionKind: action.kind, layerId: action.layerId };
+  if (action.kind === "effect.mottle.enable") return { label: action.enabled ? "Turn on mottle" : "Turn off mottle",
+    actionKind: action.kind, layerId: action.layerId };
+  if (action.kind === "effect.mottle.set") return { label: mottleLabel[action.key], actionKind: `${action.kind}.${action.key}`, layerId: action.layerId };
+  if (action.kind === "effect.mottle.preset") return { label: "Mottle preset", actionKind: action.kind, layerId: action.layerId };
+  if (action.kind === "effect.mottle.shuffle") return { label: "Shuffle mottle", actionKind: action.kind, layerId: action.layerId };
   const command = "command" in action ? action.command.kind : undefined;
   return { label: (command && nested[command]) ?? simple[action.kind] ?? "Recipe change",
     actionKind: command ? `${action.kind}.${command}` : action.kind, layerId: action.layerId };
