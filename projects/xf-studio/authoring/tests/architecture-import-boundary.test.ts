@@ -301,7 +301,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
  */
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material", "metal-base-material", "mouth-occlusion",
-  "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
+  "creator-lighting", "creator-lighting-rig", "shadow-filter", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
   "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig", "dangle-spec", "dangle-solver",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
