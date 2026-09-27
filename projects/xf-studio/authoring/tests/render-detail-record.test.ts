@@ -352,3 +352,17 @@ test("a record keeps well-formed deformation rigs with a drawn body, and leaves 
   expect(parseCharacterDetail(bodyless).rigs).toBeUndefined();
   expect(parseCharacterDetail(character()).rigs).toBeUndefined();
 });
+
+test("a garment component carries its item's visual tags (the photo-mode outfit filter reads them); bad tags are refused, absent ones are fine", () => {
+  const record = character();
+  const body = record.components.find(item => item.slot === "body")!;
+  const garment = { ...body, id: "clothing:outer:7", slot: "clothing" as const, option: "OuterChest", morphs: undefined,
+    garment: { area: "OuterChest", item: "123", layer: 80, tags: ["Coat", "hide_T1"] } };
+  const parsed = parseCharacterDetail({ ...record, components: [...record.components, garment] });
+  expect(parsed.components.find(item => item.slot === "clothing")?.garment).toEqual({ area: "OuterChest", item: "123", layer: 80, tags: ["Coat", "hide_T1"] });
+  const untagged = parseCharacterDetail({ ...record, components: [...record.components, { ...garment, garment: { area: "OuterChest", item: "123", layer: 80 } }] });
+  expect(untagged.components.find(item => item.slot === "clothing")?.garment).toEqual({ area: "OuterChest", item: "123", layer: 80 });
+  // A component whose tags aren't CNames is refused (the record keeps its other parts, as for any invalid component).
+  const refused = parseCharacterDetail({ ...record, components: [...record.components, { ...garment, garment: { ...garment.garment, tags: ["not a tag!"] } }] });
+  expect(refused.components.some(item => item.slot === "clothing")).toBe(false);
+});

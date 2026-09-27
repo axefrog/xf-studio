@@ -177,3 +177,15 @@ test("a stored pose waits for the Poses module and can be dropped; without a mot
   const none = new MotionActions(freshWorkspace().preview, { ...motionPort([]), setPose: undefined });
   expect(none.poseCapability().reason).toContain("Poses play on V");
 });
+
+test("the held pose is view state in the workspace: stored with its label, restored, and dropped when unreadable", async () => {
+  const { parseWorkspace, serializeWorkspace } = await import("../src/workspace-state");
+  const { STUDIO_DOCUMENTS } = await import("../src/compose/studio-registry");
+  const state = freshWorkspace();
+  state.preview.pose = { id: "PhotoModePoses.idle_stand_01", label: "Standing" };
+  const round = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace(state, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
+  expect(round.preview.pose).toEqual({ id: "PhotoModePoses.idle_stand_01", label: "Standing" });
+  const bad = JSON.parse(JSON.stringify(serializeWorkspace(state, STUDIO_DOCUMENTS)));
+  bad.preview.pose = { id: "no spaces allowed", label: "x" };
+  expect(parseWorkspace(bad, STUDIO_DOCUMENTS).preview.pose).toBeUndefined();
+});

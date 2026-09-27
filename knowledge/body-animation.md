@@ -58,7 +58,8 @@ The main rig (`woman_base.rig`, 71 joints) is what every body clip keys. Every b
 
 1. The host reads the player entity (`PLAYER_ENTITIES`, with every ArchiveXL patch) and takes each animated component bound to another animated component. It compiles each rig and graph, read natively, into a program (`deformation-rig.ts`) and serves it beside the character record (`rigs`).
 2. The idle (`idle-animation.ts`) runs each program on the clip's pose every frame, about 0.3 ms. It drives each joint a program solves through a virtual driver. Without a program, helper joints fall back to the rig segment nearest them (`nearestDriver`).
-3. **What it fixes:** under the nearest-segment fallback, the latissimus, scapula and chest-side joints turned with the upper arm, so lowering the arms from the bind pose pulled the torso's sides in under the ribs. With the rig, the vertices mostly weighted to them move in by 11 mm on average in the close-up idle, against 38 mm before (17 against 44 in the inventory idle) [offline: the reference V's body posed both ways].
+3. **Poses play on the same rigs.** A photo-mode pose chosen in the Poses panel is a body clip on the idle's rig (`src/pose-clip.ts`, [poses §9](poses.md#9-where-this-lives-in-xf-studio)), so each program runs on the posed joints exactly as on an idle's. Strong poses are where the inferred semantics away from the A pose (twist sign, bounce slopes, the spline's curve) first show; capture ask 2 checks them.
+4. **What it fixes:** under the nearest-segment fallback, the latissimus, scapula and chest-side joints turned with the upper arm, so lowering the arms from the bind pose pulled the torso's sides in under the ribs. With the rig, the vertices mostly weighted to them move in by 11 mm on average in the close-up idle, against 38 mm before (17 against 44 in the inventory idle) [offline: the reference V's body posed both ways].
 
 ## 4. Feet states and the idles
 
