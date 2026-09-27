@@ -4,7 +4,7 @@ Last reviewed **28 September 2026** (export, release and waiting lists; other ro
 
 ## Summary
 
-XF Studio's eye-makeup editor builds a verified **XF Eye Artistry** mod from the player's own game. The first public alpha, **`v0.1.0-alpha.1`**, was tagged but stays an unpublished draft. The first published alpha will be **`v0.1.0-alpha.2`**: it is prepared (version, changelog with known limitations, release preflight passing) and waits only for its tag from `main`.
+XF Studio's eye-makeup editor builds a verified **XF Eye Artistry** mod from the player's own game. **`v0.1.0-alpha.2`**, the first published alpha, was released on 28 September 2026 as an unsigned Windows pre-release with checksums and a build-provenance attestation ([release](https://github.com/axefrog/xf-studio/releases/tag/v0.1.0-alpha.2)); `v0.1.0-alpha.1` stays an unpublished draft.
 
 The export has been **confirmed in game** across three sessions (25–28 September, feminine V, game 2.31):
 - The selector (labelled "XF") appears in the character creator, gameplay and photo mode, and switching, clearing and save persistence work.
@@ -49,7 +49,7 @@ Offline verification is not in-game proof. Runtime evidence so far is in the [fi
 
 Every pending in-game ask below and on the knowledge pages is ranked in the [next-sessions plan](../research/runtime/next-sessions-plan.md): sittings of 20–30 minutes, driven through the bridge (0.4.0 on `main`, not yet staged).
 
-1. **Nothing blocks `v0.1.0-alpha.2`.** It is prepared and the coordinator tags and publishes it per the release decisions. It ships with its known limitations: feminine V only; Glossy, Shimmer and Colour-shifting experimental; Glitter left out; no facial idle, blink or live Expressions face in the desktop app.
+1. **`v0.1.0-alpha.2` is published** (28 September 2026). Its known limitations: feminine V only; Glossy, Shimmer and Colour-shifting experimental; Glitter left out; no facial idle, blink or live Expressions face in the desktop app.
 2. **The next session** opens with the Glitter board ([experiment 021](../experiments/021-glitter-board/README.md)) and an alpha.2-built export beside it. That export carries two checks:
    - The Gloss verdict under a controlled directional light (plan 1.5).
    - Headgear (plan 2.6): a vanilla helmet (`Items.Helmet_01_basic_01`), plus **a mod item whose appearance carries `hide_Head`** from the installed mods, since no vanilla item has that tag.
@@ -64,7 +64,7 @@ Product and R&D run in parallel, like a commercial team beside a research lab:
 
 - **Product tracks:** first game smoke test; brow, lash and hair colours; rendering every character detail in the viewport; CC controls so work can be checked on other characters (every creator option is now in the Character panel with live preview, Off, its own Undo and portable presets, in one hierarchy by part of V, with colour swatches derived from what wins and the creator's icons; next: choices grouped by mod author; later: save write-back); remaining finish adapters.
 - **R&D lab:** the game's material and shader system, and the character-customisation file chain (mining the legacy xf-omega code and the Modding Docs screenshots). Findings are distilled into the agent-facing [knowledge base](../knowledge/README.md).
-- **Desktop app and public site (standing request):** the site is live; `v0.1.0-alpha.1` stays an unpublished draft; `v0.1.0-alpha.2` is prepared and published once tagged (releases no longer need the maintainer's go-ahead). Signing (SignPath) and auto-update come after the first alpha.
+- **Desktop app and public site (standing request):** the site is live; `v0.1.0-alpha.1` stays an unpublished draft; `v0.1.0-alpha.2` is published and the site links it (releases need no go-ahead). Signing (SignPath) and auto-update come after the first alpha.
 - **Closed with in-game evidence:** plate clearance (the vanilla-style decal lift needs no correction at normal viewing). Native eye assembly remains paused.
 
 See the [ranked backlog](../research/backlog/README.md) for owners and details, and [AGENTS.md](../AGENTS.md) for the standing rules.
