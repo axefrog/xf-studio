@@ -33,7 +33,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, ren
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { type BodyCensorship, type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { type BodyCensorship, type BodyScope, bodyStateFor, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
@@ -48,12 +48,13 @@ import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
-  type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
+  type RenderRig, type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
+import { puppetDeformationRigs, type PuppetRigs } from "./deformation-rig-host";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
 
@@ -247,6 +248,27 @@ function store(storeRoot: string, file: string, extension: "glb" | "png"): { fil
   hashed.set(file, { stamp, sha256: stored.sha256, bytes: bytes.length, size });
   if (hashed.size > 20_000) hashed.delete(hashed.keys().next().value!);
   return { file: stored.file, sha256: stored.sha256, size };
+}
+/**
+ * The puppet's deformation rigs as content-addressed program files beside the records (`<sha256>.json` in `records/`, which the asset
+ * route serves by name). A rig that can't be read or interpreted leaves a plain note; the helper joints then follow their limbs.
+ */
+async function serveRigs(graph: ResourceGraph, gender: "female" | "male", storeRoot: string, notes: string[], log: (line: string) => void): Promise<RenderRig[]> {
+  let found: PuppetRigs;
+  try { found = await puppetDeformationRigs(graph, gender, log); }
+  catch (error) { log(`The player's deformation rigs couldn't be read: ${(error as Error)?.stack ?? error}`); return []; }
+  notes.push(...found.notes);
+  return found.rigs.map(({ component, program }) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(program)), hash = sha256(bytes), file = `${hash}.json`;
+    const target = join(storeRoot, "records", file);
+    if (!existsSync(target)) {
+      mkdirSync(join(storeRoot, "records"), { recursive: true, mode: 0o700 });
+      const staging = `${target}.${process.pid}.tmp`;
+      writeFileSync(staging, bytes, { mode: 0o600 });
+      renameSync(staging, target);
+    }
+    return { component, rig: program.rig, graph: program.graph, file, sha256: hash };
+  });
 }
 function storeBytes(storeRoot: string, bytes: Uint8Array, extension: "glb" | "png"): { file: string; sha256: string } {
   const hash = sha256(bytes), name = `${hash}.${extension}`, target = join(storeRoot, "files", name);
@@ -885,7 +907,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const clothing = dressed && !("failed" in dressed) ? dressed : null;
   if (request.clothing && scope === "drawn") time("clothing");
   cancelled();
-  const bodyState = { feet: clothing?.feet ?? "flat" } as const;
+  const bodyState = bodyStateFor(clothing?.feet, request.puppet, cco.merged.cco);
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
   input = previewInput(input, bodyState, scope === "drawn");
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
@@ -1185,12 +1207,15 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   if (bodyWithdrawn) slots.set("body", { slot: "body", state: "unavailable", label: slots.get("body")!.label, message: UNCOVERED_BODY });
   else if (!coversServed && censoredServed.size) slots.set("body", { ...slots.get("body")!, message: CENSORED_BODY });
   if (summary.scanGaps.length) whole.push("Some installed mod files could not be read; the resolved details may differ from the game.");
+  // The puppet's deformation rigs pose the body's helper joints the way the game solves them (deformation-rig-host.ts).
+  const rigs = scope === "drawn" && components.some(item => item.slot === "body") ? await serveRigs(graph, request.bodyGender, options.storeRoot, whole, log) : [];
+  if (rigs.length) time("rigs");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
     character: { source: request.source, bodyGender: request.bodyGender },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: recordNotes([...drops, ...whole], notes), ...(toolLabel ? { tool: toolLabel } : {}) },
-    components, slots: [...slots.values()],
+    components, slots: [...slots.values()], ...(rigs.length ? { rigs } : {}),
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
   // with a note here, not discovered by the page.
@@ -1317,13 +1342,14 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
     cancelled();
     const scopes = requests.map(bodyScopeOf);
     const worn = clothes.map(entry => entry && !("failed" in entry) ? entry : null);
-    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: worn[index]?.feet ?? "flat" },
+    const bodyStates = requests.map((request, index) => bodyStateFor(worn[index]?.feet, request.puppet, cco.merged.cco));
+    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, bodyStates[index],
       scopes[index] === "drawn"), cco, cache, worn[index]?.overrides).then(result => result.resolved) : null));
     cancelled();
     await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(worn[index] ?? null)]
       .flatMap(component => component.materials.map(material => material.template).filter((template): template is Provenance => !!template)) : []), cache);
     const plans = resolved.map((entry, index) => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities,
-      { feet: worn[index]?.feet ?? "flat" }, clothes[index] ?? null, scopes[index], undefined, censorshipOf(requests[index]!)) : null);
+      bodyStates[index], clothes[index] ?? null, scopes[index], undefined, censorshipOf(requests[index]!)) : null);
     cancelled();
     const fresh = new Map<string, PlannedComponent>();
     for (const plan of plans) for (const component of [...plan?.components ?? [], ...plan?.censoredBody ?? []]) {

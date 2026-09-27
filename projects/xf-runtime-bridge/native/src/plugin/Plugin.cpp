@@ -73,6 +73,14 @@ nlohmann::json InfoJson()
         {"game_state", GameStateName(state.gameState.load())},
         {"running_ticks", state.runningTicks.load()},
         {"bridge", state.bridge ? state.bridge->Status()
-                                : nlohmann::json{{"enabled", false}, {"listening", false}}}};
+                                : nlohmann::json{{"enabled", state.config.bridgeEnabled}, {"listening", false}}},
+        {"allow_creator_leave", state.config.allowCreatorLeave},
+        {"allow_live_pose", state.config.allowLivePose},
+        {"restore_pending", state.restore.Pending()},
+        {"rearm_pending", state.rearmRequested.load()},
+        {"last_rearm", [&state] {
+             std::scoped_lock _(state.rearmMutex);
+             return state.lastRearm;
+         }()}};
 }
 } // namespace xfb::plugin

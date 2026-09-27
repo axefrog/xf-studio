@@ -206,4 +206,13 @@ void GameThreadQueue::Close()
         current->done.notify_all();
     }
 }
+
+void GameThreadQueue::Reopen(bool aPumping)
+{
+    Close(); // releases anything still queued (nothing should be)
+    std::scoped_lock _(m_mutex);
+    m_items.clear();
+    m_closed.store(false);
+    m_pumping.store(aPumping);
+}
 } // namespace xfb

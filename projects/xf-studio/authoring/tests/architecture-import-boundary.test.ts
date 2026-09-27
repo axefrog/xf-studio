@@ -291,7 +291,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   "core-detail-loader", "character-detail-loader", "character-material-adapters", "head-skin-placement", "render-detail", "render-templates",
   "detail-limits", "head-load-error", "scene-evidence",
   // The rig's motion and facial shapes.
-  "idle-animation", "game-blink", "preview-motion", "face-morphs",
+  "idle-animation", "idle-catalogue", "game-blink", "preview-motion", "face-morphs",
   // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the saved V record.
   "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "saved-v",
 ]);
@@ -302,7 +302,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material",
   "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
-  "red-json", "depot-path", "archive-precedence", "resolution-evidence",
+  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
 const SCENE_UNREACHABLE = /^(?:features\/|engines\/|compose\/|studio-ui\/|studio-(?:main|startup|application|presentation)$|platform\/(?:core|export)\/|authoring-|collection-|trusted-|workspace-|[\w-]+-(?:actions|service|host|server)$|node:|bun:)/;

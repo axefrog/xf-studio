@@ -1,9 +1,11 @@
 import type * as THREE from "three";
 import type { GameBlink } from "./game-blink";
 import type { IdleAnimation } from "./idle-animation";
+import type { DeformationProgram } from "./deformation-rig";
 
 /** The parts of the idle and the blink the scene composes (IdleAnimation and GameBlink; test doubles may stand in). */
-export type ComposedIdle = Pick<IdleAnimation, "enabled" | "paused" | "onChange" | "update" | "setEnabled" | "attach" | "detach">;
+export type ComposedIdle = Pick<IdleAnimation, "enabled" | "paused" | "onChange" | "update" | "setEnabled" | "attach" | "detach"> &
+  Partial<Pick<IdleAnimation, "setDeformations">>;
 export type ComposedBlink = Pick<GameBlink, "animating" | "onChange" | "update" | "reset" | "attach" | "detach" | "dispose">;
 
 /**
@@ -33,6 +35,8 @@ export function composePreviewMotion(idle: ComposedIdle | undefined, blink: Comp
       return true;
     },
     attach(bones: readonly THREE.Object3D[]) { blink?.attach(bones); idle?.attach(bones); },
+    /** The puppet's deformation rigs for the helper joints the details bring (the idle poses them; the blink never moves them). */
+    setDeformations(programs: readonly DeformationProgram[]) { idle?.setDeformations?.(programs); },
     detach(bones: readonly THREE.Object3D[]) { blink?.detach(bones); idle?.detach(bones); },
     /** Ask for a frame whenever either changes the pose outside playback; returns the disconnect. */
     connect(invalidate: () => void) {

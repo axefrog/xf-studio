@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { basename, join } from "node:path";
 import { depotHash } from "./depot-path";
 import { depotPathRegex } from "./eye-plate-wolvenkit";
-import { createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, type GeometryRepairOutcome, type GeometryRepairStep,
+import { createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, type GeometryRepairOutcome, type GeometryRepairStep, type MorphTargetSkin,
   type UncookRun } from "./game-asset-export";
 import { MESH_EXPORT_REPAIR_VERSION, repairMeshForExport } from "./mesh-export-repair";
 import type { JsonObject } from "./red-json";
@@ -141,6 +141,23 @@ export function createWolvenKitMeshRepair(cli: string | null, timeoutMs = DEFAUL
 }
 
 /**
+ * The skin route for a morph target WolvenKit exported without its skin (game-asset-export.ts `MorphTargetSkin`): the raw copy is
+ * exported by file with the game folder, from which WolvenKit reads the base mesh's rig. Exporting the file itself (not uncooking its
+ * path) means the bytes are the source's own; no other copy can stand in (PIPE-106).
+ */
+export function createWolvenKitMorphSkin(cli: string | null, timeoutMs = DEFAULT_TIMEOUT_MS, run: typeof runWolvenKit = runWolvenKit): MorphTargetSkin {
+  return async ({ source, depotPath, raw, workDir, signal, lowPriority }) => {
+    const name = depotPath.split("\\").pop()!, input = join(workDir, "in"), out = join(workDir, "out");
+    mkdirSync(input, { recursive: true }); mkdirSync(out, { recursive: true });
+    const file = join(input, name);
+    copyFileSync(raw, file);
+    await run(cli, ["export", file, "-o", out, "-gp", source.gameRoot, "-v", "Minimal"], { signal, timeoutMs, keep: 64_000, lowPriority });
+    const glb = join(out, `${name}.glb`);
+    return existsSync(glb) ? glb : null;
+  };
+}
+
+/**
  * The WolvenKit-backed exporter: its cache is keyed by this CLI's identity (version and content hash),
  * so upgrading or replacing WolvenKit never reuses another build's exports, and it can ask the
  * source's own archive indexes whether a resource exists at all.
@@ -151,6 +168,7 @@ export function createWolvenKitGameAssetExporter(cacheRoot: string, cli: string 
     tool: { key: wolvenKitIdentityKey(identity), label: identity?.version ? `WolvenKit CLI ${identity.version}` : "WolvenKit CLI" },
     contains: (source, hashes) => archiveSourceContains(source.archivePath, hashes),
     repairGeometry: createWolvenKitMeshRepair(cli, timeoutMs),
+    skinMorphTarget: createWolvenKitMorphSkin(cli, timeoutMs),
     repairKey: MESH_EXPORT_REPAIR_VERSION,
   });
 }

@@ -9,13 +9,16 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   bad_params: "Some of the values given aren't valid for this action.",
   bad_version: "The game bridge speaks a different protocol version. Update XF Runtime Bridge and the XF tools together.",
   unauthorized: "The game bridge refused the connection key. Restart the game so the bridge writes a fresh session file.",
-  killed: "The game bridge was switched off with its kill switch. Restart the game to use it again.",
+  killed:
+    "The game bridge was switched off with its kill switch. In the game, open the Cyber Engine Tweaks overlay and press Reconnect in the XF Runtime Bridge window (test builds), or restart the game.",
   rate_limited: "Too many requests in a short time. Wait a second and try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
     "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character). Nothing was changed.",
   write_mismatch:
     "The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again.",
+  writes_paused:
+    "Changes are paused in the game's XF Runtime Bridge window (Cyber Engine Tweaks overlay). Nothing was changed. Resume them there to continue.",
   writes_disabled:
     "Changing the game is switched off in this setup. It is allowed only in the dedicated test profile, where the bridge's config.ini has allow_writes = true.",
   game_not_running: "The game hasn't finished starting. Wait for the main menu, then try again.",
@@ -42,9 +45,24 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   not_safe_now:
     "The game isn't at a safe moment for the appearance screen (combat, a scene, a vehicle, or somewhere photo mode isn't allowed). Nothing was opened. Walk V somewhere quiet and try again.",
   save_lock_not_held:
-    "The appearance screen wasn't opened because the game hasn't confirmed that saving is locked yet. Try again in a moment.",
+    "The appearance screen wasn't opened because the game hasn't confirmed the bridge's save lock yet. Saving stays locked until a save is loaded. Try again in a moment.",
   creator_open_timeout:
-    "The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and nothing opened. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere).",
+    "The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and nothing opened. Saving stays locked until a save is loaded. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere).",
+  creator_open_uncertain:
+    "The game took the request to open the appearance screen but it hadn't opened by the end of the wait, so it may still open. Check game_status: if the phase is character_menu, use cc_back to close it. Saving stays locked until a save is loaded.",
+  not_v:
+    "The player isn't V right now (a Johnny section, or someone else the story puts in V's place), so the appearance screen wasn't opened. Try again once V is back.",
+  live_pose_disabled:
+    "Writing the live-pose carrier is switched off in this bridge's config.ini (allow_live_pose; only the XF test profile's -writes build allows it). Nothing was changed.",
+  live_pose_unavailable:
+    "The live-pose commands can't run on this game version (an engine address they need is missing from RED4ext's address library), so nothing was read or changed.",
+  carrier_not_loaded:
+    "The animation set isn't loaded. For the XF live carrier: install the XF Live Pose test package, open photo mode and select the carrier pose (photo_pose_set with record xfs_live_carrier), then try again.",
+  clip_not_found: "The animation set is loaded but has no clip with that name. Check the name, or the test package's build.",
+  carrier_not_selected:
+    "The XF live carrier isn't the selected photo-mode pose, so nothing was written. Select it with photo_pose_set (record xfs_live_carrier), then try again.",
+  layout_unrecognised:
+    "The clip's keys aren't laid out the way the bridge expects on this game version, so it stopped without writing anything. Keep the answer (its detail lists every mismatch) and stop the live-pose steps.",
   not_in_gameplay: "This needs V in the world (or, for the clock, the appearance screen): load a save and close any other menus first.",
   not_in_character_menu:
     "Character options can only be changed while the appearance screen (a mirror, or the ripperdoc's appearance menu) is open. Open it in the game first.",

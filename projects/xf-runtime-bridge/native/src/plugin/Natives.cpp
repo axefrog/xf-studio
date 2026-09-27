@@ -167,6 +167,79 @@ void Kill(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64
     });
 }
 
+// XFBridge_Rearm(reason: String) -> String   (the CET panel's Reconnect after the kill switch)
+// Asks the next Running ticks to re-arm the bridge with a new session (Main.cpp HandleRearm); answers
+// {"requested":true} or {"requested":false,"reason":"..."} at once. Only an in-game action can do this:
+// no pipe method re-arms, since the pipe is closed while the bridge is killed.
+void Rearm(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    RED4ext::CString reason;
+    RED4ext::GetParameter(aFrame, &reason);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_Rearm", [&] {
+        auto& state = Get();
+        json answer{{"requested", false}};
+        if (!state.config.bridgeEnabled)
+        {
+            answer["reason"] = "the bridge is off in config.ini ([bridge] enabled = false), so there is nothing to reconnect";
+        }
+        else if (!state.bridge)
+        {
+            answer["reason"] = "the bridge didn't start this session (see the plugin log); restart the game";
+        }
+        else if (!state.bridge->GetDispatcher().IsKilled())
+        {
+            answer["reason"] = "the bridge is already running";
+        }
+        else
+        {
+            state.rearmRequestedAt.store(state.runningTicks.load());
+            state.rearmRequested.store(true);
+            answer["requested"] = true;
+            log::Warn("bridge.rearm_requested", "by=" + Sanitize(ToStd(reason), 64));
+        }
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(SerializeJson(answer).c_str());
+        }
+    });
+}
+
+// XFBridge_PauseWrites(paused: Bool) -> String   (the CET panel's write switch)
+// Pauses or resumes writes. It can only take access away: with allow_writes = false nothing changes,
+// and resuming gives back exactly what config.ini allows.
+void PauseWrites(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    bool paused = false;
+    RED4ext::GetParameter(aFrame, &paused);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_PauseWrites", [&] {
+        auto& state = Get();
+        json answer{{"changed", false}};
+        if (!state.bridge)
+        {
+            answer["reason"] = "the bridge isn't running";
+        }
+        else if (!state.config.allowWrites)
+        {
+            answer["reason"] = "changes are off in config.ini (allow_writes = false), so there is nothing to pause";
+        }
+        else
+        {
+            auto& dispatcher = state.bridge->GetDispatcher();
+            answer["changed"] = dispatcher.WritesPaused() != paused;
+            dispatcher.SetWritesPaused(paused);
+        }
+        answer["writes_paused"] = state.bridge && state.bridge->GetDispatcher().WritesPaused();
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(SerializeJson(answer).c_str());
+        }
+    });
+}
+
 // XFBridge_OptionsWanted() -> String   (CET layer: the render options game.options.read waits for,
 // {"seq":n,"names":["Category/Name",...]}, or "" when none are wanted)
 void OptionsWanted(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
@@ -211,13 +284,13 @@ void OptionsReport(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aO
 }
 
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
-                    std::initializer_list<const char*> aStringParams)
+                    std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
     auto* func = RED4ext::CGlobalFunction::Create(aName, aName, aFunction);
     func->flags = {.isNative = true, .isStatic = true};
     for (const auto* param : aStringParams)
     {
-        func->AddParam("String", param);
+        func->AddParam(aParamType, param);
     }
     if (aReturnType)
     {
@@ -245,7 +318,9 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_Kill", &Kill, "Bool", {"reason"});
         RegisterGlobal(rtti, "XFBridge_OptionsWanted", &OptionsWanted, "String", {});
         RegisterGlobal(rtti, "XFBridge_OptionsReport", &OptionsReport, "Bool", {"values"});
-        log::Info("rtti.register_types", "phase=post_register natives=7");
+        RegisterGlobal(rtti, "XFBridge_Rearm", &Rearm, "String", {"reason"});
+        RegisterGlobal(rtti, "XFBridge_PauseWrites", &PauseWrites, "String", {"paused"}, "Bool");
+        log::Info("rtti.register_types", "phase=post_register natives=9");
     }
     catch (const std::exception& e)
     {

@@ -73,6 +73,11 @@ export type PreviewState = {
   /** The creator preset's diagnostic switches and its exposure scalar. */
   creatorLighting: CreatorLightingOptions;
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
+  /**
+   * Which of the game's preview idles plays while the idle is on (idle-catalogue.ts); absent: the default, the creator's close-up. Stored
+   * only when another is chosen, so a workspace that never chooses keeps its bytes.
+   */
+  idleClip?: string;
 };
 export const WORKSPACE_1 = "xfas/workspace-1";
 export const WORKSPACE_2 = "xfs/workspace-2";
@@ -187,6 +192,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (typeof p.eyeOwnRoughness === "boolean") state.preview.eyeOwnRoughness = p.eyeOwnRoughness;
     if (typeof p.body === "boolean") state.preview.body = p.body;
     if (typeof p.uncensored === "boolean") state.preview.uncensored = p.uncensored;
+    if (typeof p.idleClip === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(p.idleClip) && p.idleClip !== "closeup") state.preview.idleClip = p.idleClip;
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;

@@ -71,6 +71,11 @@ public:
     // True once Close() has returned (or is running): no task can start after that, except one
     // the game thread had already taken, which finishes inside that same Drain call.
     bool IsClosed() const;
+    // Re-arming the bridge after the kill switch: accepts tasks again. Only from the game thread,
+    // between Drain calls, once the old bridge's threads have stopped (nothing waits on the queue).
+    // Close() left nothing queued; Reopen() clears anything that remains, releasing its waiter, and sets
+    // pumping to aPumping (Close() cleared it; the game thread is still running).
+    void Reopen(bool aPumping);
 
 private:
     enum State : int
