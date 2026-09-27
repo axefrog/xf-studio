@@ -2,7 +2,7 @@
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, previewTile, ScrollMemory, VIEW_KEY, type LightListItem, type TabItem } from "../components";
+  sampleBackground, LightList, DirectionDial, previewTile, previewStage, ScrollMemory, VIEW_KEY, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
 
@@ -206,6 +206,7 @@ const MOUNTS: Record<string, Mount> = {
     return h("div", { style: "max-width:520px" }, stack({ gap: "loose" }, folder.element, games.element)); },
   "lib-swatch-card": () => swatchCardSpecimen(),
   "lib-choice-preview": () => choicePreviewSpecimen(),
+  "lib-choice-layouts": () => choiceLayoutsSpecimen(),
   "lib-split-view": () => { const tree = h("ul", { class: "save-tree" }, ...["GameSessionDesc", "DynamicEntityIDSystem", "TypeDatabase_v2"].map(name => h("li", { class: "save-tree-row" }, h("span", { class: "save-tree-name", text: name }))));
     return new SplitView({ label: "the sample tree and inspector", key: "guide.split", initial: .45, min: 140, start: tree,
       end: blockSection({ title: "GameSessionDesc" }, propertyList([["Kind", "Holds child nodes"], ["Size", "58 B"]])) }).element; },
@@ -229,16 +230,20 @@ const MOUNTS: Record<string, Mount> = {
  * A synthetic channel image (choice-preview.ts §channels): a lit head as the subject and a hair shape as the feature, drawn here so the
  * specimen needs no game file. `style` picks the shape: 0 a bob, 1 long, 2 short.
  */
-function syntheticPreview(style: number): string {
+function syntheticPreview(style: number, frames = 1): string {
   const size = 128, canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const context = canvas.getContext("2d")!, image = context.createImageData(size, size);
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+  canvas.width = size * frames; canvas.height = size;
+  const context = canvas.getContext("2d")!, image = context.createImageData(size * frames, size);
+  // A turntable strip (frames side by side): the light and a side tail move with the turn, so the specimen visibly turns.
+  for (let k = 0; k < frames; k++) for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const turn = (k / frames) * Math.PI * 2, side = Math.sin(turn), front = Math.cos(turn);
     const dx = (x - 60) / 30, dy = (y - 58) / 38, head = dx * dx + dy * dy <= 1 || (Math.abs(x - 60) < 13 && y > 80 && y < 118);
     const hx = (x - 60) / 36, hy = (y - 52) / 42, inHair = hx * hx + hy * hy <= 1;
-    const hair = inHair && (style === 2 ? y < 44 : style === 0 ? y < 84 && !(dx * dx + dy * dy < .7 && y > 44) : !(dx * dx + dy * dy < .7 && y > 44)) || (style === 1 && Math.abs(x - 60) < 34 && y > 60 && y < 124 && Math.abs(x - 60) > 20);
-    const light = Math.max(.18, Math.min(1, .55 - dx * .35 - dy * .35 + (hair ? .1 * Math.sin(x * .9) : 0)));
-    const at = (y * size + x) * 4;
+    const tail = frames > 1 && Math.abs(x - (60 + 38 * side)) < 7 + 3 * Math.abs(front) && y > 50 && y < 116;
+    const face = dx * dx + dy * dy < .7 && y > 44 && (frames === 1 || front > -0.2);
+    const hair = inHair && (style === 2 ? y < 44 : style === 0 ? y < 84 && !face : !face) || (style === 1 && Math.abs(x - 60) < 34 && y > 60 && y < 124 && Math.abs(x - 60) > 20) || tail;
+    const light = Math.max(.18, Math.min(1, .55 - (dx * front + .4 * side) * .35 - dy * .35 + (hair ? .1 * Math.sin(x * .9 + turn * 3) : 0)));
+    const at = (y * size * frames + k * size + x) * 4;
     if (hair) { image.data[at] = 255 * light; image.data[at + 2] = 255; image.data[at + 3] = 255; }
     else if (head) { image.data[at + 1] = 255 * light; image.data[at + 3] = 255; }
   }
@@ -262,9 +267,66 @@ function choicePreviewSpecimen() {
     return stack({ gap: "tight" }, h("span", { class: "small muted", text: `Size ${size.toUpperCase()}` }),
       h("div", { class: "choices cc-choices previews", "data-size": size, role: "listbox", "aria-label": `Hairstyle choices, size ${size.toUpperCase()}`, style: "max-width:560px;padding:0" }, ...tiles));
   };
-  return h("div", { style: "max-width:600px" }, stack({ gap: "normal" }, grid("m"), grid("s"), grid("l"),
-    h("p", { class: "note", text: "Pictures here are drawn in the page from synthetic channels (a head and a hair shape); in the Character panel they come from the preview worker, drawn from the resolved winner's parts. Switch the guide's theme: one channel image serves both." })));
+  return h("div", { style: "max-width:600px" }, stack({ gap: "normal" }, grid("m"), grid("s"), turning(pictures),
+    h("p", { class: "note", text: "Pictures here are drawn in the page from synthetic channels (a head and a hair shape); in the Character panel they come from the preview worker, drawn from the resolved winner's parts. Switch the guide's theme: one channel image serves both. In size L, rest the pointer on a picture to turn it, or press and drag across it." })));
 }
+/** Size L with turntables: every ready tile turns on hover and drag (a synthetic 24-frame strip). */
+function turning(pictures: string[]) {
+  const strip = syntheticPreview(1, 24);
+  const tiles = ["01", "02", "03", "04"].map((label, n) => {
+    const tile = previewTile({ label: `Hairstyle ${label}`, glyph: "head" });
+    tile.set(n === 3 ? null : pictures[n % 3]!, false);
+    tile.spinnable(n !== 3);
+    tile.setSpin(n === 3 ? null : strip, 24);
+    const item = choiceItem({ label: `Hairstyle ${label}`, selected: n === 0, description: "From the game", className: "cc-choice preview-choice", content: tile.element });
+    item.tabIndex = n === 0 ? 0 : -1;
+    return item;
+  });
+  return stack({ gap: "tight" }, h("span", { class: "small muted", text: "Size L (turns on hover and drag)" }),
+    h("div", { class: "choices cc-choices previews", "data-size": "l", "data-layout": "grid", role: "listbox", "aria-label": "Hairstyle choices, size L", style: "max-width:560px;padding:0" }, ...tiles));
+}
+/** The three layouts of one sample row (lib-choice-layouts): the row's controls, then grid, list and details with its large picture. */
+function choiceLayoutsSpecimen() {
+  const pictures = [syntheticPreview(0), syntheticPreview(1), syntheticPreview(2)], strip = syntheticPreview(1, 24);
+  const names = ["Bob", "Braids", "Bun", "Curly", "Pixie"], sources = ["From the game", "From Sample Hair Pack", "From the game", "From Sample Hair Pack", "From the game"];
+  const states = ["", "", "Preparing", "Not prepared yet", ""];
+  const host = h("div", { class: "cc-choice-list" });
+  let layout: "grid" | "list" | "details" = "details", size: "s" | "m" | "l" = "m", shown = 1;
+  const stage = previewStage({ glyph: "head" });
+  const sizes = new Segmented<"s" | "m" | "l">({ label: "Picture size", showLabel: false, compact: true, options: [{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }],
+    onSelect: value => { size = value; paint(); } });
+  const layouts = new Segmented<"grid" | "list" | "details">({ label: "Picture layout", showLabel: false, compact: true,
+    options: [{ value: "grid", label: "Grid" }, { value: "list", label: "List" }, { value: "details", label: "Details" }], onSelect: value => { layout = value; paint(); } });
+  const tiles = names.map((name, n) => {
+    const tile = previewTile({ label: name, glyph: "head" });
+    tile.set(n === 3 ? null : pictures[n % 3]!, false);
+    tile.setSpin(n === 3 ? null : strip, 24);
+    const item = choiceItem({ label: name, selected: n === 1, description: sources[n], className: "cc-choice preview-choice", content: tile.element });
+    if (n === 2) item.dataset.fetch = "fetching";
+    if (n === 3) item.dataset.fetch = "pending";
+    item.tabIndex = n === 1 ? 0 : -1;
+    item.addEventListener("pointerenter", () => { shown = n; paint(true); });
+    item.addEventListener("pointerleave", () => { shown = 1; paint(); });
+    return { tile, item };
+  });
+  const list = h("div", { class: "choices cc-choices previews", role: "listbox", "aria-label": "Sample hairstyle choices", style: "padding:0" }, ...tiles.map(entry => entry.item));
+  const body = h("div", { class: "cc-choice-body" }, list);
+  host.append(body);
+  function paint(looking = false) {
+    sizes.update(size); layouts.update(layout);
+    sizes.element.hidden = layout !== "grid";
+    list.dataset.layout = layout; host.dataset.layout = layout;
+    if (layout === "grid") list.dataset.size = size; else delete list.dataset.size;
+    tiles.forEach(({ tile }, n) => { tile.spinnable(layout === "details" || (layout === "grid" && size === "l")); tile.setMeta(layout !== "grid" && n >= 3 ? sources[n]! : "", layout === "details" ? states[n]! : ""); });
+    if (layout === "details") { if (stage.element.parentNode !== body) body.insertBefore(stage.element, list); } else stage.element.remove();
+    stage.show({ label: names[shown]!, source: sources[shown]!, url: shown === 3 ? null : pictures[shown % 3]!, none: false, spin: shown === 3 ? null : strip, frames: 24, looking });
+  }
+  paint();
+  return h("div", { style: "max-width:640px" }, stack({ gap: "normal" },
+    h("div", { class: "cc-choice-tools", style: "padding:0" }, sizes.element, layouts.element), host,
+    h("p", { class: "note", text: "Switch the layout above; narrow the guide below 520 px to see the details picture move above the list. Rest the pointer on a row to turn its picture in the large view, or drag the large picture. PageUp, PageDown and typing a name move focus in the list." })));
+}
+
 function swatchCardSpecimen() {
   const clustered = [["#030303"], ["#534f46"], ["#210402"], ["#2d1208"], ["#090402"], ["#494339"], ["#3f3628"], ["#2c2420"], ["#2b1c09"], ["#4d4038"],
     ["#2a2725"], ["#540000"], ["#2b211a"], ["#460e18"], ["#3d3735"], ["#3e2117"], ["#13100e"], ["#6c6664"], ["#231610"]];

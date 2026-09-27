@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyColourMatrix, type ChoicePreviewSource, compositeChannels, isPreviewKey, parsePreviewSource, PREVIEW_STYLES, previewCamera, previewColourMatrix,
-  previewKey, previewKindOf, previewSourceOf, type PreviewTokens } from "../src/choice-preview";
+  previewKey, previewKeyInput, previewKindOf, previewSourceOf, type PreviewTokens, TURNTABLE, turntableYaw } from "../src/choice-preview";
 import { ChoicePreviewStore, manifestStamp } from "../src/choice-preview-host";
 import { createChoicePreviewHandler } from "../src/choice-preview-server";
 import { ChoicePreviewService, type ChoicePreviewPort, type PreviewAsk } from "../src/choice-preview-service";
@@ -61,6 +61,17 @@ describe("preview keys", () => {
     expect(await previewKey({ ...a, parts: [{ ...a.parts[0]!, sha256: hex(9) }] }, "subject-1")).not.toBe(key);
     expect(await previewKey(a, "subject-2")).not.toBe(key);
   });
+  test("a turntable strip has its own key; the still's key input is unchanged by it (phase 1 pictures stay valid)", async () => {
+    const a = previewSourceOf(hairParts(), "hair")!;
+    expect(previewKeyInput(a, "s")).not.toHaveProperty("turntable");
+    expect(previewKeyInput(a, "s", "turntable")).toMatchObject({ turntable: TURNTABLE });
+    const still = await previewKey(a, "s"), strip = await previewKey(a, "s", "turntable");
+    expect(isPreviewKey(strip)).toBe(true);
+    expect(strip).not.toBe(still);
+    expect(await previewKey(previewSourceOf(hairParts(undefined, 40), "hair")!, "s", "turntable")).toBe(strip);
+    // 24 frames of 256 px stay within WebP's 16383-pixel side.
+    expect(TURNTABLE.frames * PREVIEW_STYLES.hair.size).toBeLessThanOrEqual(16383);
+  });
 });
 
 describe("theming", () => {
@@ -106,6 +117,18 @@ describe("the row's camera", () => {
     const turned = previewCamera(head, { min: [-0.05, 1.7, 0.08], max: [0.05, 1.72, 0.1] }, style);
     expect(turned.eye[1]).toBeGreaterThan(turned.target[1]);
     expect(Math.abs(turned.eye[0] - turned.target[0])).toBeGreaterThan(0.1);
+  });
+  test("turntable frames turn about the head's vertical axis: frame 0 is the still, half a turn looks from behind, the target and height stay", () => {
+    const style = PREVIEW_STYLES.hair, eyes = { min: [-0.05, 1.7, 0.08] as [number, number, number], max: [0.05, 1.72, 0.1] as [number, number, number] };
+    const still = previewCamera(head, eyes, style), first = previewCamera(head, eyes, style, turntableYaw(0));
+    expect([...first.view]).toEqual([...still.view]);
+    const half = previewCamera(head, eyes, style, turntableYaw(TURNTABLE.frames / 2));
+    expect(half.target).toEqual(still.target);
+    expect(half.eye[1]).toBeCloseTo(still.eye[1], 9);
+    // Opposite side of the head: the horizontal offset from the target flips.
+    expect(half.eye[0] - half.target[0]).toBeCloseTo(-(still.eye[0] - still.target[0]), 9);
+    expect(half.eye[2] - half.target[2]).toBeCloseTo(-(still.eye[2] - still.target[2]), 9);
+    expect(turntableYaw(1)).toBe(360 / TURNTABLE.frames);
   });
 });
 
@@ -179,6 +202,9 @@ describe("the preview endpoint", () => {
 
 describe("the preview service's scheduling", () => {
   const source = previewSourceOf(hairParts(), "hair")!;
+  /** Each position's own source (its geometry's hash names it), so the log says which choice is drawn. */
+  const sourceAt = (position: number): ChoicePreviewSource => ({ ...source, parts: [{ ...source.parts[0]!, sha256: hex(200 + position) }] });
+  const positionOf = (drawn: ChoicePreviewSource) => Number.parseInt(drawn.parts[0]!.sha256, 16) - 200;
   function harness(options: { ready?: (position: number) => boolean } = {}) {
     const log: string[] = [];
     const waiting: { resolve(): void }[] = [];
@@ -188,11 +214,11 @@ describe("the preview service's scheduling", () => {
         log.push(derive === null ? `lookup ${positions.join(",")}` : `derive ${derive}`);
         await gate();
         return positions.map(position => position === 9 ? { position, state: "none" as const }
-          : derive === null && position !== 1 ? { position, state: "unprepared" as const } : { position, state: "ready" as const, source });
+          : derive === null && position !== 1 ? { position, state: "unprepared" as const } : { position, state: "ready" as const, source: sourceAt(position) });
       },
       async subject() { return "subject"; },
       async stored() { return null; },
-      async render(_source, key) { log.push(`draw ${key.slice(0, 4)}`); await gate(); return { url: `blob:${log.length}` }; },
+      async render(drawn, _key, frames) { log.push(`${frames ? `spin(${frames})` : "draw"} p${positionOf(drawn)}`); await gate(); return { url: `blob:${log.length}` }; },
     };
     let changes = 0;
     const service = new ChoicePreviewService(port, () => { changes++; });
@@ -233,6 +259,57 @@ describe("the preview service's scheduling", () => {
     h.service.update(h.ask({ option: "head/other", positions: [7], selected: null }));
     await h.settle();
     expect(h.service.row("head/hairstyle")!.urls.has(1)).toBe(true);
+  });
+  test("a turntable is drawn only for the wanted choice, after the chosen and hovered stills and before the rest of the row", async () => {
+    const h = harness();
+    h.service.update(h.ask({ positions: [1, 4], focus: null }));
+    await h.settle();
+    // Nobody wants a spin: no strip is drawn.
+    expect(h.log.some(line => line.startsWith("spin"))).toBe(false);
+    const drawn = h.log.filter(line => line.startsWith("draw")).length;
+    // The pointer rests on 5 (a new choice): its still first (it is the hovered one), then its strip, then the rest.
+    h.service.update(h.ask({ positions: [1, 4, 5, 6], focus: 5, spin: 5 }));
+    await h.settle();
+    const after = h.log.slice(h.log.findIndex(line => line === "lookup 5,6") + 1).filter(line => !line.startsWith("derive"));
+    expect(after.slice(0, 3)).toEqual(["draw p5", "spin(24) p5", "draw p6"]);
+    expect(h.log.filter(line => line.startsWith("spin"))).toHaveLength(1);
+    const row = h.service.row("head/hairstyle")!;
+    expect(row.spins.has(5)).toBe(true);
+    expect(row.spins.has(6)).toBe(false);
+    expect(row.frames).toBe(TURNTABLE.frames);
+    expect(h.service.stats.spun).toBe(1);
+    expect(h.service.stats.spinWaitMs).toHaveLength(1);
+    expect(drawn).toBeGreaterThan(0);
+    // Asked again, nothing is redrawn.
+    h.service.update(h.ask({ positions: [1, 4, 5, 6], focus: 5, spin: 5 }));
+    await h.settle();
+    expect(h.log.filter(line => line.startsWith("spin"))).toHaveLength(1);
+  });
+  test("a turntable already started finishes and is kept when the pointer moves on", async () => {
+    const h = harness();
+    h.service.update(h.ask({ positions: [1], selected: 1 }));
+    await h.settle();
+    h.service.update(h.ask({ positions: [1], selected: 1, spin: 1 }));
+    // The strip is being drawn; the pointer leaves.
+    h.service.update(h.ask({ positions: [1], selected: 1, spin: null }));
+    await h.settle();
+    expect(h.service.row("head/hairstyle")!.spins.has(1)).toBe(true);
+  });
+  test("a stored strip is used without drawing", async () => {
+    const log: string[] = [];
+    const port: ChoicePreviewPort = {
+      async sources(_r, _o, _k, positions) { return positions.map(position => ({ position, state: "ready" as const, source })); },
+      async subject() { return "subject"; },
+      async stored(key) { return `/stored/${key.slice(0, 4)}`; },
+      async render() { log.push("render"); return { url: "blob:x" }; },
+    };
+    const service = new ChoicePreviewService(port, () => {});
+    const ask: PreviewAsk = { option: "o", kind: "hair", request: DEFAULT_CHARACTER, body: "female", positions: [2], selected: null, focus: 2, spin: 2, ready: () => true, busy: false };
+    service.update(ask);
+    for (let i = 0; i < 10; i++) await new Promise(r => setTimeout(r, 0));
+    expect(log).toEqual([]);
+    expect(service.row("o")!.spins.get(2)).toStartWith("/stored/");
+    expect(service.stats.spinStored).toBe(1);
   });
 });
 

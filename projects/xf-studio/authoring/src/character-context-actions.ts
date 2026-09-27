@@ -496,14 +496,15 @@ export class CharacterContextActions {
   }
   /**
    * A shape row's choice pictures (choice-previews-design.md): asks for the pictures of `positions` (view order), the V's chosen one and
-   * the one under the pointer first, as preparing ahead makes each ready. Null when the row has no picture kind or previews are off.
+   * the one under the pointer first, as preparing ahead makes each ready, and `spin`'s turntable strip. Null when the row has no picture
+   * kind or previews are off.
    */
-  previews(option: string, positions: readonly number[], selected: number | null, focus: number | null = null): ChoicePreviewRow | null {
+  previews(option: string, positions: readonly number[], selected: number | null, focus: number | null = null, spin: number | null = null): ChoicePreviewRow | null {
     const kind = this.byId.get(option)?.preview;
     if (!kind || !this.ports.previews || !this.ready()) return null;
     this.previewService ??= new ChoicePreviewService(this.ports.previews, () => this.publish());
     const fetch = this.fetch?.option === option ? this.fetch : null;
-    return this.previewService.update({ option, kind, request: this.detailRequest(), body: this.state.bodyGender, positions, selected, focus,
+    return this.previewService.update({ option, kind, request: this.detailRequest(), body: this.state.bodyGender, positions, selected, focus, spin,
       ready: position => fetch?.states.get(position) === "r", busy: this.viewing !== null });
   }
   /** What choice previews have cost so far (measurement and diagnostics). */

@@ -30,8 +30,15 @@
  *   A heading is the shared expander (expander.ts, level "maker"). Makers with a single choice in the row share one "Other mods" heading,
  *   last, its choices sorted by label (cc-panel.ts `pooled`); each choice's mod is in its tooltip and description as everywhere.
  * - **Pictures of shape choices** (choice-previews-design.md): a row whose option has a picture kind (a hairstyle) shows its choices as
- *   preview tiles (components/choice-preview.ts) in a grid of three sizes (`previews.size`); a picture arriving fills its tile in place and
- *   never moves the layout. The label stays the tile's accessible name, tooltip and (except at size S) visible caption.
+ *   preview tiles (components/choice-preview.ts) in one of three layouts (`previews.layout`, §7.1): a **grid** of three sizes
+ *   (`previews.size`), a **list** of 32 px rows (thumbnail, label, and the source where its heading doesn't say it: "Other mods") or
+ *   **details** (the same small rows with the prepared state where it isn't ready yet, and the large picture of the choice under the pointer, else the focused one, else
+ *   the V's, which never scrolls away: beside the list from a 440 px row, a compact block kept under the row's top edge below that). A picture arriving fills its tile in place and never moves the layout; the label stays the tile's accessible name,
+ *   tooltip and (except at size S) visible caption. Switching layout keeps focus on the same choice and brings it into view.
+ * - **Turntables** (grid L and details): the picture under the pointer turns slowly after a dwell and turns by hand when dragged (a drag
+ *   never chooses). The list says which choice it wants turning (`onSpin`: the hovered tile in L; in details the one the large picture
+ *   shows), so only that choice's strip is drawn.
+ * - **PageUp and PageDown** move focus by a screenful, and **typing** a label's first letters moves to it (components/listbox-keys.ts).
  */
 import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTHER_MODS_GROUP, OTHER_MODS_INDEX } from "../../cc-panel";
 import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
@@ -40,9 +47,10 @@ import { expander, expanderLabel, setExpanded } from "../expander";
 import { viewState } from "../view-state";
 import { holdScroll, revealInView } from "../scroll-anchor";
 import { choiceItem } from "../components/choice-list";
-import { previewTile, type PreviewTile } from "../components/choice-preview";
+import { previewStage, previewTile, type PreviewStage, type PreviewTile } from "../components/choice-preview";
+import { pageStep, TypeAhead } from "../components/listbox-keys";
 import type { ChoicePreviewRow } from "../../choice-preview-service";
-import type { ChoiceSize } from "../../ui-preferences";
+import type { ChoiceLayout, ChoiceSize } from "../../ui-preferences";
 
 export type ChoiceListInput = {
   /** The option shown (its ID) and the search the list is limited to: another of either rebuilds the list. */
@@ -60,8 +68,8 @@ export type ChoiceListInput = {
   swatches?: CharacterSwatchState | null;
   /** The V is being prepared with the current choices: the chosen item shows it is on its way, in place. */
   preparing?: boolean;
-  /** Pictures of the choices (a shape row): the grid size and the pictures so far; null or absent for text or swatch choices. */
-  previews?: { readonly size: ChoiceSize; readonly row: ChoicePreviewRow | null } | null;
+  /** Pictures of the choices (a shape row): the layout, the grid size and the pictures so far; null or absent for text or swatch choices. */
+  previews?: { readonly size: ChoiceSize; readonly layout?: ChoiceLayout; readonly row: ChoicePreviewRow | null } | null;
   /** Who made each choice (the panel's `groups` and `modGroups`): shown grouped by maker; null or absent for a row with one maker. */
   groups?: { readonly list: readonly CcChoiceGroup[]; readonly modGroups: readonly number[];
     /** The option's groups shown together under "Other mods" (cc-panel.ts `CcPanel.pools` at the option's `pool`). */
@@ -100,6 +108,9 @@ const FETCH_SHOWN: Partial<Record<ChoiceFetch, { mark: string; words: string }>>
   n: { mark: "pending", words: "not prepared yet" }, q: { mark: "pending", words: "not prepared yet" },
   f: { mark: "fetching", words: "being prepared" }, x: { mark: "failed", words: "couldn't be prepared ahead; choosing it tries again" },
 };
+/** The prepared state as the details layout writes it beside a choice, in the Character legend's words; nothing once it is ready. */
+const FETCH_STATE: Partial<Record<ChoiceFetch, string>> = { n: "Not prepared yet", q: "Not prepared yet", f: "Preparing",
+  x: "Couldn't be prepared ahead" };
 
 /** What decides whether a list is grouped, and how: another of it rebuilds the list. */
 const groupedKey = (input: ChoiceListInput) => `${input.groups ? `g:${(input.groups.pooled ?? []).join(",")}` : ""}${input.previews ? "|pictures" : ""}`;
@@ -127,12 +138,29 @@ export class ChoiceList {
   private reveal: "none" | "unfold" | "scroll" = "none";
   /** The item that takes Tab focus (roving tabindex). */
   private active: HTMLButtonElement | null = null;
+  private readonly body: HTMLElement;
+  private readonly typeAhead = new TypeAhead();
+  /** The pictures' layout shown, the details layout's large picture, the choice under the pointer, and the turntable asked for last. */
+  private layout: ChoiceLayout | null = null;
+  private stage: PreviewStage | null = null;
+  private hovered: number | null = null;
+  private spinning: number | null = null;
+  private pictures: ChoiceListInput["previews"] = null;
+  private fetchStates: ReadonlyMap<number, ChoiceFetch> | null = null;
 
-  constructor(id: string, private readonly onChoose: (choice: CcPanelChoice) => void, private readonly onHint: (choice: CcPanelChoice) => void = () => {}) {
+  constructor(id: string, private readonly onChoose: (choice: CcPanelChoice) => void, private readonly onHint: (choice: CcPanelChoice) => void = () => {},
+    private readonly onSpin: (position: number | null) => void = () => {}) {
     this.list = h("div", { class: "choices cc-choices", id, role: "listbox" });
     this.status = h("p", { class: "note cc-choices-status", hidden: true });
-    this.element = h("div", { class: "cc-choice-list" }, this.list, this.status);
+    this.body = h("div", { class: "cc-choice-body" }, this.list);
+    this.element = h("div", { class: "cc-choice-list" }, this.body, this.status);
     this.list.addEventListener("keydown", event => this.key(event));
+    // The choice under the pointer (the large picture shows it; its turntable is wanted).
+    this.list.addEventListener("pointerover", event => {
+      const item = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".choice[data-position]");
+      if (item && this.list.contains(item)) this.hover(Number(item.dataset.position));
+    });
+    this.list.addEventListener("pointerleave", () => this.hover(null));
   }
 
   update(input: ChoiceListInput) {
@@ -140,7 +168,13 @@ export class ChoiceList {
     if (!same) this.rebuild(input);
     this.list.classList.toggle("grid", input.grid && !input.previews);
     this.list.classList.toggle("previews", !!input.previews);
-    if (input.previews) setAttr(this.list, "data-size", input.previews.size); else this.list.removeAttribute("data-size");
+    const layout = input.previews ? input.previews.layout ?? "grid" : null;
+    if (input.previews && layout === "grid") setAttr(this.list, "data-size", input.previews.size); else this.list.removeAttribute("data-size");
+    if (layout) setAttr(this.list, "data-layout", layout); else this.list.removeAttribute("data-layout");
+    setAttr(this.element, "data-layout", layout ?? undefined);
+    this.pictures = input.previews ?? null;
+    this.fetchStates = input.fetch ?? null;
+    if (layout !== this.layout) this.relayout(layout, input);
     setAttr(this.list, "aria-label", `${input.label} choices`);
     // Newly loaded choices are appended; an Off choice joins the Off ones at the front.
     for (const choice of input.choices.slice(this.items.length)) this.add(choice, input);
@@ -151,8 +185,9 @@ export class ChoiceList {
     for (const entry of this.items) {
       this.showFetch(entry, input.preparing && entry.choice.position === input.selected ? "f" : input.fetch?.get(entry.choice.position));
       this.paintSwatch(entry, input.swatches);
-      if (entry.tile) entry.tile.set(input.previews?.row?.urls.get(entry.choice.position) ?? null, entry.choice.off || !!input.previews?.row?.none.has(entry.choice.position));
+      this.paintTile(entry, input);
     }
+    this.paintStage();
     this.markChosen();
     this.revealChosen();
     const line = input.error ?? (input.loading && !this.items.length ? "Loading choices…" : !input.loading && !this.items.length ? "No choice matches." : "");
@@ -167,6 +202,63 @@ export class ChoiceList {
    * as needed, never while a remembered position is being restored). Choosing never moves the view (`holdScroll`), and nothing else
    * (a rebuild, a search, focus coming back) scrolls it.
    */
+  /** A tile's picture, its turntable (where the layout turns pictures) and its list and details text. */
+  private paintTile(entry: Entry, input: ChoiceListInput) {
+    if (!entry.tile) return;
+    const row = input.previews?.row, position = entry.choice.position;
+    entry.tile.set(row?.urls.get(position) ?? null, entry.choice.off || !!row?.none.has(position));
+    entry.tile.spinnable(!entry.choice.off && this.turns());
+    entry.tile.setSpin(row?.spins.get(position) ?? null, row?.frames ?? 1);
+    const state = this.layout === "details" ? FETCH_STATE[input.preparing && position === input.selected ? "f" : input.fetch?.get(position) ?? "r"] ?? "" : "";
+    // A choice's source only where its heading doesn't already say it (the pooled "Other mods"; a row with one maker has its source in the row).
+    const source = this.layout !== "grid" && entry.group?.index === OTHER_MODS_INDEX ? entry.from : "";
+    entry.tile.setMeta(source, entry.choice.off ? "" : state);
+  }
+  /** Whether pictures turn in this layout (the large grid and details). */
+  private turns() { return this.layout === "details" || (this.layout === "grid" && this.pictures?.size === "l"); }
+  /** Another layout: the large picture comes or goes, and a focused choice stays focused and in view. */
+  private relayout(layout: ChoiceLayout | null, input: ChoiceListInput) {
+    this.layout = layout;
+    if (layout === "details" && !this.stage) this.stage = previewStage({ glyph: "head" });
+    if (this.stage) {
+      if (layout === "details") { if (this.stage.element.parentNode !== this.body) this.body.insertBefore(this.stage.element, this.list); }
+      else this.stage.element.remove();
+    }
+    for (const entry of this.items) this.paintTile(entry, input);
+    const focused = this.focused() ? document.activeElement as HTMLElement : null;
+    if (focused) revealInView(focused);
+    this.wantSpin();
+  }
+  /** The choice the large picture shows: the one under the pointer, else the focused one, else the V's. */
+  private staged(): number | null {
+    const active = this.active?.dataset.position;
+    return this.hovered ?? (active !== undefined ? Number(active) : this.selected);
+  }
+  private paintStage() {
+    if (!this.stage || this.layout !== "details") return;
+    const position = this.staged(), entry = position === null ? undefined : this.items.find(item => item.choice.position === position);
+    const row = this.pictures?.row;
+    if (!entry) { this.stage.show({ label: "", source: "", url: null, none: false, spin: null, frames: 1, looking: false }); return; }
+    this.stage.show({ label: entry.choice.off ? "Off" : entry.choice.label, source: entry.from, url: row?.urls.get(entry.choice.position) ?? null,
+      none: entry.choice.off || !!row?.none.has(entry.choice.position), spin: entry.choice.off ? null : row?.spins.get(entry.choice.position) ?? null,
+      frames: row?.frames ?? 1, looking: this.hovered === entry.choice.position });
+  }
+  private hover(position: number | null) {
+    if (position === this.hovered) return;
+    this.hovered = position;
+    this.paintStage();
+    this.wantSpin();
+  }
+  /** Tell the row which choice's turntable is wanted now (only when it changes). */
+  private wantSpin() {
+    const want = !this.turns() ? null : this.layout === "details" ? this.staged() : this.hovered;
+    const entry = want === null ? undefined : this.items.find(item => item.choice.position === want);
+    const position = entry && !entry.choice.off ? want : null;
+    if (position === this.spinning) return;
+    this.spinning = position;
+    this.onSpin(position);
+  }
+
   /** Bring the V's choice into view at the next update where it is listed (the person just opened the row). */
   revealChosenNext() { this.reveal = "scroll"; }
   private revealChosen() {
@@ -325,7 +417,7 @@ export class ChoiceList {
     // The choice shows as chosen at once, before anything is prepared; the next update puts back the V's own if the change was refused.
     // The person's choice never moves their view, whatever it rebuilds or shows (scroll-anchor.ts `holdScroll`).
     item.addEventListener("click", () => { holdScroll(this.list); this.rove(item); this.select(choice.position); this.onChoose(choice); });
-    item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });
+    item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); if (this.layout === "details") { this.paintStage(); this.wantSpin(); } });
     item.addEventListener("pointerenter", () => this.onHint(choice));
     const group = this.groups && !choice.off ? this.groupFor(choiceGroup(choice, input.groups!), input) : null;
     const entry: Entry = { choice, element: item, from, fetch: "", swatch, look: "", group, tile };
@@ -401,9 +493,21 @@ export class ChoiceList {
       if (there >= 0 && there < block.length) return items.indexOf(block[there]!);
       return step > 0 ? items.indexOf(block[block.length - 1]!) + 1 : items.indexOf(block[0]!) - 1;
     };
+    // Type-ahead goes by the choices' labels (headings are skipped); PageUp and PageDown by a screenful of the block's rows.
+    if (this.typeAhead.accepts(event)) {
+      event.preventDefault();
+      const choices = items.filter(item => !item.classList.contains("expander"));
+      const found = this.typeAhead.find(event.key, choices.map(item => item.getAttribute("aria-label") ?? ""), choices.indexOf(current));
+      if (found < 0) return;
+      this.rove(choices[found]!);
+      choices[found]!.focus();
+      return;
+    }
+    const page = event.key === "PageDown" || event.key === "PageUp" ? (event.key === "PageDown" ? 1 : -1) * pageStep(current, head ? 1 : columns) : 0;
     const next = event.key === "ArrowRight" ? at + 1 : event.key === "ArrowLeft" ? at - 1 : event.key === "ArrowDown" ? vertical(columns)
-      : event.key === "ArrowUp" ? vertical(-columns) : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : null;
+      : event.key === "ArrowUp" ? vertical(-columns) : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : page ? at + page : null;
     if (next === null) return;
+
     event.preventDefault();
     const target = items[Math.max(0, Math.min(items.length - 1, next))]!;
     this.rove(target);
