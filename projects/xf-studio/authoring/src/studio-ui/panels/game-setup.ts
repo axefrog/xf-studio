@@ -128,6 +128,7 @@ export function gameSetupForm(rt: StudioRuntime) {
     helpTip("Your own WolvenKit", "Leave this empty and XF Studio sets WolvenKit up for you (it asks before downloading).")), wolvenKit);
   const plateHead = h("select", { class: "field" });
   const plateHeadLabel = h("span", { class: "control-label" });
+  const plateHeadTip = helpTip("the head used for the eye plate", "Build cuts the eye plate from this head. Choose the unmodified head only if a head mod stops Build.");
   plateHead.addEventListener("change", () => void save({ eyePlateHead: plateHead.value as LocalSetupFields["eyePlateHead"] }));
 
   const findAgain = button({ label: "Find my game and mod manager again", icon: "search", small: true, variant: "quiet", onClick: () => void detect(true) });
@@ -139,7 +140,7 @@ export function gameSetupForm(rt: StudioRuntime) {
   const mo2Section = h("div", { class: "setup-mo2" }, mo2.element, profileField), directSection = h("div", { class: "setup-direct" }, direct.element);
   const gameElement = h("div", { class: "setup-section setup-game" },
     h("div", { class: "row wrap gap-s" }, restore), route.element, game.element, mo2Section, directSection,
-    h("label", { class: "control" }, plateHeadLabel, plateHead), h("div", { class: "row wrap gap-s" }, findAgain));
+    h("div", { class: "control" }, h("div", { class: "control-line" }, plateHeadLabel, plateHeadTip), plateHead), h("div", { class: "row wrap gap-s" }, findAgain));
   const toolsElement = h("div", { class: "setup-section setup-tools" }, wolvenKitField);
   const saves = savesFolderField(rt, save);
   // Finding is read only and quick: done once when the form is first shown, and again on request.

@@ -44,14 +44,14 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
   desktop?.render();
   // Settings, where everything about this computer is chosen (UI-109).
   const settings = h("li", {}, h("button", { class: "link-button help-settings", type: "button", text: "Settings", onclick: () => rt.settings.open() }),
-    h("small", { class: "muted", text: "Your game and mod manager, where your saves are, WolvenKit, appearance and diagnostics." }));
+    h("small", { class: "muted", text: "Your game, mod manager, saves, tools, appearance and diagnostics." }));
   const links = h("ul", { class: "help-links" }, settings, about, desktop?.element ?? null, h("li", {},
     h("button", { class: "link-button", type: "button", text: "Report a problem…", onclick: () => { openReportDialog(rt, null); } }),
     h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), HELP_LINKS.map(item => h("li", {},
     h("button", { class: "link-button", type: "button", text: item.label, onclick: () => void open(item.link) }),
     h("small", { class: "muted", text: item.detail }))));
   const toursSection = section("Guided tours", tours), topicsSection = section("Questions and answers", topics);
-  const referenceSection = section("Keyboard & mouse", h("p", { class: "note muted", text: `Generated from the Studio's own bindings. ${shortcutLabel("shell.shortcuts")} opens the same list as a sheet.` }), reference);
+  const referenceSection = section("Keyboard & mouse", h("p", { class: "note muted", text: `${shortcutLabel("shell.shortcuts")} opens this list anywhere.` }), reference);
   const empty = emptyState("Nothing matches", "Try fewer or different words, or browse the sections below once the search is cleared.",
     button({ label: "Clear search", variant: "quiet", onClick: () => { search.value = ""; render(); search.focus(); } }));
   const element = h("div", { class: "panel-content help-panel" },

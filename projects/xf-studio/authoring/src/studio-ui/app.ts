@@ -325,7 +325,7 @@ function viewPreferences(port: Port, feedback: Feedback) {
     hints, setHints, research, setResearch, openReference,
     items(): MenuItem[] {
       return [{ kind: "heading", label: "Viewports", detail: "Stored with your workspace" },
-        { kind: "action", label: "Show input hints", icon: "keyboard", checked: hints(), hint: "Corner strip and target tooltips that follow the pointer and held keys",
+        { kind: "action", label: "Show input hints", icon: "keyboard", checked: hints(), hint: "Hints in the 3D view and UV map that follow the pointer and the keys you hold",
           run: () => setHints(!hints()) },
         { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference },
         { kind: "separator" },
@@ -363,7 +363,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const helpButton = button({ label: "Help", icon: "help", iconOnly: true, variant: "ghost", title: `Help: tours, answers and shortcuts (${shortcutLabel("shell.help")})`, onClick: openHelp });
   // One place for everything configured (UI-109): the game and mod manager, the saves folder, WolvenKit, appearance and diagnostics.
   const settingsButton = button({ label: "Settings", icon: "settings", iconOnly: true, variant: "ghost",
-    title: "Settings: your game and mod manager, saves folder, WolvenKit and appearance", onClick: () => rt.settings.open() });
+    title: "Settings: game, mod manager, saves, tools and appearance", onClick: () => rt.settings.open() });
   for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton],
     ["header.settings", settingsButton]] as const)
     rt.anchors.register(anchor, control);
