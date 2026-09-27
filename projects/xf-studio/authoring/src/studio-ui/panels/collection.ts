@@ -269,7 +269,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const setupLine = h("p", { class: "setup-status", role: "status" });
   const setup = section({ title: "Game & tools", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game and Settings › Tools." },
     setupLine, h("div", { class: "row wrap gap-s" }, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
-  const check = button({ label: "Check mod export", icon: "check", onClick: () => void runPackage("check") });
+  const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // The progress line keeps its place while nothing runs, so starting or finishing work never moves the panel (UI-90).
   const progressText = h("p", { class: "progress-text" });
@@ -349,7 +349,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "panel-content" },
     section({ title: "Mod package", help: [`Builds your own copy of your XF mods from your current draft, unsaved edits included.`,
       `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`] },
-      mods, h("div", { class: "row wrap gap-s" }, check, build), progress),
+      // Check, then the primary Build last; the progress takes the rest of the same row (one line, reserved), so it adds no band.
+      mods, h("div", { class: "row gap-s package-actions" }, check, build, progress)),
     result,
     setup,
     section({ title: "What can be packaged", help: ["Check decides what is built; this list is a guide.",
@@ -366,7 +367,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
-      setText(progressText, working ? `${library.progress!.message} It can't be cancelled once started.` : "");
+      setText(progressText, working ? library.progress!.message : "");
+      progressText.title = progressText.textContent ?? "";
       const lastError = files.last && !files.last.ok && (files.last.kind === "package.check" || files.last.kind === "package.build") ? files.last : undefined;
       const signature = JSON.stringify([files.package, lastError, library.draft?.presets.map(p => [p.id, p.name])]);
       if (signature !== resultSignature) {

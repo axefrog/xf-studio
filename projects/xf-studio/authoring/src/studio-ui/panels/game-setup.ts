@@ -174,7 +174,7 @@ export function gameSetupForm(rt: StudioRuntime) {
       if (key !== profileKey) {
         profileKey = key;
         profile.replaceChildren(...(current ? [] : [h("option", { value: "", text: "Choose a profile" })]),
-          ...choices.map(name => h("option", { value: name, text: name === instance?.selectedProfile ? `${name} (last used)` : name })));
+          ...choices.map(name => h("option", { value: name, text: name === instance?.selectedProfile ? `${name} · last used` : name })));
       }
       if (document.activeElement !== profile) profile.value = current ?? "";
       profile.closest<HTMLElement>(".select-wrap")!.hidden = !profiles.length;

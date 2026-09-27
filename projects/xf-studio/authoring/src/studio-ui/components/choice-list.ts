@@ -29,6 +29,8 @@ export type ChoiceListOptions<T extends string> = {
   help?: HelpText; showLabel?: boolean;
   /** Keep the note line from the start (a passing state or the list's reason comes and goes there). */
   reserveNote?: boolean;
+  /** The list's unavailable reason is a wait or information (muted), not a problem (warning). */
+  quietReason?: boolean;
   options?: readonly ChoiceOption<T>[];
 };
 
@@ -52,7 +54,7 @@ export class ChoiceList<T extends string> {
     const labelId = uid("choices");
     this.list = h("div", { class: `choices ${options.layout ?? "chips"}`, role: "listbox",
       "aria-label": options.showLabel === false ? options.label : undefined, "aria-labelledby": options.showLabel === false ? undefined : labelId });
-    this.note = new NoteLine(options.reserveNote);
+    this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.element = h("div", { class: "control choice-list" },
       options.showLabel === false ? null : h("div", { class: "control-line" }, h("span", { class: "control-label", id: labelId, text: options.label }),
         options.help !== undefined ? helpTip(options.label, options.help) : null),

@@ -207,7 +207,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 .control-note { color: var(--warning); }
 .control-note.info { color: var(--text-muted); }
 /* A control's note line keeps its place once it has one (UI-90): an empty note keeps its height. */
-.control-note:not([hidden]) { display: block; min-height: 1.35em; }
+/* A note line is one 16 px line: longer text is clamped (its whole text is the line's tooltip), so a note appearing never moves anything. */
+.control-note:not([hidden]) { display: block; min-height: 16px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A folder's refusal answers what the person typed, inside the open text box: it wraps in full. */
+.folder-note:not([hidden]) { white-space: normal; line-height: 1.35; }
 /* Hidden but in place; the empty-state box (`.empty`) shares the class name, so its padding and border are taken off (UI-115). */
 .control-note.empty { visibility: hidden; padding: 0; border: 0; }
 /* A note whose text changes length as it counts keeps room for its longer form. */
@@ -307,7 +310,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .folder-choice:hover { background: var(--bg-hover); color: var(--text); }
 .folder-choice[aria-pressed="true"] { border-color: var(--signal); color: var(--text); background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
 .folder-choice[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
-.folder-choice-path { overflow-wrap: anywhere; }
+.folder-choice-path { overflow-wrap: break-word; }
 .folder-choice-source { font-size: var(--fs-xs); color: var(--text-muted); }
 /* Tree view (components/tree-view.ts): fixed-height items positioned in a spacer, so only the rows in view are in the page. */
 .tree-view { position: relative; overflow: auto; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line); container-type: inline-size; }
@@ -598,10 +601,12 @@ span.category { border-color: transparent; background: transparent; padding-left
 .progress-fill { display: block; height: 100%; width: 0; background: var(--signal); transition: width var(--dur) var(--ease); }
 .progress.indeterminate .progress-fill { display: none; }
 @keyframes sweep { from { left: -35%; } to { left: 100%; } }
-.package-progress { display: flex; flex-direction: column; gap: var(--sp-3); min-height: calc(3px + var(--sp-3) + 2.8em); }
+.package-actions .btn { flex: none; }
+.package-progress { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 /* Idle, the progress keeps its place (UI-90): starting or finishing a Check or Build never moves the panel. */
 .package-progress.idle { visibility: hidden; }
 .progress-text { margin: 0; font-size: var(--fs-sm); }
+.package-progress .progress-text { font-size: var(--fs-xs); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* After Build: add to the mod manager, show the folder, and what happened (UI-82). */
 .install-row { display: grid; gap: var(--sp-3); }
 .install-line { margin: 0; min-height: 1.4em; color: var(--text-muted); }
@@ -657,7 +662,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-history { display: inline-flex; gap: var(--sp-1); margin-left: auto; }
 /* One line that is always there, so what follows never moves. */
 /* One line of fixed height: the text is clamped, and actions not offered keep their place (UI-68). */
-.cc-status { margin: 0; height: var(--control-h-sm); font-size: var(--fs-sm); color: var(--text-muted); display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+/* The status line is a 24 px row (its actions keep their place) whose text sits mid-row: it gives back 4 px of the gap below, so the next block reads 16 px away. */
+.cc-status { margin: 0 0 calc(-1 * var(--sp-2)); height: var(--control-h-sm); font-size: var(--fs-sm); color: var(--text-muted); display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .cc-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-status.busy::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--signal); animation: pulse 1s steps(2) infinite; }
 .cc-status.warning .cc-status-text { color: var(--warning); }
@@ -766,8 +772,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-choice[data-fetch="fetching"]::after, .cc-fetch-mark[data-fetch="fetching"] { border-color: var(--signal); border-top-color: transparent; animation: cc-fetch-turn .9s linear infinite; }
 .cc-choice[data-fetch="failed"]::after { border-color: var(--warning); background: var(--warning); }
 @keyframes cc-fetch-turn { to { rotate: 360deg; } }
-.cc-legend { margin: var(--sp-2) 0 var(--sp-3); min-height: calc(var(--fs-xs) * 1.42 * 2); font-size: var(--fs-xs); color: var(--text-muted); }
-.cc-legend-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cc-legend { margin: var(--sp-2) 0 0; min-height: calc(var(--fs-xs) * 1.42); font-size: var(--fs-xs); color: var(--text-muted); }
+.cc-legend-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-prepared { align-items: center; }
 .cc-prepared-text { font-size: var(--fs-xs); color: var(--text-muted); }
 @media (prefers-reduced-motion: reduce) { .cc-status.busy::before { animation: none; }

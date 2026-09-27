@@ -182,8 +182,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         exportLine.dataset.finish = key;
         const earlier = !!status && !status.exportable && status.blockedBy === "layer" && descriptor?.exportAdapter === "experimental";
         const byPreset = !!status && !status.exportable && status.blockedBy === "preset";
-        exportLine.replaceChildren(!status?.exportable ? badge(earlier ? "Earlier preview model" : byPreset ? "Left out of this preset" : "Preview only", "warning")
-          : status.experimental ? badge("Experimental", "warning") : badge("Can be built", "success"),
+        // The finish's group heading already says Can be built, Experimental or Preview only: a badge shows only a state that differs from it.
+        exportLine.replaceChildren(...(earlier || byPreset ? [badge(earlier ? "Earlier preview model" : "Left out of this preset", "warning")] : []),
           h("span", { class: "small", text: status ? (status.exportable ? status.note : status.reason) : descriptor?.exportNote ?? "" }),
           ...(earlier ? [useGame] : []), openPackage);
       }

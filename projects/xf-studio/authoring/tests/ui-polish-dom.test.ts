@@ -262,8 +262,8 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     expect(fields.some(saved => saved.mo2Root === "D:\\MO2")).toBe(true);
     expect(choices(0)[0]!.getAttribute("aria-pressed")).toBe("true");
     expect(text(choices(1)[0]!.querySelector(".folder-choice-source")!)).toBe("Cyberpunk MO2");
-    const profile = game.querySelectorAll("select").find(select => select.options.some(option => text(option) === "Main (last used)"))!;
-    expect(profile.options.map(option => text(option))).toEqual(["Choose a profile", "Main (last used)", "Testing"]);
+    const profile = game.querySelectorAll("select").find(select => select.options.some(option => text(option) === "Main · last used"))!;
+    expect(profile.options.map(option => text(option))).toEqual(["Choose a profile", "Main · last used", "Testing"]);
     // No native picker on this host: Choose another folder… opens the text box, which saves what is typed.
     buttonNamed(folders[0]!, "Choose another folder…")!.click();
     await settle(); h.paint();

@@ -61,10 +61,11 @@ const LEGEND = "Not prepared yet";
 const LEGEND_FETCHING = "Preparing";
 /** What the marks mean, in the legend's help tip. */
 const LEGEND_HELP = "A choice that isn't prepared yet is read from your game files when you choose it, which takes a few seconds the first time. Choices are prepared in the background, the ones in view first.";
+/** One line each (the legend's line never grows); every choice still works either way. */
 const STOPPED: Record<"time" | "disk" | "setup", string> = {
-  time: "Preparing ahead has paused for this row. Every choice still works.",
-  disk: "Preparing ahead has paused (this session's disk space is used). Every choice still works.",
-  setup: "Choices are prepared for the 3D view once WolvenKit is set up.",
+  time: "Preparing ahead paused for this row.",
+  disk: "Preparing ahead paused: this session's disk space is used.",
+  setup: "Choices are prepared once WolvenKit is set up.",
 };
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
 /** The part of the page a list scrolls in (its nearest scrolling ancestor, clipped to the window), or null without layout. */

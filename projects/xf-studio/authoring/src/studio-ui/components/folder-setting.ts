@@ -129,7 +129,7 @@ export class FolderSetting {
       this.choiceKey = key;
       this.choiceButtons = listed.map(choice => {
         const control = h("button", { class: "folder-choice", type: "button", "aria-pressed": "false" },
-          h("span", { class: "folder-choice-path", text: choice.path }), choice.source ? h("span", { class: "folder-choice-source", text: choice.source }) : null);
+          h("span", { class: "folder-choice-path" }, ...pathParts(choice.path)), choice.source ? h("span", { class: "folder-choice-source", text: choice.source }) : null);
         // The one in use does nothing; an unavailable one answers with its reason tip (reason-tip.ts).
         control.addEventListener("click", () => {
           if (control.getAttribute("aria-disabled") !== "true" && control.getAttribute("aria-pressed") !== "true") void this.run(() => this.options.onSelect!(choice.path));
@@ -156,6 +156,8 @@ export class FolderSetting {
     this.placeNote();
   }
 }
+/** A path with a line-break opportunity after each separator, so a long folder wraps between folders, not inside a name. */
+const pathParts = (path: string) => path.split(/(?<=[\\/])/).flatMap((part, index) => index ? [h("wbr"), part] : [part]);
 /** The same folder, whatever the case or a trailing slash. */
 const sameFolder = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b &&
   a.replace(/[\\/]+$/, "").toLowerCase() === b.replace(/[\\/]+$/, "").toLowerCase();

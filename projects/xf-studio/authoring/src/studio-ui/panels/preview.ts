@@ -118,9 +118,9 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
       helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
     intensity.element, cone.element, creatorExposure.element, creatorShadows.element, h("div", { class: "row" }, resetCalibration));
-  // The line under the slider (reserved, UI-90): only a framing limit or why the camera can't move yet.
-  const fovNote = h("small", { class: "control-note info empty" });
-  const fovLine = (text: string) => { setText(fovNote, text); fovNote.classList.toggle("empty", !text); };
+  // A framing limit is said once, as a notice (no line is reserved under the slider for something this rare; the feedback shows a
+  // repeated notice once while it is on screen, so a drag at the limit doesn't flood it).
+  const fovLine = (text: string) => { if (text) rt.feedback.toast("info", "Camera", text); };
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`, help: FOV_HELP,
     transaction: {
       edit: value => {
@@ -144,9 +144,9 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   // Studio stage: named setups, then each control on its own (studio-lighting.ts). Exposure is in stops, on a log scale.
   // The setups arrive with the preview's read model (StudioApplication.previewState().studioSetups).
   let setupButtons: { id: StudioSetupId; button: HTMLButtonElement }[] = [];
-  const setupReadout = h("output", { class: "readout" });
   const setupRow = h("div", { class: "chip-row", role: "group", "aria-label": "Studio lighting setup" });
-  const setups = h("div", { class: "control" }, h("span", { class: "control-label" }, h("span", { text: "Setup" }), setupReadout), setupRow);
+  // The pressed chip is the setup in use (none pressed once a light is adjusted); no readout repeats it.
+  const setups = h("div", { class: "control" }, h("span", { class: "control-label" }, h("span", { text: "Setup" })), setupRow);
   const studioExposureRange = rt.range("preview.setExposure", "value"), stops = (value: number) => Math.log2(value);
   const exposure = new Slider({ label: "Exposure", min: stops(studioExposureRange.min), max: stops(studioExposureRange.max), step: .05,
     format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
@@ -186,7 +186,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     h("span", { class: "control-label", text: scatterEntry.label }), helpTip(scatterEntry.label, scatterEntry.reason)), scatter.element) : null;
   const element = h("div", { class: "panel-content" },
     section({ title: "Camera", help: ["Camera and light are saved with your workspace; they never change your looks or your mod.",
-      "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
+      "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section({ title: "Light", help: LIGHT_HELP }, preset.element, presetNote, studioControls),
     diagnostics,
     section("Display", toolToggles, normals.element, scatterControl, h("div", { class: "research-only" }, optics.element, opticsNote)));
@@ -221,7 +221,6 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
         control.setAttribute("aria-pressed", String(id === matched));
         applyCapability(control, ready ? port.authoring.capability({ kind: "preview.applyStudioSetup", setup: id }) : { available: false, reason: loading.reason });
       }
-      setText(setupReadout, !preview ? "" : offered?.setups.find(entry => entry.id === matched)?.label ?? "Adjusted");
       applyCapability(resetStudio, ready ? port.authoring.capability({ kind: "preview.resetStudioLighting" }) : { available: false, reason: loading.reason });
       preset.update(preview?.lightingPreset, value => ready ? port.authoring.capability({ kind: "preview.setLightingPreset", preset: value }) : { available: false, reason: loading.reason });
       setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
@@ -236,8 +235,6 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       creatorShadows.update(creator?.shadows ?? true, studioOnly({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
       applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       // The panel's loading reason is said once, in the line that is always there (UI-90).
-      if (!ready) fovLine(loading.reason);
-      else if (fovNote.textContent === loading.reason) fovLine("");
       // Research tools (UI-85): the calibration and the display studies show only when asked for.
       const research = !!frame.preferences?.researchTools;
       diagnostics.hidden = !research;
@@ -268,7 +265,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const STILL = "still", POSE = "pose";
   // One choice per source (the list can change), all shown, in the Character panel's choice look (ChoiceList). The chosen one moves at
   // once (the chosen idle is optimistic while its clip loads); the loading line keeps its place under them.
-  const source = new ChoiceList<string>({ label: "Body", reserveNote: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
+  const source = new ChoiceList<string>({ label: "Body", reserveNote: true, quietReason: true, options: [{ value: STILL, label: "Still" }], onSelect: value => {
     if (value === POSE) return;
     if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
     rt.dispatch({ kind: "motion.setIdleClip", clip: value });
@@ -284,7 +281,8 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
   const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value),
     help: "Turn off either to hold that part still. The idle keeps time, so it carries on smoothly when you turn it back on." });
-  const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, reserveNote: true,
+  // The blink's reasons (the idle blinks on its own, still loading) are information, so they keep the muted tone.
+  const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, reserveNote: true, quietReason: true,
     format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
     transaction: { edit: value => { const action = { kind: "motion.setBlink" as const, value }; rt.report(action.kind, port.authoring.dispatch(action)); } } });
   const play = button({ label: "Play blink", icon: "play", small: true, onClick: () => {
@@ -295,7 +293,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
   // Hair physics: the scene's dangle simulation, one setting per scene (hair-physics-plan.md §3.6); off until it is calibrated in game.
-  const physics = new Toggle({ label: "Hair physics", reserveNote: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
+  const physics = new Toggle({ label: "Hair physics", reserveNote: true, quietReason: true, onChange: value => rt.dispatch({ kind: "motion.setPhysics", enabled: value }),
     help: "Hair that has physics in the game swings and hangs with gravity here too, worked out from the hairstyle's own files." });
   const idleSection = section({ title: "Game idle", help: IDLE_HELP }, source.element, h("div", { class: "row" }, pause), head.element, face.element);
   const blinkSection = section({ title: "Blink", help: blinkHelp(undefined) }, blinkControls, blinkNote);

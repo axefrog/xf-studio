@@ -112,14 +112,20 @@ const MOUNTS: Record<string, Mount> = {
     const body: ChoiceList<string> = new ChoiceList<string>({ label: "Body", reserveNote: true, onSelect: value => body.update(value, undefined, { note: value === "still" ? "" : "Loading that idle; the previous one plays until it's ready." }),
       options: [["still", "Still"], ["closeup", "Creator close-up"], ["eyes", "Creator close-up eyes section"], ["full", "Creator full body"], ["inventory", "Inventory"],
         ["nails", "Creator nails"], ["gender", "Gender selection"]].map(([value, label]) => ({ value: value!, label: label! })) });
-    body.update("closeup");
+    // One choice unavailable, with its reason (focus or hover it for the reason tip).
+    const unprepared = (value: string) => value === "nails" ? { available: false, reason: "That idle isn't prepared on this computer." } : { available: true };
+    body.update("closeup", unprepared);
+    // The whole list unavailable: one reason, on its reserved line.
+    const waiting: ChoiceList<string> = new ChoiceList<string>({ label: "Body (before the 3D preview is ready)", reserveNote: true, quietReason: true, onSelect: () => {},
+      options: [{ value: "still", label: "Still" }, { value: "closeup", label: "Creator close-up" }, { value: "full", label: "Creator full body" }] });
+    waiting.update("still", undefined, { disabled: true, reason: "Your V's motion appears once the 3D preview is ready." });
     const eyes: ChoiceList<string> = new ChoiceList<string>({ label: "Eye shape in the 3D view", layout: "tiles", onSelect: value => eyes.update(value),
       options: Array.from({ length: 22 }, (_, k) => ({ value: String(k), label: String(k + 1), name: `Eye shape ${k + 1}` })) });
     eyes.update("6");
     const head: ChoiceList<string> = new ChoiceList<string>({ label: "Head used for the eye plate", layout: "rows", onSelect: value => head.update(value),
       options: [{ value: "installed", label: "The head your game loads (recommended)" }, { value: "base-game", label: "The unmodified game head" }] });
     head.update("installed");
-    return h("div", { style: "max-width:420px" }, stack({ gap: "loose" }, body.element, eyes.element, head.element)); },
+    return h("div", { style: "max-width:420px" }, stack({ gap: "loose" }, body.element, waiting.element, eyes.element, head.element)); },
   "lib-folder-setting": () => {
     let chosen: string | null = null;
     const folder: FolderSetting = new FolderSetting({ label: "Saves folder", help: "Where the game keeps your saves.", placeholder: "e.g. %USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077",

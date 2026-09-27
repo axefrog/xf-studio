@@ -523,7 +523,7 @@ Phase 2 applied §3–§6a with the component library's help tips, sections, pro
 | Pigment & edge, Shape, Warp | Done |
 | Colour & finish, Layers | Done (finish descriptions and export notes shortened in the engine's finish table) |
 | Character | Done (the V's details list, two button rows, legend tip) |
-| Library, Mod package, History | Done (L3, L4: the buttons already share a row and wrap only in a narrow panel; L8 not done) |
+| Library, Mod package, History | Done. L3: Check and the primary Build mod files… share one row at every width down to 300 px, and the progress takes the rest of that row (one line, reserved), so there is no band before the result. L8 not done |
 | Shell, Settings, Help, Expression, Save Explorer | Done (Save Explorer's tree keys note kept: the tree has no heading to hold a tip) |
 | Toasts and reasons (§3.20) | Done |
 | Coming soon placeholders (§6) | Done |
@@ -537,4 +537,6 @@ Phase 2 applied §3–§6a with the component library's help tips, sections, pro
 - Planned entries in menus carry a neutral **Soon** tag and their "Coming soon: …" in the muted colour (menu `tag`, `quietReason`), never the warning colour.
 - Creator choice rows show every choice: "Show N more" is gone, the row loads its pages one after another, and when a row opens the V's choice is scrolled into view and the maker group holding it opens. Measured on the reference setup (the Hairstyle row, 283 choices): every page loaded in about 0.3–0.4 s, and reopening the row (every choice rendered from the cached pages) took 26 ms to the next painted frame, so no virtualisation is needed.
 
-**Still open:** L6 (studio slider sub-groups), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and Expression › Start from (§6a).
+**Gate review fixes (UI visual QA checklist):** the Field of view note line is gone (a framing limit is a notice); the Setup readout that repeated the pressed chip is gone; the Character legend is one line and the status line gives back 4 px, so both gaps read 16 px; every note line is one 16 px line, clamped with its text in the tooltip, so a reason appearing never moves the next section (measured: Blink's heading stays put when the Hair physics reason shows); waits and information (Hair physics, Body before the preview, Blink) use the muted note tone (`quietReason` on Toggle, Slider and ChoiceList); the Colour & finish export line drops the badge that repeated the finish's group; the Poses module line is one sentence; the MO2 profile reads "2025 (again) · last used"; a found folder's path wraps between folders.
+
+**Still open:** L6 (studio slider sub-groups, now UI-126), L8 (the setup line beside Build while it blocks), L10 (the 3D view overlay's UV-line flag), L11 (a focusable disabled state for Toggle and SelectField), L13 (the blink's "prepare it again"), and Expression › Start from (§6a).

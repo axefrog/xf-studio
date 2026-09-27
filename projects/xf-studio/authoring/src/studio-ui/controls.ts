@@ -20,7 +20,8 @@ export type Transaction<T> = { begin?(): void; edit(value: T): void; commit?(): 
 export class NoteLine {
   readonly element = h("small", { class: "control-note" });
   private reserved: boolean;
-  constructor(reserve = false) { this.reserved = reserve; this.element.hidden = !reserve; }
+  /** `quiet`: a reason that is a wait or information, not a problem, keeps the muted note tone instead of the warning tone. */
+  constructor(reserve = false, private readonly quiet = false) { this.reserved = reserve; this.element.hidden = !reserve; }
   update(control: HTMLElement, disabled: boolean, reason: string | undefined, note: string | undefined) {
     if (note) this.reserved = true;
     const why = disabled && reason ? reason : undefined;
@@ -28,7 +29,9 @@ export class NoteLine {
     setText(this.element, text);
     this.element.hidden = !this.reserved;
     this.element.classList.toggle("empty", !text);
-    this.element.classList.toggle("info", !(why && this.reserved));
+    this.element.classList.toggle("info", this.quiet || !(why && this.reserved));
+    // One line: a longer note is clamped (studio.css), its whole text in the tooltip.
+    this.element.title = text;
     setAttr(control, "aria-description", why);
   }
 }
@@ -87,11 +90,13 @@ export class Slider {
   constructor(private options: { label: string; min: number; max: number; step: number; format(value: number): string;
     transaction: Transaction<number>; help?: string; id?: string;
     /** Keep a note line from the start: its note comes and goes (a limit that applies only sometimes). */
-    reserveNote?: boolean }) {
+    reserveNote?: boolean;
+    /** Its unavailable reason is a wait or information (muted), not a problem (warning). */
+    quietReason?: boolean }) {
     const id = options.id ?? uid("slider");
     this.input = h("input", { id, class: "slider", type: "range", min: String(options.min), max: String(options.max), step: String(options.step) });
     this.output = h("output", { class: "readout", for: id });
-    this.note = new NoteLine(options.reserveNote);
+    this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.element = h("div", { class: "control" },
       h("label", { class: "control-label", for: id }, h("span", { class: "control-label-text" }, h("span", { text: options.label }),
         options.help ? helpTip(options.label, options.help) : null), this.output),
@@ -116,10 +121,12 @@ export class Toggle {
   private readonly note: NoteLine;
   /** The help tip beside the label, when the toggle was given `help`. */
   private readonly tip: HTMLButtonElement | null;
-  constructor(private readonly options: { label: string; help?: HelpText; onChange(checked: boolean): void; id?: string; reserveNote?: boolean }) {
+  constructor(private readonly options: { label: string; help?: HelpText; onChange(checked: boolean): void; id?: string; reserveNote?: boolean;
+    /** Its unavailable reason is a wait or information (muted), not a problem (warning). */
+    quietReason?: boolean }) {
     const id = options.id ?? uid("toggle");
     this.input = h("input", { id, type: "checkbox", role: "switch", class: "switch" });
-    this.note = new NoteLine(options.reserveNote);
+    this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.tip = options.help !== undefined ? helpTip(options.label, options.help) : null;
     // The tip sits outside the label, so pressing it never flips the switch.
     this.element = h("div", { class: "control toggle-row" },
