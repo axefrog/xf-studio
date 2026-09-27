@@ -534,7 +534,7 @@ Subsystems already covered by a deep review, with the focus a later review shoul
 
 - **Live preview turn** (claude/choice-previews phase 2): worker `live`/`live-frame`/`live-stop`, `PreviewRenderer.load`/`present`/`release`, `ChoicePreviewPort.live`, `PreviewLive` and the page's `bitmaprenderer` canvas in `components/choice-preview.ts`. Review focus: supersession (fixed as PREV-151), per-row wishes for the worker's one slot (fixed as PREV-152), GL state shared with queued jobs.
 - **Character contact shadows** (claude/fix-plate-seam, PREV-148): `platform/scene/contact-shadow.ts`, the shared `contactShadowUniforms` in `skin-material.ts`, and the `maxTextures` override.
-- **Easing and the expression intensity scrub** (claude/expression-interpolator): `src/easing.ts`, `ScrubSlider`, `expression.intensity`, the `easing.set` preference.
+- **Easing and the expression intensity scrub** (claude/expression-interpolator): `src/platform/api/easing.ts`, `ScrubSlider`, `expression.intensity`, the `easing.set` preference.
 - **DirectionDial and splitter components** (claude/lighting-setups, claude/saved-layouts).
 - **Natural expression samples**: `src/expression-samples.ts`.
 - **Remembered view state** (claude/ui-state-persistence, UI-133): `src/studio-ui/view-state.ts` (the bound store: session memory until the shell binds the preference-backed one at mount; `RememberedSet`) and `src/studio-ui/scroll-anchor.ts` (anchor capture and restore over `data-view-key`, `ScrollMemory` with MutationObserver/ResizeObserver retries, `flushScrollMemories` on pagehide in the capture phase). A deep review should look at:
