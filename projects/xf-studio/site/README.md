@@ -70,7 +70,7 @@ A strict meta Content-Security-Policy allows only same-origin styles, scripts an
 
 ## Content policy
 
-The site may publish only `.html`, `.css`, `.js`, `.svg`, `.xml` and `.txt` (`ALLOWED_EXTENSIONS`), within the byte budgets in `site.config.json`. The self-contained style guide has a separate 512 KiB file budget and intentionally uses inline CSS, live demo script and specimen styles. The public site's own pages retain their stricter Content-Security-Policy and page checks. Guide publication requires a byte-exact copy of the generated Studio source and a fresh rebuild from its design inputs.
+The site may publish only `.html`, `.css`, `.js`, `.svg`, `.xml` and `.txt` (`ALLOWED_EXTENSIONS`), within the byte budgets in `site.config.json`. The self-contained style guide has a separate 768 KiB file budget (raised from 512 KiB when the component library section and its live specimens landed) and intentionally uses inline CSS, live demo script and specimen styles. The public site's own pages retain their stricter Content-Security-Policy and page checks. Guide publication requires a byte-exact copy of the generated Studio source and a fresh rebuild from its design inputs.
 
 - No extracted game or mod assets, game-derived renders, Studio viewport screenshots (the preview head is game-derived), personal saves, libraries, inventories or credentials.
 - Visuals are original CSS/SVG and are labelled as illustrations, not renders.

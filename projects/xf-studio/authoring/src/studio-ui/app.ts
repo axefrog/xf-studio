@@ -125,7 +125,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     announce: message => feedback.announce(message),
     beforeLayout: () => port.viewport.cancelInput(),
     afterLayout: () => requestAnimationFrame(() => port.viewport.resize()),
-    homes: catalogue.homes,
   });
   rt.dock = dock;
   /**
@@ -167,12 +166,13 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   rt.modules = { list: modules, panels: panelsOf, set: setModuleShown };
   const openHelp = () => { dock.reveal("help", false); requestAnimationFrame(() => help.focusSearch?.()); };
   /**
-   * Settings (UI-109) has no obvious home among the docked groups, so a closed Settings opens floating; one already open is brought
-   * forward where it is, its group expanded if collapsed (`reveal`). Then the group asked for is shown and focused.
+   * Settings (UI-109) is summoned like any panel (`reveal`, dock/layout.ts `summonPanel`): with no home among the docked groups a closed
+   * Settings opens floating, or where the person last had it; one already open is brought forward where it is, its group expanded if
+   * collapsed. Then the group asked for is shown and focused.
    */
   const settingsPanel = byId.get(SETTINGS_PANEL);
   rt.settings = { open: (section?: SettingsSection) => {
-    if (dock.panelState(SETTINGS_PANEL) === "closed") dock.float(SETTINGS_PANEL); else dock.reveal(SETTINGS_PANEL, false);
+    dock.reveal(SETTINGS_PANEL, false);
     requestAnimationFrame(() => settingsPanel?.show?.(section));
   } };
   guidance = mountGuidance(rt, { openHelp });
@@ -366,14 +366,14 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   for (const [anchor, control] of [["header.save", save], ["header.package", pkg], ["header.history", historyButton], ["header.palette", palette], ["header.help", helpButton],
     ["header.settings", settingsButton]] as const)
     rt.anchors.register(anchor, control);
-  const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", title: "Panels, modules and views", onClick: event => {
+  const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels, modules and views", onClick: event => {
     openMenu([...panelMenuItems(rt),
       { kind: "separator" },
       { kind: "action", label: "Reset this layout", icon: "reset", run: () => rt.dock.reset() },
       { kind: "action", label: "Keyboard & mouse", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: () => view.openReference() }],
     event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
   } });
-  const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", onClick: event =>
+  const themeButton = button({ label: "View preferences", icon: "monitor", iconOnly: true, variant: "ghost", menu: true, onClick: event =>
     openMenu([...themeItems(theme), { kind: "separator" }, ...view.items(), { kind: "separator" },
       { kind: "action", label: "All settings…", icon: "settings", hint: "Game, saves folder, WolvenKit, appearance and diagnostics", run: () => rt.settings.open("appearance") }],
     event.currentTarget as Element,
@@ -498,7 +498,7 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
     return { kind: "action", label: meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
       hint: `${STATE[state]} · ${meta?.description ?? ""}`,
       ...(state === "parked" ? { capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
-      run: () => state === "collapsed" ? dock.toggleCollapse(id) : id === SETTINGS_PANEL && state === "closed" ? rt.settings.open() : dock.toggle(id) };
+      run: () => state === "collapsed" ? dock.reveal(id) : id === SETTINGS_PANEL && state === "closed" ? rt.settings.open() : dock.toggle(id) };
   };
   const owned = new Set(rt.modules.list.flatMap(module => rt.modules.panels(module)));
   const items: MenuItem[] = [{ kind: "heading", label: "Panels", detail: `${dock.sizeClass === "wide" ? "Wide" : "Compact"} layout · each size keeps its own arrangement` },

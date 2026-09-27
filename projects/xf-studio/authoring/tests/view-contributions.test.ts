@@ -1,6 +1,6 @@
 /**
  * View contributions (feature-module platform §4, step 5): the shell derives its panel catalogue, factory
- * layouts, closed-panel homes, lazily repainted panels and activity sources from the shell's and each
+ * layouts, lazily repainted panels and activity sources from the shell's and each
  * feature's view contribution. Eye makeup's panels keep their grandfathered IDs, so saved dock layouts
  * restore; a synthetic second feature's view slots in without touching the shell.
  */
@@ -49,7 +49,7 @@ const GRANDFATHERED = ["presets", "layers", "history", "library", "package", "he
   "edge", "warp", "character", "lighting", "motion", "quality", "activity", "help"];
 const area = { x: 0, y: 0, w: 1600, h: 900 };
 
-test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layouts and homes exactly", () => {
+test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layouts exactly", () => {
   expect([...HISTORICAL.ids] as string[]).toEqual(GRANDFATHERED);
   expect(defaultWide(HISTORICAL)).toEqual(BEFORE.wide());
   expect(defaultCompact(HISTORICAL)).toEqual(BEFORE.compact());
@@ -60,7 +60,6 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   const parked = defaultDockStateFor(STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
   expect([parked.wide.root, parked.wide.floating, parked.wide.closed]).toEqual([BEFORE.wide().root, BEFORE.wide().floating, withAddedClosed(BEFORE.wide()).closed]);
   expect([parked.compact.root, parked.compact.closed]).toEqual([BEFORE.compact().root, withAddedClosed(BEFORE.compact()).closed]);
-  expect(STUDIO_CATALOGUE.homes).toEqual({ help: ["finish", "layers"] });
   expect(STUDIO_CATALOGUE.heavy).toEqual(["library", "package"]);
   expect(PANEL_META.warp).toEqual({ title: "Warp", icon: "warp", description: "Smooth displacement fields that bend the selected layer's mask." });
   expect(PANEL_META["package"].title).toBe("Mod package");
