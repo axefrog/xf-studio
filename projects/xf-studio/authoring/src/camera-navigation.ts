@@ -1,4 +1,4 @@
-import { MAX_CAMERA_DISTANCE, MIN_CAMERA_DISTANCE } from "./camera-framing";
+import { CAMERA_DISTANCE_RANGE, type DistanceLimits } from "./camera-framing";
 import type { CameraState } from "./workspace-state";
 
 /**
@@ -28,8 +28,9 @@ export function validNavigation(command: CameraNavigation): string | undefined {
 }
 
 /** `orbit` turns by radians (positive pitch raises the camera); `dolly` multiplies distance;
- * `pan` moves camera and target by fractions of the visible view height. */
-export function navigateCamera(state: CameraState, command: CameraNavigation): CameraState {
+ * `pan` moves camera and target by fractions of the visible view height. `limits` are the view's orbit limits (the scene's,
+ * camera-framing.ts `orbitDistanceLimits`; default: the whole stored range). */
+export function navigateCamera(state: CameraState, command: CameraNavigation, limits: DistanceLimits = CAMERA_DISTANCE_RANGE): CameraState {
   const position = state.position.slice(0, 3) as V, target = state.target.slice(0, 3) as V;
   const offset = sub(position, target), radius = length(offset);
   if (validNavigation(command) || !(radius > 0)) return structuredClone(state);
@@ -40,7 +41,7 @@ export function navigateCamera(state: CameraState, command: CameraNavigation): C
     return { ...structuredClone(state), position: add(target, next) };
   }
   if (command.kind === "dolly") {
-    const distance = Math.min(MAX_CAMERA_DISTANCE, Math.max(MIN_CAMERA_DISTANCE, radius * command.factor));
+    const distance = Math.min(limits.max, Math.max(limits.min, radius * command.factor));
     return { ...structuredClone(state), position: add(target, scale(offset, distance / radius)) };
   }
   const forward = unit(scale(offset, -1)), right = unit(cross(forward, [0, 1, 0]));

@@ -4,6 +4,7 @@ import type { ViewGraph } from "./platform/core/view-graph";
 import { createStudioViewGraph, EYE_SHAPE_RANGE, LEGACY_TOOL_FIELDS, previewFields, previewMirror, type DisplayState, type LightsState,
   type SceneState } from "./preview-view-graph";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
+import type { DistanceLimits } from "./camera-framing";
 import type { FaceMorphChoice } from "./face-morphs";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, DEFAULT_CREATOR_LIGHTING, INTENSITY_FORMS, LIGHTING_PRESETS, type BodySex, type ConeReading,
   type CreatorCameraPage, type CreatorLightingOptions, type IntensityForm, type LightingPreset } from "./creator-lighting";
@@ -57,6 +58,8 @@ export const MAX_EYE_SHAPE_INDEX = EYE_SHAPE_RANGE.max;
 export type PreviewPort = {
   cameraState(): CameraState; front(): boolean; setFov(degrees: number): boolean | undefined; endFovGesture(): void;
   restoreCamera(camera: CameraState): void;
+  /** The view's orbit distance limits now (derived from its lens, aspect and scene: camera-framing.ts). Absent: the whole stored range. */
+  distanceLimits?(): DistanceLimits;
   setExposure(value: number): void; setLightAngle(degrees: number): void;
   /** The studio stage's strengths, key elevation and tint (studio-lighting.ts). Absent on a preview without the adjustable rig. */
   setStudioLights?(lights: StudioLights): void;
@@ -273,7 +276,7 @@ export class PreviewActions {
         case "camera.endFovGesture": this.port.endFovGesture(); break;
         case "camera.restore": this.jump(view, "Saved camera", () => { this.port.restoreCamera(action.camera); }); break;
         case "camera.back": case "camera.forward": this.cameraStep(action.kind === "camera.back" ? "back" : "forward", view); break;
-        case "camera.navigate": this.port.restoreCamera(navigateCamera(this.port.cameraState(), action.command)); this.moved(view); break;
+        case "camera.navigate": this.port.restoreCamera(navigateCamera(this.port.cameraState(), action.command, this.port.distanceLimits?.())); this.moved(view); break;
         case "camera.creatorFraming":
           this.jump(view, action.page === "face" ? "Creator face camera" : "Creator hair camera",
             () => { this.port.restoreCamera(this.port.creatorCamera!(action.page)); });

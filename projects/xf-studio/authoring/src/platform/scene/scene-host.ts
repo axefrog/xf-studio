@@ -1,7 +1,6 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { BODY_ENVELOPE, bodyClipPlanes, previewClipPlanes } from "../../camera-depth";
-import { BODY_FRAME, bodyCameraDistance, frontCameraDistance, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE, surfaceAnchoredDistance } from "../../camera-framing";
+import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, frontCameraDistance, HEAD_SUBJECT, surfaceAnchoredDistance, type Subject } from "../../camera-framing";
 import { coreSceneEvidence } from "../../scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../viewport-size";
@@ -21,6 +20,7 @@ import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
 import { createHeadRig, type MotionLoader } from "./head-rig";
 import { createCharacterRenderer } from "./character-renderer";
+import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 
 /**
  * The scene host (feature-module platform §5): the platform's 3D viewport. It owns the WebGL renderer, the camera and its controls,
@@ -101,13 +101,12 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     camera = new THREE.PerspectiveCamera(30, 1, 0.005, 10);
   const backdrop = createViewportBackdrop(scene, options.stage ?? "dark");
   releases.push(() => backdrop.dispose());
-  const controls = new OrbitControls(camera, renderer.domElement);
+  const controls = new SceneOrbitControls(camera, renderer.domElement);
   // The binding catalogue, not the controls' default mouse/touch mapping, decides every press.
   const cameraInput = attachHeadCameraInput(renderer.domElement, controls);
   releases.push(() => { cameraInput.dispose(); controls.dispose(); });
   controls.enableDamping = true;
-  controls.minDistance = MIN_CAMERA_DISTANCE;
-  controls.maxDistance = MAX_CAMERA_DISTANCE;
+  // The distance limits come from the scene once the head and the V exist (orbit-limits.ts); the jumps below reach the whole range.
   // OrbitControls leaves an inline `cursor: auto`; the presentation owns viewport cursors (`[data-cursor]`).
   renderer.domElement.style.cursor = "";
   const idleFrameOffset = new THREE.Vector3();
@@ -116,7 +115,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     frontPending = !visibleViewportSize(host.clientWidth, host.clientHeight);
     const requested = frontCameraDistance(camera.fov,
       retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect));
-    const distance = Math.min(MAX_CAMERA_DISTANCE - .005, requested);
+    const distance = Math.min(CAMERA_DISTANCE_RANGE.max, requested);
     camera.position.set(0, 1.67, -distance);
     controls.target.set(0, 1.67, 0.005);
     camera.position.add(idleFrameOffset);
@@ -129,7 +128,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   function frameBody() {
     frontPending = false;
     const requested = bodyCameraDistance(camera.fov, retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect));
-    const distance = Math.min(MAX_CAMERA_DISTANCE - .005, requested);
+    const distance = Math.min(CAMERA_DISTANCE_RANGE.max, requested);
     camera.position.set(0, BODY_FRAME.targetHeight, -distance);
     controls.target.set(0, BODY_FRAME.targetHeight, 0.005);
     camera.position.add(idleFrameOffset);
@@ -157,6 +156,18 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const { head, eyes, surfaces, albedo, motion } = rig;
   const { idle, blink, rig: rigMotion } = motion;
   const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? [] });
+  // The orbit's distance limits follow the lens, the pane's aspect, the target and what shows: the farthest fits the head (and the
+  // body while it shows) with a margin, the closest stops in front of the head's surface (camera-framing.ts, orbit-limits.ts).
+  const shifted = (subject: Subject): Subject => ({ radius: subject.radius,
+    centre: [subject.centre[0] + idleFrameOffset.x, subject.centre[1] + idleFrameOffset.y, subject.centre[2] + idleFrameOffset.z] });
+  const orbitLimits = createOrbitLimits({ camera, controls,
+    subjects: () => character.bodyShown() ? [shifted(HEAD_SUBJECT), shifted(BODY_SUBJECT)] : [shifted(HEAD_SUBJECT)],
+    framing: (fov, aspect) => character.bodyShown() ? [frontCameraDistance(fov, aspect), bodyCameraDistance(fov, aspect)] : [frontCameraDistance(fov, aspect)],
+    surfaces: () => [head, ...surfaces.values(), eyes],
+    surfaceBounds: () => shifted(HEAD_SUBJECT),
+    // As the lens gesture does: skinned and morphed bounds go stale as the face moves, and the ray tests them first.
+    updateWorld: () => { scene.updateMatrixWorld(true); head.computeBoundingSphere(); for (const surface of surfaces.values()) surface.computeBoundingSphere(); } });
+  releases.push(() => orbitLimits.dispose());
   // A restored context comes back with empty render targets: the studio stage prefilters its environment again, the feature
   // renderers redraw theirs (eye makeup's composite), and the shown V's layered parts are baked again from their stacks (PREV-62).
   const restored = () => {
@@ -277,6 +288,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     front,
     /** Frame the whole body (the whole-body view); true when the lens is too narrow to fit it within the orbit's reach. */
     frameBody,
+    /** The orbit's distance limits now, derived from the lens, the pane's aspect, the target and what the scene shows. */
+    distanceLimits: () => orbitLimits.limits(),
     /** A composed feature's renderer, typed by its factory (the composition root hands its devices what they need; the host names no feature). */
     feature: <R extends FeatureRenderer>(factory: FeatureRendererFactory<R>): R | undefined => features?.get(factory),
     /** The composed features that draw, in creation order. */
@@ -339,7 +352,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
         fovGestureAnchor = (hit?.point ?? controls.target).clone();
       }
       const frame = surfaceAnchoredDistance(
-        camera.position.toArray(), controls.target.toArray(), fovGestureAnchor.toArray(), camera.fov, next);
+        camera.position.toArray(), controls.target.toArray(), fovGestureAnchor.toArray(), camera.fov, next, orbitLimits.limits(next));
       const orbitDirection = camera.position.clone().sub(controls.target).normalize();
       camera.position.copy(controls.target).addScaledVector(orbitDirection, frame.distance);
       camera.fov = next;

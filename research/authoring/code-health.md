@@ -73,6 +73,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| PREV-114 | Med | Rendering | The orbit distance had a fixed clamp (0.1–5, `MIN/MAX_CAMERA_DISTANCE`): at 15° in a pane about 3:4 the wheel couldn't zoom out to V's whole body (it needs about 11), Whole body was silently clamped, and the close limit ignored where the head's surface was | **Fixed** (claude/camera-zoom, 27 Sep; see below) |
 | UI-102 | Med | Presentation | Hiding a module removes its tool controls but leaves an active tool on (Surface controls keeps drawing and editing, hints still point at parked panels) (`studio-ui/app.ts:125`, `input-hints.ts:71`) | **Fixed** (claude/cleanup-view-graph, 27 Sep; see below) |
 | UI-103 | Med | Presentation | `reveal()` activates a panel's tab but never expands a collapsed group, so Show panel, the flyout's Views entries and Help reveals look like they do nothing (`dock/dock-view.ts:409`; reproduced) | Fixed in claude/fix-dock-collapse (see below) |
 | UI-107 | Med | Presentation | Collapsed groups fold inconsistently: in a stack a collapsed header is a short strip of tabs instead of spanning its column, and a column of stacked groups all collapsed never becomes a vertical strip as a one-group column does (`dock/dock-view.ts` `renderNode`, `studio.css`; maintainer screenshot) | Fixed in claude/fix-dock-collapse (see below) |
@@ -445,6 +446,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 - **Diagnostics** (`src/diagnostics/`, claude/diagnostics): host log and rolling detail window, error references, page trapping and forwarding endpoint, problem-report builder (mod identities, resource extracts, ZIP), report review UI, and one-line failure hooks in the character, resolver, LUT, preview, eye-plate, package and library hosts. A new host capability and a boundary exception (ui-architecture-boundary.md item 13), so a deep review is due. [docs/diagnostics.md](../../docs/diagnostics.md). Reviewed at `972ee62` (DIAG-01..18).
 
 
+## Fixed in claude/camera-zoom
+
+- **PREV-114 (Med):** the orbit limits come from the scene ([camera zoom design](camera-zoom-design.md#orbit-limits-come-from-the-scene)). The farthest fits the head, and the body while it shows, around the target at the current lens and aspect with a margin, and always reaches Front view and Whole body; the closest stops 1.5 cm in front of the head's surface on the orbit line. Both are recomputed before every controls update, never move the camera, and lie within `CAMERA_DISTANCE_RANGE` (0.02–100), which `validCameraPose` accepts for the camera codec and `parseWorkspace` alike. Whole body now fits the frame's near face, so wide lenses keep the feet in view. Files: `camera-framing.ts`, `platform/scene/orbit-limits.ts` (new), `platform/scene/scene-host.ts` (limits and framing only), `camera-navigation.ts`, `preview-actions.ts`, `browser-scene-preview-ports.ts`, `preview-view-graph.ts`. Tests: `tests/camera-framing.test.ts`, `tests/view-graph.test.ts`, `tests/application-api-gaps.test.ts`; the isolated `?verify=1` run at 15° in 550×888 and 330×888 panes zoomed out past the whole body and framed it.
 ## Fixed in claude/body-fidelity
 
 Three rendering faults the maintainer reported on the reference V in the whole-body view (the torso's sides pinched under the ribs, crushed toes, floating nails), each found offline with measurements ([evidence](../animation/deformation-rig-evaluator.md)):
