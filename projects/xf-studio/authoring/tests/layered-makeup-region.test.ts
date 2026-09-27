@@ -1,3 +1,4 @@
+import { MM_PER_UV } from "../src/glitter-region";
 import { expect, test } from "bun:test";
 import { coverage, createRasterJob, raster, rasterWindow, type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { editLayers } from "../src/engines/layered-makeup/layer-stack";
@@ -33,8 +34,10 @@ test("eye makeup's region is what the engine used to hard-code", () => {
     .toBe("A duochrome: the colour turns toward a chosen shift colour as the lid curves away from view. Multichrome is still to come.");
   expect(glitterModelCatalogue(EYE_MAKEUP_REGION.wording).find(item => item.id === "irregular")!.summary)
     .toBe("Irregular flakes are baked into a texture. Dense settings cover the eye UV area and can lose sparkle at face distance.");
-  expect(rasterRegion(EYE_MAKEUP_REGION)).toEqual({ mirror: EYE_MAKEUP_REGION.mirror, fineGlitter: EYE_MAKEUP_REGION.fineGlitter,
-    wording: { area: "the eye UV area" } });
+  expect(rasterRegion(EYE_MAKEUP_REGION)).toEqual({ mirror: EYE_MAKEUP_REGION.mirror, skin: EYE_MAKEUP_REGION.skin,
+    fineGlitter: EYE_MAKEUP_REGION.fineGlitter, wording: { area: "the eye UV area" } });
+  // Mottle's skin scale: the plate measure the glitter route uses, and the plate window's texel.
+  expect(EYE_MAKEUP_REGION.skin).toEqual({ mmPerUv: MM_PER_UV, texelMm: .13 });
 });
 
 test("the raster mirrors a symmetric layer across the region's own line, exactly as its scalar coverage does", () => {

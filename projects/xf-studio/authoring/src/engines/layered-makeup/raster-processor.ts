@@ -6,7 +6,7 @@ import { maskAlphaKey, studioIrregularOpticalKey, irregularAlbedoKey } from "./m
 import {isDirectGlint} from "./direct-glint-settings";
 import type { RasterRegion } from "./region";
 
-/** One layer's raster. `region` is the plain-data part of the layer's region (its mirror and fine-Glitter scope). */
+/** One layer's raster. `region` is the plain-data part of the layer's region (its mirror, skin scale and fine-Glitter scope). */
 export type RasterRequest = { i: number; version: number; layer: Layer; size: number; region: RasterRegion; bakeOptics?: boolean };
 export type GlitterStats={generated:number;regionRetained:number;maskCentres:number;
   paintedPixels:number;coveredPixels:number;quarterCoveragePixels:number;halfCoveragePixels:number};
@@ -56,7 +56,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
             return pixel===size*size;
           }},4096);
         } else {
-          const job = createRasterJob(layer, size, region.mirror);
+          const job = createRasterJob(layer, size, region.mirror, region.skin);
           await drain(job,16);
           data = job.data;
         }

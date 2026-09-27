@@ -20,6 +20,7 @@ export const EYE_MAKEUP_UNITS: Partial<Record<EyeMakeupAction["kind"], SpecUnits
   "glitter.setIrregular": { "count.value": "count", "radius.value": "uv", "spread.value": "fraction", "tilt.value": "fraction" },
   "glitter.setDirect": { "density.value": "fraction", "fineShare.value": "fraction" },
   "layer.edit": { "rename.name": "characters", "move.to": "index" },
+  "effect.mottle.set": { "amount.value": "fraction", "grain.value": "mm", "clumping.value": "fraction", "angle.value": "degrees" },
 };
 
 /** The layer a limit is asked about: the target layer, or a point's or warp control's layer. */
