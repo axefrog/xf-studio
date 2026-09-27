@@ -28,7 +28,7 @@
 import type { CcoPart } from "./cco-model";
 import { type BodyGender, CatalogueIndex, type CcCatalogue, type CcOption, followsLink, userFacing } from "./cc-catalogue";
 import type { RenderCoverage, RenderStatus } from "./cc-render-coverage";
-import type { CharacterChange, CharacterView } from "./character-context";
+import type { CharacterView } from "./character-context";
 import { CREATOR_LIMITS, isCreatorName } from "./creator-names";
 
 export const CC_PANEL_SCHEMA = "xfs/cc-panel-5" as const;
@@ -292,14 +292,6 @@ export function rowOption(panel: Readonly<CcPanel>, row: Readonly<CcPanelRow>, v
   const options = row.options.map(index => panel.options[index]!);
   if (!view) return options[0] ?? null;
   return options.find(option => view.values[option.id]?.active) ?? null;
-}
-/** Every makeup row's change to Off: the active options of the marked section that have an Off choice and aren't Off already. */
-export function makeupOff(panel: Readonly<CcPanel>, view: Readonly<CreatorView> | null): CharacterChange[] {
-  if (!view) return [];
-  return panel.sections.filter(entry => entry.makeup).flatMap(entry => entry.rows).flatMap(row => {
-    const option = rowOption(panel, row, view), value = option && view.values[option.id];
-    return option && value && option.off !== null && value.choice !== option.off ? [{ part: option.part, option: option.name, choice: option.off }] : [];
-  });
 }
 
 // ---------------------------------------------------------------------------------------------------------------

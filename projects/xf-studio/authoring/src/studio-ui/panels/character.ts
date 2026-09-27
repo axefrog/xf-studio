@@ -6,9 +6,9 @@
  * Options the 3D view can't draw say so.
  *
  * Every change is a typed `character.*` action with its own Undo history (CORE-59); the rules live in the application service, so this
- * module only dispatches (the quick action is `character.hideOwnMakeup`, CORE-71). One Undo rule covers the whole panel (UI-81): its
- * Undo and Redo, and Ctrl+Z / Ctrl+Y anywhere in it except a text box, step through the panel's changes (creator choices and
- * Clothing) in the order they were made; the header's Undo covers the makeup only and says so. Nothing here moves the layout on its own (UI-68):
+ * module only dispatches (the V's own makeup is a switch, `character.setOwnMakeup`: instant and undoable; CORE-71). One Undo rule covers the whole panel (UI-81): its
+ * Undo and Redo, and Ctrl+Z / Ctrl+Y anywhere in it except a text box, step through the panel's changes (creator choices,
+ * Clothing and the V's own makeup) in the order they were made; the header's Undo covers the makeup only and says so. Nothing here moves the layout on its own (UI-68):
  * one status line of fixed height carries what is on its way or failed, with Try again and Keep my changes inline, and a Details
  * disclosure for the plain lines about what couldn't be used; a row reserves its detail line when any of its options has one, and a
  * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72); files come last.
@@ -117,10 +117,11 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   // The panel's one Undo and Redo (UI-81): creator choices and Clothing, in the order they were made.
   const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undo" }) });
   const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redo" }) });
-  const hide = button({ label: "Hide my V's own makeup", icon: "eye", variant: "primary", onClick: () => dispatch({ kind: "character.hideOwnMakeup" }) });
+  // A switch, not a one-way action: the V's own makeup hides and shows again at once, and the panel's Undo steps it back.
+  const ownMakeup = new Toggle({ label: "Show my V's own makeup", onChange: shown => dispatch({ kind: "character.setOwnMakeup", shown }) });
   const resetAll = button({ label: "Reset all", icon: "reset", small: true, variant: "quiet", title: "Every creator change back to your V's own (Undo brings them back)",
     onClick: () => dispatch({ kind: "character.resetAll" }) });
-  const hideNote = note("Turns every makeup row Off in one step, so only the makeup you're making shows on your V. Undo brings it back.");
+  const hideNote = note("Turn it off to see only the makeup you're making on your V. Your V's creator choices don't change.");
   // One status line of fixed height: the text is clamped to one line, and its actions keep their place when not offered (UI-68).
   const statusText = h("span", { class: "cc-status-text", role: "status", "aria-live": "polite" });
   const retry = button({ label: "Try again", icon: "refresh", small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.retry" }) });
@@ -174,7 +175,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const element = h("div", { class: "panel-content cc-panel" },
     section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault,
       h("span", { class: "cc-history" }, undo, redo)), status, messages, detailNote),
-    h("section", { class: "section cc-quick" }, h("div", { class: "row wrap gap-s" }, hide, resetAll), hideNote),
+    h("section", { class: "section cc-quick" }, ownMakeup.element, hideNote, h("div", { class: "row wrap gap-s" }, resetAll)),
     h("div", { class: "cc-find" }, search, legend, noMatch),
     groupsHost,
     section("Files", h("div", { class: "row wrap gap-s" }, exportV),
@@ -500,7 +501,8 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       setAttr(detailsToggle, "aria-expanded", String(showMessages && !!lines.length));
       messages.hidden = !showMessages || !lines.length;
       // The quick actions.
-      applyCapability(hide, port.authoring.capability({ kind: "character.hideOwnMakeup" }));
+      const makeupShown = context?.ownMakeup ?? true, makeupChange = port.authoring.capability({ kind: "character.setOwnMakeup", shown: !makeupShown });
+      ownMakeup.update(makeupShown, { disabled: !makeupChange.available, reason: makeupChange.reason });
       applyCapability(resetAll, port.authoring.capability({ kind: "character.resetAll" }));
       search.disabled = !panel;
       legend.hidden = !panel;

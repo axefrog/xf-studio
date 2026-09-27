@@ -119,6 +119,20 @@ test("a feature supersedes one creator option's components, or a whole slot, and
   expect(heard.character.map(text => JSON.parse(text).drawn)).toEqual([["face", "brows"], ["face"], ["face", "brows"], ["brows"], ["face", "brows"]]);
 });
 
+test("the viewer hides the parts of named head options at once (the V's own makeup), a later V follows, and the body never does", () => {
+  const { character } = setup();
+  const lips = skinned(quad(0.02), "lips"), liner = skinned(quad(0.03), "liner"), body = skinned(quad(0.04), "body");
+  character.setCharacterDetails(v("a", [component("face", "lips", [lips]), component("face", "eyeliner", [liner]), component("body", "lips", [body])]));
+  character.setHiddenOptions(["lips"]);
+  expect([lips.parent!.visible, liner.parent!.visible, body.parent!.visible]).toEqual([false, true, true]);
+  // A V that arrives while it is hidden follows the setting.
+  const next = skinned(quad(0.02), "lips b");
+  character.setCharacterDetails(v("b", [component("face", "lips", [next])]));
+  expect(next.parent!.visible).toBe(false);
+  character.setHiddenOptions([]);
+  expect(next.parent!.visible).toBe(true);
+});
+
 test("a superseded skin leaves the core head with its default skin, in both placements; superseded eyes bring back the core eye (PREV-89)", () => {
   // Core-head placement: the resolved skin is drawn as the core head's material.
   const core = setup();

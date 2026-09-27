@@ -82,7 +82,7 @@
   "savedV.clear",
   "character.setOption",
   "character.setOptions",
-  "character.hideOwnMakeup",
+  "character.setOwnMakeup",
   "character.reset",
   "character.resetAll",
   "character.useDefault",
@@ -2369,13 +2369,19 @@
     }
    }
   },
-  "character.hideOwnMakeup": {
+  "character.setOwnMakeup": {
    "scope": [
     "viewport"
    ],
    "effect": "workspace",
    "undo": "none",
-   "payload": {}
+   "payload": {
+    "shown": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    }
+   }
   },
   "character.reset": {
    "scope": [
@@ -3349,7 +3355,7 @@
    "async": false
   },
   {
-   "id": "character.hideOwnMakeup",
+   "id": "character.setOwnMakeup",
    "family": "action",
    "scope": [
     "viewport"

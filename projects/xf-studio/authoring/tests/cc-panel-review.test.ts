@@ -9,7 +9,7 @@ import { buildCatalogue, CatalogueIndex, readCcoWithPresentation } from "../src/
 import { type CatalogueLabels, LABELS_NEED_WOLVENKIT, LABELS_RETRY } from "../src/cc-catalogue-host";
 import { CreatorCatalogueHost, CreatorFailedError, structuralInput } from "../src/cc-catalogue-service";
 import { createCreatorHandler } from "../src/cc-catalogue-server";
-import { choicePage, makeupOff, panelProjection, rowOption, searchChoices, type CcPanel, type CreatorView } from "../src/cc-panel";
+import { choicePage, panelProjection, rowOption, searchChoices, type CcPanel, type CreatorView } from "../src/cc-panel";
 import { CC_PRESET_SCHEMA, parseCcPreset, serializeCcPreset } from "../src/cc-preset";
 import { catalogueCoverage } from "../src/cc-render-coverage";
 import { carryPreset, type CharacterChoice, type CharacterSource, deriveCharacter, lastChoices, matchChoice } from "../src/character-context";
@@ -382,25 +382,44 @@ describe("CORE-70: same-named choices", () => {
 });
 
 describe("CORE-71 and CORE-73: the quick action and gating", () => {
-  test("hide my V's own makeup is an action of the context: the host marks the section, the context turns its rows Off in one step", async () => {
+  test("the V's own makeup is a switch: hidden and shown at once in the view, undoable in the panel's Undo, never a creator change", async () => {
     const source = await fixtureSource(true);
     const { port: creatorPort } = await port(source, panel => ({ ...panel, sections: panel.sections.map(section => ({ ...section, makeup: section.id === "Scars" })) }));
     const context = new CharacterContextActions({ creator: creatorPort, showSave: () => {} });
-    expect(context.capability({ kind: "character.hideOwnMakeup" })).toMatchObject({ code: "not_ready" });
+    // Hiding needs the creator options (they say which rows are makeup); showing never waits.
+    expect(context.capability({ kind: "character.setOwnMakeup", shown: false })).toMatchObject({ code: "not_ready" });
+    expect(context.capability({ kind: "character.setOwnMakeup", shown: true })).toMatchObject({ available: false, code: "invalid_value" });
     context.start(); await settle();
-    // The fixture's scars default to Off: nothing to hide yet.
-    expect(context.capability({ kind: "character.hideOwnMakeup" })).toMatchObject({ available: false, reason: "Every makeup row on your V is already Off." });
     context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
     await settle();
-    expect(makeupOff(context.panel()!, context.view())).toEqual([set("scars", "")]);
+    const request = context.request(), revision = context.snapshot().revision;
+    expect(context.hiddenOptions()).toEqual([]);
+    context.dispatch({ kind: "character.setOwnMakeup", shown: false });
+    // Applied in the same call: the view hides the makeup rows' options; the creator choices (and so the host's request) are untouched.
+    expect(context.snapshot()).toMatchObject({ ownMakeup: false, undo: "Hide my V's own makeup" });
+    expect(context.snapshot().revision).toBeGreaterThan(revision);
+    expect(context.hiddenOptions()).toEqual(["scars"]);
+    expect(context.hiddenOptions()).toBe(context.hiddenOptions());
+    expect(context.request()).toEqual(request);
+    expect(context.stored()).toMatchObject({ ownMakeup: "hidden" });
+    // A real switch: shown again directly, and the panel's one Undo steps back through it in order with the creator choices.
+    context.dispatch({ kind: "character.setOwnMakeup", shown: true });
+    expect(context.hiddenOptions()).toEqual([]);
+    context.dispatch({ kind: "character.undo" });
+    expect(context.snapshot()).toMatchObject({ ownMakeup: false, undo: "Hide my V's own makeup", redo: "Show my V's own makeup" });
+    context.dispatch({ kind: "character.undo" });
+    expect(context.snapshot()).toMatchObject({ ownMakeup: true });
+    expect(context.request().choices).toEqual([set("scars", "scar_01")]);
+    context.dispatch({ kind: "character.redo" });
+    expect(context.snapshot().ownMakeup).toBe(false);
+    // Reset all resets creator changes only; the setting stays, and is restored with the workspace.
+    context.dispatch({ kind: "character.resetAll" });
+    expect(context.snapshot().ownMakeup).toBe(false);
+    const again = new CharacterContextActions({ creator: creatorPort, showSave: () => {} }, { stored: context.stored() });
+    expect(again.snapshot().ownMakeup).toBe(false);
     // A row shows the option the view marks active; its first while the view is on its way.
     const panel = context.panel()!, piercingRow = panel.sections.flatMap(section => section.rows).find(row => row.options.length > 1)!;
     expect(rowOption(panel, piercingRow, null)).toBe(panel.options[piercingRow.options[0]!]!);
-    expect(rowOption(panel, piercingRow, context.view())?.id).toBe(piercingRow.options.map(i => panel.options[i]!).find(option => context.view()!.values[option.id]?.active)?.id);
-    expect(makeupOff(panel, null)).toEqual([]);
-    context.dispatch({ kind: "character.hideOwnMakeup" });
-    expect(context.snapshot()).toMatchObject({ undo: "Hide my V's own makeup" });
-    expect(context.request().choices).toEqual([set("scars", "")]);
   });
 
   test("every action that changes choices waits for the catalogue; a V change and Undo don't; changes are validated whole", async () => {

@@ -157,23 +157,28 @@ describe("the Character panel's DOM", () => {
     expect(nodes()).toBe(shape);
   });
 
-  test("the quick action and Reset all dispatch typed actions; a row's detail line is reserved only where it can have one", async () => {
+  test("the V's own makeup is a switch that shows its state and changes at once both ways; Reset all dispatches; detail lines are reserved only where needed", async () => {
     const h = await harness();
     h.context.dispatch({ kind: "character.setOption", part: "head", option: "scars", choice: "scar_01" });
     h.paint(); await settle(); h.paint();
-    const hide = h.root.querySelectorAll("button").find(button => button.textContent === "Hide my V's own makeup")!;
-    expect(hide.getAttribute("aria-disabled")).toBeNull();
-    hide.click();
-    expect(h.dispatched.at(-1)).toEqual({ kind: "character.hideOwnMakeup" });
-    expect(h.context.request().choices).toEqual([{ part: "head", option: "scars", choice: "" }]);
-    h.paint(); await settle(); h.paint();
-    // Unavailable, it stays focusable and says why (UI-84); a click runs nothing.
-    expect(hide.disabled).toBe(false);
-    expect(hide.getAttribute("aria-disabled")).toBe("true");
-    expect(hide.getAttribute("aria-description")).toBeTruthy();
-    const before = h.dispatched.length;
-    hide.click();
-    expect(h.dispatched.length).toBe(before);
+    const input = h.root.querySelectorAll("input").find(item => item.closest(".toggle")?.textContent?.includes("Show my V's own makeup"))!;
+    const checked = () => (input as unknown as { checked: boolean }).checked;
+    expect(input.getAttribute("role")).toBe("switch");
+    expect(checked()).toBe(true);
+    (input as unknown as { checked: boolean }).checked = false;
+    input.dispatchEvent(lightEvent("change"));
+    expect(h.dispatched.at(-1) as unknown).toEqual({ kind: "character.setOwnMakeup", shown: false });
+    // At once: the context hides the makeup rows' parts in the view before any paint; no creator choice changed.
+    expect(h.context.hiddenOptions()).toEqual(["scars"]);
+    expect(h.context.request().choices).toEqual([{ part: "head", option: "scars", choice: "scar_01" }]);
+    h.paint();
+    expect(checked()).toBe(false);
+    (input as unknown as { checked: boolean }).checked = true;
+    input.dispatchEvent(lightEvent("change"));
+    expect(h.dispatched.at(-1) as unknown).toEqual({ kind: "character.setOwnMakeup", shown: true });
+    h.paint();
+    expect(checked()).toBe(true);
+    expect(h.context.hiddenOptions()).toEqual([]);
     const resetAll = h.root.querySelectorAll("button").find(button => button.textContent === "Reset all")!;
     resetAll.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.resetAll" });
