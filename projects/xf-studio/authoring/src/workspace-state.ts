@@ -19,6 +19,7 @@ import { storedCharacterOf, type StoredCharacter } from "./character-context-act
 import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
+import { parseSetupLibrary, rigKindOf, type SetupLibrary } from "./lighting-setups";
 import type { ViewGraphData } from "./platform/api/view-graph";
 import { parseViewGraph } from "./platform/core/view-graph";
 import { EYE_SHAPE_RANGE, isDefaultViewGraph, STUDIO_VIEW_GRAPH_RULES, validCameraPose } from "./preview-view-graph";
@@ -77,6 +78,12 @@ export type PreviewState = {
   studioLights: StudioLights;
   /** The creator preset's diagnostic switches and its exposure scalar. */
   creatorLighting: CreatorLightingOptions;
+  /**
+   * The lighting setup shown and the person's own setups (lighting-setups.ts). Present only while the person has setups of their own:
+   * otherwise `lightingPreset` and the studio stage say exactly which built-in shows, and a workspace that never made one keeps its
+   * bytes. When present it decides the lighting, and the legacy fields are its approximation for builds before setups.
+   */
+  lightingSetups?: SetupLibrary;
   idle: boolean; idleTime: number; idlePaused: boolean; idleBody: boolean; idleFace: boolean;
   /**
    * Which of the game's preview idles plays while the idle is on (idle-catalogue.ts); absent: the default, the creator's close-up. Stored
@@ -228,6 +235,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     const lights = (p as { studioLights?: unknown }).studioLights;
     if (validStudioLights(lights)) state.preview.studioLights = { environment: lights.environment, key: lights.key,
       elevation: lights.elevation, fill: lights.fill, rim: lights.rim, neutral: lights.neutral };
+    // The person's own setups, all or nothing; they decide the preset (the legacy fields only approximate them for older builds).
+    const setups = parseSetupLibrary((p as { lightingSetups?: unknown }).lightingSetups);
+    if (setups?.setups.length) { state.preview.lightingSetups = setups; state.preview.lightingPreset = rigKindOf(setups); }
     if (state.preview.idle) { state.preview.blinkPlaying = false; state.preview.blink = 0; }
     else state.preview.idlePaused = false;
     if (validCameraPose(p.camera)) state.preview.camera = structuredClone(p.camera);

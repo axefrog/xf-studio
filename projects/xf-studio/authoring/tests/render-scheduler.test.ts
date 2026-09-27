@@ -150,11 +150,11 @@ test("wrapped mutators request a frame after they run, keep their results, and s
   expect(() => invalidating(target, ["value"], () => {})).toThrow("not a method");
 });
 
-test("the creator lighting options request a frame once wrapped onto the device (they don't notify listeners)", () => {
+test("a lighting setup requests a frame once wrapped onto the device (it doesn't always notify listeners)", () => {
   let applied = 0, requests = 0;
-  const lighting = { setCreatorOptions(_: unknown) { applied++; } };
-  Object.assign(lighting, invalidating(lighting, ["setCreatorOptions"], () => requests++));
-  lighting.setCreatorOptions({});
+  const lighting = { setSource(_: unknown) { applied++; } };
+  Object.assign(lighting, invalidating(lighting, ["setSource"], () => requests++));
+  lighting.setSource({});
   expect([applied, requests]).toEqual([1, 1]);
 });
 
@@ -245,7 +245,7 @@ test("the authored plate's light, skin and composite change only inside calls th
   expect(frame.indexOf("features?.beforeDraw();")).toBeLessThan(frame.indexOf("lighting.render(camera);"));
   // A restored context (a canvas trigger, so a frame follows) prefilters the environment again and lets each feature redraw its targets (PREV-58).
   expect(CANVAS_TRIGGERS).toContain("webglcontextrestored");
-  expect(source).toContain("studio.restore(); features?.contextRestored();");
+  expect(source).toContain("lighting.restore(); features?.contextRestored();");
   // …and bakes the shown V's layered parts again from their stacks (PREV-62).
   expect(source.slice(source.indexOf("const restored = () => {"), source.indexOf("renderer.domElement.addEventListener(\"webglcontextrestored\", restored)")))
     .toContain("character.contextRestored();");

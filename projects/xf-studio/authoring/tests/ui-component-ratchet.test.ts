@@ -64,7 +64,7 @@ const ALLOWANCE: Readonly<Record<string, number>> = {
   "studio-ui/panels/game-setup.ts": 4,
   "studio-ui/panels/history.ts": 1,
   "studio-ui/panels/mod-install-sheet.ts": 1,
-  "studio-ui/panels/preview.ts": 3,
+  "studio-ui/panels/preview.ts": 1,
   "studio-ui/preview-setup-card.ts": 3,
 };
 

@@ -300,6 +300,32 @@ span.category { border-color: transparent; background: transparent; padding-left
 .bipolar-slider.mixed .bipolar-range::-moz-range-thumb { border-style: dashed; }
 .bipolar-ends { display: flex; justify-content: space-between; gap: var(--sp-4); margin-top: -2px; font-size: var(--fs-2xs); line-height: 1.2; color: var(--text-faint); }
 .bipolar-slider .control-note { margin-top: var(--sp-2); }
+/* Light list (components/light-list.ts): the Ordered list with a light's colour chip and kind glyph. */
+.light-list .light-chip { width: 14px; height: 14px; border-radius: 50%; }
+.light-list .light-kind { display: inline-flex; color: var(--text-muted); }
+.light-list .light-kind svg { width: 14px; height: 14px; }
+/* The name comes first: the glance line gives way (ellipsis) before the name does. */
+.light-list .item-name { flex: 0 1 auto; min-width: 7ch; }
+.light-list .item-meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Direction dial (components/direction-dial.ts): a top view of V, the handle in the light's colour. */
+.direction-dial { gap: var(--sp-2); }
+.direction-dial .control-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 22px; }
+.direction-dial .control-label-text { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.dial-readouts { display: inline-flex; gap: var(--sp-3); font: var(--fs-xs) var(--font-mono); font-variant-numeric: tabular-nums; }
+.direction-dial-face { width: 100%; max-width: 208px; aspect-ratio: 140 / 118; margin: 0 auto; cursor: grab; touch-action: none; }
+.direction-dial-face:active { cursor: grabbing; }
+.direction-dial-face:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.direction-dial-face.disabled { cursor: default; opacity: .55; }
+.direction-dial-art { display: block; width: 100%; height: 100%; overflow: visible; }
+.dial-edge { fill: var(--bg-sunken); stroke: var(--line-strong); stroke-width: .8; }
+.dial-horizon { fill: none; stroke: var(--line-strong); stroke-width: .6; stroke-dasharray: 2 2; }
+.dial-axis { stroke: var(--line); stroke-width: .5; }
+.dial-head { fill: var(--bg-panel); stroke: var(--text-muted); stroke-width: .8; }
+.dial-nose { stroke: var(--text-muted); stroke-width: .8; }
+.dial-word { font: 6.5px var(--font-ui); fill: var(--text-faint); pointer-events: none; }
+.dial-mark { fill: var(--light); opacity: .8; stroke: var(--text-muted); stroke-width: .6; }
+.dial-handle { fill: var(--light, var(--signal)); stroke: oklch(.18 .01 255); stroke-width: 1.2; }
+.direction-dial-face:focus-visible .dial-handle { stroke: var(--focus); stroke-width: 1.6; }
 /* Pair control (components/pair-control.ts). */
 .pair-control { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
 .pair-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }

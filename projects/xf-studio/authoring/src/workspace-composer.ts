@@ -49,6 +49,8 @@ export class WorkspaceComposer {
       idle: motion?.idle ?? original.idle, idleTime: motion?.idleTime ?? original.idleTime,
       idlePaused: motion?.idlePaused ?? original.idlePaused,
       idleBody: motion?.idleBody ?? original.idleBody, idleFace: motion?.idleFace ?? original.idleFace };
+    // The person's own lighting setups are stored only while there are any (the preview's mirror has them then).
+    if (config) { delete preview.lightingSetups; if (config.lightingSetups) preview.lightingSetups = config.lightingSetups; }
     // The chosen idle is stored only when it isn't the default (the close-up), so a workspace that never chooses keeps its bytes.
     const idleClip = motion ? motion.idleClip : original.idleClip;
     delete preview.idleClip;

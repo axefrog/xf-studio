@@ -1,6 +1,6 @@
 /**
  * Browser page for tests/webgl-studio-lighting.test.ts (bundled there, run in headless Chrome with a real WebGL 2 context).
- * The studio rig (studio-light-rig.ts) lighting a head-sized sphere seen from the front, as the Studio frames the head:
+ * The studio setups (lighting-setups.ts, drawn by lighting-setup-stage.ts) lighting a head-sized sphere seen from the front, as the Studio frames the head:
  * 1. A Metallic makeup plate over the whole sphere, through the makeup stack's single lit pass (plate-blend.ts), lit with the
  *    standard light and with the skin's own light, and a plain glossy metal sphere as a control. For each, the brightest pixel's
  *    position under the key alone at several azimuths and elevations, and its value at two key strengths.
@@ -12,7 +12,8 @@ import * as THREE from "three";
 import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { skinParameters } from "../src/skin-material";
-import { createStudioLightRig } from "../src/studio-light-rig";
+import { createLightingSetupStage } from "../src/lighting-setup-stage";
+import { studioStageSetup } from "../src/lighting-setups";
 import { DEFAULT_STUDIO_LIGHTS, STUDIO_LIGHT_TARGET, type StudioLights } from "../src/studio-lighting";
 import { hideHalfFloatRendering } from "./webgl-harness-page";
 import { initialRecipe } from "./fixtures/eye-region";
@@ -45,9 +46,11 @@ try {
   };
   const gl = renderer.getContext() as WebGL2RenderingContext;
   const scene = new THREE.Scene();
-  const rig = createStudioLightRig(renderer, scene);
-  probe.environment = rig.environment.mode;
-  probe.float = rig.environment.mode === "pmrem";
+  const stage = createLightingSetupStage({ scene, renderer, loadLut: () => new Promise(() => {}) });
+  // The probe measures light, not shadows, and draws the scene straight into its own target (the stage's display and shadow maps unused).
+  renderer.shadowMap.enabled = false;
+  probe.environment = stage.environment.mode;
+  probe.float = stage.environment.mode === "pmrem";
   const target = new THREE.WebGLRenderTarget(SIZE, SIZE, probe.float ? { type: THREE.HalfFloatType, depthBuffer: true }
     : { type: THREE.UnsignedByteType, colorSpace: THREE.LinearSRGBColorSpace, depthBuffer: true });
 
@@ -113,7 +116,9 @@ try {
     for (let y = SIZE / 2 - 2; y < SIZE / 2 + 2; y++) for (let x = SIZE / 2 - 2; x < SIZE / 2 + 2; x++) sum += luminance((y * SIZE + x) * 4);
     return sum / 16;
   };
-  const light = (lights: Partial<StudioLights>, azimuth: number) => { rig.setLights({ ...DEFAULT_STUDIO_LIGHTS, ...lights }); rig.setKeyAngle(azimuth); };
+  const light = (lights: Partial<StudioLights>, azimuth: number) => {
+    stage.setSource({ kind: "setup", setup: studioStageSetup({ lights: { ...DEFAULT_STUDIO_LIGHTS, ...lights }, exposure: 1.2, angle: azimuth }) });
+  };
   // The key alone: no room, fill or rim.
   const keyOnly = (azimuth: number, elevation: number, key = 1) => { light({ environment: 0, fill: 0, rim: 0, key, elevation }, azimuth); render(); return highlight(); };
   const surface = (): SurfaceProbe => ({

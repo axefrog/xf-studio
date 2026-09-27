@@ -271,11 +271,11 @@ async function start(host: StudioHost, root: HTMLElement) {
     xfStudioSeekIdle: (seconds: number) => { scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; },
     // Creator rig evidence for calibration captures (tools/creator-light-look.ts): its lights, one alone, and the frame cost.
     xfStudioCreatorRig: {
-      lights: () => scene?.lighting.rig.specs.map(spec => ({ name: spec.name, castShadow: spec.castShadow })) ?? [],
+      lights: () => scene?.lighting.rig.lights.map(light => ({ name: light.id, castShadow: light.shadows })) ?? [],
       solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
       trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
       trialCasters: (names: string[] | null) => { scene?.lighting.trialCasters(names); scene?.requestRender(); },
-      casters: () => scene?.lighting.rig.specs.filter(spec => spec.castShadow).map(spec => spec.name) ?? [],
+      casters: () => scene?.lighting.rig.lights.filter(light => light.shadows).map(light => light.id) ?? [],
       frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,
       shadowMapSize: () => scene?.lighting.rig.shadowMapSize ?? null,
       // The skin scatter (platform/scene/skin-scatter.ts): switch it off for the wrap stand-in and on again (A/B evidence), and its state.

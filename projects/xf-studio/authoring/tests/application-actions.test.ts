@@ -202,7 +202,7 @@ test("preview commands keep camera and lighting state readable without DOM and e
     cameraState: () => structuredClone(camera), front: () => { calls.push("front"); return false; },
     setFov: degrees => { camera.fov = degrees; return degrees === 10; },
     endFovGesture: () => calls.push("end"), restoreCamera: value => { camera.fov = value.fov; },
-    setExposure: value => calls.push(`exposure:${value}`), setLightAngle: value => calls.push(`angle:${value}`),
+    setLighting: source => calls.push(source.kind === "setup" ? `lighting:${source.setup.exposure}/${source.setup.lights[0]!.position.map(n => n.toFixed(3))}` : "lighting:game"),
     setSurfaceControls: () => {}, setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {},
     setHair: () => {}, setDetail: () => {}, setEyeShape: index => calls.push(`eye:${index}`),
     setPiercings: enabled => calls.push(`piercings:${enabled}`),
@@ -219,7 +219,8 @@ test("preview commands keep camera and lighting state readable without DOM and e
   expect(detached.camera.fov).toBe(10);
   expect(detached.exposure).toBe(1.5);
   expect(notifications).toBe(3);
-  expect(calls).toEqual(["exposure:1.5", "angle:120"]);
+  // Both changes light the view by the fork of Soft studio they made: the exposure, then the key turned to 120°.
+  expect(calls).toEqual(["lighting:1.5/-0.300,1.900,-0.500", "lighting:1.5/0.505,1.900,0.292"]);
   actions.dispatch({ kind: "preview.setEyeShape", index: 12 });
   expect(actions.snapshot()).toMatchObject({ eyeShape: 12 });
   // A piercing style is a creator choice, the character context's, not a preview preference.
@@ -233,7 +234,7 @@ test("eye-shape choices come from the loaded head, and only those choices are ac
   const calls: number[] = [];
   const choices = [null, "h011", "h021"].map((target, index) => ({ index, region: "eyes", target, number: String(index + 1).padStart(2, "0") }));
   const port = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
-    endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
+    endFovGesture: () => {}, restoreCamera: () => {}, setSurfaceControls: () => {},
     setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {},
     setEyeShape: (index: number) => calls.push(index), setPiercings: () => {},
     eyeShapeOptions: () => ({ choices, eyesFollow: true, eyeSource: "base\he_morphs.morphtarget" }) } satisfies PreviewPort;
@@ -253,7 +254,7 @@ test("eye-shape choices come from the loaded head, and only those choices are ac
 test("UI-79: the whole-body view is offered only while the body is shown", () => {
   const framed: string[] = [];
   const port = { cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,
-    endFovGesture: () => {}, restoreCamera: () => {}, setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
+    endFovGesture: () => {}, restoreCamera: () => {}, setSurfaceControls: () => {},
     setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {}, setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {},
     setBody: (enabled: boolean) => framed.push(`body:${enabled}`), frameBody: () => { framed.push("frame"); return false; } } satisfies PreviewPort;
   const actions = new PreviewActions(freshWorkspace().preview, port);

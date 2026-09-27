@@ -31,3 +31,6 @@ export { progressBar, type ProgressBar } from "./progress";
 export { attachSwatchCard, ChoiceList, choiceItem, swatchCard, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
 export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
 export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";
+// Feature-specific: lighting setups.
+export { LightList, type LightListItem, type LightListOptions } from "./light-list";
+export { azimuthWords, DirectionDial, dialDirection, dialPoint, type DialMark, type Direction, type DirectionDialOptions } from "./direction-dial";

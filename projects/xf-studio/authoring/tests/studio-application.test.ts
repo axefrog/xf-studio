@@ -73,7 +73,7 @@ test("saved-V eye suggestion updates application state without applying the morp
   const preview = new PreviewActions(freshWorkspace().preview, {
     cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }),
     front: () => false, setFov: () => false, endFovGesture: () => {}, restoreCamera: () => {},
-    setExposure: () => {}, setLightAngle: () => {}, setSurfaceControls: () => {},
+    setSurfaceControls: () => {},
     setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {},
     setEyeShape: index => calls.push(index), setPiercings: () => {},
     setDetail: () => {},

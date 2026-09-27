@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { installShadowFilter, SHADOW_FILTER_MARK } from "../src/shadow-filter";
-import { shadowState } from "../src/lighting-preset-stage";
+import { shadowState } from "../src/lighting-setup-stage";
 
-test("the shadow filter replaces Three's per-pixel noise rotation with a fixed grid, once", () => {
+test("the shadow filter replaces Three's per-pixel noise rotation with the tent filter, once", () => {
   // Three's bundled PCF body, in the form this build ships it (comments stripped).
   const pcf = "\n\t\t\t\tfloat radius = shadowRadius * texelSize.x;\n\t\t\t\tfloat phi = interleavedGradientNoise( gl_FragCoord.xy ) * PI2;\n" +
     "\t\t\t\tshadow = (\n\t\t\t\t\ttexture( shadowMap, vec3( shadowCoord.xy + vogelDiskSample( 0, 5, phi ) * radius, shadowCoord.z ) )\n\t\t\t\t) * 0.2;\n\t\t\t}\n";
@@ -11,7 +11,8 @@ test("the shadow filter replaces Three's per-pixel noise rotation with a fixed g
   expect(installShadowFilter(chunks)).toBe(true);
   expect(chunks.shadowmap_pars_fragment).toContain(SHADOW_FILTER_MARK);
   expect(chunks.shadowmap_pars_fragment).not.toContain("interleavedGradientNoise");
-  expect(chunks.shadowmap_pars_fragment).toContain("\t\t\t\tshadow = xfsShadowSum / 16.0;");
+  expect(chunks.shadowmap_pars_fragment).toContain("\t\t\t\tif ( shadowRadius < 2.0 ) {");
+  expect(chunks.shadowmap_pars_fragment).toContain(") / 2704.0;");
   const once = chunks.shadowmap_pars_fragment;
   expect(installShadowFilter(chunks)).toBe(true);
   expect(chunks.shadowmap_pars_fragment).toBe(once);

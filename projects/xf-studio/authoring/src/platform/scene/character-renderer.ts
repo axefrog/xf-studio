@@ -287,7 +287,7 @@ export function createCharacterRenderer(input: {
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
         mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
-        // The skin, body, clothing and hair strands cast the lights' shadows (lighting-preset-stage.ts); eyes, decals and lashes don't.
+        // The skin, body, clothing and hair strands cast the lights' shadows (lighting-setup-stage.ts); eyes, decals and lashes don't.
         const material = mesh.material as THREE.MeshStandardMaterial;
         // Hair strands (alpha-to-coverage cards) cast by their coverage; the cap decal and the other hair parts don't.
         const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;

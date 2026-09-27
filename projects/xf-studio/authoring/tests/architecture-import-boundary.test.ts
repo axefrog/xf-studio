@@ -285,7 +285,7 @@ test("platform code imports only the platform: nothing from features, engines, c
  */
 const SCENE_DEVICE_MODULES = new Set<string>([
   // Renderer and GPU devices: the stage, lights, display, camera input, skinning and the head's materials.
-  "browser-grading-lut-device", "lighting-preset-stage", "linear-display", "studio-light-rig", "viewport-backdrop", "head-camera-input",
+  "browser-grading-lut-device", "lighting-setup-stage", "linear-display", "viewport-backdrop", "head-camera-input",
   "device-pixel-ratio", "skin", "eye-material", "layered-material", "render-scheduler",
   // The character context's loaders, adapters and placement, and their record types and codes.
   "core-detail-loader", "character-detail-loader", "character-material-adapters", "head-skin-placement", "render-detail", "render-templates",
@@ -294,8 +294,9 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   "idle-animation", "idle-catalogue", "game-blink", "preview-motion", "face-morphs", "dangle-motion",
   // A photo-mode pose as a body clip for the idle's rig, and the sampled pose record it reads (types only).
   "pose-clip", "pose-sample",
-  // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the saved V record.
-  "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "hair-colour-model", "saved-v",
+  // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values and lighting setups, hair profile
+  // encoding, the saved V record.
+  "camera-depth", "camera-framing", "viewport-size", "stage-backdrop", "studio-lighting", "lighting-setups", "hair-colour-model", "saved-v",
 ]);
 /**
  * What the device modules build on in turn, reached only through them (types included): the materials, lights and grading they

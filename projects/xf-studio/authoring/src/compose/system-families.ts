@@ -52,13 +52,18 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
   actions: actionTable<PreviewAction, ActionScope>(ACTION_DESCRIPTORS, {
     "camera.front": true, "camera.body": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
     "camera.navigate": true, "camera.back": true, "camera.forward": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
-    "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setCreatorShadows": true, "preview.setExposure": true, "preview.setKeyAngle": true,
-    "preview.setStudioLight": true, "preview.setStudioNeutral": true, "preview.applyStudioSetup": true, "preview.resetStudioLighting": true,
+    "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setCreatorShadows": true,
+    "preview.selectLightingSetup": true, "preview.createLightingSetup": true, "preview.renameLightingSetup": true, "preview.deleteLightingSetup": true,
+    "preview.resetLightingSetup": true, "preview.setExposure": true, "preview.setRoomLight": true, "preview.setBackdrop": true,
+    "preview.setDisplayTransform": true, "preview.setLight": true, "preview.setLightColour": true, "preview.setLightShadows": true,
+    "preview.setLightType": true, "preview.renameLight": true, "preview.aimLightAtHead": true, "preview.addLight": true, "preview.removeLight": true, "preview.moveLight": true, "preview.duplicateLight": true,
+    "preview.setKeyAngle": true,
     "preview.setEyeShape": true, "preview.setPiercings": true, "preview.setBody": true, "preview.setUncensored": true,
     "preview.setSurfaceControls": true, "preview.setWire": true, "preview.setNormals": true,
     "preview.setEyeOptics": true, "preview.setHair": true, "preview.setDetail": true },
     { "camera.setFov": { degrees: "degrees" }, "preview.setKeyAngle": { degrees: "degrees" },
-      "preview.setStudioLight": { "elevation.value": "degrees" } }),
+      "preview.setLight": { "azimuth.value": "degrees", "elevation.value": "degrees", "cone.value": "degrees" },
+      "preview.renameLightingSetup": { name: "characters" }, "preview.renameLight": { name: "characters" }, "preview.moveLight": { index: "index" } }),
 });
 
 /**

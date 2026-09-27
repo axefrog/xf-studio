@@ -2,7 +2,7 @@
 
 ## Skin scatter and the quality sizes — 27 September 2026
 
-The skin's screen-space scatter ([skin reference §11](../materials/shader-skin.md#11-screen-space-scatter-in-the-preview-threejs)) runs at every size, 512 to 4K, with the game's High kernel (25 samples; `scatterQualityFor` in `lighting-preset-stage.ts`). Its cost follows the canvas, not the generated-texture size: its passes measured 0.2–0.45 ms per drawn frame on an RTX 4070 at up to 2600 × 1536. Its targets (36 bytes per drawing-buffer pixel) are framebuffers, outside this contract's 1 GiB generated-texture estimate. Whole-pixel taps make resolution part of its look, so the first step down, if a GPU needs one, is the Medium kernel, not a smaller buffer.
+The skin's screen-space scatter ([skin reference §11](../materials/shader-skin.md#11-screen-space-scatter-in-the-preview-threejs)) runs at every size, 512 to 4K, with the game's High kernel (25 samples; `scatterQualityFor` in `lighting-setup-stage.ts`). Its cost follows the canvas, not the generated-texture size: its passes measured 0.2–0.45 ms per drawn frame on an RTX 4070 at up to 2600 × 1536. Its targets (36 bytes per drawing-buffer pixel) are framebuffers, outside this contract's 1 GiB generated-texture estimate. Whole-pixel taps make resolution part of its look, so the first step down, if a GPU needs one, is the Medium kernel, not a smaller buffer.
 
 ## Layer-identity reconciliation — 25 September 2026
 

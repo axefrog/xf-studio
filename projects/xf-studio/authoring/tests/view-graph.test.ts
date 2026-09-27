@@ -12,6 +12,10 @@ import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import { WorkspaceComposer } from "../src/workspace-composer";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { DEFAULT_CREATOR_LIGHTING } from "../src/creator-lighting";
+
+/** A lights-node edit: the creator calibration's exposure (the node's own values; its studio mirror is derived from the setups). */
+const calibrated = (exposure: unknown) => ({ state: { creatorLighting: { ...DEFAULT_CREATOR_LIGHTING, exposure } } });
 
 const graph = () => ({ graph: createStudioViewGraph(freshWorkspace().preview) });
 
@@ -44,8 +48,8 @@ test("a new view shares scene, lights and display, forks the camera and starts w
   expect(views.snapshot().views.map(view => [view.id, view.shared])).toEqual([["main", ["scene", "lights", "display"]], ["v2", ["scene", "lights", "display"]]]);
   expect(changes.at(-1)).toMatchObject({ structure: true, views: ["v2"], origin: "edit" });
   // A light change in either view reaches both (they share the rig); a camera change reaches only its own view.
-  views.edit(v2, "lights", { state: { exposure: 2 } }, { label: "Exposure" });
-  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ exposure: 2 });
+  views.edit(v2, "lights", calibrated(2), { label: "Exposure" });
+  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ creatorLighting: { exposure: 2 } });
   expect([...changes.at(-1)!.views].sort()).toEqual(["main", "v2"]);
   views.cameraMoved(v2, { pose: { position: [0, 1, 2], target: [0, 1, 0], fov: 40 } });
   expect(changes.at(-1)!.views).toEqual(["v2"]);
@@ -67,10 +71,12 @@ test("a new view shares scene, lights and display, forks the camera and starts w
 
 test("edits are validated by the slot's codec, and a camera or rig must suit the view's scene kind", () => {
   const { graph: views } = graph();
-  expect(() => views.edit(MAIN_VIEW, "lights", { state: { exposure: "bright" } })).toThrow("isn't valid");
+  expect(() => views.edit(MAIN_VIEW, "lights", calibrated("bright"))).toThrow("isn't valid");
   expect(() => views.edit(MAIN_VIEW, "lights", { kind: "sun" })).toThrow("isn't valid");
-  expect(views.edit(MAIN_VIEW, "lights", { kind: "creator" })).toBe(true);
-  expect(views.edit(MAIN_VIEW, "lights", { kind: "creator" })).toBe(false);
+  // The kind is the shown setup's display: it changes with the setup, and a kind that disagrees with the setup is refused.
+  expect(() => views.edit(MAIN_VIEW, "lights", { kind: "creator" })).toThrow("isn't valid");
+  expect(views.edit(MAIN_VIEW, "lights", { kind: "creator", state: { setup: "creator" } })).toBe(true);
+  expect(views.edit(MAIN_VIEW, "lights", { kind: "creator", state: { setup: "creator" } })).toBe(false);
   expect(() => views.target("nowhere")).toThrow("no longer exists");
   // A location scene (World, P5) registers its own rules; a character camera can't link across.
   const rules = { ...STUDIO_VIEW_GRAPH_RULES, codecs: { ...STUDIO_VIEW_GRAPH_RULES.codecs,
@@ -93,14 +99,14 @@ test("edits are validated by the slot's codec, and a camera or rig must suit the
 test("the View and lighting history records settings and camera jumps, coalesces a drag until it is sealed, and never records navigation or tools", () => {
   const { graph: views } = graph();
   // One drag is one step however long it pauses; releasing the slider seals it, so the next drag is a step of its own (CORE-95).
-  for (const value of [1.3, 1.4, 1.5]) views.edit(MAIN_VIEW, "lights", { state: { exposure: value } }, { label: "Exposure", coalesce: "exposure" });
+  for (const value of [1.3, 1.4, 1.5]) views.edit(MAIN_VIEW, "lights", calibrated(value), { label: "Exposure", coalesce: "exposure" });
   expect(views.history()).toEqual({ undo: "Exposure", depth: 1, redoDepth: 0 });
   views.seal();
-  views.edit(MAIN_VIEW, "lights", { state: { exposure: 1.6 } }, { label: "Exposure", coalesce: "exposure" });
+  views.edit(MAIN_VIEW, "lights", calibrated(1.6), { label: "Exposure", coalesce: "exposure" });
   expect(views.history().depth).toBe(2);
   // A different edit also ends the run: the same slider afterwards starts a new step.
-  views.edit(MAIN_VIEW, "lights", { state: { lightAngle: 300 } }, { label: "Key light direction", coalesce: "angle" });
-  views.edit(MAIN_VIEW, "lights", { state: { exposure: 1.7 } }, { label: "Exposure", coalesce: "exposure" });
+  views.edit(MAIN_VIEW, "lights", { state: { setup: "key" } }, { label: "Lighting: Key light", coalesce: "setup" });
+  views.edit(MAIN_VIEW, "lights", calibrated(1.7), { label: "Exposure", coalesce: "exposure" });
   expect(views.history().depth).toBe(4);
   views.undo(); views.undo();
   expect(views.history().depth).toBe(2);
@@ -118,9 +124,9 @@ test("the View and lighting history records settings and camera jumps, coalesces
   expect(views.state(MAIN_VIEW, "camera")).toEqual({ pose: orbit });
   expect(changes.at(-1)).toMatchObject({ origin: "history", applied: false, views: ["main"] });
   expect(views.undo()).toBe(true);
-  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ exposure: 1.5 });
+  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ creatorLighting: { exposure: 1.5 } });
   expect(views.redo()).toBe(true);
-  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ exposure: 1.6 });
+  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ creatorLighting: { exposure: 1.6 } });
   // Undo restores only the nodes a step touched: the tool toggle and the camera stay as they are.
   expect(views.state(MAIN_VIEW, "tools")).toEqual({ on: { "eye-makeup.surface": false } });
   // Restore-time state records nothing.
@@ -129,11 +135,11 @@ test("the View and lighting history records settings and camera jumps, coalesces
   expect(views.history()).toMatchObject({ undo: "Exposure", redo: "Front view" });
   // Graph edits undo too: a closed view comes back with its own nodes.
   const v2 = views.addView(MAIN_VIEW, { scene: true }, { label: "New 3D view" });
-  views.edit(v2, "lights", { state: { exposure: 3 } }, { label: "Exposure" });
+  views.edit(v2, "lights", calibrated(3), { label: "Exposure" });
   views.closeView(v2, { label: "Close view" });
   expect(views.has(v2)).toBe(false);
   views.undo();
-  expect(views.state(v2, "lights")).toMatchObject({ exposure: 3 });
+  expect(views.state(v2, "lights")).toMatchObject({ creatorLighting: { exposure: 3 } });
   expect(views.shares(MAIN_VIEW, v2, "scene")).toBe(true);
 });
 
@@ -193,7 +199,7 @@ test("preview actions edit the graph node of the view they name, and the device 
   let camera = { position: [0, 1.6, -0.6], target: [0, 1.6, 0.005], fov: 30 };
   const port: PreviewPort = { cameraState: () => camera, front: () => { camera = { ...camera, position: [0, 1.67, -0.6] }; calls.push("front"); return false; },
     setFov: () => false, endFovGesture: () => {}, restoreCamera: next => { camera = next; calls.push("restore"); },
-    setExposure: value => calls.push(`exposure:${value}`), setLightAngle: () => calls.push("angle"), setStudioLights: () => calls.push("studio"),
+    setLighting: source => calls.push(`exposure:${source.kind === "setup" ? source.setup.exposure : "game"}`),
     setSurfaceControls: enabled => calls.push(`surface:${enabled}`), setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {},
     setHair: enabled => calls.push(`hair:${enabled}`), setEyeShape: () => {}, setPiercings: () => {}, setDetail: () => {} };
   const workspace = freshWorkspace(), views = createStudioViewGraph(workspace.preview);
@@ -227,7 +233,7 @@ test("preview actions edit the graph node of the view they name, and the device 
   expect(calls.at(-1)).toBe("surface:false");
   actions.dispose();
   calls.length = 0;
-  views.edit(MAIN_VIEW, "lights", { state: { exposure: 1.7 } });
+  views.edit(MAIN_VIEW, "lights", calibrated(1.7));
   expect(calls).toEqual([]);
 });
 
@@ -237,21 +243,21 @@ test("every structure edit records a step, an unrecorded one clears the history 
   expect(views.history()).toMatchObject({ undo: "New view", depth: 1 });
   expect(views.unlink(v2, "scene")).toBe(true);
   expect(views.history()).toMatchObject({ undo: "Unlink scene", depth: 2 });
-  views.edit(v2, "lights", { state: { exposure: 3 } }, { label: "Exposure" });
+  views.edit(v2, "lights", calibrated(3), { label: "Exposure" });
   // A structure change the history doesn't hold (a restore) leaves no step that could name its removed nodes.
   views.withoutHistory(() => views.closeView(v2));
   expect(views.history()).toMatchObject({ depth: 0, redoDepth: 0 });
   expect(views.undo()).toBe(false);
   expect(views.viewIds()).toEqual([MAIN_VIEW]);
   // The check itself: a step whose views would name a missing node is dropped with the steps behind it, and nothing changes.
-  views.edit(MAIN_VIEW, "lights", { state: { exposure: 2 } }, { label: "Exposure" });
+  views.edit(MAIN_VIEW, "lights", calibrated(2), { label: "Exposure" });
   const broken = { views: [{ id: MAIN_VIEW, kind: "3d", scene: "s1", camera: "gone", lights: "l1", display: "d1", tools: "t1" }], focused: MAIN_VIEW };
   (views as unknown as { undoSteps: unknown[] }).undoSteps.push({ label: "Broken", nodes: new Map(), structure: { before: broken, after: broken } });
   const changes: ViewGraphChange[] = [];
   views.subscribe(change => changes.push(change));
   expect(views.undo()).toBe(false);
   expect(views.history()).toMatchObject({ depth: 0 });
-  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ exposure: 2 });
+  expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ creatorLighting: { exposure: 2 } });
   expect(changes).toHaveLength(1);
   expect(views.node(MAIN_VIEW, "camera").id).toBe("c1");
 });
@@ -271,8 +277,8 @@ test("node codecs enforce the ranges parseWorkspace does (CORE-96)", () => {
   expect(() => views.edit(MAIN_VIEW, "scene", { state: { eyeShape: -1 } })).toThrow("isn't valid");
   expect(views.edit(MAIN_VIEW, "scene", { state: { eyeShape: 3.4 } })).toBe(true);
   expect(views.state(MAIN_VIEW, "scene")).toMatchObject({ eyeShape: 3 });
-  expect(() => views.edit(MAIN_VIEW, "lights", { state: { exposure: 100 } })).toThrow("isn't valid");
-  expect(() => views.edit(MAIN_VIEW, "lights", { state: { lightAngle: 400 } })).toThrow("isn't valid");
+  expect(() => views.edit(MAIN_VIEW, "lights", calibrated(100))).toThrow("isn't valid");
+  expect(() => views.edit(MAIN_VIEW, "lights", { state: { setup: "disco" } })).toThrow("isn't valid");
   for (const pose of [{ position: [0, 1.6, -60], target: [0, 1.6, 60], fov: 30 }, { position: [0, 1.6, -0.6], target: [0, 1.6, 0], fov: 5 },
     { position: [0, 1.6, -200], target: [0, 1.6, -199], fov: 30 }])
     expect(() => views.cameraMoved(MAIN_VIEW, { pose })).toThrow("isn't valid");

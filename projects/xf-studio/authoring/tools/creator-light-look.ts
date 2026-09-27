@@ -63,7 +63,7 @@ try {
   await page.wait(3000);
   for (const action of [{ kind: "preview.setSurfaceControls", enabled: false }, { kind: "motion.setIdle", enabled: false },
     { kind: "preview.setLightingPreset", preset: "creator" }, { kind: "camera.creatorFraming", page: framing }]) await run(action).catch(() => undefined);
-  if (setup) { await run({ kind: "preview.setLightingPreset", preset: "studio" }); await run({ kind: "preview.applyStudioSetup", setup }); }
+  if (setup) await run({ kind: "preview.selectLightingSetup", setup });
   // The 3D view's group maximized, so the viewport fills the workspace; its canvas is the one inside that group.
   await page.evaluate(`(() => { const g = document.getElementById("dock-tab-head")?.closest("[data-group]");
     if (g) window.xfStudioShell.dock.toggleMaximize(g.dataset.group); })()`);

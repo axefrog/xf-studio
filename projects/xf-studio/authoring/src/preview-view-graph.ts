@@ -11,8 +11,10 @@
 import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules, type ViewRecord } from "./platform/api/view-graph";
 import { parseViewGraph, ViewGraph } from "./platform/core/view-graph";
 import type { CameraState, PreviewState } from "./workspace-state";
-import { LIGHTING_PRESETS, readCreatorLighting, type CreatorLightingOptions, type LightingPreset } from "./creator-lighting";
+import { DEFAULT_CREATOR_LIGHTING, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
+  type LightingPreset } from "./creator-lighting";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
+import { DEFAULT_SETUP_LIBRARY, legacyStudioStage, migrateLegacyLighting, parseSetupLibrary, rigKindOf, type SetupLibrary } from "./lighting-setups";
 import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
 
 /**
@@ -22,8 +24,13 @@ import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
 export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean; physics?: boolean };
 /** An orbit camera's pose in the scene's neutral subject space (absent until one is saved). Aspect belongs to each view. */
 export type CameraNodeState = { pose?: CameraState };
-/** A light rig's settings. The node's kind is the rig shown (the lighting preset); both rigs keep their settings. */
-export type LightsState = { exposure: number; lightAngle: number; studioLights: StudioLights; creatorLighting: CreatorLightingOptions };
+/**
+ * A light rig's settings (lighting-setups.ts): the setup shown, the person's own setups, and the calibration the built-in Character
+ * creator is read with. The node's kind is the display the shown setup draws through (`studio`: ACES; `creator`: the game's grade).
+ * `exposure`, `lightAngle` and `studioLights` are the legacy mirror, recomputed from the setups on every edit so builds before setups
+ * read a studio stage (`legacyStudioStage`); they are read only from a node stored before setups, which they migrate.
+ */
+export type LightsState = SetupLibrary & { creatorLighting: CreatorLightingOptions; exposure: number; lightAngle: number; studioLights: StudioLights };
 /** The content filter: which character slots show (design §3.1). */
 export type DisplayState = { brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; body?: boolean };
 /** Each view tool's on/off state, by tool ID (`eye-makeup.surface`). */
@@ -79,13 +86,41 @@ const camera: NodeCodec = { kinds: ["orbit"], parse: state => {
   return state.pose === undefined ? {} : { pose: { position: [...(state.pose as CameraState).position], target: [...(state.pose as CameraState).target],
     fov: (state.pose as CameraState).fov } };
 } };
-const lights: NodeCodec = { kinds: [...LIGHTING_PRESETS], parse: state => {
+const lights: NodeCodec = { kinds: [...LIGHTING_PRESETS], parse: (state, kind) => {
   const s = state as Partial<LightsState>;
-  if (!inRange(s.exposure, STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) ||
-    !inRange(s.lightAngle, STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) || !validStudioLights(s.studioLights) ||
-    !readCreatorLighting(s.creatorLighting)) return;
-  return { exposure: s.exposure, lightAngle: s.lightAngle, studioLights: { ...s.studioLights }, creatorLighting: readCreatorLighting(s.creatorLighting)! };
+  const creatorLighting = readCreatorLighting(s.creatorLighting);
+  if (!creatorLighting) return;
+  let library: SetupLibrary | undefined;
+  if (s.setup !== undefined || s.setups !== undefined) library = parseSetupLibrary({ setup: s.setup, setups: s.setups });
+  else {
+    // A node stored before setups: its preset and studio stage migrate (a stage no built-in matches becomes one user setup).
+    if (!inRange(s.exposure, STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) ||
+      !inRange(s.lightAngle, STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) || !validStudioLights(s.studioLights)) return;
+    library = migrateLegacyLighting(kind === "creator" ? "creator" : "studio", { lights: s.studioLights, exposure: s.exposure, angle: s.lightAngle });
+  }
+  // The kind is the shown setup's display: a node whose kind disagrees is damaged.
+  return library && rigKindOf(library) === kind ? lightsNodeState(library, creatorLighting) : undefined;
 } };
+/** A lights node's state for a library and calibration, with the legacy mirror derived from them. */
+export function lightsNodeState(library: SetupLibrary, creatorLighting: CreatorLightingOptions): LightsState {
+  const stage = legacyStudioStage(library);
+  return { setup: library.setup, setups: structuredClone(library.setups) as LightsState["setups"], creatorLighting: { ...creatorLighting },
+    exposure: stage.exposure, lightAngle: stage.angle, studioLights: { ...stage.lights } };
+}
+/**
+ * The lights a workspace's `preview` block holds: its setups when it stores them (`lightingSetups`, only while the person has setups of
+ * their own), else its legacy preset and studio stage, migrated. Unreadable lighting gives Soft studio.
+ */
+export function previewLights(preview: PreviewState): LightsState {
+  return (lights.parse(storedLights(preview), previewRig(preview)) as LightsState | undefined) ??
+    lightsNodeState(DEFAULT_SETUP_LIBRARY, readCreatorLighting(preview.creatorLighting) ?? DEFAULT_CREATOR_LIGHTING);
+}
+/** The lights fields as the `preview` block stores them (the legacy stage, and the setups when present). */
+const storedLights = (preview: PreviewState) => ({ exposure: preview.exposure, lightAngle: preview.lightAngle, studioLights: { ...preview.studioLights },
+  creatorLighting: { ...preview.creatorLighting },
+  ...(preview.lightingSetups ? structuredClone({ setup: preview.lightingSetups.setup, setups: preview.lightingSetups.setups }) : {}) });
+/** Stored setups decide the rig (a build before setups only ever writes `lightingPreset` without them). */
+const previewRig = (preview: PreviewState): LightingPreset => preview.lightingSetups ? rigKindOf(preview.lightingSetups) : preview.lightingPreset;
 const display: NodeCodec = { parse: state => {
   const s = state as Partial<DisplayState>;
   if (!bool(s.brows) || !bool(s.lashes) || !bool(s.hair) || !bool(s.piercings) || !optional(s.body, bool)) return;
@@ -107,17 +142,18 @@ export const STUDIO_VIEW_GRAPH_RULES: ViewGraphRules = Object.freeze({
 
 /** The main view's node states as the legacy `preview` block holds them. */
 function mainNodes(preview: PreviewState) {
+  const lights = previewLights(preview);
   return {
     scene: { eyeShape: preview.eyeShape, normals: preview.normals, ...(preview.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: preview.eyeOwnRoughness }),
       ...(preview.uncensored === undefined ? {} : { uncensored: preview.uncensored }),
       ...(preview.physics === undefined ? {} : { physics: preview.physics }) } satisfies SceneState,
     camera: (preview.camera ? { pose: structuredClone(preview.camera) } : {}) satisfies CameraNodeState,
-    lights: { exposure: preview.exposure, lightAngle: preview.lightAngle, studioLights: { ...preview.studioLights },
-      creatorLighting: { ...preview.creatorLighting } } satisfies LightsState,
+    // Read through the codec, so the node holds the setups (a workspace saved before them migrates here).
+    lights: lights satisfies LightsState,
     display: { brows: preview.brows, lashes: preview.lashes, hair: preview.hair, piercings: preview.piercings,
       ...(preview.body === undefined ? {} : { body: preview.body }) } satisfies DisplayState,
     tools: { on: { [LEGACY_TOOL_FIELDS.surface]: preview.surface, [LEGACY_TOOL_FIELDS.wire]: preview.wire } } satisfies ToolsState,
-    rig: preview.lightingPreset,
+    rig: rigKindOf(lights),
   };
 }
 
@@ -169,10 +205,18 @@ export function isDefaultViewGraph(data: ViewGraphData): boolean {
   return !!on && Object.keys(on).every(id => mirrored.has(id));
 }
 
-/** What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph. */
+/**
+ * What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph, with each
+ * lights node's calibration in its stored form (the untouched token), as `preview` has it, so every view keeps following a refit (PREV-135).
+ */
 export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
   const data = graph.data();
-  return isDefaultViewGraph(data) ? undefined : data;
+  if (isDefaultViewGraph(data)) return undefined;
+  const known = new Set<string>(LIGHTING_PRESETS);
+  return { ...data, lights: data.lights.map(node => {
+    const calibration = node.kind !== undefined && known.has(node.kind) ? readCreatorLighting(node.creatorLighting) : null;
+    return calibration ? { ...node, creatorLighting: storedCreatorLighting(calibration) } : node;
+  }) };
 }
 
 /**
@@ -199,5 +243,8 @@ export function previewMirror(graph: ViewGraph, view = MAIN_VIEW) {
     ...(f.scene.uncensored === undefined ? {} : { uncensored: f.scene.uncensored }),
     ...(f.scene.physics === undefined ? {} : { physics: f.scene.physics }),
     exposure: f.lights.exposure, lightAngle: f.lights.lightAngle, lightingPreset: f.rig, creatorLighting: f.lights.creatorLighting,
-    studioLights: f.lights.studioLights, ...(f.camera ? { camera: f.camera } : {}) };
+    studioLights: f.lights.studioLights,
+    // The setups are stored only while the person has their own: otherwise the legacy fields say exactly which built-in shows.
+    ...(f.lights.setups.length ? { lightingSetups: { setup: f.lights.setup, setups: f.lights.setups } } : {}),
+    ...(f.camera ? { camera: f.camera } : {}) };
 }

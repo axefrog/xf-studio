@@ -1,9 +1,10 @@
 import type { PreviewTextureSize } from "../../preview-quality";
-import { applyCapability, badge, button, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
+import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
 import { comingSoon, liveFeatures } from "../coming-soon";
-import { ChoiceList } from "../components/choice-list";
+import { ChoiceList, DirectionDial, GroupSection, LightList, SliderWithValue } from "../components";
+import { openMenu, openValuePopover } from "../menu";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -13,7 +14,7 @@ import type { ConeReading, IntensityForm, LightingPreset } from "../../creator-l
 import type { LightingStatus } from "../../preview-actions";
 import type { MotionState } from "../../motion-actions";
 import type { DetailLimit, DetailNotice } from "../../detail-limits";
-import type { StudioLightKey, StudioSetupId } from "../../studio-lighting";
+import type { LightType, SetupBackdrop, SetupDisplay } from "../../lighting-setups";
 
 /** What the field-of-view slider does, in plain words (UI-85): its help tip. The line under it is kept for limits and loading. */
 const FOV_HELP = "Changing the lens angle moves the camera, so your V's face stays the same size.";
@@ -64,16 +65,23 @@ export function characterDetailRows(details: DetailStatus | undefined): { rows: 
   return { rows, limits, message: details.message && !rows.some(row => row.note === details.message) ? details.message : "" };
 }
 
-/** One plain line about the lighting preset and where its colour grade came from. */
+/** One plain line about the shown setup's colour grade: where the game's grade came from, while it draws through it. */
 export function lightingPresetLine(preset: LightingPreset | undefined, status: LightingStatus | null | undefined): string {
-  // Studio lighting needs no line (its segment's tooltip says what it is); creator lighting states where its colour grade came from.
   if (preset !== "creator") return "";
   const lut = status?.lut;
   return !lut || lut.phase !== "ready" ? "Loading the game's colour grade…" : lut.source?.note ?? "";
 }
-/** What the two lighting presets are (the Light heading's help tip). */
-const LIGHT_HELP = ["Studio: soft authoring light you can adjust. Character creator: the game's creator lights for your V's body, on black, with fixed exposure.",
-  "The lights the game flags for shadows cast them onto your V; the creator's light strengths are still being calibrated."];
+/** What lighting setups are (the Light heading's help tip). */
+const LIGHT_HELP = ["Built-in setups are starting points and never change: changing one makes your own copy, so nothing you change is lost.",
+  "Character creator uses the game's creator lights for your V's body, on black, with the game's colour grade. Its light strengths are still being calibrated."];
+type LightView = NonNullable<Frame["preview"]["lightingSetups"]>["shown"]["lights"][number];
+/** One light's glance line in the list: its strength and whether it casts shadows (the row's glyph shows its kind). */
+export function lightMeta(light: Pick<LightView, "intensity" | "shadows">): string {
+  const strength = light.intensity >= 100 ? Math.round(light.intensity) : Number(light.intensity.toPrecision(2));
+  return [String(strength), light.shadows ? "shadows" : ""].filter(Boolean).join(" · ");
+}
+/** The strength slider's range for a kind of light (lux for directional, candela for spot). */
+const STRENGTH_RANGE = { directional: { min: 0, max: 20, step: .05 }, spot: { min: 0, max: 500, step: .5 } } as const;
 
 export function lightingPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -86,11 +94,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   };
   // A released slider (or the end of a keyboard burst) ends its View and lighting step: the next drag is a step of its own (CORE-95).
   const endEdit = () => { port.authoring.dispatch({ kind: "view.endEdit" }); };
-  const preset = new Segmented<LightingPreset>({ label: "Lighting", options: [
-    { value: "studio", label: "Studio", title: "The Studio's soft authoring light" },
-    { value: "creator", label: "Character creator", title: "The game's creator and mirror lighting, for comparing with the game" }],
-  onSelect: value => rt.dispatch({ kind: "preview.setLightingPreset", preset: value }) });
-  const presetNote = note("");
+  const capability = (action: Parameters<typeof port.authoring.capability>[0]) => port.authoring.capability(action);
   const live = liveFeatures(port);
   const creatorFace = button({ label: "Creator face", icon: "front", small: true, title: "The creator's face-page camera: 15° lens, 1.2 m",
     onClick: () => rt.dispatch({ kind: "camera.creatorFraming", page: "face" }) });
@@ -116,7 +120,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   // A research tool (UI-85): shown only with View preferences › Show research tools.
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
     h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
-      helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
+      helpTip("the calibration", "How the built-in Character creator reads the game's rig, for matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise. Your own setups keep what they copied.")),
     intensity.element, cone.element, creatorExposure.element, creatorShadows.element, h("div", { class: "row" }, resetCalibration));
   // A framing limit is said once, as a notice (no line is reserved under the slider for something this rare; the feedback shows a
   // repeated notice once while it is on screen, so a drag at the limit doesn't flood it).
@@ -141,36 +145,113 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     const limited = result.ok && (result.result as { limited?: boolean } | undefined)?.limited;
     if (limited) fovLine("Too narrow for the whole body. Widen the panel or raise the field of view.");
   } });
-  // Studio stage: named setups, then each control on its own (studio-lighting.ts). Exposure is in stops, on a log scale.
-  // The setups arrive with the preview's read model (StudioApplication.previewState().studioSetups).
-  let setupButtons: { id: StudioSetupId; button: HTMLButtonElement }[] = [];
-  const setupRow = h("div", { class: "chip-row", role: "group", "aria-label": "Studio lighting setup" });
-  // The pressed chip is the setup in use (none pressed once a light is adjusted); no readout repeats it.
-  const setups = h("div", { class: "control" }, h("span", { class: "control-label" }, h("span", { text: "Setup" })), setupRow);
-  const studioExposureRange = rt.range("preview.setExposure", "value"), stops = (value: number) => Math.log2(value);
-  const exposure = new Slider({ label: "Exposure", min: stops(studioExposureRange.min), max: stops(studioExposureRange.max), step: .05,
-    format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
+
+  // ----- Lighting setups (lighting-setups.ts): one flat list, the built-ins first, then the person's own. -----
+  let shownId = "soft";
+  const setupList = new ChoiceList<string>({ label: "Lighting setup", showLabel: false, layout: "chips", quietReason: true,
+    onSelect: setup => rt.dispatch({ kind: "preview.selectLightingSetup", setup }) });
+  const shown = () => port.authoring.previewState().lightingSetups?.shown;
+  const newSetup = button({ label: "New setup", icon: "plus", small: true, onClick: () => rt.dispatch({ kind: "preview.createLightingSetup", from: shownId }) });
+  const renameSetup = button({ label: "Rename…", icon: "rename", small: true, onClick: event => {
+    const current = shown(); if (!current) return;
+    openValuePopover({ kind: "text", label: "Name", value: current.label, maxLength: 60 }, event.currentTarget as Element, { title: "Rename lighting setup", apply: "Rename",
+      validate: value => capability({ kind: "preview.renameLightingSetup", setup: current.id, name: String(value) }),
+      commit: value => rt.dispatch({ kind: "preview.renameLightingSetup", setup: current.id, name: String(value) }) });
+  } });
+  const resetSetup = button({ label: "Reset", icon: "reset", small: true, onClick: () => rt.dispatch({ kind: "preview.resetLightingSetup", setup: shownId }) });
+  const deleteSetup = button({ label: "Delete", icon: "trash", small: true, onClick: () => rt.dispatch({ kind: "preview.deleteLightingSetup", setup: shownId }) });
+  const setupActions = h("div", { class: "row wrap gap-s" }, newSetup, renameSetup, resetSetup, deleteSetup);
+  const presetNote = note("");
+  // The shown setup's surroundings: exposure (in stops, whichever display), the room's light, the backdrop and the colour grade.
+  const exposure = new SliderWithValue({ label: "Exposure", min: Math.log2(0.125), max: Math.log2(8), step: .1, unit: "EV",
+    format: value => `${value < -.05 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
     transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); }, commit: endEdit, cancel: endEdit } });
-  const angle = new Slider({ label: "Key light direction", ...rt.range("preview.setKeyAngle", "degrees"), step: 1,
-    format: value => { const degrees = Math.round(value) % 360; return `${Math.round(value)}° ${degrees === 0 ? "front" : degrees === 180 ? "behind"
-      : degrees < 180 ? "from V's right" : "from V's left"}`; },
-    transaction: { edit: degrees => { edit({ kind: "preview.setKeyAngle", degrees }); }, commit: endEdit, cancel: endEdit } });
-  const studioSlider = (key: StudioLightKey, label: string, format: (value: number) => string, step: number, help?: string) => new Slider({ label, help,
-    ...rt.range("preview.setStudioLight", "value", key), step, format,
-    transaction: { edit: value => { edit({ kind: "preview.setStudioLight", key, value }); }, commit: endEdit, cancel: endEdit } });
-  const percent = (value: number) => `${Math.round(value * 100)}%`;
-  const elevation = studioSlider("elevation", "Key light height", value => `${Math.round(value)}°`, 1);
-  const keyStrength = studioSlider("key", "Key light strength", percent, .05);
-  const environmentStrength = studioSlider("environment", "Room light", percent, .05, "Ambient light and reflections from the room.");
-  const fillStrength = studioSlider("fill", "Fill light strength", percent, .05);
-  const rimStrength = studioSlider("rim", "Rim light strength", percent, .05);
-  const neutral = new Toggle({ label: "Untinted lights", help: "Grey lights of the same brightness instead of the warm key and cool fill, for judging colour.",
-    onChange: enabled => rt.dispatch({ kind: "preview.setStudioNeutral", enabled }) });
-  const resetStudio = button({ label: "Restore defaults", icon: "reset", small: true, variant: "quiet",
-    title: "Put every studio light and the exposure back to Soft studio",
-    onClick: () => rt.dispatch({ kind: "preview.resetStudioLighting" }) });
-  const studioControls = h("div", { class: "section" }, setups, exposure.element, angle.element, elevation.element, keyStrength.element,
-    environmentStrength.element, fillStrength.element, rimStrength.element, neutral.element, h("div", { class: "row" }, resetStudio));
+  const room = new SliderWithValue({ label: "Room light", min: 0, max: 300, step: 5, unit: "%", help: "Ambient light and reflections from the room around your V.",
+    format: value => `${Math.round(value)} %`,
+    transaction: { edit: value => { edit({ kind: "preview.setRoomLight", value: value / 100 }); }, commit: endEdit, cancel: endEdit } });
+  const backdrop = new Segmented<SetupBackdrop>({ label: "Backdrop", options: [{ value: "studio", label: "Studio" }, { value: "black", label: "Black" }],
+    onSelect: value => rt.dispatch({ kind: "preview.setBackdrop", backdrop: value }) });
+  const grade = new Segmented<SetupDisplay>({ label: "Colour grade", options: [
+    { value: "aces", label: "Studio", title: "The Studio's tone mapping (ACES)" }, { value: "game", label: "Game grade", title: "The game's colour grade from your game files" }],
+  onSelect: value => rt.dispatch({ kind: "preview.setDisplayTransform", display: value }) });
+  const surroundings = new GroupSection({ title: "Surroundings", key: "lighting.surroundings", level: "subsection", expanded: true });
+  surroundings.body.append(exposure.element, room.element, backdrop.element, grade.element);
+
+  // The shown setup's lights: the list, then the chosen light's controls.
+  let selectedLight: string | undefined;
+  const lightMenu = (id: string, anchor: Element | { x: number; y: number }, invoker: Element) => {
+    const light = shown()?.lights.find(item => item.id === id); if (!light) return;
+    openMenu([
+      { kind: "action", label: "Rename", icon: "rename", run: () => lights.rename(id) },
+      { kind: "action", label: "Duplicate", icon: "duplicate", capability: capability({ kind: "preview.duplicateLight", light: id }),
+        run: () => rt.dispatch({ kind: "preview.duplicateLight", light: id }) },
+      { kind: "action", label: "Aim at the head", icon: "target", run: () => rt.dispatch({ kind: "preview.aimLightAtHead", light: id }) },
+      { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => rt.dispatch({ kind: "preview.removeLight", light: id }) },
+    ], anchor, { label: `${light.name} actions`, invoker });
+  };
+  const lights = new LightList({ label: "Lights", maxLength: 60, onSelect: id => { selectedLight = id; paintLight(); },
+    onMove: (light, index) => rt.dispatch({ kind: "preview.moveLight", light, index }),
+    onRename: (light, name) => rt.dispatch({ kind: "preview.renameLight", light, name }),
+    onDelete: light => rt.dispatch({ kind: "preview.removeLight", light }),
+    onDuplicate: light => rt.dispatch({ kind: "preview.duplicateLight", light }), onMenu: lightMenu });
+  const addLight = button({ label: "Add light", icon: "plus", small: true, menu: true, onClick: event => openMenu([
+    { kind: "action", label: "Directional light", icon: "sun", capability: capability({ kind: "preview.addLight", type: "directional" }),
+      run: () => rt.dispatch({ kind: "preview.addLight", type: "directional" }) },
+    { kind: "action", label: "Spot light", icon: "lighting", capability: capability({ kind: "preview.addLight", type: "spot" }),
+      run: () => rt.dispatch({ kind: "preview.addLight", type: "spot" }) }], event.currentTarget as Element, { label: "Add light" }) });
+  const lightId = () => selectedLight ?? "";
+  const direction = new DirectionDial({ label: "Direction", transaction: {
+    edit: value => { edit({ kind: "preview.setLight", light: lightId(), key: "azimuth", value: value.azimuth });
+      edit({ kind: "preview.setLight", light: lightId(), key: "elevation", value: value.elevation }); },
+    commit: endEdit, cancel: endEdit } });
+  const lightSlider = (key: "distance" | "intensity" | "cone" | "softness", label: string, range: { min: number; max: number; step: number },
+    unit: string, toValue: (shown: number) => number, format: (value: number) => string, help?: string) => new SliderWithValue({ label, ...range, unit, format, help,
+    transaction: { edit: value => { edit({ kind: "preview.setLight", light: lightId(), key, value: toValue(value) }); }, commit: endEdit, cancel: endEdit } });
+  const strength = lightSlider("intensity", "Strength", STRENGTH_RANGE.directional, "", value => value, value => String(Number(value.toPrecision(3))),
+    "Lux for a directional light, candela for a spot light.");
+  const distance = lightSlider("distance", "Distance", { min: .1, max: 10, step: .05 }, "m", value => value, value => `${value.toFixed(2)} m`,
+    "How far the light is from your V's head. A spot light's strength falls off with it.");
+  const coneSlider = lightSlider("cone", "Cone", { min: 1, max: 89.5, step: .5 }, "°", value => value, value => `${value.toFixed(1)}°`, "Half the spot light's cone angle.");
+  const softness = lightSlider("softness", "Cone softness", { min: 0, max: 100, step: 1 }, "%", value => value / 100, value => `${Math.round(value)} %`);
+  const colour = new ColorField({ label: "Colour", transaction: {
+    edit: value => { edit({ kind: "preview.setLightColour", light: lightId(), colour: value }); }, commit: endEdit, cancel: endEdit } });
+  const kind = new Segmented<LightType>({ label: "Kind", reserveNote: true, options: [{ value: "directional", label: "Directional" }, { value: "spot", label: "Spot" }],
+    onSelect: type => rt.dispatch({ kind: "preview.setLightType", light: lightId(), type }) });
+  const shadows = new Toggle({ label: "Casts shadows", reserveNote: true, onChange: enabled => rt.dispatch({ kind: "preview.setLightShadows", light: lightId(), enabled }) });
+  const lightControls = h("div", { class: "light-editor" }, kind.element, direction.element, distance.element, strength.element, colour.element,
+    coneSlider.element, softness.element, shadows.element);
+  const noLights = emptyState("No lights", "Add a light to light your V directly; the room light still shows her.");
+  const lightsGroup = new GroupSection({ title: "Lights", key: "lighting.lights", level: "subsection", expanded: true });
+  lightsGroup.body.append(lights.element, h("div", { class: "row" }, addLight), noLights, lightControls);
+  let lastFrame: Frame | undefined;
+  /** Paint the chosen light's controls from the last frame (also straight after a selection, before the next frame). */
+  function paintLight() {
+    const view = lastFrame?.preview.lightingSetups, ready = !!lastFrame?.preview.preview;
+    const list = view?.shown.lights ?? [];
+    if (!list.some(light => light.id === selectedLight)) selectedLight = list[0]?.id;
+    lights.update(list.map(light => ({ id: light.id, name: light.name, meta: lightMeta(light), colour: light.colour, kind: light.type })), selectedLight, !ready);
+    const light = list.find(item => item.id === selectedLight);
+    noLights.hidden = !!light; lightControls.hidden = !light;
+    if (!light) return;
+    const gate = (action: Parameters<typeof port.authoring.capability>[0]) => {
+      if (!ready) return { disabled: true, reason: "The preview is still loading." };
+      const allowed = capability(action); return { disabled: !allowed.available, reason: allowed.reason };
+    };
+    kind.update(light.type, type => ready ? capability({ kind: "preview.setLightType", light: light.id, type }) : { available: false, reason: "The preview is still loading." },
+      { note: light.type === "directional" ? "Cone and softness apply to spot lights." : "" });
+    direction.update({ azimuth: light.azimuth, elevation: light.elevation }, { colour: light.colour,
+      others: list.filter(item => item.id !== light.id).map(item => ({ azimuth: item.azimuth, elevation: item.elevation, colour: item.colour })),
+      ...gate({ kind: "preview.setLight", light: light.id, key: "azimuth", value: light.azimuth }) });
+    distance.update(light.distance, gate({ kind: "preview.setLight", light: light.id, key: "distance", value: light.distance }));
+    const range = STRENGTH_RANGE[light.type];
+    strength.update(light.intensity, { ...gate({ kind: "preview.setLight", light: light.id, key: "intensity", value: light.intensity }),
+      min: range.min, max: Math.max(range.max, light.intensity) });
+    colour.update(light.colour, !ready);
+    coneSlider.update(light.cone, gate({ kind: "preview.setLight", light: light.id, key: "cone", value: light.cone }));
+    softness.update(light.softness * 100, gate({ kind: "preview.setLight", light: light.id, key: "softness", value: light.softness }));
+    shadows.update(light.shadows, gate({ kind: "preview.setLightShadows", light: light.id, enabled: !light.shadows }));
+  }
+
   const normals = new Toggle({ label: "Preview normal map", onChange: enabled => rt.dispatch({ kind: "preview.setNormals", enabled }) });
   // The view's tool toggles (view-graph-design.md §3.9): the shown modules' tools, derived like the toolbar, one Toggle each.
   const toolToggles = h("div", { class: "view-tool-toggles" });
@@ -187,60 +268,61 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "panel-content" },
     section({ title: "Camera", help: ["Camera and light are saved with your workspace; they never change your looks or your mod.",
       "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
-    section({ title: "Light", help: LIGHT_HELP }, preset.element, presetNote, studioControls),
+    section({ title: "Light", help: LIGHT_HELP }, setupList.element, setupActions, presetNote, surroundings.element, lightsGroup.element),
     diagnostics,
     section("Display", toolToggles, normals.element, scatterControl, h("div", { class: "research-only" }, optics.element, opticsNote)));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
+      lastFrame = frame;
       const preview = frame.preview.preview, ready = !!preview, assets = frame.status.assets;
       const loading = { disabled: !ready, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? "Preview is still loading." };
       fov.update(preview?.camera.fov, loading);
-      const studioOnly = (action: Parameters<typeof port.authoring.capability>[0]) => {
-        const allowed = port.authoring.capability(action);
+      const gated = (action: Parameters<typeof port.authoring.capability>[0]) => {
+        const allowed = capability(action);
         return ready ? { disabled: !allowed.available, reason: allowed.reason } : loading;
       };
-      // The studio controls belong to the studio stage: while the creator rig shows, only the switch back is offered.
-      studioControls.hidden = preview?.lightingPreset === "creator";
-      exposure.update(preview ? Math.log2(preview.exposure) : undefined, studioOnly({ kind: "preview.setExposure", value: preview?.exposure ?? 1.2 }));
-      angle.update(preview?.lightAngle, studioOnly({ kind: "preview.setKeyAngle", degrees: preview?.lightAngle ?? 0 }));
-      const lights = preview?.studioLights;
-      for (const [slider, key] of [[elevation, "elevation"], [keyStrength, "key"], [environmentStrength, "environment"], [fillStrength, "fill"],
-        [rimStrength, "rim"]] as const) slider.update(lights?.[key], studioOnly({ kind: "preview.setStudioLight", key, value: lights?.[key] ?? 0 }));
-      neutral.update(!!lights?.neutral, studioOnly({ kind: "preview.setStudioNeutral", enabled: !lights?.neutral }));
-      const offered = frame.preview.studioSetups, matched = offered?.active ?? null;
-      const setupKey = JSON.stringify(offered?.setups ?? []);
-      if (setupRow.dataset.key !== setupKey) {
-        setupRow.dataset.key = setupKey;
-        setupButtons = (offered?.setups ?? []).map(entry => ({ id: entry.id, button: h("button", { class: "chip-button", type: "button",
-          "aria-pressed": "false", title: entry.title, "data-title": entry.title,
-          onclick: () => rt.dispatch({ kind: "preview.applyStudioSetup", setup: entry.id }) }, h("span", { text: entry.label })) }));
-        setupRow.replaceChildren(...setupButtons.map(item => item.button));
-      }
-      for (const { id, button: control } of setupButtons) {
-        control.setAttribute("aria-pressed", String(id === matched));
-        applyCapability(control, ready ? port.authoring.capability({ kind: "preview.applyStudioSetup", setup: id }) : { available: false, reason: loading.reason });
-      }
-      applyCapability(resetStudio, ready ? port.authoring.capability({ kind: "preview.resetStudioLighting" }) : { available: false, reason: loading.reason });
-      preset.update(preview?.lightingPreset, value => ready ? port.authoring.capability({ kind: "preview.setLightingPreset", preset: value }) : { available: false, reason: loading.reason });
+      // The setups: one flat list, the built-ins marked as such by their group.
+      const view = frame.preview.lightingSetups;
+      shownId = view?.active ?? "soft";
+      setupList.setOptions((view?.setups ?? []).map(entry => ({ value: entry.id, label: entry.label, group: entry.builtIn ? "Built-in" : "Your setups",
+        title: entry.builtIn ? `${entry.title}. Built in: changing it makes your own copy.` : entry.title })));
+      setupList.update(view?.active, setup => capability({ kind: "preview.selectLightingSetup", setup }), ready ? {} : loading);
+      const current = view?.shown;
+      setText(newSetup.querySelector("span")!, "New setup");
+      newSetup.title = current ? `A new setup of your own, starting from ${current.label}` : "";
+      applyCapability(newSetup, ready ? capability({ kind: "preview.createLightingSetup", from: shownId }) : { available: false, reason: loading.reason });
+      applyCapability(renameSetup, ready ? capability({ kind: "preview.renameLightingSetup", setup: shownId, name: current?.label ?? "" }) : { available: false, reason: loading.reason });
+      resetSetup.title = current && !current.builtIn ? `Put ${current.label} back to ${current.baseLabel}` : "";
+      applyCapability(resetSetup, ready ? capability({ kind: "preview.resetLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
+      applyCapability(deleteSetup, ready ? capability({ kind: "preview.deleteLightingSetup", setup: shownId }) : { available: false, reason: loading.reason });
       setText(presetNote, lightingPresetLine(preview?.lightingPreset, frame.preview.lighting));
       presetNote.hidden = !presetNote.textContent;
-      applyCapability(creatorFace, port.authoring.capability({ kind: "camera.creatorFraming", page: "face" }));
-      applyCapability(creatorHair, port.authoring.capability({ kind: "camera.creatorFraming", page: "hair" }));
+      if (current) {
+        const range = current.exposureRange;
+        exposure.update(Math.log2(current.exposure), { ...gated({ kind: "preview.setExposure", value: current.exposure }), min: Math.log2(range.min), max: Math.log2(range.max) });
+        room.update(current.environment * 100, gated({ kind: "preview.setRoomLight", value: current.environment }));
+        backdrop.update(current.backdrop, value => ready ? capability({ kind: "preview.setBackdrop", backdrop: value }) : { available: false, reason: loading.reason });
+        grade.update(current.display, value => ready ? capability({ kind: "preview.setDisplayTransform", display: value }) : { available: false, reason: loading.reason });
+      }
+      paintLight();
+      addLight.hidden = false;
+      applyCapability(addLight, ready ? capability({ kind: "preview.addLight", type: "spot" }) : { available: false, reason: loading.reason });
+      applyCapability(creatorFace, capability({ kind: "camera.creatorFraming", page: "face" }));
+      applyCapability(creatorHair, capability({ kind: "camera.creatorFraming", page: "hair" }));
       const creator = preview?.creatorLighting;
-      intensity.update(creator?.intensity, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "intensity", value }));
-      cone.update(creator?.cone, value => port.authoring.capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
-      creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...studioOnly({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
-        note: preview?.lightingPreset === "creator" ? "Scene light × k before the game's colour grade. Fitted to a capture's forehead." : "Applies while Character creator lighting is on." });
-      creatorShadows.update(creator?.shadows ?? true, studioOnly({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
-      applyCapability(resetCalibration, ready ? port.authoring.capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
-      // The panel's loading reason is said once, in the line that is always there (UI-90).
+      intensity.update(creator?.intensity, value => capability({ kind: "preview.setCreatorLighting", key: "intensity", value }));
+      cone.update(creator?.cone, value => capability({ kind: "preview.setCreatorLighting", key: "cone", value }));
+      creatorExposure.update(creator ? log(creator.exposure) : undefined, { ...gated({ kind: "preview.setCreatorLighting", key: "exposure", value: creator?.exposure ?? 1 }),
+        note: "Scene light × k before the game's colour grade, for the built-in Character creator. Fitted to a capture's forehead." });
+      creatorShadows.update(creator?.shadows ?? true, gated({ kind: "preview.setCreatorShadows", enabled: !(creator?.shadows ?? true) }));
+      applyCapability(resetCalibration, ready ? capability({ kind: "preview.resetCreatorLighting" }) : { available: false, reason: loading.reason });
       // Research tools (UI-85): the calibration and the display studies show only when asked for.
       const research = !!frame.preferences?.researchTools;
       diagnostics.hidden = !research;
       for (const node of element.querySelectorAll<HTMLElement>(".research-only")) node.hidden = !research;
-      applyCapability(front, port.authoring.capability({ kind: "camera.front" }));
-      applyCapability(bodyView, port.authoring.capability({ kind: "camera.body" }));
+      applyCapability(front, capability({ kind: "camera.front" }));
+      applyCapability(bodyView, capability({ kind: "camera.body" }));
       normals.update(!!preview?.normals, loading);
       const tools = frame.viewTools.filter(tool => tool.kind === "toggle" && tool.state === "tools");
       for (const tool of tools) if (!toggles.has(tool.id)) toggles.set(tool.id, new Toggle({ label: tool.label,

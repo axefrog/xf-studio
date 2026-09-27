@@ -1,56 +1,75 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { creatorShadowCasters, DEFAULT_CREATOR_LIGHTING, readCreatorLighting, storedCreatorLighting } from "../src/creator-lighting";
-import { createLightingPresetStage } from "../src/lighting-preset-stage";
+import { createLightingSetupStage } from "../src/lighting-setup-stage";
+import { studioStageSetup, type LightingSource } from "../src/lighting-setups";
+import { DEFAULT_STUDIO_STAGE } from "../src/studio-lighting";
+import type { StudioEnvironment } from "../src/studio-environment";
 import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/preview-actions";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/trusted-preview-services";
-import { parseWorkspace } from "../src/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/workspace-state";
+import { createStudioViewGraph, storedViewGraph } from "../src/preview-view-graph";
+import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
+const GAME: LightingSource = { kind: "game", calibration: DEFAULT_CREATOR_LIGHTING };
+const SOFT: LightingSource = { kind: "setup", setup: studioStageSetup(DEFAULT_STUDIO_STAGE) };
+/** A stand-in room: the prefiltered texture it would set, or (probe) the light probe it would add. */
+const room = (mode: "pmrem" | "probe" = "pmrem", texture = new THREE.Texture()) => (_renderer: THREE.WebGLRenderer, scene: THREE.Scene): StudioEnvironment => {
+  const probe = new THREE.LightProbe();
+  if (mode === "pmrem") scene.environment = texture; else scene.add(probe);
+  return { mode, lights: mode === "probe" ? [probe] : [], restore: () => {}, dispose: () => {} };
+};
+
 function port(options: { creator?: boolean } = {}) {
-  const calls: string[] = [], listeners = new Set<() => void>();
+  const calls: string[] = [], listeners = new Set<() => void>(), sources: LightingSource[] = [];
   let camera = { position: [0, 1.67, -1], target: [0, 1.67, 0], fov: 30 };
   let status: LightingStatus = { preset: "studio", sex: "female", defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: { phase: "idle", source: null } };
   const base: PreviewPort = {
     cameraState: () => structuredClone(camera), front: () => false, setFov: () => false, endFovGesture: () => {},
     restoreCamera: value => { camera = structuredClone(value); calls.push(`camera:${value.fov}`); },
-    setExposure: value => calls.push(`exposure:${value}`), setLightAngle: value => calls.push(`angle:${value}`),
     setSurfaceControls: () => {}, setWire: () => {}, setNormals: () => {}, setEyeOptics: () => {}, setHair: () => {},
     setDetail: () => {}, setEyeShape: () => {}, setPiercings: () => {},
   };
   const creator: Partial<PreviewPort> = options.creator === false ? {} : {
-    setLightingPreset: preset => { calls.push(`preset:${preset}`); status = { ...status, preset }; },
-    setCreatorLighting: value => calls.push(`creator:${value.intensity}/${value.cone}/${value.exposure}`),
+    setLighting: source => {
+      sources.push(structuredClone(source));
+      const preset = source.kind === "game" || source.setup.display === "game" ? "creator" : "studio";
+      calls.push(source.kind === "game" ? `creator:${source.calibration.intensity}/${source.calibration.cone}/${source.calibration.exposure}` : `setup:${preset}`);
+      status = { ...status, preset };
+    },
     creatorCamera: page => ({ position: [0, 1.62, page === "face" ? -1.2 : -2], target: [0, 1.62, 0], fov: 15 }),
     lightingStatus: () => status,
     onLightingStatus: listener => { listeners.add(listener); return () => listeners.delete(listener); },
   };
-  return { port: { ...base, ...creator } as PreviewPort, calls, listeners,
+  return { port: { ...base, ...creator } as PreviewPort, calls, listeners, sources,
     setStatus(next: LightingStatus) { status = next; for (const listener of listeners) listener(); } };
 }
 
-test("the creator preset is a typed, reversible workspace preference; studio stays the default", () => {
+test("Character creator is a setup like the others: reversible, the game rig to the device, its exposure the game's k", () => {
   const { port: p, calls } = port();
   const actions = new PreviewActions(freshWorkspace().preview, p);
   expect(actions.snapshot().lightingPreset).toBe("studio");
   expect(actions.snapshot().creatorLighting).toEqual(DEFAULT_CREATOR_LIGHTING);
-  actions.dispatch({ kind: "preview.setLightingPreset", preset: "creator" });
+  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
   expect(actions.snapshot().lightingPreset).toBe("creator");
-  // The studio stage's exposure and key angle don't apply while the game's lights show.
-  expect(actions.capability({ kind: "preview.setExposure", value: 1 })).toMatchObject({ available: false });
-  expect(actions.capability({ kind: "preview.setKeyAngle", degrees: 10 }).reason).toContain("Studio lighting");
-  actions.dispatch({ kind: "preview.setLightingPreset", preset: "studio" });
-  expect(actions.capability({ kind: "preview.setExposure", value: 1 }).available).toBe(true);
-  expect(calls).toEqual(["preset:creator", "preset:studio"]);
+  // Its exposure is the game display's k: the range follows, and a change forks it (the built-in's name never describes edited values).
+  expect(actions.capability({ kind: "preview.setExposure", value: 15 }).available).toBe(true);
+  expect(actions.capability({ kind: "preview.setExposure", value: 30 }).reason).toBe("Exposure must be between 0.01 and 20.");
+  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "soft" });
+  expect(actions.capability({ kind: "preview.setExposure", value: 15 }).reason).toBe("Exposure must be between 0.125 and 8.");
+  expect(calls).toEqual([`creator:isotropic/full/${DEFAULT_CREATOR_LIGHTING.exposure}`, "setup:studio"]);
 });
 
 test("creator diagnostics validate their switches and exposure, and the camera preset frames the creator page", () => {
   const { port: p, calls } = port();
   const actions = new PreviewActions(freshWorkspace().preview, p);
+  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
+  calls.length = 0;
   expect(actions.capability({ kind: "preview.setCreatorLighting", key: "cone", value: "quarter" as never }).available).toBe(false);
   expect(actions.capability({ kind: "preview.setCreatorLighting", key: "exposure", value: 0 }).reason).toContain("between");
   expect(actions.capability({ kind: "preview.setLightingPreset", preset: "sunset" as never }).available).toBe(false);
@@ -67,6 +86,7 @@ test("creator diagnostics validate their switches and exposure, and the camera p
 test("Restore defaults puts every creator calibration control back, and says when there is nothing to restore", () => {
   const { port: p, calls } = port();
   const actions = new PreviewActions(freshWorkspace().preview, p);
+  actions.dispatch({ kind: "preview.selectLightingSetup", setup: "creator" });
   expect(actions.capability({ kind: "preview.resetCreatorLighting" })).toEqual({ available: false, reason: "The calibration is already at its defaults." });
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "intensity", value: "cone" });
   actions.dispatch({ kind: "preview.setCreatorLighting", key: "cone", value: "half" });
@@ -83,10 +103,10 @@ test("Restore defaults puts every creator calibration control back, and says whe
   expect(bare.capability({ kind: "preview.resetCreatorLighting" }).available).toBe(false);
 });
 
-test("a preview without the creator rig explains why, and the LUT's arrival notifies readers", () => {
+test("a preview without the lighting stage explains why, and the LUT's arrival notifies readers", () => {
   const bare = new PreviewActions(freshWorkspace().preview, port({ creator: false }).port);
-  expect(bare.capability({ kind: "preview.setLightingPreset", preset: "creator" }).reason).toBe("Creator lighting is unavailable in this preview.");
-  expect(bare.capability({ kind: "preview.setLightingPreset", preset: "studio" }).available).toBe(true);
+  expect(bare.capability({ kind: "preview.selectLightingSetup", setup: "creator" }).reason).toBe("Lighting controls are unavailable in this preview.");
+  expect(bare.capability({ kind: "preview.setLightingPreset", preset: "studio" }).available).toBe(false);
   expect(bare.capability({ kind: "camera.creatorFraming", page: "face" }).available).toBe(false);
   expect(bare.lightingStatus()).toBeNull();
   const live = port(), actions = new PreviewActions(freshWorkspace().preview, live.port);
@@ -113,7 +133,8 @@ test("descriptors and application validation cover the new actions", () => {
   expect(app.dispatch({ kind: "preview.setLightingPreset", preset: "creator" })).toMatchObject({ ok: true });
   expect(app.previewState().preview?.lightingPreset).toBe("creator");
   expect(app.previewState().lighting?.preset).toBe("creator");
-  expect(app.dispatch({ kind: "preview.setExposure", value: 1 })).toMatchObject({ ok: false });
+  expect(app.dispatch({ kind: "preview.setExposure", value: 1 })).toMatchObject({ ok: true });
+  expect(app.previewState().lightingSetups?.shown).toMatchObject({ label: "Custom (from Character creator)", exposure: 1 });
 });
 
 test("the workspace keeps the preset and diagnostics, and restore applies them", () => {
@@ -134,46 +155,47 @@ test("the workspace keeps the preset and diagnostics, and restore applies them",
   const { port: p, calls } = port();
   createTrustedPreviewServices(parsed, { preview: p, savedAppearance: { apply: () => ({ applied: [], appearanceReferences: 0 } as never) },
     motion: { idle: undefined, available: false, setIdle: () => {}, setIdlePaused: () => {}, setIdleContributions: () => {}, setBlink: () => {}, animateBlink: () => {} } as never });
-  expect(calls).toContain("creator:cone/full/1.5");
-  expect(calls).toContain("preset:creator");
+  expect(calls).toEqual(["creator:cone/full/1.5"]);
 });
 
-test("the Three stage hides the studio stage for the creator rig and restores exactly what it found", async () => {
-  const scene = new THREE.Scene(), environment = new THREE.Texture(), background = new THREE.Texture();
-  scene.environment = environment; scene.background = background;
-  const key = new THREE.DirectionalLight(), fill = new THREE.DirectionalLight();
-  fill.visible = false; // A light the studio itself had hidden stays hidden afterwards.
+test("the Three stage shows a setup's lights, room, backdrop and display, and the creator rig for the body shown", async () => {
+  const scene = new THREE.Scene(), texture = new THREE.Texture(), background = new THREE.Texture();
+  scene.background = background;
   const renders: string[] = [];
   const renderer = { render: (_s: THREE.Scene, c: THREE.Camera) => renders.push(c.type), setRenderTarget: () => {}, getRenderTarget: () => null,
-    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8), toneMappingExposure: 1 } as unknown as THREE.WebGLRenderer;
   let loads = 0, resolveLut!: () => void;
-  const stage = createLightingPresetStage({ scene, renderer, studioLights: [key, fill],
+  const stage = createLightingSetupStage({ scene, renderer, createEnvironment: room("pmrem", texture),
     loadLut: () => { loads++; return new Promise(resolve => { resolveLut = () => resolve({ lut: null, source: { kind: "neutral", depotPath: null, archive: null,
       group: null, provider: null, alternatives: [], rule: null, size: null, note: "neutral", skipped: [] } }); }); } });
-  const spots = () => stage.rig.group.children.filter(child => child instanceof THREE.SpotLight);
+  const lights = () => stage.rig.group.children.filter(child => (child as THREE.Light).isLight) as (THREE.DirectionalLight | THREE.SpotLight)[];
+  // Soft studio by default: key, fill and rim, the room, the stage backdrop, ACES at 1.2.
+  expect(lights().map(light => light.name)).toEqual(["xfs-light-key", "xfs-light-fill", "xfs-light-rim"]);
+  expect([scene.environment, scene.background, scene.environmentIntensity, renderer.toneMappingExposure]).toEqual([texture, background, 1, 1.2]);
+  expect(stage.status().preset).toBe("studio");
+  let changes = 0; stage.subscribe(() => changes++);
+  stage.setSource(GAME);
+  const spots = () => lights().filter(light => light instanceof THREE.SpotLight);
   expect(spots()).toHaveLength(15);
-  // The flagged lights cast head-scoped shadow maps that follow the preview quality; the switch turns them off.
-  const casting = () => spots().filter(light => light.castShadow).map(light => light.name.replace("xfs-creator-", ""));
+  expect(lights()).toHaveLength(15);
+  expect(scene.environment).toBeNull();
+  expect((scene.background as unknown as THREE.Color).getHex()).toBe(0);
+  expect(stage.status()).toMatchObject({ preset: "creator", lut: { phase: "loading" } });
+  // The flagged lights cast head-scoped shadow maps that follow the preview quality; the calibration's switch turns them off.
+  const casting = () => spots().filter(light => light.castShadow).map(light => light.name.replace("xfs-light-", ""));
   expect(casting().sort()).toEqual(creatorShadowCasters("female", DEFAULT_CREATOR_LIGHTING).sort());
   expect(spots().find(light => light.castShadow)!.shadow.mapSize.x).toBe(1024);
   stage.setShadowQuality(4096);
   expect(spots().find(light => light.castShadow)!.shadow.mapSize.x).toBe(2048);
-  stage.setCreatorOptions({ ...DEFAULT_CREATOR_LIGHTING, shadows: false });
+  stage.setSource({ kind: "game", calibration: { ...DEFAULT_CREATOR_LIGHTING, shadows: false } });
   expect(casting()).toEqual([]);
-  stage.setCreatorOptions({ ...DEFAULT_CREATOR_LIGHTING });
+  stage.setSource(GAME);
   expect(casting()).toHaveLength(6);
   // Solo (developer evidence) shows one light, null all of them again.
   stage.solo("Main_Face");
-  expect(spots().filter(light => light.visible).map(light => light.name)).toEqual(["xfs-creator-Main_Face"]);
+  expect(spots().filter(light => light.visible).map(light => light.name)).toEqual(["xfs-light-Main_Face"]);
   stage.solo(null);
   expect(spots().every(light => light.visible)).toBe(true);
-  expect(stage.rig.group.visible).toBe(false);
-  let changes = 0; stage.subscribe(() => changes++);
-  stage.setPreset("creator");
-  expect(scene.environment).toBeNull();
-  expect((scene.background as unknown as THREE.Color).getHex()).toBe(0);
-  expect([key.visible, fill.visible, stage.rig.group.visible]).toEqual([false, false, true]);
-  expect(stage.status().lut.phase).toBe("loading");
   const camera = new THREE.PerspectiveCamera();
   stage.render(camera);
   expect(renders).toEqual(["PerspectiveCamera", "OrthographicCamera"]); // scene into the linear target, then the display pass
@@ -181,16 +203,27 @@ test("the Three stage hides the studio stage for the creator rig and restores ex
   expect(stage.status().lut.phase).toBe("ready");
   stage.setBodySex("male");
   expect(spots()).toHaveLength(14);
-  stage.setPreset("studio"); stage.setPreset("creator"); stage.setPreset("studio");
-  expect(loads).toBe(2); // each activation asks the host again (PREV-40)
-  expect(scene.environment).toBe(environment);
-  expect(scene.background).toBe(background);
-  expect([key.visible, fill.visible, stage.rig.group.visible]).toEqual([true, false, false]);
+  expect(stage.shown().focus).toEqual([0, 1.67, 0]);
+  stage.setSource(SOFT); stage.setSource(GAME); stage.setSource(SOFT);
+  expect(loads).toBe(2); // each activation of the game display asks the host again (PREV-40)
+  expect([scene.environment, scene.background]).toEqual([texture, background]);
+  expect(lights().map(light => light.name)).toEqual(["xfs-light-key", "xfs-light-fill", "xfs-light-rim"]);
   renders.length = 0; stage.render(camera);
   expect(renders).toEqual(["PerspectiveCamera"]);
   expect(changes).toBeGreaterThanOrEqual(5);
   expect(stage.camera("face")).toEqual({ position: [0, 1.67, -1.2], target: [0, 1.67, 0], fov: 15 });
+  // A setup with no room light has no environment at all; with the light probe instead, the probe follows the strength.
+  stage.setSource({ kind: "setup", setup: { ...studioStageSetup(DEFAULT_STUDIO_STAGE), environment: 0, backdrop: "black" } });
+  expect([scene.environment, (scene.background as unknown as THREE.Color).getHex()]).toEqual([null, 0]);
   stage.dispose();
+  const probed = new THREE.Scene();
+  const probeStage = createLightingSetupStage({ scene: probed, renderer, createEnvironment: room("probe"), loadLut: () => new Promise(() => {}) });
+  const probe = probeStage.environment.lights[0] as THREE.LightProbe;
+  probeStage.setSource({ kind: "setup", setup: { ...studioStageSetup(DEFAULT_STUDIO_STAGE), environment: 0.3 } });
+  expect([probe.visible, probe.intensity, probed.environmentIntensity]).toEqual([true, 0.3, 0.3]);
+  probeStage.setSource(GAME);
+  expect(probe.visible).toBe(false);
+  probeStage.dispose();
 });
 
 test("the studio stage draws through the scene-linear target too, with the backdrop untoned beneath it (PREV-50)", () => {
@@ -211,7 +244,7 @@ test("the studio stage draws through the scene-linear target too, with the backd
       expect(c).toBeDefined();
     },
   } as unknown as THREE.WebGLRenderer;
-  const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: () => new Promise(() => {}) });
+  const stage = createLightingSetupStage({ scene, renderer, createEnvironment: room(), loadLut: () => new Promise(() => {}) });
   expect(stage.display.path).toBe("linear");
   stage.render(new THREE.PerspectiveCamera());
   expect(calls).toEqual([
@@ -240,10 +273,10 @@ test("without a renderable half-float buffer the creator preset renders into an 
       getClearColor: (c: THREE.Color) => c, getClearAlpha: () => 1, setClearColor: () => {},
       render(s: THREE.Scene) { if (s === scene) targets.push(target); },
     } as unknown as THREE.WebGLRenderer;
-    const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: () => new Promise(() => {}) });
+    const stage = createLightingSetupStage({ scene, renderer, createEnvironment: room(), loadLut: () => new Promise(() => {}) });
     const camera = new THREE.PerspectiveCamera();
     stage.render(camera);
-    stage.setPreset("creator");
+    stage.setSource(GAME);
     stage.render(camera);
     const [studio, creator] = targets;
     if (extensions.length) {
@@ -275,13 +308,13 @@ test("the creator preset re-asks the host on activation and swaps the grade only
     { lut: cube(0.25), file: "a".repeat(64) + ".bin", source: source("installed", "Colour grading: your LUT mod.") },
   ];
   let loads = 0;
-  const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: async () => answers[loads++]! });
+  const stage = createLightingSetupStage({ scene, renderer, createEnvironment: room(), loadLut: async () => answers[loads++]! });
   const applied: unknown[] = [];
   const setLut = stage.display.setLut.bind(stage.display);
   stage.display.setLut = next => { applied.push(next); setLut(next); };
   const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-  const reactivate = async () => { stage.setPreset("studio"); stage.setPreset("creator"); await settle(); };
-  stage.setPreset("creator"); await settle();
+  const reactivate = async () => { stage.setSource(SOFT); stage.setSource(GAME); await settle(); };
+  stage.setSource(GAME); await settle();
   expect(stage.status().lut.source?.kind).toBe("neutral");
   // WolvenKit became ready (a new installation fingerprint on the host): the next activation shows the LUT.
   await reactivate();
@@ -311,18 +344,18 @@ test("a changed cube with the same source description still notifies, so the vie
     { lut: cube(0.5), file: "b".repeat(64) + ".bin", source: structuredClone(source) },
   ];
   let loads = 0;
-  const stage = createLightingPresetStage({ scene, renderer, studioLights: [], loadLut: async () => answers[loads++]! });
+  const stage = createLightingSetupStage({ scene, renderer, createEnvironment: room(), loadLut: async () => answers[loads++]! });
   const applied: unknown[] = [];
   const setLut = stage.display.setLut.bind(stage.display);
   stage.display.setLut = next => { applied.push(next); setLut(next); };
   const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-  stage.setPreset("creator"); await settle();
+  stage.setSource(GAME); await settle();
   let notices = 0; stage.subscribe(() => notices++);
-  stage.setPreset("studio"); stage.setPreset("creator");
+  stage.setSource(SOFT); stage.setSource(GAME);
   notices = 0; await settle();
   expect(applied).toHaveLength(2);
   expect(notices).toBe(1);
-  stage.setPreset("studio"); stage.setPreset("creator");
+  stage.setSource(SOFT); stage.setSource(GAME);
   notices = 0; await settle();
   expect(applied).toHaveLength(2);
   expect(notices).toBe(0);
@@ -339,4 +372,61 @@ test("the calibration is stored as the untouched token at its defaults, so an un
   expect(readCreatorLighting(storedCreatorLighting(tuned))).toEqual(tuned);
   const workspace = freshWorkspace();
   expect(parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS).preview.creatorLighting).toEqual(DEFAULT_CREATOR_LIGHTING);
+});
+
+test("shadow maps survive a quality notice that keeps their size, and are drawn again after a lost context (PREV-131, PREV-132)", () => {
+  const scene = new THREE.Scene();
+  const caster = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  caster.castShadow = true; scene.add(caster);
+  const shadowMap = { enabled: false, type: 0, autoUpdate: true, needsUpdate: false };
+  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null, shadowMap,
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
+  let restored = 0;
+  const stage = createLightingSetupStage({ scene, renderer, loadLut: () => new Promise(() => {}),
+    createEnvironment: (r, s) => ({ ...room()(r, s), restore: () => { restored++; } }) });
+  expect([shadowMap.enabled, shadowMap.autoUpdate]).toEqual([true, false]);
+  const camera = new THREE.PerspectiveCamera(), drawn = () => { const was = shadowMap.needsUpdate; shadowMap.needsUpdate = false; return was; };
+  stage.render(camera);
+  expect(drawn()).toBe(true);
+  stage.setShadowQuality(1024);
+  const key = stage.rig.objects[0]!, map = { dispose: () => { throw Error("disposed"); } } as unknown as THREE.WebGLRenderTarget;
+  key.shadow.map = map;
+  // The preview quality notifies again at the same size: the maps stay, nothing needs drawing.
+  stage.setShadowQuality(1024);
+  expect(key.shadow.map).toBe(map);
+  stage.render(camera);
+  expect(drawn()).toBe(false);
+  // A new size is a new fingerprint: the next frame draws the maps at it.
+  key.shadow.map = null;
+  stage.setShadowQuality(2048);
+  stage.render(camera);
+  expect(drawn()).toBe(true);
+  stage.render(camera);
+  expect(drawn()).toBe(false);
+  // A restored context: the room is prefiltered again and the next frame draws the (empty) maps again.
+  stage.restore();
+  expect(restored).toBe(1);
+  stage.render(camera);
+  expect(drawn()).toBe(true);
+  stage.dispose();
+});
+
+test("a chosen calibration equal to the token's reads back as chosen, and every view's lights node stores the token (PREV-135)", () => {
+  // An explicitly chosen 0.46 (the old default) is written with its shadow switch, so it isn't read as untouched.
+  const chosen = { ...DEFAULT_CREATOR_LIGHTING, exposure: 0.46 };
+  expect(storedCreatorLighting(chosen)).toEqual({ intensity: "isotropic", cone: "full", exposure: 0.46, shadows: true });
+  expect(readCreatorLighting(storedCreatorLighting(chosen))).toEqual(chosen);
+  expect(readCreatorLighting({ intensity: "isotropic", cone: "full", exposure: 0.46 })).toEqual(DEFAULT_CREATOR_LIGHTING);
+  const workspace = freshWorkspace();
+  workspace.preview.creatorLighting = chosen;
+  expect(parseWorkspace(storedWorkspace(workspace), STUDIO_DOCUMENTS).preview.creatorLighting).toEqual(chosen);
+  // A second view with lights of its own: its node stores the untouched token like `preview`, so it keeps following refits.
+  const fresh = freshWorkspace(), views = createStudioViewGraph(fresh.preview);
+  const v2 = views.addView(MAIN_VIEW, { scene: true });
+  views.edit(v2, "lights", { kind: "creator", state: { setup: "creator" } });
+  const stored = storedViewGraph(views)!;
+  const node = stored.lights.find(entry => entry.id === views.node(v2, "lights").id)!;
+  expect(node.creatorLighting).toEqual({ intensity: "isotropic", cone: "full", exposure: 0.46 });
+  const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...fresh, views: stored }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
+  expect(createStudioViewGraph(read.preview, read.views).state(v2, "lights")).toMatchObject({ setup: "creator", creatorLighting: DEFAULT_CREATOR_LIGHTING });
 });
