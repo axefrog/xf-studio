@@ -8,7 +8,7 @@ import { ItemList, type ListRow } from "../item-list";
  * way as layers do.
  *
  * - **A row** leads with the light's colour chip (the layer swatch) and a glyph for its kind (a sun for a directional light, the lighting
- *   mark for a spot), then its name and one muted line of what matters at a glance ("Spot · 40 · shadows").
+ *   mark for a spot), then its name and one muted line of what matters at a glance ("40 · shadows").
  * - **Selecting** a row picks the light the editor below shows; the owner keeps the selection (`update(items, selected)`).
  * - **Access:** the list and its keyboard are the Ordered list's; each row is named "<name>, <kind> light, <meta>", so the chip and
  *   glyph never carry meaning alone.

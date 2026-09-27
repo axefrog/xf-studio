@@ -49,9 +49,9 @@ const MOUNTS: Record<string, Mount> = {
       transaction: { edit: edit => { if (edit.sides === "both") { values.left = values.right = edit.value; } else values[edit.sides] = edit.value; pair.update(values, { linked }); } } });
     pair.update(values, { linked }); return pair.element; },
   "lib-light-list": () => {
-    let lights: LightListItem[] = [{ id: "key", name: "Key", meta: "Directional · 2.5 · shadows", colour: "#fff2e9", kind: "directional" },
-      { id: "fill", name: "Fill", meta: "Directional · 1", colour: "#c6dafa", kind: "directional" },
-      { id: "neon", name: "Neon sign", meta: "Spot · 40", colour: "#ff3d9a", kind: "spot" }];
+    let lights: LightListItem[] = [{ id: "key", name: "Key", meta: "2.5 · shadows", colour: "#fff2e9", kind: "directional" },
+      { id: "fill", name: "Fill", meta: "1", colour: "#c6dafa", kind: "directional" },
+      { id: "neon", name: "Neon sign", meta: "40", colour: "#ff3d9a", kind: "spot" }];
     let selected = "key";
     const list: LightList = new LightList({ label: "Lights", maxLength: 60, onSelect: id => { selected = id; list.update(lights, selected); },
       onMove: (id, index) => { const light = lights.find(item => item.id === id)!; lights = lights.filter(item => item.id !== id); lights.splice(index, 0, light); list.update(lights, selected); },

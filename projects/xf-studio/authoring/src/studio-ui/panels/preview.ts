@@ -75,10 +75,10 @@ export function lightingPresetLine(preset: LightingPreset | undefined, status: L
 const LIGHT_HELP = ["Built-in setups are starting points and never change: changing one makes your own copy, so nothing you change is lost.",
   "Character creator uses the game's creator lights for your V's body, on black, with the game's colour grade. Its light strengths are still being calibrated."];
 type LightView = NonNullable<Frame["preview"]["lightingSetups"]>["shown"]["lights"][number];
-/** One light's glance line in the list: its kind, strength and whether it casts shadows. */
-export function lightMeta(light: Pick<LightView, "type" | "intensity" | "shadows">): string {
+/** One light's glance line in the list: its strength and whether it casts shadows (the row's glyph shows its kind). */
+export function lightMeta(light: Pick<LightView, "intensity" | "shadows">): string {
   const strength = light.intensity >= 100 ? Math.round(light.intensity) : Number(light.intensity.toPrecision(2));
-  return [light.type === "spot" ? "Spot" : "Directional", String(strength), light.shadows ? "shadows" : ""].filter(Boolean).join(" · ");
+  return [String(strength), light.shadows ? "shadows" : ""].filter(Boolean).join(" · ");
 }
 /** The strength slider's range for a kind of light (lux for directional, candela for spot). */
 const STRENGTH_RANGE = { directional: { min: 0, max: 20, step: .05 }, spot: { min: 0, max: 500, step: .5 } } as const;
@@ -163,15 +163,15 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const setupActions = h("div", { class: "row wrap gap-s" }, newSetup, renameSetup, resetSetup, deleteSetup);
   const presetNote = note("");
   // The shown setup's surroundings: exposure (in stops, whichever display), the room's light, the backdrop and the colour grade.
-  const exposure = new SliderWithValue({ label: "Exposure", min: Math.log2(0.125), max: Math.log2(8), step: .05, unit: "EV",
-    format: value => `${value < -.005 ? "−" : "+"}${Math.abs(value).toFixed(2)} EV`,
+  const exposure = new SliderWithValue({ label: "Exposure", min: Math.log2(0.125), max: Math.log2(8), step: .1, unit: "EV",
+    format: value => `${value < -.05 ? "−" : "+"}${Math.abs(value).toFixed(1)} EV`,
     transaction: { edit: value => { edit({ kind: "preview.setExposure", value: Number((2 ** value).toPrecision(4)) }); }, commit: endEdit, cancel: endEdit } });
   const room = new SliderWithValue({ label: "Room light", min: 0, max: 300, step: 5, unit: "%", help: "Ambient light and reflections from the room around your V.",
     format: value => `${Math.round(value)} %`,
     transaction: { edit: value => { edit({ kind: "preview.setRoomLight", value: value / 100 }); }, commit: endEdit, cancel: endEdit } });
   const backdrop = new Segmented<SetupBackdrop>({ label: "Backdrop", options: [{ value: "studio", label: "Studio" }, { value: "black", label: "Black" }],
     onSelect: value => rt.dispatch({ kind: "preview.setBackdrop", backdrop: value }) });
-  const grade = new Segmented<SetupDisplay>({ label: "Colour", options: [
+  const grade = new Segmented<SetupDisplay>({ label: "Colour grade", options: [
     { value: "aces", label: "Studio", title: "The Studio's tone mapping (ACES)" }, { value: "game", label: "Game grade", title: "The game's colour grade from your game files" }],
   onSelect: value => rt.dispatch({ kind: "preview.setDisplayTransform", display: value }) });
   const surroundings = new GroupSection({ title: "Surroundings", key: "lighting.surroundings", level: "subsection", expanded: true });

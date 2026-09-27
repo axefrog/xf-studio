@@ -443,15 +443,15 @@ test("light list: each row leads with the light's colour chip and kind glyph, an
   const picked: string[] = [];
   const list = new LightList({ label: "Lights", maxLength: 60, onSelect: id => picked.push(id), onMove: () => {}, onRename: () => {}, onMenu: () => {} });
   document.body.append(list.element);
-  list.update([{ id: "key", name: "Key", meta: "Directional · 2.5 · shadows", colour: "#fff2e9", kind: "directional" },
-    { id: "neon", name: "Neon sign", meta: "Spot · 40", colour: "#ff3d9a", kind: "spot" }], "neon");
+  list.update([{ id: "key", name: "Key", meta: "2.5 · shadows", colour: "#fff2e9", kind: "directional" },
+    { id: "neon", name: "Neon sign", meta: "40", colour: "#ff3d9a", kind: "spot" }], "neon");
   const rows = [...list.element.querySelectorAll(".item-row")] as HTMLElement[];
   expect(rows).toHaveLength(2);
   const chip = rows[1]!.querySelector(".light-chip") as unknown as { style: { values: Map<string, string> } };
   expect(chip.style.values.get("--swatch")).toBe("#ff3d9a");
   expect(rows[1]!.querySelector(".light-kind")!.getAttribute("title")).toBe("Spot light");
-  expect(rows[1]!.querySelector(".item-main")!.getAttribute("aria-label")).toBe("Neon sign, spot light, Spot · 40, selected");
-  expect(rows[0]!.querySelector(".item-main")!.getAttribute("aria-label")).toBe("Key, directional light, Directional · 2.5 · shadows");
+  expect(rows[1]!.querySelector(".item-main")!.getAttribute("aria-label")).toBe("Neon sign, spot light, 40, selected");
+  expect(rows[0]!.querySelector(".item-main")!.getAttribute("aria-label")).toBe("Key, directional light, 2.5 · shadows");
   fire(rows[0]!.querySelector(".item-main") as HTMLElement, "click");
   expect(picked).toEqual(["key"]);
   expect(list.element.classList.contains("light-list")).toBe(true);

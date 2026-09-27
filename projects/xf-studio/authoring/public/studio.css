@@ -304,6 +304,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .light-list .light-chip { width: 14px; height: 14px; border-radius: 50%; }
 .light-list .light-kind { display: inline-flex; color: var(--text-muted); }
 .light-list .light-kind svg { width: 14px; height: 14px; }
+/* The name comes first: the glance line gives way (ellipsis) before the name does. */
+.light-list .item-name { flex: 0 1 auto; min-width: 7ch; }
+.light-list .item-meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Direction dial (components/direction-dial.ts): a top view of V, the handle in the light's colour. */
 .direction-dial { gap: var(--sp-2); }
 .direction-dial .control-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 22px; }
