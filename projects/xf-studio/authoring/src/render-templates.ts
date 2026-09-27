@@ -3,7 +3,7 @@
  * adapter reads. The host uses this table only to decide which resolved textures and profiles to
  * export for a chunk; it never interprets them. The renderer's material adapters
  * (`character-material-adapters.ts`) interpret the channels. A chunk whose template is not listed
- * here is recorded but not drawn (for example hair shadow meshes on `glass.mt` or `metal_base.remt`).
+ * here is recorded but not drawn (for example a CCXL hair's shadow mesh on `glass.mt`).
  *
  * A template is identified the way the engine finds its compiled programs: by the template's own `name`
  * (the `CMaterialTemplate.name` CName), not by its depot path (knowledge/materials-and-shaders.md §3.1). A mod
@@ -12,7 +12,7 @@
  * not be read, the vanilla depot path is the fallback key. Nothing here names a mod or framework.
  */
 export type RenderAdapterId = "skin" | "hair-strand" | "hair-cap-decal" | "double-diffuse-decal" | "mesh-decal" | "eye" | "eye-shell"
-  | "layered" | "decal-placeholder";
+  | "layered" | "metal-base" | "decal-placeholder";
 /** Members of the post-G-buffer decal family that the face-detail path draws through one shared material (face-decal-material.ts). */
 export type DecalKind = "mesh-decal" | "double-diffuse" | "gradient-recolor";
 export type RenderTemplateInputs = {
@@ -35,6 +35,8 @@ export type RenderTemplateInputs = {
   readonly skinProfiles: readonly string[];
   /** `CGradient` parameters the adapter reads (their stops go into the record). */
   readonly gradients?: readonly string[];
+  /** `Vector4` parameters the adapter reads: each reaches the record as four scalars, `<name>.x` … `<name>.w`. */
+  readonly vectors?: readonly string[];
   /** A post-G-buffer decal the face-detail path draws with the shared decal material, and the textures that material reads. */
   readonly decal?: DecalKind;
   readonly decalTextures?: readonly string[];
@@ -97,6 +99,11 @@ export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = 
   // §4.6). The adapter bakes the layer stack once per material (layered-material.ts); `GlobalNormal` is the template's mesh-wide normal.
   multilayered: { adapter: "layered", path: "engine\\materials\\multilayered.mt", textures: ["GlobalNormal"], required: [],
     profiles: [], skinProfiles: [], layered: { setup: "MultilayerSetup", mask: "MultilayerMask" } },
+  // The engine's plain metal/rough surface (`engine\materials\metal_base.remt`, template name `metal_base`): accessories such as the
+  // earrings a CCXL hairstyle carries, arm cyberware decals, many garments and the teeth's unreached `default` appearance
+  // (research/materials/shader-metal-glass.md §3). Every input has a neutral template default, so none is required.
+  metal_base: { adapter: "metal-base", path: "engine\\materials\\metal_base.remt", textures: ["BaseColor", "Metalness", "Roughness", "Normal"],
+    required: [], vectors: ["BaseColorScale"], ...none },
   // The rest of the 2.31 decal family (names from the installed shader cache's compiled templates): recorded, not drawn yet.
   ...Object.fromEntries(["mesh_decal__blackbody", "mesh_decal_blendable", "mesh_decal_emissive", "mesh_decal_emissive_subsurface", "mesh_decal_gradient",
     "mesh_decal_gradientmap_recolor_2", "mesh_decal_gradientmap_recolor_blendable", "mesh_decal_gradientmap_recolor_emissive", "mesh_decal_morph",

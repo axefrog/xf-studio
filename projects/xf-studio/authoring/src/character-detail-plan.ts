@@ -12,7 +12,10 @@
  *   its index: the male eye mesh swaps the two (knowledge/eye-rendering.md §1). The skin type's appearance draws the head itself: its morph-target component carries the
  *   `skin.mt` chunk whose instance chain holds the tone (knowledge/head-cc-rendering.md §2).
  * - **Consumer** is the third-person head: only choices listed in the `TPP` or `hairs` groups draw on the
- *   third-person puppet (the FPP hair twins sit in `FPP_hairs`) [resource; consumer wiring hypothesis].
+ *   third-person puppet (the FPP hair twins sit in `FPP_hairs`) [resource; consumer wiring hypothesis]. **Hair** is everything the
+ *   hairstyle controller draws, every active option in the `hairs` group whatever its creator slot (`HAIR_GROUP`): a multi-part
+ *   hairstyle's parts draw beside each other, and every drawing component of a hairstyle's appearance draws (strands, cap and the
+ *   accessories it carries, such as built-in earrings on `metal_base.remt`).
  * - **Level of detail**: the preview draws the highest-detail level (chunks whose LOD mask has bit 0), as a
  *   creator close-up would; lower levels are the same parts again [resource: render chunk `lodMask`].
  * - **Scene chunks**: a chunk draws only when its `renderMask` has `MCF_RenderInScene`; a shadow-only chunk (`MCF_RenderInShadows`
@@ -21,7 +24,7 @@
  * - **Unlisted chunks**: a chunk past the end of its appearance's chunk material list has no material of its own (CCXL hair points its
  *   lower levels of detail at three-vertex stubs this way) and is neither drawn nor counted as skipped (character-resolver.ts `unlistedChunk`).
  * - **Drawable chunks** are those whose material template the renderer has an adapter for
- *   (render-templates.ts). A chunk with none (`glass.mt`, `metal_base.remt`) is left out. A placeholder template (a decal the
+ *   (render-templates.ts). A chunk with none (`glass.mt`) is left out. A placeholder template (a decal the
  *   preview can't draw yet) is recorded beside drawn chunks, so the renderer can say plainly that part is not shown, but never
  *   makes a component drawable on its own.
  * - **Morph texture rule**: a morph target's `baseTexture` replaces its named parameter's texture (the vanilla eye
@@ -38,8 +41,8 @@
  *   (knowledge/head-cc-rendering.md §3).
  * - **Teeth** (the `teeth` slot) are the choice on the creator's `teeth` slot, consumed by the third-person head (`TPP`): the mouth interior,
  *   a morph-target mesh that follows the `mouth` shapes. Its chunk draws by its own template like any other: the default choice's mesh
- *   appearance is `skin.mt` with the teeth's own skin profile, the metal and pink ones are `multilayered.mt` [resource]; a chunk with no
- *   adapter (the unreached `default` appearance's `metal_base.remt`) is left out and said plainly. An appearance that lists one component
+ *   appearance is `skin.mt` with the teeth's own skin profile, the metal and pink ones are `multilayered.mt` [resource]; the unreached
+ *   `default` appearance's `metal_base.remt` draws through the metal adapter, and a chunk with no adapter is left out and said plainly. An appearance that lists one component
  *   name several times (a morph-additions mod lists the teeth 16 times) draws it once: the first drawable one, as the body draws a repeated
  *   part once [hypothesis: one component per name in an entity].
  * - **Piercings** (the `piercings` slot) are the choices on the creator's piercing slot (`piercings_color`), consumed by the face
@@ -72,6 +75,13 @@ export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.free
   skin_type: "skin", eyebrows_color: "brows", eyelash_color: "lashes", hair_color: "hair", eyes_color: "eyes", teeth: "teeth", piercings_color: "piercings" });
 /** Groups consumed by the third-person head and hair controllers. */
 export const THIRD_PERSON_GROUPS: readonly string[] = ["TPP", "hairs"];
+/**
+ * The group the third-person hairstyle controller draws (`gameuiCharacterCustomizationHairstyleController {groupName: hairs}`): every
+ * active option in it is hair, whatever its creator slot. Vanilla and CCXL hairstyles sit there on `hair_color`, and a multi-part
+ * hairstyle's parts on slots of their own (the Multicolored Hair framework's `mch_hair_part_01…03`) [resource: knowledge/cc-file-chain.md
+ * groups], so the hair is chosen by this consumer rule, never by a list of slot names (PREV-109).
+ */
+export const HAIR_GROUP = "hairs";
 /**
  * Groups whose choices the third-person head's face draws: `TPP` (tattoos, scars, blemishes), `face` (the face controller's
  * makeup, face cyberware and piercings, where CCXL makeup lands) and `beards` (the male beard controller) [resource;
@@ -175,6 +185,17 @@ function parseScalar(param: ResolvedParam): number | RenderRgba | null {
   return null;
 }
 
+/** A `Vector4` parameter's four components (a serializer leaves out a component at its default, 0), or null. */
+export function parseVector(param: ResolvedParam): [number, number, number, number] | null {
+  if (param.kind !== "scalar") return null;
+  let value: unknown;
+  try { value = JSON.parse(param.value); } catch { return null; }
+  const vector = value as { $type?: string; X?: unknown; Y?: unknown; Z?: unknown; W?: unknown } | null;
+  if (!vector || vector.$type !== "Vector4") return null;
+  const parts = [vector.X, vector.Y, vector.Z, vector.W].map(item => item === undefined ? 0 : item);
+  return parts.every(item => typeof item === "number" && Number.isFinite(item)) ? parts as [number, number, number, number] : null;
+}
+
 /** Instance values nearest-first, then the template's defaults for everything the chain leaves unset. */
 export function effectiveParams(material: ResolvedChunkMaterial, defaults: TemplateDefaults): ResolvedParam[] {
   const own = new Map(material.params.map(param => [param.name, param]));
@@ -212,6 +233,8 @@ export function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDef
   if (!inputs) return chunk;
   const textureInputs = templateTextures(inputs, decals);
   for (const param of effectiveParams(material, defaults)) {
+    const vector = inputs.vectors?.includes(param.name) ? parseVector(param) : null;
+    if (vector) { vector.forEach((value, i) => { chunk.scalars[`${param.name}.${"xyzw"[i]}`] = value; }); continue; }
     const scalar = parseScalar(param);
     if (typeof scalar === "number") chunk.scalars[param.name] = scalar;
     else if (scalar) chunk.colours[param.name] = scalar;
@@ -276,6 +299,26 @@ const decalOnly = (component: PlannedComponent) => component.materials.every(mat
  */
 export function teethLabel(definition: string): string {
   return definition.split("__").length > 2 ? choiceLabel(definition) : "natural";
+}
+
+/**
+ * The hair slot's labels: the colour of the one hair option (`brown liquorice`), or, when the hairstyle controller draws several (a
+ * multi-part hairstyle's parts), each option's own creator label with its colour, in the creator's option order (`hair base: brown
+ * liquorice`, `face frame: ash brown`). A label that is a localisation key or not readable reads `part N`. Labels only; selection
+ * never uses them.
+ */
+export function hairLabels(cco: CcoResource, entries: readonly { option: string; definition: string }[]): string[] {
+  const options = cco.parts.head.options;
+  const byOption = new Map<string, { option: string; definition: string }[]>();
+  for (const entry of entries) byOption.set(entry.option, [...byOption.get(entry.option) ?? [], entry]);
+  if (byOption.size <= 1) return [...new Set(entries.map(entry => choiceLabel(entry.definition)))];
+  const index = (name: string) => { const at = options.findIndex(option => option.name === name); return at < 0 ? Number.MAX_SAFE_INTEGER : at; };
+  return [...byOption.keys()].sort((a, b) => index(a) - index(b)).map((name, i) => {
+    const own = options.find(option => option.name === name)?.localizedName.replace(/_+/g, " ").trim() ?? "";
+    const part = own && isChoiceLabel(own) && !/^LocKey#/i.test(own) && !/^UI-/i.test(own) && own.toLowerCase() !== "none" ? own.toLowerCase() : `part ${i + 1}`;
+    const colours = [...new Set(byOption.get(name)!.map(entry => choiceLabel(entry.definition)))].join(" / ");
+    return `${part}: ${colours}`;
+  });
 }
 
 /**
@@ -633,7 +676,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
       return item ? { entry, item } : null;
     }).filter((item): item is { entry: ResolvedAppearance; item: PlannedComponent } => !!item));
     const planned = slot === "teeth" ? oncePerPart(found) : found.map(entry => entry.item);
-    const names = [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition)
+    const names = slot === "hair" ? hairLabels(cco, entries) : [...new Set(entries.map(entry => slot === "skin" ? skinLabel(entry.option, entry.definition)
       : slot === "piercings" ? piercingLabel(cco, entry.option, entry.definition) : slot === "teeth" ? teethLabel(entry.definition)
       : choiceLabel(entry.definition)))];
     const label = clampedList(names), inMessage = clampedList(names, 160);
@@ -674,6 +717,9 @@ export function detailSlotOf(cco: CcoResource): Map<string, DetailSlot> {
   for (const option of cco.parts.head.options) { const slot = DETAIL_UI_SLOTS[option.uiSlot]; if (option.name && slot) out.set(option.name, slot); }
   for (const slot of DETAIL_SLOTS) for (const switcher of slotSwitchers(cco, slot))
     for (const name of switcherReach(cco, "head", switcher.name)) if (!out.has(name)) out.set(name, slot);
+  // Everything else the hairstyle controller draws is hair too: a multi-part hairstyle's parts, on creator slots of their own.
+  for (const group of cco.parts.head.groups) if (group.name === HAIR_GROUP)
+    for (const name of group.options) if (name && !out.has(name)) out.set(name, "hair");
   return out;
 }
 

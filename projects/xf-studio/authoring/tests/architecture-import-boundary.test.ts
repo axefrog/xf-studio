@@ -300,7 +300,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
  * compose, the binding catalogue the camera input resolves presses with, and the pure record readers under them (CORE-86).
  */
 const SCENE_SUPPORT_MODULES = new Set<string>([
-  "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material",
+  "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material", "metal-base-material", "mouth-occlusion",
   "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
   "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig",
 ]);

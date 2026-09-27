@@ -473,7 +473,7 @@ Colour maps are sRGB (`isGamma`), roughness, metalness, normals and microblends 
 
 ### 4.7 `engine\materials\metal_base.remt` and `glass_onesided.mt`
 
-Full reference: [metal and glass](../research/materials/shader-metal-glass.md). Both appear on arm cyberware (Gorilla Arms, Mantis Blades), the teeth mesh's unused `default` appearance and many clothing items; the preview has no adapter for either yet.
+Full reference: [metal and glass](../research/materials/shader-metal-glass.md). Both appear on arm cyberware (Gorilla Arms, Mantis Blades), the teeth mesh's unused `default` appearance, the accessories some CCXL hairstyles carry (earrings, hair pins) and many clothing items. The preview draws `metal_base` since 27 September (`src/metal-base-material.ts`, without the alpha test yet); `glass_onesided` has no adapter.
 
 **`metal_base.remt`** is Standard class: a depth prepass, an opaque G-buffer pass (Index 1; Index 2 adds rain), and a `post_gbuffer` decal mode [resource] [source].
 

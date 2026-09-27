@@ -63,7 +63,7 @@ type Option = Record<string, unknown>;
 export const appearanceOption = (name: string, resource: string | null, definitions: string[], extra: Option = {}) => handle({
   $type: "gameuiAppearanceInfo", name: cn(name), resource: rp(resource, "Soft"), uiSlot: cn(extra.uiSlot as string ?? "None"),
   link: cn(extra.link as string ?? "None"), linkController: extra.linkController ?? 0, enabled: extra.enabled ?? 1, hidden: extra.hidden ?? 0,
-  index: 0, defaultIndex: extra.defaultIndex ?? 0, localizedName: "", editTags: [],
+  index: 0, defaultIndex: extra.defaultIndex ?? 0, localizedName: extra.localizedName as string ?? "", editTags: [],
   // The creator's censorship rule, as the vanilla body options carry it (`Censor_Nudity` with `Activate` or `Deactivate`).
   ...(extra.censorFlag ? { censorFlag: extra.censorFlag, censorFlagAction: extra.censorFlagAction ?? "Activate" } : {}),
   definitions: definitions.map((definition, index) => ({ $type: "gameuiIndexedAppearanceDefinition", name: cn(definition), index, localizedName: "", tags: { $type: "redTagList", tags: [] } })),
