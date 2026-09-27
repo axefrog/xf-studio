@@ -174,7 +174,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
   // Skin scattering quality (shader-skin.md §11, "a viewing preference beside the lighting presets"): Coming soon until it lands.
-  const scatterEntry = comingSoon("lighting.subsurface", live);
+  const scatterEntry = comingSoon("lightingSubsurface", live);
   const scatter = scatterEntry ? new Segmented<string>({ label: scatterEntry.label, showLabel: false, onSelect: () => {},
     options: [{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }] }) : undefined;
   scatter?.update(undefined, () => ({ available: false, reason: scatterEntry!.reason }));

@@ -521,7 +521,7 @@ function panelMenuItems(rt: StudioRuntime): MenuItem[] {
   // Coming soon until P4 registers their actions (coming-soon.ts).
   const graph = rt.port.views.snapshot();
   const live = liveFeatures(rt.port);
-  const upcoming = (["views.new", "views.duplicate"] as const).flatMap(id => { const entry = comingSoon(id, live);
+  const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live);
     return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
   if (graph) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;

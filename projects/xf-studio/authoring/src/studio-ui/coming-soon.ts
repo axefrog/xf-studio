@@ -20,21 +20,21 @@ export type ComingSoonEntry = {
 };
 
 export const COMING_SOON = {
-  "views.new": { label: "New view", reason: "Coming soon: open another 3D view of your V.",
+  viewsNew: { label: "New view", reason: "Coming soon: open another 3D view of your V.",
     key: "action:view.create", design: "research/authoring/view-graph-design.md (P4)" },
-  "views.duplicate": { label: "Duplicate view (shared camera)", reason: "Coming soon: a second view of this scene that moves with this view's camera.",
+  viewsDuplicate: { label: "Duplicate view (shared camera)", reason: "Coming soon: a second view of this scene that moves with this view's camera.",
     key: "action:view.duplicate", design: "research/authoring/view-graph-design.md (P4)" },
-  "motion.pose": { label: "Pose (coming soon)", reason: "Coming soon: pose your V with any photo-mode pose from your game and mods.",
+  motionPose: { label: "Pose (coming soon)", reason: "Coming soon: pose your V with any photo-mode pose from your game and mods.",
     key: "module:poses", design: "research/animation/pose-library-design.md; research/authoring/view-graph-design.md §5.1" },
-  "lighting.subsurface": { label: "Skin scattering", reason: "Coming soon: how softly light spreads under the skin, as the game's quality setting does.",
+  lightingSubsurface: { label: "Skin scattering", reason: "Coming soon: how softly light spreads under the skin, as the game's quality setting does.",
     key: "action:preview.setSubsurfaceQuality", design: "research/materials/shader-skin.md §11" },
-  "expressions.handles": { label: "Face handles", reason: "Coming soon: drag handles on the face to shape the expression.",
+  expressionHandles: { label: "Face handles", reason: "Coming soon: drag handles on the face to shape the expression.",
     key: "tool:expressions.handles", design: "research/animation/expression-editor-design.md (phase 2)" },
-  "expressions.sculpt": { label: "Sculpt", reason: "Coming soon: push and pull the face directly, and the controls follow.",
+  expressionSculpt: { label: "Sculpt", reason: "Coming soon: push and pull the face directly, and the controls follow.",
     key: "tool:expressions.sculpt", design: "research/animation/expression-editor-design.md (sculpt mode, Option 3)" },
-  "expressions.export": { label: "Export to game", reason: "Coming soon: build this expression into your mod for photo mode.",
+  expressionExport: { label: "Export to game", reason: "Coming soon: build this expression into your mod for photo mode.",
     key: "exporter:expressions", design: "research/animation/expression-editor-design.md (phase 3)" },
-  "saves.edit": { label: "Edit values", reason: "Coming soon: change values in your save.",
+  savesEdit: { label: "Edit values", reason: "Coming soon: change values in your save.",
     key: "action:saves.setValue", design: "research/save/save-editor-design.md §7.2" },
 } as const satisfies Record<string, ComingSoonEntry>;
 export type ComingSoonId = keyof typeof COMING_SOON;

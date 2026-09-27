@@ -60,9 +60,9 @@ test("placeholders say Coming soon plainly and name their design", () => {
 test("the presentation hides a placeholder whose feature it can see", () => {
   const live = { actions: () => ["saves.setValue"], modules: () => ["poses"], tools: () => ["expressions.handles"] };
   const none = { actions: () => [], modules: () => [], tools: () => [] };
-  expect(comingSoon("saves.edit", live)).toBeUndefined();
-  expect(comingSoon("motion.pose", live)).toBeUndefined();
-  expect(comingSoon("expressions.handles", live)).toBeUndefined();
-  expect(comingSoon("saves.edit", none)?.label).toBe("Edit values");
+  expect(comingSoon("savesEdit", live)).toBeUndefined();
+  expect(comingSoon("motionPose", live)).toBeUndefined();
+  expect(comingSoon("expressionHandles", live)).toBeUndefined();
+  expect(comingSoon("savesEdit", none)?.label).toBe("Edit values");
   expect(isLive("exporter:expressions", live)).toBe(false);
 });

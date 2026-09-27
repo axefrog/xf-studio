@@ -8,9 +8,10 @@
  * line), a split view between the tree and the inspector, block sections for a node and an object, property lists and code blocks.
  */
 import { chordsLabel, keyBinding, keyBindingById } from "../../../input-bindings";
-import { applyCapability, badge, blockSection, button, codeBlock, emptyState, note, PageHeader, propertyList, Segmented, SplitView, stack }
+import { applyCapability, badge, blockSection, button, codeBlock, emptyState, helpTip, note, PageHeader, propertyList, Segmented, SplitView, stack }
   from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";
+import { COMING_SOON } from "../../../studio-ui/coming-soon";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { InspectField, NodeInspection, ObjectInspection, ObjectRef, TreeRow } from "../explorer";
@@ -33,6 +34,13 @@ const number = (value: number) => value.toLocaleString();
 const bytes = (value: number) => value < 1024 ? `${value} B` : value < 1024 * 1024 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1024 / 1024).toFixed(2)} MB`;
 const when = (iso: string) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(); };
 
+/** Editing a save's values is decided (save-editor-design.md §7.2) but not built: a Coming soon button where it will live (coming-soon.ts). */
+function editValues(): HTMLButtonElement {
+  const entry = COMING_SOON.savesEdit, control = button({ label: entry.label, icon: "rename", small: true, variant: "quiet", onClick: () => {} });
+  applyCapability(control, { available: false, reason: entry.reason });
+  return control;
+}
+
 export function explorerPanel(ctx: Ctx): PanelController {
   const facade = ctx.facade;
   // ---- The saves list ----
@@ -46,9 +54,11 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const listEmpty = h("div", { class: "save-explorer-empty" });
   const openSettings = () => ctx.openSettings("saves");
   const listView = h("div", { class: "save-explorer-list" },
-    h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, listCount), h("div", { class: "row gap-xs" }, refresh, openFile)),
-    listNote, listEmpty, saveList,
-    note("Read-only: XF Studio never changes a save here. Script mods' data is shown as the save names it."));
+    // What the explorer promises is its heading's help tip, not a permanent footer (ui-copy-and-layout-review.md §3.18).
+    h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, listCount),
+      helpTip("the Save Explorer", "Read-only: XF Studio never changes a save here. Script mods' data is shown as the save names it.")),
+      h("div", { class: "row gap-xs" }, refresh, openFile)),
+    listNote, listEmpty, saveList);
 
   // ---- One open save ----
   const namesNote = note("", "info");
@@ -207,7 +217,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const renderObject = (inspection: ObjectInspection | undefined) => {
     if (!inspection) { objectPane.replaceChildren(); return; }
     objectPane.replaceChildren(blockSection({ title: inspection.title, titleClass: "save-node-title",
-      actions: [button({ label: "Close", icon: "close", iconOnly: true, small: true, variant: "quiet", onClick: () => inspect(null) })] },
+      actions: [editValues(), button({ label: "Close", icon: "close", iconOnly: true, small: true, variant: "quiet", onClick: () => inspect(null) })] },
       h("p", { class: "note muted", text: inspection.subtitle }),
       ...inspection.notes.map(text => note(text, "info")),
       inspection.fields.length ? h("div", { class: "save-fields", role: "group", "aria-label": `Fields of ${inspection.title}` }, inspection.fields.map(fieldView))
@@ -219,8 +229,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const renderMods = () => {
     const view = facade.modData();
     if (!view) { modsPane.replaceChildren(); return; }
-    const intro = note("Script mods keep their data in the save as ordinary objects. They're listed here by namespace, as the save names them; " +
-      "XF Studio doesn't interpret any mod's data.");
+    const intro = note("Script mods' data, by namespace, as the save names it. XF Studio doesn't interpret it.");
     const scripts = view.scriptNames ? null : note("Your installed scripts couldn't be read, so XF Studio can't tell which of these mods are still installed.", "info");
     if (!view.namespaces.length) { modsPane.replaceChildren(intro, emptyState("No mod data", "This save holds no namespaced script data.")); return; }
     modsPane.replaceChildren(intro, ...(scripts ? [scripts] : []), h("div", { class: "save-mod-list" }, view.namespaces.map(group => h("details", { class: "save-mod" },
