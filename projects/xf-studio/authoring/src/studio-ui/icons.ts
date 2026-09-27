@@ -71,6 +71,8 @@ const ICONS = {
   rename: [s("M2.5 13.5h3l7.5-7.5-3-3-7.5 7.5z"), s("M9 4l3 3")],
   reset: [s("M3 8a5 5 0 1 0 1.5-3.6"), s("M3 2.5v3h3")],
   layout: [s("M2 2.5h12v11H2z"), s("M6 2.5v11M6 8h8")],
+  /** Saved layouts: three windows stacked in a cascade, the front one with its title bar. */
+  layouts: [s("M2.5 6.5h8v7h-8z"), s("M2.5 8.5h8"), s("M4.5 6.5v-2h8v7h-2"), s("M6.5 4.5v-2h7v7h-1")],
   category: [s("M2.5 2.5h4.5v11H2.5z"), s("M9 2.5h4.5v4.5H9zM9 9h4.5v4.5H9z")],
   dot: [f("M5.5 5.5h5v5h-5z")],
   link: [s("M6.8 9.2l2.4-2.4"), s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7")],

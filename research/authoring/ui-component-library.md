@@ -44,6 +44,7 @@ Components added on request:
 - For settings discoverability and Game & tools: FolderSetting.
 - For the expression drawer's merged opposing controls (gaze, brow up/down): BipolarSlider, built on the internal readout field (`components/readout-field.ts`: the one readout, typed into in place, which Slider with value adopts next). Also TreeView's `maxRows`/`minRows` (a tree that fits its content, no resize grip) and iconButton's `mode` (a mode toggle tinted when on, for mirrored sides).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
+- For saved layouts (`claude/saved-layouts`): option switches in the value popover (`ValueOption`: Save layout's name with Remember shown modules and automatic switching, each with a default).
 
 ## The ratchet
 
