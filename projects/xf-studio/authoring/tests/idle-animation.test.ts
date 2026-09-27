@@ -25,6 +25,29 @@ test("facial movement composes before head rotation, with its own clock and exac
   expect(target.quaternion.toArray()).toEqual([0,0,0,1]);
 });
 
+test("a face with a one-shot showcase plays it once from when it is chosen, then loops only its loop part", () => {
+  const body = new THREE.Group(), head = new THREE.Bone(); head.name = "Head"; body.add(head);
+  const facial = new THREE.Group(), faceHead = new THREE.Bone(), lip = new THREE.Bone();
+  faceHead.name = "Head"; lip.name = "lip"; faceHead.add(lip); facial.add(faceHead);
+  const preview = new THREE.Group(), target = new THREE.Bone(); target.name = "lip"; preview.add(target); preview.updateMatrixWorld(true);
+  const bodyClip = new THREE.AnimationClip("body", 1, [new THREE.VectorKeyframeTrack("Head.position", [0, 1], [0, 0, 0, 0, 0, 0])]);
+  // The face's x is its own time: 0–4 the showcase, 4–10 the loop part.
+  const faceClip = new THREE.AnimationClip("face", 10, [new THREE.VectorKeyframeTrack("lip.position", [0, 10], [0, 0, 0, 10, 0, 0])]);
+  const idle = new IdleAnimation(body, bodyClip, [target], { lip: "Head" }, { source: facial, clip: faceClip, loopFrom: 4 });
+  idle.setEnabled(true);
+  idle.seek(3); expect(idle.faceTime()).toBeCloseTo(3, 6); expect(target.position.x).toBeCloseTo(3, 5);
+  idle.seek(9); expect(idle.faceTime()).toBeCloseTo(9, 6);
+  // Past the first pass only the loop part repeats: 11 s is 4 + (11 - 4) % 6 = 5.
+  idle.seek(11); expect(idle.faceTime()).toBeCloseTo(5, 6); expect(target.position.x).toBeCloseTo(5, 5);
+  idle.seek(16); expect(idle.faceTime()).toBeCloseTo(4, 6);
+  // Chosen again later (another idle, then this one): its showcase starts from that moment.
+  idle.setClips(bodyClip, faceClip, 4);
+  idle.seek(18); expect(idle.faceTime()).toBeCloseTo(2, 6);
+  // Without a loop start the whole clip loops, as before.
+  idle.setClips(bodyClip, faceClip);
+  idle.seek(12); expect(idle.faceTime()).toBeCloseTo(2, 6);
+});
+
 test("decoded motion follows inherited drivers, carries unskinned eyes and restores exactly", () => {
   const source = new THREE.Group(), driver = new THREE.Bone();
   driver.name = "Head"; driver.position.set(0,2,0); source.add(driver);

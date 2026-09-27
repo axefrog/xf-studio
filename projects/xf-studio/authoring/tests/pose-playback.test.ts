@@ -101,7 +101,7 @@ test("a pose plays on the idle's rig; a held expression is lent and composed ove
     { bone: "Root", parent: null, translation: [0, 0, 0], ...identity, keyed: false },
     { bone: "Hips", parent: "Root", translation: [0, -0.04, 1], ...identity, keyed: true },
     { bone: "Head", parent: "Hips", translation: [0, 0, 0.6], rotation: turn, scale: [1, 1, 1], keyed: true }] }));
-  idle.setClips(pose.clip, undefined, { pose: true, moves: pose.moves });
+  idle.setClips(pose.clip, undefined, undefined, { pose: true, moves: pose.moves });
   expect(motion.poseChanged()).toBe(true);
   expect(idle.enabled && idle.posing).toBe(true);
   expect(face.isApplied).toBe(false); expect(face.isLent).toBe(true);
@@ -124,7 +124,7 @@ test("a pose plays on the idle's rig; a held expression is lent and composed ove
 
 test("joint bounds cover the posed skeleton", () => {
   const { idle } = rig();
-  idle.setClips(poseClip(sample()).clip, undefined, { pose: true, moves: false });
+  idle.setClips(poseClip(sample()).clip, undefined, undefined, { pose: true, moves: false });
   idle.setEnabled(true);
   const box = idle.jointBounds();
   expect(box.max.y).toBeCloseTo(1.6, 6); expect(box.min.y).toBeCloseTo(0, 6);

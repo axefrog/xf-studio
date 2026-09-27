@@ -9,13 +9,14 @@ export const chromeInstalled = () => existsSync(CHROME);
 
 /**
  * Bundle a probe page, serve it on a loopback port, open it in headless Chrome (a real WebGL 2 context), wait for `window.probe`
- * and return it. `query` is appended to the page URL (the page reads it, for example to hide extensions).
+ * and return it. `query` is appended to the page URL (the page reads it, for example to hide extensions); `define` replaces global
+ * identifiers in the bundle with the given JavaScript expressions (for example a stylesheet's text, as a JSON string).
  */
-export async function runProbePage<T>(entry: string, query = "", timeout = 60_000): Promise<T> {
+export async function runProbePage<T>(entry: string, query = "", timeout = 60_000, define: Record<string, string> = {}): Promise<T> {
   const out = mkdtempSync(join(tmpdir(), "xfs-webgl-probe-"));
   let server: ReturnType<typeof Bun.serve> | undefined, page: Awaited<ReturnType<typeof launch>> | undefined;
   try {
-    const build = await Bun.build({ entrypoints: [entry], outdir: out, target: "browser", naming: "probe.js" });
+    const build = await Bun.build({ entrypoints: [entry], outdir: out, target: "browser", naming: "probe.js", define });
     if (!build.success) throw Error(build.logs.map(String).join("\n"));
     server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: request => new URL(request.url).pathname === "/probe.js"
       ? new Response(Bun.file(join(out, "probe.js")), { headers: { "content-type": "text/javascript" } })

@@ -10,6 +10,7 @@ outputs under public/assets are ignored.
 
   python tools/prepare_body_idles.py --wolvenkit <WolvenKit.CLI.exe> --game <game folder> --anim-export <AnimExport.exe>
       [--addon <Cyberpunk-Blender-add-on checkout>]
+  python tools/prepare_body_idles.py --eyes-section-only [--intake <cc-idle intake>]   (add the eyes section to a prepared catalogue)
 """
 import argparse
 import hashlib
@@ -212,13 +213,75 @@ def face_clips():
     return {value(a['Data']['animation']['Data']['name']) for a in root['animations']}
 
 
+EYES_SECTION = 'closeup-eyes'
+EYES_CLIP = 'ui_closeup_shot_eyes'
+
+
+def eyes_section_entry(args, closeup, root, assets):
+    """The close-up with the creator's eyes section open, when the face set has the section's showcase.
+
+    The creator's face graph (`player_woman_paperdoll_sermo.animgraph`) loops `ui_closeup_shot`; with `AnimFeature_Paperdoll`'s
+    `characterCreation_Eyes` set (the preview controller sets it for the `UI_Eyes` camera: the eyes, eyebrows, lash colour and eye
+    makeup rows) it plays `ui_closeup_shot_eyes` once (4.00 s), blending 0.5 s, then returns to the loop (knowledge/facial-expressions.md
+    §5). The face is baked with the showcase before one loop pass (`bake_idle_face.py --intro-clip`); the body keeps the close-up's clip.
+    """
+    raw = root / 'raw' / f'face-{EYES_CLIP}.glb'
+    if not raw.exists() and (root / 'raw' / 'eyes-face.glb').exists():
+        raw = root / 'raw' / 'eyes-face.glb'
+    if not raw.exists():
+        if not args.anim_export:
+            raise SystemExit(f'{raw} is missing; pass --anim-export to export it.')
+        subprocess.run([args.anim_export, str(depot(FACE_SET)), str(depot(FACE_RIG)), EYES_CLIP, str(raw)], check=True, stdout=subprocess.DEVNULL)
+    face_file = 'cc-idle-face-eyes-section.glb'
+    report = APP / 'evidence/idle-face-bake-eyes-section.json'
+    subprocess.run([sys.executable, str(APP / 'tools/bake_idle_face.py'), '--addon', args.addon, '--intake', str(root),
+                    '--face-glb', str(root / 'raw/idle-face.glb'), '--intro-clip', EYES_CLIP, '--intro-glb', str(raw),
+                    '--name', 'ui_closeup_shot_eyes_section', '--output', str(assets / face_file), '--report', str(report)],
+                   check=True, stdout=subprocess.DEVNULL)
+    loop_from = json.loads(report.read_text(encoding='utf-8'))['intro']['loopFrom']
+    return {**closeup, 'id': EYES_SECTION, 'label': 'Creator close-up, eyes section',
+            'flags': ['characterCreation_Head', 'characterCreation_Eyes'], 'state': 'closeup (eyes one-shot)',
+            'face': {'clip': 'ui_closeup_shot_eyes_section', 'file': face_file, 'loopFrom': loop_from},
+            'evidence': '[resource] player_woman_paperdoll_sermo.animgraph plays ui_closeup_shot_eyes once while characterCreation_Eyes is set, '
+                        'then loops ui_closeup_shot (0.5 s blends); [source] entityPreviewGameController sets it for the UI_Eyes camera; '
+                        'blending in track space before the solve is a hypothesis'}
+
+
+def add_eyes_section(args, root=ROOT, assets=ASSETS):
+    """Add (or refresh) the eyes-section entry in an existing catalogue, without preparing the other idles again."""
+    path = assets / 'cc-idle-catalogue.json'
+    catalogue = json.loads(path.read_text(encoding='utf-8'))
+    closeup = next(entry for entry in catalogue['idles'] if entry['id'] == 'closeup')
+    idles = [entry for entry in catalogue['idles'] if entry['id'] != EYES_SECTION]
+    idles.insert(idles.index(closeup) + 1, eyes_section_entry(args, closeup, root, assets))
+    catalogue['idles'] = idles
+    path.write_text(json.dumps(catalogue, indent=2) + '\n', encoding='utf-8')
+    # The catalogue evidence follows the catalogue.
+    evidence = APP / 'evidence/idle-catalogue.json'
+    if evidence.exists():
+        report = json.loads(evidence.read_text(encoding='utf-8'))
+        section = next(entry for entry in idles if entry['id'] == EYES_SECTION)
+        report['catalogue'] = catalogue
+        report.setdefault('outputSha256', {})[section['face']['file']] = hashlib.sha256((assets / section['face']['file']).read_bytes()).hexdigest()
+        evidence.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    print(json.dumps([{k: e[k] for k in ('id', 'clip', 'screen', 'duration')} for e in idles], indent=1))
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--wolvenkit', required=True)
-    parser.add_argument('--game', required=True)
-    parser.add_argument('--anim-export', required=True)
+    parser.add_argument('--wolvenkit')
+    parser.add_argument('--game')
+    parser.add_argument('--anim-export')
     parser.add_argument('--addon', default='D:/Dev/Cyberpunk-Blender-add-on')
+    parser.add_argument('--eyes-section-only', action='store_true',
+                        help='Only add the eyes-section entry to the existing catalogue (the close-up idle already prepared)')
+    parser.add_argument('--intake', type=Path, default=ROOT, help='The cc-idle intake (for --eyes-section-only)')
     args = parser.parse_args()
+    if args.eyes_section_only:
+        add_eyes_section(args, args.intake)
+        return
+    if not (args.wolvenkit and args.game and args.anim_export):
+        parser.error('--wolvenkit, --game and --anim-export are needed to prepare the idles')
     document = ensure_extracted(args)
     entries, left = preview_idles(document)
     faces = face_clips()
@@ -251,7 +314,13 @@ def main():
                       'screen': entry['screen'], 'state': entry['state'], 'flags': entry['flags'], 'face': face,
                       # The creator's screens run on the creator puppet, whose appearance `character_creation` draws lifted feet.
                       'puppet': None if entry['screen'] == 'inventory' else 'creator', 'evidence': entry['evidence']})
-    order = ['closeup', 'fullbody', 'inventory', 'nails', 'gender-selection']
+    # The close-up with the eyes section open: its showcase once, then the loop (the face set has the showcase in vanilla).
+    closeup = next((entry for entry in idles if entry['id'] == 'closeup'), None)
+    if closeup and EYES_CLIP in faces:
+        section = eyes_section_entry(args, closeup, ROOT, ASSETS)
+        idles.append(section)
+        hashes[section['face']['file']] = hashlib.sha256((ASSETS / section['face']['file']).read_bytes()).hexdigest()
+    order = ['closeup', EYES_SECTION, 'fullbody', 'inventory', 'nails', 'gender-selection']
     idles.sort(key=lambda e: order.index(e['id']) if e['id'] in order else len(order))
     catalogue = {'schema': 'xfs/idle-catalogue-1', 'source': {'graph': GRAPH, 'set': SET, 'rig': RIG}, 'idles': idles, 'left': left}
     (ASSETS / 'cc-idle-catalogue.json').write_text(json.dumps(catalogue, indent=2) + '\n', encoding='utf-8')

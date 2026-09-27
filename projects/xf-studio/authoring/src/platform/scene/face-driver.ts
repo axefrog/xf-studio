@@ -23,6 +23,12 @@ export type FacePose = { readonly frames: readonly FaceFrame[]; readonly rate?: 
 /** How far (metres) a head bone's bind may sit from its rig joint's rest: 0.1 mm, as the blink allows. */
 export const FACE_BIND_TOLERANCE = 1e-4;
 export const FACE_OTHER_HEAD = "The face data doesn't match this head's skeleton, so live expressions are off for it.";
+/**
+ * The face data read today is the feminine V's face rig; a masculine V's face (his own skeleton and setup) comes later, so his head holds
+ * still rather than be refused as another head (CORE-107).
+ */
+export const FACE_MASCULINE = "Live expressions for a masculine V aren't part of this version of XF Studio yet, so his face holds still. " +
+  "Your expression is still saved with the look.";
 
 type Binding = { bone: THREE.Object3D; worldBind: THREE.Matrix4; position: THREE.Vector3; rotation: THREE.Quaternion; scale: THREE.Vector3;
   driver?: { node: THREE.Object3D; inverseBind: THREE.Matrix4 } };
@@ -44,8 +50,8 @@ export class FaceDriver {
   /** Called after a change that needs a frame drawn outside playback. */
   onChange?: () => void;
 
-  /** Bind the head's bones now, capturing their neutral pose. */
-  constructor(targets: readonly THREE.Object3D[]) { this.bind(targets); }
+  /** Bind the head's bones now, capturing their neutral pose. `body`: whose head this is (the face data is the feminine V's). */
+  constructor(targets: readonly THREE.Object3D[], private readonly body: "female" | "male" = "female") { this.bind(targets); }
 
   /** Whether the rig's rest is known (the face data arrived and fits this head). */
   get ready() { return !!this.root; }
@@ -58,10 +64,11 @@ export class FaceDriver {
   }
 
   /**
-   * The face skeleton's rest (glTF axes, rig order). Throws `FACE_OTHER_HEAD` when the head's bones of those names don't sit on it;
-   * nothing then changes. Re-applies a held pose.
+   * The face skeleton's rest (glTF axes, rig order). Throws `FACE_OTHER_HEAD` when the head's bones of those names don't sit on it, and
+   * `FACE_MASCULINE` on a masculine V's head; nothing then changes. Re-applies a held pose.
    */
   setRig(joints: readonly FaceRigJoint[]) {
+    if (this.body !== "female") throw Error(FACE_MASCULINE);
     const root = new THREE.Group(), nodes: THREE.Object3D[] = [];
     joints.forEach((joint, index) => {
       const node = new THREE.Object3D();

@@ -52,6 +52,11 @@ export type PreviewState = {
    */
   uncensored?: boolean;
   /**
+   * Whether the scene simulates its V's dangles (hair and worn items with physics; `motion.setPhysics`, hair-physics-plan.md §3.6). Absent
+   * means off, the default until the in-game calibration: it is written only once the viewer changes it.
+   */
+  physics?: boolean;
+  /**
    * Retired: the piercing style an earlier build tried on the V (`character.tryChoice`): a switcher choice and a definition of the option
    * it activates. Read so an untouched workspace writes it back unchanged, and so the character context can turn it into the matching
    * Piercings choices once the catalogue is ready (CORE-74); nothing writes new values here.
@@ -197,6 +202,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (typeof p.eyeOwnRoughness === "boolean") state.preview.eyeOwnRoughness = p.eyeOwnRoughness;
     if (typeof p.body === "boolean") state.preview.body = p.body;
     if (typeof p.uncensored === "boolean") state.preview.uncensored = p.uncensored;
+    if (typeof p.physics === "boolean") state.preview.physics = p.physics;
     if (typeof p.idleClip === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(p.idleClip) && p.idleClip !== "closeup") state.preview.idleClip = p.idleClip;
     const pose = p.pose as { id?: unknown; label?: unknown } | undefined;
     if (pose && typeof pose === "object" && typeof pose.id === "string" && pose.id.length <= 512 && /^[A-Za-z0-9_.\-$#]+$/.test(pose.id) &&

@@ -265,8 +265,10 @@ async function start(host: StudioHost, root: HTMLElement) {
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
       frames: scene.frameTiming(), plateBlend: (liveSurface && scene.feature(liveSurface)?.evidence?.()) ?? null,
-      features: scene.featureEvidence(), bands: scene.featureBands() }) : null,
-    xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null });
+      features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence() }) : null,
+    xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null,
+    // Developer captures: put the playing or paused idle at a motion time (the dangles re-simulate to it deterministically).
+    xfStudioSeekIdle: (seconds: number) => { scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; } });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
   session.watch(bootstrap.collection);

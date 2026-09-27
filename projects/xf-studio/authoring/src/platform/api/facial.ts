@@ -59,7 +59,11 @@ export type FacialStartPoints = {
 
 /** How blink composes into a solve: a held closure (0 open, 1 the clip's closed frame), or the whole clip at its own timing. */
 export type FacialBlink = { readonly closure: number } | { readonly play: true };
-export type FacialSolveRequest = { readonly controls: Readonly<Record<string, number>>; readonly blink?: FacialBlink };
+/**
+ * `client`: the asking page's own id (letters, digits and dashes, at most 64): each page's newer request replaces only its own waiting one,
+ * and pages take turns (CORE-104). Absent: one shared page.
+ */
+export type FacialSolveRequest = { readonly controls: Readonly<Record<string, number>>; readonly blink?: FacialBlink; readonly client?: string };
 /** A solve's answer: `frames` poses in rig order (one, or the blink clip at `rate` Hz), base64 float32 rotation and translation deltas. */
 export type FacialSolveAnswer = { readonly ok: true; readonly frames: number; readonly rate?: number; readonly q: string; readonly t: string;
   /** Solver time (ms) and the controls the rig lacks (skipped). */

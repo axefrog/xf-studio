@@ -80,6 +80,7 @@
   "motion.setContributions",
   "motion.setBlink",
   "motion.playBlink",
+  "motion.setPhysics",
   "quality.set",
   "quality.rebuild",
   "savedV.load",
@@ -2474,6 +2475,25 @@
     }
    }
   },
+  "motion.setPhysics": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "quality.set": {
    "scope": [
     "viewport"
@@ -3686,6 +3706,15 @@
   },
   {
    "id": "motion.playBlink",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.setPhysics",
    "family": "action",
    "scope": [
     "viewport"

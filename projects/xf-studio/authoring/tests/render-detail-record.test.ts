@@ -366,3 +366,14 @@ test("a garment component carries its item's visual tags (the photo-mode outfit 
   const refused = parseCharacterDetail({ ...record, components: [...record.components, { ...garment, garment: { ...garment.garment, tags: ["not a tag!"] } }] });
   expect(refused.components.some(item => item.slot === "clothing")).toBe(false);
 });
+
+test("a part skinned to a dangle component keeps a well-formed dangle entry; a malformed one is left out and the part stays", () => {
+  const dangle = { component: "hair_dangle", rig: "base\hair_dangle.rig", graph: "base\hair_dangle.animgraph", file: `${sha("9")}.json`, sha256: sha("9") };
+  const withDangle = (entry: unknown) => { const record = character(); (record.components[2] as unknown as Record<string, unknown>).dangle = entry; return record; };
+  expect(parseCharacterDetail(withDangle(dangle)).components[2]!.dangle).toEqual(dangle);
+  for (const broken of [{ ...dangle, file: "../x.json" }, { ...dangle, sha256: sha("8") }, { ...dangle, component: "" }, "hair_dangle"]) {
+    const parsed = parseCharacterDetail(withDangle(broken));
+    expect(parsed.components[2]!.slot).toBe("hair");
+    expect(parsed.components[2]!.dangle).toBeUndefined();
+  }
+});

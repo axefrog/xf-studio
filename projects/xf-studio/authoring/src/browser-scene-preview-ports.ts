@@ -22,7 +22,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       setSurfaceControls: options.setSurfaceControls, setWire: scene.setWire,
       setNormals: scene.setNormals, setEyeOptics: scene.setEyeOptics,
       setHair: scene.setHair, setDetail: scene.setDetail, setEyeShape: scene.eyeShape,
-      setPiercings: scene.setPiercings,
+      setPiercings: scene.setPiercings, setPhysics: scene.setPhysics,
       setBody: scene.setBody, frameBody: scene.frameBody,
       eyeShapeOptions: scene.eyeShapeOptions,
       setLightingPreset: preset => scene.lighting.setPreset(preset),
@@ -45,6 +45,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       setIdleContributions: scene.setIdleContributions, setBlink: scene.setBlink,
       animateBlink: scene.animateBlink,
       setPose: scene.setPose,
+      dangles: () => scene.dangles() ?? { parts: 0, simulated: false, loaded: true },
     },
   };
 }

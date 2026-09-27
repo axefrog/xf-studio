@@ -1,0 +1,121 @@
+{
+  "feature": "expressions",
+  "name": "Disgust (natural)",
+  "part": {
+    "schema": "xfs/expression-part-1",
+    "body": {
+      "label": "Disgusted",
+      "controls": {
+        "eye_l_brows_lateral": 0.25,
+        "eye_l_brows_lower": 0.3,
+        "eye_l_oculi_squint_inner": 0.4,
+        "eye_l_oculi_squint_outer_lower": 0.3,
+        "eye_r_brows_lateral": 0.2,
+        "eye_r_brows_lower": 0.22,
+        "eye_r_oculi_squint_inner": 0.3,
+        "eye_r_oculi_squint_outer_lower": 0.18,
+        "jaw_mid_shift_back": 0.1,
+        "lips_chin_raise": 0.25,
+        "lips_l_corner_dn": 0.25,
+        "lips_l_pull": 0.1,
+        "lips_l_upper_raise": 0.4,
+        "lips_r_corner_dn": 0.3,
+        "lips_r_upper_raise": 0.22,
+        "nose_l_snear": 0.55,
+        "nose_r_snear": 0.35
+      },
+      "links": {
+        "eye_brows_lateral": false,
+        "eye_brows_lower": false,
+        "eye_oculi_squint_inner": false,
+        "eye_oculi_squint_outer_lower": false,
+        "lips_corner_dn": false,
+        "lips_pull": false,
+        "lips_upper_raise": false,
+        "nose_snear": false
+      },
+      "origin": {
+        "kind": "rest"
+      }
+    }
+  },
+  "facs": {
+    "closestVanilla": "facial_disgusted",
+    "actionUnits": [
+      {
+        "au": "AU9",
+        "name": "Nose wrinkler",
+        "intensity": "C (left) / B (right)",
+        "controls": [
+          "nose_l_snear",
+          "nose_r_snear"
+        ]
+      },
+      {
+        "au": "AU10",
+        "name": "Upper lip raiser",
+        "intensity": "B (left) / A (right)",
+        "controls": [
+          "lips_l_upper_raise",
+          "lips_r_upper_raise",
+          "lips_l_pull"
+        ]
+      },
+      {
+        "au": "AU4",
+        "name": "Brow lowerer",
+        "intensity": "B",
+        "controls": [
+          "eye_l_brows_lower",
+          "eye_r_brows_lower",
+          "eye_l_brows_lateral",
+          "eye_r_brows_lateral"
+        ]
+      },
+      {
+        "au": "AU6+7",
+        "name": "Cheek raiser and lid tightener",
+        "intensity": "B",
+        "note": "The nose wrinkle pushes the cheeks up and narrows the eyes.",
+        "controls": [
+          "eye_l_oculi_squint_inner",
+          "eye_r_oculi_squint_inner",
+          "eye_l_oculi_squint_outer_lower",
+          "eye_r_oculi_squint_outer_lower"
+        ]
+      },
+      {
+        "au": "AU15",
+        "name": "Lip corner depressor",
+        "intensity": "B",
+        "controls": [
+          "lips_l_corner_dn",
+          "lips_r_corner_dn"
+        ]
+      },
+      {
+        "au": "AU17",
+        "name": "Chin raiser",
+        "intensity": "B",
+        "controls": [
+          "lips_chin_raise"
+        ]
+      },
+      {
+        "au": "AU29 (reversed)",
+        "name": "Jaw pulled back",
+        "intensity": "A",
+        "note": "A slight withdrawal.",
+        "controls": [
+          "jaw_mid_shift_back"
+        ]
+      }
+    ],
+    "why": [
+      "The core of disgust is the nose wrinkle and the raised upper lip (AU9, AU10), here stronger on one side, which is how disgust usually appears.",
+      "The eyes narrow from below and the brows lower a little, so the upper face agrees with the mouth.",
+      "The jaw stays closed. The vanilla face opens it (jaw open 0.55), which reads as shock or speech."
+    ],
+    "source": "XF Studio experiment 026 (research/animation/natural-expressions.md): authored values, tuned in the live preview."
+  }
+}

@@ -22,6 +22,10 @@ test("the catalogue reads only well-formed entries; the built-in one stands for 
   expect(() => parseIdleCatalogue(catalogue([entry("a"), entry("a")]))).toThrow("repeated id");
   expect(() => parseIdleCatalogue({ ...catalogue([entry("a")]), schema: "other" })).toThrow("not a catalogue");
   expect(parseIdleCatalogue(BUILT_IN_CATALOGUE)).toEqual(BUILT_IN_CATALOGUE);
+  // A face with a one-shot showcase before its loop (the eyes section) keeps where its loop starts; a nonsense start is refused.
+  const eyes = { clip: "ui_closeup_shot_eyes_section", file: "cc-idle-face-eyes-section.glb", loopFrom: 4.5 };
+  expect(parseIdleCatalogue(catalogue([entry("closeup-eyes", { clip: "ui_closeup_shot", face: eyes })])).idles[0]!.face).toEqual(eyes);
+  expect(() => parseIdleCatalogue(catalogue([entry("closeup-eyes", { clip: "ui_closeup_shot", face: { ...eyes, loopFrom: -1 } })]))).toThrow("a face loop start");
 });
 
 /** A motion port with a catalogue; `selectIdle` resolves or rejects as told, and records what it was asked. */

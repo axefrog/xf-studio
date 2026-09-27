@@ -108,7 +108,8 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     }
     const targets: THREE.Object3D[] = [];
     scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
-    idle = new IdleAnimation(motion.scene, clip, targets, binding.ancestry, { source: facial.scene, clip: faceClip });
+    idle = new IdleAnimation(motion.scene, clip, targets, binding.ancestry, { source: facial.scene, clip: faceClip,
+      ...(first.face?.loopFrom !== undefined ? { loopFrom: first.face.loopFrom } : {}) });
     firstClips = { body: clip, face: faceClip };
     if (!idle.bindings.length) throw Error("Idle rig has no matching bones");
   } catch (error) {
@@ -149,12 +150,12 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     const faceRef = entry.face ?? first.face;
     const [body, face] = await Promise.all([clipOf(entry.body, entry.clip), faceRef ? clipOf(faceRef.file, `${faceRef.clip}_face`) : undefined]);
     if (!body) throw Error("That idle's motion couldn't be read from its prepared file.");
-    idle.setClips(body, face);
+    idle.setClips(body, face, face ? faceRef?.loopFrom : undefined);
     idleId = id;
   };
   const selectPose = async (pose: PoseClip | null) => {
     if (!idle) throw Error("V's motion isn't prepared on this computer, so she can't hold a pose.");
-    if (pose) idle.setClips(pose.clip, undefined, { pose: true, moves: pose.moves });
+    if (pose) idle.setClips(pose.clip, undefined, undefined, { pose: true, moves: pose.moves });
     else if (idle.posing) await selectIdle(idleId);
   };
   return { idle, idleError, blink, blinkError, idles, selectIdle, selectPose };
@@ -216,7 +217,7 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   const faceTargets: THREE.Object3D[] = [];
   scene.updateMatrixWorld(true);
   scene.traverse(o => { if (o instanceof THREE.Bone) faceTargets.push(o); });
-  const face = new FaceDriver(faceTargets);
+  const face = new FaceDriver(faceTargets, core.body === "male" ? "male" : "female");
   // One owner of the rig's bones at a time: the idle while enabled, else a held expression, else the blink (preview-motion.ts).
   const rigMotion = composePreviewMotion(idle, blink, face);
   /**

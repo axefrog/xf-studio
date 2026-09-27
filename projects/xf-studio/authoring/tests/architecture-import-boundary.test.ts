@@ -290,8 +290,8 @@ const SCENE_DEVICE_MODULES = new Set<string>([
   // The character context's loaders, adapters and placement, and their record types and codes.
   "core-detail-loader", "character-detail-loader", "character-material-adapters", "head-skin-placement", "render-detail", "render-templates",
   "detail-limits", "head-load-error", "scene-evidence",
-  // The rig's motion and facial shapes.
-  "idle-animation", "idle-catalogue", "game-blink", "preview-motion", "face-morphs",
+  // The rig's motion (the dangle adapter included) and facial shapes.
+  "idle-animation", "idle-catalogue", "game-blink", "preview-motion", "face-morphs", "dangle-motion",
   // A photo-mode pose as a body clip for the idle's rig, and the sampled pose record it reads (types only).
   "pose-clip", "pose-sample",
   // Pure helpers and types: camera framing and depth, viewport sizes, the stage theme, studio light values, hair profile encoding, the saved V record.
@@ -304,7 +304,7 @@ const SCENE_DEVICE_MODULES = new Set<string>([
 const SCENE_SUPPORT_MODULES = new Set<string>([
   "brow-material", "decal-underlay", "face-decal-material", "hair-shading", "head-surface", "skin-material", "metal-base-material", "mouth-occlusion",
   "creator-lighting", "creator-lighting-rig", "grading-lut", "studio-environment", "game-blink-messages", "input-bindings",
-  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig",
+  "red-json", "depot-path", "archive-precedence", "resolution-evidence", "deformation-rig", "dangle-spec", "dangle-solver",
 ]);
 /** What nothing the scene host reaches may be: a feature, an engine, the composition, the UI, an entry point, or an application service. */
 const SCENE_UNREACHABLE = /^(?:features\/|engines\/|compose\/|studio-ui\/|studio-(?:main|startup|application|presentation)$|platform\/(?:core|export)\/|authoring-|collection-|trusted-|workspace-|[\w-]+-(?:actions|service|host|server)$|node:|bun:)/;

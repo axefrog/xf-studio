@@ -155,6 +155,8 @@ const facial = new FacialHost({ cacheRoot: previewCacheRoot,
     script: resolve(import.meta.dir, "tools", "facial_solver_server.py"), pythonDefault: "python" }),
   log: diagnostics.log.logger("facial") });
 const facialRequest = createFacialHandler(facial);
+// "Clear prepared game files" clears the face data too, and the size counts it (CORE-102).
+characterDetails.attachPrepared({ bytes: () => facial.preparedBytes(), clear: () => facial.clearPrepared() });
 // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
 const commit = (() => {
   try { const run = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: import.meta.dir, stdout: "pipe", stderr: "ignore" });

@@ -336,7 +336,14 @@ export type RenderComponent = {
    * (the uncensored skin) is drawn only while every cover of the record is (`withdrawUncoveredBody`).
    */
   censor?: "cover" | "covered";
+  /**
+   * The dangle component this part's mesh is skinned to (hair with physics, knowledge/hair-physics.md §2): its name, the rig and graph, and
+   * the content-addressed spec file beside the record (dangle-spec.ts). Optional and additive: without it the part's joints follow V's
+   * skeleton the way a reader without it poses them.
+   */
+  dangle?: RenderDangle;
 };
+export type RenderDangle = { component: string; rig: string; graph: string; file: string; sha256: string };
 /** One plain line for a body withdrawn because its underwear couldn't be read or loaded (PIPE-97). */
 export const UNCOVERED_BODY = "XF Studio couldn't load the underwear the game draws on your V, so the body isn't shown.";
 /**
@@ -560,6 +567,10 @@ function component(value: unknown, index: number): RenderComponent {
   const garmentTags = garment?.tags;
   if (garmentTags !== undefined && (!Array.isArray(garmentTags) || garmentTags.length > GARMENT_TAGS_MAX || garmentTags.some(tag => !isVisualTag(tag))))
     fail(`${what} garment tags are invalid.`);
+  // A malformed dangle entry is left out on its own: the part is still drawn, its joints following V's skeleton.
+  const dangle = item.dangle, d = dangle as Partial<RenderDangle> | undefined;
+  const dangleOk = !!d && typeof d === "object" && [d.component, d.rig, d.graph].every(value => typeof value === "string" && value.length > 0 && value.length <= 512) &&
+    typeof d.file === "string" && /^[a-f0-9]{64}\.json$/.test(d.file) && d.file === `${d.sha256}.json`;
   return { id: text(item.id, `${what} id`), slot: item.slot, option: text(item.option, `${what} option`),
     definition: text(item.definition, `${what} definition`), component: text(item.component, `${what} component`),
     geometry: { ...resource(geometry, `${what} geometry`), depotPath: text(geometry?.depotPath, `${what} geometry path`),
@@ -569,8 +580,8 @@ function component(value: unknown, index: number): RenderComponent {
     ...(rule ? { morphTexture: { morph: text(rule.morph, `${what} morph`), texture: rule.texture === null ? null : text(rule.texture, `${what} morph texture`),
       parameter: rule.parameter === null ? null : paramName(rule.parameter, `${what} morph texture parameter`) } } : {}),
     ...(morphs ? { morphs: morphs.map((name, k) => paramName(name, `${what} morph ${k}`)) } : {}),
-    ...(garment ? { garment: { area: garment.area, item: garment.item, layer: garment.layer, ...(garmentTags?.length ? { tags: [...garmentTags] } : {}) } } : {}),
-    ...(censor ? { censor } : {}) };
+    ...(garment ? { garment: { area: garment.area, item: garment.item, layer: garment.layer, ...(garmentTags?.length ? { tags: [...garmentTags] } : {}) } } : {}), ...(censor ? { censor } : {}),
+    ...(dangleOk ? { dangle: { component: d!.component!, rig: d!.rig!, graph: d!.graph!, file: d!.file!, sha256: d!.sha256! } } : {}) };
 }
 /** A record entry that says it is a cover (before it is parsed: a cover the parser drops still counts, so its covered parts go too). */
 const isRawCover = (item: unknown) => !!item && typeof item === "object" && (item as RenderComponent).slot === "body" && (item as RenderComponent).censor === "cover";
