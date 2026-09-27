@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `91cad9b` | 2026-09-28 | Since `6e1e0b8`: bridge 0.4 (save, load, inventory and notify classes, light placement, creator busy handling, framing), the masculine export, the `hx_` rename, honest surfaces, the colour refit, the release test changes | **2 High**, 5 Medium, 10 Low (RB-51..65, PIPE-122, PREV-166). Inventory removal scoping, write-class gating, framing termination, the masculine test switch's isolation, seam welding, the verifier's body rules and the `hx_` rule are sound |
 | `6e1e0b8` | 2026-09-28 | Since `f38a88f`: expression export (exporter, verifier, product extras, sets), native body idle (SIMD decoder, idle host), expression transitions, desktop cleanup, the choice-preview cleanup | 0 High, 4 Medium, 12 Low (PIPE-117..121, NATIVE-67..70, PREV-162..165, CORE-116..118). The verifier's independence, For-sharing row filtering, extras path safety, library revision guards, the lenient read's isolation, worker trim ordering and the PREV-150..161 fixes are sound |
 | `f38a88f` | 2026-09-28 | Everything since `62637f4` (33 merges, about 17k source lines): choice previews and the live turn, lighting setups and the direction dial, skin scatter and contact shadows, saved layouts, remembered view state and preferences, poses, the deformation rig, expressions and the intensity scrub. One read-only reviewer, by priority | **1 High**, 7 Medium, 8 Low (PREV-150..161, CORE-112..114, UI-138). The choice-preview service's failure, cancellation and live-turn paths carry most of the risk. Lighting, layout and scroll persistence held up |
 | `62637f4` | 2026-09-27 | Motion and rendering since `9f71a56`: hair physics (spec, solver, motion, host, idle integration), the eyes-section idle intro, creator lighting (shadow maps and cache, filter, 8-influence depth material, calibration token, curvature wrap, macro-normal diffuse), the layered 1/contrast change, host/facial cleanup | **1 High**, 2 Medium, 10 Low (PREV-129..140, CORE-108). PREV-129, PREV-130 and parts of PREV-133, PREV-135 and PREV-139 reproduced. Rig and graph bounds, frame-rate determinism, the shadow cache key, the depth material, the 1/contrast clamp, `stoppableGraph`, prefetch and the facial host's timeouts and budgets are sound |
@@ -79,6 +80,23 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| RB-51 | **High** | Bridge (creator) | `cc.confirm` decides "nothing to confirm" from `m_ccChanges`, which only the `OnSliderChange`/`OnColorChange` wraps count; a `cc.apply` through the system route (`ApplyChangeToOption`), presets and randomize aren't counted, so confirm closes with `ConfirmBackConfirmation` and discards the change while saying nothing was discarded (`redscript/XFRuntimeBridgeActions.reds:1795`, `:609-648`, `:2061`). Count every route or compare against an open-time snapshot; never fall back to Back when unsure. | Open, cleanup-bridge-0.4 |
+| RB-52 | **High** | Bridge (saves) | With `override_lock`, `SavePrepare` drops the bridge's save lock and only `OnXFBridgeSavingComplete` or explicit refusals retake it; the kill switch, a game-thread timeout, `save()` throwing and `save_uncertain` leave it off, and `RestoreAfterKill` doesn't retake it (`native/src/core/Writes.cpp:830-870`, `redscript/XFRuntimeBridgeGame.reds:321`, `XFRuntimeBridgeActions.reds:855-890`): an autosave can keep the bridge's changes. Relock on every path, including after a kill. | Open, cleanup-bridge-0.4 |
+| RB-53 | Med | Bridge (safety) | Pause is checked only when a request arrives; multi-step `game.save`/`game.load` never check `WritesPaused()`/`IsKilled()` again before acting (`Dispatcher.cpp:460`, `Writes.cpp:853, 960`). | Open, cleanup-bridge-0.4 |
+| RB-54 | Med | Bridge (creator) | The stale-busy clear fires 12 s into a real pending change and 8 s after a `CreatorBusySeenAt` that completion events never reset (`XFRuntimeBridgeActions.reds:1821-1843`) [plausible]: a slow swap can be refinalised mid-way. | Open, cleanup-bridge-0.4 |
+| RB-55 | Med | Bridge (saves) | Save and load waits count loop turns, not time (`Writes.cpp:838-866, 922-931`) [plausible]: a hitching save outlives the client timeout, and a retry makes a second save. Use steady_clock deadlines. | Open, cleanup-bridge-0.4 |
+| RB-56 | Med | Bridge (saves) | `game.load` needs only the class switch and skips the modded-save confirmation, with no guard for unsaved progress (`XFRuntimeBridgeGame.reds:367-440`) [plausible]. Require `discard_unsaved: true` or an in-game confirmation. | Open, cleanup-bridge-0.4 |
+| RB-57 | Med | Bridge (photo lights) | `PlaceLight` teleports whatever entity the indicator's projection names without checking it is a `gamePhotomodeLightObject` (`XFRuntimeBridgeActions.reds:527-542, 1239`) [plausible]. | Open, cleanup-bridge-0.4 |
+| RB-58 | Low | Bridge (saves) | The "save list changed" check compares the registry's copy with itself (`XFRuntimeBridgeGame.reds:433`) [plausible]; a reordered list loads another save. | Open, cleanup-bridge-0.4 |
+| RB-59 | Low | Bridge (photo lights) | `place: "camera"` records no position undo, though the catalogue promises it (`Writes.cpp:306-330`). | Open, cleanup-bridge-0.4 |
+| RB-60 | Low | Bridge (photo lights) | The moved branch's `aOps.position` call is unguarded, so an error after moving claims nothing changed and returns no undo (`Writes.cpp:346`). | Open, cleanup-bridge-0.4 |
+| RB-61 | Low | Bridge (framing) | The vertical-only route divides by a squared response Broyden can shrink toward 0, sending NaN to `photo.camera.set` (`tools/api/framing.ts:445`) [plausible]. | Open, cleanup-bridge-0.4 |
+| RB-62 | Low | Bridge tools (MCP/CLI) | The idle-timer fix assumes one call at a time; a finished call restarts the timer while a long one waits, and a rejected call never restarts it (`tools/api/command-api.ts:192-198`) [plausible]. | Open, cleanup-bridge-0.4 |
+| RB-63 | Low | Bridge (inventory) | Removal finds V's first copy of the record rather than the added `ItemID`, and the equip check compares debug names (`XFRuntimeBridgeGame.reds` `FindItem`, `RemoveAdded:241`) [plausible]. | Open, cleanup-bridge-0.4 |
+| RB-64 | Low | Bridge (notify) | An interrupted session runner never clears its ask line; the final message is skipped when paused (`tools/session.ts`). | Open, cleanup-bridge-0.4 |
+| RB-65 | Low | Bridge (packaging) | The `^xf_photo_mode_presets.yaml` rename leaves the old file on a manual 0.3 upgrade, and `^` overrides another mod's presets 6-9 for the whole profile (`tools/packaging.ts:36, 145`) [plausible]. Document it or remove the old file. | Open, cleanup-bridge-0.4 |
+| PIPE-122 | Low | Masculine export | A damaged masculine plate value still reaches `planPlate`'s `refuse("invalid_collection")`, blocking the feminine Check and Build (`features/eye-makeup/export/index.ts:71-76`) [plausible]. Treat it as unavailable with a warning. | Open |
+| PREV-166 | Low | Creator lighting | The refit gains were fitted on feminine captures but apply by light name to `CREATOR_RIG_MALE` too (`creator-lighting.ts:144, 293`) [plausible]. Key the calibration by body, or record the male rig as not fitted. | Open |
 | UI-147 | Low | Mod package (copy) | The head-mod reason says "for both V's" next to "the masculine V's head"; "for both heads" reads cleaner (masculine export gate, 28 September) | Open |
 | UI-148 | Low | Mod package (Check) | Before any Build, the mod line already says "for a feminine and a masculine V" while the note below says Build still decides whether he fits; leave the masculine part off until a Build has checked | Open |
 | UI-149 | Low | Mod package (warnings) | The panel deduplicates `FeatureCheck.warnings` by object, not text, so the same warning from two features shows twice | Open |
@@ -538,12 +556,15 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- None since `6e1e0b8` (deep review, 28 September 2026).
+- None since `91cad9b` (deep review, 28 September 2026).
 
 ## Subsystem register
 
 Subsystems already covered by a deep review, with the focus a later review should keep.
 
+- **Bridge 0.4 classes** (claude/bridge-0.4): `notify` and the message board (`core/Messages.cpp`, the session runner's echo); `write-inventory` (`XFInventory`, the bridge-added registry); `write-save` (`XFGame`, `GameSave`/`GameLoad`/`FindSave`, the lock override); photo-light entity placement; creator change tracking and stale-busy clearing. Review focus: RB-51/52.
+- **Optional host prerequisites and export audience** (claude/masculine-export): `FeatureExporter.optionalPrerequisites`, `FeatureCheck.audience` and `warnings`; the masculine eye plate prerequisite and per-body selector.
+- **Stage tag component** (claude/honest-surfaces): `studio-ui/components/stage-tag.ts`.
 - **Expression exporter and independent verifier** (claude/expression-export): `features/expressions/export`, `features/expressions/verify`; product extras (TweakXL files, overlay archives) in the builder, product verifier and manifest v2; ArchiveXL `resource: patch`; the `expressions/game` host prerequisite with the Check-started background read; the `part_preset_sets` table, `partPreset.restore` and the page's set export service. Review focus: PIPE-117/118 concurrency and cache keys.
 - **Value transitions** (claude/expression-transition): `platform/core/value-transition.ts`, transition settings, `transition.set`, the shared easing catalogue.
 - **Worker trim and install-receipt recognition** (claude/desktop-cleanup).
