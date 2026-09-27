@@ -23,7 +23,9 @@ projects/*/authoring/public/build/
 projects/*/authoring/build/
 projects/*/authoring/evidence/screenshots/
 projects/*/authoring/.server-*.log
-projects/*/authoring/data/
+projects/*/authoring/data/*
+# Tracked sample data inside the otherwise private data folder: authored values only (no game or personal data).
+!projects/*/authoring/data/expression-samples/
 projects/*/authoring/desktop/static/
 projects/*/authoring/desktop/build-tools/
 projects/*/authoring/desktop/webview2/
