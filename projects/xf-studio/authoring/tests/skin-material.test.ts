@@ -152,6 +152,10 @@ describe("skin shader", () => {
     expect(f).toContain("#define RE_Direct RE_Direct_XfsSkin");
     expect(f).toContain("xfsSkinIBL( geometryViewDir, geometryNormal, material.roughness )");
     expect(f).toContain("textureGrad( xfsMicroDetail");
+    // A light flagged for character contact shadows is scaled by the march's visibility, diffuse, specular and scatter input alike (PREV-147).
+    expect(f).toContain("float xfsContactVisibility(");
+    expect(f).toContain("vec3 xfsLightColour = directLight.color * xfsContactVisibility( geometryPosition, geometryNormal, directLight.direction );");
+    expect(f.match(/directLight\.color \*/g)?.length).toBe(1);
     // Two GGX lobes at scaled roughness, weighted by the profile.
     expect(f.match(/BRDF_GGX\( directLight\.direction, geometryViewDir, geometryNormal, lobe[01] \)/g)?.length).toBe(2);
     // The exact tint arithmetic: weight abs(scale) · mask.R, multiply or overlay, saturate, blend.
@@ -161,7 +165,7 @@ describe("skin shader", () => {
     // The wrap is gated by the host (off while the screen-space scatter runs), and the scatter-input variant writes E, class depth,
     // √albedo with the slot, and the metalness (research/materials/shader-skin.md §11.3).
     expect(f).toContain("xfsWrapGate * xfsWrap");
-    expect(f).toContain("xfsScatterE += directLight.color * wrapped * burley * BRDF_Lambert( vec3( 1.0 - material.metalness ) );");
+    expect(f).toContain("xfsScatterE += xfsLightColour * wrapped * burley * BRDF_Lambert( vec3( 1.0 - material.metalness ) );");
     expect(f).toContain("gl_FragColor = vec4( xfsScatterE, vViewPosition.z );");
     expect(f).toContain("( xfsScatterSlot + 1.0 ) / 8.0");
     expect(f).toContain("layout( location = 2 ) out highp vec4 xfsScatterOut2;");

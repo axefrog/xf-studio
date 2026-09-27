@@ -25,6 +25,7 @@
 import * as THREE from "three";
 import type { RenderChunkMaterial, RenderSkinProfile } from "./render-detail";
 import { declarePass, SCATTER_INPUT_OUTPUTS, type PassSkinProfile } from "./platform/api/scene";
+import { CONTACT_SHADOW_GLSL, contactShadowUniforms } from "./contact-shadow";
 
 /**
  * How a `TintColor` byte reaches the program. The engine's encoding is still open (materials open
@@ -278,6 +279,7 @@ vec3 xfsTangentMacro = normalize( mix( vec3( 0.0, 0.0, 1.0 ), vec3( xfsMacroN.x,
 
 /** The skin light: two specular lobes and a wrapped Burley diffuse (appended after `lights_physical_pars_fragment`). */
 const LIGHT = /* glsl */`
+${CONTACT_SHADOW_GLSL}
 uniform vec3 xfsLobes;
 uniform vec3 xfsWrap;
 uniform float xfsWrapGate;
@@ -307,7 +309,9 @@ vec3 xfsSkinIBL( const in vec3 viewDir, const in vec3 normal, const in float rou
 #endif
 void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
 	float xfsNoL = dot( geometryNormal, directLight.direction );
-	vec3 irradiance = saturate( xfsNoL ) * directLight.color;
+	// A light flagged for character contact shadows is hidden where a caster lies just toward it (contact-shadow.ts, PREV-147).
+	vec3 xfsLightColour = directLight.color * xfsContactVisibility( geometryPosition, geometryNormal, directLight.direction );
+	vec3 irradiance = saturate( xfsNoL ) * xfsLightColour;
 #ifdef XFS_SKIN_DIFFUSE_NORMAL
 	// The macro normal stands in for the blur only with the wrap; the screen-space scatter blurs the full normal's light, as the game does.
 	float xfsDiffuseNoL = dot( xfsWrapGate > 0.5 ? xfsDiffuseNormal : geometryNormal, directLight.direction );
@@ -332,9 +336,9 @@ void RE_Direct_XfsSkin( const in IncidentLight directLight, const in vec3 geomet
 	// Gated off (xfsWrapGate 0) while the screen-space scatter replaces it.
 	vec3 wrap = material.metalness > 0.1 ? vec3( 0.0 ) : xfsWrapGate * xfsWrap * min( 1.0, ${SKIN_SCATTER_LENGTH.toFixed(6)} * xfsSurfaceCurvature() );
 	vec3 wrapped = saturate( ( xfsDiffuseNoL + wrap ) / ( 1.0 + wrap ) ) / ( 1.0 + wrap );
-	reflectedLight.directDiffuse += directLight.color * wrapped * burley * BRDF_Lambert( material.diffuseContribution );
+	reflectedLight.directDiffuse += xfsLightColour * wrapped * burley * BRDF_Lambert( material.diffuseContribution );
 #ifdef XFS_SCATTER_INPUT
-	xfsScatterE += directLight.color * wrapped * burley * BRDF_Lambert( vec3( 1.0 - material.metalness ) );
+	xfsScatterE += xfsLightColour * wrapped * burley * BRDF_Lambert( vec3( 1.0 - material.metalness ) );
 #endif
 }
 #undef RE_Direct
@@ -377,6 +381,8 @@ export const skinLightUniforms = (parameters: Pick<SkinParameters, "lobes" | "wr
   xfsLobes: { value: new THREE.Vector3(parameters.lobes.roughness0, parameters.lobes.roughness1, parameters.lobes.weight) },
   xfsWrap: { value: new THREE.Vector3(...parameters.wrap) },
   xfsWrapGate: { value: 1 },
+  // Shared by every skin-lit program: the contact shadows' prepass updates them once per frame.
+  ...contactShadowUniforms,
 });
 
 /**
