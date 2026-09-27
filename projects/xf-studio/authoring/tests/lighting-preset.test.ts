@@ -133,8 +133,9 @@ test("descriptors and application validation cover the new actions", () => {
   expect(app.dispatch({ kind: "preview.setLightingPreset", preset: "creator" })).toMatchObject({ ok: true });
   expect(app.previewState().preview?.lightingPreset).toBe("creator");
   expect(app.previewState().lighting?.preset).toBe("creator");
-  expect(app.dispatch({ kind: "preview.setExposure", value: 1 })).toMatchObject({ ok: true });
-  expect(app.previewState().lightingSetups?.shown).toMatchObject({ label: "Custom (from Character creator)", exposure: 1 });
+  // A value other than the calibration's exposure (1), so the change forks the built-in.
+  expect(app.dispatch({ kind: "preview.setExposure", value: 1.5 })).toMatchObject({ ok: true });
+  expect(app.previewState().lightingSetups?.shown).toMatchObject({ label: "Custom (from Character creator)", exposure: 1.5 });
 });
 
 test("the workspace keeps the preset and diagnostics, and restore applies them", () => {

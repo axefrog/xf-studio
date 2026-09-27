@@ -125,6 +125,16 @@ describe("calibration and shadows", () => {
     expect(calibrationGain("Rim_Right")).toBe(CREATOR_CALIBRATION.gains.Rim_Right ?? 1);
   });
 
+  test("the calibration is the two-pair fit of 28 September (knowledge §12.6): fills at a third, the key near its data, k 1", () => {
+    const fills = CREATOR_RIG_FEMALE.filter(light => light.name.startsWith("Fill_")).map(light => light.name);
+    expect(fills.sort()).toEqual(["Fill_Base", "Fill_Left", "Fill_Lower", "Fill_Upper"]);
+    for (const name of fills) expect(calibrationGain(name)).toBe(0.35);
+    expect(calibrationGain("Main_Face")).toBe(1.25);
+    expect(Object.keys(CREATOR_CALIBRATION.gains).sort()).toEqual(["Main_Face", ...fills].sort());
+    expect(CREATOR_CALIBRATION.exposure).toBe(1);
+    expect(CREATOR_CALIBRATION.yawOffset).toBe(10); // session 3's turned V fits the same rig yaw (§12.6)
+  });
+
   test("the casters are the flagged lights: character contact shadows first, then shadow maps by strength, within the budget", () => {
     const casters = creatorShadowCasters("female", DEFAULT_CREATOR_LIGHTING);
     expect(casters).toHaveLength(CREATOR_SHADOW.budget);
