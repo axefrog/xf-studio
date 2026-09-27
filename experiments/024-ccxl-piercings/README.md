@@ -147,5 +147,5 @@ Tool names are the runtime bridge's MCP names ([bridge test card](../../research
 
 ## Staging
 
-26 September 2026: the two files of run `20260926T132240` (hashes above) are in the MO2 mod folder `XF Piercings Probe`, not yet enabled: MO2 was open, so its profile list wasn't edited under it. Before the session, enable `XF Piercings Probe` in the test profile (it appears after a refresh), or the coordinator adds it once MO2 is closed. Nothing else changes.
+26 September 2026: the two files of run `20260926T132240` (hashes above) are in the MO2 mod folder `XF Piercings Probe`. By 27 September the entry was enabled in the test profile, and both files still match the hashes above. Nothing else changes. The checks run in their own sitting, after [session 3](../028-session-3/README.md).
 
