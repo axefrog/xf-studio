@@ -26,6 +26,7 @@ R&D is a permanent, first-class mandate, run like a research lab beside the prod
 - **Discuss before building each later feature.** The order is piercings/earrings, eyebrows, cheek makeup, hair, facial expressions (static/animated, plus varied idles), tattoos (full body by then). Early approved exception: playing the real default character-creator idle with an on/off toggle. Never label synthetic motion as the game idle.
 - **Ask when a decision is genuinely his.** Otherwise pick a sensible default and say so.
 - **Test UI changes in an isolated `?verify=1` workspace,** never in the maintainer's active draft.
+- **Keep the maintainer's local Studio running.** The coordinator starts the localhost dev server (port 4317) whenever it isn't running, and restarts it after merges that need it.
 
 ## Coordination and parallel work
 
