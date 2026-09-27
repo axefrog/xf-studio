@@ -1,6 +1,6 @@
 # Session 3: alpha.2 export confirmation, calibration frames, then features
 
-**Status:** prepared 27 September 2026, not run. Nothing here has been seen in game. This is the next in-game session with the maintainer. It replaces the earlier [session 3 card](../022-session-3/README.md): that card's Glitter board needs a restage and a relaunch, so it moves to the next session, and its blink and creator checks are folded in below. Every other open in-game ask is ranked in the [next-sessions plan](../../research/runtime/next-sessions-plan.md). This session takes the highest-value rows from that plan that fit one launch.
+**Status:** run on 28 September 2026 (partly; results in [§5](#5-results-28-september-2026)). Prepared 27 September 2026. This is the next in-game session with the maintainer. It replaces the earlier [session 3 card](../022-session-3/README.md): that card's Glitter board needs a restage and a relaunch, so it moves to the next session, and its blink and creator checks are folded in below. Every other open in-game ask is ranked in the [next-sessions plan](../../research/runtime/next-sessions-plan.md). This session takes the highest-value rows from that plan that fit one launch.
 
 **Who does what.** The maintainer (**M**) runs MO2 and the game, loads the save, answers the judgement questions and does anything in the inventory or the CET overlay. The coordinator (**C**) drives everything else through the [runtime bridge](../../projects/xf-runtime-bridge/README.md): MCP tools, or the session runner (`bun tools/session.ts` in `projects/xf-runtime-bridge`). Agents never launch the game or MO2.
 
@@ -220,3 +220,29 @@ Run `bun tools/session.ts tools/sessions/session-2.json --out local/sessions/<da
 | A1–A6, W1–W2 | The [bridge test card](../../research/runtime/runtime-bridge-test-card.md) (batch 3 and 4 results; the staged build record becomes 0.3.0); [runtime access](../../knowledge/runtime-access.md); [photo mode](../../knowledge/photo-mode.md) open questions 5 and 6 |
 | E1–E4 | The [expression editor design](../../research/animation/expression-editor-design.md) and [facial expressions](../../knowledge/facial-expressions.md); the [pose library design](../../research/animation/pose-library-design.md) and [poses](../../knowledge/poses.md) |
 | Every row | Tick or delete its row in the [next-sessions plan](../../research/runtime/next-sessions-plan.md); add a results section here; refresh [status](../../docs/status.md) and backlog row 1; stage the Glitter board for the next session |
+
+## 5. Results (28 September 2026)
+
+Run on the test profile with bridge 0.3.0 `-writes` (`f194020`), game 2.31, DLSS Performance, ray-traced lighting Ultra, path tracing off, SSS High. The session ran through a fallback runner because of the bridge problems below; the private evidence (captures, runner logs, the command audit, the plugin log and notes with verdicts word for word) is kept locally with the session.
+
+| Step | Result |
+|---|---|
+| A1–A2 preflight | **Pass**: the right build, script calls and live pose on; photo mode opens by key |
+| A3 light | Light 1 switches on, but its type can't be set: setting 45 isn't in 2.31's menu |
+| A4 framing | **Fail**: `photo.frame` stops with `no_response`, and the XF camera presets 6–9 carry a 90° roll. A vertical-only fallback (preset, roll 0, V's height offset and the field of view from `photo.subject`) framed correctly |
+| B1 Gloss A–D | The photo-mode light sweep is **void**: light 1 lit V only once, because it's placed where the camera was when it switched on, and the world clock advanced between presets. Judged by eye in the creator's eye framing instead: **no stripes visible on A, B or C; only an ambiguous edge on D**. The finishes barely separate under the creator's soft light; the verdict needs a controlled directional light |
+| B2 Shimmer · strong | **Fail**: a static field of dots, no flash or sparkle as V moves. Shimmer stays experimental and its facet route needs rework |
+| B3 Metal ramp · lifted | **Pass** for highlights: no angular shapes; the ramp's steps show as three faint stripes, with no single hard seam |
+| B4 Depth D in motion | **Pass**: no edge, no lifted look, no skin at the inner corners while blinking and turning. 0.4 mm stays |
+| B5 Lines new against old | **Pass**: new is visibly sharper than old at the creator's eye framing. The density gain is established |
+| B7 headgear | Not run (no full-head item in the inventory). The source already says the `xfs_c<key>_makeup` prefix isn't covered by `hide_Head` ([clothing](../../knowledge/clothing.md)) |
+| C1 closed lids, Depth D | **Pass** on eye shapes 01, 02, 10 and 12: at full closure the lid is covered, no eye shows between the lids, the lashes sit on the lid line, no bare skin shows between crease and lashes, and nothing pokes through. The creator's eye crop can't resolve sub-millimetre contact |
+| C2 tint, C3 feet | Not usable: after the first skin-type change the creator stayed busy and refused every later change |
+| D2, D3 eye designs and iris gradients | Captured; to compare with the preview offline |
+| D5 calibration | Captured under the Character Rendering Editor's Vanilla preset (confirmed through the game options): page frames, the four-colour hair ladder on the reference hairstyle, and two 8-frame bursts (steady exposure). Lash colour frames not taken. Ratios to be computed |
+| D6 noon and midnight | Captured on the head page |
+| D1, D4, E, W | Not run |
+
+**Bridge problems for the next build:** `photo.frame`'s left/right probe (a zero Jacobian); the XF camera presets' 90° roll; placing light 1 relative to V rather than the camera; `cc.open` refusing at scene tier 2 in V's apartment (the check should accept it); the creator staying busy after a skin-type change; `cc.confirm` refusing when nothing changed.
+
+**Requested for the next build:** a message line in the in-game bridge label (so the maintainer can read the coordinator without leaving the game), and commands for equipping an item and for saving and loading, so fewer steps need the maintainer.
