@@ -460,7 +460,7 @@ export const RENDERING_HELP = {
     "Preview only: your looks and your mod are unchanged."],
 } as const;
 /** The Hair look's readout: its two ends by name, per cent between them (the value is 0 Crisp … 1 Game-like). */
-export const hairLookText = (percent: number) => percent < .5 ? "Crisp" : percent > 99.5 ? "Game-like" : `${Math.round(percent)} %`;
+export const hairLookText = (percent: number) => percent < .5 ? "Crisp" : percent > 99.5 ? "Game-like" : `${Math.round(percent)} % game-like`;
 
 export function qualityPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -477,6 +477,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
   const shadows = new Toggle({ label: "Face shadows", help: RENDERING_HELP.shadows,
     onChange: enabled => rt.dispatch({ kind: "preview.setFaceShadows", enabled }) });
   const hairLook = new SliderWithValue({ label: "Hair look", min: 0, max: 100, step: 1, unit: "%", format: hairLookText, help: RENDERING_HELP.hairLook,
+    ends: { min: "Crisp", max: "Game-like" },
     defaultValue: 0, reset: true, transaction: {
       edit: value => { const action = { kind: "preview.setHairLook" as const, value: value / 100 }; rt.report(action.kind, port.authoring.dispatch(action)); },
       commit: endEdit, cancel: endEdit } });
@@ -495,8 +496,10 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
         stateLine.dataset.key = key;
         // The same wording as the status bar and the head's badge (UI-92).
         const text = readinessText(frame);
+        // Ready: the badge says it; the sentence speaks only for a state that needs words (updating, an error).
+        const ready = readiness.phase === "ready" && frame.viewport.head.phase === "ready";
         stateLine.replaceChildren(badge(text.label, readiness.phase === "ready" ? "success" : readiness.phase === "updating" ? "info" : "error"),
-          h("span", { class: "small", text: text.detail }),
+          ...(ready ? [] : [h("span", { class: "small", text: text.detail })]),
           h("span", { class: "muted small", text: `About ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB of memory at this size.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));

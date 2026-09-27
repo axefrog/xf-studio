@@ -3,7 +3,7 @@
  * throwaway Chrome profile) on its own port (never 4317 or the person's draft):
  * - with `3d`: the default feminine V at one framing each, side by side: Hair look Crisp | Game-like (the creator's hair camera) and
  *   Skin scattering on | off (the creator's face camera), each pair drawn back to back with nothing else changed;
- * - the Preview quality panel floating at 300 and 480 px, as it opens and with every option changed.
+ * - the Preview quality panel floating at 300 px, with Hair look at Crisp, 60 % and Game-like.
  *
  *   bun tools/rendering-look.ts <out dir under evidence/screenshots> [port] [light|dark] [3d]
  *
@@ -65,20 +65,20 @@ try {
       ["Face shadows off", { kind: "preview.setFaceShadows", enabled: false }]], 0.62);
     for (const action of [{ kind: "preview.setSkinScatter", enabled: true }, { kind: "preview.setFaceShadows", enabled: true }]) await run(action);
   }
-  // The panel at each width, as it opens and with every option changed.
-  for (const width of [300, 480]) {
-    await page.evaluate(`window.xfStudioShell.dock.moveTo("quality", { kind: "float", x: 760, y: 20, w: ${width}, h: 560 }, "")`);
-    await page.wait(1200);
-    const box = async () => page.evaluate(`(() => { const e = [...document.querySelectorAll(".dock-floating > *")].find(n => n.textContent.includes("Hair look"));
-      const r = e?.getBoundingClientRect(); if (!r) return null; const x = r.left, y = Math.max(0, r.top - 20);
-      return { x: Math.round(x), y: Math.round(y), width: Math.round(Math.min(innerWidth, r.right + 240) - x), height: Math.round(Math.min(innerHeight, r.bottom + 20) - y) }; })()`);
-    await page.screenshot(resolve(out, `${schemeArg}-${width}-1-defaults.png`), (await box()) ?? undefined);
-    for (const action of [{ kind: "preview.setSkinScatter", enabled: false }, { kind: "preview.setFaceShadows", enabled: false },
-      { kind: "preview.setHairLook", value: 0.6 }, { kind: "view.endEdit" }]) await run(action);
+  // The panel at 300 px: as it opens (Hair look Crisp), then at a middle value and Game-like with the switches off.
+  const width = 300;
+  await page.evaluate(`window.xfStudioShell.dock.moveTo("quality", { kind: "float", x: 760, y: 20, w: ${width}, h: 480 }, "")`);
+  await page.wait(1200);
+  const box = async () => page.evaluate(`(() => { const e = [...document.querySelectorAll(".dock-floating > *")].find(n => n.textContent.includes("Hair look"));
+    const r = e?.getBoundingClientRect(); if (!r) return null; const y = Math.max(0, r.top - 20);
+    return { x: Math.round(r.left), y: Math.round(y), width: Math.round(r.width), height: Math.round(Math.min(innerHeight, r.bottom + 20) - y) }; })()`);
+  for (const [name, look, on] of [["look-0", 0, true], ["look-60", 0.6, false], ["look-100", 1, false]] as const) {
+    for (const action of [{ kind: "preview.setSkinScatter", enabled: on }, { kind: "preview.setFaceShadows", enabled: on },
+      { kind: "preview.setHairLook", value: look }, { kind: "view.endEdit" }]) await run(action);
     await page.wait(700);
-    await page.screenshot(resolve(out, `${schemeArg}-${width}-2-changed.png`), (await box()) ?? undefined);
-    for (const action of [{ kind: "preview.setSkinScatter", enabled: true }, { kind: "preview.setFaceShadows", enabled: true },
-      { kind: "preview.setHairLook", value: 0 }, { kind: "view.endEdit" }]) await run(action);
+    await page.screenshot(resolve(out, `${schemeArg}-${width}-${name}.png`), (await box()) ?? undefined);
   }
+  for (const action of [{ kind: "preview.setSkinScatter", enabled: true }, { kind: "preview.setFaceShadows", enabled: true },
+    { kind: "preview.setHairLook", value: 0 }, { kind: "view.endEdit" }]) await run(action);
   writeFileSync(resolve(out, `${schemeArg}-console.json`), JSON.stringify(page.console.filter(m => m.type === "error" || m.type === "exception").slice(0, 20), null, 2));
 } finally { await page.close(); started?.server.kill(); }

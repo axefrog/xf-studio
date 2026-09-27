@@ -150,5 +150,5 @@ test("Face shadows off draws every light of the setup unshadowed, and on again r
 test("the Rendering group's words: the scatter's help says what it does, and the Hair look names its ends", () => {
   expect(RENDERING_HELP.scatter).toContain("shadow edges soften and turn warm");
   expect(RENDERING_HELP.scatter).toContain("lit skin stays neutral");
-  expect([hairLookText(0), hairLookText(40), hairLookText(100)]).toEqual(["Crisp", "40 %", "Game-like"]);
+  expect([hairLookText(0), hairLookText(40), hairLookText(100)]).toEqual(["Crisp", "40 % game-like", "Game-like"]);
 });

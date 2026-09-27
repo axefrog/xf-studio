@@ -39,6 +39,8 @@ export type SliderWithValueOptions = {
   inline?: boolean;
   /** The range's accessible name when the visible label is short. */
   accessibleLabel?: string;
+  /** Words small under the track's ends, for a scale between two named looks ("Crisp", "Game-like"); stacked layout only. */
+  ends?: { min: string; max: string };
   id?: string;
 };
 const decimals = (step: number) => { const text = String(step); return text.includes(".") ? text.length - text.indexOf(".") - 1 : 0; };
@@ -71,7 +73,9 @@ export class SliderWithValue {
     this.element = options.inline
       ? h("div", { class: "control slider-with-value inline" }, h("div", { class: "slider-inline-row" }, label, this.input, this.readout.element, this.resetButton), this.note.element)
       : h("div", { class: "control slider-with-value" },
-        h("div", { class: "slider-value-line" }, label, tip, h("span", { class: "grow" }), this.readout.element, this.resetButton), this.input, this.note.element);
+        h("div", { class: "slider-value-line" }, label, tip, h("span", { class: "grow" }), this.readout.element, this.resetButton), this.input,
+        options.ends ? h("div", { class: "slider-ends", "aria-hidden": "true" }, h("span", { text: options.ends.min }), h("span", { text: options.ends.max })) : null,
+        this.note.element);
     this.edit = bindRangeTransaction(this.input, options.transaction, value => { this.text = undefined; this.show(value); });
     this.input.addEventListener("keydown", event => {
       if (this.disabled) return;
