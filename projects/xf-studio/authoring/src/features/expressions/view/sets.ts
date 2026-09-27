@@ -14,7 +14,7 @@
  *   note, what was left out with a Start from it button, the next step after a Build (Show in folder) and a Details group. Nothing is
  *   ever added to the game or a mod manager from here.
  */
-import { applyCapability, badge, button, emptyState, GroupSection, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
+import { applyCapability, badge, button, emptyState, GroupSection, hasCommands, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
   section, Segmented, type MenuItem } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
@@ -45,7 +45,7 @@ export function expressionSets(ctx: Ctx): PanelController {
   const current = (): PartPresetSet | undefined => { const items = ctx.presets.sets().items; return items.find(item => item.id === chosenSet) ?? items[0]; };
   const saved = () => ctx.presets.list().items;
   const presetOf = (id: string) => saved().find(item => item.id === id);
-  const rowOf = (list: ItemList<{ id: string; name: string; meta: string }>, id: string) =>
+  const rowOf = (list: ItemList<{ id: string; name: string; meta: string; secondary?: string }>, id: string) =>
     list.element.querySelector<HTMLElement>(`[data-id="${CSS.escape(id)}"]`) ?? list.element;
 
   // ---- Sets ----
@@ -72,7 +72,7 @@ export function expressionSets(ctx: Ctx): PanelController {
   const setTitle = h("span", { text: "In this set" });
   const add = button({ label: "Add…", icon: "plus", small: true, menu: true, onClick: event => addMenu(event.currentTarget as Element) });
   const removeFrom = (id: string) => { const set = current(); if (set) setMembersTo(set, set.members.filter(member => member !== id)); };
-  const members = new ItemList<{ id: string; name: string; meta: string }>({
+  const members = new ItemList<{ id: string; name: string; meta: string; secondary?: string }>({
     label: "Expressions in this set, in photo mode's order", noun: "expression", maxLength: 64,
     onSelect: id => startFrom(id),
     onMove: (id, to) => { const set = current(); if (!set) return; const next = set.members.filter(member => member !== id); next.splice(to, 0, id); setMembersTo(set, next); },
@@ -182,20 +182,25 @@ export function expressionSets(ctx: Ctx): PanelController {
     ], anchor, { label: `${set.name} actions` });
   }
   const outsideOf = (set: PartPresetSet) => saved().filter(preset => !set.members.includes(preset.id));
+  /** The Add… menu's commands: each saved expression not in the set yet, and all of them. */
+  function addItems(set: PartPresetSet): MenuItem[] {
+    const outside = outsideOf(set);
+    return [{ kind: "heading", label: "Add a saved expression" }, ...outside.map((preset): MenuItem => ({ kind: "action", label: shownName(preset), icon: "plus",
+      run: () => setMembersTo(set, [...set.members, preset.id]) })),
+      ...(outside.length > 1 ? [{ kind: "separator" } as MenuItem, { kind: "action", label: `Add all ${outside.length}`, icon: "plus",
+        run: () => setMembersTo(set, [...set.members, ...outside.map(preset => preset.id)]) } as MenuItem] : [])];
+  }
+  /** Add… is unavailable, with the reason, when its menu would hold no command (`hasCommands`). */
   function addCapability(set: PartPresetSet | undefined) {
     if (!set) return { available: false, reason: "Choose a set first." };
-    if (!saved().length) return { available: false, reason: "Save an expression in the Expression panel first." };
-    if (!outsideOf(set).length) return { available: false, reason: "Every saved expression is in this set already." };
+    if (!hasCommands(addItems(set))) return { available: false, reason: saved().length ? "Every saved expression is in this set already."
+      : "Save an expression in the Expression panel first." };
     return ctx.presets.capability({ kind: "partPresetSet.setMembers", id: set.id, members: set.members, revision: set.revision });
   }
   function addMenu(anchor: Element) {
     const set = current();
     if (!set || !addCapability(set).available) return;
-    const outside = outsideOf(set);
-    openMenu([{ kind: "heading", label: "Add a saved expression" }, ...outside.map((preset): MenuItem => ({ kind: "action", label: shownName(preset), icon: "plus",
-      run: () => setMembersTo(set, [...set.members, preset.id]) })),
-      ...(outside.length > 1 ? [{ kind: "separator" } as MenuItem, { kind: "action", label: `Add all ${outside.length}`, icon: "plus",
-        run: () => setMembersTo(set, [...set.members, ...outside.map(preset => preset.id)]) } as MenuItem] : [])], anchor, { label: "Add to set" });
+    openMenu(addItems(set), anchor, { label: "Add to set" });
   }
   function memberMenu(id: string, anchor: Element | { x: number; y: number }) {
     const set = current(), preset = presetOf(id);
@@ -344,7 +349,9 @@ export function expressionSets(ctx: Ctx): PanelController {
       const loaded = origin?.kind === "preset" && set.members.includes(origin.id) ? origin.id : undefined;
       members.update(setMembers(set, presets.items).map(member => {
         const preset = member.preset ? presetOf(member.id) : undefined;
-        return { id: member.id, name: preset ? shownName(preset) : "Deleted expression", meta: "" };
+        // The name photo mode shows; the saved name beside it when it differs.
+        const secondary = preset && preset.name !== shownName(preset) ? `saved as “${preset.name}”` : undefined;
+        return { id: member.id, name: preset ? shownName(preset) : "Deleted expression", meta: "", ...(secondary ? { secondary } : {}) };
       }), loaded);
       membersEmpty.hidden = set.members.length > 0;
       applyCapability(add, addCapability(set));
