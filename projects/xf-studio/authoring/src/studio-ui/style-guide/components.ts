@@ -116,7 +116,7 @@ export function components() {
     pattern({ id: "c-segmented", title: "Segmented control", status: "implemented",
       specimen: `<div class="stack-s">${segmented("Selected point handles", ["Smooth", "Symmetric", "Corner"], 0)}${segmented("Generated texture resolution", ["512", "1K", "2K", "4K"], 1, [3])}</div>`,
       what: "Mutually exclusive choices shown together; the selection carries a cyan underline. Choices the application refuses (e.g. 4K over the hardware budget) are disabled with the reason as a tooltip and in the palette. The choices may change with `setOptions` (rebuilt only when the list differs, focus kept on the same choice); the whole group can be disabled with one visible reason, and a reserved note line under it carries a transient state without moving anything.",
-      when: "Two to four short options in one row that benefit from comparison (modes, views, a size). More options, or long labels, use a Choice list (c-choice-list).",
+      when: "Two to four short options in one row that benefit from comparison (modes, views, a size); icon only (`iconOnly`), up to eight choices whose icons say what they are, such as the easing curves, with the chosen one named in the note line. More labelled options, or long labels, use a Choice list (c-choice-list).",
       a11y: "A labelled group of toggle buttons with aria-pressed; a disabled group states its reason in the note line and as the group's description.",
       drives: `${code("choicesFor(target, kind, field)")} or per-value ${code("capability")}; ${code("setOptions")} for a list that changes.` }),
     pattern({ id: "c-choice-list", title: "Choice list", status: "implemented", wide: true,

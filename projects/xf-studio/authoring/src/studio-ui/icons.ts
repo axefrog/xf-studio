@@ -1,3 +1,4 @@
+import type { EasingId } from "../platform/api/easing";
 /** Original 16px line icons for XF Studio. Stroked with currentColor; decorative unless labelled. */
 type Shape = { d: string; fill?: boolean; dash?: string };
 const s = (d: string): Shape => ({ d });
@@ -75,11 +76,15 @@ const ICONS = {
   layouts: [s("M2.5 6.5h8v7h-8z"), s("M2.5 8.5h8"), s("M4.5 6.5v-2h8v7h-2"), s("M6.5 4.5v-2h7v7h-1")],
   category: [s("M2.5 2.5h4.5v11H2.5z"), s("M9 2.5h4.5v4.5H9zM9 9h4.5v4.5H9z")],
   dot: [f("M5.5 5.5h5v5h-5z")],
-  // Easing curves (easing.ts), drawn as the curve from rest (bottom left) to full (top right).
+  // Easing curves (platform/api/easing.ts), each drawn from its own curve from rest (bottom left) to full (top right) in the 11 px box at
+  // 2.5, sampled at 17 points with its departure from the diagonal made 1.6 times larger so that gentle and strong curves read apart at
+  // 16 px (tests/easing-transitions.test.ts checks every path against the catalogue).
   easeLinear: [s("M2.5 13.5L13.5 2.5")],
-  easeIn: [s("M2.5 13.5C8.5 13.5 12 9.5 13.5 2.5")],
-  easeOut: [s("M2.5 13.5C4 6.5 7.5 2.5 13.5 2.5")],
-  easeInOut: [s("M2.5 13.5C8.5 13.5 7.5 2.5 13.5 2.5")],
+  easeIn: [s("M2.5 13.5L3.19 13.5 3.88 13.5 4.56 13.5 5.25 13.5 5.94 13.5 6.63 13.5 7.31 13.02 8 12.4 8.69 11.64 9.38 10.75 10.06 9.72 10.75 8.55 11.44 7.24 12.13 5.8 12.81 4.22 13.5 2.5")],
+  easeOut: [s("M2.5 13.5L3.19 11.78 3.88 10.2 4.56 8.76 5.25 7.45 5.94 6.28 6.63 5.25 7.31 4.36 8 3.6 8.69 2.98 9.38 2.5 10.06 2.5 10.75 2.5 11.44 2.5 12.13 2.5 12.81 2.5 13.5 2.5")],
+  easeInOut: [s("M2.5 13.5L3.19 13.5 3.88 13.5 4.56 13.11 5.25 12.4 5.94 11.48 6.63 10.41 7.31 9.23 8 8 8.69 6.77 9.38 5.59 10.06 4.52 10.75 3.6 11.44 2.89 12.13 2.5 12.81 2.5 13.5 2.5")],
+  easeInOutStrong: [s("M2.5 13.5L3.19 13.5 3.88 13.5 4.56 13.5 5.25 13.5 5.94 13.36 6.63 12.31 7.31 10.54 8 8 8.69 5.46 9.38 3.69 10.06 2.64 10.75 2.5 11.44 2.5 12.13 2.5 12.81 2.5 13.5 2.5")],
+  easeOutStrong: [s("M2.5 13.5L3.19 10.8 3.88 8.5 4.56 6.57 5.25 4.99 5.94 3.71 6.63 2.71 7.31 2.5 8 2.5 8.69 2.5 9.38 2.5 10.06 2.5 10.75 2.5 11.44 2.5 12.13 2.5 12.81 2.5 13.5 2.5")],
   link: [s("M6.8 9.2l2.4-2.4"), s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7")],
   /** The link broken: its two halves apart, with break marks (PairControl's separate sides). */
   unlink: [s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7"), s("M5 2.5v1.8M2.5 5h1.8M11 13.5v-1.8M13.5 11h-1.8")],
@@ -88,6 +93,11 @@ const ICONS = {
   starFilled: [f("M8 2.3l1.75 3.55 3.9.57-2.83 2.76.67 3.89L8 11.23l-3.49 1.84.67-3.89L2.35 6.42l3.9-.57z")],
 } satisfies Record<string, Shape[]>;
 export type IconName = keyof typeof ICONS;
+/** Each easing curve's icon (platform/api/easing.ts `EASINGS`), for any curve picker. */
+export const EASING_ICONS: Readonly<Record<EasingId, IconName>> = Object.freeze({ linear: "easeLinear", in: "easeIn", out: "easeOut", inOut: "easeInOut",
+  inOutStrong: "easeInOutStrong", outStrong: "easeOutStrong" });
+/** An icon's path data (for checks and the style guide). */
+export const iconPaths = (name: IconName): readonly string[] => ICONS[name].map(shape => shape.d);
 /** Whether a name (a module contribution's) is one of the shell's icons. */
 export const isIconName = (name: string): name is IconName => Object.hasOwn(ICONS, name);
 

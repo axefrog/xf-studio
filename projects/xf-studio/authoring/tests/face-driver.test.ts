@@ -97,3 +97,27 @@ test("a held clip (the blink over an expression) animates inside its frames and 
   expect(face.animating).toBe(false);
   face.dispose();
 });
+
+test("the same clip over a changed pose carries on where it was (a transition or drag never restarts the blink); another clip starts over", () => {
+  const { bones } = head(), face = new FaceDriver(bones);
+  face.setRig(JOINTS);
+  const shut = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.5).toArray();
+  const clip = (continues?: boolean) => ({ frames: [new Map(), new Map([[1, { t: [0, -0.05, 0.02], r: shut }]]), new Map()], rate: 10, repeat: 1,
+    ...(continues ? { continues } : {}) });
+  face.hold(clip());
+  face.setApplied(true);
+  face.update(0.1);
+  const midway = world(bones[2]!).clone();
+  face.hold(clip(true));
+  // Still at the clip's middle frame: the lip stays where the blink had it.
+  expect(world(bones[2]!).distanceTo(midway)).toBeLessThan(1e-9);
+  face.update(0.1);
+  expect(face.animating).toBe(false);
+  // Without `continues`, or with a clip of another length, playback starts again.
+  face.hold(clip());
+  expect(face.animating).toBe(true);
+  face.update(0.1);
+  face.hold({ ...clip(true), frames: [new Map(), new Map()] });
+  expect(face.animating).toBe(true);
+  face.dispose();
+});

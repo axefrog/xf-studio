@@ -93,7 +93,17 @@ const MOUNTS: Record<string, Mount> = {
     scrub.update({ curve }); show(0);
     return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, scrub.element, h("div", { class: "row gap-m" }, ...bars))); },
   "lib-segmented": () => { const s: Segmented<string> = new Segmented({ label: "Show", options: [{ value: "both", label: "Both eyes" }, { value: "one", label: "Single eye" }], onSelect: v => s.update(v), compact: true });
-    s.update("both"); return s.element; },
+    s.update("both");
+    // Icon only: the Expression drawer's transition curves, each named with how it moves in its tooltip, the chosen one named in the note.
+    const hints: [string, string, string][] = [["easeLinear", "Linear", "steady from start to end"], ["easeIn", "Ease in", "starts slowly and speeds up into the end"],
+      ["easeOut", "Ease out", "starts quickly and slows into the end"], ["easeInOut", "Ease in-out", "gentle at both ends"],
+      ["easeInOutStrong", "Strong ease in-out", "a slow start and finish around a quick middle"], ["easeOutStrong", "Strong ease out", "most of the change at once, then a long settle"]];
+    const named = (v: string) => hints.find(([icon]) => icon === v)![1];
+    const curves: Segmented<string> = new Segmented({ label: "Curve", iconOnly: true, reserveNote: true, compact: true,
+      options: hints.map(([icon, label, hint]) => ({ value: icon, label, icon: icon as never, title: `${label}: ${hint}.` })),
+      onSelect: v => curves.update(v, undefined, { note: named(v) }) });
+    curves.update("easeInOutStrong", undefined, { note: named("easeInOutStrong") });
+    return stack({ gap: "normal" }, s.element, h("div", { style: "max-width:300px" }, curves.element)); },
   "lib-color": () => { const c: ColorField = new ColorField({ label: "Colour", transaction: { edit: v => c.update(v) } }); c.update("#b0587a"); return c.element; },
   "lib-select": () => { const s: SelectField<string> = new SelectField({ label: "Launch route", help: "How you start the game.", onChange: v => s.update(choices, v) });
     const choices = [{ value: "mo2", label: "Mod Organizer 2" }, { value: "direct", label: "Directly" }]; s.update(choices, "mo2"); return s.element; },

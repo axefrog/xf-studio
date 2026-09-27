@@ -180,9 +180,35 @@ Today `src/game-blink.ts` and `src/idle-animation.ts` each take a solved rig (lo
 | Solver LOD 0 | Photo-mode close-ups probably also solve at full detail | [hypothesis] |
 | Portability across face shapes | The same vector on another V is expected to look equivalent | [hypothesis]; R4 on two shapes |
 | Male V | The Studio has no male head preview; male clips export blind | Question 4 |
-| Photo mode's 1 s cross-fade | Irrelevant for a held static face | [resource] |
+| Photo mode's 1 s cross-fade | Reproduced by the animated transition's default (§5.5): control weights blended linearly over 1 s before each frame's solve, where the graph blends its tracks | [resource]; not compared in game |
 
 The preview is therefore labelled a **solved preview of the game's rig**, never "as in game", until R4 has compared them.
+
+### 5.5 Animated transitions
+
+Built 28 September 2026 (`claude/expression-transition`); offline evidence only. A change from one expression to another can play as motion instead of a cut, so its naturalness can be judged. The same machinery is meant for poses and for the planned timeline editor.
+
+**What a person sees.** The Expression drawer's **Transitions** section, between Start from and Adjust all: **Animate changes** (a switch, off by default), **Duration** (0 to 3 s in 0.05 s steps, 1 s by default, reset to 1 s; 0 reads "Cut") and **Curve** (every curve of the easing catalogue as an icon-only Segmented strip, each with its name and how it moves as its tooltip, the chosen one named in the note line under it, on one line so choosing never changes the section's height). While the switch is off, Duration and Curve keep their place and value, disabled, with the reason in their tooltips, so turning it on moves nothing.
+
+**The default, 1 s Linear, is photo mode's own.** Photo mode's face graph swaps between two `AnimDatabase` states on `updateFacialPose` with a linear 1 s blend ([knowledge §3](../../knowledge/facial-expressions.md#3-photo-mode-expressions)) [resource]. The blend happens on the tracks before the `Sermo` solve, which is where the Studio blends too, so the first thing a person sees is the switch as the graph describes it; the other curves are there to judge motion the game doesn't make. Whether the game's blend looks like this in practice is a runtime question (knowledge open question 9).
+
+**What animates and what doesn't.**
+
+| Change | Behaviour | Why |
+|---|---|---|
+| Start from (a saved, natural or installed expression, or Rest), Reset all, a group's or a control's reset, Mirror, Flip, Undo, Redo, selecting another look | Eases from the face on screen to the new one | Whole-face jumps: the comparison the feature is for. Undo and Redo included, because stepping back and forth between two faces with the motion is the most direct A/B comparison. |
+| A slider drag, a key step, a typed value, Adjust all › Intensity (anything inside an open form-control transaction) | The controls the edit changed follow at once; anything still easing keeps its own clock | The edit is already continuous and follows the hand; making it lag would make fine adjustment harder. Nothing else jumps. |
+| A change nobody can see (no head yet, the solver starting, the idle playing), the first vector, 0 s, the switch off | Cuts | Nothing to watch; a hidden animation would only spend solves. Turning the switch off mid-way cuts to the target. |
+
+A change mid-transition starts from the blended face on screen (`ValueTransition.ease` reads the value at that moment), so it never jumps. The rule is generic: the facial preview asks the composition whether a form control is open (`featureControlSnapshot`), not which action ran.
+
+**How.** A **value-transition node** (`platform/core/value-transition.ts`, pure, clock-driven) sits between the combined face vector (the composition's face posers, `combineFacePoses`) and the solve in `FacialPreview`. It keeps the value shown, the target, the start time, the duration and the curve; `cut`, `ease` and `follow` retarget it; `valueAt(now)` blends each control weight linearly in eased time (`weightBlend`: absent is 0, float32, clamped to 0–1, zeros dropped). While it moves, the preview solves one frame about every 16.7 ms (`FRAME_MS`; the 5–8 ms round trip leaves room), through the same newest-wins solve as a drag; the last frame is the target's own exact solve. The blink composes into every frame exactly as for a still face (a held closure is in each solve; Play blink's clip carries on through the frames, `FacePose.continues`, instead of restarting). Ownership of the bones is unchanged (preview-motion.ts): the face driver holds each frame as it holds a still face, lent to a pose when one plays, so nothing rebinds and the PREV-144 drift can't return. Poses plug in as another source with their own `Blend` (a per-joint rotation blend) and their own setting.
+
+**The setting** is the `transitions` family's one action, `transition.set {source, enabled?, seconds?, easing?}` ([catalogue](../authoring/ui-action-catalogue.md)), owned by `TransitionSettings` (`platform/core/transition-settings.ts`). It is view state of the subject's motion, like the blink: kept in the workspace's `preview.transitions` only once changed, never a look, an Undo step or an export, and available before the head loads. It is not a UI preference because the facial preview, on the application side, reads it; UI preferences are presentation state the application never reads. The views of one scene share one rig and one face, so like the idle it belongs to the scene and moves into the scene node with the other motion state in view-graph P3 ([view graph §6.5](../authoring/view-graph-design.md#65-phase-status)); a second scene with its own face gets its own node.
+
+**The easing catalogue** (`platform/api/easing.ts`) is the Studio's one vocabulary of curves, shared by Adjust all › Intensity, the transition and, later, the timeline editor. Every curve is a cubic Bézier `[x1, y1, x2, y2]` from (0, 0) to (1, 1), x within 0–1 so it is a function of time, y free to overshoot. A stored curve (`EasingCurve`) is a preset's ID or `{ bezier }`, so a keyframe segment will store either and evaluate it with `ease(curve, t)`. The presets: Linear, Ease in (`x²`), Ease out, Ease in-out (smoothstep; the three are exactly Béziers with x controls at ⅓ and ⅔, and keep their closed forms, so Intensity's maths are unchanged), Strong ease in-out (cubic, a deliberate change) and Strong ease out (cubic, a quick onset and a long settle, like a spontaneous reaction). No bounce or elastic: a face doesn't move like that. Each curve's icon is drawn from its own curve, its bend from the diagonal made 1.6 times larger so gentle and strong curves read apart at 16 px.
+
+**Deferred.** A Bézier handle editor (the timeline R&D designs curve editing; the model stores and validates custom curves already, `parseEasingCurve`), per-region timing (brows leading the mouth, as real onsets often do), a measured "natural" onset curve from reference footage, overshoot and anticipation curves (allowed by the model, clamped by the weight blend), and transitions for poses.
 
 ## 6. Export route
 

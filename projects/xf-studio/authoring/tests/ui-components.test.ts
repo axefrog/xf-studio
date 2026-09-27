@@ -783,3 +783,23 @@ test("direction dial: the resize bar clamps between the minimum and what the con
   expect(dial.shownSize).toBe(420);
   expect([dial.grip.getAttribute("role"), dial.grip.getAttribute("aria-orientation")]).toEqual(["separator", "horizontal"]);
 });
+
+test("segmented, icon only: each segment shows its icon and is named by its label; a disabled group can keep its note and give the reason in tooltips", async () => {
+  const { Segmented } = await lib();
+  const picked: string[] = [];
+  const control = new Segmented<string>({ label: "Curve", iconOnly: true, reserveNote: true, onSelect: value => picked.push(value),
+    options: [{ value: "linear", label: "Linear", icon: "easeLinear" }, { value: "inOut", label: "Ease in-out", icon: "easeInOut" }] });
+  document.body.append(control.element);
+  const buttons = control.element.querySelectorAll<HTMLButtonElement>(".segment");
+  expect(control.element.querySelector(".segmented")!.classList.contains("icon-only")).toBe(true);
+  expect([...buttons].map(button => [button.getAttribute("aria-label"), button.title, !!button.querySelector("svg"), !!button.querySelector("span")]))
+    .toEqual([["Linear", "Linear", true, false], ["Ease in-out", "Ease in-out", true, false]]);
+  buttons[1]!.click();
+  expect(picked).toEqual(["inOut"]);
+  control.update("inOut", undefined, { disabled: true, reason: "Turn it on first.", note: "Ease in-out: gentle at both ends.", reasonOnLine: false });
+  const note = control.element.querySelector<HTMLElement>(".control-note")!;
+  expect([note.textContent, buttons[0]!.disabled, buttons[0]!.title, buttons[1]!.getAttribute("aria-pressed")])
+    .toEqual(["Ease in-out: gentle at both ends.", true, "Turn it on first.", "true"]);
+  control.update("inOut", undefined, { note: "Ease in-out: gentle at both ends." });
+  expect([buttons[0]!.disabled, buttons[0]!.title]).toEqual([false, "Linear"]);
+});

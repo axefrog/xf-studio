@@ -47,7 +47,7 @@ export const GUIDANCE: Record<string, { combine?: string; adapt?: string; drives
     adapt: "Fields fill their column; titles truncate with an ellipsis rather than wrapping.", drives: "collection.rename, preset.edit rename, layer.edit rename; application validation decides." },
   "c-slider": { combine: "Pair related sliders in one row only when both fit (Colour + Opacity); disabled sliders keep their reason directly beneath.",
     adapt: "Sliders fill their column; readouts never wrap." },
-  "c-switch": { combine: "Switches stack in a section with their notes; a switch that unlocks a slider sits directly above it (Smooth point gradients → Point blend).",
+  "c-switch": { combine: "Switches stack in a section with their notes; a switch that unlocks a slider sits directly above it (Smooth point gradients → Point blend). The controls a switch unlocks keep their place and value while it is off, disabled with the reason in their tooltip, so turning it on moves nothing (Expression › Transitions: Animate changes above Duration and Curve).",
     adapt: "Full-width rows in every size class.", drives: "Recipe switches: control transactions (pigment/softness) or dispatch (layer.setSymmetry); preview switches: preview.* actions." },
   "c-segmented": { combine: "The selected choice's explanation appears as a note beneath (e.g. handle modes).",
     adapt: "Segments keep their labels; the group wraps within its panel rather than scrolling." },

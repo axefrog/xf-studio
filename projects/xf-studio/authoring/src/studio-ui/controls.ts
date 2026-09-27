@@ -165,7 +165,10 @@ export type SegmentOption<T extends string | number> = { value: T; label: string
  * data-driven list such as the game's idles prepared on this computer): the buttons are rebuilt only when the list differs, and focus
  * stays on the same choice. It is for two to four short options in one row; more, or long labels, use the ChoiceList (components/
  * choice-list.ts). `update` can disable the whole group with one reason (the reason stays visible in the note line, which keeps its height
- * when `reserveNote` is set).
+ * when `reserveNote` is set; `reasonOnLine: false` keeps the note and puts the reason in the tooltips and description only).
+ *
+ * `iconOnly`: each segment shows only its icon, its label being its accessible name and tooltip, for up to eight choices whose icons say
+ * what they are (the easing curves). Pair it with a reserved note line that names the chosen one.
  */
 export class Segmented<T extends string | number> {
   readonly element: HTMLElement;
@@ -176,9 +179,9 @@ export class Segmented<T extends string | number> {
   private readonly tip: HTMLButtonElement | null;
   private signature = "";
   constructor(private readonly options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean;
-    reserveNote?: boolean; help?: HelpText }) {
+    reserveNote?: boolean; help?: HelpText; iconOnly?: boolean }) {
     const labelId = uid("seg");
-    this.group = h("div", { class: "segmented", role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
+    this.group = h("div", { class: `segmented${options.iconOnly ? " icon-only" : ""}`, role: "group", "aria-label": options.showLabel === false ? options.label : undefined,
       "aria-labelledby": options.showLabel === false ? undefined : labelId });
     this.note = new NoteLine(options.reserveNote);
     this.tip = options.help !== undefined && options.showLabel !== false ? helpTip(options.label, options.help) : null;
@@ -195,9 +198,13 @@ export class Segmented<T extends string | number> {
     if (signature === this.signature) return;
     this.signature = signature;
     const focused = this.buttons.find(item => item.button === document.activeElement)?.value;
-    this.buttons = options.map(option => ({ value: option.value, button: h("button", { class: "segment", type: "button",
-      "aria-pressed": "false", title: option.title, "data-title": option.title,
-      onclick: () => this.options.onSelect(option.value) }, option.icon ? icon(option.icon) : null, h("span", { text: option.label })) }));
+    const iconOnly = !!this.options.iconOnly;
+    this.buttons = options.map(option => {
+      const title = option.title ?? (iconOnly ? option.label : undefined);
+      return { value: option.value, button: h("button", { class: "segment", type: "button", "aria-pressed": "false", title, "data-title": title,
+        "aria-label": iconOnly ? option.label : undefined, onclick: () => this.options.onSelect(option.value) },
+        option.icon ? icon(option.icon) : null, iconOnly && option.icon ? null : h("span", { text: option.label })) };
+    });
     this.group.replaceChildren(...this.buttons.map(item => item.button));
     if (focused !== undefined) this.buttons.find(item => item.value === focused)?.button.focus();
   }
@@ -206,13 +213,13 @@ export class Segmented<T extends string | number> {
    * under the choices (shown in the same line, so the layout never shifts between them when `reserveNote` is set).
    */
   update(selected: T | undefined, capability: (value: T) => { available: boolean; reason?: string } = () => ({ available: true }),
-    state: { disabled?: boolean; reason?: string; note?: string } = {}) {
+    state: { disabled?: boolean; reason?: string; note?: string; reasonOnLine?: boolean } = {}) {
     for (const { value, button } of this.buttons) {
       setAttr(button, "aria-pressed", String(value === selected));
       const allowed = state.disabled ? { available: false, reason: state.reason } : capability(value);
       setDisabled(button, !allowed.available && (state.disabled || value !== selected), allowed.reason);
     }
-    this.note.update(this.group, !!state.disabled, state.reason, state.note);
+    this.note.update(this.group, !!state.disabled, state.reason, state.note, state.reasonOnLine ?? true);
   }
 }
 

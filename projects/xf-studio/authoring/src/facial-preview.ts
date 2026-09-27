@@ -13,11 +13,19 @@
  * - **Idle.** The idle's facial solve isn't additive, so while it plays the head shows the idle and the drawer says so, with one click to
  *   stop it (design §5.3); the held expression comes back when it stops. A photo-mode pose is not the idle: the expression composes over
  *   the posed body (pose-library-design.md decision Q5; preview-motion.ts).
+ * - **Animated changes** (design §5.5, `animate`): with the expression's transition on, the held vector passes through a value-transition
+ *   node (platform/core/value-transition.ts) and the face eases from the pose on screen to each new one, solved frame by frame (about
+ *   every `FRAME_MS`, as fast as the solver answers) with the blink composed in each frame as for a still face. A change made inside a
+ *   form control (a slider drag, a key step, Adjust all) follows at once; every other change animates. Anything the viewer can't see
+ *   (no head yet, the solver starting, the idle playing) cuts. Exact at the end: the last frame is the target's own solve.
  */
 import { posedLocals, type RigRest, type SolvedPose } from "./engines/facial-rig/pose";
 import type { FacialAxisControl, FacialAxisPair, FacialBlink, FacialControl, FacialHostState, FacialPreviewSnapshot, FacialSolveRequest, FacialStartPoints } from "./platform/api/facial";
 import { buildAxes, counterpartName, linkedByDefault, linkKey } from "./engines/facial-rig/symmetry";
 import { proposeAxes } from "./engines/facial-rig/relations";
+import { storedWeight } from "./engines/facial-rig/vector";
+import { ValueTransition, weightBlend } from "./platform/core/value-transition";
+import type { TransitionSetting } from "./platform/core/transition-settings";
 
 /** A solve's answer with its buffers decoded (the device does the transport). */
 export type FacialSolved = { ok: true; frames: number; rate?: number; pose: SolvedPose; ms: number; skipped: readonly string[] } |
@@ -30,7 +38,7 @@ export interface FacialDevicePort {
 /** The scene's face driver as the service sees it (head-rig.ts `face`). */
 export type FacePoseSink = {
   setRig(joints: FacialHostState["rig"]["joints"] & object): void;
-  hold(pose: { frames: ReadonlyMap<number, { t: readonly number[]; r: readonly number[] }>[]; rate?: number; repeat?: number }): void;
+  hold(pose: { frames: ReadonlyMap<number, { t: readonly number[]; r: readonly number[] }>[]; rate?: number; repeat?: number; continues?: boolean }): void;
   release(): void;
 };
 /** The motion the preview composes with (motion-actions.ts `MotionState`). */
@@ -41,6 +49,11 @@ export type FacialTimer = { set(callback: () => void, ms: number): unknown; clea
 const TIMER: FacialTimer = { set: (callback, ms) => setTimeout(callback, ms), clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
   now: () => performance.now() };
 
+/** How the face's changes animate: the expression's transition setting now, and whether a form control is open (its edits follow at once). */
+export type FacialAnimation = { setting(): TransitionSetting | undefined; continuous(): boolean };
+/** A moving transition asks for the next frame's solve this soon after the last one began (ms): 60 per second. */
+export const FRAME_MS = 1000 / 60;
+const REST: Readonly<Record<string, number>> = Object.freeze({});
 /** A solve slower than this shows "updating" in place. */
 export const SLOW_SOLVE_MS = 150;
 /** How often the host's state is asked for while it prepares (ms), growing to the maximum. */
@@ -57,6 +70,15 @@ export class FacialPreview {
   private sinkError: string | null = null;
   private pose: () => Readonly<Record<string, number>> | undefined = () => undefined;
   private motion: () => FacialMotion | undefined = () => undefined;
+  private animation: FacialAnimation | undefined;
+  private readonly blend = weightBlend(storedWeight);
+  /** What the face shows between the held vector and the solve (a cut unless the transition is on). */
+  private readonly transition = new ValueTransition(this.blend);
+  private tick: unknown = null;
+  private solveStarted = -Infinity;
+  private lastTick = -Infinity;
+  /** Whether the pose last handed to the scene was the blink clip (a new one then carries on at the same point of the clip). */
+  private heldPlay = false;
   private shown = "none";
   private inFlight = false;
   private dirty = false;
@@ -79,6 +101,8 @@ export class FacialPreview {
   follow(pose: () => Readonly<Record<string, number>> | undefined, motion: () => FacialMotion | undefined) {
     this.pose = pose; this.motion = motion; this.changed();
   }
+  /** Animate changes of the held vector by the expression's transition setting (design §5.5); without it every change cuts. */
+  animate(animation: FacialAnimation | undefined) { this.animation = animation; this.changed(); }
   /** The scene's face driver (undefined while no head is loaded). */
   attachScene(sink: FacePoseSink | undefined) {
     this.sink = sink; this.sinkRigged = false; this.sinkError = null; this.shown = "none";
@@ -89,6 +113,7 @@ export class FacialPreview {
     this.disposed = true;
     if (this.poll !== null) this.timer.clear(this.poll);
     if (this.slowTimer !== null) this.timer.clear(this.slowTimer);
+    if (this.tick !== null) this.timer.clear(this.tick);
     this.listeners.clear();
   }
 
@@ -119,9 +144,11 @@ export class FacialPreview {
   /** The held expression, the motion or the host changed: solve what the face should show now (newest wins). */
   changed() {
     if (this.disposed) return;
+    this.retarget();
     const request = this.desired();
+    if (this.transition.moving(this.timer.now())) this.nextFrame();
     if (!request) {
-      if (this.shown !== "none" && this.sink) { this.sink.release(); this.shown = "none"; }
+      if (this.shown !== "none" && this.sink) { this.sink.release(); this.shown = "none"; this.heldPlay = false; }
       return;
     }
     if (!this.sink || !this.sinkRigged || this.host?.solver.phase !== "ready") return;
@@ -130,8 +157,31 @@ export class FacialPreview {
     if (this.inFlight) { this.dirty = true; return; }
     void this.solve(request, key);
   }
+  /**
+   * A new held vector: cut, follow or ease to it (design §5.5). Only a change the viewer can see animates, and only with the transition on
+   * and a duration; a change inside a form control follows at once. Turning the transition off mid-way cuts to the target.
+   */
+  private retarget() {
+    const now = this.timer.now(), target = this.pose() ?? REST, was = this.transition.target(), setting = this.animation?.setting();
+    const animated = !!setting?.enabled && setting.seconds > 0;
+    if (was !== undefined && this.blend.same(was, target)) {
+      if (!animated && this.transition.moving(now)) this.transition.cut(target);
+      return;
+    }
+    const motion = this.motion();
+    const visible = !!this.sink && this.sinkRigged && this.host?.solver.phase === "ready" && !(motion?.idle && !motion.pose);
+    if (was === undefined || !visible || !animated) this.transition.cut(target);
+    else if (this.animation!.continuous()) this.transition.follow(target, now);
+    else this.transition.ease(target, now, { seconds: setting!.seconds, curve: setting!.easing });
+  }
+  /** While a transition moves, solve its next frame about `FRAME_MS` after the last solve began (or as soon as the solver is free). */
+  private nextFrame() {
+    if (this.tick !== null || this.disposed) return;
+    const since = this.timer.now() - Math.max(this.solveStarted, this.lastTick);
+    this.tick = this.timer.set(() => { this.tick = null; this.lastTick = this.timer.now(); this.changed(); }, Math.max(0, Math.min(FRAME_MS, FRAME_MS - since)));
+  }
   private desired(): FacialSolveRequest | undefined {
-    const controls = this.pose();
+    const controls = this.transition.valueAt(this.timer.now());
     if (!controls || !Object.keys(controls).length) return undefined;
     const motion = this.motion(), blink: FacialBlink | undefined = !motion || (motion.idle && !motion.pose) || !this.host?.blink.available ? undefined
       : motion.blinkPlaying ? { play: true } : motion.blink > 0 ? { closure: motion.blink } : undefined;
@@ -139,7 +189,7 @@ export class FacialPreview {
   }
   private async solve(request: FacialSolveRequest, key: string) {
     this.inFlight = true; this.dirty = false;
-    const started = this.timer.now();
+    const started = this.solveStarted = this.timer.now();
     this.slowTimer = this.timer.set(() => { this.slowTimer = null; this.slow = true; this.notify(); }, SLOW_SOLVE_MS);
     let answer: FacialSolved;
     try { answer = await this.device.solve(request); }
@@ -150,17 +200,21 @@ export class FacialPreview {
     if (answer.ok && this.sink && this.rest) {
       try {
         const frames = Array.from({ length: answer.frames }, (_, frame) => posedLocals(this.rest!, answer.pose, frame));
-        const motion = this.motion();
-        this.sink.hold({ frames, ...(answer.rate ? { rate: answer.rate, repeat: motion?.blinkRepeatSeconds ?? 0 } : {}) });
-        this.shown = key; this.failure = null;
+        const motion = this.motion(), play = !!request.blink && "play" in request.blink;
+        // The blink clip over a changed expression carries on where it was (a transition or a drag doesn't restart it).
+        this.sink.hold({ frames, ...(answer.rate ? { rate: answer.rate, repeat: motion?.blinkRepeatSeconds ?? 0 } : {}), ...(play && this.heldPlay ? { continues: true } : {}) });
+        this.shown = key; this.failure = null; this.heldPlay = play;
         this.latencies.push({ total: this.timer.now() - started, solver: answer.ms });
         if (this.latencies.length > 20) this.latencies.shift();
       } catch (error) { this.failure = (error as Error).message; }
     } else if (!answer.ok && answer.code !== "superseded") this.failure = answer.message;
     this.inFlight = false;
     this.notify();
-    // Anything newer than what was just solved goes next; an unchanged state is left alone.
-    if (this.dirty || (answer.ok && this.desiredKey() !== key)) this.changed();
+    // Anything newer than what was just solved goes next; an unchanged state is left alone. A moving transition's next frame waits
+    // for its tick (one solve a frame), unless the tick already came while this solve ran.
+    const moving = this.transition.moving(this.timer.now());
+    if (this.dirty || (answer.ok && !moving && this.desiredKey() !== key)) this.changed();
+    else if (moving) this.nextFrame();
   }
   private desiredKey() { const request = this.desired(); return request ? JSON.stringify(request) : "none"; }
 
@@ -171,7 +225,9 @@ export class FacialPreview {
       return { median: round(totals[Math.floor(totals.length / 2)]!), max: round(totals.at(-1)!), solver: round(solver[Math.floor(solver.length / 2)]!), count: totals.length };
     })() : undefined;
     const axes = this.axes();
+    const setting = this.animation?.setting();
     const base = { ...(controls ? { controls } : {}), ...(groups ? { groups } : {}), startPoints, samples: host?.samples ?? [],
+      ...(setting ? { transition: { ...setting } } : {}),
       ...(axes ? { axes, gazeSameWay: host?.rig.gazeSameWay ?? null } : {}), ...(latency ? { latency } : {}) };
     if (this.hostError) return { ...base, phase: "failed", reason: this.hostError, next: "retry" };
     if (!host || host.rig.phase === "preparing") return { ...base, phase: "preparing", reason: "Reading your V's face from your game files…" };

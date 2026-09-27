@@ -99,6 +99,7 @@
   "motion.setBlink",
   "motion.playBlink",
   "motion.setPhysics",
+  "transition.set",
   "quality.set",
   "quality.rebuild",
   "savedV.load",
@@ -2929,6 +2930,48 @@
     }
    }
   },
+  "transition.set": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "source": {
+     "type": "enum",
+     "required": true,
+     "from": "input",
+     "values": [
+      "expression"
+     ]
+    },
+    "enabled": {
+     "type": "boolean",
+     "required": false,
+     "from": "input"
+    },
+    "seconds": {
+     "type": "number",
+     "required": false,
+     "from": "input",
+     "min": 0,
+     "max": 3
+    },
+    "easing": {
+     "type": "enum",
+     "required": false,
+     "from": "input",
+     "values": [
+      "linear",
+      "in",
+      "out",
+      "inOut",
+      "inOutStrong",
+      "outStrong"
+     ]
+    }
+   }
+  },
   "quality.set": {
    "scope": [
     "viewport"
@@ -4383,6 +4426,15 @@
   },
   {
    "id": "motion.setPhysics",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "transition.set",
    "family": "action",
    "scope": [
     "viewport"
