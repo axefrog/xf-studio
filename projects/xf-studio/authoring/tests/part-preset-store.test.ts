@@ -55,7 +55,7 @@ test("saving, renaming and deleting presets leaves the released tables, their ve
   const after = new Database(temp.path, { readonly: true });
   try {
     expect((after.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(version);
-    expect(tables(after)).toEqual([...released, "part_presets"].sort());
+    expect(tables(after)).toEqual([...released, "part_preset_sets", "part_presets"].sort());
     // The release's own list reads the library exactly as before.
     const alpha = alphaList(after, parseRecipeFile);
     expect(alpha.map(({ id, name, revision, count }) => ({ id, name, revision, count })))
@@ -109,6 +109,8 @@ test("the presets family's service lists on first ask, keeps names sorted and re
     save: async input => { const row = { ...input, id: `id-${++n}`, revision: 1, updatedAt: "now" }; rows.push(row); return row; },
     rename: async (id, input) => ({ id, name: input.name, revision: input.revision + 1 }),
     delete: async id => ({ id }),
+    listSets: async () => [], createSet: async () => { throw Error("unused"); }, updateSet: async () => { throw Error("unused"); },
+    deleteSet: async id => ({ id }),
   });
   expect(service.snapshot("expressions")).toEqual({ phase: "loading", items: [] });
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -122,4 +124,61 @@ test("the presets family's service lists on first ask, keeps names sorted and re
   expect(service.capability({ kind: "partPreset.delete", feature: "expressions", id: "gone", revision: 1 })).toMatchObject({ available: false, code: "missing_target" });
   expect(await service.execute({ kind: "partPreset.delete", feature: "expressions", id: "id-2", revision: 1 })).toEqual({ ok: true });
   expect(service.snapshot("expressions").items.map(item => item.name)).toEqual(["Beta"]);
+});
+
+test("expression sets: created, renamed, filled, named for export and deleted, revision-guarded, beside the presets", async () => {
+  const temp = library();
+  let n = 0;
+  const presets = new PartPresetLibrary(temp.path, STUDIO_PARTS, () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`);
+  try {
+    const smile = presets.save({ feature: "expressions", name: "Smile", part: expression({ lips_l_corner_up: 0.3 }) });
+    const frown = presets.save({ feature: "expressions", name: "Frown", part: expression({ eye_l_brows_lower: 0.2 }) });
+    const set = presets.createSet({ feature: "expressions", name: "  Moody  " });
+    expect(set).toMatchObject({ name: "Moody", revision: 1, members: [] });
+    expect(() => presets.createSet({ feature: "expressions", name: " " })).toThrow("Give the set a name.");
+    expect(() => presets.createSet({ feature: "nope", name: "x" })).toThrow();
+    const filled = presets.updateSet(set.id, { revision: 1, members: [frown.id, smile.id] });
+    expect(filled).toMatchObject({ revision: 2, members: [frown.id, smile.id] });
+    // A stale window can't overwrite; a damaged or duplicated list is refused.
+    expect(() => presets.updateSet(set.id, { revision: 1, name: "Late" })).toThrow("changed in another window");
+    expect(() => presets.updateSet(set.id, { revision: 2, members: [smile.id, smile.id] })).toThrow("damaged");
+    expect(() => presets.updateSet(set.id, { revision: 2, members: ["not-a-uuid"] })).toThrow("damaged");
+    // The mod name and table: a folder-unsafe name is refused in plain words; an empty name goes back to the default.
+    expect(() => presets.updateSet(set.id, { revision: 2, modName: "XF: Moody" })).toThrow("can't contain");
+    const named = presets.updateSet(set.id, { revision: 2, modName: "XF Moody Faces", table: "sharing", name: "Moody faces" });
+    expect(named).toMatchObject({ name: "Moody faces", modName: "XF Moody Faces", table: "sharing", revision: 3 });
+    const cleared = presets.updateSet(set.id, { revision: 3, modName: "", table: "installed" });
+    expect(cleared.modName).toBeUndefined(); expect(cleared.table).toBeUndefined();
+    // Deleting a saved expression leaves its place in the set (export reports it).
+    presets.delete(smile.id, 1);
+    expect(presets.listSets("expressions")[0]!.members).toEqual([frown.id, smile.id]);
+    // The request route: list and change through <prefix>/sets.
+    const origin = "http://127.0.0.1:4999";
+    const listed = await (await partPresetRequest(new Request(`${origin}/api/part-presets/sets?feature=expressions`), presets, "/api/part-presets")).json();
+    expect(listed).toHaveLength(1);
+    const patched = await partPresetRequest(new Request(`${origin}/api/part-presets/sets/${set.id}`, { method: "PATCH", headers: { Origin: origin,
+      "Content-Type": "application/json" }, body: JSON.stringify({ revision: 4, members: [frown.id] }) }), presets, "/api/part-presets");
+    expect(patched.status).toBe(200);
+    const foreign = await partPresetRequest(new Request(`${origin}/api/part-presets/sets/${set.id}?revision=5`, { method: "DELETE", headers: { Origin: "http://evil" } }),
+      presets, "/api/part-presets");
+    expect(foreign.status).toBe(403);
+    expect(presets.deleteSet(set.id, 5)).toEqual({ id: set.id });
+    expect(presets.listSets("expressions")).toEqual([]);
+  } finally { presets.close(); temp.cleanup(); }
+});
+
+test("a set exports as a package-only collection named for the mod, members in order, deleted ones left out", async () => {
+  const { setCollection, defaultSetModName } = await import("../src/part-preset-sets");
+  expect(defaultSetModName("expressions", "Moody: faces?")).toBe("XF Expressions - Moody faces");
+  expect(defaultSetModName("expressions", "  ")).toBe("XF Expressions");
+  expect(defaultSetModName("expressions", "x".repeat(200)).length).toBeLessThanOrEqual(80);
+  const a = "00000000-0000-4000-8000-00000000000a", b = "00000000-0000-4000-8000-00000000000b", gone = "00000000-0000-4000-8000-00000000000c";
+  const set = { id: "00000000-0000-4000-8000-0000000000ff", feature: "expressions", name: "Moody", revision: 3, members: [b, gone, a], updatedAt: "now" };
+  const presets = [{ id: a, name: "A", revision: 1, part: expression({ jaw_mid_open: 0.5 }) }, { id: b, name: "B", revision: 2, part: expression({ eye_l_blink: 1 }) }];
+  const collection = setCollection(set, presets);
+  expect(collection.presets.map(look => look.id)).toEqual([b, a]);
+  expect(collection.packagePlan).toEqual({ schema: "xfs/package-plan-1", products: [{ id: set.id, name: "XF Expressions - Moody", features: ["expressions"] }] });
+  expect(collection.exportOptions).toBeUndefined();
+  expect(setCollection({ ...set, table: "sharing", modName: "Mine" }, presets)).toMatchObject({ exportOptions: { table: "sharing" },
+    packagePlan: { products: [{ name: "Mine" }] } });
 });

@@ -150,6 +150,20 @@ export const PART_PRESET_DESCRIPTORS = {
   "partPreset.rename": request("workspace", "save", { feature: target("string"), id: target("string"), name: inputText(1, 120),
     revision: state("integer") }),
   "partPreset.delete": request("workspace", "save", { feature: target("string"), id: target("string"), revision: state("integer") }),
+  // Sets of saved presets (part-preset-sets.ts): an expression set, exported as one mod.
+  "partPresetSet.list": request("workspace", "read", { feature: target("string") }),
+  "partPresetSet.create": request("workspace", "save", { feature: target("string"), name: inputText(1, 120),
+    members: { type: "object", required: false, from: "input" } }),
+  "partPresetSet.rename": request("workspace", "save", { feature: target("string"), id: target("string"), name: inputText(1, 120),
+    revision: state("integer") }),
+  "partPresetSet.setMembers": request("workspace", "save", { feature: target("string"), id: target("string"), members: { type: "object", required: true, from: "input" },
+    revision: state("integer") }),
+  "partPresetSet.setExport": request("workspace", "save", { feature: target("string"), id: target("string"), revision: state("integer"),
+    modName: { type: "string", required: false, from: "input", maxLength: 80 }, table: { type: "enum", required: false, from: "input", values: ["installed", "sharing"] } }),
+  "partPresetSet.delete": request("workspace", "save", { feature: target("string"), id: target("string"), revision: state("integer") }),
+  "partPresetSet.check": request("workspace", "package", { feature: target("string"), id: target("string") }),
+  "partPresetSet.build": request("workspace", "package", { feature: target("string"), id: target("string") }),
+  "partPresetSet.reveal": request("host", "reveal", { feature: target("string"), id: target("string") }),
 } satisfies Record<PartPresetRequest["kind"], RequestDescriptor>;
 export const REQUEST_DESCRIPTORS = {
   initialize: request("collection", "read"), refresh: request("collection", "read"),

@@ -317,10 +317,12 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       { kind: "action", label: "Mirror left onto right", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "left" } as ExpressionAction) },
       { kind: "action", label: "Mirror right onto left", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "right" } as ExpressionAction) },
       { kind: "action", label: "Flip face", icon: "mirror", capability: edit, run: () => ctx.dispatch({ kind: "expression.mirror", from: "flip" } as ExpressionAction) },
-      // Decided but not built yet (coming-soon.ts): face handles and sculpting (phase 2 and later), export to the game (phase 3).
       { kind: "separator" },
-      ...(["expressionHandles", "expressionSculpt", "expressionExport"] as const).map((id): MenuItem => ({ kind: "action", label: COMING_SOON[id].label,
-        icon: id === "expressionExport" ? "export" : "handles", tag: "Soon", quietReason: true, capability: { available: false, reason: COMING_SOON[id].reason }, run: () => {} })),
+      // Export: saved expressions are grouped into sets, each built as a photo-mode mod (the Expression sets panel).
+      { kind: "action", label: "Expression sets…", icon: "package", run: () => ctx.reveal("expressions.sets", true) },
+      // Decided but not built yet (coming-soon.ts): face handles and sculpting (phase 2 and later).
+      ...(["expressionHandles", "expressionSculpt"] as const).map((id): MenuItem => ({ kind: "action", label: COMING_SOON[id].label,
+        icon: "handles", tag: "Soon", quietReason: true, capability: { available: false, reason: COMING_SOON[id].reason }, run: () => {} })),
     ], anchor, { label: "Face commands" });
   }
   function renamePreset(id: string, anchor: Element | { x: number; y: number }) {

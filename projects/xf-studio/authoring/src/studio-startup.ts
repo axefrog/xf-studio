@@ -44,7 +44,7 @@ import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
 import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
 import { combineFacePoses, FacialPreview } from "./facial-preview";
 import { createBrowserFacialDevice } from "./browser-facial-device";
-import { PartPresetService, partPresetTransport } from "./part-presets";
+import { PartPresetService, partPresetTransport, setExportTransport } from "./part-presets";
 import { UIPreferenceActions } from "./ui-preferences";
 import { storedViewGraph } from "./preview-view-graph";
 import { DiagnosticsActions } from "./diagnostics/actions";
@@ -208,7 +208,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   // and the head shows the result once it is loaded. Part presets (favourites) live in the library, the verification workspace's apart.
   // The main view shows the held expression: the view graph's per-view scene input is the seam where another view could show another.
   const facial = new FacialPreview(createBrowserFacialDevice());
-  const presets = new PartPresetService(partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets"));
+  // A set of saved expressions exports as one mod through the same package route a collection uses (never installed by Build).
+  const presets = new PartPresetService(partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets"),
+    setExportTransport(verification ? "/api/verification/mod-install" : "/api/mod-install"));
   core.app.attach({ facial, presets });
   facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
     () => motionActions?.snapshot());

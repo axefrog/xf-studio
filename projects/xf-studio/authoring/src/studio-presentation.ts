@@ -1,5 +1,5 @@
 import type { FacialPreviewSnapshot } from "./platform/api/facial";
-import type { PartPresetList, PartPresetOutcome, PartPresetRequest } from "./part-presets";
+import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "./part-presets";
 import type { AuthoringPresentation } from "./authoring-presentation";
 import type { CollectionViewPort } from "./collection-application";
 import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
@@ -109,7 +109,8 @@ export type GenericFeatureFacade = FeatureFacade & { view(): ReadonlyDeep<{ part
 /** The live facial preview a feature's drawer reads (facial-preview.ts), and its Try again. */
 export type FacialPort = { snapshot(): FacialPreviewSnapshot | undefined; retry(): void };
 /** Part presets in the library (part-presets.ts): list per feature, and the `presets` family's requests. */
-export type PartPresetPort = { list(feature: string): PartPresetList; capability(request: PartPresetRequest): StudioCapability;
+export type PartPresetPort = { list(feature: string): PartPresetList; sets(feature: string): PartPresetSetList; exports(): SetExportState;
+  capability(request: PartPresetRequest): StudioCapability;
   execute(request: PartPresetRequest): Promise<PartPresetOutcome> };
 /** The facades with a typed view, by feature ID; every other registered feature gets a `GenericFeatureFacade`. */
 export type PresentationFeatures = { readonly "eye-makeup": EyeMakeupFacade };
@@ -443,7 +444,7 @@ export function createStudioPresentation<Slot>(sources: {
     previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id), localSetup: Object.freeze(localSetup),
     facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry() }),
     // A save without a part saves the feature's live part, serialized with its own codec.
-    presets: Object.freeze({ list: (feature: string) => a.presetList(feature),
+    presets: Object.freeze({ list: (feature: string) => a.presetList(feature), sets: (feature: string) => a.presetSets(feature), exports: () => a.presetExports(),
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
     installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp,
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),

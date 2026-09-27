@@ -28,8 +28,6 @@ export const COMING_SOON = {
     key: "tool:expressions.handles", design: "research/animation/expression-editor-design.md (phase 2)" },
   expressionSculpt: { label: "Sculpt", reason: "Coming soon: push and pull the face directly, and the controls follow.",
     key: "tool:expressions.sculpt", design: "research/animation/expression-editor-design.md (sculpt mode, Option 3)" },
-  expressionExport: { label: "Export to game", reason: "Coming soon: build this expression into your mod for photo mode.",
-    key: "exporter:expressions", design: "research/animation/expression-editor-design.md (phase 3)" },
   savesEdit: { label: "Edit values", reason: "Coming soon: change values in your save.",
     key: "action:saves.setValue", design: "research/save/save-editor-design.md §7.2" },
 } as const satisfies Record<string, ComingSoonEntry>;
