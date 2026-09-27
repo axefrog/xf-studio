@@ -94,16 +94,22 @@ const MOUNTS: Record<string, Mount> = {
     return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, scrub.element, h("div", { class: "row gap-m" }, ...bars))); },
   "lib-segmented": () => { const s: Segmented<string> = new Segmented({ label: "Show", options: [{ value: "both", label: "Both eyes" }, { value: "one", label: "Single eye" }], onSelect: v => s.update(v), compact: true });
     s.update("both");
-    // Icon only: the Expression drawer's transition curves, each named with how it moves in its tooltip, the chosen one named in the note.
-    const hints: [string, string, string][] = [["easeLinear", "Linear", "steady from start to end"], ["easeIn", "Ease in", "starts slowly and speeds up into the end"],
-      ["easeOut", "Ease out", "starts quickly and slows into the end"], ["easeInOut", "Ease in-out", "gentle at both ends"],
-      ["easeInOutStrong", "Strong ease in-out", "a slow start and finish around a quick middle"], ["easeOutStrong", "Strong ease out", "most of the change at once, then a long settle"]];
-    const named = (v: string) => hints.find(([icon]) => icon === v)![1];
-    const curves: Segmented<string> = new Segmented({ label: "Curve", iconOnly: true, reserveNote: true, compact: true,
-      options: hints.map(([icon, label, hint]) => ({ value: icon, label, icon: icon as never, title: `${label}: ${hint}.` })),
-      onSelect: v => curves.update(v, undefined, { note: named(v) }) });
-    curves.update("easeInOutStrong", undefined, { note: named("easeInOutStrong") });
-    return stack({ gap: "normal" }, s.element, h("div", { style: "max-width:300px" }, curves.element)); },
+    // Labelled, in a panel's column: the strip hugs its choices; arrows move between them.
+    const handles: Segmented<string> = new Segmented({ label: "Selected point handles", options: [{ value: "smooth", label: "Smooth" }, { value: "symmetric", label: "Symmetric" },
+      { value: "corner", label: "Corner" }], onSelect: v => handles.update(v) });
+    handles.update("smooth");
+    // Icon only: the Expression drawer's transition curves, each named with how it moves in its tooltip, the chosen one named as the readout;
+    // below it the same strip while its switch is off, the reason once on its line.
+    const curves = [["easeLinear", "Linear", "steady from start to end"], ["easeIn", "Ease in", "starts slowly and speeds up into the end"],
+      ["easeOut", "Ease out", "starts quickly and slows into the end"], ["easeOutStrong", "Strong ease out", "most of the change at once, then a long settle"],
+      ["easeInOut", "Ease in-out", "gentle at both ends"], ["easeInOutStrong", "Strong ease in-out", "a slow start and finish around a quick middle"]] as const;
+    const strip = () => { const c: Segmented<string> = new Segmented({ label: "Curve", iconOnly: true, reserveNote: true, compact: true,
+      readout: v => curves.find(([icon]) => icon === v)![1], readoutGutter: true,
+      options: curves.map(([icon, label, hint]) => ({ value: icon, label, icon, title: `${label}: ${hint}.` })), onSelect: v => c.update(v) }); return c; };
+    const on = strip(), off = strip();
+    on.update("easeInOutStrong");
+    off.update("easeLinear", undefined, { disabled: true, reason: "Turn on Animate changes to set these." });
+    return stack({ gap: "normal" }, s.element, h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, handles.element, on.element, off.element))); },
   "lib-color": () => { const c: ColorField = new ColorField({ label: "Colour", transaction: { edit: v => c.update(v) } }); c.update("#b0587a"); return c.element; },
   "lib-select": () => { const s: SelectField<string> = new SelectField({ label: "Launch route", help: "How you start the game.", onChange: v => s.update(choices, v) });
     const choices = [{ value: "mo2", label: "Mod Organizer 2" }, { value: "direct", label: "Directly" }]; s.update(choices, "mo2"); return s.element; },
@@ -148,8 +154,8 @@ const MOUNTS: Record<string, Mount> = {
     { kind: "separator" }, { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => {} }], event.currentTarget as Element, { label: "Layer actions" }) }),
     button({ label: "Delete a saved expression", icon: "trash", onClick: event => openConfirmPopover(event.currentTarget as Element,
       { title: "Delete saved expression", message: "Delete “Smirk” from your library? This can't be undone.", confirm: "Delete", danger: true, onConfirm: () => {} }) })),
-  "lib-item-list": () => { let items = [{ id: "a", name: "Petal wash", meta: "Matte" }, { id: "b", name: "Liner", meta: "Glossy" }]; let selected = "a";
-    const list: ItemList<{ id: string; name: string; meta: string }> = new ItemList({ label: "Sample layers", noun: "layer", maxLength: 40,
+  "lib-item-list": () => { let items = [{ id: "a", name: "Petal wash", meta: "Matte" }, { id: "b", name: "Liner", meta: "Glossy", secondary: "shows as “Wing”" }]; let selected = "a";
+    const list: ItemList<{ id: string; name: string; meta: string; secondary?: string }> = new ItemList({ label: "Sample layers", noun: "layer", maxLength: 40,
       onSelect: id => { selected = id; list.update(items, selected); }, onMove: (id, index) => { const item = items.find(i => i.id === id)!; items = items.filter(i => i.id !== id); items.splice(index, 0, item); list.update(items, selected); },
       onRename: (id, name) => { items = items.map(i => i.id === id ? { ...i, name } : i); list.update(items, selected); }, onMenu: () => {} });
     list.update(items, selected); return h("div", { style: "max-width:360px" }, list.element); },

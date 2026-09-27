@@ -18,7 +18,8 @@ import { freshWorkspace } from "./fixtures/eye-region";
 const xs = Array.from({ length: 101 }, (_, i) => i / 100);
 
 test("every preset runs from 0 to 1 and never goes back; the four gentle curves are their exact forms as Béziers", () => {
-  expect(EASING_IDS).toEqual(["linear", "in", "out", "inOut", "inOutStrong", "outStrong"]);
+  // By family, each gentle curve beside its strong one.
+  expect(EASING_IDS).toEqual(["linear", "in", "out", "outStrong", "inOut", "inOutStrong"]);
   for (const preset of EASINGS) {
     expect([ease(preset.id, 0), ease(preset.id, 1), ease(preset.id, -3), ease(preset.id, 7), ease(preset.id, NaN)]).toEqual([0, 1, 0, 1, 0]);
     const values = xs.map(x => ease(preset.id, x));
@@ -54,16 +55,13 @@ test("a custom Bézier is the same data as a preset: evaluated, validated and re
   expect(easingBezier(custom)).toEqual([0.42, 0, 0.58, 1]);
 });
 
-test("each curve's icon is drawn from its own curve, its bend made larger to read at 16 px", () => {
+test("each curve's icon is its own Bézier, exactly", () => {
   const n = (v: number) => String(Math.round(v * 100) / 100);
   for (const preset of EASINGS) {
     const path = iconPaths(EASING_ICONS[preset.id]).join(" ");
     if (preset.id === "linear") { expect(path).toBe("M2.5 13.5L13.5 2.5"); continue; }
-    const points = Array.from({ length: 17 }, (_, j) => {
-      const x = j / 16, y = Math.max(0, Math.min(1, x + (ease(preset.id, x) - x) * 1.6));
-      return `${n(2.5 + 11 * x)} ${n(13.5 - 11 * y)}`;
-    });
-    expect(path).toBe(`M${points[0]}L${points.slice(1).join(" ")}`);
+    const [x1, y1, x2, y2] = preset.bezier;
+    expect(path).toBe(`M2.5 13.5C${n(2.5 + 11 * x1)} ${n(13.5 - 11 * y1)} ${n(2.5 + 11 * x2)} ${n(13.5 - 11 * y2)} 13.5 2.5`);
   }
 });
 

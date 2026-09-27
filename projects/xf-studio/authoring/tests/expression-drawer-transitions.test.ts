@@ -35,20 +35,24 @@ const fire = (element: Element, type: string) => (element as unknown as LightEle
 /** What the section shows, in document order: every element and whether it is hidden (the layout must not change between states). */
 const shape = (root: HTMLElement): string[] => [...root.querySelectorAll<HTMLElement>("*")].map(el => `${el.tagName}:${el.hidden}`);
 
-test("off: Animate changes is off and Duration and Curve read as inactive, with the reason, in place", async () => {
+const curveNote = (section: HTMLElement) => section.querySelector<HTMLElement>(".expr-curve")!.querySelector<HTMLElement>(".control-note")!;
+const curveReadout = (section: HTMLElement) => section.querySelector<HTMLElement>(".expr-curve")!.querySelector<HTMLElement>(".segmented-readout")!;
+
+test("off: Animate changes is off and Duration and Curve read as inactive in place, the reason said once on Curve's line", async () => {
   const { section } = await drawer();
   const toggle = section.querySelector<HTMLInputElement>('input[role="switch"]')!;
   const duration = section.querySelector<HTMLInputElement>('input[type="range"]')!;
   const curves = [...section.querySelector<HTMLElement>(".expr-curve")!.querySelectorAll<HTMLButtonElement>(".segment")];
   expect([toggle.checked, toggle.disabled, duration.disabled]).toEqual([false, false, true]);
-  expect(duration.title).toBe("Turn on Animate changes to choose how long a change takes and how it moves.");
-  // Every curve, icon only, named; the chosen one pressed; all inactive while off.
-  expect(curves.map(button => button.getAttribute("aria-label"))).toEqual(["Linear", "Ease in", "Ease out", "Ease in-out", "Strong ease in-out", "Strong ease out"]);
+  expect(duration.title).toBe("Turn on Animate changes to set these.");
+  // Every curve, icon only, named, by family (each gentle curve beside its strong one); the chosen one pressed; all inactive while off.
+  expect(curves.map(button => button.getAttribute("aria-label"))).toEqual(["Linear", "Ease in", "Ease out", "Strong ease out", "Ease in-out", "Strong ease in-out"]);
   expect(curves.map(button => button.getAttribute("aria-pressed"))).toEqual(["true", "false", "false", "false", "false", "false"]);
   expect(curves.every(button => button.disabled && !button.querySelector("span"))).toBe(true);
-  // The chosen curve is named under the strip (the reason stays in the tooltips, so the note never changes place); off, the tooltips give
-  // the reason, and on, each curve's name and how it moves.
-  expect(section.querySelector<HTMLElement>(".expr-curve")!.querySelector<HTMLElement>(".control-note")!.textContent).toBe("Linear");
+  // The reason, once, in words on the strip's reserved line (as Point blend's is under its switch); the chosen curve is the readout; both
+  // controls marked disabled.
+  expect([curveNote(section).textContent, curveReadout(section).textContent]).toEqual(["Turn on Animate changes to set these.", "Linear"]);
+  expect([...section.querySelectorAll<HTMLElement>(".control")].filter(control => control.classList.contains("disabled")).length).toBe(2);
   expect(section.querySelector<HTMLElement>(".readout-value")!.textContent).toBe("1 s");
 });
 
@@ -63,16 +67,18 @@ test("on: the controls work, each change is one transition.set, and nothing move
   const duration = section.querySelector<HTMLInputElement>('input[type="range"]')!;
   const curves = [...section.querySelector<HTMLElement>(".expr-curve")!.querySelectorAll<HTMLButtonElement>(".segment")];
   expect([duration.disabled, curves.some(button => button.disabled)]).toEqual([false, false]);
-  curves[3]!.click();
+  // On, the note line is kept empty (its height reserved) and nothing is disabled.
+  expect([curveNote(section).textContent, curveNote(section).hidden]).toEqual(["", false]);
+  curves[4]!.click();
   expect(platform.at(-1)).toEqual({ kind: "transition.set", source: "expression", easing: "inOut" });
   set({ easing: "inOut", seconds: 0 });
-  expect(curves.map(button => button.getAttribute("aria-pressed"))[3]).toBe("true");
-  expect(section.querySelector<HTMLElement>(".expr-curve")!.querySelector<HTMLElement>(".control-note")!.textContent).toBe("Ease in-out");
+  expect(curves.map(button => button.getAttribute("aria-pressed"))[4]).toBe("true");
+  expect(curveReadout(section).textContent).toBe("Ease in-out");
   expect(curves.map(button => button.title)).toEqual(["Linear: steady from start to end.", "Ease in: starts slowly and speeds up into the end.",
-    "Ease out: starts quickly and slows into the end.", "Ease in-out: gentle at both ends.", "Strong ease in-out: a slow start and finish around a quick middle.",
-    "Strong ease out: most of the change at once, then a long settle."]);
-  // 0 s is a cut, said in words.
-  expect(section.querySelector<HTMLElement>(".readout-value")!.textContent).toBe("Cut");
+    "Ease out: starts quickly and slows into the end.", "Strong ease out: most of the change at once, then a long settle.", "Ease in-out: gentle at both ends.",
+    "Strong ease in-out: a slow start and finish around a quick middle."]);
+  // 0 s reads as a duration like any other.
+  expect(section.querySelector<HTMLElement>(".readout-value")!.textContent).toBe("0 s");
   // The duration's reset returns to 1 s as one change.
   section.querySelector<HTMLButtonElement>(".slider-reset")!.click();
   expect(platform.at(-1)).toEqual({ kind: "transition.set", source: "expression", seconds: 1 });

@@ -9,12 +9,12 @@
  * a custom `{ bezier }`, so a keyframe or a preference keeps a short name when it is a preset, and any curve a future handle editor
  * draws fits the same field.
  *
- * **The presets** (`EASINGS`, in the order a curve picker shows them):
+ * **The presets** (`EASINGS`, in the order a curve picker shows them: by family, each gentle curve beside its strong one):
  * - **Linear:** steady from start to end. Photo mode's face graph blends between expressions this way, over 1 s.
  * - **Ease in** (`x²`), **Ease out** (`1 − (1 − x)²`), **Ease in-out** (smoothstep, `3x² − 2x³`): the gentle curves Adjust all ›
  *   Intensity has always used. Each is exactly a cubic Bézier with its x controls at ⅓ and ⅔; the closed form is kept as the evaluator.
- * - **Strong ease in-out** (cubic in-out): a slower start and finish and a quicker middle, a deliberate change.
  * - **Strong ease out** (cubic out): most of the change at once, then a long settle, like a spontaneous reaction.
+ * - **Strong ease in-out** (cubic in-out): a slower start and finish and a quicker middle, a deliberate change.
  */
 export type EasingId = "linear" | "in" | "out" | "inOut" | "inOutStrong" | "outStrong";
 /** A cubic Bézier's two control points, `[x1, y1, x2, y2]`, between (0, 0) and (1, 1). */
@@ -36,9 +36,9 @@ export const EASINGS: readonly EasingPreset[] = Object.freeze([
   { id: "linear", label: "Linear", hint: "Steady from start to end.", bezier: [0, 0, 1, 1], exact: (x: number) => x },
   { id: "in", label: "Ease in", hint: "Starts slowly and speeds up into the end.", bezier: [THIRD, 0, TWO_THIRDS, THIRD], exact: (x: number) => x * x },
   { id: "out", label: "Ease out", hint: "Starts quickly and slows into the end.", bezier: [THIRD, TWO_THIRDS, TWO_THIRDS, 1], exact: (x: number) => 1 - (1 - x) * (1 - x) },
+  { id: "outStrong", label: "Strong ease out", hint: "Most of the change at once, then a long settle.", bezier: [0.33, 1, 0.68, 1] },
   { id: "inOut", label: "Ease in-out", hint: "Gentle at both ends.", bezier: [THIRD, 0, TWO_THIRDS, 1], exact: (x: number) => x * x * (3 - 2 * x) },
   { id: "inOutStrong", label: "Strong ease in-out", hint: "A slow start and finish around a quick middle.", bezier: [0.65, 0, 0.35, 1] },
-  { id: "outStrong", label: "Strong ease out", hint: "Most of the change at once, then a long settle.", bezier: [0.33, 1, 0.68, 1] },
 ].map(preset => Object.freeze({ ...preset, bezier: Object.freeze(preset.bezier) as unknown as CubicBezier })) as EasingPreset[]);
 const BY_ID = new Map(EASINGS.map(preset => [preset.id, preset]));
 

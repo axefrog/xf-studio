@@ -717,8 +717,10 @@ test("scrub slider: rests at the middle, previews while moved, applies on releas
   drag(45); key(scrub.input, "Escape");
   expect(calls).toEqual(["begin", "preview 55", "commit", "begin", "preview 45", "cancel"]);
   calls.length = 0;
-  // The curve buttons are toggles; choosing one tells the owner.
-  const [linear, easeIn] = (scrub.element.querySelector(".scrub-curves")! as unknown as LightElement).children as unknown as HTMLElement[];
+  // The curves are a frameless icon-only Segmented (the same control as a standalone curve strip); choosing one tells the owner.
+  const strip = scrub.element.querySelector(".segmented")!;
+  expect([strip.classList.contains("frameless"), strip.classList.contains("icon-only")]).toEqual([true, true]);
+  const [linear, easeIn] = strip.querySelectorAll<HTMLElement>(".segment");
   expect([linear!.getAttribute("aria-pressed"), easeIn!.getAttribute("aria-pressed")]).toEqual(["true", "false"]);
   easeIn!.click();
   expect(calls).toEqual(["curve in"]);
@@ -784,22 +786,82 @@ test("direction dial: the resize bar clamps between the minimum and what the con
   expect([dial.grip.getAttribute("role"), dial.grip.getAttribute("aria-orientation")]).toEqual(["separator", "horizontal"]);
 });
 
-test("segmented, icon only: each segment shows its icon and is named by its label; a disabled group can keep its note and give the reason in tooltips", async () => {
+test("segmented, icon only: each segment shows its icon and is named by its label; the chosen one is the readout; a disabled group says why once, muted", async () => {
   const { Segmented } = await lib();
   const picked: string[] = [];
-  const control = new Segmented<string>({ label: "Curve", iconOnly: true, reserveNote: true, onSelect: value => picked.push(value),
-    options: [{ value: "linear", label: "Linear", icon: "easeLinear" }, { value: "inOut", label: "Ease in-out", icon: "easeInOut" }] });
+  const control = new Segmented<string>({ label: "Curve", iconOnly: true, reserveNote: true, readoutGutter: true, onSelect: value => picked.push(value),
+    readout: value => value === "linear" ? "Linear" : "Ease in-out",
+    options: [{ value: "linear", label: "Linear", icon: "easeLinear" }, { value: "inOut", label: "Ease in-out", icon: "easeInOut", title: "Ease in-out: gentle at both ends." }] });
   document.body.append(control.element);
   const buttons = control.element.querySelectorAll<HTMLButtonElement>(".segment");
   expect(control.element.querySelector(".segmented")!.classList.contains("icon-only")).toBe(true);
   expect([...buttons].map(button => [button.getAttribute("aria-label"), button.title, !!button.querySelector("svg"), !!button.querySelector("span")]))
-    .toEqual([["Linear", "Linear", true, false], ["Ease in-out", "Ease in-out", true, false]]);
+    .toEqual([["Linear", "Linear", true, false], ["Ease in-out", "Ease in-out: gentle at both ends.", true, false]]);
   buttons[1]!.click();
   expect(picked).toEqual(["inOut"]);
-  control.update("inOut", undefined, { disabled: true, reason: "Turn it on first.", note: "Ease in-out: gentle at both ends.", reasonOnLine: false });
-  const note = control.element.querySelector<HTMLElement>(".control-note")!;
-  expect([note.textContent, buttons[0]!.disabled, buttons[0]!.title, buttons[1]!.getAttribute("aria-pressed")])
-    .toEqual(["Ease in-out: gentle at both ends.", true, "Turn it on first.", "true"]);
-  control.update("inOut", undefined, { note: "Ease in-out: gentle at both ends." });
-  expect([buttons[0]!.disabled, buttons[0]!.title]).toEqual([false, "Linear"]);
+  control.update("inOut");
+  const readout = control.element.querySelector<HTMLElement>(".segmented-readout")!, note = control.element.querySelector<HTMLElement>(".control-note")!;
+  expect([readout.textContent, note.hidden, note.classList.contains("empty")]).toEqual(["Ease in-out", false, true]);
+  // Off: every segment unavailable (its reason as the tooltip), the reason once on the reserved line, the control marked.
+  control.update("inOut", undefined, { disabled: true, reason: "Turn on Animate changes to set these." });
+  expect(control.element.querySelector(".readout-gutter")).not.toBeNull();
+  expect([note.textContent, note.classList.contains("info"), buttons[0]!.disabled, buttons[0]!.title, buttons[1]!.getAttribute("aria-pressed"),
+    control.element.classList.contains("disabled")]).toEqual(["Turn on Animate changes to set these.", false, true, "Turn on Animate changes to set these.", "true", true]);
+  control.update("inOut");
+  expect([buttons[0]!.disabled, buttons[0]!.title, control.element.classList.contains("disabled")]).toEqual([false, "Linear", false]);
+});
+
+test("segmented keys: one Tab stop on the chosen choice; Left and Right move (wrapping), Home and End to the ends, and never choose", async () => {
+  const { Segmented } = await lib();
+  const picked: string[] = [];
+  const control = new Segmented<string>({ label: "Handles", onSelect: value => picked.push(value),
+    options: ["smooth", "symmetric", "corner"].map(value => ({ value, label: value })) });
+  document.body.append(control.element);
+  control.update("symmetric");
+  const buttons = [...control.element.querySelectorAll<HTMLButtonElement>(".segment")];
+  expect(buttons.map(button => button.tabIndex)).toEqual([-1, 0, -1]);
+  const group = control.element.querySelector<HTMLElement>(".segmented")!;
+  const press = (name: string) => (group as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: name }));
+  buttons[1]!.focus();
+  press("ArrowRight");
+  expect([document.activeElement === (buttons[2] as unknown), buttons.map(button => button.tabIndex)]).toEqual([true, [-1, -1, 0]]);
+  press("ArrowRight");
+  expect(document.activeElement === (buttons[0] as unknown)).toBe(true);
+  press("End");
+  expect(document.activeElement === (buttons[2] as unknown)).toBe(true);
+  press("Home"); press("ArrowLeft");
+  expect(document.activeElement === (buttons[2] as unknown)).toBe(true);
+  expect(picked).toEqual([]);
+  // An unavailable choice is skipped; the stop falls to the first available when the chosen one can't take focus.
+  control.update("corner", value => ({ available: value !== "corner", reason: "Not here." }));
+  expect(buttons.map(button => button.tabIndex)).toEqual([-1, -1, 0]);
+  control.update("smooth", value => ({ available: value !== "symmetric", reason: "Not here." }));
+  buttons[0]!.focus(); press("ArrowRight");
+  expect(document.activeElement === (buttons[2] as unknown)).toBe(true);
+});
+
+test("item list: a sentence goes in the secondary slot, in the UI face after the name; meta stays the compared value; both are in the row's name", async () => {
+  const { ItemList } = await lib();
+  const list = new ItemList<{ id: string; name: string; meta?: string; secondary?: string }>({ label: "Set", noun: "expression", maxLength: 40,
+    onSelect: () => {}, onMove: () => {}, onRename: () => {}, onMenu: () => {} });
+  document.body.append(list.element);
+  list.update([{ id: "a", name: "Sly", secondary: "shows as “Sly smile”", meta: "2 sets" }, { id: "b", name: "Calm" }], "a");
+  const rows = list.element.querySelectorAll<HTMLElement>(".item-row");
+  const secondary = rows[0]!.querySelector<HTMLElement>(".item-secondary")!;
+  expect([secondary.textContent, secondary.hidden, rows[0]!.querySelector(".item-main")!.getAttribute("aria-label")])
+    .toEqual(["shows as “Sly smile”", false, "Sly, shows as “Sly smile”, 2 sets, selected"]);
+  expect(rows[1]!.querySelector<HTMLElement>(".item-secondary")!.hidden).toBe(true);
+});
+
+test("menus: a menu or submenu with nothing to act on never opens (and never says so in a menu)", async () => {
+  const { openMenu, hasCommands, closeMenus, menuOpen } = await import("../src/studio-ui/menu");
+  const anchor = document.createElement("button");
+  document.body.append(anchor);
+  expect(hasCommands([{ kind: "heading", label: "Nothing to add" }, { kind: "separator" }])).toBe(false);
+  expect(openMenu([{ kind: "heading", label: "Nothing to add" }], anchor, { label: "Add" })).toBeUndefined();
+  expect(openMenu([], anchor, { label: "Add" })).toBeUndefined();
+  expect(menuOpen()).toBe(false);
+  // An unavailable action still opens (it says why, and it is actionable once available).
+  expect(hasCommands([{ kind: "action", label: "Add", capability: { available: false, reason: "Nothing left to add." }, run: () => {} }])).toBe(true);
+  closeMenus(false);
 });

@@ -13,8 +13,9 @@
  *   (a confirm popover), since the library can't undo it.
  * - **Save expression…** (in the Start from heading) opens a value popover with a name to accept or change.
  * - **Transitions:** Animate changes (off by default) makes the face move from one expression to the next instead of cutting, to judge
- *   how natural the change looks: Duration (0 to 3 s, 0 cuts; 1 s by default) and Curve (every easing curve, one icon each with its
- *   name and how it moves as its tooltip, the chosen one named under them). Off, both stay in place and read as inactive. Whole-face changes animate (Start from, Reset
+ *   how natural the change looks: Duration (0 to 3 s, 1 s by default; at 0 s a change shows at once) and Curve (every easing curve, one
+ *   icon each with its name and how it moves as its tooltip, the chosen one named on the label line). Off, both stay in place and read
+ *   as inactive, and the line under Curve says why once. Whole-face changes animate (Start from, Reset
  *   all, a group or control reset, Mirror, Flip, Undo and Redo); a control being dragged follows the hand. View state of the preview
  *   (`transition.set`), never Undo or the look.
  * - **Face:** the heading holds Symmetric (every left/right pair follows its counterpart), a More menu (mirror either side onto the other,
@@ -234,17 +235,19 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     ctx.platform({ kind: "transition.set", source: "expression", ...patch });
   const animate = new Toggle({ label: "Animate changes",
     help: ["The face moves from one expression to the next instead of cutting, so you can judge how natural the change looks.",
-      "Choosing a start, Reset, Mirror, Flip, Undo and Redo animate; a control you drag follows your hand. Photo mode blends from one expression to the next steadily over 1 s, which is the default here."],
+      "Choosing an expression under Start from, Reset, Mirror, Flip, Undo and Redo animate; a control you drag follows your hand. At 0 s a change shows at once. Photo mode blends from one expression to the next steadily over 1 s, which is the default here."],
     onChange: on => { setTransition({ enabled: on }); } });
   animate.element.classList.add("expr-animate");
   let durationStart: number | undefined;
   const duration = new SliderWithValue({ label: "Duration", min: TRANSITION_MIN, max: TRANSITION_MAX, step: 0.05, unit: "s", defaultValue: 1, reset: true,
-    format: seconds => seconds === 0 ? "Cut" : `${Number(seconds.toFixed(2))} s`,
-    help: "How long a change takes. At 0 the face cuts to the new expression.",
+    format: seconds => `${Number(seconds.toFixed(2))} s`,
+    help: "How long a change takes.",
     transaction: { begin: () => { durationStart = preview?.transition?.seconds; }, edit: seconds => { setTransition({ seconds }); },
       commit: () => { durationStart = undefined; }, cancel: () => { if (durationStart !== undefined) setTransition({ seconds: durationStart }); durationStart = undefined; } } });
-  const curve = new Segmented<EasingId>({ label: "Curve", iconOnly: true, reserveNote: true, compact: true,
-    help: "How a change moves over its duration. Rest the pointer on a curve for how it moves.",
+  // The chosen curve's name is the readout on its label line, like Duration's value; the note line under the strip is kept for the
+  // one reason both controls are off, so nothing moves between the states.
+  const curve = new Segmented<EasingId>({ label: "Curve", iconOnly: true, reserveNote: true, compact: true, readout: id => EASING_LABELS[id], readoutGutter: true,
+    help: "How a change moves over its duration: steady, or easing in, out or both.",
     options: EASING_IDS.map(id => ({ value: id, label: EASING_LABELS[id], icon: EASING_ICONS[id], title: `${EASING_LABELS[id]}: ${lowerFirst(easingPreset(id).hint)}` })),
     onSelect: easing => { setTransition({ easing }); } });
   curve.element.classList.add("expr-curve");
@@ -482,12 +485,11 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   function paintTransition() {
     const setting = preview?.transition;
     const inactive = !setting ? { disabled: true, reason: "The live face preview isn't connected here." }
-      : setting.enabled ? { disabled: false } : { disabled: true, reason: "Turn on Animate changes to choose how long a change takes and how it moves." };
+      : setting.enabled ? { disabled: false } : { disabled: true, reason: "Turn on Animate changes to set these." };
     animate.update(!!setting?.enabled, setting ? {} : inactive);
     duration.update(setting?.seconds ?? 1, inactive);
-    const easing = setting?.easing ?? "linear";
-    // The chosen curve's name on one line (its hint is its tooltip), so choosing another never changes the section's height.
-    curve.update(easing, undefined, { ...inactive, note: EASING_LABELS[easing], reasonOnLine: false });
+    // Said once, on the strip's reserved line under both controls (one line at 300 px, so the height never changes).
+    curve.update(setting?.easing ?? "linear", undefined, inactive);
   }
   function updatePresetsNote() {
     const list = ctx.presets.list();

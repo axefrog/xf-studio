@@ -16,6 +16,7 @@
  *   bun tools/expression-transition-look.ts <out dir> [port]
  */
 import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { launch, startServer } from "./cdp";
 
@@ -98,6 +99,7 @@ try {
   await page.waitFor(`window.xfStudioPresentation.facial.snapshot().samples.length > 0`, 120000);
   log("drawer built");
 
+  if (!process.env.ONLY_HARNESS) {
   // ---- The drawer: Transitions off, then on, both themes, narrow and wide. ----
   await startFrom("Warm smile");
   for (const scheme of ["dark", "light"] as const) {
@@ -115,7 +117,56 @@ try {
       await dispatch({ kind: "transition.set", source: "expression", enabled: true, seconds: 0.75, easing: "inOutStrong" });
       await page.wait(400);
       await snap(`${scheme}-${width}-on-strong`, `document.querySelector('.expr-drawer [data-view-key="expressions.transitions"]')`);
+      // Beside the reference pattern, a switch over the slider it unlocks: Pigment & edge's Smooth point gradients → Point blend, off.
+      await dispatch({ kind: "transition.set", source: "expression", enabled: false, seconds: 1, easing: "linear" });
+      await page.evaluate(`window.xfStudioShell.dock.reveal("edge")`);
+      await page.evaluate(`(() => { const row = [...document.querySelectorAll(".toggle-row")].find(r => r.textContent.includes("Smooth point gradients"));
+        const input = row?.querySelector("input"); if (input?.checked) input.click(); })()`);
+      await page.evaluate(`window.xfStudioShell.dock.moveTo("edge", { kind: "float", x: ${1400 - 2 * width}, y: 30, w: ${width}, h: 900 }, "")`);
+      await page.evaluate(`window.xfStudioShell.dock.reveal("expressions.controls")`);
+      await page.wait(900);
+      // Transitions at the drawer's top, beside Pigment strength at the Pigment & edge panel's.
+      await scrollTo('.expr-drawer [data-view-key="expressions.transitions"]');
+      await page.wait(300);
+      await page.screenshot(resolve(out, `${scheme}-${width}-beside-point-blend.png`), { x: 1390 - 2 * width, y: 20, width: 2 * width + 40, height: 400 });
+      shots.push(`${scheme}-${width}-beside-point-blend`);
     }
+  }
+  // ---- Focus, hover and the curves' names (dark, narrow). ----
+  await theme("dark");
+  await page.evaluate(`window.xfStudioShell.dock.moveTo("expressions.controls", { kind: "float", x: 1120, y: 30, w: 300, h: 900 }, "")`);
+  await dispatch({ kind: "transition.set", source: "expression", enabled: true, seconds: 1, easing: "linear" });
+  await page.wait(600);
+  await scrollTo(".expr-drawer");
+  const section = `document.querySelector('.expr-drawer [data-view-key="expressions.transitions"]')`;
+  // Keyboard focus (a key first, so the browser shows the focus ring): the switch, then the chosen curve, then one step right.
+  await page.key("Shift");
+  await page.evaluate(`document.querySelector('.expr-drawer .expr-animate input').focus()`);
+  await page.wait(200);
+  await snap("dark-300-focus-switch", section);
+  await page.evaluate(`document.querySelector('.expr-drawer .expr-curve .segment[tabindex="0"]').focus()`);
+  await page.wait(200);
+  await snap("dark-300-focus-curve", section);
+  await page.key("ArrowRight", { code: "ArrowRight" });
+  await page.wait(200);
+  await snap("dark-300-focus-curve-arrow", section);
+  notes.focusAfterArrow = await page.evaluate(`document.activeElement?.getAttribute("aria-label")`);
+  // Hover on Strong ease out. Chrome draws a native tooltip outside the page, so no capture shows it: its words are recorded here.
+  const hovered = await box(`document.querySelectorAll('.expr-drawer .expr-curve .segment')[3]`);
+  if (hovered) {
+    await page.evaluate(`document.activeElement?.blur()`);
+    await page.mouse("mouseMoved", hovered.x + hovered.width / 2, hovered.y + hovered.height / 2);
+    await page.wait(400);
+    await snap("dark-300-hover-curve", section);
+    notes.hoverTooltip = await page.evaluate(`document.querySelectorAll('.expr-drawer .expr-curve .segment')[3].title`);
+    await page.mouse("mouseMoved", 10, 10);
+  }
+  // Intensity's curves beside the Curve strip: one control, frameless on its label line.
+  for (const scheme of ["dark", "light"] as const) {
+    await theme(scheme);
+    await snap(`${scheme}-300-transitions-and-intensity`, `(() => { const a = document.querySelector('.expr-drawer [data-view-key="expressions.transitions"]'),
+      b = document.querySelector('.expr-drawer [data-view-key="expressions.adjust-all"]'); if (!a || !b) return null;
+      const r = a.getBoundingClientRect(), q = b.getBoundingClientRect(); return { getBoundingClientRect: () => ({ x: r.x, y: r.y, width: r.width, height: q.bottom - r.y }) }; })()`);
   }
   // The pattern Curve follows: the style guide's Segmented specimens, in both themes.
   await page.send("Page.navigate", { url: `file:///${resolve(import.meta.dir, "..", "public", "style-guide.html").replaceAll("\\", "/")}#lib-segmented` });
@@ -163,6 +214,37 @@ try {
   const at = (notes.midwayAt as number | undefined) ?? 1500;
   await strip("filmstrip-interrupted", `Mild surprise → Warm smile, changed to Confusion at ${(at / 1000).toFixed(2)} s · 3 s, Linear`, midway,
     [0, at - 60, at + 150, at + 1500, at + 3000].map(t => ({ at: t, label: (x: number) => `${(x / 1000).toFixed(2)} s${x >= at ? " (after the change)" : ""}` })));
+  }
+  // ---- The live face preview isn't connected (a host without the facial preview; no Studio host reaches it today): the drawer on its
+  // own, with the Studio's stylesheet, over a fake view context whose facial snapshot has no transition setting. ----
+  const harness = resolve(tmpdir(), `xfs-transition-harness-${Date.now()}`);
+  mkdirSync(harness, { recursive: true });
+  const drawerPath = resolve(import.meta.dir, "..", "src", "features", "expressions", "view", "drawer.ts").replaceAll("\\", "/");
+  writeFileSync(resolve(harness, "entry.ts"), `import { expressionDrawer } from "${drawerPath}";
+    const ctx = { facade: { view: () => ({ part: { controls: {}, links: {} } }), editable: () => ({ available: true }), controlBegin: () => true,
+      controlEdit: () => ({ ok: true }), controlCommit: () => {}, controlCancel: () => {} }, dispatch: () => true, platform: () => true,
+      feedback: { toast: () => {}, announce: () => {}, record: () => {} }, easing: { get: () => undefined, set: () => {} },
+      facial: { snapshot: () => ({ phase: "idle", startPoints: { phase: "ready", items: [] }, samples: [] }), retry: () => {} },
+      presets: { list: () => ({ phase: "ready", items: [] }), capability: () => ({ available: true }), execute: async () => ({ ok: true }) },
+      links: { open: async () => {} }, openSettings: () => {} };
+    for (const width of [300, 480]) { const panel = expressionDrawer(ctx as never); panel.update(undefined as never);
+      const host = document.createElement("div"); host.className = "harness"; host.style.width = width + "px"; host.append(panel.spec.element);
+      document.getElementById("hosts")!.append(host); }`);
+  const built = await Bun.build({ entrypoints: [resolve(harness, "entry.ts")], outdir: harness, target: "browser", format: "iife" });
+  if (!built.success) throw Error(built.logs.map(String).join("\n"));
+  const css = resolve(import.meta.dir, "..", "public", "studio.css").replaceAll("\\", "/");
+  writeFileSync(resolve(harness, "index.html"), `<!doctype html><html><head><link rel="stylesheet" href="file:///${css}"><style>body{margin:0;background:var(--bg-app)}
+    #hosts{display:flex;gap:24px;padding:16px;align-items:flex-start}.harness{background:var(--bg-panel);border:1px solid var(--line)}</style></head>
+    <body><div id="hosts"></div><script src="entry.js"></script></body></html>`);
+  await page.send("Page.navigate", { url: `file:///${resolve(harness, "index.html").replaceAll("\\", "/")}` });
+  await page.waitFor(`document.querySelectorAll(".harness").length === 2`, 30000);
+  for (const scheme of ["dark", "light"] as const) {
+    await theme(scheme);
+    for (const [index, width] of [[0, 300], [1, 480]] as const) {
+      await snap(`${scheme}-${width}-not-connected`, `(() => { const s = document.querySelectorAll(".harness")[${index}]?.querySelector('[data-view-key="expressions.transitions"]'); return s; })()`);
+    }
+  }
+
   writeFileSync(resolve(out, "run.json"), JSON.stringify({ date: new Date().toISOString(), shots, notes,
     console: page.console.filter(m => m.type === "error" || m.type === "exception").slice(0, 20) }, null, 2));
   console.log(`Wrote ${shots.length} captures to ${out}`);

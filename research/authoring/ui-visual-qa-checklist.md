@@ -45,8 +45,8 @@ The gate every UI change passes before it merges (AGENTS.md, "UI/UX review befor
 
 | # | Situation | Use | Fails if |
 |---|---|---|---|
-| D1 | 2–4 short, parallel options | Segmented [lib-segmented] | A dropdown or a Choice list is used. |
-| D2 | 5 or more options, or long labels | Choice list: chips, rows or tiles [lib-choice-list] | A dropdown, or a wrapped Segmented (it reads as a broken listbox). |
+| D1 | 2–4 short, parallel options; or, icon only, up to 8 choices whose icons are distinct and say what they are (the easing curves), with the chosen one named as the readout | Segmented [lib-segmented] (`iconOnly` for the second case), hugging its choices | A dropdown or a Choice list is used; the strip stretches to the panel's width; an icon-only strip whose icons read alike or whose chosen choice isn't named. |
+| D2 | 5 or more labelled options, or long labels | Choice list: chips, rows or tiles [lib-choice-list] | A dropdown, or a wrapped Segmented (it reads as a broken listbox; a Segmented never wraps). An icon-only Segmented under D1's conditions is not this case. |
 | D3 | Dozens to hundreds, grouped, one click applies | Search field and Tree view [lib-tree-view] | A select or combobox used as a command ("Start from: Choose…"). |
 | D4 | An ordered collection the person reorders | Ordered list [lib-item-list] | Hand-built rows. |
 | D5 | On or off, applies at once | Switch [lib-switch] | A button labelled with its state. |

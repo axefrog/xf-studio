@@ -2965,9 +2965,9 @@
       "linear",
       "in",
       "out",
+      "outStrong",
       "inOut",
-      "inOutStrong",
-      "outStrong"
+      "inOutStrong"
      ]
     }
    }
