@@ -12,9 +12,9 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
-- **Only what's there.** The Modules menu no longer lists modules that aren't built yet, and the Panels menu, the Expression panel and the Save Explorer no longer show "Coming soon" buttons. Expressions, Poses and Save Explorer, which are still previews and hidden until you turn them on, now say **Preview** wherever they appear: in the Modules and Panels menus and on their panels' tabs. So does Hair physics in the Motion panel.
-- **More help.** A new tour, **Your V, the camera and Settings**, and a Help answer for **Camera and light**, so every part of the Studio has one. Help also has a page on **What's not in this version yet**.
-- **Expressions without a live face say what you can do.** Where the live face preview isn't available (the desktop app), the Expression panel now offers **Open Expression sets**, to build your expression into a photo-mode mod.
+- **Only what's there.** The Modules menu no longer lists modules that aren't built yet, and the Panels menu, the Expression panel and the Save Explorer no longer show "Coming soon" buttons. Expressions, Poses and Save Explorer, which are still unfinished and hidden until you turn them on, now say **Early access** wherever they appear: in the Modules and Panels menus and on their panels' tabs. So does Hair physics in the Motion panel.
+- **More help.** A new tour, **Your V, camera and settings**, and a Help answer for **Camera & light**, so every part of the Studio has one. Help also has a page on **What's not in this version yet**, with what to do next.
+- **Expressions without a live face say what you can do.** Where the live face preview isn't available (the desktop app), the Expression panel now offers **Export to photo mode…**, to build your expression into a photo-mode mod.
 
 ### Fixes and under the hood
 
@@ -151,7 +151,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 - **Hiding with the head is new.** Makeup hiding under a head-hiding item follows ArchiveXL's rules but hasn't been seen in game yet. An ordinary helmet covers the makeup like the game's own makeup; it doesn't hide the head.
 - **No face movement in the desktop app yet.** The desktop app plays the body idle and holds poses, but not the idle's facial movement, the game's blink or the live face in the Expression panel.
 - **XF Expressions mods haven't been seen in game.** Build checks them thoroughly, but no expression set has been tried in photo mode yet.
-- **Clothes that mods add aren't drawn.** The preview dresses V in the game's own items from her save; items added by mods (TweakXL items and ArchiveXL dynamic items) aren't read yet.
+- **Clothes that mods add aren't drawn.** The preview dresses V in the game's own items from your save; items added by mods (TweakXL items and ArchiveXL dynamic items) aren't read yet.
 - **Unsigned, with no automatic updates.** Windows SmartScreen may warn before the setup runs; checksums and a build-provenance attestation come with the release. Download new versions from the releases page. Installing a newer build over an older one kept the library and settings in a test, but export your looks as a backup first.
 
 ## 0.1.0-alpha.1

@@ -82,23 +82,41 @@ test("update reuses tabs by ID and retitle changes a label in place", async () =
   expect(chosen).toEqual(["p1"]);
 });
 
-test("a preview's tab carries a Preview stage tag, says Preview in its name and tooltip, and keeps it through a retitle", async () => {
+test("an early-access tab says so in its tag, name and tooltip, and keeps it through a retitle", async () => {
   const { TabStrip } = await import("../src/studio-ui/components/tab-strip");
   const view = new TabStrip({ label: "Expression panels", onSelect: () => {} });
   view.update([{ id: "expr", label: "Expression", icon: "character", tooltip: "Expression · drag to move", stage: "preview" }, { id: "light", label: "Camera & light", icon: "lighting" }], "expr");
-  const [preview, stable] = view.tabs as unknown as LightElement[];
-  expect([preview!.getAttribute("aria-label"), preview!.title]).toEqual(["Expression, Preview", "Preview · Expression · drag to move"]);
-  const tag = preview!.querySelector(".stage-tag")!;
-  expect([tag.textContent, tag.getAttribute("aria-hidden")]).toEqual(["Preview", "true"]);
+  const [early, stable] = view.tabs as unknown as LightElement[];
+  expect([early!.getAttribute("aria-label"), early!.title]).toEqual(["Expression, Early access", "Early access · Expression · drag to move"]);
+  const tag = early!.querySelector(".stage-tag")!;
+  expect([tag.textContent, tag.getAttribute("aria-hidden"), tag.hidden]).toEqual(["Early access", "true", false]);
   expect([stable!.getAttribute("aria-label"), stable!.querySelector(".stage-tag")]).toEqual(["Camera & light", null]);
   view.retitle("expr", "Smirk", "Smirk · your saved expression");
-  expect([preview!.getAttribute("aria-label"), preview!.title]).toEqual(["Smirk, Preview", "Preview · Smirk · your saved expression"]);
+  expect([early!.getAttribute("aria-label"), early!.title]).toEqual(["Smirk, Early access", "Early access · Smirk · your saved expression"]);
 });
 
-test("a stable part carries no stage tag; anything not yet stable reads Preview", async () => {
-  const { stageLabel, stageTag } = await import("../src/studio-ui/components/stage-tag");
-  expect([stageLabel("stable"), stageLabel(undefined), stageLabel("preview"), stageLabel("dev")]).toEqual([undefined, undefined, "Preview", "Preview"]);
+test("a tab's stage tag shows only beside a whole label: all in full, none in truncated, the active one (short) in icons, never icon-only", async () => {
+  const view = await strip();
+  view.update(items.map((item, index) => ({ ...item, stage: index < 2 ? "preview" as const : undefined })), "p0");
+  const tags = () => view.tabs.map(tab => { const tag = (tab as unknown as LightElement).querySelector(".stage-tag"); return tag ? tag.hidden ? "-" : tag.textContent : null; });
+  view.fit(480);
+  expect([view.stage, tags()]).toEqual(["full", ["Early access", "Early access", null, null]]);
+  view.fit(362);
+  expect([view.stage, tags()]).toEqual(["truncated", ["-", "-", null, null]]);
+  view.fit(230);
+  expect([view.stage, tags()]).toEqual(["icons", ["Early", "-", null, null]]);
+  view.fit(126);
+  expect([view.stage, tags()]).toEqual(["overflow", ["-", "-", null, null]]);
+  // A new active tab is painted at once, without waiting for the next fit.
+  view.update(items.map((item, index) => ({ ...item, stage: index < 2 ? "preview" as const : undefined })), "p1");
+  expect(view.tabs.map(tab => tab.getAttribute("aria-selected"))).toEqual(["false", "true", "false", "false"]);
+});
+
+test("a stable part carries no stage tag; anything not yet stable is Early access, Early in short", async () => {
+  const { stageLabel, stageShortLabel, stageTag } = await import("../src/studio-ui/components/stage-tag");
+  expect([stageLabel("stable"), stageLabel(undefined), stageLabel("preview"), stageLabel("dev")]).toEqual([undefined, undefined, "Early access", "Early access"]);
+  expect([stageShortLabel("stable"), stageShortLabel("preview")]).toEqual([undefined, "Early"]);
   expect(stageTag("stable")).toBeNull();
   const tag = stageTag("preview", "menu-tag") as unknown as LightElement;
-  expect([tag.className, tag.textContent, tag.dataset.stage]).toEqual(["stage-tag menu-tag", "Preview", "preview"]);
+  expect([tag.className, tag.textContent, tag.dataset.stage]).toEqual(["stage-tag menu-tag", "Early access", "preview"]);
 });

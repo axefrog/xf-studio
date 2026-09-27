@@ -9,14 +9,14 @@ const tokens: [string, string, string][] = [
   ["--line", "Structural dividers", "line"], ["--line-strong", "Control boundaries (≥3:1)", "line"],
   ["--text", "Primary text (≥15:1)", "text"], ["--text-muted", "Secondary text (≥6:1)", "text"], ["--text-faint", "Tertiary text (≥4.5:1 on panels)", "text"],
   ["--accent", "Signal yellow: commitment (primary action), focus, active tab notch", "accent"], ["--accent-text", "Accent used as text", "text"],
-  ["--signal", "Cyan/teal: live selection, data, drop targets", "accent"], ["--success", "Verified, exportable, ready", "state"],
+  ["--signal", "Cyan/teal: live selection, data, drop targets, and the info tone (the Working chip, info badges, stage tags)", "accent"], ["--success", "Verified, exportable, ready", "state"],
   ["--warning", "Preview only, stale, needs attention", "state"], ["--danger", "Errors, destructive commands", "state"], ["--focus", "Focus ring", "accent"],
 ];
 
 export function foundations(css: string) {
   const contrast = contrastTable(css);
   return section("foundations", "01", "Foundations",
-    `A restrained Cyberpunk: graphite instruments under a single signal yellow, with cyan reserved for live state. The only ornament is the bevel —
+    `A restrained Cyberpunk: graphite instruments under a single signal yellow, with cyan reserved for live state and the info tone. The only ornament is the bevel —
      a clipped corner borrowed from industrial labelling. No neon glow, glitch, scanline or fake HUD chrome: atmosphere never costs legibility.
      Tokens are defined once with ${code("light-dark()")}; a container's ${code("color-scheme")} chooses the theme, so every specimen below renders
      in either theme and in the side-by-side comparison.`, [

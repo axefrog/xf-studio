@@ -114,7 +114,7 @@ export type FacialPreviewSnapshot = {
   readonly phase: "unavailable" | "preparing" | "ready" | "updating" | "idle" | "failed";
   /** Plain words for the drawer when the preview can't show the face, with the one next step. */
   readonly reason?: string;
-  /** `export`: this computer has no facial solver (the desktop app has none yet), so the next step is seeing it in the game (Expression sets). */
+  /** `export`: this computer has no facial solver (the desktop app has none yet), so the next step is Export to photo mode… (Expression sets), as the Face commands menu names it. */
   readonly next?: "game-setup" | "guide" | "stop-idle" | "retry" | "export";
   readonly controls?: readonly FacialControl[];
   /** The drawer's groups, in order, with their labels. */

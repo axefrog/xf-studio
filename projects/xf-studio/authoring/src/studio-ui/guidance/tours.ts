@@ -7,7 +7,7 @@ import type { Tour } from "./types";
  * command and key token against the registries.
  */
 export const ONBOARDING_TOUR_ID = "onboarding";
-/** The tour of the Studio's other stable parts: your V, the camera and light, and Settings. */
+/** The tour of the Studio's other stable parts: your V, Camera & light, and Settings. */
 export const STUDIO_TOUR_ID = "your-v-and-view";
 
 export const TOURS: readonly Tour[] = [
@@ -41,15 +41,15 @@ export const TOURS: readonly Tour[] = [
     ],
   },
   {
-    id: STUDIO_TOUR_ID, audience: "howto", title: "Your V, the camera and Settings",
+    id: STUDIO_TOUR_ID, audience: "howto", title: "Your V, camera and settings",
     summary: "Where your V's creator options, the camera and lights, and your game and mod manager settings live.",
     steps: [
       { anchor: "panel.character", content: { title: "Your V",
-        body: "The **Character** panel holds your V's character-creator options, read from your game and mods.\n\n- Load a save to see your own V.\n- Change any option to try your looks on another face, and save a set of options as a preset.\n\nYour looks never change when you do." },
+        body: "The **Character** panel holds your V's character-creator options, read from your game and mods.\n\n- Load a save to see your own V.\n- Change any option to try your looks on another face, and save a set of options as a preset.\n\nNone of this changes your looks or your save." },
         buttons: [{ label: "Load V from a save…", action: { kind: "file", action: { kind: "savedV.import" } } }] },
-      { anchor: "panel.lighting", content: { title: "Camera and light",
+      { anchor: "panel.lighting", content: { title: "Camera & light",
         body: "**Camera & light** frames the view and lights your V. Choose a lighting setup, such as **Character creator** to compare with the game, or make your own and aim its lights with the direction dial.\n\nCamera and light never change your looks or your mod." },
-        buttons: [{ label: "Show the front view", action: { kind: "studio", action: { kind: "camera.front" } } }] },
+        buttons: [{ label: "Use creator lighting", action: { kind: "studio", action: { kind: "preview.selectLightingSetup", setup: "creator" } } }] },
       { anchor: "header.settings", content: { title: "Your game and mod manager",
         body: "**Settings** holds what XF Studio needs to know about your computer: your game folder, your mod manager, your saves and WolvenKit. XF Studio finds these for you; change one here if it guessed wrong." },
         buttons: [{ label: "Open Settings", action: { kind: "panel", panel: "settings" } }] },

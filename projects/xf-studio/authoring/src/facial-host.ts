@@ -52,7 +52,7 @@ const STEP_TIMEOUT_MS = 3 * 60_000;
 
 /** Where the solver lives: the add-on checkout, the Python that runs it and the server script; or why there is none, in plain words. */
 export type FacialSolverLocation = { readonly addon: string; readonly python: string; readonly script: string } | { readonly missing: string };
-export const SOLVER_MISSING = "The live face preview comes in a later version. Your expression still saves, and you can build it into an expression set for photo mode.";
+export const SOLVER_MISSING = "The live face preview comes in a later version. Your expression still saves.";
 
 /**
  * Find the solver (localhost): `XFS_FACIAL_SOLVER` (the add-on checkout), else XF Studio's tools folder (`<tools>/io-suite/<pin>/`,

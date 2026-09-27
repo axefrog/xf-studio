@@ -476,7 +476,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   function statusText(snapshot: FacialPreviewSnapshot | undefined): { text: string; tone: "muted" | "warning" | "info"; next?: string } | undefined {
     if (!snapshot) return { text: "The live face preview isn't connected here.", tone: "muted" };
     const nextLabel = { "game-setup": "Open Settings", guide: "How live expressions work", "stop-idle": "Stop the idle", retry: "Try again",
-      export: "Open Expression sets" } as const;
+      export: "Export to photo mode…" } as const;
     const label = snapshot.next ? nextLabel[snapshot.next] : undefined;
     // A limit of this version (its next step is the guide or the export) is said calmly; something the person can fix is a warning.
     const tone = snapshot.next === "guide" || snapshot.next === "export" ? "muted" : "warning";

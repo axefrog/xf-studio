@@ -405,7 +405,7 @@ Placing a V into a location later is a `location` scene that references a charac
 
 It replaces the header's authoring-category label (`studio-ui/app.ts:251`), which today reads "Eye makeup" because only one feature is registered.
 
-- **Layout.** One checkbox row per module, grouped (Character: Eye makeup, Poses; World: World), with a stage badge ("Preview") and one plain line of what it adds ("Adds 6 panels and 2 view tools").
+- **Layout.** One checkbox row per module, grouped (Character: Eye makeup, Poses; World: World), with a stage tag ("Early access"; components/stage-tag.ts) and one plain line of what it adds ("Adds 6 panels and 2 view tools").
 - **Palette.** "Show Eye makeup" and "Hide Eye makeup" appear as palette commands.
 - **Storage.** The state is `UIPreferences.modules` (workspace and verification-scoped, like the layout), with defaults from each manifest.
 - **Boundary.** It is a presentation preference only. The application never reads it, and actions stay dispatchable (a future MCP client can still drive a hidden module).
@@ -542,7 +542,7 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 | Tools and capture scripts break on the new structure | The `head`/`main` aliases, `#device-head canvas` for view `main` and the evidence keys stay until the tools read evidence per view |
 | Workspace downgrade | The `views` field is written only when needed, and the main view is mirrored into the legacy fields. The reader test is part of the P4 gate. |
 | Subject services moved out of the head attachment change restore order | P3 keeps the existing restore order (saved V, then optics, eye shape and details, then motion, then camera) and its tests |
-| Placeholders read as promises | Stage "Preview", hidden by default, one true line each, nothing faked |
+| Placeholders read as promises | Stage "Early access", hidden by default, one true line each, nothing faked |
 | Scope creep into world rendering | World's placeholder draws a grid only; streaming stays behind the native mesh phase |
 
 ### 6.5 Phase status

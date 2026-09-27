@@ -155,20 +155,24 @@ const MOUNTS: Record<string, Mount> = {
     button({ label: "Delete a saved expression", icon: "trash", onClick: event => openConfirmPopover(event.currentTarget as Element,
       { title: "Delete saved expression", message: "Delete “Smirk” from your library? This can't be undone.", confirm: "Delete", danger: true, onConfirm: () => {} }) })),
   "lib-stage-tag": () => {
-    const physics = new Toggle({ label: "Hair physics", stage: "preview", help: "A preview: how the hair moves hasn't been matched to the game yet.", onChange: checked => physics.update(checked) });
+    const physics = new Toggle({ label: "Hair physics", stage: "preview", help: "An early-access setting: how the hair moves hasn't been matched to the game yet.", onChange: checked => physics.update(checked) });
     physics.update(false);
+    // The same switch while it can't be used: the tag dims with the label.
+    const waiting = new Toggle({ label: "Hair physics", stage: "preview", reserveNote: true, quietReason: true, onChange: () => {} });
+    waiting.update(false, { disabled: true, reason: "Available once your V's hair has loaded." });
     const strip: TabStrip = new TabStrip({ label: "Sample preview panels", onSelect: () => {} });
     strip.update([{ id: "expression", label: "Expression", icon: "character", stage: "preview", closable: true }, { id: "sets", label: "Expression sets", icon: "package", stage: "preview" }], "expression");
     const menu = button({ label: "Modules", icon: "category", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Modules" },
       { kind: "action", label: "Eye makeup", icon: "category", checked: true, hint: "Design layered eye makeup for your V.", run: () => {} },
       { kind: "action", label: "Expressions", icon: "character", checked: false, stage: "preview", hint: "Pose V's face with the game's own face controls.", run: () => {} }],
       event.currentTarget as Element, { label: "Modules" }) });
-    // Fitted like the dock fits its groups: whole labels (and tags) at this width; narrower, the tags go and the names keep "Preview".
+    // Fitted like the dock fits its groups: whole labels (and tags) at this width; narrower, only the active tab keeps "Early" beside a
+    // whole label, and every name keeps "Early access".
     const fitted = new PanelHeader({ strip, actions: [], drag: { title: "Drag area", onPointerDown: () => {} } });
     requestAnimationFrame(() => fitted.fit());
     return stack({ gap: "normal" }, h("div", { class: "row wrap gap-s" }, stageTag("preview"), menu),
-      h("section", { class: "dock-group", style: "width:460px" }, fitted.element, h("div", { class: "dock-body", style: "height:24px" })),
-      h("div", { style: "max-width:320px" }, physics.element));
+      h("section", { class: "dock-group", style: "width:600px" }, fitted.element, h("div", { class: "dock-body", style: "height:24px" })),
+      h("div", { style: "max-width:320px" }, physics.element, waiting.element));
   },
   "lib-item-list": () => { let items = [{ id: "a", name: "Petal wash", meta: "Matte" }, { id: "b", name: "Liner", meta: "Glossy", secondary: "shows as “Wing”" }]; let selected = "a";
     const list: ItemList<{ id: string; name: string; meta: string; secondary?: string }> = new ItemList({ label: "Sample layers", noun: "layer", maxLength: 40,

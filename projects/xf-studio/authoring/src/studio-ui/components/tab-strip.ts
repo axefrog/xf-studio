@@ -1,7 +1,7 @@
 import { h, setAttr, setText } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu } from "../menu";
-import { stageLabel, stageTag, type Stage } from "./stage-tag";
+import { stageLabel, stageShortLabel, stageTag, type Stage } from "./stage-tag";
 
 /**
  * Tab strip (style guide "Tab strip"): a row of tabs, or a column when its group is folded to a vertical strip, that never overflows
@@ -25,8 +25,10 @@ export type TabItem = {
   /** Whether the active tab shows a close mark (the keyboard closes with the strip's own key binding). */
   closable?: boolean;
   /**
-   * The release stage of what the tab shows: a preview's tab carries a Preview stage tag after its label while its label shows (every
-   * tab in the full stage, the active tab while condensed), and its name and tooltip say "Preview" at every stage.
+   * The release stage of what the tab shows: an early-access tab carries a stage tag after its label, only beside a whole label: every
+   * tab in the full stage ("Early access", there is room), the active tab in the icons and overflow stages while its label shows whole
+   * (the short "Early", where "Early access" won't fit), none in the truncated stage. Its name and tooltip say "Early access" at every
+   * stage.
    */
   stage?: Stage;
 };
@@ -123,6 +125,7 @@ export class TabStrip {
     });
     this.tablist.replaceChildren(...this.entries.map(entry => entry.tab));
     this.show(this.entries.map((_, index) => index), false);
+    this.paintTags();
   }
   /** Change one tab's label and tooltip in place (nothing is laid out again). */
   retitle(id: string, label: string, tooltip?: string) {
@@ -137,16 +140,20 @@ export class TabStrip {
     setAttr(entry.tab, "aria-label", stage ? `${entry.item.label}, ${stage}` : entry.item.label);
     entry.tab.title = stage ? `${stage} · ${tip}` : tip;
     entry.close.title = `Close ${entry.item.label}`;
+    // A reused tab whose stage changed gains or loses its tag (paintTags shows and words it).
+    if (!!entry.tag !== !!stage) {
+      entry.tag?.remove();
+      entry.tag = stage ? stageTag(entry.item.stage, "dock-tab-stage") : null;
+      if (entry.tag) { entry.tag.setAttribute("aria-hidden", "true"); entry.tab.insertBefore(entry.tag, entry.close); }
+    }
   }
   private create(item: TabItem): TabEntry {
     const id = item.id, prefix = this.options.idPrefix;
     const label = h("span", { class: "dock-tab-label" });
     const close = h("span", { class: "dock-tab-close", "aria-hidden": "true" }, icon("close"));
-    // The stage tag is read as part of the tab's name (`describe`), so it is hidden from the accessibility tree here.
-    const tag = stageTag(item.stage, "dock-tab-stage");
-    tag?.setAttribute("aria-hidden", "true");
+    // The stage tag (`describe` adds it) is read as part of the tab's name, so it is hidden from the accessibility tree.
     const tab = h("button", { class: "dock-tab", type: "button", role: "tab", id: prefix ? `${prefix}${id}` : undefined,
-      "aria-controls": this.options.controls, ...this.options.tabData?.(item) }, icon(item.icon), label, tag, close);
+      "aria-controls": this.options.controls, ...this.options.tabData?.(item) }, icon(item.icon), label, close);
     close.addEventListener("pointerdown", event => event.stopPropagation());
     close.addEventListener("click", event => { event.stopPropagation(); this.options.onClose?.(id); });
     tab.addEventListener("click", () => this.options.onSelect(id));
@@ -154,12 +161,28 @@ export class TabStrip {
     tab.addEventListener("contextmenu", event => this.options.onContextMenu?.(event, id, tab));
     tab.addEventListener("pointerdown", event => this.options.onPointerDown?.(event, id, tab));
     tab.addEventListener("auxclick", event => this.options.onAuxClick?.(event, id));
-    return { item, tab, label, close, tag };
+    return { item, tab, label, close, tag: null };
   }
   private setStage(stage: TabStripStage, activeIconOnly = false) {
     this.current = stage;
     setAttr(this.element, "data-stage", stage);
     this.element.classList.toggle("active-icon", activeIconOnly);
+    this.paintTags();
+  }
+  /**
+   * Stage tags show only beside a whole label, so a tab's name never loses room to its qualifier: every tab in the full stage, the
+   * active tab in the icons and overflow stages (unless it is icon-only), none in the truncated stage. `whole` (after a fit's layout)
+   * also drops the active tab's tag when its label is still cut short.
+   */
+  private paintTags(whole?: (entry: TabEntry) => boolean) {
+    const stage = this.current, activeIconOnly = this.element.classList.contains("active-icon");
+    for (const entry of this.entries) {
+      if (!entry.tag) continue;
+      const active = entry.item.id === this.active;
+      const shown = stage === "full" || (active && (stage === "icons" || stage === "overflow") && !activeIconOnly && (whole?.(entry) ?? true));
+      if (entry.tag.hidden === shown) entry.tag.hidden = !shown;
+      setText(entry.tag, (stage === "full" ? stageLabel : stageShortLabel)(entry.item.stage) ?? "");
+    }
   }
   /** Show the tabs at `indices` (the rest move to the overflow menu). */
   private show(indices: readonly number[], overflow: boolean) {
@@ -199,10 +222,12 @@ export class TabStrip {
     const plan = planTabs({ available, sizes, active, activeIcon, more });
     this.setStage(plan.stage, plan.activeIconOnly);
     this.show(plan.shown, plan.stage === "overflow");
+    // The active label may still be cut short (its condensed maximum): then it keeps its whole room and no tag.
+    this.paintTags(entry => !(entry.label.scrollWidth > entry.label.clientWidth + 1));
   }
   private openOverflow() {
     const items = this.hidden.map(id => this.entries.find(entry => entry.item.id === id)!.item);
-    openMenu(items.map(item => ({ kind: "action" as const, label: item.label, icon: item.icon, run: () => this.options.onSelect(item.id) })),
+    openMenu(items.map(item => ({ kind: "action" as const, label: item.label, icon: item.icon, stage: item.stage, run: () => this.options.onSelect(item.id) })),
       this.more, { label: "More tabs", invoker: this.more });
   }
 }

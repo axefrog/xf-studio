@@ -14,7 +14,7 @@ export type MenuItem =
       capability?: Capability; checked?: boolean; danger?: boolean; run(): void;
       /** A small neutral tag after the label ("Soon" on a planned entry, research tools only). */
       tag?: string;
-      /** The release stage of what the entry shows or turns on: a Preview stage tag after the label (components/stage-tag.ts). */
+      /** The release stage of what the entry shows or turns on: an Early access stage tag after the label (components/stage-tag.ts). */
       stage?: Stage;
       /** The unavailable reason is information, not a problem (a planned feature's "Coming soon: …"): shown in the muted colour. */
       quietReason?: boolean }

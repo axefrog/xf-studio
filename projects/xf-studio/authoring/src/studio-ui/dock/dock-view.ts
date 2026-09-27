@@ -21,7 +21,7 @@ export type PanelSpec = {
   id: PanelId; title: string; icon: IconName; description: string;
   /** What the panel shows, for its tab's tooltip (a view's subject); set with `DockView.retitle`. */
   context?: string;
-  /** The release stage of the module the panel belongs to: a preview module's panels carry a Preview tag on their tab. */
+  /** The release stage of the module the panel belongs to: an early-access module's panels carry the stage tag on their tab. */
   stage?: Stage;
   element: HTMLElement;
   /** Called after each layout when the panel becomes shown or hidden. */

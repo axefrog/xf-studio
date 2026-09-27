@@ -130,7 +130,7 @@ export class Toggle {
     quietReason?: boolean;
     /** The label while mixed ("Symmetric · some regions"), so the state is said in words as well as by the mark. */
     mixedLabel?: string;
-    /** The release stage of what it turns on: a preview carries a Preview stage tag after its label, part of its name. */
+    /** The release stage of what it turns on: an early-access setting carries an Early access stage tag after its label, part of its name. */
     stage?: Stage }) {
     const id = options.id ?? uid("toggle");
     this.input = h("input", { id, type: "checkbox", role: "switch", class: "switch" });

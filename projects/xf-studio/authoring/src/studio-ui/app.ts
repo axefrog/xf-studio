@@ -504,7 +504,7 @@ function cycleRegions(root: HTMLElement, backwards: boolean) {
 const MODULE_GROUPS: Record<StudioModule["group"], string> = { character: "Character", world: "World", assets: "Assets", tools: "Tools" };
 
 /**
- * The Modules menu (view-graph-design.md §4.2): one row per module, grouped, each a checkbox with its stage (a Preview stage tag) and what it adds. Hiding
+ * The Modules menu (view-graph-design.md §4.2): one row per module, grouped, each a checkbox with its stage (an Early access stage tag) and what it adds. Hiding
  * one keeps its work and exports; its panels and view tools leave until it is shown again.
  */
 function moduleMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
@@ -543,7 +543,8 @@ function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
     const module = rt.modules.list.find(item => rt.modules.panels(item).includes(id));
     return { kind: "action", label: meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
       hint: `${STATE[state]} · ${meta?.description ?? ""}`,
-      ...(state === "parked" ? { capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
+      // Parked is a state the person chose (the module is hidden), not a problem: its reason is muted (UI-144 makes the row actionable).
+      ...(state === "parked" ? { quietReason: true, capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
       run: () => state === "collapsed" ? dock.reveal(id) : id === SETTINGS_PANEL && state === "closed" ? rt.settings.open() : dock.toggle(id) };
   };
   const owned = new Set(rt.modules.list.flatMap(module => rt.modules.panels(module)));

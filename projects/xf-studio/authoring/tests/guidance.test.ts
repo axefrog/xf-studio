@@ -439,4 +439,11 @@ test("Help covers every stable part of the Studio, with a page on what isn't in 
   expect(searchTopics("not in this version")[0]!.id).toBe("limitations");
   // For the people using it: no developer words.
   expect(limits.body).not.toMatch(/\b(TweakXL|ArchiveXL|hide_Head|WebView|Python|solver|shader|adapter|API)\b/);
+  // Grouped, each group a bold lead line; the untested items end with the one thing to do.
+  for (const lead of ["**In your mod**", "**In the 3D view**", "**Installing and updating**", "**Report a problem…**"]) expect(limits.body).toContain(lead);
+  // V is never "her" or "she": either gender's V uses the Studio.
+  const studioTour = TOURS.find(tour => tour.id === "your-v-and-view")!;
+  for (const text of [limits.body, topics.get("camera")!.body, topics.get("character")!.body, ...studioTour.steps.map(step => `${step.content.title} ${step.content.body}`)])
+    expect(text).not.toMatch(/\b(her|she|hers|herself)\b/i);
+  expect(topics.get("camera")!.title).toBe("Camera & light");
 });
