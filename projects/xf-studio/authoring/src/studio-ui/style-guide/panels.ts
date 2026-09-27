@@ -1,3 +1,4 @@
+import type { IconName } from "../icons";
 import { code, group, i, menu, menuHeading, menuItem, menuSep, note, pattern, section } from "./kit";
 
 const lorem = (title: string) => `<div class="panel-content"><h3 class="section-title">${title}</h3><p class="note">Panel content scrolls inside its group.</p></div>`;
@@ -47,6 +48,22 @@ export function panelSystem() {
       what: "Rows and columns of groups with 4 px splitters. Hover or focus shows the cyan track; dragging resizes the two neighbours only.",
       when: "Any docked arrangement. Minimum group size is 150 × 96 px.",
       a11y: "Splitters are focusable separators: arrow keys move 4 %, Enter or double-click equalises the pair." }),
+    pattern({ id: "d-collapse", title: "Collapsed group: header row or vertical strip", status: "implemented", wide: true,
+      specimen: (() => {
+        const tabs: [string, IconName][] = [["Pigment & edge", "edge"], ["Warp", "warp"], ["Colour & finish", "finish"], ["Shape", "shape"], ["Layers", "layers"]];
+        return `<div class="demo-dock-row" style="align-items:flex-start">
+        ${group(tabs, 0, "", { collapsed: true, fold: "row", style: "height:600px" })}
+        ${group(tabs, 2, "", { collapsed: true, fold: "row", style: "height:600px" })}
+        ${group(tabs, 2, "", { collapsed: true, fold: "row", stage: "icons", style: "height:360px" })}
+        ${group(tabs, 2, "", { collapsed: true, fold: "row", stage: "icons", activeIcon: true, focus: true, style: "height:250px" })}
+        <div style="width:400px">${group(tabs, 2, "", { collapsed: true, stage: "icons" })}</div></div>`;
+      })(),
+      what: "A collapsed group keeps only its tab bar. Folded along a column it is a header row spanning the column (right). Folded along a row (a group alone in its row, or a column whose groups all collapsed) it is a full-height vertical strip: the same tab bar turned on its side (left to right: the first tab active, a middle tab active, a shorter strip with the inactive tabs icon-only, and the shortest with every tab icon-only). Each tab has padding at both ends, an upright icon centred across the strip, a gap between icon, label and close mark, and a hairline between tabs; the active tab is raised to the panel surface with the yellow indicator down the strip's outer edge and its close mark as its own 18 px target at its end.",
+      when: "Collapse a group to keep its panels one click away while giving its space to the rest of the workspace. Choosing any tab expands the group showing that tab.",
+      combine: "The strip condenses in the same stages as a crowded bar (the tab strip component, lib-tab-strip): full labels, inactive labels cut short, inactive tabs icon-only, the active tab icon-only, then an overflow menu at the strip's end. An icon-only tab keeps its name as its tooltip and accessible name, and a label is never cut mid-glyph. The expand and layout buttons sit at the strip's foot and never shrink.",
+      adapt: "The strip is 36 px wide (the 32 px bar height plus 4 px), whichever tab is active or hovered, so nothing shifts. Its tabs refit whenever its height changes.",
+      drives: `${code("foldAxes")} in studio-ui/dock/layout.ts picks the axis; the dock marks the group ${code("data-fold")} and builds its header with ${code("orientation: \"vertical\"")}. The tab CSS is written in logical properties, so ${code("writing-mode: vertical-rl")} on the strip turns padding, separators and the indicator with it. Tests: tests/dock-collapse-dom.test.ts (folding), tests/dock-strip-geometry.test.ts (laid-out geometry in Chrome: no overlaps, padding, centred icons, one width, icon-only fallback).`,
+      a11y: "The tablist is marked aria-orientation=vertical and keeps the bar's keys (←/→/Home/End switch tabs). The focus ring is drawn inside each tab (outline offset −2 px), so the strip's clipping never cuts it." }),
     pattern({ id: "d-float", title: "Floating panel", status: "implemented",
       specimen: `<div class="demo-float-area"><div class="dock-window" style="left:20px;top:14px;width:250px;height:150px">${group([["Camera & light", "lighting"]], 0, lorem("Camera"), { floating: true })}</div></div>`,
       what: "A panel in its own window above the dock, with resize handles on every edge and corner. Its tab strip is the window's title bar.",

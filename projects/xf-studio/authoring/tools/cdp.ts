@@ -97,13 +97,13 @@ async function stopChrome(chrome: Subprocess, profile: string): Promise<void> {
  * its profile), so concurrent or back-to-back starts never collide on one. A start that exposes no page within its deadline, or exits,
  * is stopped and tried again with a fresh profile, a bounded number of times, then fails with a clear message.
  */
-async function startChrome(options: { width?: number; height?: number; debugPort?: number }) {
+async function startChrome(options: { width?: number; height?: number; debugPort?: number; args?: readonly string[] }) {
   const failures: string[] = [];
   for (let attempt = 1; attempt <= PAGE_TARGET_LIMITS.attempts; attempt++) {
     const profile = mkdtempSync(join(tmpdir(), "xfs-ui-chrome-"));
     const chrome: Subprocess = Bun.spawn([CHROME, "--headless=new", `--remote-debugging-port=${options.debugPort ?? 0}`, `--user-data-dir=${profile}`,
       `--window-size=${options.width ?? 1600},${options.height ?? 1000}`, "--no-first-run", "--no-default-browser-check",
-      "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", "about:blank"], { stdout: "ignore", stderr: "ignore" });
+      "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", ...(options.args ?? []), "about:blank"], { stdout: "ignore", stderr: "ignore" });
     try {
       const page = await waitForPageTarget(async () => {
         const port = options.debugPort ?? activePort(profile);
@@ -118,7 +118,8 @@ async function startChrome(options: { width?: number; height?: number; debugPort
   throw Error(`Chrome did not expose a page target after ${PAGE_TARGET_LIMITS.attempts} attempts (${CHROME}): ${failures.join("; ")}`);
 }
 
-export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark" } = {}) {
+/** `args`: extra Chrome switches (for example a fake camera: `--use-fake-device-for-media-stream`). */
+export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark"; args?: readonly string[] } = {}) {
   const { chrome, profile, page } = await startChrome(options);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { socket.onopen = ok; socket.onerror = fail; });

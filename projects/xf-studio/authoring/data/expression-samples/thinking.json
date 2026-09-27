@@ -1,0 +1,106 @@
+{
+  "feature": "expressions",
+  "name": "Thinking deeply (natural)",
+  "part": {
+    "schema": "xfs/expression-part-1",
+    "body": {
+      "label": "Thinking",
+      "controls": {
+        "eye_l_blink": 0.05,
+        "eye_l_brows_lateral": 0.4,
+        "eye_l_brows_lower": 0.3,
+        "eye_l_dir_out": 0.5,
+        "eye_l_dir_up": 0.25,
+        "eye_l_oculi_squint_inner": 0.3,
+        "eye_r_blink": 0.05,
+        "eye_r_brows_lateral": 0.4,
+        "eye_r_brows_lower": 0.38,
+        "eye_r_dir_in": 0.5,
+        "eye_r_dir_up": 0.25,
+        "eye_r_oculi_squint_inner": 0.3,
+        "lips_chin_raise": 0.3,
+        "lips_l_corner_wide": 0.3,
+        "lips_mid_shift_l": 0.4,
+        "lips_suck_dn": 0.1
+      },
+      "links": {
+        "eye_brows_lower": false,
+        "lips_corner_wide": false
+      },
+      "origin": {
+        "kind": "rest"
+      }
+    }
+  },
+  "facs": {
+    "closestVanilla": "facial_bored",
+    "actionUnits": [
+      {
+        "au": "AU4",
+        "name": "Brow lowerer",
+        "intensity": "B",
+        "note": "The concentration furrow.",
+        "controls": [
+          "eye_l_brows_lower",
+          "eye_r_brows_lower",
+          "eye_l_brows_lateral",
+          "eye_r_brows_lateral"
+        ]
+      },
+      {
+        "au": "AU7",
+        "name": "Lid tightener",
+        "intensity": "B",
+        "controls": [
+          "eye_l_oculi_squint_inner",
+          "eye_r_oculi_squint_inner"
+        ]
+      },
+      {
+        "au": "AU61+63",
+        "name": "Eyes turn left and up",
+        "intensity": "C",
+        "note": "A glance away from the listener while thinking; both eyes turn toward V's left.",
+        "controls": [
+          "eye_l_dir_out",
+          "eye_r_dir_in",
+          "eye_l_dir_up",
+          "eye_r_dir_up"
+        ]
+      },
+      {
+        "au": "AU43",
+        "name": "Eyes lowered (slight)",
+        "intensity": "A",
+        "controls": [
+          "eye_l_blink",
+          "eye_r_blink"
+        ]
+      },
+      {
+        "au": "AU14",
+        "name": "Dimpler (unilateral), mouth to one side",
+        "intensity": "B",
+        "controls": [
+          "lips_mid_shift_l",
+          "lips_l_corner_wide"
+        ]
+      },
+      {
+        "au": "AU17+28",
+        "name": "Chin raiser, lower lip in",
+        "intensity": "B / A",
+        "controls": [
+          "lips_chin_raise",
+          "lips_suck_dn"
+        ]
+      }
+    ],
+    "why": [
+      "A small furrow (AU4 with AU7) and a glance up and to the side are the recognisable signs of someone thinking. The gaze does most of the work.",
+      "The mouth is pushed sideways (a one-sided AU14 with a mouth shift) and pressed by a chin raise: a private, unposed face.",
+      "Everything stays under about half strength. In photo mode, turn the camera look-at off or the eyes will follow the camera."
+    ],
+    "source": "XF Studio experiment 026 (research/animation/natural-expressions.md): authored values, tuned in the live preview."
+  }
+}

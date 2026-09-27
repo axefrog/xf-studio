@@ -77,7 +77,8 @@ test("a slow solve shows updating in place; a superseded answer is ignored; a fa
   h.setPose({ lips_l_corner_up: 0.4 });
   h.answers[1]!({ ok: false, code: "failed", message: "The facial solver couldn't solve that pose." }); await settle();
   expect(h.preview.snapshot()).toMatchObject({ phase: "failed", reason: "The facial solver couldn't solve that pose.", next: "retry" });
-  h.preview.retry();
+  // Try again asks the host for its state first (a stopped solver is started again there, CORE-101), then solves.
+  h.preview.retry(); await settle();
   expect(h.requests.length).toBe(3);
 });
 

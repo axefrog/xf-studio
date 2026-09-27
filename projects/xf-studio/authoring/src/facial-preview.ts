@@ -180,7 +180,12 @@ export class FacialPreview {
     return { ...base, phase: "ready" };
   }
   /** Solve again after a failure (the drawer's Try again). */
-  retry() { this.failure = null; this.shown = ""; if (!this.host || this.hostError) void this.refresh(); else this.changed(); this.notify(); }
+  retry() {
+    // The host's state is asked for again: a solver that stopped or was stuck is started again there (CORE-101), and the solve follows.
+    this.failure = null; this.shown = ""; this.polls = 0;
+    if (this.poll !== null) { this.timer.clear(this.poll); this.poll = null; }
+    void this.refresh(); this.notify();
+  }
 }
 const round = (value: number) => Math.round(value * 10) / 10;
 

@@ -274,7 +274,8 @@ test("the native-first exporter decodes textures itself, caches them by its iden
   // Another served size is another identity: nothing cached for it.
   const larger = createNativeFirstExporter(inner, { cacheRoot, maxSide: 8, decoder: async () => decoder, onFallback: () => {} });
   expect(larger.has!("textures", "base\\t\\chain.xbm", source)).toBe(false);
-  expect(NATIVE_TEXTURE_IDENTITY).toMatch(/^xfs-native-texture:\d+$/);
+  // The resource reader's version and data hash are part of it (NATIVE-61).
+  expect(NATIVE_TEXTURE_IDENTITY).toMatch(/^xfs-native-texture:\d+:\d+:[0-9a-f]{12}$/);
 
   // No decoder: every texture goes to WolvenKit; a folder source is never read natively.
   const none = createNativeFirstExporter(inner, { cacheRoot: join(tempRoot(), "e2"), maxSide: 4, decoder: async () => null, onFallback: () => {} });

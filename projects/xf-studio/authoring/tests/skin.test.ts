@@ -121,11 +121,12 @@ derivedCharacterTest("resolved brow, lash, hair and body GLBs retain their shape
     .map(([path, morphs]) => ({ path, morphs, body: kind.startsWith("body|") })));
   for (const { path, morphs, body } of checks) {
     const buffer = await Bun.file(path).arrayBuffer();
-    // Head decals and lashes carry the head's 105 face targets or the eye component's 21; a body part its own shapes (checked by name).
+    // Head decals and lashes carry the head's face targets (105 feminine, 100 masculine) or the eye component's (21 or 20); a body part its own
+    // shapes (checked by name).
     // Some chunks (the eyeball beside the lashes, the feet's lower chunks) have four influences only; the export keeps what the game has.
     // Plain skinned meshes (hair, arms, feet, the underwear cover) may carry a garment-support shape, which is not a facial target. A body
     // part exported without its skin (a nails mod's mesh) has no weights to check.
-    checkSkinnedGlb(buffer, morphs && !body ? [105, 21] : null, undefined, false);
+    checkSkinnedGlb(buffer, morphs && !body ? [105, 21, 100, 20] : null, undefined, false);
     if (body) checkBodyTargets(buffer);
   }
   expect(slots.size).toBeGreaterThan(0);

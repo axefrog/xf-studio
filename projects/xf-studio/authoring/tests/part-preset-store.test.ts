@@ -93,6 +93,10 @@ test("the endpoint lists, saves, renames and deletes for the local studio only",
     expect((await send("DELETE", `/${saved.id}?revision=1`)).status).toBe(409);
     expect((await send("DELETE", `/${saved.id}?revision=2`)).status).toBe(200);
     expect((await send("POST", "", { feature: "expressions", name: "x", part: expression({}) }, { Origin: "http://evil.test", "Content-Type": "application/json" })).status).toBe(403);
+    // JSON that isn't an object is refused plainly; a body over the limit is refused before it is read whole (CORE-106).
+    expect((await send("POST", "", null)).status).toBe(400);
+    expect((await send("POST", "", { feature: "expressions" }, { Origin: origin, "Content-Type": "application/json", "Content-Length": "9999999" })).status).toBe(413);
+    expect((await send("POST", "", { feature: "expressions", name: "x".repeat(2_100_000) })).status).toBe(413);
   } finally { presets.close(); temp.cleanup(); }
 });
 

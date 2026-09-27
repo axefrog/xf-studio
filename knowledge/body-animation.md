@@ -21,6 +21,7 @@ The paperdoll body graph picks a clip per screen from `AnimFeature_Paperdoll`, w
 | Studio entry | Clip (body) | Length | Graph state and flags | Face loop | Feet it's authored for |
 |---|---|---:|---|---|---|
 | Creator close-up | `ui_closeup_shot` | 12.33 s | state machine `closeup` (`characterCreation_Head`, `_Eyes`, `_Nose`, `_Lips`, `_Jaw`, `_Hair` pick one-shots from it) | `ui_closeup_shot` (22.07 s) | the creator puppet's lifted feet |
+| Creator close-up, eyes section | `ui_closeup_shot` | 12.33 s | `closeup` with `characterCreation_Eyes` set (the eye camera: eyes, eyebrows, lash colour, eye makeup rows) | the face graph's one-shot `ui_closeup_shot_eyes` (4.00 s) once, then `ui_closeup_shot` ([facial animation §6](facial-animation.md#6-the-idles-upper-face)) | lifted |
 | Creator full body | `ui_fullbody_shot` | 15.73 s | state machine `fullbody` (after the one-shot `ui_closeup_to_fullbody`) | `ui_fullbody_shot` (22.07 s) | lifted |
 | Creator nails | `ui_expose_hand_loop` | 4.70 s | state `loop` (`characterCreation_Nails`: `ui_expose_hand_start` → loop → `_end`) | none in the face set | lifted |
 | Gender selection | `ui_gender_selection` | 15.63 s | played directly by the screens' switch | none in the face set | not established |

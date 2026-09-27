@@ -62,7 +62,12 @@ export class IdleAnimation {
   private readonly stillDelta: DeltaOf = name => this.drivers.has(name) ? IDENTITY : null;
   constructor(readonly source: THREE.Object3D, public clip: THREE.AnimationClip,
     targets: THREE.Object3D[], ancestry: Record<string, string | null>,
-    readonly facial?: { source: THREE.Object3D; clip: THREE.AnimationClip }) {
+    readonly facial?: { source: THREE.Object3D; clip: THREE.AnimationClip;
+      /**
+       * A face clip that plays once up to here and loops from here to its end: a creator section's one-shot showcase before the loop
+       * (idle-catalogue.ts `face.loopFrom`). Absent: the whole clip loops.
+       */
+      loopFrom?: number }) {
     source.updateMatrixWorld(true);
     source.traverse(o => this.drivers.set(o.name, { driver: o, inverseBind: o.matrixWorld.clone().invert() }));
     if (facial) {
@@ -236,7 +241,7 @@ export class IdleAnimation {
    * Play other clips on the same rigs (another of the game's preview idles): a body clip keyed on the body rig's joint names, and a face
    * clip on the face rig's (absent: the face keeps its clip). The phase carries over, wrapped into the new clips.
    */
-  setClips(body: THREE.AnimationClip, face?: THREE.AnimationClip) {
+  setClips(body: THREE.AnimationClip, face?: THREE.AnimationClip, faceLoopFrom?: number) {
     this.mixer.stopAllAction();
     this.mixer.uncacheClip(this.clip);
     this.clip = body;
@@ -245,14 +250,17 @@ export class IdleAnimation {
       this.faceMixer.stopAllAction();
       this.faceMixer.uncacheClip(this.facial.clip);
       this.facial.clip = face;
+      this.facial.loopFrom = faceLoopFrom;
       this.faceMixer.clipAction(face).setLoop(THREE.LoopRepeat, Infinity).play();
+      // A face with a one-shot showcase starts it now, as the creator does on entering its section.
+      this.faceStart = faceLoopFrom !== undefined ? this.elapsed : 0;
     }
     if (this.enabled) { this.resetDangles(); this.update(0); }
     this.onChange?.();
   }
   setEnabled(enabled: boolean) {
     if (enabled === this.enabled) return;
-    this.enabled = enabled; this.elapsed = 0; this.playbackPaused = false;
+    this.enabled = enabled; this.elapsed = 0; this.faceStart = 0; this.playbackPaused = false;
     if (enabled) { this.resetDangles(); this.update(0); }
     else { this.restore(); this.stillDangles(); }
     this.onChange?.();
@@ -322,7 +330,7 @@ export class IdleAnimation {
   private poseAt(time: number) {
     this.mixer.setTime(time % this.clip.duration);
     if (this.facial && this.faceMixer) {
-      this.faceMixer.setTime(time % this.facial.clip.duration);
+      this.faceMixer.setTime(this.faceTimeAt(time));
       this.facial.source.updateMatrixWorld(true);
     }
     this.source.updateMatrixWorld(true);
@@ -420,6 +428,19 @@ export class IdleAnimation {
     return { physics: this.physics, parts: this.dangles.size, simulated: this.dangles.simulated, simTime: this.simTime, notes: this.dangles.notes(),
       bones: this.bindings.filter(b => b.inverseDriverBind === IDENTITY).map(b => ({ part: String(b.bone.userData.xfsDangle), name: b.bone.name,
         at: b.bone.getWorldPosition(world).toArray().map(v => Math.round(v * 1e5) / 1e5) })) };
+  }
+  /** When the face's clip started (its one-shot plays from here): the phase a face with `loopFrom` was chosen at. */
+  private faceStart = 0;
+  /** The face clip's time now: the whole clip looping, or its one-shot part once and then its loop part (`loopFrom`). */
+  faceTime(): number { return this.faceTimeAt(this.elapsed); }
+  /** The face clip's time at a motion time (the dangles' game frames pose the face at their own times). */
+  private faceTimeAt(at: number): number {
+    const facial = this.facial;
+    if (!facial) return 0;
+    const duration = facial.clip.duration, from = facial.loopFrom;
+    if (from === undefined || !(from > 0 && from < duration)) return at % duration;
+    const time = Math.max(0, at - this.faceStart);
+    return time < duration ? time : from + (time - from) % (duration - from);
   }
   get time() { return this.elapsed; }
   get paused() { return this.playbackPaused; }
