@@ -236,11 +236,11 @@ By keanuWheeze, per the support link on its [Nexus page](https://www.nexusmods.c
 
 ### CharLi – Character Lighting Suite for Photomode
 
-By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/8176). It showed how to build a light rig from spawned light entities that follows V or the photo-mode puppet, set each light's colour, intensity, range and cone, and clean it up again, which is the basis of the planned scripted light sweep for in-game tests. Studied only.
+By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/8176). It showed how to build a light rig from spawned light entities that follows V or the photo-mode puppet, set each light's colour, intensity, range and cone, aim a ring of lights at V and clean it up again. That loop is the basis of the planned scripted light sweep and of the XF Runtime Bridge's lighting mirror, which places a Studio lighting setup about V in photo mode. Studied only.
 
 ### CyanideX
 
-[LUT Switcher 2](https://www.nexusmods.com/cyberpunk2077/mods/16310). Studying its installed package showed that runtime LUT mods apply grading as player effects that can switch off in menus, which the character-creator capture protocol now controls for. Private local reference only.
+[LUT Switcher 2](https://www.nexusmods.com/cyberpunk2077/mods/16310) and [ENV Tuner](https://www.nexusmods.com/cyberpunk2077/mods/23079) (per its script namespace). Studying LUT Switcher's installed package showed that runtime LUT mods apply grading as player effects that can switch off in menus, which the character-creator capture protocol now controls for. ENV Tuner showed that the environment's exposure curves can be rewritten in memory as their resources load and restored afterwards, the technique the lighting mirror's research exposure pin would use. Private local reference only.
 
 ### eagul
 
@@ -365,7 +365,7 @@ By DJ_Kovrik (djkovrik), whose [GPL-3.0 repository](https://github.com/djkovrik/
 
 ### World Builder and Removal Editor
 
-By keanuWheeze (GitHub account justarandomguyintheinternet) and contributors, per its source and commit history. [World Builder](https://github.com/justarandomguyintheinternet/CP77_entSpawner) ([Nexus](https://www.nexusmods.com/cyberpunk2077/mods/20660)) and its companion [Removal Editor](https://github.com/justarandomguyintheinternet/CP77_removalEditor). World Builder showed how the community builds locations in the running game and turns them into ordinary streaming sectors: one saved group per sector, its export format, how each placeable type maps to a world node, how communities, devices and variants are exported, and how previews are spawned as entities. The Removal Editor's deletion files showed that recording each removed node's name, reference, resource and position lets a removal be re-matched after a game update. Studied only; the source carries no open licence and asks for credit or permission before reuse, so only its data formats are described.
+By keanuWheeze (GitHub account justarandomguyintheinternet) and contributors, per its source and commit history. [World Builder](https://github.com/justarandomguyintheinternet/CP77_entSpawner) ([Nexus](https://www.nexusmods.com/cyberpunk2077/mods/20660)) and its companion [Removal Editor](https://github.com/justarandomguyintheinternet/CP77_removalEditor). World Builder showed how the community builds locations in the running game and turns them into ordinary streaming sectors: one saved group per sector, its export format, how each placeable type maps to a world node, how communities, devices and variants are exported, and how previews are spawned as entities. Its light previews, an empty entity given a light component built from saved data as it assembles, showed how every light field can be set at run time, the route the XF Runtime Bridge's lighting mirror plans. The Removal Editor's deletion files showed that recording each removed node's name, reference, resource and position lets a removal be re-matched after a game update. Studied only; the source carries no open licence and asks for credit or permission before reuse, so only its data formats are described.
 
 ### World and location mods
 
