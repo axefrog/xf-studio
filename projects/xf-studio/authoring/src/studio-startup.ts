@@ -270,9 +270,9 @@ async function start(host: StudioHost, root: HTMLElement) {
     void previewSetup.start();
   }
 
-  /** Load the 3D head and connect every head-dependent service once the preview is ready. */
   /** The workspace a head attaches with: the restored one, then (after a V changed body) the workspace as it was then. */
   let headWorkspace = workspace, headHistory: ContextHistory | undefined;
+  /** Load the 3D head and connect every head-dependent service once the preview is ready. */
   async function attachHead() {
     core.app.setPreviewUnavailable("");
     // A retry starts from nothing: an earlier head and its connections are released first (PREV-20).
