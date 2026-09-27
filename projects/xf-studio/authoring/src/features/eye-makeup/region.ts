@@ -87,6 +87,12 @@ export const EYE_MAKEUP_REGION: LayeredMakeupRegion = Object.freeze({
   models: LAYER_MODELS,
   // The face's centre line: a symmetric layer paints both lids.
   mirror: Object.freeze({ axis: "u", centre: 0.5 }),
+  /**
+   * The lids' millimetres per unit of head UV (the plate measure glitter-region.ts's MM_PER_UV restates) and the flat
+   * and faceted routes' export texel: the 2048 × 512 plate window is about 0.13 × 0.12 mm per texel, so mottle's grain
+   * is floored at 0.26 mm.
+   */
+  skin: Object.freeze({ mmPerUv: Object.freeze({ u: 569, v: 405 }), texelMm: 0.13 }),
   fineGlitter: Object.freeze({ id: "eye-region-global-ids-1", regions: EYE_FINE_GLITTER_REGIONS }),
   /**
    * `mesh_decal` transforms every texture UV by UVScale/UVOffset, so the flat and faceted routes spend their texels

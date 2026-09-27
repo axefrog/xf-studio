@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { compileDeformationRig, DeformationRigError, evaluateDeformationRig, identity, multiply, parseDeformationProgram, twistAngle,
-  type DeformationProgram, type Mat4 } from "../src/deformation-rig";
+import { compileDeformationRig, DEFORMATION_LIMITS, DeformationRigError, evaluateDeformationRig, identity, multiply, parseDeformationProgram, programWork, twistAngle,
+  type DeformationOp, type DeformationProgram, type Mat4 } from "../src/deformation-rig";
 import type { JsonObject } from "../src/red-json";
 import { animatedComponents } from "../src/deformation-rig-host";
 
@@ -140,6 +140,34 @@ test("a program read back from the host is the same program; one with an index o
   expect(() => parseDeformationProgram(broken)).toThrow(DeformationRigError);
   expect(() => parseDeformationProgram({ ...program, schema: "other" })).toThrow(DeformationRigError);
   expect(multiply(identity(), translation(1, 2, 3))).toEqual(translation(1, 2, 3));
+});
+
+test("programs are bounded in work and magnitude, defined in order, and the compiler emits only what the parser reads (PREV-121..124)", () => {
+  const base = compile([]);
+  const program = (ops: object[], transforms = base.transforms) => ({ ...JSON.parse(JSON.stringify(base)), transforms: JSON.parse(JSON.stringify(transforms)), ops });
+  // PREV-121: a program at every count bound but too costly to evaluate is refused; one within the work bound evaluates quickly.
+  const bounce = { op: "bounce", start: 0, end: 1, measure: "PosX", offset: 0, positive: 1, negative: 1, tracks: [],
+    outputs: Array.from({ length: 16 }, () => ({ target: 3, parent: 0, scale: 1, channels: Array.from({ length: 9 }, () => ({ channel: "PosX", scale: 1 })) })) };
+  expect(() => parseDeformationProgram(program(Array.from({ length: 8192 }, () => bounce)))).toThrow("too much work");
+  const heavy = parseDeformationProgram(program(Array.from({ length: Math.floor(DEFORMATION_LIMITS.work / programWork({ joints: 0, ops: [bounce as DeformationOp] })) - 1 }, () => bounce)));
+  const started = performance.now();
+  run(heavy);
+  expect(performance.now() - started).toBeLessThan(250);
+  // PREV-122: a huge finite number is refused; a degenerate pose never reaches the bones as NaN.
+  const huge = program([]); huge.transforms[3].local[12] = 1e300;
+  expect(() => parseDeformationProgram(huge)).toThrow(DeformationRigError);
+  const aim = compile([{ $type: "animAnimNode_AimConstraint_ObjectUp", transformIndex: ti("H"), targetTransform: ti("H"), upTransform: ti("H") }]);
+  expect(run(aim).at("H").every(Number.isFinite)).toBe(true);
+  // PREV-123: a graph beyond the parser's bounds is refused by the compiler, plainly.
+  expect(() => compile([{ $type: "animAnimNode_SimpleBounce", startTransform: ti("A"), endTransform: ti("B"),
+    transformOutputs: [{ targetTransform: ti("H"), parentTransform: ti("Root"), targetTransformChannel: "PosX",
+      channelEntries: Array.from({ length: 10 }, () => ({ transformChannel: "PosY", multiplier: 1 })) }] }])).toThrow(DeformationRigError);
+  // PREV-124: an op may name only transforms defined before it, and added transforms are extended in order.
+  const added = [...base.transforms, { name: "X", parent: 3, local: identity() }, { name: "Y", parent: 4, local: identity() }];
+  expect(() => parseDeformationProgram(program([{ op: "set", target: 4, source: 0, offset: identity() }], added))).toThrow("an index");
+  expect(() => parseDeformationProgram(program([{ op: "extend", transforms: [5, 4] }], added))).toThrow("out of order");
+  expect(() => parseDeformationProgram(program([], [...base.transforms, { name: "X", parent: 5, local: identity() }, { name: "Y", parent: 3, local: identity() }]))).toThrow("a parent");
+  expect(parseDeformationProgram(program([{ op: "extend", transforms: [4, 5] }, { op: "set", target: 5, source: 4, offset: identity() }], added)).ops).toHaveLength(2);
 });
 
 test("the player entity's secondary rigs are the animated components bound to another animated component", () => {

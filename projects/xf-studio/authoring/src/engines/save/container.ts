@@ -14,7 +14,7 @@
  * The image keeps the original bytes and the chunk table, so the later minimal-diff writer (design §7.2) can splice re-encoded nodes and
  * re-compress from the first changed chunk; nothing here writes.
  */
-import { decodeLz4, MAX_CHUNK_BYTES } from "./lz4";
+import { decodeLz4Into, lz4CanExpand, MAX_CHUNK_BYTES } from "./lz4";
 import { Reader } from "./reader";
 
 export type SaveHeader = {
@@ -111,8 +111,12 @@ export function openSave(bytes: Uint8Array): SaveImage {
   for (const c of raw) {
     if (c.offset !== last || c.stored < 1 || c.size > MAX_CHUNK_BYTES || c.offset + c.stored > nodeTableOffset)
       throw new SaveFormatError("Invalid chunk boundaries");
-    chunks.push({ offset: c.offset, stored: c.stored, start: total, size: c.size,
-      compressed: c.stored >= 4 && ascii(bytes.subarray(c.offset, c.offset + 4)) === "4ZLX" });
+    const compressed = c.stored >= 4 && ascii(bytes.subarray(c.offset, c.offset + 4)) === "4ZLX";
+    // Every declared size is checked against its stored bytes before the stream is allocated (SAVE-05): a stored chunk holds exactly its
+    // size, and an LZ4 block can't expand past `MAX_LZ4_RATIO` times its bytes.
+    if (compressed ? c.stored < 8 || !lz4CanExpand(c.stored - 8, c.size) : c.size !== c.stored)
+      throw new SaveFormatError(compressed ? "A chunk declares more data than it holds" : "Unsupported uncompressed chunk");
+    chunks.push({ offset: c.offset, stored: c.stored, start: total, size: c.size, compressed });
     total += c.size;
     last += c.stored;
   }
@@ -120,17 +124,12 @@ export function openSave(bytes: Uint8Array): SaveImage {
   const expanded = new Uint8Array(total);
   for (const c of chunks) {
     const stored = bytes.subarray(c.offset, c.offset + c.stored);
-    let out: Uint8Array;
     if (c.compressed) {
       const part = new Reader(stored);
       part.take(4);
       if (part.u32() !== c.size) throw new SaveFormatError("Chunk length mismatch");
-      out = decodeLz4(stored.subarray(8), c.size);
-    } else {
-      if (c.size !== c.stored) throw new SaveFormatError("Unsupported uncompressed chunk");
-      out = stored;
-    }
-    expanded.set(out, c.start);
+      decodeLz4Into(stored.subarray(8), expanded, c.start, c.size);
+    } else expanded.set(stored, c.start);
   }
   const directory = new Reader(bytes.subarray(nodeTableOffset, bytes.length - 8));
   if (directory.u32() !== NODE_TABLE) throw new SaveFormatError("Missing node directory");

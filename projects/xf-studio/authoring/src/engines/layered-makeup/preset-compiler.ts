@@ -9,10 +9,10 @@ import {
 } from "./finish-export";
 import { HEAD_UV_WINDOW, type UvWindow } from "./plate-uv-window";
 import { parseRecipe, raster, rasterWindow, type Layer, type Recipe } from "./recipe";
-import type { LayeredMakeupRegion, Mirror } from "./region";
+import type { LayeredMakeupRegion, Mirror, SkinScale } from "./region";
 
-/** What the compiler needs of a feature's region: the layer models it validates with and its mirror. */
-export type CompileRegion = Pick<LayeredMakeupRegion, "models" | "mirror">;
+/** What the compiler needs of a feature's region: the layer models it validates with, its mirror and its skin scale (mottle). */
+export type CompileRegion = Pick<LayeredMakeupRegion, "models" | "mirror" | "skin">;
 
 export const DECAL_ADAPTER = ROUTE_ADAPTER.flat;
 export const srgbToLinear = (v: number) =>
@@ -66,18 +66,18 @@ function checkSize(size: number) {
 export type TextureSpace =
   | { readonly kind: "head"; readonly size: number }
   | { readonly kind: "window"; readonly width: number; readonly height: number; readonly window: UvWindow };
-type Target = { width: number; height: number; window: UvWindow; head: boolean; mirror: Mirror };
+type Target = { width: number; height: number; window: UvWindow; head: boolean; mirror: Mirror; skin: SkinScale };
 function target(space: number | TextureSpace, region: CompileRegion): Target {
-  const value: TextureSpace = typeof space === "number" ? { kind: "head", size: space } : space, mirror = region.mirror;
-  if (value.kind === "head") { checkSize(value.size); return { width: value.size, height: value.size, window: HEAD_UV_WINDOW, head: true, mirror }; }
+  const value: TextureSpace = typeof space === "number" ? { kind: "head", size: space } : space, mirror = region.mirror, skin = region.skin;
+  if (value.kind === "head") { checkSize(value.size); return { width: value.size, height: value.size, window: HEAD_UV_WINDOW, head: true, mirror, skin }; }
   const pow2 = (n: number) => Number.isInteger(n) && n >= 32 && n <= 4096 && !(n & (n - 1));
   const w = value.window;
   if (!pow2(value.width) || !pow2(value.height)) throw Error("Window texture sides must be powers of two from 32 to 4096.");
   if (!(w.u0 >= 0 && w.u1 <= 1 && w.v0 >= 0 && w.v1 <= 1 && w.u1 > w.u0 && w.v1 > w.v0)) throw Error("Invalid texture window.");
-  return { width: value.width, height: value.height, window: w, head: false, mirror };
+  return { width: value.width, height: value.height, window: w, head: false, mirror, skin };
 }
 /** Coverage mask of one layer in the target's texel grid (alpha of white RGBA). */
-const layerMask = (layer: Layer, t: Target) => t.head ? raster(layer, t.width, t.mirror) : rasterWindow(layer, t.width, t.height, t.window, t.mirror);
+const layerMask = (layer: Layer, t: Target) => t.head ? raster(layer, t.width, t.mirror, t.skin) : rasterWindow(layer, t.width, t.height, t.window, t.mirror, t.skin);
 const hexBytes = (color: string) => [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
 const sqrtLinear = (color: string) => hexBytes(color).map(b => Math.sqrt(srgbToLinear(b / 255)));
 
@@ -220,7 +220,7 @@ export function compileFresnelPreset(value: unknown, region: CompileRegion, size
   if (plan.route !== "fresnel") throw Error("This preset is not a single colour-shift pigment.");
   const count = size * size, coverage = new Float64Array(count);
   for (const layer of plan.included) {
-    const mask = raster(layer, size, region.mirror);
+    const mask = raster(layer, size, region.mirror, region.skin);
     for (let p = 0; p < count; p++) { const a = mask[p * 4 + 3] / 255; if (a) coverage[p] = a + coverage[p] * (1 - a); }
   }
   const mask = new Uint8Array(count);
@@ -301,7 +301,7 @@ export function presetCoverage(value: unknown, region: CompileRegion,
     throw Error("Invalid coverage crop.");
   const coverage = new Float64Array(width * height);
   for (const layer of plan.included) {
-    const mask = raster(layer, grid, region.mirror);
+    const mask = raster(layer, grid, region.mirror, region.skin);
     for (let y = 0; y < height; y++) for (let x = 0, row = ((y0 + y) * grid + x0) * 4 + 3, p = y * width; x < width; x++, p++) {
       const a = mask[row + x * 4] / 255;
       if (a) coverage[p] = a + coverage[p] * (1 - a);

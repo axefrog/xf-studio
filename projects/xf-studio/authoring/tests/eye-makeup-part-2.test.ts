@@ -64,19 +64,20 @@ function oldGate(schema: string, finish: Layer["finish"], flakes: unknown, optic
   if (f !== undefined) {
     if (!f || typeof f !== "object" || Array.isArray(f)) return false;
     if ("model" in f) {
-      const irregular = ["xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11"].includes(schema) &&
+      const irregular = ["xfs/recipe-7", "xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11", "xfs/recipe-12"].includes(schema) &&
         f.model === "irregular-planar-1";
-      const direct = ["xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11"].includes(schema) &&
+      const direct = ["xfs/recipe-8", "xfs/recipe-9", "xfs/recipe-10", "xfs/recipe-11", "xfs/recipe-12"].includes(schema) &&
         // isDirectGlint: one of the three direct models, with valid settings (the fixtures' are).
         ["uv-cell-direct-1", "uv-cell-direct-2", "uv-cell-direct-3"].includes(f.model as string) && (f.model === "uv-cell-direct-1" ||
-        (f.model === "uv-cell-direct-2" && schema !== "xfs/recipe-8") || schema === "xfs/recipe-10" || schema === "xfs/recipe-11");
+        (f.model === "uv-cell-direct-2" && schema !== "xfs/recipe-8") || schema === "xfs/recipe-10" || schema === "xfs/recipe-11" || schema === "xfs/recipe-12");
       if (finish !== "glitter" || !(irregular || direct)) return false;
     } else if (!Number.isInteger(f.cells) || !num(f.cells, 32, 256) || !num(f.density, 0, 1) || !num(f.tilt, 0, 1) ||
       !Number.isInteger(f.seed) || !num(f.seed, 0, 2147483647)) return false;
   }
   if (optics !== undefined) {
     const o = optics as { model?: unknown; shift?: unknown };
-    if (schema !== "xfs/recipe-11" || !o || typeof o !== "object" || o.model !== "game-matched-1" ||
+    // recipe-12 (mottle) holds everything recipe-11 does.
+    if ((schema !== "xfs/recipe-11" && schema !== "xfs/recipe-12") || !o || typeof o !== "object" || o.model !== "game-matched-1" ||
       !["glossy", "shimmer", "iridescent"].includes(finish)) return false;
     if ((finish === "iridescent") !== ("shift" in o)) return false;
   }
@@ -350,7 +351,7 @@ test("each layer model is registered once with the oldest recipe schema that hol
   const registered = EYE_MAKEUP_LAYER_MODELS.map(model => [model.slot, model.id ?? "(classic)", model.recipeSchema]);
   expect(registered).toEqual([["flakes", "(classic)", "eye-artistry/recipe-1"], ["flakes", "irregular-planar-1", "xfs/recipe-7"],
     ["flakes", "uv-cell-direct-1", "xfs/recipe-8"], ["flakes", "uv-cell-direct-2", "xfs/recipe-9"],
-    ["flakes", "uv-cell-direct-3", "xfs/recipe-10"], ["optics", "game-matched-1", "xfs/recipe-11"]]);
+    ["flakes", "uv-cell-direct-3", "xfs/recipe-10"], ["optics", "game-matched-1", "xfs/recipe-11"], ["mottle", "mottle-1", "xfs/recipe-12"]]);
   expect(() => new LayerModelRegistry([...EYE_MAKEUP_LAYER_MODELS, EYE_MAKEUP_LAYER_MODELS[2]])).toThrow("registered twice");
   expect(() => new LayerModelRegistry([{ slot: "optics", valid: () => true }])).toThrow("Only classic flakes");
   // A named "classic" or empty model is never the classic model.

@@ -1,0 +1,76 @@
+{
+  "feature": "expressions",
+  "name": "Mild surprise (natural)",
+  "part": {
+    "schema": "xfs/expression-part-1",
+    "body": {
+      "label": "Mildly surprised",
+      "controls": {
+        "eye_l_brows_raise_in": 0.45,
+        "eye_l_brows_raise_out": 0.4,
+        "eye_l_widen": 0.35,
+        "eye_r_brows_raise_in": 0.4,
+        "eye_r_brows_raise_out": 0.45,
+        "eye_r_widen": 0.32,
+        "jaw_mid_open": 0.14,
+        "lips_apart_dn": 0.22,
+        "lips_apart_up": 0.12
+      },
+      "links": {
+        "eye_brows_raise_in": false,
+        "eye_brows_raise_out": false,
+        "eye_widen": false
+      },
+      "origin": {
+        "kind": "rest"
+      }
+    }
+  },
+  "facs": {
+    "closestVanilla": "facial_surprised",
+    "actionUnits": [
+      {
+        "au": "AU1",
+        "name": "Inner brow raiser",
+        "intensity": "C",
+        "controls": [
+          "eye_l_brows_raise_in",
+          "eye_r_brows_raise_in"
+        ]
+      },
+      {
+        "au": "AU2",
+        "name": "Outer brow raiser",
+        "intensity": "B",
+        "controls": [
+          "eye_l_brows_raise_out",
+          "eye_r_brows_raise_out"
+        ]
+      },
+      {
+        "au": "AU5",
+        "name": "Upper lid raiser",
+        "intensity": "B",
+        "controls": [
+          "eye_l_widen",
+          "eye_r_widen"
+        ]
+      },
+      {
+        "au": "AU25+26",
+        "name": "Lips part, jaw drop",
+        "intensity": "B",
+        "controls": [
+          "lips_apart_up",
+          "lips_apart_dn",
+          "jaw_mid_open"
+        ]
+      }
+    ],
+    "why": [
+      "The classic surprise prototype (AU1 + AU2 + AU5 + AU26) at low intensity: both brows lift evenly, the eyes open a little wider, the jaw drops a few millimetres.",
+      "No other action units compete. The vanilla face mixes in cheek suck, lip purse and funnel, throat open and a jaw shift, and opens one eye much wider than the other."
+    ],
+    "source": "XF Studio experiment 026 (research/animation/natural-expressions.md): authored values, tuned in the live preview."
+  }
+}

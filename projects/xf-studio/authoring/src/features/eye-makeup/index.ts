@@ -35,7 +35,8 @@ const KINDS: Record<EyeMakeupAction["kind"], true> = {
   "layer.setFinish": true, "layer.useGameOptics": true, "layer.setShift": true, "glitter.selectModel": true,
   "glitter.setClassic": true, "glitter.setIrregular": true, "glitter.setDirect": true, "point.move": true,
   "point.insert": true, "point.setTangent": true, "shape.transform": true, "field.setOrigin": true,
-  "field.setVector": true, "layer.edit": true, "layer.setEnabled": true,
+  "field.setVector": true, "layer.edit": true, "layer.setEnabled": true, "effect.mottle.enable": true, "effect.mottle.set": true,
+  "effect.mottle.shuffle": true, "effect.mottle.preset": true,
 };
 
 /** What one gesture frame changed: the layer the preview reschedules and the edit's kind. */

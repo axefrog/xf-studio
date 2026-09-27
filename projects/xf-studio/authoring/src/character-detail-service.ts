@@ -50,10 +50,10 @@ import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
   type RenderRig, type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
-import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
+import { manifestOf, type ManifestExport, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
 import type { Installation, InstallationOptions } from "./resolver-host";
-import type { Provenance, ResourceGraph } from "./resource-graph";
+import { stoppableGraph, type Provenance, type ResourceGraph } from "./resource-graph";
 import { puppetDeformationRigs, type PuppetRigs } from "./deformation-rig-host";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
@@ -797,15 +797,18 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
 }
 
 /** Every export a plan's parts are served from, as the preparation cache holds them now: [kind, depot path, archive]. */
-function planExports(graph: ResourceGraph, cache: CharacterPreparationCache, plan: CharacterPlan): [ExportKind, string, string][] {
-  const out: [ExportKind, string, string][] = [];
-  const add = (kind: ExportKind, ref: DepotRef) => {
+function planExports(graph: ResourceGraph, cache: CharacterPreparationCache, plan: CharacterPlan): ManifestExport[] {
+  const out: ManifestExport[] = [];
+  const add = (kind: ExportKind, ref: DepotRef, baseRef?: DepotRef) => {
     const at = locate(graph, ref);
     const into = kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks;
-    if (at && into.has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) out.push([kind, at.depotPath, at.archive.id]);
+    if (!at || !into.has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) return;
+    // A morph target's skin comes from its located base mesh (gatherParts), so the manifest names it too (NATIVE-60).
+    const base = baseRef ? locate(graph, baseRef) : null;
+    out.push(base ? [kind, at.depotPath, at.archive.id, base.depotPath, base.archive.id] : [kind, at.depotPath, at.archive.id]);
   };
   for (const component of plan.components) {
-    add("geometry", component.drawnFrom.ref);
+    add("geometry", component.drawnFrom.ref, component.baseMesh?.ref);
     for (const material of component.materials) {
       for (const provenance of Object.values(material.textures)) add("textures", provenance.ref);
       if (material.layered?.mask) add("masks", material.layered.mask.ref);
@@ -1287,6 +1290,8 @@ async function dress(graph: ResourceGraph, request: CharacterRequest, options: {
     const ports = await clothingPorts(graph, options.route.gameRoot, options.resolverCache, log, { decodeWorker: options.nativeDecodeWorker });
     return await resolveClothing(graph, { ...request.clothing, bodyGender: request.bodyGender }, ports);
   } catch (error) {
+    // A batch prepared ahead that was stopped (PREV-120) is not a failure to resolve the clothes.
+    if (error instanceof CharacterDetailError && error.code === "character_cancelled") throw error;
     log(`V's clothes couldn't be resolved; showing V without them: ${(error as Error)?.stack ?? error}`);
     return { failed: "unresolved" };
   }
@@ -1342,9 +1347,11 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
   cancelled();
   if (cache.installation && cache.installation.depot !== installation.depot) cache.reset();
   cache.installation = installation;
-  const { graph } = installation;
+  // Every level of the batch's resource chains reads through a view that stops once the batch is stopped (PREV-120): reads WolvenKit
+  // already has finish and are kept for everyone, and nothing further is asked for.
+  const graph = signal ? stoppableGraph(installation.graph, signal, cancelledError) : installation.graph;
   const transientBefore = transientFailures(installation);
-  const recording = graph.beginReads();
+  const recording = installation.graph.beginReads();
   try {
     const cco = await loadMergedCco(graph, requests[0]!.bodyGender);
     for (const hash of creatorReads(cco)) run.reads.add(hash);
