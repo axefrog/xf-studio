@@ -29,12 +29,18 @@
  *   and Down move by the group's own columns and step onto the heading next to it at its edges. A row with one maker has no headings.
  *   A heading is the shared expander (expander.ts, level "maker"). Makers with a single choice in the row share one "Other mods" heading,
  *   last, its choices sorted by label (cc-panel.ts `pooled`); each choice's mod is in its tooltip and description as everywhere.
+ * - **Pictures of shape choices** (choice-previews-design.md): a row whose option has a picture kind (a hairstyle) shows its choices as
+ *   preview tiles (components/choice-preview.ts) in a grid of three sizes (`previews.size`); a picture arriving fills its tile in place and
+ *   never moves the layout. The label stays the tile's accessible name, tooltip and (except at size S) visible caption.
  */
 import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTHER_MODS_GROUP, OTHER_MODS_INDEX } from "../../cc-panel";
 import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
 import { expander, expanderLabel, setExpanded } from "../expander";
 import { choiceItem } from "../components/choice-list";
+import { previewTile, type PreviewTile } from "../components/choice-preview";
+import type { ChoicePreviewRow } from "../../choice-preview-service";
+import type { ChoiceSize } from "../../ui-preferences";
 
 export type ChoiceListInput = {
   /** The option shown (its ID) and the search the list is limited to: another of either rebuilds the list. */
@@ -52,6 +58,8 @@ export type ChoiceListInput = {
   swatches?: CharacterSwatchState | null;
   /** The V is being prepared with the current choices: the chosen item shows it is on its way, in place. */
   preparing?: boolean;
+  /** Pictures of the choices (a shape row): the grid size and the pictures so far; null or absent for text or swatch choices. */
+  previews?: { readonly size: ChoiceSize; readonly row: ChoicePreviewRow | null } | null;
   /** Who made each choice (the panel's `groups` and `modGroups`): shown grouped by maker; null or absent for a row with one maker. */
   groups?: { readonly list: readonly CcChoiceGroup[]; readonly modGroups: readonly number[];
     /** The option's groups shown together under "Other mods" (cc-panel.ts `CcPanel.pools` at the option's `pool`). */
@@ -59,7 +67,8 @@ export type ChoiceListInput = {
 };
 type Group = { index: number; key: string; head: HTMLButtonElement; count: HTMLElement; body: HTMLElement; element: HTMLElement; entries: Entry[]; open: boolean;
   chosen: boolean };
-type Entry = { choice: CcPanelChoice; element: HTMLButtonElement; from: string; fetch: string; swatch: HTMLElement | null; look: string; group: Group | null };
+type Entry = { choice: CcPanelChoice; element: HTMLButtonElement; from: string; fetch: string; swatch: HTMLElement | null; look: string; group: Group | null;
+  tile: PreviewTile | null };
 
 /** How one grid choice's swatch is drawn: CSS custom properties on its swatch element, and whether it is still waiting. */
 export type SwatchLook = { readonly background: string; readonly image: string; readonly size: string; readonly position: string; readonly waiting: boolean;
@@ -91,7 +100,7 @@ const FETCH_SHOWN: Partial<Record<ChoiceFetch, { mark: string; words: string }>>
 };
 
 /** What decides whether a list is grouped, and how: another of it rebuilds the list. */
-const groupedKey = (input: ChoiceListInput) => input.groups ? `g:${(input.groups.pooled ?? []).join(",")}` : "";
+const groupedKey = (input: ChoiceListInput) => `${input.groups ? `g:${(input.groups.pooled ?? []).join(",")}` : ""}${input.previews ? "|pictures" : ""}`;
 
 export class ChoiceList {
   /** The list and its one status line (loading, a failure, nothing matching). */
@@ -125,7 +134,9 @@ export class ChoiceList {
   update(input: ChoiceListInput) {
     const same = this.shown?.option === input.option && this.shown.query === input.query && this.shown.grouped === groupedKey(input);
     if (!same) this.rebuild(input);
-    this.list.classList.toggle("grid", input.grid);
+    this.list.classList.toggle("grid", input.grid && !input.previews);
+    this.list.classList.toggle("previews", !!input.previews);
+    if (input.previews) setAttr(this.list, "data-size", input.previews.size); else this.list.removeAttribute("data-size");
     setAttr(this.list, "aria-label", `${input.label} choices`);
     // Newly loaded choices are appended; an Off choice joins the Off ones at the front.
     for (const choice of input.choices.slice(this.items.length)) this.add(choice, input);
@@ -136,6 +147,7 @@ export class ChoiceList {
     for (const entry of this.items) {
       this.showFetch(entry, input.preparing && entry.choice.position === input.selected ? "f" : input.fetch?.get(entry.choice.position));
       this.paintSwatch(entry, input.swatches);
+      if (entry.tile) entry.tile.set(input.previews?.row?.urls.get(entry.choice.position) ?? null, entry.choice.off || !!input.previews?.row?.none.has(entry.choice.position));
     }
     this.markChosen();
     this.revealChosen();
@@ -293,18 +305,20 @@ export class ChoiceList {
   private add(choice: CcPanelChoice, input: ChoiceListInput) {
     const from = choice.mod >= 0 ? `From ${input.mods[choice.mod] ?? "a mod"}` : "From the game";
     // In a colour grid every choice but Off is a narrow swatch; its label is the accessible name, and the swatch card shows it.
-    const swatch = input.grid && !choice.off ? h("span", { class: "swatch", "aria-hidden": "true" }) : null;
+    const tile = input.previews ? previewTile({ label: choice.off ? "Off" : choice.label, glyph: choice.off ? "close" : "head" }) : null;
+    const swatch = input.grid && !choice.off && !tile ? h("span", { class: "swatch", "aria-hidden": "true" }) : null;
     // One look with every choice list (the library's `choiceItem`); the creator's own marks (prepared ahead) ride on `cc-choice`.
     const label = choice.off ? "Off" : choice.label;
     const item = choiceItem({ label, selected: choice.position === input.selected, title: `${label} · ${from}`, description: from, off: choice.off,
-      swatch: input.grid, className: "cc-choice", content: swatch ?? h("span", { class: "choice-label cc-choice-label", text: label }) });
+      swatch: input.grid && !tile, className: tile ? "cc-choice preview-choice" : "cc-choice",
+      content: tile?.element ?? swatch ?? h("span", { class: "choice-label cc-choice-label", text: label }) });
     item.dataset.position = String(choice.position);
     // The choice shows as chosen at once, before anything is prepared; the next update puts back the V's own if the change was refused.
     item.addEventListener("click", () => { this.rove(item); this.select(choice.position); this.onChoose(choice); });
     item.addEventListener("focus", () => { this.rove(item); this.onHint(choice); });
     item.addEventListener("pointerenter", () => this.onHint(choice));
     const group = this.groups && !choice.off ? this.groupFor(choiceGroup(choice, input.groups!), input) : null;
-    const entry: Entry = { choice, element: item, from, fetch: "", swatch, look: "", group };
+    const entry: Entry = { choice, element: item, from, fetch: "", swatch, look: "", group, tile };
     if (group?.index === OTHER_MODS_INDEX) {
       // "Other mods" is sorted by label, whatever order its choices arrive in.
       const at = group.entries.findIndex(other => other.choice.label.localeCompare(choice.label, undefined, { sensitivity: "base" }) > 0);
@@ -369,7 +383,7 @@ export class ChoiceList {
     const block = !this.groups ? items : entry?.group ? entry.group.entries.map(item => item.element)
       : this.items.filter(item => !item.group).map(item => item.element);
     const inBlock = block.indexOf(current), container = entry?.group?.body ?? this.lead ?? this.list;
-    const columns = !head && this.list.classList.contains("grid")
+    const columns = !head && (this.list.classList.contains("grid") || this.list.classList.contains("previews"))
       ? Math.max(1, Math.round(container.clientWidth / Math.max(1, (block[0] ?? current).offsetWidth + 4))) : 1;
     const vertical = (step: number) => {
       if (head) return at + Math.sign(step);

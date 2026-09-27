@@ -53,6 +53,11 @@
   --stage-text: light-dark(oklch(.24 .01 255), oklch(.93 .005 255));
   --stage-text-muted: light-dark(oklch(.36 .01 255), oklch(.86 .005 255));
   --stage-strong: light-dark(oklch(.12 .01 255), oklch(1 0 0));
+  /* Choice previews (style guide "Preview tokens"): a flat stage tone, the neutral subject, the choice's ink, and how much shadow darkens both. */
+  --pv-ground: light-dark(oklch(.93 .004 255), oklch(.27 .006 255));
+  --pv-subject: light-dark(oklch(.82 .006 255), oklch(.42 .008 255));
+  --pv-ink: light-dark(oklch(.3 .012 255), oklch(.86 .006 255));
+  --pv-shade-light: .72; --pv-shade-dark: .62; --pv-shade: var(--pv-shade-light);
   --stage-chip: light-dark(oklch(.985 .003 255 / .82), oklch(.17 .008 255 / .78));
   --stage-chip-strong: light-dark(oklch(.985 .003 255 / .9), oklch(.17 .008 255 / .86));
   --stage-hover: light-dark(oklch(0 0 0 / .07), oklch(1 0 0 / .1));
@@ -68,7 +73,8 @@
   --guidance-ring: light-dark(oklch(.5 .1 212), oklch(.89 .16 100));
 }
 :root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="dark"] { color-scheme: dark; --pv-shade: var(--pv-shade-dark); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --pv-shade: var(--pv-shade-dark); } }
 
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -817,6 +823,34 @@ span.category { border-color: transparent; background: transparent; padding-left
 .choice.swatch-choice .swatch { width: 100%; height: 100%; }
 .choice.swatch-choice .swatch[data-empty] { background: repeating-linear-gradient(135deg, var(--bg-sunken) 0 3px, var(--line) 3px 4px); }
 .choice.swatch-choice.off { aspect-ratio: auto; grid-column: span 2; }
+/* Choice previews (components/choice-preview.ts): tiles in a grid of three sizes; the tile keeps its size whatever its picture's state. */
+.choices.previews { --pv-size: 88px; }
+.choices.previews[data-size="s"] { --pv-size: 56px; } .choices.previews[data-size="l"] { --pv-size: 132px; }
+.choices.previews, .choices.previews .cc-maker-items, .choices.previews .choice-group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--pv-size), 1fr)); gap: var(--sp-2); }
+.choices.previews.grouped { grid-template-columns: minmax(0, 1fr); }
+.choices.previews .cc-maker, .choices.previews .cc-maker-head { grid-column: 1 / -1; }
+.choice.preview-choice { padding: 3px; min-width: 0; align-items: stretch; justify-content: flex-start; contain-intrinsic-size: auto calc(var(--pv-size) + 20px); content-visibility: auto; }
+.choice.preview-choice.off { font-family: var(--font-display); }
+.pv-tile { display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: 100%; }
+/* The frame is the ground alone: the choice item already draws the border and the chosen, hover and focus states. */
+.pv-frame { position: relative; display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; background: var(--pv-ground);
+  border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm); }
+.pv-glyph { display: grid; place-items: center; width: 42%; height: 42%; color: var(--line-strong); opacity: .55; }
+.pv-glyph svg { width: 100%; height: 100%; }
+/* One colour matrix per theme (components/choice-preview.ts): the page's theme picks it, and so does a specimen pane with its own colour scheme. */
+.pv-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: url(#xfs-pv-light); opacity: 0; transition: opacity var(--dur) var(--ease); }
+:root[data-theme="dark"] .pv-image { filter: url(#xfs-pv-dark); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv-image { filter: url(#xfs-pv-dark); } }
+.pane[style*="color-scheme:dark"] .pv-image { filter: url(#xfs-pv-dark); }
+.pane[style*="color-scheme:light"] .pv-image { filter: url(#xfs-pv-light); }
+.pv-tile[data-state="ready"] .pv-image { opacity: 1; }
+.pv-tile[data-state="ready"] .pv-glyph { visibility: hidden; }
+.pv-label { overflow: hidden; font-size: var(--fs-2xs); line-height: 1.35; color: var(--text-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.choice.preview-choice[aria-selected="true"] .pv-label, .choice.preview-choice:hover .pv-label { color: var(--text); }
+.choices.previews[data-size="s"] .pv-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (prefers-reduced-motion: reduce) { .pv-image { transition: none; } }
+@media (forced-colors: active) { .pv-image { filter: none; } .pv-frame { outline: 1px solid CanvasText; } }
+@supports (corner-shape: bevel) { .pv-frame { corner-shape: bevel; } }
 /* A swatch derived from what wins for the choice: one colour, a root-to-tip gradient, or the game's icon cut from a sheet (cc-swatch.ts, cc-icons.ts). */
 .choice.swatch-choice .swatch, .cc-row-swatch { background-color: var(--swatch); background-image: var(--swatch-image, none); background-size: var(--swatch-size, auto);
   background-position: var(--swatch-position, 0 0); background-repeat: no-repeat; }
@@ -833,6 +867,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .cc-maker-head { width: 100%; min-height: 20px; }
 .cc-maker-head[data-chosen][aria-expanded="false"] .cc-maker-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: var(--sp-2);
   border-radius: 50%; background: var(--signal); vertical-align: middle; }
+.cc-choice-tools { display: flex; justify-content: flex-end; padding: var(--sp-2) var(--sp-3) 0 var(--cc-indent); }
 .cc-choices-status { margin: 0 var(--sp-3) var(--sp-3) var(--cc-indent); }
 .cc-row-swatch { width: 12px; height: 12px; }
 /* Swatch card (components/swatch-card.ts): a larger look at the swatch under the pointer or focus, floating beside it (never moves the layout,

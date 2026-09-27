@@ -95,7 +95,7 @@ describe("the row's camera", () => {
   test("aims below the head's centre, frames the style's extent, and faces where the eyes are", () => {
     const style = PREVIEW_STYLES.hair;
     const front = previewCamera(head, { min: [-0.05, 1.7, 0.08], max: [0.05, 1.72, 0.1] }, { ...style, yaw: 0, elevation: 0 });
-    expect(front.target[1]).toBeCloseTo(1.65 - 0.3 * 0.3, 6);
+    expect(front.target[1]).toBeCloseTo(1.65 - style.drop * 0.3, 6);
     expect(front.eye[2]).toBeGreaterThan(1);
     expect(Math.abs(front.eye[0])).toBeLessThan(1e-9);
     const back = previewCamera(head, { min: [-0.05, 1.7, -0.14], max: [0.05, 1.72, -0.12] }, { ...style, yaw: 0, elevation: 0 });
@@ -214,14 +214,15 @@ describe("the preview service's scheduling", () => {
     expect(row.none.has(9)).toBe(true);
     expect(row.urls.size).toBeGreaterThan(0);
   });
-  test("choices not ready yet are left alone; nothing new starts while a person's change is prepared", async () => {
+  test("every choice shown is looked up, only ready ones are derived; nothing new starts while a person's change is prepared", async () => {
     const h = harness({ ready: position => position === 4 });
     h.service.update(h.ask({ busy: true }));
     await h.settle();
     expect(h.log).toEqual([]);
     h.service.update(h.ask());
     await h.settle();
-    expect(h.log[0]).toBe("lookup 4");
+    expect(h.log[0]).toBe("lookup 1,4,5,6,9");
+    expect(h.log).toContain("derive 4");
     expect(h.log.join(" ")).not.toContain("derive 5");
   });
   test("a job already started finishes when priorities change (another row opens) and its picture is kept", async () => {

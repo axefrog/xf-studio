@@ -2,7 +2,7 @@
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, type LightListItem, type TabItem } from "../components";
+  sampleBackground, LightList, DirectionDial, previewTile, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
 
@@ -183,6 +183,7 @@ const MOUNTS: Record<string, Mount> = {
     games.update({ chosen: game, found });
     return h("div", { style: "max-width:520px" }, stack({ gap: "loose" }, folder.element, games.element)); },
   "lib-swatch-card": () => swatchCardSpecimen(),
+  "lib-choice-preview": () => choicePreviewSpecimen(),
   "lib-split-view": () => { const tree = h("ul", { class: "save-tree" }, ...["GameSessionDesc", "DynamicEntityIDSystem", "TypeDatabase_v2"].map(name => h("li", { class: "save-tree-row" }, h("span", { class: "save-tree-name", text: name }))));
     return new SplitView({ label: "the sample tree and inspector", key: "guide.split", initial: .45, min: 140, start: tree,
       end: blockSection({ title: "GameSessionDesc" }, propertyList([["Kind", "Holds child nodes"], ["Size", "58 B"]])) }).element; },
@@ -202,6 +203,46 @@ const MOUNTS: Record<string, Mount> = {
  * tones) shown as derived and as enhanced, an already varied set (hair colours, root to tip) that enhancement leaves alone, the gain curve
  * with each set's spread marked, and the card on every swatch.
  */
+/**
+ * A synthetic channel image (choice-preview.ts §channels): a lit head as the subject and a hair shape as the feature, drawn here so the
+ * specimen needs no game file. `style` picks the shape: 0 a bob, 1 long, 2 short.
+ */
+function syntheticPreview(style: number): string {
+  const size = 128, canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext("2d")!, image = context.createImageData(size, size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const dx = (x - 60) / 30, dy = (y - 58) / 38, head = dx * dx + dy * dy <= 1 || (Math.abs(x - 60) < 13 && y > 80 && y < 118);
+    const hx = (x - 60) / 36, hy = (y - 52) / 42, inHair = hx * hx + hy * hy <= 1;
+    const hair = inHair && (style === 2 ? y < 44 : style === 0 ? y < 84 && !(dx * dx + dy * dy < .7 && y > 44) : !(dx * dx + dy * dy < .7 && y > 44)) || (style === 1 && Math.abs(x - 60) < 34 && y > 60 && y < 124 && Math.abs(x - 60) > 20);
+    const light = Math.max(.18, Math.min(1, .55 - dx * .35 - dy * .35 + (hair ? .1 * Math.sin(x * .9) : 0)));
+    const at = (y * size + x) * 4;
+    if (hair) { image.data[at] = 255 * light; image.data[at + 2] = 255; image.data[at + 3] = 255; }
+    else if (head) { image.data[at + 1] = 255 * light; image.data[at + 3] = 255; }
+  }
+  context.putImageData(image, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+/** The choice preview tile in each state and grid size (lib-choice-preview), in the Character panel's creator look. */
+function choicePreviewSpecimen() {
+  const pictures = [syntheticPreview(0), syntheticPreview(1), syntheticPreview(2)];
+  const grid = (size: "s" | "m" | "l") => {
+    const tiles = ["01", "02", "03", "04", "05"].map((label, n) => {
+      const tile = previewTile({ label: `Hairstyle ${label}`, glyph: "head" });
+      // Ready, ready, waiting, ready, no picture possible.
+      tile.set(n === 2 || n === 4 ? null : pictures[n % 3]!, n === 4);
+      const fetch = n === 2 ? "fetching" : "";
+      const item = choiceItem({ label: `Hairstyle ${label}`, selected: n === 1, description: `From the game${fetch ? "; being prepared" : ""}`, className: "cc-choice preview-choice", content: tile.element });
+      if (fetch) item.dataset.fetch = fetch;
+      item.tabIndex = n === 1 ? 0 : -1;
+      return item;
+    });
+    return stack({ gap: "tight" }, h("span", { class: "small muted", text: `Size ${size.toUpperCase()}` }),
+      h("div", { class: "choices cc-choices previews", "data-size": size, role: "listbox", "aria-label": `Hairstyle choices, size ${size.toUpperCase()}`, style: "max-width:560px;padding:0" }, ...tiles));
+  };
+  return h("div", { style: "max-width:600px" }, stack({ gap: "normal" }, grid("m"), grid("s"), grid("l"),
+    h("p", { class: "note", text: "Pictures here are drawn in the page from synthetic channels (a head and a hair shape); in the Character panel they come from the preview worker, drawn from the resolved winner's parts. Switch the guide's theme: one channel image serves both." })));
+}
 function swatchCardSpecimen() {
   const clustered = [["#030303"], ["#534f46"], ["#210402"], ["#2d1208"], ["#090402"], ["#494339"], ["#3f3628"], ["#2c2420"], ["#2b1c09"], ["#4d4038"],
     ["#2a2725"], ["#540000"], ["#2b211a"], ["#460e18"], ["#3d3735"], ["#3e2117"], ["#13100e"], ["#6c6664"], ["#231610"]];

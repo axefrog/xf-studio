@@ -2,9 +2,10 @@
  * Application service for choice previews (choice-previews-design.md §6.2–6.3): turns the choices a row shows into pictures, in the
  * maintainer's priority order, without ever holding up a person's own change. DOM-free: the host, the worker and the store are ports.
  *
- * - **Driven by readiness.** A choice gets a picture once the row's preparing ahead marks it ready (choice-prefetch.ts `r`): its source
- *   is looked up (or derived once, on the host), its key computed (choice-preview.ts), and the stored image used, or drawn by the worker
- *   and stored. A choice whose detail draws nothing is `none` (the tile keeps its glyph).
+ * - **Driven by readiness.** Every choice shown is looked up in the host's source index at once (a later session shows its pictures
+ *   before preparing ahead has checked the choices again); a choice without one gets its source derived once the row's preparing ahead
+ *   marks it ready (choice-prefetch.ts `r`). With a source, its key is computed (choice-preview.ts) and the stored image used, or drawn
+ *   by the worker and stored. A choice whose detail draws nothing is `none` (the tile keeps its glyph).
  * - **Priorities** (the scheduling rule, research/backlog/performance.md): the V's chosen choice, then the one under the pointer or
  *   focus, then the row's choices in view order (in view first, then nearest), then the other rows of the same kind shown this session
  *   (their choices whose sources are known). Only waiting work is reordered: a job once started always finishes and is kept.
@@ -60,7 +61,17 @@ export class ChoicePreviewService {
   private disposed = false;
   readonly stats: PreviewStats = { looked: 0, derived: 0, stored: 0, drawn: 0, failed: 0, drawMs: [], timings: [] };
 
-  constructor(private readonly port: ChoicePreviewPort, private readonly changed: () => void, private readonly now: () => number = () => performance.now()) {}
+  constructor(private readonly port: ChoicePreviewPort, private readonly changed: () => void, private readonly now: () => number = () => performance.now()) {
+    // Measurement hook (tools and `?verify=1` sessions read the costs from the page).
+    (globalThis as { xfsChoicePreviews?: unknown }).xfsChoicePreviews = this;
+  }
+  /** The service's state for measurement: its rows' item states and its stats. */
+  debug() {
+    return { ask: this.ask && { option: this.ask.option, busy: this.ask.busy, positions: this.ask.positions.length, ready: this.ask.positions.filter(p => this.ask!.ready(p)).length },
+      asking: this.asking, drawing: this.drawing, rows: [...this.rows.values()].map(row => ({ option: row.option,
+        states: [...row.items.values()].reduce<Record<string, number>>((counts, item) => { counts[item.state] = (counts[item.state] ?? 0) + 1; return counts; }, {}) })),
+      stats: this.stats };
+  }
 
   /** The panel shows a row: remember what it shows and start work. Answers the row's pictures so far (frozen; a new object on change). */
   update(ask: PreviewAsk): ChoicePreviewRow {
@@ -106,9 +117,11 @@ export class ChoicePreviewService {
   /** One question to the host: look up the ready choices not known yet; else derive the first ready one without a source. */
   private nextQuestion(): void {
     const ask = this.ask!, row = this.rows.get(ask.option)!;
-    const order = this.ordered(ask).filter(position => ask.ready(position));
+    // Stored sources are looked up for every choice shown (a restart shows the row's pictures at once, before preparing ahead has checked
+    // each choice again: a picture of the same choice, kept until a new one replaces it); only a ready choice's source is derived.
+    const order = this.ordered(ask);
     const unknown = order.filter(position => row.items.get(position)?.state === "unknown").slice(0, LOOKUP);
-    const derive = unknown.length ? null : order.find(position => row.items.get(position)?.state === "unprepared") ?? null;
+    const derive = unknown.length ? null : order.find(position => ask.ready(position) && row.items.get(position)?.state === "unprepared") ?? null;
     if (!unknown.length && derive === null) return;
     const positions = unknown.length ? unknown : [derive!];
     this.asking = true;
