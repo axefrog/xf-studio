@@ -1,5 +1,5 @@
 import { resolve, sep } from "node:path";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
@@ -16,17 +16,22 @@ import { eyePlateReadiness } from "./src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "./src/eye-plate-recipe";
 import { createLocalSettingsHandler } from "./src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
+import { createSavesHandler } from "./src/features/save-explorer/host/saves-server";
+import { savesHostSources } from "./src/saves-host-sources";
+import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/desktop-app-host";
 import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
 import type { LocalSettings } from "./src/local-settings";
 import { buildBrowser } from "./browser-build";
 import { PreviewCoreHost } from "./src/preview-core-host";
 import { createPreviewCoreHandler } from "./src/preview-core-server";
-import { PREVIEW_CORE_FILES } from "./src/preview-core-recipe";
-import { CharacterDetailHost } from "./src/character-detail-host";
+import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview-core-recipe";
+import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character-detail-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
+import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
+import { PoseCatalogueHost } from "./src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
 import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
 import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "./src/diagnostics/host-endpoint";
@@ -63,6 +68,12 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
   const settings = localSettings.load().settings;
   return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
 } });
+// "Get the desktop app" (localhost only): whether it is installed, the setup this checkout built, and the site's release status.
+// Starts that setup or the app only on the person's confirmed click; a test copy or a verification workspace never starts anything.
+const detectDesktop = () => detectDesktopApp(createDesktopAppHostPort(), { desktopRoot: resolve(import.meta.dir, "desktop"),
+  siteConfig: resolve(import.meta.dir, "..", "site", "site.config.json") });
+const desktopAppRequest = createDesktopAppHandler({ detect: detectDesktop, readOnly: state.isolated ? DESKTOP_APP_READ_ONLY_TEST_SERVER : undefined });
+const verificationDesktopAppRequest = createDesktopAppHandler({ detect: detectDesktop, readOnly: DESKTOP_APP_READ_ONLY_VERIFICATION });
 // Mod export: the shared package host service with localhost's adapter; each exporting feature's host prerequisites
 // are bound here by ID (eye makeup: the built-in eye plate). Settings are read for every request.
 // Unreadable settings: Check plans with the defaults and Build answers a plain JSON refusal, as on desktop (PIPE-94).
@@ -103,6 +114,15 @@ const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot,
   log: diagnostics.log.logger("character"), trace: diagnostics.trace });
 const characterDetailRequest = createCharacterDetailHandler(characterDetails);
 const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
+// Photo-mode poses (pose-library-design.md P1): listed from the same launch route and resolver cache as the creator options.
+const poseSettings = () => {
+  const settings = localSettings.load().settings;
+  return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
+    mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
+};
+const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+  resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")), log: diagnostics.log.logger("poses") });
+const poseRequest = createPoseHandler(poses);
 // The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
 const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
@@ -140,11 +160,18 @@ const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   testHook: process.env.XFS_DIAGNOSTICS_TEST_HOOK === "1",
 });
-const coreFiles = new Set<string>(PREVIEW_CORE_FILES);
+// Both bodies' core files (the masculine core under `pma/`), named with forward slashes on every OS.
+const coreFiles = new Set<string>(PREVIEW_CORE_ASSET_NAMES);
 const root = resolve(import.meta.dir, "public");
 const assetOverlay = process.env.XFS_ASSET_OVERLAY ? resolve(process.env.XFS_ASSET_OVERLAY) : undefined;
 /** Retired piercing intake payloads (vanilla and PRC manifests and their files), never served. */
 const RETIRED_ASSET_DIRS = /^(?:prc|piercings)(?:[\\/]|$)/i;
+// The Save Explorer's read-only endpoints: the player's saves and the installed scripts' names. XFS_SAVES_DIR points an isolated
+// server at a folder of copies instead; nothing here writes.
+const savesRequest = createSavesHandler(savesHostSources({ allowOverride: true, exists: existsSync, settings: () => {
+  const settings = localSettings.load().settings;
+  return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
+} }), diagnostics.log.logger("saves"));
 const build = await buildBrowser(resolve(root, "build"));
 if (!build.success) {
   console.error(build.logs);
@@ -166,9 +193,13 @@ const server = Bun.serve({
     if (url.pathname === "/api/local-settings") return settingsRequest(request);
     if (url.pathname === "/api/verification/local-settings") return verificationSettingsRequest(request);
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
+    if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(request);
+    if (url.pathname === "/api/desktop-app") return desktopAppRequest(request);
+    if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
+    if (url.pathname === POSES_ENDPOINT) return poseRequest(request);
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);
@@ -207,9 +238,9 @@ const server = Bun.serve({
     // The retired piercing intakes' payloads may still sit in an old checkout's ignored public/assets; piercings come only from the
     // resolver now, so nothing serves them (UI-50).
     if (assetName !== null && RETIRED_ASSET_DIRS.test(assetName)) return new Response("Not found", { status: 404 });
-    if (!research && assetName !== null && coreFiles.has(assetName)) {
+    if (!research && assetName !== null && coreFiles.has(assetName.replaceAll(sep, "/"))) {
       // The core preview has one source: the derivation from the player's own game files.
-      const derived = previewCore.assetPath(assetName);
+      const derived = previewCore.assetPath(assetName.replaceAll(sep, "/"));
       if (!derived) return new Response("Not found", { status: 404 });
       file = Bun.file(derived);
     }

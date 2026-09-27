@@ -18,6 +18,10 @@
  * - `factories`: FactoryIndex/Config.cpp and Extension.cpp Configure (a path or list; each existing factory is loaded after the game's own);
  * - `player.bodyTypes`: PuppetState/Config.cpp (a name or list; Configure registers each as the body tag `Body:<name>`, which the player
  *   entity's tags or components carry when that body is installed: `GetBodyType`);
+ * - `animations`: Animation/Config.cpp and Extension.cpp (a list of `{entity: path | list | scope, set, priority = 128, vars, component =
+ *   "root"}`; Configure expands scopes, drops a set or target the depot lacks, and files each entry under FNV-1a 64 of the component name
+ *   seeded with the target's path hash; `OnInitializeAnimations` appends them, in load order, to the `gameplay` sets of the animated
+ *   component of that name in an entity made from that template: so with the default component, only the one named `root`);
  * - `overrides.tags`: Garment/Config.cpp `GarmentOverrideConfig::LoadYAML` (tag → component name or prefix → `{hide|show: chunks | mask}`,
  *   a chunk list, or a numeric mask) and ChunkMask.hpp (a hide list keeps every other chunk; `hide: 0` hides the whole component).
  * The installed ArchiveXL may be older than this source; each rule is still read from the installed files.
@@ -67,6 +71,21 @@ export const XL_LANGUAGES: readonly string[] = ["ar-ar", "cz-cz", "de-de", "en-u
  */
 export interface XlTagRule { readonly component: string; readonly hide: bigint | null; readonly show: bigint | null; readonly declaredBy: string }
 
+/** One `animations:` entry: an animation set ArchiveXL appends to a named animated component of the target entities. */
+export interface XlAnimation {
+  /** The `set` depot path as declared, and its hash. */
+  readonly set: string;
+  readonly setHash: string;
+  /** Target entity hashes, scopes expanded (the depot check is the consumer's, as Configure does it). */
+  readonly targets: ReadonlySet<string>;
+  /** The animated component that receives the set (`root` unless the entry names another). */
+  readonly component: string;
+  /** 0-255, default 128. */
+  readonly priority: number;
+  readonly variables: readonly string[];
+  readonly declaredBy: string;
+}
+
 export interface ArchiveXlConfig {
   readonly customizations: { readonly female: readonly XlCustomization[]; readonly male: readonly XlCustomization[] };
   /** Flattened scope → leaf members. */
@@ -87,6 +106,8 @@ export interface ArchiveXlConfig {
   readonly tagRules: ReadonlyMap<string, readonly XlTagRule[]>;
   /** Body types body mods declare (`player.bodyTypes`), in load order; the player entity names the one installed (`Body:<name>`). */
   readonly bodyTypes: readonly { readonly name: string; readonly declaredBy: string }[];
+  /** `animations:` entries in load order. */
+  readonly animations: readonly XlAnimation[];
   readonly issues: readonly string[];
 }
 
@@ -142,9 +163,23 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
   const factories: { path: string; declaredBy: string }[] = [];
   const tagRules = new Map<string, XlTagRule[]>();
   const bodyTypes: { name: string; declaredBy: string }[] = [];
+  const rawAnimations: { set: string; entities: string[]; component: string; priority: number; variables: string[]; declaredBy: string }[] = [];
 
   for (const { id, document } of documents) {
     if (!isMap(document)) continue;
+    if (document.animations !== undefined) {
+      if (!Array.isArray(document.animations)) issues.push(`${id}: animations must be a list of entries.`);
+      else for (const entry of document.animations) {
+        // AnimationsConfig::LoadYAML: an entry needs an entity (a path or a list) and a scalar set; others are malformed and skipped.
+        const entities = isMap(entry) ? list(entry.entity) : [];
+        const set = isMap(entry) ? scalar(entry.set) : null;
+        if (!isMap(entry) || !entities.length || !set) { issues.push(`${id}: an animations entry without an entity or set is skipped.`); continue; }
+        const priority = Number.parseInt(scalar(entry.priority) ?? "", 10);
+        rawAnimations.push({ set, entities, component: scalar(entry.component) ?? "root",
+          priority: Number.isInteger(priority) && priority >= 0 && priority <= 255 ? priority : 128,
+          variables: Array.isArray(entry.vars) ? list(entry.vars) : [], declaredBy: id });
+      }
+    }
     if (isMap(document.player)) for (const name of list(document.player.bodyTypes)) bodyTypes.push({ name, declaredBy: id });
     if (isMap(document.localization)) {
       const unit = { name: id.split(/[\\/]/).pop()!, declaredBy: id, onscreens: new Map<string, string[]>(), fallback: null as string | null,
@@ -260,7 +295,9 @@ export function readArchiveXlConfig(documents: readonly XlDocument[]): ArchiveXl
   }
   const texts: XlLocalization[] = localization.filter(unit => !unit.extend && unit.onscreens.size)
     .map(({ name, declaredBy, onscreens, fallback }) => ({ name, declaredBy, onscreens, fallback }));
-  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, localization: texts, factories, tagRules, bodyTypes, issues };
+  const animations: XlAnimation[] = rawAnimations.map(entry => ({ set: entry.set, setHash: known(entry.set), targets: expand(entry.entities.map(known)),
+    component: entry.component, priority: entry.priority, variables: entry.variables, declaredBy: entry.declaredBy }));
+  return { customizations: { female, male }, scopes, fixes, patches, copies, links, paths, localization: texts, factories, tagRules, bodyTypes, animations, issues };
 }
 
 export const inScope = (config: ArchiveXlConfig, scopePath: string, hash: string) =>

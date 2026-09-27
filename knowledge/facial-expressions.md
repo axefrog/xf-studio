@@ -123,6 +123,8 @@ The creator and inventory face graph (`player_woman_paperdoll_sermo.animgraph`) 
 
 The close-up state machine starts in the looping `closeup` state. Setting a section flag enters that section's one-shot; its end event moves to a second `closeup` state, which returns to the start only when the flag is false **and** a 15-second timed condition fires, so a section's showcase clip plays once per visit rather than repeating [resource; the timed condition's exact semantics are a hypothesis]. Transitions blend 0.5 s.
 
+The body graph (`player_paperdoll.animgraph`) loops its own clip per screen: `ui_closeup_shot`, `ui_fullbody_shot`, the nails loop, gender selection and the inventory's `UI_full_shot` ([body animation §2](body-animation.md#2-the-preview-idles)).
+
 So "the game has one idle" is right for the creator's **looping** face idle: `ui_closeup_shot` (22.07 s, `AdditiveFromRefPose`, body counterpart 12.33 s in `ui_female.anims`) is the only loop in the close-up view [resource]. The section clips are `Additive` one-shot showcases, and the eyes showcase is the strong bilateral brow movement noted in the [brow idle gap](../research/animation/brow-idle-gap.md): it plays when the creator's eyes section is opened [resource; to confirm in game].
 
 Elsewhere the game has **many facial idles, but for NPCs**: `generic_average_female_facial_idle.anims` holds 20 looping emotion idles (`idle__neutral__female`, `…joy…`, `…anger…`, `…fear…` and so on, 21–29 s, `AdditiveFromRefPose`), used by NPC reactions and by AMM [resource]. The player's face rig lists these generic sets too [resource], but no vanilla graph path was found that loops one on V outside scenes [hypothesis].

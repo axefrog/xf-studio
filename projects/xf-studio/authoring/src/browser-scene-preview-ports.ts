@@ -13,11 +13,11 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
   setSurfaceControls(enabled: boolean): void;
 }): { savedAppearance: SavedAppearancePort; preview: PreviewPort; motion: MotionPort } {
   return {
-    savedAppearance: { apply: savedV => scene.applySavedV(savedV), clear: () => { scene.setFaceMorphs([]); },
+    savedAppearance: { apply: savedV => scene.applySavedV(savedV), clear: () => { scene.setFaceMorphs([]); scene.lighting.setBodySex(scene.body); },
       setBodySex: sex => scene.lighting.setBodySex(sex) },
     preview: {
       cameraState: scene.cameraState, front: scene.front, setFov: scene.setFov,
-      endFovGesture: scene.endFovGesture, restoreCamera: scene.restoreCamera,
+      endFovGesture: scene.endFovGesture, restoreCamera: scene.restoreCamera, distanceLimits: scene.distanceLimits,
       setExposure: scene.setExposure, setLightAngle: scene.setLightAngle,
       setSurfaceControls: options.setSurfaceControls, setWire: scene.setWire,
       setNormals: scene.setNormals, setEyeOptics: scene.setEyeOptics,
@@ -40,6 +40,7 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
       available: scene.evidence.idle.available, error: scene.evidence.idle.error,
       blink: { available: scene.evidence.blink?.available ?? false, error: scene.evidence.blink?.error || undefined,
         repeatSeconds: scene.evidence.blink?.repeatSeconds },
+      idles: scene.idles?.idles ?? [], selectIdle: scene.selectIdle,
       setIdle: scene.setIdle, setIdlePaused: scene.setIdlePaused,
       setIdleContributions: scene.setIdleContributions, setBlink: scene.setBlink,
       animateBlink: scene.animateBlink,

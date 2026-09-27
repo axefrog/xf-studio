@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildCatalogue, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/cc-catalogue";
 import type { CcoResource } from "../src/cco-model";
-import { catalogueCoverage, refineCoverage } from "../src/cc-render-coverage";
+import { catalogueCoverage, refineCoverage, renderCoverage, type CoverageInput } from "../src/cc-render-coverage";
 import { CC_PAGE_SIZE, choicePage, panelProjection, readCcPanel, readChoicePage } from "../src/cc-panel";
 import { loadMergedCco } from "../src/character-resolver";
 import { appearance, BASE_CCO, creator, fixtureSource, MOD_CCO, MOD_NAME, PRESENTATION, switcher, TEXTS, vanillaCreator } from "./cc-fixtures";
@@ -200,5 +200,19 @@ describe("creator catalogue from the merged resource", () => {
     const page = choicePage(new CatalogueIndex(catalogue), mods, "head/option_0", 0)!;
     expect(page.choices).toHaveLength(Math.min(CC_PAGE_SIZE, 130));
     expect(JSON.stringify(page).length).toBeLessThan(40_000);
+  });
+});
+
+describe("hair coverage follows the hairstyle controller's group (PREV-109)", () => {
+  const option = (name: string, uiSlot: string, groups: string[], extra: Partial<CoverageInput> = {}): CoverageInput => ({ id: name, part: "head", name,
+    type: "appearance", uiSlot, link: null, hasResource: true, groups, targets: [], uiSlots: [], emitsNothing: false, ...extra });
+  test("a multi-part hairstyle's part rows, on slots of their own, are drawn as the hair, and so is the switcher that turns them on", () => {
+    const options = [option("hair_color1", "hair_color", ["hairs", "character_customization"]),
+      option("part_01", "mch_hair_part_01", ["hairs", "character_customization"]), option("part_02", "mch_hair_part_02", ["hairs", "character_customization"]),
+      option("part_fpp", "mch_hair_fpp", ["character_customization", "FPP_hairs"]),
+      option("mch", "None", [], { type: "switcher", hasResource: false, targets: ["part_01", "part_02", "part_fpp"], uiSlots: ["mch_hair_part_01", "mch_hair_fpp"] })];
+    const coverage = renderCoverage(options);
+    expect(["hair_color1", "part_01", "part_02", "part_fpp", "mch"].map(id => [coverage.get(id)!.status, coverage.get(id)!.detail])).toEqual([
+      ["rendered", "hair"], ["rendered", "hair"], ["rendered", "hair"], ["not-rendered", null], ["rendered", "hair"]]);
   });
 });

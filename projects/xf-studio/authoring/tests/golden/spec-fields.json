@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + expressions feature (claude/expressions-p1)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1)",
  "states": {
   "starter": {
    "modes": {
@@ -419,6 +419,12 @@
     },
     "layer/preview.setDetail": {
      "detail": {}
+    },
+    "layer/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "layer/motion.setBlink": {
      "value": {
@@ -904,6 +910,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "point/motion.setBlink": {
      "value": {
       "min": 0,
@@ -1384,6 +1396,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "viewport/motion.setBlink": {
      "value": {
@@ -1866,6 +1884,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "collection/motion.setBlink": {
      "value": {
       "min": 0,
@@ -2346,6 +2370,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "preset/motion.setBlink": {
      "value": {
@@ -3036,6 +3066,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "layer/motion.setBlink": {
      "value": {
       "min": 0,
@@ -3527,6 +3563,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "point/motion.setBlink": {
      "value": {
       "min": 0,
@@ -4007,6 +4049,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "viewport/motion.setBlink": {
      "value": {
@@ -4489,6 +4537,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "collection/motion.setBlink": {
      "value": {
       "min": 0,
@@ -4969,6 +5023,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "preset/motion.setBlink": {
      "value": {
@@ -5660,6 +5720,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "layer/motion.setBlink": {
      "value": {
       "min": 0,
@@ -6152,6 +6218,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "point/motion.setBlink": {
      "value": {
       "min": 0,
@@ -6632,6 +6704,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "viewport/motion.setBlink": {
      "value": {
@@ -7114,6 +7192,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "collection/motion.setBlink": {
      "value": {
       "min": 0,
@@ -7594,6 +7678,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "preset/motion.setBlink": {
      "value": {
@@ -8284,6 +8374,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "layer/motion.setBlink": {
      "value": {
       "min": 0,
@@ -8775,6 +8871,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "point/motion.setBlink": {
      "value": {
       "min": 0,
@@ -9255,6 +9357,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "viewport/motion.setBlink": {
      "value": {
@@ -9737,6 +9845,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "collection/motion.setBlink": {
      "value": {
       "min": 0,
@@ -10217,6 +10331,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "preset/motion.setBlink": {
      "value": {
@@ -10907,6 +11027,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "layer/motion.setBlink": {
      "value": {
       "min": 0,
@@ -11398,6 +11524,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "point/motion.setBlink": {
      "value": {
       "min": 0,
@@ -11878,6 +12010,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "viewport/motion.setBlink": {
      "value": {
@@ -12360,6 +12498,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "collection/motion.setBlink": {
      "value": {
       "min": 0,
@@ -12840,6 +12984,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "preset/motion.setBlink": {
      "value": {
@@ -13533,6 +13683,12 @@
     "layer/preview.setDetail": {
      "detail": {}
     },
+    "layer/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "layer/motion.setBlink": {
      "value": {
       "min": 0,
@@ -14027,6 +14183,12 @@
     "point/preview.setDetail": {
      "detail": {}
     },
+    "point/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "point/motion.setBlink": {
      "value": {
       "min": 0,
@@ -14507,6 +14669,12 @@
     },
     "viewport/preview.setDetail": {
      "detail": {}
+    },
+    "viewport/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "viewport/motion.setBlink": {
      "value": {
@@ -14989,6 +15157,12 @@
     "collection/preview.setDetail": {
      "detail": {}
     },
+    "collection/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
+    },
     "collection/motion.setBlink": {
      "value": {
       "min": 0,
@@ -15469,6 +15643,12 @@
     },
     "preset/preview.setDetail": {
      "detail": {}
+    },
+    "preset/motion.setIdleClip": {
+     "clip": {
+      "minLength": 1,
+      "maxLength": 40
+     }
     },
     "preset/motion.setBlink": {
      "value": {

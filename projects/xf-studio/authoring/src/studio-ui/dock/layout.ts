@@ -185,7 +185,11 @@ function activeOf(node: DockNode): PanelId | undefined {
 /** The other share of a two-way split, without binary noise (1 - .42 is .58, not .5800000000000001), so a restored layout is exact. */
 const rest = (share: number) => Number((1 - share).toPrecision(12));
 /** Insert an arbitrary node at a drop target. Tab targets merge its panels. */
-function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultRect?: Rect, share = .5): DockTree {
+/**
+ * `whole`: `share` is the node's share of the split it joins (a parked group coming back, UI-104), so every sibling gives up its part;
+ * otherwise it is a share of the target group, which alone gives it up.
+ */
+function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultRect?: Rect, share = .5, whole = false): DockTree {
   const next = clone(tree);
   if (target.kind === "tab") {
     const found = findGroup(next, target.groupId);
@@ -213,7 +217,7 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
           const children = [...item.children];
           let incoming: number;
           // A growing composite root keeps every member's pixels: siblings scale by (1 - share).
-          if (grow && item === subtree) { sizes = sizes.map(size => size * (1 - share)); incoming = share; }
+          if ((grow && item === subtree) || whole) { sizes = sizes.map(size => size * (1 - share)); incoming = share; }
           else { incoming = sizes[index] * share; sizes[index] -= incoming; }
           children.splice(before ? index : index + 1, 0, node);
           sizes.splice(before ? index : index + 1, 0, incoming);
@@ -332,6 +336,72 @@ export function setCollapsed(tree: DockTree, groupId: string, collapsed: boolean
   });
 }
 
+/** Whether every group in a subtree is collapsed (a split whose groups are all collapsed folds away as one). */
+export function allCollapsed(node: DockNode): boolean {
+  return node.kind === "group" ? !!node.collapsed : node.children.every(allCollapsed);
+}
+/**
+ * The folding rule (view-graph-design.md §4.4): a collapsed group folds along the axis of the nearest split that still has
+ * something expanded, and a split whose groups are all collapsed folds as one along its parent's axis. Folded along a column
+ * (in a vertical stack) a group is a full-width header row; folded along a row it is a full-height vertical strip. A tree whose
+ * groups are all collapsed (a floating window, a saved layout) folds along a column: its window shrinks to its header rows.
+ * Returns each folded node's axis by ID; a node that isn't folded is absent. The sizes are never changed, so expanding restores them.
+ */
+export function foldAxes(root: DockNode | null): Map<string, SplitNode["axis"]> {
+  const folds = new Map<string, SplitNode["axis"]>();
+  const visit = (node: DockNode, fold?: SplitNode["axis"]) => {
+    if (fold) folds.set(node.id, fold);
+    if (node.kind === "group") return;
+    for (const child of node.children) visit(child, fold ?? (allCollapsed(child) ? node.axis : undefined));
+  };
+  if (root) visit(root, allCollapsed(root) ? "column" : undefined);
+  return folds;
+}
+/**
+ * How a split lays out its children under the folding rule: `folded[i]` when child i gave up its space along this split's axis
+ * (its cell is only as big as its bars), `shares` the flex-grow of the others (summing to 1, so they fill the split).
+ */
+export function splitShares(node: SplitNode, folds: ReadonlyMap<string, SplitNode["axis"]>): { folded: boolean[]; shares: number[] } {
+  const folded = node.children.map(child => folds.get(child.id) === node.axis);
+  return { folded, shares: openShares(node.sizes, folded) };
+}
+/**
+ * Whether a split is a stack of vertical strips (a column folded along a row): each strip is as long as its tabs need and they share
+ * what is left, since a strip's labels run along its length. Its stored sizes wait for a group to expand.
+ */
+export function isStripStack(node: SplitNode, folds: ReadonlyMap<string, SplitNode["axis"]>): boolean {
+  return node.axis === "column" && folds.get(node.id) === "row";
+}
+/**
+ * The two children a splitter between children `index - 1` and `index` resizes: the nearest on each side that isn't folded along
+ * the split's axis (a folded cell has no size to give). Undefined when either side has none: that splitter is inert.
+ */
+export function splitterPair(folded: readonly boolean[], index: number): [number, number] | undefined {
+  let before = index - 1, after = index;
+  while (before >= 0 && folded[before]) before--;
+  while (after < folded.length && folded[after]) after++;
+  return before >= 0 && after < folded.length ? [before, after] : undefined;
+}
+/**
+ * Never a blank dock (UI-105): when every docked group is collapsed (a layout saved before collapsing the last one was refused, or
+ * one whose expanded groups all left with a hidden module), the docked group with the largest share of the workspace expands.
+ */
+export function keepDockExpanded(tree: DockTree): DockTree {
+  if (!tree.root || !allCollapsed(tree.root)) return tree;
+  let best: { id: string; area: number } | undefined;
+  const visit = (node: DockNode, area: number) => {
+    if (node.kind === "group") { if (!best || area > best.area) best = { id: node.id, area }; return; }
+    node.children.forEach((child, index) => visit(child, area * node.sizes[index]!));
+  };
+  visit(tree.root, 1);
+  return setCollapsed(tree, best!.id, false);
+}
+/** Whether collapsing a docked group would leave nothing docked expanded to take its space. */
+export function lastExpandedDocked(tree: DockTree, groupId: string): boolean {
+  const docked = [...groups(tree.root)];
+  return docked.some(item => item.id === groupId && !item.collapsed) && docked.every(item => item.id === groupId || item.collapsed);
+}
+
 /** Where a panel is now, as a parked place (undefined when the tree doesn't hold it). `leaving` are the panels parked with it. */
 function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>): ParkedPlace | undefined {
   if (tree.closed.includes(panel)) return { closed: true };
@@ -421,10 +491,14 @@ export function unparkPanels(tree: DockTree, panels: readonly PanelId[], fallbac
     if (place?.anchor && anchor && !anchor.windowId) {
       const created = group([panel], panel);
       next = insertNode(next, place.collapsed ? { ...created, collapsed: true } : created, { kind: "split", groupId: anchor.group.id, side: place.anchor.side },
-        undefined, place.anchor.share);
+        undefined, place.anchor.share, true);
       continue;
     }
-    if (place?.window) { next = insertNode(next, group([panel]), { kind: "float", ...place.window }); continue; }
+    if (place?.window) {
+      const created = group([panel]);
+      next = insertNode(next, place.collapsed ? { ...created, collapsed: true } : created, { kind: "float", ...place.window });
+      continue;
+    }
     if (fallback.closed.includes(panel)) { next = { ...next, closed: [...next.closed, panel] }; continue; }
     const home = locate(fallback, panel);
     next = openPanel(next, panel, home ? home.group.panels.filter(id => id !== panel) : [], area);
@@ -456,9 +530,19 @@ export function raiseWindow(tree: DockTree, windowId: string): DockTree {
 }
 /** Only docked groups can be maximized; floating windows already sit above the dock. */
 export function setMaximized(tree: DockTree, groupId?: string): DockTree {
-  const next = clone(tree), found = groupId ? findGroup(next, groupId) : undefined;
+  const found = groupId ? findGroup(tree, groupId) : undefined;
+  // A collapsed group expands to fill the workspace: maximized, it shows its panel (UI-105).
+  const next = found?.group.collapsed && !found.windowId ? setCollapsed(tree, found.group.id, false) : clone(tree);
   if (found && !found.windowId) next.maximized = groupId; else delete next.maximized;
   return next;
+}
+/**
+ * Show a panel: its tab becomes the active one and a collapsed group holding it expands (UI-103), so every reveal (the palette,
+ * the Panels flyout, Help, guidance) shows the panel.
+ */
+export function revealPanel(tree: DockTree, panel: PanelId): DockTree {
+  const next = activate(tree, panel), at = locate(next, panel);
+  return at?.group.collapsed ? setCollapsed(next, at.group.id, false) : next;
 }
 /** Leave maximize mode when a panel that must become visible is docked elsewhere. */
 export function showPanelDocked(tree: DockTree, panel: PanelId): DockTree {

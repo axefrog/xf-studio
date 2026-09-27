@@ -71,6 +71,7 @@
   "preview.setHair",
   "preview.setDetail",
   "motion.setIdle",
+  "motion.setIdleClip",
   "motion.setPaused",
   "motion.setContributions",
   "motion.setBlink",
@@ -100,6 +101,7 @@
   "view.setTool",
   "view.undo",
   "view.redo",
+  "view.endEdit",
   "expression.setControl",
   "expression.linkPair",
   "expression.mirror",
@@ -2169,6 +2171,27 @@
     }
    }
   },
+  "motion.setIdleClip": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "clip": {
+     "type": "string",
+     "required": true,
+     "from": "input",
+     "minLength": 1,
+     "maxLength": 40
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "motion.setPaused": {
    "scope": [
     "viewport"
@@ -2608,6 +2631,14 @@
    "payload": {}
   },
   "view.redo": {
+   "scope": [
+    "workspace"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {}
+  },
+  "view.endEdit": {
    "scope": [
     "workspace"
    ],
@@ -3383,6 +3414,15 @@
    "async": false
   },
   {
+   "id": "motion.setIdleClip",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
    "id": "motion.setPaused",
    "family": "action",
    "scope": [
@@ -3636,6 +3676,15 @@
   },
   {
    "id": "view.redo",
+   "family": "action",
+   "scope": [
+    "workspace"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "view.endEdit",
    "family": "action",
    "scope": [
     "workspace"

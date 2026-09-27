@@ -1,10 +1,14 @@
 import { h, isUnavailable, setAttr, setDisabled, setText, setUnavailable, setValue, uid } from "./dom";
+import { helpTip, setHelp, type HelpText } from "./help-tip";
 import { icon, type IconName } from "./icons";
 
 /**
  * Form controls for the Studio presentation. Continuous controls speak a
  * begin/edit/commit/cancel transaction so the application can group a drag into
  * one Undo step and Escape can restore its starting value.
+ *
+ * A control's `help` is what it is or does: it shows as a help tip beside the control's label (help-tip.ts), never as an inline line;
+ * inline lines are for what the person can act on (a control's note: a limit, why it is unavailable).
  */
 export type Transaction<T> = { begin?(): void; edit(value: T): void; commit?(): void; cancel?(): void };
 
@@ -45,8 +49,9 @@ export class Slider {
     this.output = h("output", { class: "readout", for: id });
     this.note = new NoteLine(options.reserveNote);
     this.element = h("div", { class: "control" },
-      h("label", { class: "control-label", for: id }, h("span", { text: options.label }), this.output),
-      this.input, options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note.element);
+      h("label", { class: "control-label", for: id }, h("span", { class: "control-label-text" }, h("span", { text: options.label }),
+        options.help ? helpTip(options.label, options.help) : null), this.output),
+      this.input, this.note.element);
     // A transaction begins lazily on the first value change, so a click that changes nothing
     // never leaves one open. Pointer drags commit after release; browsers fire `change` for
     // every arrow key, so a keyboard burst stays one transaction until a short pause or blur.
@@ -100,14 +105,17 @@ export class Toggle {
   readonly element: HTMLElement;
   readonly input: HTMLInputElement;
   private readonly note: NoteLine;
-  constructor(options: { label: string; help?: string; onChange(checked: boolean): void; id?: string; reserveNote?: boolean }) {
+  /** The help tip beside the label, when the toggle was given `help`. */
+  private readonly tip: HTMLButtonElement | null;
+  constructor(private readonly options: { label: string; help?: HelpText; onChange(checked: boolean): void; id?: string; reserveNote?: boolean }) {
     const id = options.id ?? uid("toggle");
     this.input = h("input", { id, type: "checkbox", role: "switch", class: "switch" });
     this.note = new NoteLine(options.reserveNote);
+    this.tip = options.help !== undefined ? helpTip(options.label, options.help) : null;
+    // The tip sits outside the label, so pressing it never flips the switch.
     this.element = h("div", { class: "control toggle-row" },
-      h("label", { class: "toggle", for: id }, this.input, h("span", { class: "switch-track", "aria-hidden": "true" }),
-        h("span", { class: "toggle-label", text: options.label })),
-      options.help ? h("small", { class: "control-help", text: options.help }) : null, this.note.element);
+      h("div", { class: "control-line" }, h("label", { class: "toggle", for: id }, this.input, h("span", { class: "switch-track", "aria-hidden": "true" }),
+        h("span", { class: "toggle-label", text: options.label })), this.tip), this.note.element);
     this.input.addEventListener("change", () => options.onChange(this.input.checked));
   }
   update(checked: boolean, state: { disabled?: boolean; reason?: string; note?: string } = {}) {
@@ -115,6 +123,8 @@ export class Toggle {
     setDisabled(this.input, !!state.disabled, state.reason);
     this.note.update(this.input, !!state.disabled, state.reason, state.note);
   }
+  /** Change the help tip's text (a toggle made with `help` only). */
+  setHelp(text: HelpText) { if (this.tip) setHelp(this.tip, text); }
 }
 
 export type SegmentOption<T extends string | number> = { value: T; label: string; icon?: IconName; title?: string };
@@ -178,12 +188,13 @@ export class SelectField<T extends string> {
   readonly element: HTMLElement;
   readonly select: HTMLSelectElement;
   private signature = "";
-  constructor(private options: { label: string; onChange(value: T): void; id?: string; help?: string }) {
+  constructor(private options: { label: string; onChange(value: T): void; id?: string; help?: HelpText }) {
     const id = options.id ?? uid("select");
     this.select = h("select", { id, class: "field" });
-    this.element = h("div", { class: "control" }, h("label", { class: "control-label", for: id }, h("span", { text: options.label })),
-      h("div", { class: "select-wrap" }, this.select, icon("chevronDown")),
-      options.help ? h("small", { class: "control-help", text: options.help }) : null);
+    // The help tip sits beside the label, outside it (a label's click would move focus to the select).
+    this.element = h("div", { class: "control" }, h("div", { class: "control-line" }, h("label", { class: "control-label", for: id }, h("span", { text: options.label })),
+      options.help !== undefined ? helpTip(options.label, options.help) : null),
+      h("div", { class: "select-wrap" }, this.select, icon("chevronDown")));
     this.select.addEventListener("change", () => options.onChange(this.select.value as T));
   }
   update(choices: { value: T; label: string; disabled?: boolean }[], value: T | undefined, disabled = false, reason?: string) {
@@ -215,8 +226,11 @@ export function applyCapability(control: HTMLElement, capability: { available: b
   setUnavailable(control, !capability.available, capability.reason);
 }
 
-export function section(title: string, ...children: (Node | null | undefined | false)[]) {
-  return h("section", { class: "section" }, h("h3", { class: "section-title", text: title }), ...children);
+/** A panel section; `{ title, help }` puts what the section is in a help tip beside its title (help-tip.ts) rather than a note. */
+export function section(heading: string | { title: string; help: HelpText }, ...children: (Node | null | undefined | false)[]) {
+  const title = typeof heading === "string" ? heading : heading.title;
+  const head = h("h3", { class: "section-title" }, h("span", { text: title }));
+  return h("section", { class: "section" }, typeof heading === "string" ? head : h("div", { class: "section-head" }, head, helpTip(title, heading.help)), ...children);
 }
 export function note(text = "", tone: "muted" | "warning" | "info" = "muted") {
   return h("p", { class: `note ${tone}`, text });

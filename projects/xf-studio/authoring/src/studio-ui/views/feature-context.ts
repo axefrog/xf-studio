@@ -11,7 +11,7 @@ import { menuFromSections, openMenu, type MenuItem, type MenuSection } from "../
 import { Frame, type StudioRuntime } from "../runtime";
 import { readinessText } from "../readiness-text";
 import { contextItems, viewportMenu } from "../target-menus";
-import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget } from "./feature-view";
+import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
 import type { PartPresetRequest } from "../../part-presets";
 
 type Action = { kind: string };
@@ -84,4 +84,31 @@ export function featureCommands(binding: FeatureViewBinding, ctx: FeatureViewCon
     capability: () => command.action ? ctx.facade.capability(command.action) : { available: false, reason: command.unavailable },
     run: () => { if (command.action) ctx.dispatch(command.action); },
   }));
+}
+
+/** A module view's context over `port.module(owner)`. Refuses an owner the composition registered no service for. */
+export function moduleViewContext(rt: StudioRuntime, owner: string): ModuleViewContext {
+  const facade = rt.port.module(owner);
+  if (!facade) throw Error(`The ${owner} view has no registered module service.`);
+  return Object.freeze({
+    facade,
+    dispatch: async (action: { kind: string }, options?: Parameters<StudioRuntime["report"]>[2]) => {
+      let outcome: Awaited<ReturnType<typeof facade.dispatch>>;
+      try { outcome = await facade.dispatch(action); }
+      catch { outcome = { ok: false, code: "unavailable", message: "That didn't work. Try again." }; }
+      const ok = rt.report(action.kind, outcome.ok ? { ok: true as const }
+        : { ok: false as const, code: outcome.code ?? "invalid_value", message: outcome.message ?? "That can't be done now." }, options);
+      rt.changed();
+      return ok;
+    },
+    feedback: Object.freeze({
+      toast: (...args: Parameters<StudioRuntime["feedback"]["toast"]>) => rt.feedback.toast(...args),
+      announce: (...args: Parameters<StudioRuntime["feedback"]["announce"]>) => rt.feedback.announce(...args),
+      record: (...args: Parameters<StudioRuntime["feedback"]["record"]>) => rt.feedback.record(...args),
+    }),
+    anchors: Object.freeze({ register: (...args: Parameters<StudioRuntime["anchors"]["register"]>) => rt.anchors.register(...args) }),
+    reveal: (panel: string, focus?: boolean) => rt.dock.reveal(panel, focus),
+    links: Object.freeze({ open: (link: Parameters<typeof rt.port.links.open>[0]) => rt.port.links.open(link) }),
+    changed: () => rt.changed(),
+  } satisfies ModuleViewContext);
 }

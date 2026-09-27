@@ -3,7 +3,7 @@ import { extendSkin } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
-import { BODY_SHAPE_KEY, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
+import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
 import type { CharacterDetail, DetailSlot } from "../../render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
 import { priorityRank } from "../../render-templates";
@@ -135,10 +135,15 @@ export function createCharacterRenderer(input: {
         return result.attribute;
       } } : {}) };
   }
+  /**
+   * Parts that left the scene (or whose change was superseded before it was shown), kept on this renderer's context for the next change
+   * that brings them back (character-detail-loader.ts `DetailPartPool`).
+   */
+  const pool = new DetailPartPool();
   /** The host's detail loader: this renderer's anisotropy and skin placement, the record's chunks through their template's adapter. */
   const details: DetailLoader = {
     load: (record, options) => loadCharacterDetails(record, { ...options, anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
-      context: detailContext }),
+      context: detailContext, pool }),
   };
   // The skin drawn under a feature's surfaces (the scene port's `skin`): the shown resolved skin's light, and the skin under a surface
   // read on the drawn head, like the face decals' underlay. Features read both again whenever the drawn skin changes, told once.
@@ -252,8 +257,14 @@ export function createCharacterRenderer(input: {
     }
     resolvedSkin = null;
     // The previous V is released after the new one has baked, so a tried style can share a bake it keeps (PREV-78).
-    const releasePrevious = () => previous?.dispose(kept);
-    if (!next) { releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
+    // What the next V doesn't use is kept for a later change (the part pool), except a whole slot it no longer draws (the body turned
+    // off, clothes taken off: PREV-108) and everything when no V is shown: those leave GPU memory at once.
+    const releasePrevious = () => {
+      previous?.dispose(kept);
+      const drawn = new Set(next?.components.map(item => item.component.slot) ?? []);
+      pool.releaseWhere(item => !drawn.has(item.component.slot));
+    };
+    if (!next) { rigMotion.setDeformations?.([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
@@ -294,7 +305,9 @@ export function createCharacterRenderer(input: {
     applyEyes();
     applyEyeOptics();
     scene.updateMatrixWorld(true);
-    // The blink binds first: it must capture the details' neutral pose before a playing idle poses them.
+    // The puppet's deformation rigs first, so the body's helper joints bind to the joints the rigs solve; the blink binds before the
+    // idle: it must capture the details' neutral pose before a playing idle poses them.
+    rigMotion.setDeformations?.(next.rigs ?? []);
     rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: [...skinLimits(), ...bakeLimits] };
@@ -338,6 +351,8 @@ export function createCharacterRenderer(input: {
    * baked (PREV-74).
    */
   function contextRestored() {
+    // Kept parts' bakes died with the context; they are loaded again when a change brings them back.
+    pool.clear();
     layeredContextRestored(renderer);
     for (const item of characterDetails?.components ?? []) for (const { handle } of item.layered ?? []) handle.contextRestored();
     publishBakeLimits([...skinLimits(), ...bakeLayered()]);
@@ -354,6 +369,12 @@ export function createCharacterRenderer(input: {
     /** Whether the V's resolved body shows now (the viewer hasn't hidden it and it loaded): the scene's depth range then covers it. */
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
+    /** Release the V and every kept part (the scene is going away). */
+    dispose() { setCharacterDetails(null); pool.clear(); },
+    /** How many parts are kept for later (developer evidence). */
+    keptParts: () => pool.size,
+    /** Release the parts kept for later (another V is being shown). */
+    releaseKeptParts: () => pool.clear(),
     setSlotVisible,
     setHiddenOptions,
     refreshVisibility: refreshDetailVisibility,

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { loadCharacterDetails } from "../src/character-detail-loader";
+import { DetailPartPool, loadCharacterDetails, partKeyFor, type LoadedCharacterDetails } from "../src/character-detail-loader";
 import { storeChunkGeometry } from "../src/character-detail-service";
 import { GlbWriter, keepGlbMeshes, parseGlb, readAccessor } from "../src/glb";
 import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderComponent, UNCOVERED_BODY } from "../src/render-detail";
@@ -195,6 +195,83 @@ describe("a tried choice loads only what changed (PREV-68)", () => {
     tried.dispose();
     expect(faceReleased).toBe(1);
     fresh.dispose();
+  });
+
+  /** Three piercing files and a face file, a fetcher that counts, and loads through one part pool. */
+  function pooled(limits?: { parts: number; texels: number }) {
+    const files = new Map<string, Uint8Array>(), hashes = new Map<string, string>();
+    const add = (name: string, bytes: Uint8Array) => { const file = `${sha(bytes)}.glb`; files.set(file, bytes); hashes.set(name, file); return file; };
+    add("face", morphMesh(3)); add("a", morphMesh(2)); add("b", morphMesh(1)); add("c", morphMesh(3));
+    const fetched: string[] = [];
+    const pool = new DetailPartPool(limits);
+    const options = { anisotropy: 1, context: () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const }), pool,
+      fetcher: async (url: string) => { const name = url.split("/").pop()!; fetched.push(name); return new Response(files.get(name)!.slice()); } };
+    const piercing = (name: string) => part("piercings", name, hashes.get(name)!, hashes.get(name)!.slice(0, 64), [0]);
+    const face = () => part("face", "makeupCheeks_05", hashes.get("face")!, hashes.get("face")!.slice(0, 64), [0, 1]);
+    /** What the scene does: show `next` in place of `shown`, which releases what the next one didn't take. */
+    const show = (shown: LoadedCharacterDetails | null, next: LoadedCharacterDetails) => { next.adopt(); shown?.dispose(new Set(next.components)); return next; };
+    return { pool, options, fetched, piercing, face, show };
+  }
+
+  test("a part the next V let go is kept: bringing it back takes the same objects and fetches nothing", async () => {
+    const { pool, options, fetched, piercing, face, show } = pooled();
+    const first = show(null, await loadCharacterDetails(record([face(), piercing("a")]), options));
+    const aPart = first.components[1]!;
+    let released = 0;
+    aPart.meshes[0]!.geometry.addEventListener("dispose", () => released++);
+    const second = show(first, await loadCharacterDetails(record([face(), piercing("b")]), { ...options, reuse: first }));
+    expect(pool.size).toBe(1);
+    expect(aPart.root.parent).toBeNull();
+    fetched.length = 0;
+    const back = show(second, await loadCharacterDetails(record([face(), piercing("a")]), { ...options, reuse: second }));
+    expect(fetched).toEqual([]);
+    expect(back.components[1]).toBe(aPart);
+    expect(released).toBe(0);
+    // "b" went to the pool in its turn.
+    expect(pool.size).toBe(1);
+    back.dispose();
+    pool.clear();
+    expect(released).toBe(1);
+  });
+
+  test("a superseded load's parts are kept, and the change that superseded it takes them", async () => {
+    const { pool, options, fetched, piercing, face, show } = pooled();
+    const shown = show(null, await loadCharacterDetails(record([face()]), options));
+    // A burst: this load is superseded before the scene shows it.
+    const superseded = await loadCharacterDetails(record([face(), piercing("c")]), { ...options, reuse: shown });
+    const built = superseded.components[1]!;
+    superseded.dispose();
+    expect(pool.size).toBe(1);
+    fetched.length = 0;
+    const next = show(shown, await loadCharacterDetails(record([face(), piercing("c")]), { ...options, reuse: shown }));
+    expect(fetched).toEqual([]);
+    expect(next.components[1]).toBe(built);
+    expect(next.components[0]).toBe(shown.components[0]);
+    next.dispose(); pool.clear();
+  });
+
+  test("a part is taken from the pool only while what it was built on is the same (a face decal's skin)", () => {
+    const skin = (tone: string): RenderComponent => ({ ...part("face", tone, "s.glb", "0".repeat(64), [0]), slot: "skin", id: `skin:${tone}` });
+    const decal = part("face", "makeupCheeks_05", "f.glb", "1".repeat(64), [0]);
+    const pierce = part("piercings", "a", "p.glb", "2".repeat(64), [0]);
+    const pale = partKeyFor(record([skin("pale"), decal, pierce])), dark = partKeyFor(record([skin("dark"), decal, pierce]));
+    expect(pale(decal)).not.toBe(dark(decal));
+    expect(pale(pierce)).toBe(dark(pierce));
+  });
+
+  test("the pool releases the least recently kept part past its limit; parts on screen never count", async () => {
+    const { pool, options, piercing, face, show } = pooled({ parts: 1, texels: 1 << 30 });
+    let shown = show(null, await loadCharacterDetails(record([face(), piercing("a")]), options));
+    const aPart = shown.components[1]!;
+    let aReleased = 0, faceReleased = 0;
+    aPart.meshes[0]!.geometry.addEventListener("dispose", () => aReleased++);
+    shown.components[0]!.meshes[0]!.geometry.addEventListener("dispose", () => faceReleased++);
+    shown = show(shown, await loadCharacterDetails(record([face(), piercing("b")]), { ...options, reuse: shown }));
+    expect([pool.size, aReleased]).toEqual([1, 0]);
+    shown = show(shown, await loadCharacterDetails(record([face(), piercing("c")]), { ...options, reuse: shown }));
+    // "b" is kept now; "a" was the least recently kept and is released. The face, on screen throughout, is untouched.
+    expect([pool.size, aReleased, faceReleased]).toEqual([1, 1, 0]);
+    shown.dispose(); pool.clear();
   });
 
   test("a part whose exported mesh has no skin is drawn bound to one bone, and says so with the rigid-part limit (PREV-64)", async () => {

@@ -101,6 +101,9 @@ export const P = {
   teethSp: "base\\fixture\\teeth\\customisation_teeth.sp", teethD: "base\\fixture\\teeth\\ht_teeth_d01.xbm",
   teethN: "base\\fixture\\teeth\\ht_teeth_n01.xbm", teethRm: "base\\fixture\\teeth\\ht_teeth_rm01.xbm",
   metalBaseRemt: "engine\\materials\\metal_base.remt",
+  // A two-part hairstyle (the Multicolored Hair shape: part options on slots of their own, in `hairs`), its base part carrying earrings.
+  mchApp1: "fixture_mch\\hair_part_01.app", mchApp2: "fixture_mch\\hair_part_02.app", accessoryMesh: "fixture_mch\\earrings.mesh",
+  accessoryD: "fixture_mch\\tex\\earrings_d.xbm",
 } as const;
 /** Teeth definitions, as the vanilla creator names them (`metal` is a test choice on the unreached `default` appearance). */
 export const TEETH = { natural: "female_ht_000__basehead", gold: "female_ht_000__basehead__gold", metal: "female_ht_000__basehead__metal" } as const;
@@ -127,6 +130,9 @@ export const TONES = { pale: "h0_000_pwa__basehead__01_ca_pale", ivory: "h0_000_
 
 const colour = (name: string, r: number, g: number, b: number) => ({ $type: "Color", [name]: { $type: "Color", Red: r, Green: g, Blue: b, Alpha: 255 } });
 const scalar = (name: string, value: number) => ({ $type: "Float", [name]: value });
+const vector = (name: string, x: number, y: number, z: number, w: number) => ({ $type: "Vector4", [name]: { $type: "Vector4", X: x, Y: y, Z: z, W: w } });
+const vParam = (name: string, x: number, y: number, z: number, w: number) =>
+  ({ $type: "CMaterialParameterVector", parameterName: cn(name), vector: { $type: "Vector4", X: x, Y: y, Z: z, W: w } });
 const hp = (name: string, value: string) => ({ $type: "rRef:CHairProfile", [name]: rp(value) });
 const sp = (name: string, value: string) => ({ $type: "rRef:CSkinProfile", [name]: rp(value) });
 const xbm = (gamma: boolean) => cr2w({ $type: "CBitmapTexture", width: 4, height: 4, setup: { $type: "STextureGroupSetup", isGamma: gamma ? 1 : 0 } });
@@ -240,8 +246,13 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       appearanceOption("piercings_12", P.earringApp12, [PIERCING.silver, PIERCING.black], { uiSlot: "piercings_color", enabled: 0, link: "piercings color", linkController: 1 }),
       appearanceOption("piercings_01", P.earringApp1, [PIERCING.silver, PIERCING.black], { uiSlot: "piercings_color", enabled: 0, link: "piercings color", linkController: 1 }),
       option("teeth", P.teethApp, [TEETH.natural, TEETH.gold, TEETH.metal], "teeth"),
+      slotSwitcher("mch_switcher", "mch_hair_part_01", [["Off", []], ["TWO PART", ["mch_part_01", "mch_part_02"]]]),
+      appearanceOption("mch_part_01", P.mchApp1, ["brown"], { uiSlot: "mch_hair_part_01", enabled: 0, link: "hairstyle_color_1", linkController: 1,
+        localizedName: "HAIR BASE" }),
+      appearanceOption("mch_part_02", P.mchApp2, ["dark"], { uiSlot: "mch_hair_part_02", enabled: 0, link: "hairstyle_color_2", linkController: 1,
+        localizedName: "FACE FRAME" }),
     ], { TPP: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2", "eyelash_color", "eyes_color", "facial_tattoo_02", "teeth"],
-      face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01", "piercings_00", "piercings_01", "piercings_12"], hairs: ["hair_color1"],
+      face: ["makeupLips_none_00", "makeupLips_05", "makeupCheeks_05", "makeupCheeks_01", "cyberware_01", "piercings_00", "piercings_01", "piercings_12"], hairs: ["hair_color1", "mch_part_01", "mch_part_02"],
       FPP_hairs: ["hair_color_fpp_01"], character_customization: ["skin_type_01", "skin_type_03", "eyebrows_color1", "eyebrows_color2",
         "eyelash_color", "hair_color1", "hair_color_fpp_01", "eyes_color"] }, {
       body: { options: [
@@ -450,7 +461,15 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       scalar("TintScale", 0.9), sp("SkinProfile", P.teethSp)]),
     [P.teethGoldMi]: mi(P.layeredMt, [tex("GlobalNormal", P.teethN), setupRef(P.silverSetup), maskRef(P.earringMask)]),
     [P.teethSp]: skinProfile({ roughness0: 0.5, roughness1: 1.2, lobeMix: 0.8, blurSize: 0.6, falloff: [255, 220, 200] }),
-    [P.metalBaseRemt]: template([]),
+    // The engine's metal template: its own name (`.remt` is a `CMaterialTemplate` too) and its 2.31 defaults.
+    [P.metalBaseRemt]: namedTemplate("metal_base", "EMP_Normal", [tParam("BaseColor", P.grey), vParam("BaseColorScale", 1, 1, 1, 0),
+      tParam("Metalness", P.black), sParam("MetalnessScale", 1), sParam("MetalnessBias", 0), tParam("Roughness", P.white), sParam("RoughnessScale", 1),
+      sParam("RoughnessBias", 0), tParam("Normal", P.editorNormal), sParam("NormalStrength", 1), sParam("LayerTile", 1)]),
+    [P.mchApp1]: app([{ name: "brown", components: [meshComponent("mch_base", P.hairMesh, "brown"), meshComponent("mch_earrings", P.accessoryMesh)] }]),
+    [P.mchApp2]: app([{ name: "dark", components: [meshComponent("mch_face_frame", P.hairMesh, "brown")] }]),
+    [P.accessoryMesh]: mesh({ appearances: [{ name: "default", chunkMaterials: ["earrings"] }], entries: [{ name: "earrings", local: true, index: 0 }],
+      local: [instance(P.metalBaseRemt, [tex("BaseColor", P.accessoryD), vector("BaseColorScale", 0.5, 0.25, 1, 1), scalar("MetalnessBias", 0.8)])], chunks: 1 }),
+    [P.accessoryD]: xbm(true),
     [P.teethD]: xbm(true), [P.teethN]: xbm(false), [P.teethRm]: xbm(false),
   } };
   // An ArchiveXL-style bundle: the null morph whose empty `baseTexture` its patch copies onto the fix copy.
@@ -548,6 +567,9 @@ export const REQUEST_B = saved([["TPP", "skin_type_03", P.skinApp3, TONES.senna]
   ["TPP", "eyelash_color", P.lashApp, "brown"], ["TPP", "eyes_color", P.eyeApp, "pack_eye_01"],
   ["face", "makeupCheeks_01", P.frecklesApp, FACE.frecklesBrown], ["TPP", "facial_tattoo_02", P.tattooApp, FACE.tattooSenna],
   ["face", "cyberware_01", P.cyberApp, FACE.cyberSenna], ["face", "pack_liner", P.packLinerApp, FACE.packLiner]]);
+/** A save-shaped request for the two-part hairstyle alone: both parts in `hairs`, as the save lists them. */
+export const MCH_REQUEST = saved([["hairs", "mch_part_01", P.mchApp1, "brown"], ["hairs", "mch_part_02", P.mchApp2, "dark"],
+  ["character_customization", "mch_part_01", P.mchApp1, "brown"]]);
 /** A save-shaped request for one teeth choice alone (the other slots none). */
 export const teethRequest = (definition: string) => saved([["TPP", "teeth", P.teethApp, definition]]);
 /** A save-shaped request for one eye colour alone (the other slots none). */

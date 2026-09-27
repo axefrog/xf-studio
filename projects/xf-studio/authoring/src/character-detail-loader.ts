@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
+import { parseDeformationProgram, type DeformationProgram } from "./deformation-rig";
 import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "./render-detail";
@@ -49,6 +50,8 @@ export type LoadedCharacterDetails = {
   /** Shown slots with a part the preview can't draw yet, as codes the presentation words. */
   limits: { slot: DetailSlot; limit: DetailLimit }[];
   notes: string[];
+  /** The player puppet's deformation rigs the record carries (with a loaded body only): they pose the body's helper joints. */
+  rigs: DeformationProgram[];
   /** How many components were taken over from `reuse` unchanged. */
   reused: number;
   readonly disposed: boolean;
@@ -64,6 +67,11 @@ export type CharacterDetailLoadOptions = {
   context(slot: DetailSlot): Omit<AdapterContext, "slot">;
   /** The details the scene shows now: components whose content is unchanged are taken over instead of loaded again. */
   reuse?: LoadedCharacterDetails | null;
+  /**
+   * Parts kept for later (`DetailPartPool`): a part this load needs that the pool holds is taken from it instead of being loaded, and
+   * the parts these details let go (removed by the next V, or all of them when the load is superseded) go back to it.
+   */
+  pool?: DetailPartPool | null;
 };
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
@@ -227,6 +235,78 @@ class DetailLedger {
   }
 }
 const ledgers = new WeakMap<LoadedCharacterDetails, DetailLedger>();
+
+/** How many parts, and how many texels only kept parts use, a pool holds before it releases the least recently used. */
+export const PART_POOL_LIMITS = { parts: 48, texels: 64 * 1024 * 1024 };
+/**
+ * Loaded parts kept for later, keyed by their identity (`partKeyFor`), so a change that brings a part back (undo, a hairstyle tried
+ * again, makeup shown again, a burst whose middle steps were never shown) takes it as it is: its objects, materials, bakes and GPU
+ * textures, nothing fetched, decoded or uploaded again. It also holds the texture ledger every load shares, so a map two parts use is
+ * uploaded once. The least recently kept part is released when the pool holds more than `limits.parts` parts, or when the textures
+ * only kept parts use exceed `limits.texels`; parts on screen or being loaded never count and are never released by it.
+ */
+export class DetailPartPool {
+  readonly ledger = new DetailLedger();
+  /** Kept parts, least recently kept first. */
+  private readonly kept = new Map<string, LoadedCharacterComponent>();
+  /** Loaded details not yet disposed (on screen or being loaded): their geometry and textures are in use. */
+  readonly live = new Set<LoadedCharacterDetails>();
+  constructor(readonly limits: { parts: number; texels: number } = PART_POOL_LIMITS) {}
+  get size() { return this.kept.size; }
+  /** Take a kept part out of the pool (its caller owns it from now on). */
+  take(key: string): LoadedCharacterComponent | undefined {
+    const item = this.kept.get(key);
+    if (item) this.kept.delete(key);
+    return item;
+  }
+  /** Keep a part that left the scene (or was never shown), most recently used last; release what no longer fits. */
+  keep(key: string, item: LoadedCharacterComponent) {
+    item.root.removeFromParent();
+    const previous = this.kept.get(key);
+    this.kept.delete(key);
+    this.kept.set(key, item);
+    if (previous && previous !== item) this.release([previous]);
+    this.trim();
+  }
+  /** Release every kept part (another V is shown, the context was lost, or the scene is going away). */
+  clear() { this.release([...this.kept.values()]); this.kept.clear(); }
+  /** Release the kept parts `leave` names (the parts of a slot the V no longer draws at all). */
+  releaseWhere(leave: (item: LoadedCharacterComponent) => boolean) {
+    const leaving = [...this.kept].filter(([, item]) => leave(item));
+    for (const [key] of leaving) this.kept.delete(key);
+    this.release(leaving.map(([, item]) => item));
+  }
+  private trim() {
+    const over = () => {
+      if (this.kept.size > this.limits.parts) return true;
+      // Texels of the textures only kept parts use (a texture a live part uses costs nothing more to keep).
+      const livekeys = new Set<string>();
+      for (const details of this.live) for (const item of details.components) for (const key of this.ledger.parts.get(item)?.textureKeys ?? []) livekeys.add(key);
+      let texels = 0;
+      const counted = new Set<string>();
+      for (const item of this.kept.values()) for (const key of this.ledger.parts.get(item)?.textureKeys ?? []) {
+        if (livekeys.has(key) || counted.has(key)) continue;
+        counted.add(key);
+        const image = this.ledger.textures.get(key)?.texture.image as { width?: number; height?: number } | undefined;
+        texels += (image?.width ?? 0) * (image?.height ?? 0);
+      }
+      return texels > this.limits.texels;
+    };
+    const leaving: LoadedCharacterComponent[] = [];
+    while (this.kept.size && over()) {
+      const [key, item] = this.kept.entries().next().value!;
+      this.kept.delete(key);
+      leaving.push(item);
+    }
+    this.release(leaving);
+  }
+  private release(items: readonly LoadedCharacterComponent[]) {
+    if (!items.length) return;
+    // Geometry a live or kept part still draws (two parts parsed from one file share it) stays.
+    const staying = geometriesOf([...[...this.live].flatMap(details => details.components), ...this.kept.values()].filter(item => !items.includes(item)).map(item => item.root));
+    for (const item of items) { releaseDetailObject(item.root, staying); this.ledger.release(this.ledger.parts.get(item)); }
+  }
+}
 /**
  * A shared texture's ledger key: its file, how the adapter reads it and how it wraps, and the resource's own `isGamma` flag, which
  * decides a colour input's colour space (PREV-79): two resources with one image but different flags are two textures.
@@ -235,6 +315,8 @@ export const textureLedgerKey = (source: Pick<RenderTexture, "file" | "isGamma">
   `${source.file}|${use}|${wrap}|${source.isGamma ? "gamma" : "linear"}`;
 /** A component's content identity: its whole record entry (geometry file hash, chunks and every material input). */
 const contentKey = (component: RenderComponent) => JSON.stringify(component);
+/** Each loaded part's identity (`partKeyFor`), kept with it wherever it goes (shown, lent, pooled). */
+const partKeys = new WeakMap<LoadedCharacterComponent, string>();
 /** Slots whose adapters read the resolved skin under them (the face decals' and brows' underlay): reused only with an unchanged skin. */
 const READS_SKIN: ReadonlySet<DetailSlot> = new Set(["face", "brows"]);
 /** Whether a component draws with the skin adapter (the head's skin, or the body's: its skin, arms, feet, nails). */
@@ -252,6 +334,21 @@ const readsBodySkin = (component: RenderComponent) => component.slot === "body" 
 const followsBodyShape = (component: RenderComponent) => component.slot === "clothing";
 const bodyShapeKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "body" && drawsSkin(item) && item.morphs?.length)
   .map(item => `${item.geometry.depotHash}|${item.morphs!.join(",")}`).sort().join("\n");
+/**
+ * A part's identity within a record: its content, and for a part built on what is under it, that too: a face decal or brow on the head's
+ * skin, a body decal on the body's skin parts, a garment on the body's applied shape. Two records give a part the same key only when
+ * it would be built the same, so a part with that key (shown, or kept in the pool) is taken as it is.
+ */
+export function partKeyFor(record: CharacterDetail): (component: RenderComponent) => string {
+  let skin: string | undefined, bodySkin: string | undefined, shape: string | undefined;
+  return component => {
+    let key = contentKey(component);
+    if (READS_SKIN.has(component.slot)) key += `\u0000skin:${skin ??= record.components.filter(item => item.slot === "skin").map(contentKey).join("\n")}`;
+    if (readsBodySkin(component)) key += `\u0000body:${bodySkin ??= record.components.filter(item => item.slot === "body" && drawsSkin(item)).map(contentKey).join("|")}`;
+    if (followsBodyShape(component)) key += `\u0000shape:${shape ??= bodyShapeKey(record.components)}`;
+    return key;
+  };
+}
 
 /**
  * Load a record's components. With `reuse` (the details the scene shows now), a component whose content is unchanged is taken over as
@@ -262,7 +359,8 @@ const bodyShapeKey = (components: readonly RenderComponent[]) => components.filt
 export async function loadCharacterDetails(record: CharacterDetail, options: CharacterDetailLoadOptions): Promise<LoadedCharacterDetails> {
   const fetcher = options.fetcher ?? fetch, signal = options.signal;
   const previous = options.reuse && !options.reuse.disposed ? options.reuse : null;
-  const ledger = (previous && ledgers.get(previous)) ?? new DetailLedger();
+  const pool = options.pool ?? null;
+  const ledger = pool?.ledger ?? (previous && ledgers.get(previous)) ?? new DetailLedger();
   let bytesUsed = 0, verticesUsed = 0, texelsUsed = 0;
   const components: LoadedCharacterComponent[] = [];
   /** Components taken over from `reuse`: not this load's to release until the scene adopts it. */
@@ -273,15 +371,23 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     const leaving = components.filter(item => !borrowed.has(item) && !keep?.has(item) && !released.has(item));
     const staying = [...components.filter(item => !leaving.includes(item)), ...(keep ?? [])];
     const kept = geometriesOf(staying.map(item => item.root));
-    for (const item of leaving) { releaseDetailObject(item.root, kept); ledger.release(ledger.parts.get(item)); released.add(item); }
+    for (const item of leaving) {
+      released.add(item);
+      // Kept for later when there is a pool: a part the next change may bring back is not loaded again.
+      const key = partKeys.get(item);
+      if (pool && key !== undefined) pool.keep(key, item);
+      else { releaseDetailObject(item.root, kept); ledger.release(ledger.parts.get(item)); }
+    }
   };
   const aborted = () => { if (signal?.aborted) throw new DOMException("Loading the details was cancelled.", "AbortError"); };
   const bytesOf = new Map<string, Promise<ArrayBuffer>>();
-  const fetchBytes = (resource: RenderResource) => {
+  const fetchBytes = (resource: Pick<RenderResource, "file" | "sha256">) => {
     let pending = bytesOf.get(resource.file);
     if (!pending) {
       pending = (async () => {
-        const response = await fetcher(`${CHARACTER_DETAIL_ASSETS}${resource.file}`, { signal });
+        // Not cancelled once asked for: a part whose files are on their way is finished and kept (`pool`), so a superseded change's
+        // work is there for the next one (research/backlog/performance.md, scheduling rule). The files are local and content-addressed.
+        const response = await fetcher(`${CHARACTER_DETAIL_ASSETS}${resource.file}`);
         if (!response.ok) throw Error(`${resource.file} is unavailable.`);
         const bytes = await response.arrayBuffer();
         bytesUsed += bytes.byteLength;
@@ -300,7 +406,13 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
       const again = ledger.images.get(texture.file);
       if (again) return again;
       const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
-      try { const image = await new THREE.ImageLoader().loadAsync(url); ledger.images.set(texture.file, image); return image; }
+      try {
+        const image = await new THREE.ImageLoader().loadAsync(url);
+        // Decoded now, off the main thread, rather than on the first frame that uploads it (a 4096² map took a frame of its own).
+        await image.decode?.().catch(() => { /* Decoded on upload instead. */ });
+        ledger.images.set(texture.file, image);
+        return image;
+      }
       finally { URL.revokeObjectURL(url); }
     });
   };
@@ -330,15 +442,10 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   };
   const problems: LoadedCharacterDetails["problems"] = [], limits: LoadedCharacterDetails["limits"] = [], notes: string[] = [];
   const addLimit = (slot: DetailSlot, limit: DetailLimit) => { if (!limits.some(item => item.slot === slot && item.limit === limit)) limits.push({ slot, limit }); };
-  // What the shown details can lend: their components by content, and whether the skin under decals stays the same.
+  // What the shown details can lend: their components by identity (`partKeyFor`: content plus the skin or body shape a part was built on).
   const lendable = new Map<string, LoadedCharacterComponent>();
-  for (const item of previous?.components ?? []) lendable.set(contentKey(item.component), item);
-  const skinKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "skin").map(contentKey).join("\n");
-  const sameSkin = !!previous && skinKey(previous.record.components) === skinKey(record.components);
-  // The body's decals read the body's own skin (its skin-drawing parts), so they are reused only while that is unchanged.
-  const bodySkinKey = (components: readonly RenderComponent[]) => components.filter(item => item.slot === "body" && drawsSkin(item)).map(contentKey).join("|");
-  const sameBodySkin = !!previous && bodySkinKey(previous.record.components) === bodySkinKey(record.components);
-  const sameBodyShape = !!previous && bodyShapeKey(previous.record.components) === bodyShapeKey(record.components);
+  for (const item of previous?.components ?? []) { const key = partKeys.get(item); if (key !== undefined) lendable.set(key, item); }
+  const keyOf = partKeyFor(record);
   // The skin loads first, so decals over it (brows) can blend against the resolved skin colour, read on the
   // head the scene will draw (the skin's own chunks or the core head; head-skin-placement.ts).
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
@@ -385,11 +492,14 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         notes.push(`${component.slot} ${component.component}: over the preview's texture budget for one V.`);
         continue;
       }
-      const lent = lendable.get(contentKey(component));
-      if (lent && (!READS_SKIN.has(component.slot) || sameSkin) && (!readsBodySkin(component) || sameBodySkin) &&
-        (!followsBodyShape(component) || sameBodyShape) && !components.includes(lent)) {
+      const key = keyOf(component);
+      const shownPart = lendable.get(key);
+      const lent = shownPart && !components.includes(shownPart) ? shownPart : pool?.take(key);
+      if (lent) {
         spendTexels(component);
-        components.push(lent); borrowed.add(lent);
+        // A part the shown details lend stays theirs until the scene adopts these; one from the pool is this load's own at once.
+        components.push(lent);
+        if (lent === shownPart) borrowed.add(lent);
         for (const limit of lent.limits ?? []) addLimit(component.slot, limit);
         verticesUsed += lent.meshes.reduce((sum, mesh) => sum + mesh.geometry.getAttribute("position").count, 0);
         if (lent.skin) keepSkin(component, lent.skin, lent.meshes);
@@ -407,9 +517,8 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         const loadedImages = new Map<string, HTMLImageElement>();
         for (const material of component.materials) for (const texture of chunkTextureFiles(material))
           loadedImages.set(texture.file, await imageOf(texture));
-        aborted();
+        // A part whose files arrived is built even if the load was superseded meanwhile: it is kept for the next change (`pool`).
         const source = await parseOf(component.geometry);
-        aborted();
         const shared = (uses.get(component.geometry.file) ?? 0) > 1;
         const root = shared ? cloneSkinned(source.scene) as THREE.Group : source.scene;
         componentRoot = root;
@@ -498,12 +607,16 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           ...(eyes.eyeballs.length || eyes.shells.length ? { eyes } : {}), ...(decals.length ? { decals } : {}), ...(layered.length ? { layered } : {}),
           ...(partLimits.length ? { limits: partLimits } : {}) };
         ledger.parts.set(item, part);
+        partKeys.set(item, key);
         components.push(item);
         for (const limit of partLimits) addLimit(component.slot, limit);
         if (skin) keepSkin(component, skin, meshes);
       } catch (error) {
         ledger.release(part);
-        if (signal?.aborted) throw error;
+        if (signal?.aborted) {
+          if (componentRoot) releaseDetailObject(componentRoot, geometriesOf(components.map(item => item.root)));
+          throw error;
+        }
         problems.push({ slot: component.slot, message: `XF Studio couldn't load your V's ${noun}, so ${isnt} shown.` });
         notes.push(`${component.slot} ${component.component}: ${(error as Error).message}`);
         if (componentRoot) releaseDetailObject(componentRoot, geometriesOf(components.map(item => item.root)));
@@ -518,7 +631,11 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     const staying = geometriesOf(kept.map(item => item.root));
     for (const item of leaving) {
       // A part taken over from the shown details stays theirs to release; the rest is this load's.
-      if (!borrowed.has(item)) { releaseDetailObject(item.root, staying); ledger.release(ledger.parts.get(item)); }
+      if (!borrowed.has(item)) {
+        const key = partKeys.get(item);
+        if (pool && key !== undefined) pool.keep(key, item);
+        else { releaseDetailObject(item.root, staying); ledger.release(ledger.parts.get(item)); }
+      }
       borrowed.delete(item);
     }
     components.splice(0, components.length, ...kept);
@@ -527,10 +644,19 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     problems.push({ slot: "body", message: UNCOVERED_BODY });
     notes.push("body: its underwear couldn't be loaded, so the body is not shown.");
   }
+  // The deformation rigs, with a body only; one that can't be read leaves a note, and the helper joints follow their limbs.
+  const rigs: DeformationProgram[] = [];
+  if (components.some(item => item.component.slot === "body")) for (const rig of record.rigs ?? []) {
+    try { rigs.push(parseDeformationProgram(JSON.parse(new TextDecoder().decode(await fetchBytes(rig))))); }
+    catch (error) {
+      aborted();
+      notes.push(`body: its ${rig.component} rig couldn't be loaded (${(error as Error).message}), so the joints it solves follow the limbs they sit on.`);
+    }
+  }
   // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
   const shown = new Set(components.map(item => item.component.slot));
   const loaded: LoadedCharacterDetails = { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
-    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes,
+    problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes, rigs,
     reused: borrowed.size,
     get disposed() { return disposed; },
     // The scene shows these details now: the parts taken over from the shown details are this load's to release from here on
@@ -538,9 +664,11 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     adopt() { borrowed.clear(); },
     dispose(keep) {
       if (disposed) return;
-      releaseAll(keep);
       disposed = true;
+      pool?.live.delete(loaded);
+      releaseAll(keep);
     } };
   ledgers.set(loaded, ledger);
+  pool?.live.add(loaded);
   return loaded;
 }

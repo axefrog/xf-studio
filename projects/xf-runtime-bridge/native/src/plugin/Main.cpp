@@ -30,6 +30,7 @@
 #include "core/BuildInfo.hpp"
 #include "core/Win32.hpp"
 #include "plugin/GameHandlers.hpp"
+#include "plugin/LivePoseMemory.hpp"
 #include "plugin/Natives.hpp"
 #include "plugin/Plugin.hpp"
 #include "plugin/ScriptCall.hpp"
@@ -40,6 +41,63 @@ using namespace xfb;
 using namespace xfb::plugin;
 
 constexpr uint64_t kHeartbeatTicks = 60ull * 60ull * 10ull; // about every 10 minutes at 60 fps
+constexpr uint64_t kRearmPatienceTicks = 600;                 // about 10 s at 60 fps for the old listener and restore
+
+void RecordRearm(State& aState, bool aOk, const std::string& aMessage)
+{
+    std::scoped_lock _(aState.rearmMutex);
+    aState.lastRearm = nlohmann::json{{"ok", aOk}, {"message", aMessage}, {"at_tick", aState.runningTicks.load()}};
+}
+
+// Reconnect after the kill switch (XFBridge_Rearm), on the game thread between queue drains. Waits (a few
+// seconds at most) until the old listener has stopped and the kill switch's restore has run, then gives
+// the bridge a new session (new token, pipe name and session id) and starts it again.
+void HandleRearm(State& aState)
+{
+    if (!aState.rearmRequested.load() || !aState.bridge)
+    {
+        return;
+    }
+    const auto waited = aState.runningTicks.load() - aState.rearmRequestedAt.load();
+    const auto refusal = aState.bridge->RearmRefusal();
+    const bool waitable = !refusal.empty() && aState.bridge->GetDispatcher().IsKilled();
+    if ((waitable || aState.restore.Pending()) && waited < kRearmPatienceTicks)
+    {
+        return; // the listener is still closing, or the restore hasn't run yet: try again next tick
+    }
+    aState.rearmRequested.store(false);
+    if (!refusal.empty())
+    {
+        RecordRearm(aState, false, refusal);
+        log::Warn("bridge.rearm_refused", "why=" + refusal);
+        return;
+    }
+    if (!aState.restore.Reset())
+    {
+        const std::string why = "the kill switch's restore hasn't finished; try again in a moment";
+        RecordRearm(aState, false, why);
+        log::Warn("bridge.rearm_refused", "why=restore_pending");
+        return;
+    }
+    aState.options.Reset();
+    std::string error;
+    const bool ok = aState.bridge->Rearm(
+        [&aState](std::string& aError) {
+            if (!CreateSession(aState.session, aError))
+            {
+                return false;
+            }
+            log::SetSessionId(aState.session.sessionId);
+            log::Info("bridge.new_session", "reason=rearm pid=" + std::to_string(aState.session.processId));
+            return true;
+        },
+        aState.queue.IsPumping() || aState.gameState.load() == 2, error);
+    RecordRearm(aState, ok, ok ? "reconnected: a new session is listening; clients read the new session.json" : error);
+    if (!ok)
+    {
+        log::Error("bridge.rearm_failed", error);
+    }
+}
 constexpr size_t kMaxTasksPerTick = 4;
 
 // Runs a callback body; logs and swallows anything it throws. Returns aFallback on failure.
@@ -135,6 +193,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         state.restore.Tick(state.bridge && state.bridge->RestoreReady(), &RestoreAfterKill, [](const std::string& aWhat) {
             log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
         });
+        HandleRearm(state);
         // A client dropped for idleness can't be driving photo mode any more: give the cursor back
         // (RB-34). Only after a write, since only a write hides it.
         if (state.bridge && state.bridge->TakeIdleDisconnect() && state.restore.WritesUsed() && !state.restore.Done())
@@ -286,6 +345,7 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     // Every engine address a game call needs, resolved now rather than lazily at the first call, where a
     // missing one would end the game (RB-32). Without them the bridge still runs, refusing game methods.
     ResolveScriptCallAddresses();
+    live::ResolveAddresses(); // the live-pose commands' own engine addresses (refused for the session if missing)
 
     RegisterStates(aHandle, aSdk);
 

@@ -8,7 +8,7 @@ import type { Layer, Recipe, WarpField } from "./engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "./authoring-preview-coordinator";
 import type { ReadonlyDeep } from "./read-only";
 import type { StudioApplication, StudioCapability, StudioDispatchResult, StudioTarget, ViewToolEntry } from "./studio-application";
-import type { StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "./platform/api";
+import type { ModuleService, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "./platform/api";
 import type { EyeMakeupAction } from "./eye-makeup-model";
 import type { RecipeAction } from "./engines/layered-makeup/recipe-actions";
 import type { FieldLimit } from "./platform/api";
@@ -18,6 +18,7 @@ import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "./local-setup-actions";
 import { InstallDetectionActions } from "./install-detection-actions";
 import { ModInstallActions } from "./mod-install-actions";
+import { DesktopAppActions, type DesktopAppState } from "./desktop-app";
 import type { PreviewSetupActions, PreviewSetupSnapshot } from "./preview-setup";
 import type { ProjectLink } from "./project-links";
 import { DIAGNOSTICS_DESCRIPTORS, type DiagnosticsActions, type DiagnosticsSnapshot } from "./diagnostics/actions";
@@ -156,6 +157,11 @@ export type StudioPresentationPort<Slot> = {
     titles(): readonly { readonly view: ViewId; readonly panel: string; readonly title: string; readonly subject: string }[];
     /** Turn a view's tool on or off (`view.setTool` through the registry). */
     setTool(view: ViewId | undefined, tool: string, enabled: boolean): StudioDispatchResult;
+    /**
+     * The tools this presentation no longer offers (a hidden module's, research tools while they are hidden): their state is kept
+     * and no device acts on them until they are offered again (UI-102). Tool IDs only; the application never learns why.
+     */
+    withdraw(tools: readonly string[]): void;
   };
   /** The registered feature modules, in catalogue order (feature-module platform §4). */
   features(): readonly FeatureInfo[];
@@ -165,6 +171,11 @@ export type StudioPresentationPort<Slot> = {
   readonly presets: PartPresetPort;
   /** One feature's facade: typed for the features in `PresentationFeatures`, undefined for an unregistered ID. */
   readonly feature: FeatureLookup;
+  /**
+   * A module's service (a module without a document part, view-graph-design.md §5), for that module's view: undefined for a module
+   * the composition registered no service for. The module's view knows its own facade type.
+   */
+  module(id: string): ModuleService | undefined;
   /** Browser draft autosave and optional preview-asset diagnostics from trusted adapters. */
   readonly status: { snapshot(): ReadonlyDeep<PresentationStatus> };
   readonly localSetup: Pick<LocalSetupActions, "capability" | "dispatch"> & {
@@ -188,6 +199,13 @@ export type StudioPresentationPort<Slot> = {
   readonly previewSetup: Pick<PreviewSetupActions, "capability" | "dispatch" | "descriptors"> & {
     snapshot(): ReadonlyDeep<PreviewSetupSnapshot>;
   };
+  /**
+   * "Get the desktop app" on localhost: whether it is installed, the setup this checkout built, and opening either with the
+   * person's consent. `offered()` is false in the desktop app itself, where a presentation shows nothing about it.
+   */
+  readonly desktopApp: Pick<DesktopAppActions, "offered" | "capability" | "dispatch" | "descriptors"> & {
+    snapshot(): ReadonlyDeep<DesktopAppState>;
+  };
   /** XF Studio's public pages (knowledge pages, issue tracker) for the Help view. */
   readonly links: ProjectLinkPort;
   /** The host's About view, where it has one. */
@@ -206,6 +224,7 @@ export type StudioPresentationPort<Slot> = {
     installDetection: ReturnType<InstallDetectionActions["snapshot"]>;
     modInstall: ReturnType<ModInstallActions["snapshot"]>;
     previewSetup: PreviewSetupSnapshot;
+    desktopApp: DesktopAppState;
   }>;
   subscribe(listener: () => void): () => void;
 };
@@ -233,12 +252,16 @@ export function createStudioPresentation<Slot>(sources: {
   modInstall?: ModInstallActions;
   /** Optional for fixtures; without it the port reports a head that needs no setup. */
   previewSetup?: PreviewSetupActions;
+  /** The localhost host's desktop-app offer; without it (the desktop app, fixtures) nothing about the desktop app is offered. */
+  desktopApp?: DesktopAppActions;
   /** Optional for fixtures; without it the Help view says the page can't be opened here. */
   links?: ProjectLinkPort;
   /** The host's About view; without it About is refused as not part of this host. */
   about?: () => void;
   /** Optional for fixtures; without it reporting says it isn't available here and notices carry no reference. */
   diagnostics?: DiagnosticsActions;
+  /** The modules' services (`compose/module-services.ts`), already facades: the port hands each to its module's view. */
+  modules?: readonly ModuleService[];
 }): StudioPresentationPort<Slot> {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
@@ -354,6 +377,7 @@ export function createStudioPresentation<Slot>(sources: {
     summaries: (view: ViewId | undefined, filter: Pick<ViewToolFilter, "modules">) => a.viewSummaries(view, filter),
     titles: () => a.viewTitles(),
     setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
+    withdraw: (tools: readonly string[]) => a.withdrawViewTools(tools),
   });
   const localSetup: StudioPresentationPort<Slot>["localSetup"] = sources.localSetup ? {
     snapshot: () => sources.localSetup!.snapshot(), capability: action => sources.localSetup!.capability(action),
@@ -372,6 +396,10 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => install.snapshot(), capability: action => install.capability(action),
     dispatch: action => install.dispatch(action), descriptors: () => install.descriptors(),
   };
+  const desktopSource = sources.desktopApp ?? new DesktopAppActions(null);
+  const desktopApp: StudioPresentationPort<Slot>["desktopApp"] = Object.freeze({
+    offered: () => desktopSource.offered(), snapshot: () => desktopSource.snapshot(), capability: (action: Parameters<DesktopAppActions["capability"]>[0]) => desktopSource.capability(action),
+    dispatch: (action: Parameters<DesktopAppActions["dispatch"]>[0]) => desktopSource.dispatch(action), descriptors: () => desktopSource.descriptors() });
   const setup = sources.previewSetup;
   const previewSetup: StudioPresentationPort<Slot>["previewSetup"] = setup ? {
     snapshot: () => setup.snapshot(), capability: action => setup.capability(action),
@@ -397,6 +425,8 @@ export function createStudioPresentation<Slot>(sources: {
     return { "3D head": head?.phase ?? "unknown", "preview quality": String(preview?.quality?.size ?? "unknown"),
       "lighting preset": preview?.preview?.lightingPreset ?? "unknown" };
   });
+  const moduleServices = new Map((sources.modules ?? []).map(service => [service.module, service] as const));
+  if (moduleServices.size !== (sources.modules ?? []).length) throw Error("A module's service is registered twice.");
   const openAbout = sources.about;
   const about: AboutPort = Object.freeze({
     capability: () => openAbout ? { available: true } : { available: false, reason: "About is part of the XF Studio desktop app." },
@@ -406,24 +436,27 @@ export function createStudioPresentation<Slot>(sources: {
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
-    previewReadiness, views, features: () => infos, feature, localSetup: Object.freeze(localSetup),
+    previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id), localSetup: Object.freeze(localSetup),
     facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry() }),
     // A save without a part saves the feature's live part, serialized with its own codec.
     presets: Object.freeze({ list: (feature: string) => a.presetList(feature),
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
-    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup),
+    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp,
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
-      installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot() }),
+      installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot(),
+      desktopApp: desktopApp.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
         ...(sources.localSetup ? [sources.localSetup.subscribe(listener)] : []),
         ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : []),
         ...(sources.modInstall ? [sources.modInstall.subscribe(listener)] : []),
-        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : [])];
+        ...(sources.desktopApp ? [sources.desktopApp.subscribe(listener)] : []),
+        ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []),
+        ...[...moduleServices.values()].map(service => service.subscribe(listener))];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };
     },
   });

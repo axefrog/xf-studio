@@ -24,9 +24,12 @@
  * - **Never ends the host.** Background work has nobody to report to: an unexpected failure (a dependency throwing, a damaged manifest)
  *   stops the job, leaves its remaining choices "not prepared", and is reported once through `failed` (PREV-101). A choice whose
  *   readiness can't be checked is queued; one whose request can't be made is not prepared.
+ * - **Never holds the host up.** Checking which choices are ready gives the event loop a turn between choices (`slicer`), so a person's
+ *   own change, a poll and every other request are answered while a row's choices are checked.
  */
 import type { CharacterRequest } from "./character-detail-request";
 import { canonicalJson } from "./eye-plate-recipe";
+import { timeSlicer } from "./event-loop";
 
 export const CHOICE_PREFETCH_SCHEMA = "xfs/choice-prefetch-1" as const;
 /**
@@ -54,7 +57,7 @@ export type PrefetchDeps = {
   /** The V with one choice of the option set, or null when the installed catalogue doesn't offer it. */
   requestFor(base: CharacterRequest, option: string, position: number): Promise<CharacterRequest | null>;
   /** A check of whether a request is ready now (its manifest holds), on the installation as it is now. */
-  readiness(): Promise<(request: CharacterRequest) => boolean>;
+  readiness(): Promise<(request: CharacterRequest) => boolean | Promise<boolean>>;
   /** Prepare several requests ahead (character-detail-service.ts `warmCharacters`); per request, whether it is ready. */
   warm(requests: readonly CharacterRequest[], signal: AbortSignal): Promise<readonly { ready: boolean }[]>;
   /** Resolves once no person's own change is being prepared. */
@@ -66,6 +69,11 @@ export type PrefetchDeps = {
   /** Nothing can be prepared until something is set up (WolvenKit): the job stops as `setup` before its first batch (NATIVE-48). */
   needsSetup?(): boolean;
   log?(message: string): void;
+  /**
+   * Lets the host's event loop answer what is waiting between units of work (event-loop.ts `timeSlicer`): checking which choices are
+   * ready runs one manifest at a time, so a person's request, a poll or a static file is never held back behind the whole check.
+   */
+  slicer?(): () => Promise<void>;
   /** A batch or the job failed for a reason other than being stopped (the host's diagnostics hook). */
   failed?(error: unknown): void;
   now?(): number;
@@ -168,6 +176,11 @@ export class ChoicePrefetcher {
     this.spent = false;
   }
 
+  /**
+   * A person is waiting on the host (their change was asked for, prepared or not): stop the batch being prepared ahead; its choices are
+   * queued again, and the reads it already started finish and are kept. The next batch starts once the host is quiet (`foregroundIdle`).
+   */
+  pause(): void { this.batch?.abort(); }
   /** A person's own change starts: stop the batch in WolvenKit (its choices are queued again) and wait until the change is prepared. */
   foreground(request: CharacterRequest): void {
     this.foregroundKey = requestKey(request);
@@ -239,11 +252,12 @@ export class ChoicePrefetcher {
   private async run(job: Job): Promise<void> {
     job.running = true;
     const live = () => !job.controller.signal.aborted && this.job === job;
+    const slice = this.deps.slicer?.() ?? timeSlicer();
     try {
       while (live()) {
         // Find out which choices are ready already (a manifest check each; no game file is read).
         const unknown = this.queued(job, "?").slice(0, 64);
-        let ready: (request: CharacterRequest) => boolean = () => false;
+        let ready: (request: CharacterRequest) => boolean | Promise<boolean> = () => false;
         if (unknown.length) {
           try { ready = await this.deps.readiness(); }
           catch (error) { this.deps.log?.(`Choices prepared earlier couldn't be checked; they are prepared again: ${messageOf(error)}`); }
@@ -256,8 +270,11 @@ export class ChoicePrefetcher {
           item.key = item.request ? requestKey(item.request) : null;
           // One unreadable manifest queues its choice; it never stops the job.
           let holds = false;
-          if (item.request) { try { holds = ready(item.request); } catch { holds = false; } }
+          if (item.request) { try { holds = await ready(item.request); } catch { holds = false; } }
+          if (!live()) return;
           item.state = !item.request ? "n" : item.key === this.foregroundKey ? "f" : holds ? "r" : "q";
+          await slice();
+          if (!live()) return;
         }
         if (this.queued(job, "?").length) continue;
         if (this.startBytes === null) this.startBytes = await this.deps.preparedBytes();

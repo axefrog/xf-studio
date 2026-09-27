@@ -8,11 +8,12 @@
  * differs from the default one-view graph, so a workspace that never adds a view keeps its bytes. On read, the legacy fields win
  * for the main view's nodes: the main view looks exactly as the `preview` block says (no appearance change).
  */
-import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules } from "./platform/api/view-graph";
+import { MAIN_VIEW, VIEW_GRAPH_1, type NodeCodec, type ViewGraphData, type ViewGraphRules, type ViewRecord } from "./platform/api/view-graph";
 import { parseViewGraph, ViewGraph } from "./platform/core/view-graph";
 import type { CameraState, PreviewState } from "./workspace-state";
 import { LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions, type LightingPreset } from "./creator-lighting";
-import { validStudioLights, type StudioLights } from "./studio-lighting";
+import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
+import { CAMERA_DISTANCE_RANGE } from "./camera-framing";
 
 /** A character scene's state: the head's eye shape and the V's material studies and body mode (design §3.1). */
 export type SceneState = { eyeShape: number; normals: boolean; eyeOwnRoughness?: boolean; uncensored?: boolean };
@@ -34,28 +35,52 @@ export const LEGACY_TOOL_FIELDS = { surface: "eye-makeup.surface", wire: "eye-ma
 export const DEFAULT_NODES = { scene: "s1", camera: "c1", lights: "l1", display: "d1", tools: "t1" } as const;
 
 const bool = (value: unknown): value is boolean => typeof value === "boolean";
-const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const optional = <T>(value: unknown, check: (x: unknown) => x is T) => value === undefined || check(value);
-const vector = (value: unknown): value is number[] => Array.isArray(value) && value.length === 3 && value.every(finite);
-const pose = (value: unknown): value is CameraState => {
+/** A finite number within `[min, max]`. */
+export const inRange = (value: unknown, min: number, max: number): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+
+/**
+ * The ranges a stored preview holds (CORE-96): the node codecs below and `parseWorkspace`'s legacy `preview` fields enforce the same
+ * ones, so a value one refuses the other refuses too. The eye shape is rounded to its index; `EYE_SHAPE_RANGE.max` is the female
+ * creator's 22 choices, the most any head offers.
+ */
+export const EYE_SHAPE_RANGE = Object.freeze({ min: 0, max: 21 });
+export const CAMERA_FOV_RANGE = Object.freeze({ min: 10, max: 90 });
+/** How far a stored camera's position and target may lie from the subject's origin, in metres. */
+export const CAMERA_COORDINATE_LIMIT = 100;
+/**
+ * A camera pose a workspace may hold: finite vectors within bounds, a lens in range, and an orbit distance within the range any view's
+ * scene-derived limits lie in (camera-framing.ts), so a pose saved at the farthest reach of a narrow lens, a tall pane or the whole
+ * body stays valid.
+ */
+export function validCameraPose(value: unknown): value is CameraState {
   const c = value as Partial<CameraState> | undefined;
-  return !!c && typeof c === "object" && vector(c.position) && vector(c.target) && finite(c.fov);
-};
+  const vector = (x: unknown): x is number[] => Array.isArray(x) && x.length === 3 &&
+    x.every(n => inRange(n, -CAMERA_COORDINATE_LIMIT, CAMERA_COORDINATE_LIMIT));
+  if (!c || typeof c !== "object" || !vector(c.position) || !vector(c.target) || !inRange(c.fov, CAMERA_FOV_RANGE.min, CAMERA_FOV_RANGE.max)) return false;
+  const target = c.target;
+  const distance = Math.hypot(...c.position.map((n, i) => n - target[i]!));
+  return distance >= CAMERA_DISTANCE_RANGE.min - .001 && distance <= CAMERA_DISTANCE_RANGE.max + .001;
+}
 
 const scene: NodeCodec = { kinds: ["character"], parse: state => {
   const s = state as Partial<SceneState>;
-  if (!finite(s.eyeShape) || !bool(s.normals) || !optional(s.eyeOwnRoughness, bool) || !optional(s.uncensored, bool)) return;
-  return { eyeShape: s.eyeShape, normals: s.normals, ...(s.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: s.eyeOwnRoughness }),
+  if (!inRange(s.eyeShape, EYE_SHAPE_RANGE.min, EYE_SHAPE_RANGE.max) || !bool(s.normals) || !optional(s.eyeOwnRoughness, bool) ||
+    !optional(s.uncensored, bool)) return;
+  return { eyeShape: Math.round(s.eyeShape), normals: s.normals, ...(s.eyeOwnRoughness === undefined ? {} : { eyeOwnRoughness: s.eyeOwnRoughness }),
     ...(s.uncensored === undefined ? {} : { uncensored: s.uncensored }) };
 } };
 const camera: NodeCodec = { kinds: ["orbit"], parse: state => {
-  if (state.pose !== undefined && !pose(state.pose)) return;
+  if (state.pose !== undefined && !validCameraPose(state.pose)) return;
   return state.pose === undefined ? {} : { pose: { position: [...(state.pose as CameraState).position], target: [...(state.pose as CameraState).target],
     fov: (state.pose as CameraState).fov } };
 } };
 const lights: NodeCodec = { kinds: [...LIGHTING_PRESETS], parse: state => {
   const s = state as Partial<LightsState>;
-  if (!finite(s.exposure) || !finite(s.lightAngle) || !validStudioLights(s.studioLights) || !validCreatorLighting(s.creatorLighting)) return;
+  if (!inRange(s.exposure, STUDIO_EXPOSURE_RANGE.min, STUDIO_EXPOSURE_RANGE.max) ||
+    !inRange(s.lightAngle, STUDIO_KEY_ANGLE_RANGE.min, STUDIO_KEY_ANGLE_RANGE.max) || !validStudioLights(s.studioLights) ||
+    !validCreatorLighting(s.creatorLighting)) return;
   return { exposure: s.exposure, lightAngle: s.lightAngle, studioLights: { ...s.studioLights }, creatorLighting: { ...s.creatorLighting } };
 } };
 const display: NodeCodec = { parse: state => {
@@ -108,26 +133,36 @@ export function defaultViewGraph(preview: PreviewState): ViewGraphData {
 export function workspaceViewGraph(preview: PreviewState, stored: ViewGraphData | undefined): ViewGraphData {
   const parsed = stored && parseViewGraph(stored, STUDIO_VIEW_GRAPH_RULES);
   if (!parsed) return defaultViewGraph(preview);
-  const main = parsed.views.find(view => view.id === MAIN_VIEW)!, nodes = mainNodes(preview);
+  const main = parsed.views.find(view => view.id === MAIN_VIEW) as ViewRecord, nodes = mainNodes(preview);
+  // The legacy fields hold only Surface controls and Plate wireframe: every other tool the main view has stays as stored (CORE-97).
+  const storedTools = parsed.tools.find(node => node.id === main.tools)?.on as ToolsState["on"] | undefined;
+  const tools: ToolsState = { on: { ...storedTools, ...nodes.tools.on } };
   const overlay = <T extends { id: string; kind?: string }>(list: readonly T[], id: string, state: object, kind?: string) =>
     list.map(node => node.id === id ? { id, ...(node.kind === undefined ? {} : { kind: kind ?? node.kind }), ...state } : node);
   return parseViewGraph({ ...parsed, scenes: overlay(parsed.scenes, main.scene, nodes.scene),
     cameras: overlay(parsed.cameras, main.camera, nodes.camera), lights: overlay(parsed.lights, main.lights, nodes.lights, nodes.rig),
-    display: overlay(parsed.display, main.display, nodes.display), tools: overlay(parsed.tools, main.tools, nodes.tools) },
+    display: overlay(parsed.display, main.display, nodes.display), tools: overlay(parsed.tools, main.tools, tools) },
   STUDIO_VIEW_GRAPH_RULES) ?? defaultViewGraph(preview);
 }
 
 /** A graph service for a workspace's preview (and its stored views, if any). */
-export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData, options?: { now?: () => number }) {
-  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES, options);
+export function createStudioViewGraph(preview: PreviewState, stored?: ViewGraphData) {
+  return new ViewGraph(workspaceViewGraph(preview, stored), STUDIO_VIEW_GRAPH_RULES);
 }
 
-/** Whether a graph is the default one-view graph (structure only: its state is mirrored into `preview`). */
+/**
+ * Whether a graph is the default one-view graph: its structure is the default one and everything its main view holds is mirrored
+ * into `preview`. A main view with a tool state the legacy fields can't hold (any tool but Surface controls and Plate wireframe)
+ * is not the default, so the graph is stored and the state survives a save (CORE-97).
+ */
 export function isDefaultViewGraph(data: ViewGraphData): boolean {
   const [view, ...rest] = data.views;
-  return !rest.length && !!view && view.id === MAIN_VIEW && view.title === undefined && data.focused === MAIN_VIEW &&
-    view.scene === DEFAULT_NODES.scene && view.camera === DEFAULT_NODES.camera && view.lights === DEFAULT_NODES.lights &&
-    view.display === DEFAULT_NODES.display && view.tools === DEFAULT_NODES.tools;
+  if (rest.length || !view || view.kind !== "3d" || view.id !== MAIN_VIEW || view.title !== undefined || data.focused !== MAIN_VIEW ||
+    view.scene !== DEFAULT_NODES.scene || view.camera !== DEFAULT_NODES.camera || view.lights !== DEFAULT_NODES.lights ||
+    view.display !== DEFAULT_NODES.display || view.tools !== DEFAULT_NODES.tools) return false;
+  const mirrored = new Set<string>(Object.values(LEGACY_TOOL_FIELDS));
+  const on = data.tools.find(node => node.id === DEFAULT_NODES.tools)?.on as Record<string, unknown> | undefined;
+  return !!on && Object.keys(on).every(id => mirrored.has(id));
 }
 
 /** What the workspace stores for a graph: nothing for the default graph (its state is the mirrored `preview`), else the graph. */
@@ -136,10 +171,14 @@ export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
   return isDefaultViewGraph(data) ? undefined : data;
 }
 
-/** A view's node states as the legacy `preview` fields (for the workspace mirror and `PreviewActions.snapshot`). */
-export function previewFields(graph: ViewGraph, view = MAIN_VIEW) {
+/**
+ * A view's node states as the legacy `preview` fields (for the workspace mirror and `PreviewActions.snapshot`). With `active`, the
+ * tools are what the device applies: the stored choices without the tools the presentation withdrew (UI-102).
+ */
+export function previewFields(graph: ViewGraph, view = MAIN_VIEW, options: { active?: boolean } = {}) {
   const scene = graph.state<SceneState>(view, "scene"), display = graph.state<DisplayState>(view, "display");
-  const lights = graph.state<LightsState>(view, "lights"), tools = graph.state<ToolsState>(view, "tools").on;
+  const lights = graph.state<LightsState>(view, "lights");
+  const tools = options.active ? graph.activeTools(view) : graph.state<ToolsState>(view, "tools").on;
   return { scene, display, lights, rig: graph.kind(view, "lights") as LightingPreset, camera: graph.state<CameraNodeState>(view, "camera").pose,
     surface: tools[LEGACY_TOOL_FIELDS.surface] === true, wire: tools[LEGACY_TOOL_FIELDS.wire] === true, tools };
 }

@@ -134,6 +134,7 @@ export type SelectorTarget =
 | **Lip makeup** | Yes | `makeupLips`, `makeupLips_glossy`, `makeupLips_matte` (sub-row) | Vanilla row | Own: 1 | Settles the platform's §6/§9 inconsistency in favour of §6 (question Q13) |
 | **Eyebrows** | No (a decal cannot remove the brow beneath it) | `eyebrows` (choice per look, with the creator's colour row) | Vanilla row | None | [Brows and cheeks: selector](../backlog/brows-and-cheeks-brief.md#selector) |
 | **Hair colours** | No | Every `hair_color` row, with brows, lashes and beard following (slot overlay) | Vanilla rows | **1** total: colours are one set, and a second selector would only split it | [Hair colour study §3](../hair/hair-colour-authoring-feasibility.md#3-what-an-xf-export-would-emit) |
+| **Nails** (Nail Salon) | No (a second nail mesh would draw over V's own; a lifted overlay is a later option) | `nails_color` with its first-person and cyberware followers (slot overlay, which patches new-named appearances into the nail `.app` and `.mesh` files) | Vanilla row | **1** total: every look sits in one grid | [Nail Salon §2](../nails/nail-salon-design.md#2-what-an-xf-export-is) (design, needs discussion) |
 | **Tattoos** | Yes (the community rows 3300–3309 are candidate placements) | `facial_tattoo`, `body_tattoo` (sub-row) | Vanilla row | None | [Tattoos brief](../character-customization/tattoos-brief.md) |
 
 **Not selectors.** Some modules have no creator row. They stay global modules, shown from the Modules menu ([view graph §4.2](view-graph-design.md#42-the-modules-menu)):
