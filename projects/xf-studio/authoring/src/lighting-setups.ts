@@ -451,7 +451,8 @@ export function parseLightingSetup(value: unknown): LightingSetup | undefined {
 /**
  * A stored library (the lights node's `setup` and `setups`), normalised, or undefined when it isn't one. A damaged setup (an out-of-range
  * value after a later range change, say) is dropped, not the library, as `parseLayoutLibrary` does (PREV-161); a repeated id keeps the
- * first. When the shown setup was dropped, its built-in base is shown instead (the one "Reset to" would give), else the default.
+ * first. When the shown setup was dropped, its built-in base is shown instead (the one "Reset to" would give); a shown setup that
+ * names no setup at all still makes the whole value invalid.
  */
 export function parseSetupLibrary(value: unknown): SetupLibrary | undefined {
   const v = value as Partial<SetupLibrary> | undefined;
@@ -469,7 +470,8 @@ export function parseSetupLibrary(value: unknown): SetupLibrary | undefined {
   }
   const library = { setup: v.setup as string, setups };
   if (setupExists(library, v.setup)) return library;
-  return { setup: droppedShown ?? DEFAULT_SETUP_LIBRARY.setup, setups };
+  // A shown setup that names nothing at all isn't a library (an edit naming an unknown setup is refused).
+  return droppedShown ? { setup: droppedShown, setups } : undefined;
 }
 
 // ----- Workspaces saved before setups -----

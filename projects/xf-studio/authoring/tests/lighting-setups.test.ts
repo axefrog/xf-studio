@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { CREATOR_RIG_FEMALE, creatorRigSpecs, DEFAULT_CREATOR_LIGHTING, type BodySex } from "../src/creator-lighting";
 import { createLightListRig } from "../src/lighting-setup-stage";
-import { BUILT_IN_SETUP_IDS, builtInSetup, colourHex, creatorSetup, DEFAULT_SETUP_LIBRARY, hexToLinear, legacyStudioStage, lightingSource, lightPlacement,
+import { BUILT_IN_SETUP_IDS, builtInSetup, colourHex, creatorSetup, hexToLinear, legacyStudioStage, lightingSource, lightPlacement,
   LIGHTING_LIMITS, migrateLegacyLighting, parseSetupLibrary, resolveLightingSource, studioStageSetup, type LightingSource,
   type SetupLibrary } from "../src/lighting-setups";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
@@ -489,7 +489,7 @@ test("creator lights carry the game's own values, kept through the edits they st
   const two = JSON.parse(JSON.stringify({ setup: "u1", setups: [library.setups[0], { ...library.setups[0], id: "u2", name: "Second" }] }));
   two.setups[1].setup.exposure = 1e9;
   expect(parseSetupLibrary(two)).toEqual({ setup: "u1", setups: [library.setups[0]] });
-  expect(parseSetupLibrary({ setup: "u9", setups: [library.setups[0]] })).toEqual({ setup: DEFAULT_SETUP_LIBRARY.setup, setups: [library.setups[0]] });
+  expect(parseSetupLibrary({ setup: "u9", setups: [library.setups[0]] })).toBeUndefined();
   expect(parseSetupLibrary({ setup: "u1", setups: "nope" })).toBeUndefined();
 });
 
