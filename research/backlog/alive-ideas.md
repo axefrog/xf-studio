@@ -23,6 +23,7 @@
 - **Skin that responds:** wetness in rain, flushed cheeks after sprinting, sweat or grime building up and washing off, scars that stay. These are material parameters driven live, building on the skin and decal shader study.
 - **Physics on everything that should move:** hair (planned), earrings, jewellery, coat tails and straps, all through the same solver.
 - **Photo-mode direction:** live posing from the Studio, look-at targets, expression and pose timelines. "Directing" V rather than choosing presets.
+- **Light V like a set:** the Studio's lighting setups mirrored onto V in photo mode ([lighting mirror design](../runtime/lighting-mirror-design.md)), and later the reverse: the lights around V at a real place in Night City read into the Studio, so a look is authored under the light it will be seen in. A light that moves with V in normal play (a CharLi-style portrait light) is a separate decision.
 - **New voiced lines with lip sync:** voice new lines for V or other characters and have the mouth follow them, as JALI's baked clips do for the game's own lines. Later this could feed consented real-time voice swap and the quest designer.
 
   **Feasibility (27 September 2026, offline study; details in [lip sync](../../knowledge/lipsync.md) and the [lip-sync design](../animation/lipsync-design.md)):**
