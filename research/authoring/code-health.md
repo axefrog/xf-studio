@@ -29,6 +29,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | Commit (newest first) | Date | Scope | Result |
 |---|---|---|---|
+| `635b0d7` | 2026-09-27 | View graph P1+P2 (graph service, View and lighting history, module registry, parked layouts, derived tools, collapse, Panels flyout) | 0 High, 2 Medium, 8 Low (UI-102..106, CORE-94..98, plus three unnumbered Lows). Graph invariants, byte-stable workspace, history scope, factory layout round trip, derived tools, boundary rules 3–7 and collapse accessibility are sound. CORE-94 becomes High at P4 |
 | `024d960` | 2026-09-27 | Bridge batch 3 (cc.open, time in the creator, cc.apply value matching, game.options.read and the CET answer path, full-body preset, cc.page) | 0 High, 2 Medium, 7 Low (RB-42..50). Write gates, packaging split, the menu-event route, OptionsExchange bounds and the natives are sound. Rebuild the packages before staging (RB-50) |
 | `15941da`, `26d0dea` | 2026-09-27 | Native texture decoder (BCn, xbm, texture worker, export split) and the framework arm fix (substitution check, garment-data repair) | 0 High, 0 Medium, 9 Low (NATIVE-54..57, PIPE-107..109, plus two latent parts of PIPE-109). Header bounds, worker lifecycle, cache identity, colour flags, BC4 rounding, flips and the layering are sound |
 | `17d2585` | 2026-09-27 | Native catalogue merge (creator texts read natively, WolvenKit optional until export, Oodle release, degraded rule, R12) | 0 High, 2 Medium, 6 Low (NATIVE-46..53). Oodle lifecycle, payload gate, language keys, retry rules, the degraded rule, R12 and the boundary are sound. Fixed in claude/cleanup-native-catalogue |
@@ -72,6 +73,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-102 | Med | Presentation | Hiding a module removes its tool controls but leaves an active tool on (Surface controls keeps drawing and editing, hints still point at parked panels) (`studio-ui/app.ts:125`, `input-hints.ts:71`) | Open |
+| UI-103 | Med | Presentation | `reveal()` activates a panel's tab but never expands a collapsed group, so Show panel, the flyout's Views entries and Help reveals look like they do nothing (`dock/dock-view.ts:409`; reproduced) | Open (claude/fix-dock-collapse) |
 | PREV-110 | Med | Preview rig | Hair dangle chains are bound bone by bone to the nearest body segment, so a strand root follows `Head` and its tip a shoulder; a head turn shears the hair (measured on `hh_033`: 26 bones on `Head`, 9 on `Neck1`, 7 on the right shoulder). Fix: bind each chain to its own rig parent (hair physics plan P1, after claude/body-fidelity) | Open |
 | PREV-109 | Med | Character plan | A multi-part hairstyle resolves but is never drawn. `planCharacterDetails` picks hair by the vanilla slot name `hair_color` (`DETAIL_UI_SLOTS`, `character-detail-plan.ts:71`) or a switcher on such a slot (`detailSlotOf`), and the Multicolored Hair framework's part options (`mch_hair_part_01…03`, activated by its own switcher) have neither and sit in `hairs`, not a face group, so they are dropped and the hair slot reads "None" with no message while the V wears hair; `cc-render-coverage.ts` marks the rows not drawn by the same rule. Observed on the diagnostic MO2 profile with "SOPHIE MCH": the resolver returns both parts correctly (`resolveCharacter`), the plan draws neither. Proposal: plan every appearance consumed by the `hairs` group (the game's hairstyle controller) as hair, one entry per part, and give coverage the same rule; the feminine `hairs` group holds only `hair_color` and `mch_hair_part_*` options on that profile ([study §10.5](../hair/hair-colour-authoring-feasibility.md#105-what-xf-studio-does-with-it-today)) | Open |
 | CORE-93 | Med | Tests | The Authoring CI job on `ubuntu-24.04` failed 13 tests that pass on Windows: settings tests saved a Windows drive path as the game folder (absolute only on Windows, so Linux refused it), the repair route's fake WolvenKit named its output with `basename` of a backslash depot path (the whole path on Linux), and `ui-polish-dom.test.ts` left a global `requestAnimationFrame` behind, so the Character panel's DOM tests failed whenever they ran after it (the light DOM's `document` had no `addEventListener`) | **Fixed** (claude/fix-ci-linux, 27 Sep; see below) |
@@ -406,6 +409,17 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
   - **RB-48:** any in-process script can answer the pending options request first (accepted in-process trust; document it).
   - **RB-49:** no offline or card coverage of `cc.open`'s refusals or of the kill switch during `cc.open`.
   - **RB-50:** the checked-in build and `dist/` zips are batch 2 under the same version; rebuild (and bump the version) before staging.
+
+- **UI-104..106, CORE-94..98** (view graph review at `635b0d7`), Open:
+  - **UI-104:** parked-layout restore turns `[.3,.3,.4]` into `[.5,.3,.2]`; floating composites return to their factory home; `collapsed` restored only on the anchor path (reproduced).
+  - **UI-105:** Maximize is offered on a collapsed group and hides the collapse button; all groups of a split can be collapsed into a blank dock (reproduced).
+  - **UI-106:** `view.setTool` doesn't check head readiness; a toggle made before the head loads isn't saved.
+  - **CORE-94:** Undo/Redo replays a views array whose nodes an unrecorded structure edit removed: `state()` throws and a reload loses all views (reproduced; High once P4 adds real structure edits).
+  - **CORE-95:** history coalescing is time-only and `seal()` is never called: two drags within 1 s merge, a paused drag splits (reproduced).
+  - **CORE-96:** node codecs check types, not the ranges `parseWorkspace` enforces (eyeShape 999.5 accepted) (reproduced).
+  - **CORE-97:** `isDefaultViewGraph` compares structure only and only surface/wire mirror into `preview`, so other main-view tool state is dropped on save (latent).
+  - **CORE-98:** `validViewId` accepts `uv` and `surface`, which gestures reserve (reproduced).
+  - Unnumbered: `resolveTool` special-cases `motion.idle` and view tool contributions can't name the action they dispatch (a new singleton assumption); `parseViewGraph` rejects the whole graph over one unknown kind (a newer build's views get erased); `cameraJump` records a Back step when the camera didn't move.
 
 ## New subsystems since last review
 
