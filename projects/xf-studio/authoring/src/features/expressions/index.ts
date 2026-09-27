@@ -18,7 +18,7 @@ export { EXPRESSION_PART_1, expressionPart } from "./part";
 /** Registration order is the catalogue order. */
 const KINDS: Record<ExpressionAction["kind"], true> = {
   "expression.setControl": true, "expression.setAxis": true, "expression.linkPair": true, "expression.setLinks": true, "expression.mirror": true, "expression.reset": true,
-  "expression.startFrom": true, "expression.setLabel": true,
+  "expression.startFrom": true, "expression.setLabel": true, "expression.intensity": true,
 };
 
 export const EXPRESSIONS: FeatureModule<ExpressionAction, ExpressionScope, typeof EXPRESSIONS_ID, ExpressionPart, ExpressionEditor,

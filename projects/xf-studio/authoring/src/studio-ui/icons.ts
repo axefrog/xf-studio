@@ -75,6 +75,11 @@ const ICONS = {
   layouts: [s("M2.5 6.5h8v7h-8z"), s("M2.5 8.5h8"), s("M4.5 6.5v-2h8v7h-2"), s("M6.5 4.5v-2h7v7h-1")],
   category: [s("M2.5 2.5h4.5v11H2.5z"), s("M9 2.5h4.5v4.5H9zM9 9h4.5v4.5H9z")],
   dot: [f("M5.5 5.5h5v5h-5z")],
+  // Easing curves (easing.ts), drawn as the curve from rest (bottom left) to full (top right).
+  easeLinear: [s("M2.5 13.5L13.5 2.5")],
+  easeIn: [s("M2.5 13.5C8.5 13.5 12 9.5 13.5 2.5")],
+  easeOut: [s("M2.5 13.5C4 6.5 7.5 2.5 13.5 2.5")],
+  easeInOut: [s("M2.5 13.5C8.5 13.5 7.5 2.5 13.5 2.5")],
   link: [s("M6.8 9.2l2.4-2.4"), s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7")],
   /** The link broken: its two halves apart, with break marks (PairControl's separate sides). */
   unlink: [s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7"), s("M5 2.5v1.8M2.5 5h1.8M11 13.5v-1.8M13.5 11h-1.8")],

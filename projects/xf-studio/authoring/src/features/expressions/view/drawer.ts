@@ -26,8 +26,10 @@
  * the facial preview's snapshot (the rig's controls, the installed expressions and the built-in samples) and its part presets.
  */
 import { applyCapability, button, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
-  setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
+  ScrubSlider, setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
 import { COMING_SOON } from "../../../studio-ui/coming-soon";
+import { centredAmount, EASING_IDS, EASING_LABELS, type EasingId } from "../../../easing";
+import type { IconName } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
@@ -195,6 +197,27 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   const resetAll = iconButton({ label: "Reset all", icon: "reset", small: true, title: "Reset all: back to V's resting face",
     onClick: () => ctx.dispatch({ kind: "expression.startFrom", origin: { kind: "rest" }, controls: {}, links: {} } as ExpressionAction) });
   const faceHelp = helpTip("the face controls");
+
+  // ---- Adjust all: operations on every control in use at once (a section built to hold more of them) ----
+  // Intensity: every control that is non-zero when the drag begins moves toward full (above the middle) or toward rest (below), through
+  // the chosen curve; live while dragging, one Undo step on release, cancelled by Escape, a release at the middle or in the bleed area.
+  const EASE_ICONS: Record<EasingId, IconName> = { linear: "easeLinear", in: "easeIn", out: "easeOut", inOut: "easeInOut" };
+  const INTENSITY = "expression-intensity";
+  let intensityBase: Record<string, number> = {}, scrubbing = false;
+  const intensityId = "expr:intensity";
+  const intensity = new ScrubSlider<EasingId>({ label: "Intensity", ends: { negative: "Rest", positive: "Full" },
+    help: ["Moves every control your expression uses at once: toward full to the right, toward rest to the left. Controls at 0 stay at 0.",
+      "It springs back to the middle. Release to apply (one Undo step); release at the middle, press Escape or drag away to cancel. The curve buttons choose how the change grows."],
+    curves: EASING_IDS.map(id => ({ value: id, label: `Curve: ${EASING_LABELS[id]}`, icon: EASE_ICONS[id] })),
+    onCurve: id => ctx.easing.set(INTENSITY, id),
+    onBegin: () => { intensityBase = { ...current.controls }; scrubbing = true; ctx.facade.controlBegin(intensityId); },
+    onPreview: position => {
+      const outcome = ctx.facade.controlEdit(intensityId, { kind: "expression.intensity", base: intensityBase, amount: centredAmount(position, ctx.easing.get(INTENSITY) ?? "linear") } as ExpressionAction);
+      if (!outcome.ok) ctx.feedback.toast("warning", "Expression", outcome.message);
+    },
+    onCommit: () => { scrubbing = false; ctx.facade.controlCommit(intensityId); },
+    onCancel: () => { scrubbing = false; ctx.facade.controlCancel(intensityId); } });
+  intensity.element.classList.add("expr-intensity");
   const groupsHost = h("div", { class: "expr-groups" });
   const waiting = note("", "muted");
   const noControls = h("div", { class: "expr-no-match" });
@@ -204,6 +227,10 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     h("section", { class: "section", "aria-label": "Start from" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Start from" }), h("span", { class: "block-actions" }, save)),
       startSearch.element, tree.element, presetsNote),
+    h("section", { class: "section", "aria-label": "Adjust all" },
+      h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Adjust all" }),
+        helpTip("Adjust all", "Operations that change every control your expression uses at once.")),
+      intensity.element),
     h("section", { class: "section", "aria-label": "Face" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Face" }), faceHelp,
         h("span", { class: "block-actions" }, symmetric.element, more, resetAll), updating.element, updatingText),
@@ -436,6 +463,10 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       const editable = ctx.facade.editable();
       availability = editable.available ? { disabled: false } : { disabled: true, reason: editable.reason };
       for (const control of [save, more, resetAll]) applyCapability(control, editable);
+      // Intensity needs controls in use; with none, it says so in its tooltip (a drag that takes every control to rest keeps going).
+      const inUse = scrubbing || Object.values(current.controls).some(weight => weight > 0);
+      intensity.update({ curve: ctx.easing.get(INTENSITY) ?? "linear", disabled: availability.disabled || !inUse,
+        reason: availability.disabled ? availability.reason : "Move a control or start from an expression first: Intensity changes the controls in use." });
       startPoints = new Map((preview?.startPoints.items ?? []).map(point => [point.id, point]));
       paintStart(); updatePresetsNote();
       const controls = preview?.controls;

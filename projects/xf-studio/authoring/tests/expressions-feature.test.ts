@@ -154,3 +154,36 @@ test("a mirrored edit is one Undo step in the Studio: a linked two-way drag sets
   c.app.dispatch({ kind: "history.undo" });
   expect(part(c)).toBeUndefined();
 });
+
+test("intensity: toward full or rest from the drag's start, zeros and controls outside the start untouched, one Undo step, cancel restores", async () => {
+  const { interpolateWeight } = await import("../src/engines/facial-rig/vector");
+  const { centredAmount, ease } = await import("../src/easing");
+  // The maths: above the middle toward full, below toward rest, 0 stays 0, the middle changes nothing.
+  expect([interpolateWeight(0.4, 0.5), interpolateWeight(0.4, -0.5), interpolateWeight(0, 1), interpolateWeight(0.4, 0), interpolateWeight(0.4, 1), interpolateWeight(0.4, -1)])
+    .toEqual([f32(0.7), f32(0.2), 0, f32(0.4), 1, 0]);
+  // Curves map the travel; the amount is signed and continuous through the middle.
+  expect([centredAmount(50, "linear"), centredAmount(75, "linear"), centredAmount(25, "linear"), centredAmount(100, "in"), centredAmount(75, "in"), centredAmount(75, "out")])
+    .toEqual([0, 0.5, -0.5, 1, 0.25, 0.75]);
+  expect([ease("inOut", 0.5), ease("inOut", 0), ease("inOut", 1)]).toEqual([0.5, 0, 1]);
+  // The action: absolute from its base, so one drag's edits replace each other; what isn't in the base is left alone.
+  const start = state({ jaw_mid_open: f32(0.4), lips_l_corner_up: f32(0.2) });
+  const base = { jaw_mid_open: f32(0.4), lips_l_corner_up: f32(0.2) };
+  expect(apply({ kind: "expression.intensity", base, amount: 0.5 }, start).part.controls).toEqual({ jaw_mid_open: f32(0.7), lips_l_corner_up: f32(0.6) });
+  expect(apply({ kind: "expression.intensity", base, amount: -1 }, start).part.controls).toEqual({});
+  expect(apply({ kind: "expression.intensity", base: { jaw_mid_open: f32(0.4) }, amount: 1 }, start).part.controls).toEqual({ jaw_mid_open: 1, lips_l_corner_up: f32(0.2) });
+  expect(expressionCapability(start, { kind: "expression.intensity", base, amount: 2 })).toMatchObject({ available: false, code: "invalid_value" });
+  // In the Studio: a drag is one Undo step; cancelling restores the start and leaves no step.
+  const c = core();
+  c.app.dispatch({ kind: "expression.setControl", name: "jaw_mid_open", value: 0.4 } as never);
+  const before = part(c)!.controls, steps = c.app.historyTimeline().steps.length;
+  c.app.featureControlBegin("expressions", "intensity");
+  for (const amount of [0.1, 0.3, 0.5]) c.app.featureControlEdit("expressions", "intensity", { kind: "expression.intensity", base: before, amount } as { kind: string });
+  c.app.featureControlCommit("intensity");
+  expect([part(c)!.controls.jaw_mid_open, c.app.historyTimeline().steps.length, c.app.historyTimeline().steps.at(-1)!.label]).toEqual([f32(0.7), steps + 1, "Adjust intensity"]);
+  c.app.featureControlBegin("expressions", "intensity2");
+  c.app.featureControlEdit("expressions", "intensity2", { kind: "expression.intensity", base: part(c)!.controls, amount: -0.9 } as { kind: string });
+  c.app.featureControlCancel("intensity2");
+  expect([part(c)!.controls.jaw_mid_open, c.app.historyTimeline().steps.length]).toEqual([f32(0.7), steps + 1]);
+  c.app.dispatch({ kind: "history.undo" });
+  expect(part(c)!.controls.jaw_mid_open).toBe(f32(0.4));
+});

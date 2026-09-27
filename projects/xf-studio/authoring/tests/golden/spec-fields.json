@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator)",
  "states": {
   "starter": {
    "modes": {
@@ -623,6 +623,12 @@
       "unit": "characters"
      }
     },
+    "layer/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -1237,6 +1243,12 @@
       "unit": "characters"
      }
     },
+    "point/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -1846,6 +1858,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "viewport/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     },
     "collection/history.jumpTo": {
@@ -2459,6 +2477,12 @@
       "unit": "characters"
      }
     },
+    "collection/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -3068,6 +3092,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "preset/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     }
    },
@@ -3889,6 +3919,12 @@
       "unit": "characters"
      }
     },
+    "layer/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -4510,6 +4546,12 @@
       "unit": "characters"
      }
     },
+    "point/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -5119,6 +5161,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "viewport/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     },
     "collection/history.jumpTo": {
@@ -5732,6 +5780,12 @@
       "unit": "characters"
      }
     },
+    "collection/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -6341,6 +6395,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "preset/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     }
    },
@@ -7163,6 +7223,12 @@
       "unit": "characters"
      }
     },
+    "layer/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -7785,6 +7851,12 @@
       "unit": "characters"
      }
     },
+    "point/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -8394,6 +8466,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "viewport/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     },
     "collection/history.jumpTo": {
@@ -9007,6 +9085,12 @@
       "unit": "characters"
      }
     },
+    "collection/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -9616,6 +9700,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "preset/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     }
    },
@@ -10437,6 +10527,12 @@
       "unit": "characters"
      }
     },
+    "layer/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -11058,6 +11154,12 @@
       "unit": "characters"
      }
     },
+    "point/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -11667,6 +11769,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "viewport/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     },
     "collection/history.jumpTo": {
@@ -12280,6 +12388,12 @@
       "unit": "characters"
      }
     },
+    "collection/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -12889,6 +13003,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "preset/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     }
    },
@@ -13710,6 +13830,12 @@
       "unit": "characters"
      }
     },
+    "layer/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -14331,6 +14457,12 @@
       "unit": "characters"
      }
     },
+    "point/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -14940,6 +15072,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "viewport/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     },
     "collection/history.jumpTo": {
@@ -15553,6 +15691,12 @@
       "unit": "characters"
      }
     },
+    "collection/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -16162,6 +16306,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "preset/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     }
    },
@@ -16986,6 +17136,12 @@
       "unit": "characters"
      }
     },
+    "layer/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "point/history.jumpTo": {
      "entryId": {}
     },
@@ -17610,6 +17766,12 @@
       "unit": "characters"
      }
     },
+    "point/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "viewport/history.jumpTo": {
      "entryId": {}
     },
@@ -18219,6 +18381,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "viewport/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     },
     "collection/history.jumpTo": {
@@ -18832,6 +19000,12 @@
       "unit": "characters"
      }
     },
+    "collection/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
+     }
+    },
     "preset/history.jumpTo": {
      "entryId": {}
     },
@@ -19441,6 +19615,12 @@
      "label": {
       "maxLength": 64,
       "unit": "characters"
+     }
+    },
+    "preset/expression.intensity": {
+     "amount": {
+      "min": -1,
+      "max": 1
      }
     }
    },
