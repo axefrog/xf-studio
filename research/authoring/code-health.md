@@ -79,6 +79,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-146 | Low | Presentation (reduced motion) | Under `prefers-reduced-motion: reduce`, `studio.css` (about lines 1381–1382) sets `transition-duration: 1ms !important` on every element, so every property change becomes a 1 ms transition and code that measures right after a change reads stale sizes until the next frame (found by the Windows release runner, 28 September). Use `transition: none` for reduced motion | Open, UI track |
 | NATIVE-70 | Low | Native reader (depth) | `MAX_REQUEST_DEPTH` 4,096 leaves about 1.3× headroom under the measured stack limit of about 5,400 levels (the 2,048 default had 2.6×), and the graph read runs on the resolver's worker with a 30 s budget (`native/native-decode.ts:109,117`, `idle-host.ts:237`) [plausible]. | Open |
 | PREV-165 | Low | Expression transitions (shared solver) | Each animating page asks for up to 60 solves a second, and the fair host makes a second page's drag solves wait (`facial-preview.ts`) [plausible]. Lower the rate while others wait. | Open |
 | CORE-118 | Low | Diagnostics (install receipts) | An archive not hashed within the report's budget matches a receipt on name and size alone (`diagnostics/mod-identity.ts` `ownInstallOf`) [plausible]. | Open |

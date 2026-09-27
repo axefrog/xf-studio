@@ -118,8 +118,12 @@ async function startChrome(options: { width?: number; height?: number; debugPort
   throw Error(`Chrome did not expose a page target after ${PAGE_TARGET_LIMITS.attempts} attempts (${CHROME}): ${failures.join("; ")}`);
 }
 
-/** `args`: extra Chrome switches (for example a fake camera: `--use-fake-device-for-media-stream`). */
-export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark"; args?: readonly string[] } = {}) {
+/**
+ * `args`: extra Chrome switches (for example a fake camera: `--use-fake-device-for-media-stream`). `scheme` and `motion` pin the page's
+ * `prefers-color-scheme` and `prefers-reduced-motion` instead of taking the machine's settings.
+ */
+export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark";
+  motion?: "reduce" | "no-preference"; args?: readonly string[] } = {}) {
   const { chrome, profile, page } = await startChrome(options);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { socket.onopen = ok; socket.onerror = fail; });
@@ -127,6 +131,8 @@ export async function launch(url: string, options: { width?: number; height?: nu
   const pending = new Map<number, { ok(value: any): void; fail(error: Error): void }>();
   const consoleLog: { type: string; text: string }[] = [];
   const handlers = new Map<string, ((params: any) => void)[]>();
+  /** The emulated media features, kept together: each Emulation.setEmulatedMedia call replaces the whole list. */
+  const media = new Map<string, string>();
   socket.onmessage = event => {
     const message = JSON.parse(String(event.data));
     if (message.method) for (const handler of handlers.get(message.method) ?? []) handler(message.params);
@@ -144,6 +150,7 @@ export async function launch(url: string, options: { width?: number; height?: nu
   const send = <T>(method: string, params: Record<string, unknown> = {}) => new Promise<T>((ok, fail) => {
     const next = ++id; pending.set(next, { ok, fail }); socket.send(JSON.stringify({ id: next, method, params }));
   });
+  const emulateMedia = () => send("Emulation.setEmulatedMedia", { features: [...media].map(([name, value]) => ({ name, value })) });
   await send("Page.enable"); await send("Runtime.enable"); await send("Log.enable");
   const chooserQueue: string[] = [];
   let chooserArmed = false;
@@ -180,7 +187,8 @@ export async function launch(url: string, options: { width?: number; height?: nu
       await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
     },
     async colorScheme(scheme) {
-      await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
+      media.set("prefers-color-scheme", scheme);
+      await emulateMedia();
     },
     async mouse(type, x, y, opts = {}) {
       await send("Input.dispatchMouseEvent", { type, x, y, button: opts.button ?? "left", modifiers: opts.modifiers ?? 0,
@@ -218,7 +226,9 @@ export async function launch(url: string, options: { width?: number; height?: nu
     async close() { socket.close(); await stopChrome(chrome, profile); },
   };
   if (options.width) await session.viewport(options.width, options.height ?? 1000);
+  if (options.motion) media.set("prefers-reduced-motion", options.motion);
   if (options.scheme) await session.colorScheme(options.scheme);
+  else if (media.size) await emulateMedia();
   await send("Page.navigate", { url });
   return session;
 }

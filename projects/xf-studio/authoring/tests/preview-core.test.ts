@@ -16,6 +16,11 @@ import {
   EYE_MORPH_LIFT, eyeGlb, eyeMorphGlb, fakeUncook, fixturePlateRecipe, fixturePreviewRecipe, headGlb, HEAD_TRIANGLES, HEAD_VERTICES, materialExports, plateVertexIds,
 } from "./preview-core-fixture";
 
+/**
+ * Tests that run whole derivations (real files written, hashed, encoded and verified in temporary folders). The head test runs eleven:
+ * about 0.5 s on a development machine, but over 6 s on GitHub's Windows runner, which is about ten times slower at this file work.
+ */
+const DERIVATION_TIMEOUT_MS = 30_000;
 const roots: string[] = [];
 const temporary = (label: string) => { const root = mkdtempSync(join(tmpdir(), `xfs-preview-${label}-`)); roots.push(root); return root; };
 /** Each scenario gets its own export cache, so one fake's exports never leak into another. */
@@ -209,7 +214,7 @@ test("the service derives, verifies, caches and reuses the preview core", async 
   // Re-deriving reads every resource from the export cache without running WolvenKit again.
   expect((await ensurePreviewCore({ gameRoot: game, cacheRoot, exporter, recipe, plateRecipe: plate })).reused).toBe(false);
   expect(fake.calls).toHaveLength(1);
-});
+}, DERIVATION_TIMEOUT_MS);
 
 test("an unsupported or missing head is reported plainly and blocks until the game changes", async () => {
   const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
@@ -246,7 +251,7 @@ test("an unsupported or missing head is reported plainly and blocks until the ga
     .rejects.toMatchObject({ code: "preview_verification_failed" });
   // Work directories are always removed.
   expect(require("node:fs").readdirSync(cacheRoot).filter((name: string) => name.startsWith(".work-"))).toEqual([]);
-});
+}, DERIVATION_TIMEOUT_MS);
 
 test("cancellation stops the derivation, records it and leaves no partial entry", async () => {
   const plate = fixturePlateRecipe(), recipe = fixturePreviewRecipe(plate);
