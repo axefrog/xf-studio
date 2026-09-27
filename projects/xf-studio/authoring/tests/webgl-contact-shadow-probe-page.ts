@@ -1,13 +1,14 @@
 /**
  * Browser page for tests/webgl-contact-shadow.test.ts (bundled there, run in headless Chrome with a real WebGL 2 context): the character
- * contact shadows (contact-shadow.ts, PREV-148) on a synthetic crease, with no shadow maps.
+ * contact shadows (platform/scene/contact-shadow.ts, PREV-148) on a synthetic crease, with no shadow maps.
  *
  * The scene, seen from 0.3 m in front: a skin plane facing the camera and, standing on it along y at x = 0, a skin ridge 3 mm tall and
  * 1 mm thick (a fold's lip). A spot light low on the +x side grazes the plane at about 20°, so the ridge hides the plane for about 8 mm on
  * its −x side: a crease far finer than a shadow map's bias and penumbra. Results land in `window.probe` as plain numbers.
  */
 import * as THREE from "three";
-import { contactShadowUniforms, createContactShadows, setContactShadows } from "../src/contact-shadow";
+import { createContactShadows, setContactShadows } from "../src/platform/scene/contact-shadow";
+import { contactShadowUniforms } from "../src/skin-material";
 import { createSkinMaterial, skinParameters } from "../src/skin-material";
 
 export type ContactProbe = {
@@ -63,7 +64,7 @@ try {
   scene.add(plane, ridge);
   scene.updateMatrixWorld(true);
 
-  const contact = createContactShadows(renderer);
+  const contact = createContactShadows(renderer, contactShadowUniforms);
   const gl = renderer.getContext(), pixels = new Uint8Array(W * H * 4);
   const lin = (b: number) => { const c = b / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
   // x of a world point on the plane in canvas pixels.

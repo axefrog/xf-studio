@@ -6,7 +6,8 @@ import { createLinearDisplay } from "./linear-display";
 import type { GradingLut, GradingLutSource } from "./grading-lut";
 import { installShadowFilter } from "./shadow-filter";
 import { createSkinScatter } from "./platform/scene/skin-scatter";
-import { createContactShadows, setContactShadows } from "./contact-shadow";
+import { createContactShadows, setContactShadows } from "./platform/scene/contact-shadow";
+import { contactShadowUniforms } from "./skin-material";
 import type { ScatterQuality } from "./platform/scene/skin-scatter-kernel";
 import { createStudioEnvironment, type StudioEnvironment } from "./studio-environment";
 import { DEFAULT_STUDIO_STAGE } from "./studio-lighting";
@@ -65,7 +66,7 @@ export function createLightListRig() {
     if (isSpot(light)) { light.distance = spec.distance; light.angle = spec.angle; light.penumbra = spec.penumbra; light.decay = spec.decay; }
     const was = light.castShadow;
     light.castShadow = spec.shadows;
-    // The game's character contact shadows (contact-shadow.ts), on a light that shadows at all: the shadow switch turns both off.
+    // The game's character contact shadows (platform/scene/contact-shadow.ts), on a light that shadows at all: the shadow switch turns both off.
     setContactShadows(light, spec.shadows && !!spec.game && spec.game.contactShadows !== "none");
     if (!spec.shadows) return;
     if (!isSpot(light)) {
@@ -155,7 +156,7 @@ export function createLightingSetupStage(options: {
   // The prefiltered room (null with the light probe instead); a setup with room light shows it, one without has no environment.
   const room = scene.environment;
   const rig = createLightListRig(), display = createLinearDisplay(renderer), scatter = createSkinScatter(renderer);
-  const contact = createContactShadows(renderer);
+  const contact = createContactShadows(renderer, contactShadowUniforms);
   let contactOn = true;
   scene.add(rig.group);
   // Shadow maps render only for lights that cast; soft PCF with a per-light radius. They are drawn again only when what casts or

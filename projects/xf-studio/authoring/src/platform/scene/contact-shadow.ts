@@ -14,82 +14,33 @@ import * as THREE from "three";
  * depth alone through their own depth materials (all eight skin influences). Every skin-lit program (skin, decals over it, the makeup
  * plate: skin-material.ts `patchSkinLight`) then scales a flagged light's direct light by the fraction of a march toward it, from the
  * shaded point, that no caster's depth hides. A light is recognised by its direction from the point (so Three's light order doesn't
- * matter); at most `CONTACT_SHADOW.lights` lights. Unflagged lights and the image-based light are untouched.
+ * matter); at most as many lights as the term's list holds. Unflagged lights and the image-based light are untouched.
+ *
+ * This module is the scene's pass (renderer adapter): the caster depth prepass and the flagged-light list. The shader term and its shared
+ * uniforms are the skin light's (skin-material.ts `contactShadowUniforms`), so every material built on it reads the same values without
+ * reaching the scene; the lighting stage hands them to this pass.
  */
-export const CONTACT_SHADOW = Object.freeze({
-  /** Longest march toward the light (m): creases, the lip parting and the nostrils, not the nose's whole shadow (the maps keep that). */
-  length: 0.012,
-  /** Samples along the march. */
-  steps: 12,
-  /** A caster this far (m) in front of a sample, or less, hides it; a thicker gap is a silhouette the ray passes behind. */
-  thickness: 0.006,
-  /** Depth (m) a caster must be in front of a sample to count, and the start offset along the normal, against self-shadowing. */
-  bias: 0.0004,
-  /** At most this many flagged lights. */
-  lights: 4,
-});
 
-/** Uniforms every skin-lit program shares (one object: the prepass updates them for all). */
-export const contactShadowUniforms = Object.freeze({
-  xfsContactDepth: { value: null as THREE.Texture | null },
-  xfsContactCount: { value: 0 },
-  /** View-space position (w 1) or direction to the light (w 0) of each flagged light. */
-  xfsContactLights: { value: Array.from({ length: CONTACT_SHADOW.lights }, () => new THREE.Vector4()) },
-  xfsContactProjection: { value: new THREE.Matrix4() },
-  /** Camera near and far, for the depth's view z. */
-  xfsContactClip: { value: new THREE.Vector2(0.01, 100) },
-});
-
-/** GLSL: `xfsContactVisibility( position, normal, toLight )` in view space, 1 for unflagged lights. */
-export const CONTACT_SHADOW_GLSL = /* glsl */`
-uniform highp sampler2D xfsContactDepth;
-uniform int xfsContactCount;
-uniform vec4 xfsContactLights[ ${CONTACT_SHADOW.lights} ];
-uniform mat4 xfsContactProjection;
-uniform vec2 xfsContactClip;
-// A perspective depth-buffer value's view z (negative in front of the camera).
-float xfsContactViewZ( const in float depth ) {
-	return ( xfsContactClip.x * xfsContactClip.y ) / ( ( xfsContactClip.y - xfsContactClip.x ) * depth - xfsContactClip.y );
-}
-float xfsContactVisibility( const in vec3 position, const in vec3 normal, const in vec3 toLight ) {
-	if ( xfsContactCount == 0 ) return 1.0;
-	bool flagged = false;
-	for ( int i = 0; i < ${CONTACT_SHADOW.lights}; i ++ ) {
-		if ( i >= xfsContactCount ) break;
-		vec4 light = xfsContactLights[ i ];
-		vec3 direction = light.w > 0.5 ? normalize( light.xyz - position ) : light.xyz;
-		if ( dot( direction, toLight ) > 0.99999 ) flagged = true;
-	}
-	if ( !flagged ) return 1.0;
-	vec3 origin = position + normal * ${CONTACT_SHADOW.bias.toFixed(6)};
-	for ( int s = 1; s <= ${CONTACT_SHADOW.steps}; s ++ ) {
-		float along = ${CONTACT_SHADOW.length.toFixed(6)} * float( s ) / ${CONTACT_SHADOW.steps}.0;
-		vec3 marchPoint = origin + toLight * along;
-		vec4 clip = xfsContactProjection * vec4( marchPoint, 1.0 );
-		vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
-		if ( any( lessThan( uv, vec2( 0.0 ) ) ) || any( greaterThan( uv, vec2( 1.0 ) ) ) ) break;
-		float casterZ = xfsContactViewZ( texture2D( xfsContactDepth, uv ).r );
-		float inFront = casterZ - marchPoint.z;
-		// Hidden: the fade lets the far end of the march soften into the shadow maps' penumbra instead of ending in a hard line.
-		if ( inFront > ${CONTACT_SHADOW.bias.toFixed(6)} && inFront < ${CONTACT_SHADOW.thickness.toFixed(6)} ) return smoothstep( 0.5, 1.0, along / ${CONTACT_SHADOW.length.toFixed(6)} );
-	}
-	return 1.0;
-}`;
-
-/** The flagged lights among `lights` as the shader's list (view space), at most `CONTACT_SHADOW.lights`. Pure; tests call it. */
+/** The flagged lights among `lights` as the shader's list (view space), at most `max`. Pure; tests call it. */
 export function contactLightList(lights: readonly { position: THREE.Vector3; directional: boolean; direction?: THREE.Vector3 }[],
-  view: THREE.Matrix4): THREE.Vector4[] {
-  return lights.slice(0, CONTACT_SHADOW.lights).map(light => {
+  view: THREE.Matrix4, max: number): THREE.Vector4[] {
+  return lights.slice(0, max).map(light => {
     if (!light.directional) { const p = light.position.clone().applyMatrix4(view); return new THREE.Vector4(p.x, p.y, p.z, 1); }
     const d = (light.direction ?? light.position).clone().transformDirection(view);
     return new THREE.Vector4(d.x, d.y, d.z, 0);
   });
 }
 
+/** The skin light's shared contact-shadow uniforms this pass fills (skin-material.ts `contactShadowUniforms`). */
+export type ContactShadowUniforms = {
+  xfsContactDepth: { value: THREE.Texture | null }; xfsContactCount: { value: number }; xfsContactLights: { value: THREE.Vector4[] };
+  xfsContactProjection: { value: THREE.Matrix4 }; xfsContactClip: { value: THREE.Vector2 };
+};
+
 /** Marks a light as flagged for character contact shadows (the lighting rig sets it from the setup). */
 export const setContactShadows = (light: THREE.Light, on: boolean) => { light.userData.xfsContactShadows = on; };
 
-export function createContactShadows(renderer: THREE.WebGLRenderer) {
+export function createContactShadows(renderer: THREE.WebGLRenderer, contactShadowUniforms: ContactShadowUniforms) {
   let target: THREE.WebGLRenderTarget | null = null;
   const fallbackDepth = new THREE.MeshDepthMaterial();
   const size = new THREE.Vector2(), world = new THREE.Vector3(), towards = new THREE.Vector3();
@@ -153,7 +104,7 @@ export function createContactShadows(renderer: THREE.WebGLRenderer) {
         renderer.setRenderTarget(previous);
       }
       const view = camera.matrixWorldInverse, perspective = camera as THREE.PerspectiveCamera;
-      const list = contactLightList(flagged, view);
+      const list = contactLightList(flagged, view, contactShadowUniforms.xfsContactLights.value.length);
       list.forEach((entry, i) => contactShadowUniforms.xfsContactLights.value[i]!.copy(entry));
       contactShadowUniforms.xfsContactCount.value = list.length;
       contactShadowUniforms.xfsContactDepth.value = depth.depthTexture;

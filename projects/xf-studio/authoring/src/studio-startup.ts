@@ -282,7 +282,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       // The skin scatter (platform/scene/skin-scatter.ts): switch it off for the wrap stand-in and on again (A/B evidence), and its state.
       scatter: (mode: boolean | "bare") => { scene?.lighting.setScatter(mode); scene?.requestRender(); },
       scatterEvidence: () => scene ? scene.lighting.scatter.evidence() : null,
-      // Character contact shadows (contact-shadow.ts): off and on again for A/B captures, and what the last frame marched toward.
+      // Character contact shadows (platform/scene/contact-shadow.ts): off and on again for A/B captures, and what the last frame marched toward.
       contact: (on: boolean) => { scene?.lighting.setContactShadows(on); scene?.requestRender(); },
       contactEvidence: () => scene ? scene.lighting.contact.evidence() : null,
       scatterScale: (scale: number | null) => { scene?.lighting.setScatterScale(scale); scene?.requestRender(); },
