@@ -163,7 +163,8 @@ function plan(input: Parameters<FeatureExporter<ExpressionPlan>["plan"]>[0]): Ou
     presets: expressions.map(item => ({ id: item.id, revision: item.revision, appearance: item.clip, ...(item.index === null ? {} : { faceId: item.index }),
       label: item.label })),
     omissions, experimental: [], notes, requirements: EXPRESSIONS_REQUIREMENTS, packagedSha256: sha256(text),
-    details: { table: set.table, overlay, carried, filler, genders: Object.keys(GENDERS), guidance },
+    // Provisional until the game files have been read for this route: indices and face-rig checks wait for them.
+    details: { table: set.table, overlay, carried, filler, genders: Object.keys(GENDERS), guidance, ...(game ? {} : { provisional: true }) },
   };
   return { check, plan: planned, packaged: text, inventory: [sets.female, sets.male, planned.paths.patch].sort(),
     xl: { patch: { [planned.paths.patch]: [FACE_RIG_APP_PATH] } },

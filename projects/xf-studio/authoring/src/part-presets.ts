@@ -51,6 +51,9 @@ export interface SetExportTransport {
 }
 /** Most members a set holds. */
 export const PART_PRESET_SET_MEMBERS = 500;
+/** A provisional Check (the game files still being read) runs again after this long, at most this many times. */
+export const PROVISIONAL_RECHECK_MS = 4000;
+const PROVISIONAL_RECHECKS = 45;
 export const PART_PRESET_NAME_LIMIT = 120;
 /** What the library needs to put a deleted preset back (part-preset-store.ts `restore`). */
 export type PartPresetRestore = { feature: string; id: string; name: string; part: PartEnvelope; createdAt: string; memberships: { set: string; index: number }[] };
@@ -63,7 +66,8 @@ export class PartPresetService {
   private exports: SetExportState = { busy: null, results: {} };
   private busy = false;
   private listeners = new Set<() => void>();
-  constructor(private readonly transport: PartPresetTransport, private readonly exporter?: SetExportTransport) {}
+  constructor(private readonly transport: PartPresetTransport, private readonly exporter?: SetExportTransport,
+    private readonly options: { recheckMs?: number } = {}) {}
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private notify() { for (const listener of this.listeners) listener(); }
 
@@ -118,6 +122,10 @@ export class PartPresetService {
       const set = this.set(request.feature, request.id);
       if (!set) return refusal("missing_target", "That set no longer exists.");
       if (!this.exporter) return refusal("unavailable", "Making mod files isn't available here.");
+      // A current Check found nothing to package: Build would refuse the same way, so it says why now.
+      const checked = this.exports.results[set.id];
+      if (request.kind === "partPresetSet.build" && checked?.kind === "failed" && checked.code === "no_exportable_content" && checked.revision === set.revision)
+        return refusal("needs_input", "Nothing in this set can become mod files yet. Fix what Check listed, then check again.");
       if (this.exports.busy) return refusal("busy", this.exports.busy.action === "build" ? "A set's mod files are being built. Wait for it to finish."
         : "A set is being checked. Wait a moment.");
       if (request.kind === "partPresetSet.reveal") {
@@ -243,7 +251,7 @@ export class PartPresetService {
     }
   }
   /** Check or Build one set: its package-only collection through the host's package route (never installs anything). */
-  private async runExport(feature: string, id: string, action: "check" | "build"): Promise<PartPresetOutcome> {
+  private async runExport(feature: string, id: string, action: "check" | "build", attempt = 0): Promise<PartPresetOutcome> {
     const set = this.set(feature, id)!, presets = this.lists.get(feature)?.items ?? [];
     const missing = setMembers(set, presets).filter(member => !member.preset).length;
     this.exports = { ...this.exports, busy: { id, action } }; this.notify();
@@ -260,6 +268,14 @@ export class PartPresetService {
     }
     this.exports = { busy: null, results: { ...this.exports.results, [id]: entry } };
     this.notify();
+    // A Check made before the game files were read (they are read in the background) runs again by itself until they are.
+    const provisional = entry.kind === "check" && entry.result.products.some(product => product.features.some(feature =>
+      (feature.details as { provisional?: unknown }).provisional === true));
+    if (provisional && attempt < PROVISIONAL_RECHECKS) setTimeout(() => {
+      const now = this.set(feature, id);
+      if (!now || now.revision !== set.revision || this.exports.busy || this.exports.results[id] !== entry) return;
+      void this.runExport(feature, id, "check", attempt + 1);
+    }, this.options.recheckMs ?? PROVISIONAL_RECHECK_MS);
     return entry.kind === "failed" ? { ok: false, code: entry.code, message: entry.message } : { ok: true };
   }
   /** Read a feature's sets again (a preset delete or restore changed their members), when they were read before. */

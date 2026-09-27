@@ -272,12 +272,11 @@ export function expressionSets(ctx: Ctx): PanelController {
         presetOf(item.presetId) ? button({ label: "Start from it", icon: "play", small: true, variant: "quiet", onClick: () => startFrom(item.presetId) }) : null))));
   }
   /** The facts behind the result, folded: where the expression list comes from, how it grows, and any further guidance. */
-  function details(r: PackageCheckResult | PackageBuildResult, isBuild: boolean): HTMLElement {
-    const facts = (r.products[0]?.features[0]?.details ?? {}) as ExpressionDetails, product = r.products[0];
+  function details(r: PackageCheckResult | PackageBuildResult): HTMLElement {
+    const facts = (r.products[0]?.features[0]?.details ?? {}) as ExpressionDetails;
     const rows: string[] = [...(facts.guidance ?? [])];
     if (facts.carried) rows.push(`Photo mode's list: ${plural(facts.carried.rows, "expression")} from ${facts.carried.provider}, then these.`);
     if (facts.filler) rows.push(`Empty places ${facts.filler.from} to ${facts.filler.to - 1} show a neutral face, so these always sit at the same place.`);
-    if (isBuild && product) rows.push(`Files: ${(product as PackageBuildResult["products"][number]).package}`);
     const group = new GroupSection({ title: "Details", key: "expressions.set-result-details", level: "subsection", heading: 5, expanded: false });
     group.body.append(...rows.map(text => h("p", { class: "muted small", text })));
     return group.element;
@@ -286,9 +285,12 @@ export function expressionSets(ctx: Ctx): PanelController {
   function renderResult(set: PartPresetSet, last: SetExportResult | undefined): HTMLElement[] {
     if (!last) return [];
     const stale = last.revision !== set.revision;
+    // A Check made before the game files were read is provisional (Check runs again by itself once they are): no Current badge.
+    const provisional = last.kind === "check" && !!last.result.products.some(product => product.features.some(feature =>
+      (feature.details as { provisional?: unknown }).provisional === true));
     const staleNote = () => h("div", { class: "row gap-s" }, note("This set changed after this result.", "warning"),
       button({ label: "Check", icon: "check", small: true, onClick: () => void run("check") }));
-    const head = (title: string, current = true) => h("div", { class: "result-head" }, h("strong", { text: title }),
+    const head = (title: string, current = !provisional) => h("div", { class: "result-head" }, h("strong", { text: title }),
       stale ? badge("Stale", "warning") : current ? badge("Current", "success") : null);
     if (last.kind === "failed") {
       // Nothing could be packaged: a finished Check with what to fix, not a failure.
@@ -319,7 +321,7 @@ export function expressionSets(ctx: Ctx): PanelController {
     if (firstNote) card.append(note(firstNote, "info"));
     const out = leftOut(omissions);
     if (out) card.append(out);
-    card.append(details(r, isBuild));
+    card.append(details(r));
     if (stale) card.append(staleNote());
     return [card];
   }

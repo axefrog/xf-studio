@@ -50,6 +50,17 @@ async function groupShot(page: Session, selector: string, file: string, extra = 
   await page.screenshot(resolve(out, file), rect);
   (report.captures as string[]).push(file);
 }
+/** The dock group together with the open menu or popover over it, uncropped (padded 12 px). */
+async function floatingShot(page: Session, selector: string, file: string) {
+  const rect = await page.evaluate(`(() => { const g = document.querySelector(${JSON.stringify(selector)})?.closest('.dock-group'); if (!g) return null;
+    const boxes = [g, ...document.querySelectorAll('.menu, form.popover')].map(e => e.getBoundingClientRect()).filter(r => r.width && r.height);
+    const x = Math.max(0, Math.min(...boxes.map(r => r.left)) - 12), y = Math.max(0, Math.min(...boxes.map(r => r.top)) - 12);
+    const right = Math.min(innerWidth, Math.max(...boxes.map(r => r.right)) + 12), bottom = Math.min(innerHeight, Math.max(...boxes.map(r => r.bottom)) + 12);
+    return { x, y, width: right - x, height: bottom - y }; })()`);
+  if (!rect) return;
+  await page.screenshot(resolve(out, file), rect);
+  (report.captures as string[]).push(file);
+}
 const click = (page: Session, selector: string, text: string) =>
   page.evaluate(`(() => { const b = [...document.querySelectorAll(${JSON.stringify(selector)})].find(e => e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!b) throw Error("no " + ${JSON.stringify(text)}); b.click(); return true; })()`);
 const closeFloating = async (page: Session) => { await page.key("Escape"); await page.evaluate(`document.querySelectorAll('form.popover, .menu').forEach(f => f.remove())`); };
@@ -101,9 +112,9 @@ for (const [index, { scheme, width }] of passes.entries()) {
       row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: r.left + 40, clientY: r.top + 10 })); return true; })()`); await page.wait(300);
     await shot("06-member-menu", 60); await closeFloating(page);
     await page.evaluate(`document.querySelector('.expr-sets .package-mods button').click()`); await page.wait(300);
-    await shot("07a-mod-menu", 60);
+    await floatingShot(page, ".expr-sets", `${tag}-07a-mod-menu.png`);
     await click(page, "[role=menuitem], .menu button", "Rename"); await page.wait(300);
-    await shot("07b-rename-mod-popover", 60); await closeFloating(page);
+    await floatingShot(page, ".expr-sets", `${tag}-07b-rename-mod-popover.png`); await closeFloating(page);
     // Check: the first pass reads the game files first (a note says so); then what can be packaged and what was left out.
     for (let attempt = 0; attempt < 40; attempt++) {
       await click(page, ".expr-sets button", "Check");

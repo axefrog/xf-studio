@@ -219,3 +219,38 @@ test("a set's Check and Build go through the package route with its package-only
   expect(await service.execute({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toEqual({ ok: true });
   expect(revealed).toEqual(["xfs_c00-1"]);
 });
+
+test("a set's provisional Check runs again by itself, and Build says why while a current Check found nothing to package", async () => {
+  const { PartPresetService } = await import("../src/part-presets");
+  const presetId = "00000000-0000-4000-8000-000000000001", setId = "00000000-0000-4000-8000-0000000000aa";
+  const preset = { id: presetId, feature: "expressions", name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.2 }), updatedAt: "now" };
+  const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [presetId], updatedAt: "now" }];
+  let answers = 0, refuse = false;
+  const service = new PartPresetService({
+    list: async () => [preset], save: async () => { throw Error("unused"); }, rename: async () => { throw Error("unused"); }, delete: async id => ({ id }),
+    listSets: async () => structuredClone(sets), createSet: async () => { throw Error("unused"); }, deleteSet: async id => ({ id }),
+    updateSet: async () => { throw Error("unused"); },
+  }, {
+    package: async () => {
+      answers++;
+      if (refuse) throw Object.assign(Error("Nothing in this set can become mod files yet."), { code: "no_exportable_content",
+        omissions: [{ kind: "preset", presetId, presetName: "Smile", reason: "“Smile” is damaged, so XF Studio can't read it." }] });
+      // The first two answers are provisional (the game files still being read), then a final one.
+      return { schema: "xfs/package-check-2", ready: true, omissions: [], originalPresetCount: 1,
+        products: [{ features: [{ details: answers <= 2 ? { provisional: true } : {}, presets: [], omissions: [], notes: [] }] }] } as never;
+    },
+    reveal: async () => ({ ok: true }),
+  }, { recheckMs: 5 });
+  service.snapshot("expressions"); service.sets("expressions");
+  await Bun.sleep(0);
+  await service.execute({ kind: "partPresetSet.check", feature: "expressions", id: setId });
+  for (let i = 0; i < 40 && answers < 3; i++) await Bun.sleep(10);
+  await Bun.sleep(30);
+  expect(answers).toBe(3);
+  refuse = true;
+  expect(await service.execute({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toMatchObject({ ok: false, code: "no_exportable_content" });
+  expect(service.exportState().results[setId]).toMatchObject({ kind: "failed", omissions: [{ presetId }] });
+  expect(service.capability({ kind: "partPresetSet.build", feature: "expressions", id: setId }))
+    .toMatchObject({ available: false, code: "needs_input", reason: "Nothing in this set can become mod files yet. Fix what Check listed, then check again." });
+  expect(service.capability({ kind: "partPresetSet.check", feature: "expressions", id: setId })).toEqual({ available: true });
+});
