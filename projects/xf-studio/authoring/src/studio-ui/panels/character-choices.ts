@@ -25,10 +25,13 @@
  *   Left folds and Right unfolds it from the keyboard), remembered per option while the panel is open. A folded group holding the V's
  *   choice says so. Arrow keys move through headings and the choices of unfolded groups in the order they show; in a colour grid Up
  *   and Down move by the group's own columns and step onto the heading next to it at its edges. A row with one maker has no headings.
+ *   A heading is the shared expander (expander.ts, level "maker"). Makers with a single choice in the row share one "Other mods" heading,
+ *   last, its choices sorted by label (cc-panel.ts `pooled`); each choice's mod is in its tooltip and description as everywhere.
  */
-import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups } from "../../cc-panel";
+import { type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, OTHER_MODS_GROUP, OTHER_MODS_INDEX } from "../../cc-panel";
 import type { CharacterSwatchState, ChoiceFetch } from "../../character-context-actions";
 import { h, setAttr, setText } from "../dom";
+import { expander, expanderLabel, setExpanded } from "../expander";
 
 export type ChoiceListInput = {
   /** The option shown (its ID) and the search the list is limited to: another of either rebuilds the list. */
@@ -47,7 +50,9 @@ export type ChoiceListInput = {
   /** The V is being prepared with the current choices: the chosen item shows it is on its way, in place. */
   preparing?: boolean;
   /** Who made each choice (the panel's `groups` and `modGroups`): shown grouped by maker; null or absent for a row with one maker. */
-  groups?: { readonly list: readonly CcChoiceGroup[]; readonly modGroups: readonly number[] } | null;
+  groups?: { readonly list: readonly CcChoiceGroup[]; readonly modGroups: readonly number[];
+    /** The option's groups shown together under "Other mods" (cc-panel.ts `CcPanelOption.pooled`). */
+    readonly pooled?: readonly number[] } | null;
 };
 type Group = { index: number; key: string; head: HTMLButtonElement; count: HTMLElement; body: HTMLElement; element: HTMLElement; entries: Entry[]; open: boolean;
   chosen: boolean };
@@ -82,6 +87,9 @@ const FETCH_SHOWN: Partial<Record<ChoiceFetch, { mark: string; words: string }>>
   f: { mark: "fetching", words: "being prepared" }, x: { mark: "failed", words: "couldn't be prepared ahead; choosing it tries again" },
 };
 
+/** What decides whether a list is grouped, and how: another of it rebuilds the list. */
+const groupedKey = (input: ChoiceListInput) => input.groups ? `g:${(input.groups.pooled ?? []).join(",")}` : "";
+
 export class ChoiceList {
   /** The list and its one status line (loading, a failure, nothing matching). */
   readonly element: HTMLElement;
@@ -89,7 +97,9 @@ export class ChoiceList {
   private readonly status: HTMLElement;
   private items: Entry[] = [];
   private byPosition = new Map<number, HTMLButtonElement>();
-  private shown: { option: string; query: string; grouped: boolean } | null = null;
+  private shown: { option: string; query: string; grouped: string } | null = null;
+  /** The groups pooled under "Other mods" in the list shown. */
+  private pooled = new Set<number>();
   /** The maker groups by group index (null: not grouped), their order, and the Off choices above them. */
   private groups: Map<number, Group> | null = null;
   private order: (a: number, b: number) => number = (a, b) => a - b;
@@ -108,7 +118,7 @@ export class ChoiceList {
   }
 
   update(input: ChoiceListInput) {
-    const same = this.shown?.option === input.option && this.shown.query === input.query && this.shown.grouped === !!input.groups;
+    const same = this.shown?.option === input.option && this.shown.query === input.query && this.shown.grouped === groupedKey(input);
     if (!same) this.rebuild(input);
     this.list.classList.toggle("grid", input.grid);
     setAttr(this.list, "aria-label", `${input.label} choices`);
@@ -134,8 +144,9 @@ export class ChoiceList {
     const focusedAt = this.focused() ? [...this.byPosition].find(([, item]) => item === document.activeElement)?.[0] : undefined;
     this.list.replaceChildren();
     this.items = []; this.byPosition.clear(); this.active = null; this.selected = null;
-    this.shown = { option: input.option, query: input.query, grouped: !!input.groups };
+    this.shown = { option: input.option, query: input.query, grouped: groupedKey(input) };
     this.groups = input.groups ? new Map() : null;
+    this.pooled = new Set(input.groups?.pooled ?? []);
     this.order = input.groups ? compareGroups(input.groups.list) : (a, b) => a - b;
     this.lead = input.groups ? h("div", { class: "cc-maker-items cc-maker-lead" }) : null;
     this.list.classList.toggle("grouped", !!input.groups);
@@ -191,14 +202,16 @@ export class ChoiceList {
   }
 
   /** The heading and body for a maker's choices, made when its first choice arrives and placed in the groups' order. */
-  private groupFor(index: number, input: ChoiceListInput): Group {
+  private groupFor(groupIndex: number, input: ChoiceListInput): Group {
+    const index = this.pooled.has(groupIndex) ? OTHER_MODS_INDEX : groupIndex;
     const known = this.groups!.get(index);
     if (known) return known;
-    const maker = input.groups!.list[index] ?? { label: "Mods", kind: "mod" as const };
-    const id = `${this.list.id}-g${index}`, key = `${input.option}\n${maker.label.toLocaleLowerCase()}`, open = !this.folded.has(key);
-    const count = h("span", { class: "cc-maker-count" });
-    const head = h("button", { class: "cc-maker-head", type: "button", id: `${id}-head`, tabindex: "-1", "aria-expanded": String(open), "aria-controls": `${id}-items` },
-      h("span", { class: "cc-maker-chevron", "aria-hidden": "true" }), h("span", { class: "cc-maker-label", text: maker.label }), count);
+    const maker = index === OTHER_MODS_INDEX ? OTHER_MODS_GROUP : input.groups!.list[index] ?? { label: "Mods", kind: "mod" as const };
+    const id = `${this.list.id}-g${index < 0 ? "other" : index}`;
+    const key = `${input.option}\n${index === OTHER_MODS_INDEX ? "\u0000other" : maker.label.toLocaleLowerCase()}`, open = !this.folded.has(key);
+    const count = h("span", { class: "cc-maker-count expander-count" });
+    const head = expander("maker", { expanded: open, controls: `${id}-items`, id: `${id}-head`, tabindex: "-1" }, expanderLabel(maker.label, "cc-maker-label"), count);
+    head.classList.add("cc-maker-head");
     const body = h("div", { class: "cc-maker-items", id: `${id}-items`, hidden: !open });
     const element = h("div", { class: "cc-maker", role: "group", "aria-labelledby": `${id}-head`, "data-kind": maker.kind }, head, body);
     const group: Group = { index, key, head, count, body, element, entries: [], open, chosen: false };
@@ -213,7 +226,7 @@ export class ChoiceList {
   private fold(group: Group, folded: boolean) {
     group.open = !folded;
     group.body.hidden = folded;
-    setAttr(group.head, "aria-expanded", String(!folded));
+    setExpanded(group.head, !folded);
     if (folded) this.folded.add(group.key); else this.folded.delete(group.key);
     this.describeGroup(group);
     if (folded && this.active && group.body.contains(this.active)) {
@@ -222,6 +235,15 @@ export class ChoiceList {
       if (refocus) group.head.focus();
     }
   }
+
+  /** Fold every maker group away, or unfold them all (the section's Expand all / Collapse all). */
+  setAllFolded(folded: boolean) {
+    // Unfolding also forgets folds of groups not shown yet (their choices on a later page).
+    if (!folded) this.folded.clear();
+    for (const group of this.groups?.values() ?? []) if (group.open === folded) this.fold(group, folded);
+  }
+  /** Whether a maker group is folded (none when the list is not grouped). */
+  anyFolded() { return [...this.groups?.values() ?? []].some(group => !group.open); }
 
   /** Mark an item with its prepared-ahead state (only when it changes). */
   private showFetch(entry: ChoiceList["items"][number], state: ChoiceFetch | undefined) {
@@ -259,7 +281,14 @@ export class ChoiceList {
     item.addEventListener("pointerenter", () => this.onHint(choice));
     const group = this.groups && !choice.off ? this.groupFor(choiceGroup(choice, input.groups!), input) : null;
     const entry: Entry = { choice, element: item, from, fetch: "", swatch, look: "", group };
-    if (group) {
+    if (group?.index === OTHER_MODS_INDEX) {
+      // "Other mods" is sorted by label, whatever order its choices arrive in.
+      const at = group.entries.findIndex(other => other.choice.label.localeCompare(choice.label, undefined, { sensitivity: "base" }) > 0);
+      group.body.insertBefore(item, at < 0 ? null : group.entries[at]!.element);
+      group.entries.splice(at < 0 ? group.entries.length : at, 0, entry);
+      setText(group.count, String(group.entries.length));
+      this.items.push(entry);
+    } else if (group) {
       group.body.appendChild(item);
       group.entries.push(entry);
       setText(group.count, String(group.entries.length));

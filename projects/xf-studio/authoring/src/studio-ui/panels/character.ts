@@ -13,12 +13,20 @@
  * disclosure for the plain lines about what couldn't be used; a row reserves its detail line when any of its options has one, and a
  * row whose choice the 3D view doesn't draw shows a fixed-size marker. Search runs on the host over every choice (UI-72); files come last.
  *
- * **One hierarchy** (character-panel-sections.ts): the parts of V (Head, Body, Clothing), then sections (the creator's categories and
- * what contributions add), then rows. What the 3D view shows is part of it, not a list of its own: each show/hide switch sits on the
+ * **One hierarchy** (character-panel-sections.ts): the parts of V (Head, Body, Clothing), then the panel's own sections (Face holds
+ * Eyes, Eyebrows, Eyelashes and the rest as subsections; rows land by what they control, not by the creator's categories), then rows. What the 3D view shows is part of it, not a list of its own: each show/hide switch sits on the
  * heading row of what it shows (Hair on Hair, the body on Body, clothes on Clothing), the eye shape in Eyes, and the uncensored setting
  * in Body. The tree is derived from the creator projection and the contributions, so a module adds sections without this module
  * changing; a switch that can't change says why in the line reserved under its heading and stays focusable (UI-84). Colour rows draw
  * every choice as a narrow swatch derived from the resource that wins for it, with the game's icons (character-choices.ts).
+ *
+ * **Folding** (expander.ts): the parts of V, their sections, the rows and a row's author groups all fold with one expander. A group's
+ * or section's fold is remembered (the `folded.set` UI preference, keyed `character:<key>`); a section with rows has Expand all /
+ * Collapse all at the far right of its heading (and in the palette), which opens or closes its rows and unfolds their author groups.
+ * A search leaves folds alone: a folded heading holding matches shows how many.
+ *
+ * **Help, not notes** (help-tip.ts): what a heading, row or control is (hair physics, a row that follows a switcher, what the body
+ * switch covers, what a save import does) is in a help tip beside it; inline lines are kept for what the person can act on.
  *
  * An open row's choices are prepared ahead in the background (character-context-actions.ts `prefetch`), the ones in view first; each
  * choice not prepared yet carries a corner mark, one line under the search explains the marks once, and a first-time change says why
@@ -29,10 +37,13 @@ import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
 import { applyCapability, button, note, section, SelectField, Toggle } from "../controls";
 import { h, isTextInput, setAttr, setText, setUnavailable } from "../dom";
-import { CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterSectionContribution, type CharacterToggle,
-  type CharacterToggleState } from "../../character-panel-sections";
+import { ExpandAll, expander, expanderLabel, setExpanded } from "../expander";
+import { helpTip, setHelp } from "../help-tip";
+import type { Command } from "../commands";
+import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
+  type CharacterToggle, type CharacterToggleState } from "../../character-panel-sections";
 import { icon } from "../icons";
-import type { Frame, StudioRuntime } from "../runtime";
+import type { Frame, Port, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { characterDetailLine } from "./preview";
@@ -75,7 +86,7 @@ const rowOption = (panel: Readonly<CcPanel>, row: Readonly<CcPanelRow>, view: Re
 
 /**
  * A show/hide switch on a heading row: a compact switch whose accessible name says what it shows. When it can't change it stays
- * focusable, marked `aria-disabled`, and its reason shows in the line reserved under the heading (UI-84); the switch then snaps back.
+ * focusable, marked `aria-disabled`, and its reason is its description and the page's reason tip (UI-84); the switch then snaps back.
  */
 class HeadingToggle {
   readonly element: HTMLElement;
@@ -93,6 +104,7 @@ class HeadingToggle {
     this.unavailable = !!unavailable;
     setUnavailable(this.input, !!unavailable, unavailable ?? undefined);
     this.element.classList.toggle("unavailable", !!unavailable);
+    this.element.title = unavailable ?? this.toggle.label;
   }
 }
 /** The controls contributions name, by ID: the panel's own; a module passes its own beside them. */
@@ -118,10 +130,10 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const undo = button({ label: "Undo in the Character panel", icon: "undo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.undo" }) });
   const redo = button({ label: "Redo in the Character panel", icon: "redo", iconOnly: true, small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.redo" }) });
   // A switch, not a one-way action: the V's own makeup hides and shows again at once, and the panel's Undo steps it back.
-  const ownMakeup = new Toggle({ label: "Show my V's own makeup", onChange: shown => dispatch({ kind: "character.setOwnMakeup", shown }) });
+  const ownMakeup = new Toggle({ label: "Show my V's own makeup", onChange: shown => dispatch({ kind: "character.setOwnMakeup", shown }),
+    help: "Turn it off to see only the makeup you're making on your V. Your V's creator choices don't change, and the panel's Undo turns it back on." });
   const resetAll = button({ label: "Reset all", icon: "reset", small: true, variant: "quiet", title: "Every creator change back to your V's own (Undo brings them back)",
     onClick: () => dispatch({ kind: "character.resetAll" }) });
-  const hideNote = note("Turn it off to see only the makeup you're making on your V. Your V's creator choices don't change.");
   // One status line of fixed height: the text is clamped to one line, and its actions keep their place when not offered (UI-68).
   const statusText = h("span", { class: "cc-status-text", role: "status", "aria-live": "polite" });
   const retry = button({ label: "Try again", icon: "refresh", small: true, variant: "quiet", onClick: () => dispatch({ kind: "character.retry" }) });
@@ -146,16 +158,22 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   noMatch.hidden = true;
 
   // ---- Clothing: which of V's clothes the 3D view shows (a viewing setting; the panel's Undo steps it too) ----
-  const clothingState = new SelectField<ClothingState>({ label: "Clothes in the 3D view", onChange: state => dispatch({ kind: "character.setClothing", state }) });
+  const clothingState = new SelectField<ClothingState>({ label: "Clothes in the 3D view", onChange: state => dispatch({ kind: "character.setClothing", state }),
+    help: "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges." });
   // One switch per clothing area the save dresses; switching one picks the areas yourself (the setting becomes "Choose areas").
   const areaToggles = new Map<ClothingArea, Toggle>();
   const clothingAreas = h("div", { class: "cc-clothing-areas" });
+  // What is on its way or couldn't be drawn (a status; what the setting is lives in its help tip).
   const clothingNote = note("");
 
   // ---- Controls contributions name (character-panel-sections.ts): the eye shape, the uncensored look, the clothes ----
-  const eyeShape = new SelectField<string>({ label: "Eye shape in the 3D view", onChange: value => dispatch({ kind: "preview.setEyeShape", index: Number(value) }) });
+  const eyeShape = new SelectField<string>({ label: "Eye shape in the 3D view", onChange: value => dispatch({ kind: "preview.setEyeShape", index: Number(value) }),
+    help: "The 3D view's eye shape, which eye makeup is placed on. It overrides your V's Eyes row in the 3D view only." });
+  // One reserved line: why the eye shape waits, or that it overrides the saved one (never appears or vanishes).
   const eyeNote = note("");
-  const uncensored = new Toggle({ label: "Show my V uncensored, as the game can", onChange: enabled => dispatch({ kind: "preview.setUncensored", enabled }) });
+  eyeNote.classList.add("cc-reserved-note");
+  const uncensored = new Toggle({ label: "Show my V uncensored, as the game can", onChange: enabled => dispatch({ kind: "preview.setUncensored", enabled }),
+    help: ["Off: the game's censored look, with its underwear.", "On: your V as the game shows it when nudity is allowed: nipples and genitals as you chose them, with no underwear."] });
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
   const detailNote = note("");
   // The game files prepared for the 3D view on this computer, and clearing them.
@@ -175,12 +193,11 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const element = h("div", { class: "panel-content cc-panel" },
     section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault,
       h("span", { class: "cc-history" }, undo, redo)), status, messages, detailNote),
-    h("section", { class: "section cc-quick" }, ownMakeup.element, hideNote, h("div", { class: "row wrap gap-s" }, resetAll)),
+    h("section", { class: "section cc-quick" }, ownMakeup.element, h("div", { class: "row wrap gap-s" }, resetAll)),
     h("div", { class: "cc-find" }, search, legend, noMatch),
     groupsHost,
-    section("Files", h("div", { class: "row wrap gap-s" }, exportV),
-      h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared),
-      note("A save is read on this computer and never changed or uploaded.")));
+    section({ title: "Files", help: "A save is read on this computer and never changed or uploaded." }, h("div", { class: "row wrap gap-s" }, exportV),
+      h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared)));
 
   // One rule (UI-81): inside this panel the Undo keys step through the panel's own changes (creator choices and Clothing), whatever has
   // focus (a switch, a list, a button), never the makeup's history. Only a text box keeps its own text Undo.
@@ -194,13 +211,19 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
 
   // ---- Rows ----
   type RowControls = { view: RowView; element: HTMLElement; main: HTMLButtonElement; label: HTMLElement; value: HTMLElement; swatch: HTMLElement;
-    notShown: HTMLElement; off: HTMLButtonElement; reset: HTMLButtonElement; detail: HTMLElement | null; list: ChoiceList; more: HTMLButtonElement;
+    notShown: HTMLElement; off: HTMLButtonElement; reset: HTMLButtonElement;
+    /** What the row is (it follows a switcher, the 3D view can't draw it), in a help tip; only on rows where an option has something to say. */
+    help: HTMLButtonElement | null; list: ChoiceList; more: HTMLButtonElement;
     open: boolean; query: string;
     /** The option whose choices are being prepared ahead, and their positions in the order to prepare them (in view first). */
     prefetching: string | null; positions: number[]; loaded: number };
-  type Heading = { toggles: HeadingToggle[]; note: HTMLElement | null };
-  type SectionControls = { element: HTMLElement; heading: Heading; rows: RowControls[]; fixed: boolean };
-  type GroupControls = { element: HTMLElement; heading: Heading; sections: SectionControls[] };
+  type Heading = { toggles: HeadingToggle[]; help: HTMLButtonElement | null; expander: HTMLButtonElement; count: HTMLElement; expandAll: ExpandAll | null };
+  /** `fold`: its key in the `folded` UI preference; `body`: what folding hides (everything under the heading). */
+  /** `rows`: every row in it, its sections' included (what Expand all, a search count and its showing go by); `own`: its own rows. */
+  type SectionControls = { element: HTMLElement; heading: Heading; rows: RowControls[]; own: RowControls[]; fixed: boolean; fold: string; body: HTMLElement;
+    title: string; parent: SectionControls | null; children: SectionControls[] };
+  /** `sections`: every section of the group, depth first (a parent before its children). */
+  type GroupControls = { element: HTMLElement; heading: Heading; sections: SectionControls[]; fold: string; body: HTMLElement; title: string };
   let built: { identity: string; rows: RowControls[]; groups: GroupControls[] } | null = null;
   const openRows = new Set<string>();
   /** The one open row whose choices are prepared ahead: the one opened or pointed at last. */
@@ -211,60 +234,113 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const staticDetail = (panel: Readonly<CcPanel>, option: CcPanelOption, uncensoredOn: boolean) => [notDrawn(option, uncensoredOn) ? panel.notes[option.coverage[1]] || NOT_SHOWN : "",
     option.dependsOn.length ? `Choose ${option.dependsOn.join(" or ")} first: this follows it.` : ""].filter(Boolean).join(" ");
 
-  /** A heading row: its title and the switches for what it shows, with the line under it reserved when it has any (UI-68). */
-  function heading(tag: "h3" | "h4", title: string, toggles: readonly CharacterToggle[]): { row: HTMLElement; heading: Heading } {
-    const switches = toggles.map(toggle => new HeadingToggle(toggle, shown => dispatch(toggle.action(shown))));
-    const row = h("div", { class: `cc-heading ${tag === "h3" ? "cc-group-head" : "cc-section-head"}` },
-      h(tag, { class: tag === "h3" ? "cc-group-title" : "cc-section-title", text: title }), ...switches.map(toggle => toggle.element));
-    const line = switches.length ? h("p", { class: "cc-heading-note" }) : null;
-    return { row: line ? h("div", {}, row, line) : row, heading: { toggles: switches, note: line } };
+  // ---- Folding: the headings folded, remembered in the UI preferences (read each paint, changed at once on a press) ----
+  const FOLD = "character:";
+  let folded = new Set<string>();
+  const readFolds = (keys: readonly string[] | undefined) => { folded = new Set((keys ?? []).filter(key => key.startsWith(FOLD))); };
+  function setFolds(keys: readonly string[], fold: boolean) {
+    if (!keys.length) return;
+    for (const key of keys) if (fold) folded.add(key); else folded.delete(key);
+    const action = { kind: "folded.set" as const, keys, folded: fold };
+    // Presentation state: the fold shows at once; remembering it is best effort (a full store still folds for this session).
+    const preferences = port.preferences as Port["preferences"] | undefined;
+    if (preferences?.capability(action).available) preferences.dispatch(action);
+    paintFolds(search.value.trim().toLowerCase());
+    rt.changed();
   }
+
+  /** A heading row: an expander with its title, the help tip, the switches for what it shows and, for a section with rows, Expand all. */
+  function heading(level: "group" | "section" | "subsection", title: string, toggles: readonly CharacterToggle[], body: string, onFold: () => void,
+    onExpandAll: ((expand: boolean) => void) | null): { row: HTMLElement; heading: Heading } {
+    const switches = toggles.map(toggle => new HeadingToggle(toggle, shown => dispatch(toggle.action(shown))));
+    // While a search runs, a folded heading says how many rows in it match.
+    const count = h("span", { class: "expander-count cc-match-count", hidden: true });
+    const button = expander(level, { expanded: true, controls: body }, expanderLabel(title), count);
+    button.addEventListener("click", onFold);
+    const help = toggles.some(toggle => toggle.help) ? helpTip(title) : null;
+    const expandAll = onExpandAll ? new ExpandAll(title, onExpandAll) : null;
+    const row = h("div", { class: `cc-heading ${level === "group" ? "cc-group-head" : "cc-section-head"}` },
+      h(level === "group" ? "h3" : level === "section" ? "h4" : "h5", { class: level === "group" ? "cc-group-title" : "cc-section-title" }, button), help,
+      h("span", { class: "cc-heading-end" }, ...switches.map(toggle => toggle.element), expandAll?.element));
+    return { row, heading: { toggles: switches, help, expander: button, count, expandAll } };
+  }
+  /** Open or close every row of a section; expanding also unfolds the section and its rows' author groups. */
+  function expandSection(section: SectionControls, expand: boolean) {
+    const within = (entry: SectionControls): SectionControls[] => [entry, ...entry.children.flatMap(within)];
+    if (expand) setFolds(within(section).map(entry => entry.fold).filter(key => folded.has(key)), false);
+    for (const row of section.rows) {
+      if (row.element.hidden) continue;
+      if (row.open !== expand) toggle(row, false);
+      if (expand) row.list.setAllFolded(false);
+    }
+    rt.changed();
+  }
+  /** Whether a section's Expand all expands now: it is folded, or one of its shown rows is closed or has a folded author group. */
+  const sectionExpands = (section: SectionControls): boolean => folded.has(section.fold) || section.children.some(child => folded.has(child.fold))
+    || section.rows.some(row => !row.element.hidden && (!row.open || row.list.anyFolded()));
   /** The tree's shape: what decides a rebuild (a catalogue or the contributions changing, never a paint). */
   const treeIdentity = (panel: Readonly<CcPanel> | null, tree: readonly CharacterPanelGroup[]) =>
     `${panel?.identity ?? ""}
-${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.controls}:${group.sections.map(section =>
-      `${section.key}/${section.rows.length}/${section.toggles.map(t => t.id)}/${section.controls}`).join(",")}`).join(";")}`;
+${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.controls}:${allSections(group.sections).map(section =>
+      `${section.key}/${section.children.length}/${section.rows.length}/${section.toggles.map(t => t.id)}/${section.controls}`).join(",")}`).join(";")}`;
 
   function buildTree(panel: Readonly<CcPanel> | null, tree: readonly CharacterPanelGroup[]) {
     for (const controls of built?.rows ?? []) stopPrefetch(controls);
     const rows: RowControls[] = [];
     let serial = 0;
     const groups: GroupControls[] = tree.map(group => {
-      const sections: SectionControls[] = group.sections.map(entry => {
-        const body = h("div", { class: "cc-rows" });
-        const sectionRows: RowControls[] = [];
+      const flat: SectionControls[] = [];
+      // A section, then the sections inside it (a subsection's heading is one level down).
+      const buildSection = (entry: CharacterPanelSection, parent: SectionControls | null): SectionControls => {
+        const rowsHost = h("div", { class: "cc-rows" });
+        const own: RowControls[] = [];
         for (const row of panel ? entry.rows : []) {
           const view: RowView = { row, section: entry.title, options: row.options.map(index => panel!.options[index]!) };
           const controls = buildRow(panel!, view, `cc-choices-${++serial}`);
-          body.append(controls.element);
-          rows.push(controls); sectionRows.push(controls);
+          rowsHost.append(controls.element);
+          rows.push(controls); own.push(controls);
         }
-        const head = heading("h4", entry.title, entry.toggles);
+        const bodyId = `cc-section-${++serial}`, fold = `${FOLD}${entry.key}`;
         const extras = entry.controls.flatMap(id => controls_[id] ? [controls_[id]!] : []);
-        const element = h("section", { class: "cc-section", "data-section": entry.key }, head.row, ...extras, body);
-        return { element, heading: head.heading, rows: sectionRows, fixed: extras.length > 0 || entry.toggles.length > 0 };
-      });
-      const head = heading("h3", group.title, group.toggles);
+        const body = h("div", { class: "cc-section-body", id: bodyId }, ...extras, rowsHost);
+        const controls: SectionControls = { element: body, heading: null!, rows: own, own, fixed: extras.length > 0 || entry.toggles.length > 0, fold, body,
+          title: entry.title, parent, children: [] };
+        flat.push(controls);
+        controls.children = entry.children.map(child => buildSection(child, controls));
+        if (controls.children.length) body.append(h("div", { class: "cc-subsections" }, ...controls.children.map(child => child.element)));
+        controls.rows = [...own, ...controls.children.flatMap(child => child.rows)];
+        controls.fixed ||= controls.children.some(child => child.fixed);
+        const head = heading(parent ? "subsection" : "section", entry.title, entry.toggles, bodyId, () => setFolds([fold], !folded.has(fold)),
+          // Expand all only where it does more than a row's own chevron: two rows or more.
+          controls.rows.length > 1 ? expand => expandSection(controls, expand) : null);
+        controls.heading = head.heading;
+        controls.element = h("section", { class: `cc-section${parent ? " cc-subsection" : ""}`, "data-section": entry.key }, head.row, body);
+        return controls;
+      };
+      const top = group.sections.map(entry => buildSection(entry, null));
+      const sections = flat;
+      const bodyId = `cc-group-${group.id}`, fold = `${FOLD}group/${group.id}`;
       const extras = group.controls.flatMap(id => controls_[id] ? [controls_[id]!] : []);
-      const element = h("section", { class: "cc-group", "data-group": group.id }, head.row, ...extras,
-        h("div", { class: "cc-sections" }, ...sections.map(section => section.element)));
-      return { element, heading: head.heading, sections };
+      const body = h("div", { class: "cc-group-body", id: bodyId }, ...extras, h("div", { class: "cc-sections" }, ...top.map(section => section.element)));
+      const head = heading("group", group.title, group.toggles, bodyId, () => setFolds([fold], !folded.has(fold)), null);
+      const element = h("section", { class: "cc-group", "data-group": group.id }, head.row, body);
+      return { element, heading: head.heading, sections, fold, body, title: group.title };
     });
     groupsHost.replaceChildren(...groups.map(group => group.element));
     built = { identity: treeIdentity(panel, tree), rows, groups };
   }
 
   function buildRow(panel: Readonly<CcPanel>, view: RowView, id: string): RowControls {
-        const label = h("span", { class: "cc-row-label" }), swatch = h("span", { class: "swatch cc-row-swatch", hidden: true });
+        const label = h("span", { class: "expander-label cc-row-label" }), swatch = h("span", { class: "swatch cc-row-swatch", hidden: true });
         const value = h("span", { class: "cc-row-value" });
         const notShown = h("span", { class: "cc-row-not-shown", title: NOT_SHOWN, "aria-hidden": "true" }, icon("eyeOff"));
-        const main = h("button", { class: "cc-row-main", type: "button", "aria-expanded": "false", "aria-controls": id },
-          icon("chevronRight"), label, h("span", { class: "cc-row-current" }, swatch, value), notShown);
+        const main = expander("row", { expanded: false, controls: id }, label, h("span", { class: "cc-row-current" }, swatch, value), notShown);
+        main.classList.add("cc-row-main");
         const controls: RowControls = { view, element: h("div", { class: "cc-row", "data-slot": view.row.slot }), main, label, value, swatch, notShown,
           off: h("button", { class: "chip-button cc-off", type: "button", text: "Off" }),
           reset: button({ label: "Back to your V's own", icon: "reset", iconOnly: true, small: true, variant: "quiet", onClick: () => {} }),
-          // A detail line is reserved only where one of the row's options has one, so it never appears or vanishes (UI-68).
-          detail: view.options.some(option => staticDetail(panel, option, false)) ? h("p", { class: "cc-row-detail" }) : null,
+          // A help tip only where one of the row's options has something to say; it keeps its place when the shown one has nothing (UI-68).
+          help: view.options.some(option => staticDetail(panel, option, false)) ? helpTip(view.options[0]!.label) : null,
           list: new ChoiceList(id, choice => {
             const option = current(controls);
             if (option) dispatch({ kind: "character.setOption", part: option.part, option: option.name, choice: choice.key, ...(choice.activates ? { activates: [...choice.activates] } : {}) });
@@ -289,20 +365,22 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
           if (option) port.authoring.characterChoices(option.id, (port.authoring.characterChoices(option.id, undefined, controls.query)?.choices.length ?? 0) + PAGE, controls.query);
         });
         controls.list.element.hidden = true;
-        controls.element.append(h("div", { class: "cc-row-head" }, main, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
-          ...(controls.detail ? [controls.detail] : []), controls.list.element, controls.more);
+        controls.element.append(h("div", { class: "cc-row-head" }, main, controls.help, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
+          controls.list.element, controls.more);
         return controls;
   }
   const current = (controls: RowControls): CcPanelOption | null => {
     const panel = port.authoring.characterPanel();
     return panel ? rowOption(panel, controls.view.row, port.authoring.characterView()) : null;
   };
-  function toggle(controls: RowControls) {
+  function toggle(controls: RowControls, paint = true) {
     controls.open = !controls.open;
     const key = rowKey(controls.view);
     if (controls.open) { openRows.add(key); aheadRow = key; }
     else { openRows.delete(key); stopPrefetch(controls); if (aheadRow === key) aheadRow = [...openRows].at(-1) ?? null; }
-    rt.changed();
+    // The chevron turns at once; the list follows on the next paint.
+    setExpanded(controls.main, controls.open);
+    if (paint) rt.changed();
   }
   /** Stop preparing a row's choices ahead (it closed, or shows another option or a search). */
   function stopPrefetch(controls: RowControls) {
@@ -363,7 +441,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         controls.swatch.style.setProperty("--swatch-position", look.position);
       }
       controls.element.classList.toggle("changed", !!value?.set);
-      setAttr(controls.main, "aria-expanded", String(controls.open));
+      setExpanded(controls.main, controls.open);
       // Honest coverage: what the 3D view can't draw says so; a conditional option settles from what the shown V draws.
       const isOff = !!value && value.choice === option.off;
       const conditionalHidden = option.coverage[0] === "conditional" && option.type === "appearance" && !!value && !isOff && details?.phase === "ready" && !drawn.has(option.name);
@@ -381,7 +459,10 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       controls.reset.title = value?.set ? `Back to your V's own: ${value.ownLabel}` : "This is your V's own choice.";
       setAttr(controls.reset, "aria-label", controls.reset.title);
       applyCapability(controls.reset, port.authoring.capability({ kind: "character.reset", part: option.part, option: option.name }));
-      if (controls.detail) setText(controls.detail, staticDetail(creator, option, uncensoredOn));
+      if (controls.help) {
+        setHelp(controls.help, staticDetail(creator, option, uncensoredOn));
+        setAttr(controls.help, "aria-label", `About ${option.label}`);
+      }
       controls.element.classList.toggle("not-shown", notDrawn(option, uncensoredOn) || conditionalHidden);
       controls.list.element.hidden = !controls.open;
       if (!controls.open) { controls.more.hidden = true; continue; }
@@ -396,7 +477,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       controls.list.update({ option: option.id, query: controls.query, label: option.label, grid: option.grid, choices: loaded?.choices ?? [],
         selected: value?.position ?? null, mods: creator.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null, fetch: fetch?.states ?? null,
         swatches: option.grid ? rowSwatches : null, preparing: !!details?.updating,
-        groups: option.groups > 1 ? { list: creator.groups, modGroups: creator.modGroups } : null });
+        groups: option.groups > 1 ? { list: creator.groups, modGroups: creator.modGroups, pooled: option.pooled } : null });
       if (ahead && (loaded?.choices.length ?? 0) !== controls.loaded) {
         controls.loaded = loaded?.choices.length ?? 0;
         controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));
@@ -416,38 +497,94 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       }
       group.element.hidden = !any && !!query;
     }
+    readFolds(frame.preferences?.folded);
+    paintFolds(query);
     updateHeadings(frame);
     noMatch.hidden = !query || visibleRows > 0 || !!found?.loading;
     legendText.hidden = !!stopped; legendStopped.hidden = !stopped;
     if (stopped) { setText(legendStopped, STOPPED[stopped]); legendStopped.title = STOPPED[stopped]; }
     return visibleRows;
   }
+  /** Every heading's fold (the remembered ones), its match count while a search runs, and each section's Expand all. */
+  function paintFolds(query: string) {
+    const matches = (rows: readonly RowControls[]) => rows.filter(row => !row.element.hidden).length;
+    const count = (heading: Heading, isFolded: boolean, rows: number) => {
+      const shown = isFolded && !!query && rows > 0;
+      heading.count.hidden = !shown;
+      setText(heading.count, shown ? String(rows) : "");
+      if (shown) setAttr(heading.expander, "aria-description", `${rows} matching ${rows === 1 ? "row" : "rows"} inside`);
+      else heading.expander.removeAttribute("aria-description");
+    };
+    for (const group of built?.groups ?? []) {
+      const groupFolded = folded.has(group.fold);
+      group.body.hidden = groupFolded;
+      setExpanded(group.heading.expander, !groupFolded);
+      count(group.heading, groupFolded, matches(group.sections.filter(section => !section.parent).flatMap(section => section.rows)));
+      for (const section of group.sections) {
+        const sectionFolded = folded.has(section.fold);
+        section.body.hidden = sectionFolded;
+        setExpanded(section.heading.expander, !sectionFolded);
+        count(section.heading, sectionFolded, matches(section.rows));
+        section.heading.expandAll?.update(sectionExpands(section));
+      }
+    }
+  }
   search.addEventListener("input", () => rt.changed());
   const isOffChoice = (option: CcPanelOption, value: { choice: string } | undefined) => !!value && option.off !== null && value.choice === option.off;
 
-  /** Every heading switch: its state from the preview, and why it can't change when it can't (in the line under its heading). */
+  /** Every heading switch: its state from the preview and why it can't change when it can't (the reason tip); what it shows in the help tip. */
   function updateHeadings(frame: Frame) {
     const preview = frame.preview.preview, clothing = frame.preview.character?.clothing;
     const state: CharacterToggleState = { preview: preview ?? null, clothing: clothing ? { state: clothing.state } : null };
     const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "This works once the 3D preview is ready.";
     const paint = (heading: Heading) => {
-      const lines: string[] = [];
+      const help: string[] = [];
       for (const control of heading.toggles) {
         const toggle = control.toggle, shown = toggle.shown(state);
         const clothes = toggle.action(true).kind === "character.setClothing";
         const ready = clothes ? !!clothing : !!preview;
         const allowed = ready ? port.authoring.capability(toggle.action(!shown) as Parameters<typeof port.authoring.capability>[0]) : { available: false, reason: loading };
-        const reason = allowed.available ? null : allowed.reason || loading;
-        control.update(shown && ready, reason);
-        const line = reason ?? toggle.note?.(state) ?? "";
-        if (line) lines.push(line);
+        control.update(shown && ready, allowed.available ? null : allowed.reason || loading);
+        const text = toggle.help?.(state);
+        if (text) help.push(text);
       }
-      if (heading.note) { const text = [...new Set(lines)].join(" "); setText(heading.note, text); heading.note.title = text; }
+      if (heading.help) setHelp(heading.help, [...new Set(help)]);
     };
     for (const group of built?.groups ?? []) { paint(group.heading); for (const section of group.sections) paint(section.heading); }
   }
 
+  const ancestors = (section: SectionControls): SectionControls[] => section.parent ? [...ancestors(section.parent), section.parent] : [];
+  /** The palette's fold commands: Expand all / Collapse all for each section with rows, and every section folded or open at once. */
+  function commands(): Command[] {
+    const groups = built?.groups ?? [];
+    const sections = groups.flatMap(group => group.sections.filter(section => section.rows.length > 1).map(section => ({ group, section })));
+    const reveal = () => { if (typeof rt.dock?.reveal === "function") rt.dock.reveal("character", false); };
+    const ready = () => sections.length ? { available: true } : { available: false, reason: "The creator options are still being read from your game." };
+    const every = groups.flatMap(group => [group.fold, ...group.sections.map(section => section.fold)]);
+    return [
+      { id: "character.fold.openAll", title: "Open every Character section", group: "Character", icon: "expandAll", keywords: "expand unfold sections headings",
+        capability: () => groups.length ? { available: true } : { available: false, reason: "The Character panel has no sections yet." },
+        run: () => { reveal(); setFolds(every.filter(key => folded.has(key)), false); } },
+      { id: "character.fold.closeAll", title: "Fold every Character section", group: "Character", icon: "collapseAll", keywords: "collapse fold sections headings",
+        capability: () => groups.length ? { available: true } : { available: false, reason: "The Character panel has no sections yet." },
+        run: () => { reveal(); setFolds(groups.flatMap(group => group.sections.filter(section => !section.parent).map(section => section.fold)).filter(key => !folded.has(key)), true); } },
+      ...sections.map(({ group, section }) => {
+        const expand = sectionExpands(section);
+        const path = [group.title, ...ancestors(section).map(entry => entry.title), section.title].join(" › ");
+        return { id: `character.fold.${section.fold.slice(FOLD.length)}`, title: `${expand ? "Expand" : "Collapse"} everything in ${path}`,
+          group: "Character", icon: expand ? "expandAll" as const : "collapseAll" as const, keywords: "expand collapse all rows fold unfold section",
+          capability: ready, run: () => {
+            reveal();
+            // Whatever holds it opens too, so what it expands shows.
+            setFolds([group.fold, ...ancestors(section).map(entry => entry.fold)].filter(key => folded.has(key)), false);
+            expandSection(section, expand);
+          } };
+      }),
+    ];
+  }
+
   return {
+    commands,
     spec: { id: "character", ...PANEL_META["character"], element },
     update(frame) {
       const state = frame.preview, context = state.character, preview = state.preview, saved = state.savedV, assets = frame.status.assets;
@@ -524,8 +661,8 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       }
       clothingAreas.hidden = !clothing?.worn.length;
       const clothesSlot = details?.slots.find(slot => slot.slot === "clothing");
-      setText(clothingNote, clothing?.note || (clothesSlot?.state === "unavailable" || clothesSlot?.message ? clothesSlot.message ?? ""
-        : "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges."));
+      setText(clothingNote, clothing?.note || (clothesSlot?.state === "unavailable" || clothesSlot?.message ? clothesSlot.message ?? "" : ""));
+      clothingNote.hidden = !clothingNote.textContent;
 
       // Preview-only controls.
       const shapes = state.eyeShapeOptions?.choices ?? [];
@@ -542,12 +679,10 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Overriding the saved eye shape (${shapeLabel(saved.suggestedEyeShape)}) in this viewport only.` : "";
       // Before the preview is ready this line says why the section waits, once (UI-90).
-      setText(eyeNote, !preview ? loading : overriding || "The 3D view's eye shape, which eye makeup is placed on. It overrides your V's Eyes row in the 3D view.");
+      setText(eyeNote, !preview ? loading : overriding);
       // The game's own nudity setting, as the viewer chooses; off is the game's censored look (knowledge/body-rendering.md §3).
       const uncensoredOn = preview?.uncensored === true, uncensoredAllowed = port.authoring.capability({ kind: "preview.setUncensored", enabled: !uncensoredOn });
-      uncensored.update(!!preview && uncensoredOn, { disabled: !preview || !uncensoredAllowed.available, reason: uncensoredAllowed.reason ?? loading,
-        note: uncensoredOn ? "Nipples and genitals as you chose them, with no underwear, as the game shows them when nudity is allowed."
-          : "Off: the game's censored look, with its underwear. On: your V as the game shows it when nudity is allowed." });
+      uncensored.update(!!preview && uncensoredOn, { disabled: !preview || !uncensoredAllowed.available, reason: uncensoredAllowed.reason ?? loading });
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
       const prepared = context?.prepared;
       setText(preparedText, !prepared ? "" : prepared.clearing ? "Clearing the prepared game files…"

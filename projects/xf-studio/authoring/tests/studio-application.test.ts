@@ -89,7 +89,7 @@ test("saved-V eye suggestion updates application state without applying the morp
   const context = new CharacterContextActions({ showSave: () => {}, creator: {
     panel: async () => ({ phase: "ready", message: "", panel: { schema: "xfs/cc-panel-5", bodyGender: "female", identity: "t", language: null, mods: [], groups: [{ label: "Base game", kind: "game" }], modGroups: [], notes: [""],
       options: [{ id: "head/eyes_color", part: "head", name: "eyes_color", label: "Eye Color", type: "appearance", grid: true, count: 2, off: null, defaultChoice: "a",
-        mod: -1, link: null, dependsOn: [], coverage: ["rendered", 0], groups: 1 }], sections: [{ id: "Eyes", label: "Eyes", makeup: false, rows: [{ slot: "eyes_color", part: "head", options: [0] }] }],
+        mod: -1, link: null, dependsOn: [], coverage: ["rendered", 0], groups: 1, pooled: [] }], sections: [{ id: "Eyes", label: "Eyes", makeup: false, rows: [{ slot: "eyes_color", part: "head", options: [0] }] }],
       counts: { options: 1, choices: 2, modChoices: 0 } } }),
     page: async () => ({ identity: "t", option: "head/eyes_color", query: "", offset: 0, total: 2, choices: [] }),
     view: async () => ({ bodyGender: "female", identity: "t", values: {}, missing: { entries: [], summary: [] }, saveCheck: null, faceMorphs: [] }),

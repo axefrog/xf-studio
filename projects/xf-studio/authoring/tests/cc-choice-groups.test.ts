@@ -4,7 +4,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { buildCatalogue, type CcCatalogue } from "../src/cc-catalogue";
 import type { CcoResource } from "../src/cco-model";
-import { BASE_GAME_GROUP, type CcPanelChoice, choiceGroup, compareGroups, isXfResource, panelProjection, readCcPanel, XF_GROUP } from "../src/cc-panel";
+import { BASE_GAME_GROUP, type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, isXfResource, OTHER_MODS_INDEX, OWN_GROUP_MIN_CHOICES, panelProjection,
+  pooledGroups, readCcPanel, XF_GROUP } from "../src/cc-panel";
 import { catalogueCoverage } from "../src/cc-render-coverage";
 import { GAME_FOLDER_MODS, makerText, modMakers } from "../src/mod-makers";
 import type { VortexModIdentity } from "../src/vortex-deployment";
@@ -64,6 +65,29 @@ describe("maker groups in the projection", () => {
     expect(() => readCcPanel({ ...wire, modGroups: wire.modGroups.slice(1) })).toThrow();
     expect(() => readCcPanel({ ...wire, modGroups: wire.modGroups.map(() => wire.groups.length) })).toThrow();
     expect(() => readCcPanel({ ...wire, groups: wire.groups.map((group: object, at: number) => at ? { ...group, kind: "evil" } : group) })).toThrow();
+  });
+
+  test("makers with a single choice in an option share one 'Other mods' heading there, when there are two or more of them", () => {
+    // Nobody records an author (MO2): the mixed row has Zeta, Alpha Pack One and Alpha Pack Two with one choice each, and XF Studio's.
+    const { panel } = panelProjection(catalogue(), new Map(), "t");
+    const hair = panel.options.find(option => option.name === "hair_color")!;
+    expect(OWN_GROUP_MIN_CHOICES).toBe(2);
+    expect(hair.pooled.map(index => panel.groups[index]!.label).sort()).toEqual(["Alpha Pack One", "Alpha Pack Two", "Zeta Hair Colours"]);
+    // Headings: the base game, XF Studio (never pooled) and Other mods.
+    expect(hair.groups).toBe(3);
+    // The single-mod row isn't grouped at all.
+    expect(panel.options.find(option => option.name === "brow_color")!).toMatchObject({ groups: 1, pooled: [] });
+    expect(readCcPanel(JSON.parse(JSON.stringify(panel)))).toEqual(panel);
+    // A lone small group keeps its own heading; the base game and XF Studio are never pooled.
+    const groups: CcChoiceGroup[] = [BASE_GAME_GROUP, XF_GROUP, { label: "A", kind: "mod" }, { label: "B", kind: "author" }, { label: "C", kind: "mod" }];
+    expect(pooledGroups(new Map([[0, 1], [1, 1], [2, 1], [3, 5]]), groups)).toEqual([]);
+    expect(pooledGroups(new Map([[0, 1], [1, 1], [2, 1], [4, 1], [3, 5]]), groups)).toEqual([2, 4]);
+    // "Other mods" shows last.
+    expect([OTHER_MODS_INDEX, 3, 0, 1].sort(compareGroups(groups))).toEqual([0, 1, 3, OTHER_MODS_INDEX]);
+    // A host from before pooling sends none: nothing pooled; a pooled base game is refused.
+    const wire = JSON.parse(JSON.stringify(panel));
+    expect(readCcPanel({ ...wire, options: wire.options.map(({ pooled: _pooled, ...option }: { pooled: number[] }) => option) }).options.every(option => !option.pooled.length)).toBe(true);
+    expect(() => readCcPanel({ ...wire, options: wire.options.map((option: object) => ({ ...option, pooled: [0] })) })).toThrow();
   });
 
   test("an XF resource is known by its file name alone", () => {
@@ -200,6 +224,31 @@ describe("the choice list grouped by maker", () => {
     key(lightDocument.activeElement!, "ArrowUp");
     key(lightDocument.activeElement!, "ArrowUp");
     expect(lightDocument.activeElement!.getAttribute("data-position")).toBe("4");
+  });
+
+  test("'Other mods' comes last, its choices sorted by label; each says its mod", async () => {
+    const { ChoiceList } = await import("../src/studio-ui/panels/character-choices");
+    const view = new ChoiceList("o", () => {});
+    const element = view.element as unknown as LightElement;
+    const list = [choice(0, -1, { off: true, key: "" }), choice(1, -1), choice(2, 0, { label: "Zed" }), choice(3, 2, { label: "Alpha" }), choice(4, 1, { label: "Mid" })];
+    // Zeta (group 1) and Alice (group 3) are pooled; XF Studio (group 2) keeps its heading.
+    view.update(input(list, 1, { groups: { ...groups, pooled: [1, 3] } }));
+    expect(heads(element).map(head => head.querySelector(".cc-maker-label")!.textContent)).toEqual(["Base game", "Made with XF Studio", "Other mods"]);
+    const other = element.querySelectorAll(".cc-maker").at(-1)!;
+    expect(other.getAttribute("data-kind")).toBe("other");
+    expect(other.querySelectorAll(".cc-choice").map(item => item.getAttribute("aria-label"))).toEqual(["Alpha", "Zed"]);
+    expect(other.querySelectorAll(".cc-choice").map(item => item.getAttribute("aria-description"))).toEqual(["From Alpha Pack", "From Zeta Hair Colours"]);
+    // A later page joins in label order, without a rebuild.
+    view.update(input([...list, choice(5, 0, { label: "Beta" })], 1, { groups: { ...groups, pooled: [1, 3] } }));
+    expect(other.querySelectorAll(".cc-choice").map(item => item.getAttribute("aria-label"))).toEqual(["Alpha", "Beta", "Zed"]);
+    // Folding everything and unfolding it again (the section's Expand all).
+    view.setAllFolded(true);
+    expect(view.anyFolded()).toBe(true);
+    expect(heads(element).every(head => head.getAttribute("aria-expanded") === "false")).toBe(true);
+    view.setAllFolded(false);
+    expect(view.anyFolded()).toBe(false);
+    // Every heading is the shared expander.
+    expect(heads(element).every(head => head.classList.contains("expander") && head.getAttribute("data-level") === "maker")).toBe(true);
   });
 
   test("a row with one maker has no headings", async () => {

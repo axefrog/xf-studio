@@ -21,7 +21,10 @@
  *   The base game's choices have a group of their own (always `groups[0]`), and so do the mods XF Studio built (their custom creator
  *   resource is named with the `xfs_` prefix every generated resource carries: projects/xf-studio/data/naming.md); every other mod goes
  *   under its author as its mod manager records it (`ModMaker`, mod-makers.ts), else under its own name. Mods by one author share a
- *   group. Each option says how many groups its choices span (`groups`), so a row with one maker isn't grouped at all.
+ *   group. Most installed mods record no author, so a row would otherwise hold a heading per mod with one choice under it: groups with
+ *   fewer than `OWN_GROUP_MIN_CHOICES` of an option's choices are pooled into one "Other mods" group for that option (`pooled`), when
+ *   at least two are (one heading folded into another saves nothing); the base game's and XF Studio's groups are never pooled. Each
+ *   option says how many headings its choices show under (`groups`, the pool counting as one), so a row with one maker isn't grouped.
  *
  * Nothing here names an option, a slot or a mod.
  */
@@ -60,14 +63,29 @@ export interface CcPanelOption {
   readonly dependsOn: readonly string[];
   /** Preview coverage: status and an index into `notes`. */
   readonly coverage: readonly [RenderStatus, number];
-  /** How many of the panel's `groups` its offered choices come from (grouped by maker when more than one). */
+  /** How many headings its offered choices show under: the panel's `groups` they come from, "Other mods" counting once (grouped when more than one). */
   readonly groups: number;
+  /** The panel's `groups` too small to head choices of their own in this option: shown together under "Other mods" (none: nothing pooled). */
+  readonly pooled: readonly number[];
 }
 /** Who a group of choices comes from: the base game, XF Studio, an author as recorded, or a mod with no author recorded (by its name). */
 export type CcChoiceGroupKind = "game" | "xf" | "author" | "mod";
 export interface CcChoiceGroup { readonly label: string; readonly kind: CcChoiceGroupKind }
 export const BASE_GAME_GROUP: CcChoiceGroup = Object.freeze({ label: "Base game", kind: "game" });
 export const XF_GROUP: CcChoiceGroup = Object.freeze({ label: "Made with XF Studio", kind: "xf" });
+/** The heading an option's pooled groups share (`CcPanelOption.pooled`); not one of the panel's `groups`, and always shown last. */
+export const OTHER_MODS_GROUP: Readonly<{ label: string; kind: "other" }> = Object.freeze({ label: "Other mods", kind: "other" });
+/**
+ * The fewest of an option's choices a maker needs for a heading of its own there; a smaller group joins "Other mods" (with at least one
+ * other). 2: a heading over a single choice only repeats the choice's own tooltip.
+ */
+export const OWN_GROUP_MIN_CHOICES = 2;
+/** Which of an option's groups are pooled under "Other mods", from how many of its offered choices each holds (see the module note). */
+export function pooledGroups(counts: ReadonlyMap<number, number>, groups: readonly CcChoiceGroup[]): number[] {
+  const small = [...counts].filter(([group, count]) => count < OWN_GROUP_MIN_CHOICES && (groups[group]?.kind === "author" || groups[group]?.kind === "mod"))
+    .map(([group]) => group).sort((a, b) => a - b);
+  return small.length >= 2 ? small : [];
+}
 /**
  * What the host knows about who made a mod (mod-makers.ts), by the mod's name in the catalogue: the author its mod manager recorded, and
  * a better name to show for it when there is one (a Vortex mod's own name rather than its staging folder).
@@ -182,6 +200,13 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
     return maker?.author ? groupIndex({ label: maker.author, kind: "author" }) : groupIndex({ label: maker?.name || name, kind: "mod" });
   });
   const groupOf = (provenance: CcOption["provenance"]) => provenance.kind === "mod" ? modGroups[mods.get(provenance.mod ?? "") ?? -1] ?? 0 : 0;
+  // The headings an option's choices show under, small groups pooled (see the module note).
+  const groupsOf = (option: CcOption) => {
+    const counts = new Map<number, number>();
+    for (const choice of option.choices) if (offeredChoice(choice)) { const group = groupOf(choice.provenance); counts.set(group, (counts.get(group) ?? 0) + 1); }
+    const pooled = pooledGroups(counts, groups);
+    return { groups: counts.size - pooled.length + (pooled.length ? 1 : 0), pooled };
+  };
   const options: CcPanelOption[] = [], at = new Map<string, number>();
   const add = (option: CcOption) => {
     const known = at.get(option.id);
@@ -195,7 +220,7 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
       defaultChoice: option.defaultChoice, mod: option.provenance.kind === "mod" ? modIndex(option.provenance.mod) : -1,
       link: option.link ? { ...option.link } : null,
       dependsOn: option.controlledBy.map(name => index.option(option.part, name)?.label.text ?? name),
-      coverage: [shown.status, noteIndex(shown.note)], groups: new Set(option.choices.filter(offeredChoice).map(choice => groupOf(choice.provenance))).size };
+      coverage: [shown.status, noteIndex(shown.note)], ...groupsOf(option) };
     at.set(option.id, options.length);
     options.push(entry);
     return options.length - 1;
@@ -220,11 +245,13 @@ function offeredChoice(choice: CcOption["choices"][number]) {
 }
 /** A choice's group (the panel's `groups`): the base game's, or its mod's. */
 export const choiceGroup = (choice: Pick<CcPanelChoice, "mod">, panel: Pick<CcPanel, "modGroups">) => choice.mod >= 0 ? panel.modGroups[choice.mod] ?? 0 : 0;
-const KIND_ORDER: Record<CcChoiceGroupKind, number> = { game: 0, xf: 1, author: 2, mod: 2 };
-/** The order groups are shown in: the base game, then XF Studio, then every other maker by name. */
+const KIND_ORDER: Record<CcChoiceGroupKind | "other", number> = { game: 0, xf: 1, author: 2, mod: 2, other: 3 };
+/** The index a choice list gives "Other mods" (never one of the panel's `groups`). */
+export const OTHER_MODS_INDEX = -2;
+/** The order groups are shown in: the base game, then XF Studio, then every other maker by name, then "Other mods". */
 export function compareGroups(groups: readonly CcChoiceGroup[]) {
   return (a: number, b: number) => {
-    const x = groups[a], y = groups[b];
+    const x = a === OTHER_MODS_INDEX ? OTHER_MODS_GROUP : groups[a], y = b === OTHER_MODS_INDEX ? OTHER_MODS_GROUP : groups[b];
     if (!x || !y) return a - b;
     return KIND_ORDER[x.kind] - KIND_ORDER[y.kind] || x.label.localeCompare(y.label, undefined, { sensitivity: "base" }) || a - b;
   };
@@ -323,7 +350,9 @@ export function readCcPanel(value: unknown): CcPanel {
       link: option.link ? { key: str(option.link.key, "link"), controller: option.link.controller === true } : null,
       dependsOn: Array.isArray(option.dependsOn) ? option.dependsOn.slice(0, 16).map(entry => str(entry, "depends")) : [],
       coverage: [option.coverage[0], int(option.coverage[1], "coverage", notes.length - 1)] as const,
-      groups: Math.max(0, int(option.groups, "groups", groups.length)) } satisfies CcPanelOption;
+      groups: Math.max(0, int(option.groups, "groups", groups.length)),
+      // A host built before pooling sends none: nothing pooled.
+      pooled: Array.isArray(option.pooled) ? option.pooled.slice(0, groups.length).map(at => int(at, "pooled", groups.length - 1) < 1 ? fail("pooled") : at) : [] } satisfies CcPanelOption;
   });
   if (!Array.isArray(panel.sections)) fail("sections");
   const sections = panel.sections.map(section => ({ id: str(section?.id, "section"), label: str(section?.label, "section label"), makeup: section.makeup === true,

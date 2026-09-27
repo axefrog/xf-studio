@@ -3,6 +3,8 @@ import { EYE_MAKEUP_MOD } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, badge, button, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
+import { helpTip, setHelp } from "../help-tip";
+import type { Command } from "../commands";
 import type { PanelSpec } from "../dock/dock-view";
 import { icon } from "../icons";
 import { ItemList } from "../item-list";
@@ -19,6 +21,8 @@ import { openModInstallSheet } from "./mod-install-sheet";
 import { PANEL_META } from "../panel-meta";
 
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
+  /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */
+  commands?(): Command[];
   /** Mod package only: open Game & tools, find the game and mod manager, and put focus on the first thing to choose. */
   showSetup?(): void };
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -110,10 +114,10 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   const element = h("div", { class: "panel-content" },
     h("div", { class: "panel-head" }, h("label", { class: "eyebrow", text: "Collection" }), h("div", { class: "row" }, nameInput, collectionMore),
       h("div", { class: "row wrap gap-s" }, libraryChip)),
-    h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, "Presets ", count), addButton),
+    h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, "Presets ", count),
+      helpTip("presets", "Each preset becomes one choice in the game's single eye-makeup selector, alongside Off.")), addButton),
     failed, empty, list.element,
-    h("div", { class: "row wrap gap-s panel-foot" }, restore, importRecipe),
-    note("Each preset becomes one choice in the game's single eye-makeup selector, alongside Off."));
+    h("div", { class: "row wrap gap-s panel-foot" }, restore, importRecipe));
   rt.anchors.register("presets.list", list.element);
   return {
     spec: { id: "presets", ...PANEL_META["presets"], element },
@@ -202,17 +206,18 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     exportMask: button({ label: "Export layer mask", icon: "export", small: true, onClick: () => void rt.file({ kind: "mask.export" }) }),
   };
   let savedSignature = "";
-  // A research tool (UI-85): the compiler plan is input for the offline compiler, not a mod.
-  const researchNote = note("Research: a compiler plan is input for the offline compiler, not a mod. Exporting one saves a version first.");
+  // What the files are, in the Files heading's help tip; with research tools (UI-85) it adds what a compiler plan is.
+  const filesHelp = "Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first. A layer mask is a picture of the selected layer's shape.";
+  const researchHelp = "Research: a compiler plan is input for the offline compiler, not a mod. Exporting one saves a version first.";
+  const filesSection = section({ title: "Files", help: filesHelp }, h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection,
+    fileButtons.exportPlan, fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask));
+  const filesTip = filesSection.querySelector<HTMLElement>(".help-tip")!;
   const element = h("div", { class: "panel-content" },
-    section("Local library", stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy),
-      note("Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.")),
+    section({ title: "Local library", help: "Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft." },
+      stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy)),
     section("Saved collections", h("div", { class: "row between" }, h("span", { class: "muted small", text: "Opening keeps your current draft recoverable." }), refresh),
       savedEmpty, saved, h("div", { class: "row wrap gap-s" }, recover), recoverNote),
-    section("Files", h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection, fileButtons.exportPlan,
-      fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask),
-    note("Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first. A layer mask is a picture of the selected layer's shape."),
-    researchNote));
+    filesSection);
   return {
     spec: { id: "library", ...PANEL_META["library"], element },
     update(frame) {
@@ -246,7 +251,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       }
       savedEmpty.hidden = library.summaries.length > 0;
       const research = !!frame.preferences?.researchTools;
-      fileButtons.exportPlan.hidden = !research; researchNote.hidden = !research;
+      fileButtons.exportPlan.hidden = !research; setHelp(filesTip, research ? [filesHelp, researchHelp] : filesHelp);
       for (const [key, action] of [["importCollection", "collection.import"], ["exportCollection", "collection.export"], ["exportPlan", "collection.plan"],
         ["importRecipe", "recipe.import"], ["exportRecipe", "recipe.export"], ["exportMask", "mask.export"]] as const)
         applyCapability(fileButtons[key], port.files.capability({ kind: action }));
@@ -338,12 +343,15 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
       finish.exportAdapter === "flat-provisional" ? "success" : "warning"))));
   const element = h("div", { class: "panel-content" },
-    section("Mod package", note(`Builds your own copy of your XF mods from the current draft (including unsaved edits), ready for your mod manager. Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off. Your collection and library are never changed.`),
+    section({ title: "Mod package", help: [`Builds your own copy of your XF mods from the current draft (including unsaved edits), ready for your mod manager.`,
+      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector, alongside Off.`,
+      "Your collection and library are never changed."] },
       mods, h("div", { class: "row wrap gap-s" }, check, build), progress),
     result,
     setup.element,
-    section("What can be packaged", finishList,
-      note("Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole. Experimental finishes are built from the game's own decal materials, but they may look different in game: nobody has checked them there yet. Check decides; this list is a guide.")));
+    section({ title: "What can be packaged", help: ["Layers with preview-only finishes are left out and named in the result; a preset with nothing left to build is left out whole.",
+      "Experimental finishes are built from the game's own decal materials, but they may look different in game: nobody has checked them there yet.",
+      "Check decides; this list is a guide."] }, finishList));
   rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },

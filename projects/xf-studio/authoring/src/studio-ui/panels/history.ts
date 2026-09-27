@@ -1,6 +1,7 @@
 import { keyBinding, shortcutLabel } from "../../input-bindings";
-import { button, emptyState, note } from "../controls";
+import { button, emptyState } from "../controls";
 import { h, setAttr, setText } from "../dom";
+import { helpTip } from "../help-tip";
 import { historyCommandTitle, historyRows, historySummary, HISTORY_TRIMMED_NOTE, jumpable, jumpAnnouncement, type HistoryRow } from "../history-model";
 import { icon } from "../icons";
 import { PANEL_META } from "../panel-meta";
@@ -24,10 +25,11 @@ export function historyPanel(rt: StudioRuntime): PanelController {
   const list = h("ol", { class: "history-list", "aria-label": "Changes to this preset, oldest first" });
   const empty = emptyState("No changes yet", "Your edits to this preset appear here, oldest first. Click any step to go back to it.");
   const noPreset = emptyState("No preset selected", "History belongs to a preset. Select or add a preset to see its changes.");
-  const help = note(`Click a step to go back to it. Steps after it stay listed, dimmed, until you make a new change, so you can go forward again. ${keys.undo} and ${keys.redo} move one step at a time.`);
+  // How the list works, in a help tip beside its heading (help-tip.ts).
+  const help = helpTip("history", `Click a step to go back to it. Steps after it stay listed, dimmed, until you make a new change, so you can go forward again. ${keys.undo} and ${keys.redo} move one step at a time.`);
   const element = h("div", { class: "panel-content history-panel" },
-    h("div", { class: "list-head" }, h("span", { class: "eyebrow" }, summary), h("div", { class: "row gap-xs" }, undo, redo)),
-    noPreset, empty, trimmed, list, help);
+    h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, summary), help), h("div", { class: "row gap-xs" }, undo, redo)),
+    noPreset, empty, trimmed, list);
   rt.anchors.register("history.list", list);
 
   const views = new Map<string, RowView>();
