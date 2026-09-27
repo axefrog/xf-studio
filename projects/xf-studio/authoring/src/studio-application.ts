@@ -514,7 +514,7 @@ export class StudioApplication {
       const motion = this.services.motion?.snapshot();
       const playing = !!motion?.idle && !motion.idlePaused;
       return entry(!motion?.idle ? { kind: "motion.setIdle", enabled: true, view } : { kind: "motion.setPaused", paused: !motion.idlePaused, view },
-        { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play character-creator idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
+        { on: playing, shown: !!motion?.available, icon: playing ? "pause" : "play", label: !motion?.idle ? "Play the game idle" : motion.idlePaused ? "Resume idle" : "Pause idle" });
     }
     // The camera's framing commands: the tool's ID is the action it dispatches on this view.
     return entry({ kind: tool.id, view } as StudioAction);

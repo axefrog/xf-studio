@@ -240,7 +240,7 @@ export function createCharacterRenderer(input: {
     resolvedSkin = null;
     // The previous V is released after the new one has baked, so a tried style can share a bake it keeps (PREV-78).
     const releasePrevious = () => previous?.dispose(kept);
-    if (!next) { rigMotion.setDeformations([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
+    if (!next) { rigMotion.setDeformations?.([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
@@ -283,7 +283,7 @@ export function createCharacterRenderer(input: {
     scene.updateMatrixWorld(true);
     // The puppet's deformation rigs first, so the body's helper joints bind to the joints the rigs solve; the blink binds before the
     // idle: it must capture the details' neutral pose before a playing idle poses them.
-    rigMotion.setDeformations(next.rigs ?? []);
+    rigMotion.setDeformations?.(next.rigs ?? []);
     rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: [...skinLimits(), ...bakeLimits] };

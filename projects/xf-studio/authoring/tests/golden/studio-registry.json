@@ -71,6 +71,7 @@
   "preview.setHair",
   "preview.setDetail",
   "motion.setIdle",
+  "motion.setIdleClip",
   "motion.setPaused",
   "motion.setContributions",
   "motion.setBlink",
@@ -2163,6 +2164,27 @@
     }
    }
   },
+  "motion.setIdleClip": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "clip": {
+     "type": "string",
+     "required": true,
+     "from": "input",
+     "minLength": 1,
+     "maxLength": 40
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "motion.setPaused": {
    "scope": [
     "viewport"
@@ -3242,6 +3264,15 @@
   },
   {
    "id": "motion.setIdle",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.setIdleClip",
    "family": "action",
    "scope": [
     "viewport"

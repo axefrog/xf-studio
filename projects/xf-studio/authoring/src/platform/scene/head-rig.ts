@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { extendSkin } from "../../skin";
 import type { SavedV } from "../../save-reader";
 import { IdleAnimation } from "../../idle-animation";
+import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, IDLE_CATALOGUE_ASSET, parseIdleCatalogue, type IdleCatalogue } from "../../idle-catalogue";
 import { activeEyeShape, GAME_BLINK_MISSING, loadGameBlink, type GameBlink } from "../../game-blink";
 import { composePreviewMotion } from "../../preview-motion";
 import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../eye-material";
@@ -18,7 +19,11 @@ import { faceMorphChoiceIndex, faceMorphChoices, faceMorphWeights, followsFaceMo
  */
 
 /** The rig's motion and why a part of it is missing (plain words for the motion panel). */
-export type RigMotionAssets = { idle?: IdleAnimation; idleError: string; blink?: GameBlink; blinkError: string };
+export type RigMotionAssets = { idle?: IdleAnimation; idleError: string; blink?: GameBlink; blinkError: string;
+  /** The game's preview idles prepared on this computer (idle-catalogue.ts); the built-in close-up entry when no catalogue was prepared. */
+  idles?: IdleCatalogue;
+  /** Load and play one of them (its body clip and baked face) on the idle's rigs; rejects with a plain reason when its files aren't there. */
+  selectIdle?(id: string): Promise<void> };
 /** The core eye as the motion loader may re-rig it (a rigid eye gets a gaze joint per side; the rig keeps the replacement). */
 export type CoreEye = { readonly mesh: THREE.Mesh; readonly material: THREE.Material; replace(next: THREE.SkinnedMesh): void };
 /** Loads the rig's motion onto the scene's bones. The default reads the game idle and blink assets; probes inject their own. */
@@ -27,15 +32,22 @@ export type MotionLoader = (scene: THREE.Scene, eye: CoreEye) => Promise<RigMoti
 /** The game idle (with the eyeballs given gaze joints when the core eye is rigid) and the game's blink. */
 export const loadGameMotion: MotionLoader = async (scene, eye) => {
   let idle: IdleAnimation | undefined, idleError = "";
+  // The catalogue of the game's preview idles, when one was prepared; else the close-up idle alone (an older preparation).
+  let idles: IdleCatalogue = BUILT_IN_CATALOGUE;
+  try {
+    const response = await fetch(IDLE_CATALOGUE_ASSET);
+    if (response.ok) idles = parseIdleCatalogue(await response.json());
+  } catch { idles = BUILT_IN_CATALOGUE; }
+  const first = idles.idles.find(entry => entry.id === DEFAULT_IDLE) ?? idles.idles[0]!;
   try {
     const [motion, facial, binding] = await Promise.all([
-      new GLTFLoader().loadAsync("/assets/cc-idle-body.glb"),
-      new GLTFLoader().loadAsync("/assets/cc-idle-face.glb"),
+      new GLTFLoader().loadAsync(`/assets/${first.body}`),
+      new GLTFLoader().loadAsync(`/assets/${first.face?.file ?? "cc-idle-face.glb"}`),
       fetch("/assets/cc-idle-binding.json").then(r => { if (!r.ok) throw Error("Idle binding data unavailable"); return r.json(); }),
     ]);
-    const clip = motion.animations.find(a => a.name === binding.clip);
+    const clip = motion.animations.find(a => a.name === first.clip) ?? motion.animations.find(a => a.name === binding.clip);
     if (!clip) throw Error("Expected character-creator close-up clip is missing");
-    const faceClip = facial.animations.find(a => a.name === "ui_closeup_shot_face");
+    const faceClip = facial.animations.find(a => a.name === `${first.face?.clip ?? "ui_closeup_shot"}_face`);
     if (!faceClip) throw Error("Solved facial idle clip is missing");
     // The legacy eyeball preview is rigid geometry. Give each disconnected eye
     // one authoritative eye-joint influence so gaze rotates around the game pivot.
@@ -95,7 +107,28 @@ export const loadGameMotion: MotionLoader = async (scene, eye) => {
   } catch (error) {
     blink = undefined; blinkError = (error as Error).message || GAME_BLINK_MISSING;
   }
-  return { idle, idleError, blink, blinkError };
+  // Another idle: its body clip (and baked face) loaded once, then played on the same rigs (the clips share the rigs' joint names).
+  const loaded = new Map<string, Promise<THREE.AnimationClip | undefined>>();
+  const clipOf = (file: string, name: string) => {
+    const key = `${file}|${name}`;
+    let pending = loaded.get(key);
+    if (!pending) {
+      pending = new GLTFLoader().loadAsync(`/assets/${file}`).then(gltf => gltf.animations.find(a => a.name === name));
+      pending.catch(() => loaded.delete(key));
+      loaded.set(key, pending);
+    }
+    return pending;
+  };
+  const selectIdle = async (id: string) => {
+    const entry = idles.idles.find(item => item.id === id);
+    if (!idle || !entry) throw Error("That idle isn't one of the game's idles prepared on this computer.");
+    // An idle with no face of its own keeps the close-up's face loop (the default idle's).
+    const faceRef = entry.face ?? first.face;
+    const [body, face] = await Promise.all([clipOf(entry.body, entry.clip), faceRef ? clipOf(faceRef.file, `${faceRef.clip}_face`) : undefined]);
+    if (!body) throw Error("That idle's motion couldn't be read from its prepared file.");
+    idle.setClips(body, face);
+  };
+  return { idle, idleError, blink, blinkError, idles, selectIdle };
 };
 
 export type HeadRig = Awaited<ReturnType<typeof createHeadRig>>;

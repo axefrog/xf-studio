@@ -33,7 +33,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, ren
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { type BodyCensorship, type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { type BodyCensorship, type BodyScope, bodyStateFor, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
@@ -906,7 +906,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const clothing = dressed && !("failed" in dressed) ? dressed : null;
   if (request.clothing && scope === "drawn") time("clothing");
   cancelled();
-  const bodyState = { feet: clothing?.feet ?? "flat" } as const;
+  const bodyState = bodyStateFor(clothing?.feet, request.puppet, cco.merged.cco);
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
   input = previewInput(input, bodyState, scope === "drawn");
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
@@ -1341,13 +1341,14 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
     cancelled();
     const scopes = requests.map(bodyScopeOf);
     const worn = clothes.map(entry => entry && !("failed" in entry) ? entry : null);
-    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: worn[index]?.feet ?? "flat" },
+    const bodyStates = requests.map((request, index) => bodyStateFor(worn[index]?.feet, request.puppet, cco.merged.cco));
+    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, bodyStates[index],
       scopes[index] === "drawn"), cco, cache, worn[index]?.overrides).then(result => result.resolved) : null));
     cancelled();
     await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(worn[index] ?? null)]
       .flatMap(component => component.materials.map(material => material.template).filter((template): template is Provenance => !!template)) : []), cache);
     const plans = resolved.map((entry, index) => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities,
-      { feet: worn[index]?.feet ?? "flat" }, clothes[index] ?? null, scopes[index], undefined, censorshipOf(requests[index]!)) : null);
+      bodyStates[index], clothes[index] ?? null, scopes[index], undefined, censorshipOf(requests[index]!)) : null);
     cancelled();
     const fresh = new Map<string, PlannedComponent>();
     for (const plan of plans) for (const component of [...plan?.components ?? [], ...plan?.censoredBody ?? []]) {

@@ -1,0 +1,324 @@
+{
+  "catalogue": {
+    "schema": "xfs/idle-catalogue-1",
+    "source": {
+      "graph": "base\\gameplay\\anim_graphs\\player_paperdoll.animgraph",
+      "set": "base\\animations\\ui\\female\\ui_female.anims",
+      "rig": "base\\characters\\base_entities\\woman_base\\woman_base.rig"
+    },
+    "idles": [
+      {
+        "id": "closeup",
+        "label": "Creator close-up",
+        "clip": "ui_closeup_shot",
+        "body": "cc-idle-body.glb",
+        "duration": 12.333,
+        "screen": "creator",
+        "state": "closeup",
+        "flags": [
+          "characterCreation_Eyes",
+          "characterCreation_Hair",
+          "characterCreation_Jaw",
+          "characterCreation_Lips",
+          "characterCreation_Nose"
+        ],
+        "face": {
+          "clip": "ui_closeup_shot",
+          "file": "cc-idle-face.glb"
+        },
+        "puppet": "creator",
+        "evidence": "[resource] player_paperdoll.animgraph: looping SkAnim in state `closeup` of a state machine testing characterCreation_Eyes, characterCreation_Hair, characterCreation_Jaw, characterCreation_Lips, characterCreation_Nose"
+      },
+      {
+        "id": "fullbody",
+        "label": "Creator full body",
+        "clip": "ui_fullbody_shot",
+        "body": "cc-idle-body-ui_fullbody_shot.glb",
+        "duration": 15.733,
+        "screen": "creator",
+        "state": "fullbody",
+        "flags": [],
+        "face": {
+          "clip": "ui_fullbody_shot",
+          "file": "cc-idle-face-ui_fullbody_shot.glb"
+        },
+        "puppet": "creator",
+        "evidence": "[resource] player_paperdoll.animgraph: looping SkAnim in state `fullbody` of a state machine"
+      },
+      {
+        "id": "inventory",
+        "label": "Inventory",
+        "clip": "UI_full_shot",
+        "body": "cc-idle-body-ui_full_shot.glb",
+        "duration": 11.067,
+        "screen": "inventory",
+        "state": "Idle",
+        "flags": [
+          "inventoryScreen_Chest",
+          "inventoryScreen_Legs"
+        ],
+        "face": {
+          "clip": "ui_closeup_shot",
+          "file": "cc-idle-face.glb"
+        },
+        "puppet": null,
+        "evidence": "[resource] player_paperdoll.animgraph: looping SkAnim in state `Idle` of a state machine testing inventoryScreen_Chest, inventoryScreen_Legs"
+      },
+      {
+        "id": "nails",
+        "label": "Creator nails",
+        "clip": "ui_expose_hand_loop",
+        "body": "cc-idle-body-ui_expose_hand_loop.glb",
+        "duration": 4.7,
+        "screen": "creator",
+        "state": "loop",
+        "flags": [
+          "characterCreation_Nails"
+        ],
+        "face": null,
+        "puppet": "creator",
+        "evidence": "[resource] player_paperdoll.animgraph: looping SkAnim in state `loop` of a state machine testing characterCreation_Nails"
+      },
+      {
+        "id": "gender-selection",
+        "label": "Gender selection",
+        "clip": "ui_gender_selection",
+        "body": "cc-idle-body-ui_gender_selection.glb",
+        "duration": 15.633,
+        "screen": "gender",
+        "state": "switch input",
+        "flags": [],
+        "face": null,
+        "puppet": "creator",
+        "evidence": "[resource] player_paperdoll.animgraph: looping SkAnim played directly by the preview screens' switch"
+      }
+    ],
+    "left": [
+      {
+        "clip": "baseballbat_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "dian_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "fists_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "hammer_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_chao_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_kenshin_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_liberty_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_nue_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_omaha_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_slaughtomatic_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "handgun_yukimura_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "hmg_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "ironpipe_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "kanabo_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "katana_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "knife_chefs_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "knife_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "knuckles_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "lmg_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "onehanded_melee_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "precision_rifle_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "precision_rifle_rostovic_kolac_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "precision_rifle_sor22_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "precision_rifle_techtronika_pozhar_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "revolver_burya_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "revolver_crusher_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "revolver_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "revolver_nova_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "revolver_quasar_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "rifle_ajax_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "rifle_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "rifle_masamune_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "rifle_sidewinder_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "shotgun_carnage_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "shotgun_dual_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "shotgun_dual_igla_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "shotgun_dual_palica_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "shotgun_dual_testera_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "shotgun_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "smg_borg_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "smg_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "smg_pulsar_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "smg_senkoh_lx",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "smg_shingen_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "smg_warden_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "sniper_ashura_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "sniper_grad_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "sniper_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "sniper_nokota_osprey",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "special_hercules_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "tanto_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      },
+      {
+        "clip": "zhuo_idle",
+        "why": "a held weapon's idle (the inventory's weapon view); the Studio draws no weapon"
+      }
+    ]
+  },
+  "outputSha256": {
+    "cc-idle-body-ui_full_shot.glb": "165d2edae12264558db43c06091a41727c4511b1ccfe329188a0309ee08d9ee1",
+    "cc-idle-body-ui_expose_hand_loop.glb": "0ce51194fe2696d64ecb30d627f13f5bf5f1861511f12cd535e7042883af6492",
+    "cc-idle-body.glb": "b2f9ee12cbf5f19bffeb43c367439b0710f289ad38b75088943ba15fbdf8a8e8",
+    "cc-idle-body-ui_fullbody_shot.glb": "417f2667a966b1519c7a7134a33c03a676ef1b22f7c17878649992d3e18d0205",
+    "cc-idle-body-ui_gender_selection.glb": "22e1742badcc1af873869d33045edba4550c71ecc7bf908a63f291e150525870"
+  },
+  "sourceSha256": {
+    "player_paperdoll.animgraph": "2ab093eafee97290f452b70dc07a5ebe287e88ac505da73546276e239a14d526",
+    "ui_female.anims": "3ebd3a9a77e1e5ea34dd2f40e9452ea8573351eaa73a7926f08e392c978d0209",
+    "ui_female_face.anims": "9fe289d1eea33df4242cc37ce2b175d3b0c94342df66e4bd5be1d7f599982f8c",
+    "woman_base.rig": "c12c632f37b74b55918128e1a3d4d3f829dc2de577afbc77c90768812ea737bd"
+  }
+}

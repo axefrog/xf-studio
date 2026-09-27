@@ -149,6 +149,14 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     };
     followBody();
     releases.push(preview.subscribe(followBody));
+    // The creator's idles are authored for the creator puppet's lifted feet; while one plays, the request draws V's bare feet that way
+    // (knowledge/body-animation.md §4). The inventory's idle and Still stand on the feet her footwear gives her.
+    const followPuppet = () => {
+      const shown = motion.snapshot();
+      characterContext.setCreatorPuppet(shown.idle && shown.idles.find(entry => entry.id === shown.idleClip)?.puppet === "creator");
+    };
+    followPuppet();
+    releases.push(motion.subscribe(followPuppet));
     releases.push(savedAppearance.subscribe(() => characterContext.followSave(saved.snapshot().savedV)));
     // The shown details and the head's facial shape follow the context's V and choices (character-follow.ts).
     releases.push(followCharacter({ context: characterContext, details: characterDetails, savedV: savedAppearance,

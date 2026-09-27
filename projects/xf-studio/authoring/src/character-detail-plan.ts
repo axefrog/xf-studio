@@ -356,6 +356,27 @@ export const FEET_GROUPS: Readonly<Record<FeetState, string>> = Object.freeze({ 
 /** The body's state as worn items would set it; the default is the V with no clothing. */
 export type BodyState = { readonly feet: FeetState };
 export const DEFAULT_BODY_STATE: BodyState = Object.freeze({ feet: "flat" });
+/**
+ * The character creator's puppet (`Character.Player_Puppet_Menu`, `player_wa_tpp.ent`) wears the appearance `character_creation`
+ * [resource: REDmod `player_menu_record.tweak`], and the creator resource's body group of that name lists the feet group it draws
+ * (`lifted_feet` in the feminine resource) [resource]. The creator's idles are authored for those feet: posed by them, the lifted feet
+ * stand flat, while the flat feet sink their heels through the floor and bend the toes (knowledge/body-animation.md §4).
+ */
+export const CREATOR_PUPPET_GROUP = "character_creation";
+/** The feet state the creator's puppet draws bare: the one its group lists, or null when it lists none (the masculine resource). */
+export function creatorPuppetFeet(cco: CcoResource): FeetState | null {
+  const group = cco.parts.body.groups.find(entry => entry.name === CREATOR_PUPPET_GROUP);
+  const listed = (Object.entries(FEET_GROUPS) as [FeetState, string][]).filter(([, name]) => group?.options.includes(name));
+  return listed.length === 1 ? listed[0]![0] : null;
+}
+/**
+ * The body state a request draws: footwear lifts the feet; bare feet stand as the request's puppet draws them (the creator's, for its
+ * idles), else flat, as in the inventory and in gameplay.
+ */
+export function bodyStateFor(footwear: FeetState | null | undefined, puppet: "creator" | undefined, cco: CcoResource): BodyState {
+  if (footwear === "lifted") return { feet: "lifted" };
+  return { feet: (puppet === "creator" ? creatorPuppetFeet(cco) : null) ?? "flat" };
+}
 /** The groups the third-person body reads in one part for a body state. */
 export const bodyGroups = (part: "body" | "arms", state: BodyState = DEFAULT_BODY_STATE): readonly string[] =>
   part === "body" ? [...BODY_GROUPS.body, FEET_GROUPS[state.feet]] : BODY_GROUPS.arms;

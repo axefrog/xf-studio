@@ -38,7 +38,7 @@ export class IdleAnimation {
   private rigs: { program: DeformationProgram; driven: boolean[]; sources: (THREE.Object3D | string | null)[];
     outputs: { joint: number; driver: THREE.Object3D; inverseBind: THREE.Matrix4 }[] }[] = [];
   private readonly rigDrivers = new Set<string>();
-  constructor(readonly source: THREE.Object3D, readonly clip: THREE.AnimationClip,
+  constructor(readonly source: THREE.Object3D, public clip: THREE.AnimationClip,
     targets: THREE.Object3D[], ancestry: Record<string, string | null>,
     readonly facial?: { source: THREE.Object3D; clip: THREE.AnimationClip }) {
     source.updateMatrixWorld(true);
@@ -197,6 +197,24 @@ export class IdleAnimation {
         output.driver.matrixWorld.fromArray(pose[output.joint]!).multiply(output.inverseBind).premultiply(GLTF_FROM_GAME).multiply(GAME_FROM_GLTF);
       }
     }
+  }
+  /**
+   * Play other clips on the same rigs (another of the game's preview idles): a body clip keyed on the body rig's joint names, and a face
+   * clip on the face rig's (absent: the face keeps its clip). The phase carries over, wrapped into the new clips.
+   */
+  setClips(body: THREE.AnimationClip, face?: THREE.AnimationClip) {
+    this.mixer.stopAllAction();
+    this.mixer.uncacheClip(this.clip);
+    this.clip = body;
+    this.mixer.clipAction(body).setLoop(THREE.LoopRepeat, Infinity).play();
+    if (face && this.facial && this.faceMixer) {
+      this.faceMixer.stopAllAction();
+      this.faceMixer.uncacheClip(this.facial.clip);
+      this.facial.clip = face;
+      this.faceMixer.clipAction(face).setLoop(THREE.LoopRepeat, Infinity).play();
+    }
+    if (this.enabled) this.update(0);
+    this.onChange?.();
   }
   setEnabled(enabled: boolean) {
     if (enabled === this.enabled) return;

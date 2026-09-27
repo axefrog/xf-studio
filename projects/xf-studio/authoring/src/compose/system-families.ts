@@ -71,7 +71,7 @@ export const VIEWS_FAMILY: SystemFamily<ViewAction, ActionScope, typeof VIEWS_ID
 export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTION_ID> = Object.freeze({
   owner: "system", id: MOTION_ID, label: "Motion", needsScene: true, thrown: "unavailable",
   actions: actionTable<MotionAction, ActionScope>(ACTION_DESCRIPTORS, {
-    "motion.setIdle": true, "motion.setPaused": true, "motion.setContributions": true,
+    "motion.setIdle": true, "motion.setIdleClip": true, "motion.setPaused": true, "motion.setContributions": true,
     "motion.setBlink": true, "motion.playBlink": true }, { "motion.setBlink": { value: "fraction" } }),
 });
 
