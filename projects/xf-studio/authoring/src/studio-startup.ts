@@ -43,6 +43,7 @@ import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
 import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
 import { combineFacePoses, FacialPreview } from "./facial-preview";
+import { TransitionSettings } from "./platform/core/transition-settings";
 import { createBrowserFacialDevice } from "./browser-facial-device";
 import { PartPresetService, partPresetTransport, setExportTransport } from "./part-presets";
 import { UIPreferenceActions } from "./ui-preferences";
@@ -116,6 +117,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const storage = host.storage;
   const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
+  // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.
+  const transitions = new TransitionSettings(workspace.preview.transitions);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
@@ -184,6 +187,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       character: () => head ? head.characterContext.stored() ?? null : undefined,
       uiPreferences: () => preferences.snapshot(),
       previewSetup: () => ({ autostart }),
+      transitions: () => transitions.stored(),
     },
     sources: [core.document, preferences], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
@@ -211,9 +215,12 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A set of saved expressions exports as one mod through the same package route a collection uses (never installed by Build).
   const presets = new PartPresetService(partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets"),
     setExportTransport(verification ? "/api/verification/mod-install" : "/api/mod-install"));
-  core.app.attach({ facial, presets });
+  core.app.attach({ facial, presets, transitions });
   facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
     () => motionActions?.snapshot());
+  // Changes ease by the expression's transition setting; an edit inside an open form control (a slider drag) follows at once.
+  facial.animate({ setting: () => transitions.get("expression"), continuous: () => !!core.app.featureControlSnapshot() });
+  transitions.subscribe(persist);
   core.app.subscribe(() => facial.changed());
   facial.start();
   previewDevice.coordinator.quality.subscribe(persist);

@@ -5,7 +5,7 @@
  * context's type (`feature-view.ts`).
  */
 import type { StudioAction } from "../../studio-application";
-import type { EasingId } from "../../easing";
+import type { EasingId } from "../../platform/api/easing";
 import type { Command } from "../commands";
 import { ViewportInputHints } from "../input-hints";
 import { menuFromSections, openMenu, type MenuItem, type MenuSection } from "../menu";

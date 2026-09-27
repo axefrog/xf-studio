@@ -11,7 +11,7 @@
  * view imports this module to bind its factories (`featureView`).
  */
 import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../studio-application";
-import type { EasingId } from "../../easing";
+import type { EasingId } from "../../platform/api/easing";
 import type { StudioContextHit } from "../../studio-context-targets";
 import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../studio-presentation";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../../part-presets";

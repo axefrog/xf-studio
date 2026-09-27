@@ -18,8 +18,12 @@ import * as THREE from "three";
 export type FaceRigJoint = { readonly name: string; readonly parent: number; readonly t: readonly number[]; readonly r: readonly number[]; readonly s: readonly number[] };
 /** One frame: the moved joints' local transforms (index into the rig), glTF axes. */
 export type FaceFrame = ReadonlyMap<number, { readonly t: readonly number[]; readonly r: readonly number[] }>;
-/** What the driver holds: a pose, or a clip at `rate` Hz that repeats every `repeat` seconds (its last frame holds between). */
-export type FacePose = { readonly frames: readonly FaceFrame[]; readonly rate?: number; readonly repeat?: number };
+/**
+ * What the driver holds: a pose, or a clip at `rate` Hz that repeats every `repeat` seconds (its last frame holds between). `continues`:
+ * the same clip over a changed pose (the blink over an expression that is being dragged or eased), so playback carries on where it was
+ * instead of starting again; ignored unless the held clip has the same length and rate.
+ */
+export type FacePose = { readonly frames: readonly FaceFrame[]; readonly rate?: number; readonly repeat?: number; readonly continues?: boolean };
 /** How far (metres) a head bone's bind may sit from its rig joint's rest: 0.1 mm, as the blink allows. */
 export const FACE_BIND_TOLERANCE = 1e-4;
 export const FACE_OTHER_HEAD = "The face data doesn't match this head's skeleton, so live expressions are off for it.";
@@ -96,7 +100,10 @@ export class FaceDriver {
   /** Hold a pose (replacing any held one). Applies it only while `apply` is the owner's choice; returns whether it is new. */
   hold(pose: FacePose) {
     if (!pose.frames.length) throw Error("A face pose needs a frame.");
-    this.pose = pose; this.elapsed = 0;
+    const previous = this.pose;
+    const carryOn = !!pose.continues && !!previous && previous.frames.length === pose.frames.length && previous.rate === pose.rate && !!pose.rate;
+    this.pose = pose;
+    if (!carryOn) this.elapsed = 0;
     if (this.applied) this.apply();
     this.onChange?.();
   }

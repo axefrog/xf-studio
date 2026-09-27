@@ -14,6 +14,7 @@ import type { CharacterContextActions } from "./character-context-actions";
 import type { MotionAction, MotionActions } from "./motion-actions";
 import type { PreviewAction, PreviewActions } from "./preview-actions";
 import type { PreviewQualityActions, QualityAction } from "./preview-quality-actions";
+import type { TransitionAction, TransitionSettings } from "./platform/core/transition-settings";
 import { type ViewId, viewTitles } from "./platform/api/view-graph";
 import type { ViewGraph } from "./platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
@@ -52,6 +53,7 @@ export type StudioOwnerActions = {
   collection: CollectionStudioAction;
   preview: PreviewAction;
   motion: MotionAction;
+  transitions: TransitionAction;
   quality: QualityAction;
   savedV: SavedAppearanceAction;
   characterContext: CharacterContextAction;
@@ -110,6 +112,8 @@ type Services = { document: AuthoringDocument;
   history?: AuthoringHistory;
   gestures: AuthoringGestures; controls: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations; preview?: PreviewActions; motion?: MotionActions;
+  /** How a held expression's changes animate (platform/core/transition-settings.ts); the composition root attaches it at start. */
+  transitions?: TransitionSettings;
   quality?: PreviewQualityActions; savedV?: SavedAppearanceActions;
   /** The shown V's resolved details (character-detail-actions.ts). */
   characterDetails?: CharacterDetailActions;
@@ -186,7 +190,7 @@ export class StudioApplication {
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));
-    for (const source of [s.preview, s.motion, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions, s.presets, s.facial])
+    for (const source of [s.preview, s.motion, s.transitions, s.quality, s.savedV, s.characterDetails, s.characterContext, s.viewActions, s.presets, s.facial])
       if (source) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
@@ -759,6 +763,10 @@ export class StudioApplication {
       motion: {
         capability: action => app.services.motion?.capability(action) ?? missing("Motion preview is still loading."),
         dispatch: action => app.services.motion!.dispatch(action),
+      },
+      transitions: {
+        capability: action => app.services.transitions?.capability(action) ?? missing("Animated changes aren't available here."),
+        dispatch: action => app.services.transitions!.dispatch(action),
       },
       quality: {
         capability: action => app.services.quality?.capability(action) ?? missing("Preview quality is still loading."),

@@ -85,6 +85,31 @@ export const DESKTOP_CSP = "default-src 'self'; script-src 'self'; style-src 'se
   "img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'; font-src 'self'; " +
   "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
+/** The page's startup times the smoke report may carry, in ms since the page started loading (performance.now()). */
+const SMOKE_TIMINGS = [["firstPaintMs", "first paint"], ["editorReadyMs", "editor ready"],
+  ["previewReadyMs", "3D preview ready"], ["characterFrameMs", "V drawn"]] as const;
+
+/**
+ * The diagnostics line for the page's smoke report, or null for a malformed one. Besides the state it names how long the page
+ * took to its first paint, a ready editor, a ready 3D preview and the first frame with V, when the page measured them, so
+ * every log carries the startup cost (the load-time track) without a debugger attached.
+ */
+export function smokeMessage(value: any): string | null {
+  if (value?.schema !== "xfs/desktop-smoke-1" || !["error", "uv-only", "starting", "interactive"].includes(value.state) ||
+    typeof value.webgl2 !== "boolean" || typeof value.worker !== "boolean") return null;
+  const timings = value.timings;
+  if (timings !== undefined && (typeof timings !== "object" || timings === null || Array.isArray(timings))) return null;
+  const parts: string[] = [];
+  for (const [key, label] of SMOKE_TIMINGS) {
+    const ms = timings?.[key];
+    if (ms === undefined || ms === null) continue;
+    if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0 || ms > 3_600_000) return null;
+    parts.push(`${label} ${(ms / 1000).toFixed(1)} s`);
+  }
+  return `XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}` +
+    (parts.length ? `; ${parts.join(", ")} after the page started` : "");
+}
+
 export function createDesktopServer(staticRoot: string, dataRoot: string, version: DesktopVersion,
   checkWorkerPath = resolve(import.meta.dir, "check-worker.ts"),
   toolsRoot = resolve(import.meta.dir, "build-tools"), wolvenKitProbe?: WolvenKitProbe,
@@ -338,10 +363,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/desktop/smoke" && request.method === "POST") {
         let value: any;
         try { value = await routedRequest.json(); } catch { return new Response("Bad report", { status: 400 }); }
-        if (value?.schema !== "xfs/desktop-smoke-1" || !["error", "uv-only", "starting", "interactive"].includes(value.state) ||
-          typeof value.webgl2 !== "boolean" || typeof value.worker !== "boolean") return new Response("Bad report", { status: 400 });
+        const message = smokeMessage(value);
+        if (!message) return new Response("Bad report", { status: 400 });
         renderer.smoke = value.state;
-        report(`XF desktop smoke: ${value.state}; WebGL2=${value.webgl2}; Worker=${value.worker}`);
+        report(message);
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,

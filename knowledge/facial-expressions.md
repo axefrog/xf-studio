@@ -161,6 +161,7 @@ The [expression editor](../research/animation/expression-editor-design.md#phase-
 - **The installed expressions on the reference setup**: the winning table is the Mega Pack's (217 rows); V's photo-mode face rig and the pack's `resource.patch` of it list the animation sets by **hash only** (`ResourcePath` stored as `uint64` in the cooked file), so a reader must look them up by hash; every row's clip is found in an attached set (15 from the base game, 202 from the pack) [offline, 27 September].
 - **The rig's controls** come from the female head's skeleton (`trackNames`, `referenceTracks`) and its facial setup's `info.tracksMapping` (13 envelopes, 141 main poses, 86 overrides, 33 wrinkles) [resource].
 - **Solving** one pose with the pinned IO Suite solver takes about 0.7 ms after the setup compiles (about 0.2 s) [offline].
+- **A change between expressions** can play as motion (the drawer's Transitions, [design §5.5](../research/animation/expression-editor-design.md#55-animated-transitions)): the control weights are blended in time before each frame's solve, which is where photo mode's graph blends its tracks, and the default (1 s, linear) is the graph's own `updateFacialPose` transition [resource]. The Studio solves every frame of the change exactly, so correctives respond as the weights move; whether the game's switch looks the same is open question 9 [hypothesis].
 
 ## 8. Natural expressions: FACS on V's rig
 
@@ -202,6 +203,7 @@ Questions 1 and 2 have bridge commands ready (`face.rig.read` and `photo.express
 6. Can a photo-mode pose clip with many frames animate while photo mode is open, or does photo mode's time freeze it? (The Mega Pack says its animated faces loop, which suggests the face at least keeps time.)
 7. Do the expression mods' baked blinks stack with the look-at blink additives?
 8. Does the engine feed the facial solver's wrinkle outputs through `defaultfaceregions.regionset` to the head's skin shader in photo mode and the creator (crow's feet on a close-up of `facial_happy`)?
+9. Does photo mode's switch between two expressions look like a steady 1 s blend of the two faces (the graph's linear transition on the tracks before the solve), and what does a second switch during a blend start from? Filming a switch from neutral to `facial_happy` beside the Studio's transition at 1 s Linear answers the first part.
 
 ## Related pages
 

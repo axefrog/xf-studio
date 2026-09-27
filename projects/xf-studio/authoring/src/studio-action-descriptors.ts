@@ -16,6 +16,8 @@ import type { StudioFileAction } from "./studio-file-operations";
 import type { PartPresetRequest } from "./part-presets";
 import { CHARACTER_CONTEXT_DESCRIPTORS } from "./character-context";
 import { describe, enumerated, input, inputText, state, target } from "./action-descriptor-kit";
+import { TRANSITION_SECONDS, TRANSITION_SOURCES } from "./platform/core/transition-settings";
+import { EASING_IDS } from "./platform/api/easing";
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "./eye-makeup-descriptors";
 
 /** `host` actions read this computer's configuration (e.g. installed launchers); they never touch a recipe. */
@@ -121,6 +123,10 @@ export const ACTION_DESCRIPTORS = {
   "motion.setBlink": inView("viewport", "workspace", "none", { value: input("number", 0, 1) }),
   "motion.playBlink": inView("viewport", "workspace", "none", { playing: input("boolean") }),
   "motion.setPhysics": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  // Animated transitions (platform/core/transition-settings.ts): whether a held expression's changes ease, how long and along which curve.
+  "transition.set": desc("viewport", "workspace", "none", { source: enumerated(TRANSITION_SOURCES),
+    enabled: { ...input("boolean"), required: false }, seconds: { ...input("number", TRANSITION_SECONDS.min, TRANSITION_SECONDS.max), required: false },
+    easing: { ...enumerated(EASING_IDS), required: false } }),
   "quality.set": desc("viewport", "workspace", "none", { size: enumerated([512, 1024, 2048, 4096]) }),
   "quality.rebuild": desc("viewport", "workspace", "none"),
   "savedV.load": desc("file", "file", "none", { bytes: input("bytes", 0, 128 * 1024 * 1024) }),
