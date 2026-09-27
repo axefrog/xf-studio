@@ -536,6 +536,8 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 - Each tool contribution names the action it dispatches (`dispatches`), and the application resolves tools by that action, not by tool ID.
 - A camera jump that didn't move the camera records nothing and leaves no Back step.
 
+**Modules without a document part (built with the Save Explorer, 27 September).** The first such module is the [Save Explorer](../save/save-editor-design.md#phase-1-status) (`features/save-explorer/`: manifest, one panel, no view tools). The seam is generic and adds nothing about saves to the platform: `ModuleService` (`platform/api/module.ts`), `port.module(id)`, `moduleView` and `ModuleViewContext` (the module's facade and the shell's services, nothing else), `ViewComposition.modules`, and the composition list `compose/module-services.ts`. Poses and World can use it unchanged. Its actions route through the module's own service rather than the registry, a [recorded exception](ui-architecture-boundary.md) until the registry takes module-owned asynchronous families.
+
 **Deferred from P1–P2, and why.**
 
 - A shell-only composition that mounts with no features registered: the runtime still asks for eye makeup's facade at construction (the UI-75 rows in the [presentation boundary](ui-architecture-boundary.md#open-work)). Hiding eye makeup already runs the shell without its panels, tools and crumb.
