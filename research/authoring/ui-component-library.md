@@ -43,6 +43,7 @@ Components added on request:
 - For the Poses panel (`claude/pose-panel`): TreeView, favouriteToggle, and SearchField's Down into the list.
 - For settings discoverability and Game & tools: FolderSetting.
 - For the Save Explorer: the layout primitives. It is now their reference composition.
+- For saved layouts (`claude/saved-layouts`): option switches in the value popover (`ValueOption`: Save layout's name with Remember shown modules and automatic switching, each with a default).
 
 ## The ratchet
 
