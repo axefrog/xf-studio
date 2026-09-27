@@ -148,9 +148,9 @@ describe("explorer service", () => {
   });
 
   test("the world objects are checked in bounded steps, yielding to the page between them (SAVE-06)", async () => {
-    // Enough entries for several steps of the walk.
-    let yields = 0;
-    const service = new SaveExplorerActions(device({ read: async () => manyEntriesSave(2_000) }), () => { yields++; return Promise.resolve(); });
+    // Enough entries for several steps of the walk; each step made to look slower than a slice (SAVE-13), so each one yields.
+    let yields = 0, clock = 0;
+    const service = new SaveExplorerActions(device({ read: async () => manyEntriesSave(2_000) }), () => { yields++; return Promise.resolve(); }, { now: () => clock += 20 });
     await service.dispatch({ kind: "saves.refresh" });
     expect(await service.dispatch({ kind: "saves.open", folder: "QuickSave-0" })).toEqual({ ok: true });
     const row = service.tree().find(item => item.encoding === "persistency")!;

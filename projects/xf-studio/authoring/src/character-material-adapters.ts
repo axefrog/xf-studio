@@ -345,6 +345,8 @@ const layered: MaterialAdapter = {
     if (problems.templates) notes.push(`${problems.templates} layer(s) whose template could not be read are left out`);
     // A bottom layer whose template could not be read is drawn neutral (PREV-76), with a code the presentation words.
     if (problems.base) { limits.push("layered-base"); notes.push("its base layer's template could not be read; a neutral grey stands in for it"); }
+    // A layer without its microblend is drawn over the game's default one (PREV-138): its edges may differ from the game's.
+    if (problems.microblends) notes.push(`${problems.microblends} layer(s) whose microblend could not be read use the game's default microblend`);
     const layers = order.map(parameters => {
       // The neutral stand-in samples no maps.
       const source = parameters.neutral ? {} : stack.layers[parameters.index]!.textures;

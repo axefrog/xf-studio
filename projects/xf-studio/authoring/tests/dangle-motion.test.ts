@@ -161,3 +161,62 @@ describe("P3: the simulation on the motion clock", () => {
     expect(world(name).distanceTo(gl(-p[1], p[0], p[2]))).toBeLessThan(1e-6);
   });
 });
+
+describe("seeks and framing (PREV-133)", () => {
+  const chain = (world: (name: string) => THREE.Vector3) => CHAIN.map(([name]) => world(name).toArray());
+  /** Count the dangles' game frames (each poses the body, the cost that dominates a seek). */
+  const counted = (idle: IdleAnimation) => {
+    const rig = (idle as unknown as { dangles: { step: (...args: unknown[]) => void } }).dangles, step = rig.step.bind(rig);
+    const count = { frames: 0 };
+    rig.step = (...args: unknown[]) => { count.frames++; step(...args); };
+    return count;
+  };
+  const fresh = (time: number, prepare?: (idle: IdleAnimation) => void) => {
+    const { idle, world } = setup(); idle.setPhysics(true); idle.setEnabled(true); prepare?.(idle);
+    idle.seek(time);
+    return chain(world);
+  };
+
+  test("measuring the head's offset at phase zero moves nothing: not the hair, the clock or the pose", () => {
+    const { idle, world, bone } = setup(); idle.setPhysics(true); idle.setEnabled(true);
+    for (let i = 0; i < 90; i++) idle.update(1 / 60);
+    const before = chain(world), time = idle.time, head = bone("Head").quaternion.toArray();
+    const frames = counted(idle);
+    expect(idle.offsetAt("Head", 0).length()).toBeLessThan(1e-12);
+    idle.update(0);
+    expect(chain(world)).toEqual(before);
+    expect(idle.time).toBe(time);
+    expect(bone("Head").quaternion.toArray()).toEqual(head);
+    expect(frames.frames).toBe(0);
+  });
+
+  test("a second seek in a loop resumes from a checkpoint: fewer frames, the same state bit for bit", () => {
+    const { idle, world } = setup(); idle.setPhysics(true); idle.setEnabled(true);
+    idle.seek(1.9);
+    const frames = counted(idle);
+    idle.seek(1.8);
+    // From the checkpoint at 1 s (every 60 frames), not the loop's start: 48 frames instead of 108.
+    expect(frames.frames).toBeLessThanOrEqual(48);
+    expect(chain(world)).toEqual(fresh(1.8));
+  });
+
+  test("playback records checkpoints until the loop's end; past the seam a seek starts that loop's own run", () => {
+    const { idle, world } = setup(); idle.setPhysics(true); idle.setEnabled(true);
+    for (let i = 0; i < 90; i++) idle.update(1 / 60);
+    const frames = counted(idle);
+    idle.seek(1.2);
+    expect(frames.frames).toBeLessThanOrEqual(12);
+    expect(chain(world)).toEqual(fresh(1.2));
+    for (let i = 0; i < 60; i++) idle.update(1 / 60);
+    idle.seek(2.3);
+    expect(chain(world)).toEqual(fresh(2.3));
+  });
+
+  test("a change to the dangles' input drops the checkpoints", () => {
+    const { idle, world } = setup(); idle.setPhysics(true); idle.setEnabled(true);
+    idle.seek(1.9);
+    idle.setContributions({ body: false });
+    idle.seek(1.5);
+    expect(chain(world)).toEqual(fresh(1.5, other => other.setContributions({ body: false })));
+  });
+});

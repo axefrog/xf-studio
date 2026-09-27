@@ -187,3 +187,26 @@ describe("the solver on a strand", () => {
     expect(Array.from(solver.out)).toEqual(Array.from(pose));
   });
 });
+
+describe("the backstop for a state that leaves the finite range (PREV-130)", () => {
+  // The reviewer's case: an ellipsoid with scale1 = 0 divides by zero on the first frame. The spec's ranges refuse it at compile and parse
+  // (dangle-spec.test.ts); a spec built past them shows the solver's own guard.
+  const hostile = () => spec([{ name: "Head", parent: -1, at: [0, 0, 1.6] }, { name: "d1", parent: 0, at: [0, 0.05, 1.55] }, { name: "d2", parent: 1, at: [0, 0.05, 1.49] }], {
+    particles: [{ joint: 0, free: false, mass: 0.4 }, { joint: 1, mass: 0.4 }, { joint: 2, mass: 0.4 }],
+    constraints: [link(0, 1), link(1, 2), { kind: "ellipsoid", particle: 2, frame: at(0, 0, 0), radius: 0.1, scale1: 0, scale2: 1 }] });
+
+  test("a frame that ends non-finite resets to the input pose, so the part never vanishes, and is counted", () => {
+    const s = hostile(), solver = new DangleSolver(s, { initialSteps: 5 / 3 }), pose = referencePose(s);
+    for (let f = 0; f < 60; f++) {
+      solver.frame(pose, 1 / 60);
+      expect(Array.from(solver.out).every(Number.isFinite)).toBe(true);
+    }
+    expect(solver.unstable).toBeGreaterThan(0);
+  });
+
+  test("a sound strand never trips it", () => {
+    const s = strand({ cone: 60, pull: 30 }), solver = new DangleSolver(s, { initialSteps: 5 / 3 }), pose = referencePose(s);
+    for (let f = 0; f < 600; f++) solver.frame(pose, 1 / 60);
+    expect(solver.unstable).toBe(0);
+  });
+});

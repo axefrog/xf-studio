@@ -136,7 +136,8 @@ function syntheticIdle() {
     bodyEnabled: true, faceEnabled: true, onChange: undefined as undefined | (() => void),
     update(seconds: number) { idle.time += seconds; }, seek(seconds: number) { idle.time = seconds; },
     setEnabled(enabled: boolean) { idle.enabled = enabled; idle.onChange?.(); }, setPaused(paused: boolean) { idle.paused = paused; idle.onChange?.(); },
-    attach() {}, detach() {}, setContributions() {} };
+    attach() {}, detach() {}, setContributions() {},
+    offsetAt(_name: string, _time: number, out = new THREE.Vector3()) { return out.set(0, 0, 0); } };
   return idle as unknown as IdleAnimation;
 }
 
