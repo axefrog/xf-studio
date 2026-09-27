@@ -31,6 +31,7 @@ import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character-detail-host";
 import { installations } from "../src/installation-registry";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "../src/character-detail-server";
+import { CHOICE_PREVIEW_ENDPOINT, createChoicePreviewHandler } from "../src/choice-preview-server";
 import { CREATOR_ENDPOINT, createCreatorHandler } from "../src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "../src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "../src/pose-catalogue-server";
@@ -179,6 +180,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     log: logTo("character"), trace: diagnostics.trace, nativeDecodeWorker: hostOptions.nativeDecodeWorker });
   const characterDetailRequest = createCharacterDetailHandler(characterDetails);
   const creatorRequest = createCreatorHandler(characterDetails.creator, { refresh: () => characterDetails.refresh(), prepared: characterDetails });
+  const choicePreviewRequest = createChoicePreviewHandler(characterDetails);
   // Photo-mode poses (pose-library-design.md P1), from the same launch route and resolver cache as the creator options.
   const poseSettings = () => {
     const settings = savedSettings();
@@ -271,6 +273,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(routedRequest);
       if (url.pathname === "/api/desktop/preview") return previewCoreRequest(routedRequest);
       if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(routedRequest);
+      if (url.pathname === CHOICE_PREVIEW_ENDPOINT || url.pathname.startsWith(`${CHOICE_PREVIEW_ENDPOINT}/`)) return choicePreviewRequest(routedRequest);
       if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(routedRequest);
       if (url.pathname === POSES_ENDPOINT) return poseRequest(routedRequest);
       if (url.pathname === POSE_PREFERENCES_ENDPOINT) return posePreferencesRequest(routedRequest);
@@ -374,7 +377,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/health") return Response.json({ app: "xf-studio-desktop" });
       let path: string;
       let servedRoot = staticRoot;
-      if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method);
+      if (url.pathname.startsWith(CHARACTER_ASSET_PREFIX)) return serveCharacterAsset(characterDetails, url.pathname, request.method, url.searchParams.has("background"));
       if (url.pathname.startsWith(GRADING_LUT_ASSET_PREFIX)) return serveGradingLut(gradingLut, url.pathname, request.method);
       if (url.pathname.startsWith("/assets/")) {
         // Only the derived core preview files are served as assets; the installer carries none.

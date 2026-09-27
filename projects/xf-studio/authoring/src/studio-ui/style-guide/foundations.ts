@@ -28,6 +28,7 @@ export function foundations(css: string) {
         <li><strong>Every affordance is an action.</strong> Buttons, menus, shortcuts, drags and the command palette call the same typed application action and show the same disabled reason.</li>
         <li><strong>Panels are tools, not places.</strong> Any panel can dock, float, tab or join a magnetic composite; nothing depends on a fixed sidebar.</li>
         <li><strong>Density with air.</strong> Compact 28 px controls and 32 px rows, but generous section spacing and one idea per section.</li>
+        <li><strong>Previews are diagrams.</strong> Neutral subject, one ink, one light, one frame per row; the 3D view is the true preview.</li>
       </ol>`,
       what: "The rules every new screen, panel or control is reviewed against.",
       when: "Before designing a feature and again at review. A proposal that breaks one of these needs an explicit exception recorded in the architecture boundary.",
@@ -39,6 +40,15 @@ export function foundations(css: string) {
       combine: "State colours always travel with a word or icon (e.g. a warning badge says “Preview only”), never colour alone.",
       adapt: "Themes switch by color-scheme; forced-colors mode falls back to system colours for selection and borders.",
       drives: `${code("--accent")} is identical in both themes; light theme swaps accent-as-line to ink via ${code("--indicator")} and ${code("--accent-edge")}.` }),
+    pattern({ id: "f-preview-tokens", title: "Preview tokens", status: "implemented",
+      specimen: `<div class="token-grid">${[["--pv-ground", "Tile ground: the stage's centre tone, flat"], ["--pv-subject", "The neutral head, face or body"], ["--pv-ink", "The choice itself"]]
+        .map(([name, use]) => `<div class="token" data-kind="surface"><span class="token-swatch" style="--sample:var(${name})"></span><code>${name}</code><small>${use}</small></div>`).join("")}
+        <div class="token" data-kind="number"><span class="token-swatch" style="--sample:color-mix(in srgb, var(--pv-ink) calc(var(--pv-shade) * 100%), black)"></span><code>--pv-shade</code><small>How much shadow darkens ink and subject: a number the colour matrix reads (<code>--pv-shade-light</code> .72, <code>--pv-shade-dark</code> .62)</small></div></div>`,
+      what: "The four tokens every choice preview is coloured from (lib-choice-preview). A preview is stored as channels (feature and subject coverage, light), and one SVG colour matrix per theme (built from these tokens) turns them into colours, so a theme change needs no new picture.",
+      when: "Only for previews. A preview uses these tokens and nothing else (later: the V's own colour for the ink, when tinted).",
+      combine: "Inside the Choice preview tile (lib-choice-preview), never on other surfaces: the ground sits in a choice item whose border and states are the choice list's.",
+      adapt: "Light and dark values come from the theme (the colours are light-dark pairs; the shade switches with the theme). Forced colours drop the matrix.",
+      drives: `The page's filter (${code("installPreviewFilter()")}) reads them through a probe element and rebuilds its matrix when the theme changes.` }),
     pattern({ id: "f-contrast", title: "Contrast", status: "implemented", wide: true, specimen: contrast.html,
       what: "WCAG contrast ratios computed from the tokens in studio.css each time this guide is generated. Text needs 4.5:1; control boundaries, selection and focus need 3:1.",
       when: "Check this table after any token change; the guide build fails the style-guide test if a pair drops below its minimum.",

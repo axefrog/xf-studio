@@ -101,6 +101,11 @@ export type PrepareCharacterOptions = {
   lowPriority?: LowPriority;
   /** The native decode worker a packaged host ships (clothing-host.ts); the source file next to the reader otherwise. */
   nativeDecodeWorker?: string;
+  /**
+   * Leave out the parts' dangle specs (hair physics): a choice preview's source (choice-preview.ts) draws the rest pose and needs none, and
+   * reading a dangle's rig and graph can take seconds.
+   */
+  skipDangles?: boolean;
 };
 /**
  * `degraded`: a failure that may not repeat affected it; the host prepares it again next time (PIPE-53). `note`: one plain line about
@@ -1237,7 +1242,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   // leaves a note, and its strands follow the head.
   const dangleNotes = new Set<string>();
   for (let i = 0; i < components.length; i++) {
-    const item = components[i]!, planned = plannedOf.get(item)?.dangle;
+    const item = components[i]!, planned = options.skipDangles ? undefined : plannedOf.get(item)?.dangle;
     if (!planned) continue;
     try {
       const served = await serveDangle(graph, planned, options.storeRoot, log);

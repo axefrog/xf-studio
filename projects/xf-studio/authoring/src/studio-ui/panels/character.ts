@@ -35,7 +35,8 @@
  */
 import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
-import { applyCapability, button, note, section, SelectField, Toggle } from "../controls";
+import { applyCapability, button, note, section, Segmented, SelectField, Toggle } from "../controls";
+import type { ChoiceSize } from "../../ui-preferences";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
 import { ChoiceList, propertyList, SearchField } from "../components";
@@ -246,7 +247,9 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     help: HTMLButtonElement | null; list: CreatorChoiceList;
     open: boolean; query: string;
     /** The option whose choices are being prepared ahead, and their positions in the order to prepare them (in view first). */
-    prefetching: string | null; positions: number[]; loaded: number };
+    prefetching: string | null; positions: number[]; loaded: number;
+    /** A shape row's picture size (Small, Medium, Large), shown above its pictures; and the choice under the pointer or focus (pictured first). */
+    sizes: Segmented<ChoiceSize>; tools: HTMLElement; hint: number | null };
   type Heading = { toggles: HeadingToggle[]; help: HTMLButtonElement | null; expander: HTMLButtonElement; count: HTMLElement; expandAll: ExpandAll | null };
   /** `fold`: its key in the `folded` UI preference; `body`: what folding hides (everything under the heading). */
   /** `rows`: every row in it, its sections' included (what Expand all, a search count and its showing go by); `own`: its own rows. */
@@ -378,9 +381,17 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
             // A hovered or focused choice is prepared next (its row becomes the one prepared ahead).
             if (aheadRow !== rowKey(controls.view)) { aheadRow = rowKey(controls.view); rt.changed(); return; }
             if (controls.prefetching && controls.positions.length) port.authoring.characterPrefetch(controls.prefetching, controls.positions, choice.position);
+            // Its picture is drawn next too (after the V's own choice).
+            controls.hint = choice.position;
+            askPictures(controls);
           }),
           open: openRows.has(rowKey(view)), query: "",
-          prefetching: null, positions: [], loaded: -1 };
+          prefetching: null, positions: [], loaded: -1,
+          sizes: new Segmented<ChoiceSize>({ label: "Picture size", showLabel: false, compact: true,
+            options: [{ value: "s", label: "S", title: "Small pictures" }, { value: "m", label: "M", title: "Medium pictures" }, { value: "l", label: "L", title: "Large pictures" }],
+            onSelect: size => setPictureSize(controls, size) }),
+          tools: h("div", { class: "cc-choice-tools", hidden: true }), hint: null };
+        controls.tools.append(controls.sizes.element);
         main.addEventListener("click", () => toggle(controls));
         controls.off.addEventListener("click", () => {
           const option = current(controls);
@@ -394,7 +405,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         // The swatch card for the list's colour swatches: the true colour, name and maker of the one under the pointer or focus.
         attachSwatchCard(controls.list.list, item => swatchSample(controls, item));
         controls.element.append(h("div", { class: "cc-row-head" }, main, controls.contrast, controls.help, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
-          controls.list.element);
+          controls.tools, controls.list.element);
         return controls;
   }
   /** The swatch card's sample for a choice item in a row's colour grid: its true colour (the host's swatch, else its own), name and maker. */
@@ -423,6 +434,25 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
     setExpanded(controls.main, controls.open);
     if (paint) rt.changed();
   }
+  /** A shape row's picture size for its kind: the remembered one, else Medium (choice-previews-design.md §7.1). */
+  const pictureSize = (option: CcPanelOption): ChoiceSize => (option.preview && (port.preferences as Port["preferences"] | undefined)?.snapshot?.().choiceSizes?.[option.preview]) || "m";
+  function setPictureSize(controls: RowControls, size: ChoiceSize) {
+    const option = current(controls);
+    if (!option?.preview) return;
+    const action = { kind: "choiceSize.set" as const, type: option.preview, size };
+    const preferences = port.preferences as Port["preferences"] | undefined;
+    if (preferences?.capability(action).available) preferences.dispatch(action);
+    rt.changed();
+  }
+  /** Ask for an open shape row's pictures (the V's choice and the hovered one first, then the choices in view order). */
+  function askPictures(controls: RowControls) {
+    const option = current(controls);
+    if (!option?.preview || !controls.open) return null;
+    const positions = controls.positions.length ? controls.positions
+      : (port.authoring.characterChoices(option.id, Number.MAX_SAFE_INTEGER, controls.query)?.choices ?? []).map(choice => choice.position);
+    const value = port.authoring.characterView()?.values[option.id];
+    return port.authoring.characterPreviews(option.id, positions, value?.position ?? null, controls.hint);
+  }
   /** Stop preparing a row's choices ahead (it closed, or shows another option or a search). */
   function stopPrefetch(controls: RowControls) {
     if (controls.prefetching) port.authoring.characterStopPrefetch(controls.prefetching);
@@ -442,6 +472,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       for (const controls of built?.rows ?? []) if (controls.open && controls.prefetching) {
         controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));
         port.authoring.characterPrefetch(controls.prefetching, controls.positions);
+        askPictures(controls);
       }
     });
   }, { capture: true, passive: true });
@@ -511,6 +542,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       controls.element.classList.toggle("not-shown", notDrawn(option, uncensoredOn) || conditionalHidden);
       const opening = controls.open && controls.list.element.hidden;
       controls.list.element.hidden = !controls.open;
+      controls.tools.hidden = !controls.open || !option.preview;
       // A row that opens shows the V's choice: its group opens and it is scrolled into view once it has loaded.
       if (opening) controls.list.revealChosenNext();
       if (!controls.open) continue;
@@ -526,12 +558,15 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       controls.list.update({ option: option.id, query: controls.query, label: option.label, grid: option.grid, choices: loaded?.choices ?? [],
         selected: value?.position ?? null, mods: creator.mods, loading: loaded?.loading ?? true, error: loaded?.error ?? null, fetch: fetch?.states ?? null,
         swatches: option.grid ? rowSwatches : null, preparing: !!details?.updating,
+        previews: option.preview ? { size: pictureSize(option), row: askPictures(controls) } : null,
         groups: option.groups > 1 ? { list: creator.groups, modGroups: creator.modGroups, pooled: creator.pools[option.pool] ?? [] } : null });
       if (ahead && (loaded?.choices.length ?? 0) !== controls.loaded) {
         controls.loaded = loaded?.choices.length ?? 0;
         controls.positions = controls.list.visiblePositions(scrollView(controls.list.list));
         prefetchRow(controls, option);
+        askPictures(controls);
       }
+      if (option.preview) controls.sizes.update(pictureSize(option));
     }
     // A section shows while it has a row to show, or controls of its own (not while a search finds nothing in it); a group while a section does.
     for (const group of built!.groups) {

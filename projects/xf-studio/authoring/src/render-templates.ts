@@ -15,8 +15,16 @@ export type RenderAdapterId = "skin" | "hair-strand" | "hair-cap-decal" | "doubl
   | "layered" | "metal-base" | "decal-placeholder";
 /** Members of the post-G-buffer decal family that the face-detail path draws through one shared material (face-decal-material.ts). */
 export type DecalKind = "mesh-decal" | "double-diffuse" | "gradient-recolor";
+/**
+ * Where a chunk's coverage lives, for flat previews (choice-preview.ts): a texture parameter and channel (0 red … 3 alpha), optionally
+ * remapped by a scalar cutoff as the template does (`hair.mt` `AlphaCutoff`) and then over the game's hair dither range. A template
+ * without one covers its whole surface.
+ */
+export type TemplateCoverage = { readonly texture: string; readonly channel: 0 | 1 | 2 | 3; readonly cutoff?: string; readonly dither?: true };
 export type RenderTemplateInputs = {
   readonly adapter: RenderAdapterId;
+  /** Where the chunk's coverage lives (flat previews); absent: the whole surface. */
+  readonly coverage?: TemplateCoverage;
   /** The vanilla template's depot path (the fallback key when a chunk's template name is unknown). */
   readonly path: string;
   /** Texture parameters the adapter samples, or records for a later adapter. */
@@ -69,23 +77,26 @@ export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = 
     required: ["Albedo", "Normal", "Roughness"] },
   // Hair cards and lashes (knowledge/hair-shading.md §1–4).
   hair: { adapter: "hair-strand", path: "base\\materials\\hair.mt", textures: ["Strand_Alpha", "Strand_ID", "Strand_Gradient"], profiles: ["HairProfile"], skinProfiles: [],
-    required: ["Strand_Alpha", "Strand_ID", "Strand_Gradient", "HairProfile"] },
+    required: ["Strand_Alpha", "Strand_ID", "Strand_Gradient", "HairProfile"],
+    coverage: { texture: "Strand_Alpha", channel: 0, cutoff: "AlphaCutoff", dither: true } },
   // Hair caps: a post-G-buffer decal recoloured through a gradient. On the face it is a member of the decal family,
   // which also reads the ID map (`DiffuseTexture`) the gradient is indexed by.
   mesh_decal_gradientmap_recolor: { adapter: "hair-cap-decal", path: "base\\materials\\mesh_decal_gradientmap_recolor.mt", decal: "gradient-recolor",
     textures: ["MaskTexture", "GradientMap"], decalTextures: ["MaskTexture", "GradientMap", "DiffuseTexture", ...DECAL_SURFACE], ...none,
-    required: ["MaskTexture", "GradientMap"], decalRequired: ["MaskTexture", "GradientMap", "DiffuseTexture"] },
+    required: ["MaskTexture", "GradientMap"], decalRequired: ["MaskTexture", "GradientMap", "DiffuseTexture"], coverage: { texture: "MaskTexture", channel: 0 } },
   // Brows and several lip styles: the double-diffuse post-G-buffer decal. Brows keep their own study adapter (brow-material.ts);
   // on the face the decal family also reads the normal and surface inputs.
   mesh_decal_double_diffuse: { adapter: "double-diffuse-decal", path: "base\\materials\\mesh_decal_double_diffuse.mt", decal: "double-diffuse",
     textures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"],
     decalTextures: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap", ...DECAL_SURFACE], ...none,
-    required: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"], decalRequired: ["DiffuseTexture", "SecondaryDiffuseAlpha"] },
+    required: ["DiffuseTexture", "SecondaryDiffuseAlpha", "GradientMap"], decalRequired: ["DiffuseTexture", "SecondaryDiffuseAlpha"],
+    coverage: { texture: "DiffuseTexture", channel: 3 } },
   // The plain post-G-buffer decal: eye makeup, most lip styles, cheeks, freckles, pimples, scars, tattoos, face cyberware,
   // stubble and the personal-link port (knowledge/head-cc-rendering.md §3). 2.31 has no separate normal-only decal template:
   // scars and cyberware write their normals through this one.
   mesh_decal: { adapter: "mesh-decal", path: "base\\materials\\mesh_decal.mt", decal: "mesh-decal", textures: ["DiffuseTexture", ...DECAL_SURFACE],
-    decalTextures: ["DiffuseTexture", ...DECAL_SURFACE], ...none, required: ["DiffuseTexture"] },
+    decalTextures: ["DiffuseTexture", ...DECAL_SURFACE], ...none, required: ["DiffuseTexture"],
+    coverage: { texture: "DiffuseTexture", channel: 3 } },
   // The eyeball (knowledge/eye-rendering.md §2). Both templates share one program; the gradient one adds the iris
   // mask and colour ramp. `Normal` and `NormalBubble` feed the two-normal eye light (ranks 4–5) and are recorded now.
   // Without its roughness the eyeball keeps the flat preview roughness.
@@ -94,7 +105,8 @@ export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = 
   eye_gradient: { adapter: "eye", path: "base\\materials\\eye_gradient.mt", profiles: [], skinProfiles: [], gradients: ["IrisColorGradient"],
     textures: ["Albedo", "Normal", "Roughness", "NormalBubble", "IrisMask"], required: ["Albedo", "IrisMask", "IrisColorGradient"] },
   // The eye's wetness shell: a forward pass that darkens the eye towards the lids and adds the tear line (§4).
-  eye_shadow: { adapter: "eye-shell", path: "base\\materials\\eye_shadow.mt", textures: ["Mask"], profiles: [], skinProfiles: [], required: ["Mask"] },
+  eye_shadow: { adapter: "eye-shell", path: "base\\materials\\eye_shadow.mt", textures: ["Mask"], profiles: [], skinProfiles: [], required: ["Mask"],
+    coverage: { texture: "Mask", channel: 0 } },
   // Layered (`.mlsetup`) materials: earrings and piercings, the graphic eye designs and many accessories (knowledge/materials-and-shaders.md
   // §4.6). The adapter bakes the layer stack once per material (layered-material.ts); `GlobalNormal` is the template's mesh-wide normal.
   multilayered: { adapter: "layered", path: "engine\\materials\\multilayered.mt", textures: ["GlobalNormal"], required: [],

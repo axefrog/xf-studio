@@ -177,6 +177,21 @@ export class ChoicePrefetcher {
     this.stats.cancelled++;
   }
 
+  /**
+   * A choice's state in the current job, when the job is the row `option` on the V `base` (choice previews derive a source only from a
+   * ready choice); `?` otherwise.
+   */
+  stateOf(base: CharacterRequest, option: string, position: number): ChoiceFetchState {
+    const job = this.job;
+    if (!job || job.key !== `${requestKey(withoutOption(base, option))}
+${option}`) return "?";
+    return job.items.get(position)?.state ?? "?";
+  }
+  /** The current job still has choices to check or prepare (other background work gives it a turn). */
+  get pending(): boolean {
+    const job = this.job;
+    return !!job && !job.stopped && [...job.items.values()].some(item => item.state === "?" || item.state === "q");
+  }
   /** A batch is being prepared (or a stopped one hasn't settled yet). */
   get preparing(): boolean { return this.inflight !== null; }
   /** Resolves once no batch is being prepared (a stopped one has settled). Never rejects. */

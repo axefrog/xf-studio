@@ -55,9 +55,10 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
 }
 
 /** A content-addressed record or file for `/assets/character/<name>`, or a 404. */
-export async function serveCharacterAsset(host: CharacterDetailHost, pathname: string, method: string): Promise<Response> {
-  // The page is reading its V's files: work prepared ahead waits until it is done.
-  host.noteAsk();
+export async function serveCharacterAsset(host: CharacterDetailHost, pathname: string, method: string, background = false): Promise<Response> {
+  // The page is reading its V's files: work prepared ahead waits until it is done. The preview worker's reads (`?background`) are
+  // background work themselves and don't hold it up.
+  if (!background) host.noteAsk();
   let name: string;
   try { name = decodeURIComponent(pathname.slice(CHARACTER_ASSET_PREFIX.length)); } catch { return new Response("Bad path", { status: 400 }); }
   const path = host.filePath(name);

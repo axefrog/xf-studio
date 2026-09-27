@@ -34,3 +34,4 @@ export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, Swatch
 // Feature-specific: lighting setups.
 export { LightList, type LightListItem, type LightListOptions } from "./light-list";
 export { azimuthWords, DirectionDial, dialDirection, dialPoint, type DialMark, type Direction, type DirectionDialOptions } from "./direction-dial";
+export { installPreviewFilter, PREVIEW_FILTER_IDS, previewTile, previewTokens, type PreviewTile, type PreviewTileState } from "./choice-preview";

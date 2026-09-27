@@ -6,6 +6,7 @@ import { basename, resolve } from "node:path";
 export const browserEntries = [
   "src/studio-main.ts",
   "src/raster-worker.ts",
+  "src/choice-preview-worker.ts",
   "src/render-fidelity-study.ts",
   "tools/glitter-head-study.ts",
 ].map(path => resolve(import.meta.dir, path));

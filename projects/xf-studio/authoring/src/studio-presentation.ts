@@ -128,7 +128,7 @@ export type StudioPresentationPort<Slot> = {
     "controlBegin" | "controlEdit" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
     "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "history" | "historyTimeline" | "consequences" | "finishCatalogue" | "layerExport" |
-    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch"> & {
+    "glitterModelCatalogue" | "characterPanel" | "characterView" | "characterChoices" | "characterSwatches" | "characterSearch" | "characterPrefetch" | "characterStopPrefetch" | "characterPreviews"> & {
       snapshot(): ReadonlyDeep<ReturnType<StudioApplication["snapshot"]>>;
     };
   readonly library: CollectionViewPort;
@@ -305,6 +305,7 @@ export function createStudioPresentation<Slot>(sources: {
     characterChoices: (option, want, query) => a.characterChoices(option, want, query), characterSwatches: option => a.characterSwatches(option),
     characterSearch: query => a.characterSearch(query),
     characterPrefetch: (option, positions, focus) => a.characterPrefetch(option, positions, focus), characterStopPrefetch: option => a.characterStopPrefetch(option),
+    characterPreviews: (option, positions, selected, focus) => a.characterPreviews(option, positions, selected, focus),
   };
   const fallback = () => a.snapshot().document;
   const editor: EyeMakeupView = e ? {

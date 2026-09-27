@@ -32,6 +32,7 @@
 import type { CcoPart } from "./cco-model";
 import { type BodyGender, CatalogueIndex, type CcCatalogue, type CcOption, followsLink, userFacing } from "./cc-catalogue";
 import type { RenderCoverage, RenderStatus } from "./cc-render-coverage";
+import { type PreviewKind, previewKindOf, PREVIEW_STYLES } from "./choice-preview";
 import type { CharacterView } from "./character-context";
 import { CREATOR_LIMITS, isCreatorName } from "./creator-names";
 
@@ -68,6 +69,8 @@ export interface CcPanelOption {
   readonly groups: number;
   /** Its entry in the panel's `pools` (the `groups` shown together under "Other mods"), or -1 when nothing is pooled. */
   readonly pool: number;
+  /** The kind of picture its choices get (choice-preview.ts), from the preview detail it draws; absent: none yet. */
+  readonly preview?: PreviewKind;
 }
 /** Who a group of choices comes from: the base game, XF Studio, an author as recorded, or a mod with no author recorded (by its name). */
 export type CcChoiceGroupKind = "game" | "xf" | "author" | "mod";
@@ -221,7 +224,7 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
   const add = (option: CcOption) => {
     const known = at.get(option.id);
     if (known !== undefined) return known;
-    const shown = coverage.get(option.id) ?? { status: "not-rendered" as const, note: "" };
+    const shown: Pick<RenderCoverage, "status" | "note" | "detail"> = coverage.get(option.id) ?? { status: "not-rendered", note: "", detail: null };
     const entry: CcPanelOption = { id: option.id, part: option.part, name: option.name, label: option.label.text, type: option.type,
       // Off is the choice the creator labels Off (the game's own text), never one inferred from adding nothing (the base face shape and the
       // skin's own nipples add nothing and are not Off).
@@ -231,6 +234,9 @@ export function panelProjection(catalogue: CcCatalogue, coverage: ReadonlyMap<st
       link: option.link ? { ...option.link } : null,
       dependsOn: option.controlledBy.map(name => index.option(option.part, name)?.label.text ?? name),
       coverage: [shown.status, noteIndex(shown.note)], ...groupsOf(option) };
+    // Colour rows (the creator's thumbnail grid) keep their swatches; shape rows get pictures.
+    const preview = option.type === "morph" || option.useThumbnails ? null : previewKindOf(shown.detail);
+    if (preview) (entry as { preview?: PreviewKind }).preview = preview;
     at.set(option.id, options.length);
     options.push(entry);
     return options.length - 1;
@@ -365,7 +371,8 @@ export function readCcPanel(value: unknown): CcPanel {
       coverage: [option.coverage[0], int(option.coverage[1], "coverage", notes.length - 1)] as const,
       groups: Math.max(0, int(option.groups, "groups", groups.length)),
       // A host built before pooling sends none: nothing pooled.
-      pool: option.pool === undefined ? -1 : int(option.pool, "pool", pools.length - 1) } satisfies CcPanelOption;
+      pool: option.pool === undefined ? -1 : int(option.pool, "pool", pools.length - 1),
+      ...(typeof option.preview === "string" && option.preview in PREVIEW_STYLES ? { preview: option.preview } : {}) } satisfies CcPanelOption;
   });
   if (!Array.isArray(panel.sections)) fail("sections");
   const sections = panel.sections.map(section => ({ id: str(section?.id, "section"), label: str(section?.label, "section label"), makeup: section.makeup === true,

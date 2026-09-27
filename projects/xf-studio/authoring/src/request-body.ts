@@ -7,9 +7,16 @@ export class BodyTooLargeError extends Error { constructor() { super("Request is
 
 /** The body's text; throws `BodyTooLargeError` past `maxBytes`, and a `SyntaxError` when it isn't UTF-8. */
 export async function readBodyText(request: Request, maxBytes: number): Promise<string> {
+  const bytes = await readBodyBytes(request, maxBytes);
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+  catch { throw new SyntaxError("The request is not text."); }
+}
+
+/** The body's bytes; throws `BodyTooLargeError` past `maxBytes` (a binary upload, such as a choice preview image). */
+export async function readBodyBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
   const declared = Number(request.headers.get("Content-Length") ?? NaN);
   if (Number.isFinite(declared) && declared > maxBytes) throw new BodyTooLargeError();
-  if (!request.body) return "";
+  if (!request.body) return new Uint8Array(0);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -23,8 +30,7 @@ export async function readBodyText(request: Request, maxBytes: number): Promise<
   const bytes = new Uint8Array(total);
   let at = 0;
   for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
-  try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
-  catch { throw new SyntaxError("The request is not text."); }
+  return bytes;
 }
 
 /** The body parsed as JSON (see `readBodyText`). */
