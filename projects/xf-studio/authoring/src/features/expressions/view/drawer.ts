@@ -441,7 +441,12 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       const controls = preview?.controls;
       if (controls?.length) build(controls, preview?.axes ?? []);
       const keys = allLinkKeys();
-      symmetric.update(keys.length > 0 && keys.every(key => current.links[key] ?? true), availability);
+      // All mirrored: on; none: off; some regions mirrored and others not: mixed (a press mirrors them all).
+      const mirrored = keys.filter(key => current.links[key] ?? true).length;
+      const mixed = mirrored > 0 && mirrored < keys.length;
+      symmetric.update(keys.length > 0 && mirrored === keys.length, { ...availability, mixed });
+      symmetric.input.title = mixed ? "Some regions mirrored. Press to mirror them all."
+        : "Each left/right pair follows the other: skin as a mirror image, the eyes looking the same way. Turn it off to set each side on its own.";
       waiting.hidden = !!controls?.length;
       setText(waiting, controls?.length ? "" : "Your V's face controls appear once your game files are read.");
       for (const entry of entries) entry.update(current, availability);

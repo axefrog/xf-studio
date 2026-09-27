@@ -246,6 +246,9 @@ span.category { border-color: transparent; background: transparent; padding-left
 .switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; background: var(--text-muted); transition: translate var(--dur) var(--ease), background var(--dur) var(--ease); }
 .switch:checked + .switch-track { background: var(--signal-bg); border-color: var(--signal); }
 .switch:checked + .switch-track::after { translate: 14px 0; background: var(--signal); }
+/* Mixed (some of what it covers is on): the thumb halfway, in the signal colour. */
+.switch:indeterminate + .switch-track { background: var(--signal-bg); border-color: var(--signal-line); }
+.switch:indeterminate + .switch-track::after { translate: 7px 0; background: var(--signal); }
 .switch:focus-visible + .switch-track { outline: 2px solid var(--focus); outline-offset: 2px; }
 .switch:disabled + .switch-track, .switch:disabled ~ .toggle-label { opacity: .45; }
 .switch:disabled { cursor: not-allowed; }

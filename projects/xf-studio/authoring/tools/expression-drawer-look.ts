@@ -30,6 +30,12 @@ const snap = async (name: string, selector: string) => {
   await page.screenshot(resolve(out, `${name}.png`), clip as never);
   shots.push(name);
 };
+/** The theme for the next captures: the emulated system scheme and the root's theme attribute, so a stored preference can't win. */
+const theme = async (scheme: "light" | "dark") => {
+  await page.colorScheme(scheme);
+  await page.evaluate(`document.documentElement.dataset.theme = ${JSON.stringify(scheme)}`);
+  await page.wait(300);
+};
 const drawerWindow = `document.querySelector(".expr-drawer")?.closest(".dock-window, .dock-group")`;
 const scrollTo = (selector: string) => page.evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e?.scrollIntoView({ block: "start" }); return !!e; })()`);
 const clickRow = (text: string) => page.evaluate(`(() => { const row = [...document.querySelectorAll(".expr-drawer .tree-row")].find(r => r.textContent.includes(${JSON.stringify(text)})); row?.click(); return !!row; })()`);
@@ -51,7 +57,7 @@ try {
   await clickRow("Warm smile");
   await page.wait(1500);
   for (const scheme of ["dark", "light"] as const) {
-    await page.colorScheme(scheme);
+    await theme(scheme);
     for (const width of [300, 480]) {
       const tag = `${scheme}-${width}`;
       await page.evaluate(`window.xfStudioShell.dock.moveTo("expressions.controls", { kind: "float", x: ${1420 - width}, y: 30, w: ${width}, h: 900 }, "")`);
@@ -72,7 +78,7 @@ try {
     }
   }
   // Symmetric off: every pair separate (the separate layouts), dark, narrow.
-  await page.colorScheme("dark");
+  await theme("dark");
   await page.evaluate(`window.xfStudioShell.dock.moveTo("expressions.controls", { kind: "float", x: 1120, y: 30, w: 300, h: 900 }, "")`);
   await page.evaluate(`document.querySelector(".expr-symmetric input")?.click()`);
   await page.wait(800);

@@ -605,3 +605,13 @@ test("choice list with swatches: the swatch card shows a choice's colour and nam
   expect([card.hidden, (card.querySelector(".swatch-card-note") as unknown as HTMLElement).hidden]).toEqual([false, false]);
   detach();
 });
+
+test("switch: a mixed state (some of what it covers is on) reads mixed, shows no check, and a press turns it fully on", async () => {
+  const { Toggle } = await lib();
+  const changes: boolean[] = [];
+  const toggle = new Toggle({ label: "Symmetric", onChange: on => changes.push(on) });
+  toggle.update(false, { mixed: true });
+  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked")]).toEqual([true, false, "checkbox", "mixed"]);
+  toggle.update(true);
+  expect([toggle.input.indeterminate, toggle.input.checked, toggle.input.getAttribute("role"), toggle.input.getAttribute("aria-checked")]).toEqual([false, true, "switch", null]);
+});
