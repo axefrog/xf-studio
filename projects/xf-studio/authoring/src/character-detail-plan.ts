@@ -651,7 +651,8 @@ export function planClothing(clothing: ResolvedClothing | ClothingFailure | null
   for (const garment of clothing.garments) {
     if (garment.status === "hidden") continue;
     if (garment.status === "unresolved") { unshown.push(garment.label); if (garment.gap) reasons.push(garment.gap.code); continue; }
-    const entry = { option: garment.area, definition: garment.definition ?? garment.label } as ResolvedAppearance;
+    // The garment's own components are the appearance a skinned part looks up its dangle in (dangleOf).
+    const entry = { option: garment.area, definition: garment.definition ?? garment.label, components: garment.components } as ResolvedAppearance;
     const items = garment.components.map(component => planComponent("clothing", entry, component, defaults, identities))
       .filter((item): item is PlannedComponent => !!item)
       .map(item => ({ ...item, garment: { area: garment.area, item: garment.item, layer: garment.layers[item.component] ?? null, ...garmentTags(garment.tags) } }));
