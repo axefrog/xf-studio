@@ -163,6 +163,10 @@ describe("Clothing setting", () => {
     expect(plan.state.message).toContain("glasses");
     expect(plan.state.message).toContain("items a mod adds");
     expect(planClothing(null, new Map(), new Map()).state).toEqual({ slot: "clothing", state: "none", label: "None" });
+    // A skinned garment part looks up its dangle among its own garment's components (the reference save's clothes threw here).
+    const scarf = garment("Head", "scarf", ["h1_scarf"], { h1_scarf: 10 });
+    const skinned = { ...scarf, components: [{ ...scarf.components[0]!, skinning: "scarf_dangle" }] } as ResolvedGarment;
+    expect(planClothing({ ...clothing, garments: [skinned] }, new Map(), new Map()).components.map(item => item.component)).toEqual(["h1_scarf"]);
     const hidden = planClothing({ ...clothing, garments: [{ ...garment("Head", "cap", [], {}), status: "hidden", hiddenBy: { kind: "saved" } }] }, new Map(), new Map());
     expect(hidden.state.message).toContain("hides every clothing area");
   });
