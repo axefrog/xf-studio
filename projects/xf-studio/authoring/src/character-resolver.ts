@@ -145,6 +145,11 @@ export function overriddenMask(name: string, chunkMask: string, overrides: Compo
   mask = ((mask | (byName?.show ?? 0n) | (byPrefix?.show ?? 0n)) & (byName?.hide ?? ALL) & (byPrefix?.hide ?? ALL)) & ALL;
   return { mask: mask.toString(), by: [...byName?.by ?? [], ...byPrefix?.by ?? []] };
 }
+/** A chunk mask with a hiding override applied: the chunks both leave shown (an unreadable mask reads as every chunk shown). */
+export function hidingMask(own: string, override: string): string {
+  const read = (mask: string) => { try { return BigInt(mask) & ALL; } catch { return ALL; } };
+  return (read(own) & read(override)).toString();
+}
 /** A stable key of a set of overrides (for caches keyed by what was resolved). */
 export const overridesKey = (overrides: ComponentOverrides) => !overrides.masks.size && !overrides.appearances.size ? ""
   : JSON.stringify([[...overrides.masks].map(([key, value]) => [key, value.show.toString(), value.hide.toString()]).sort(),
@@ -593,13 +598,16 @@ async function resolveDefinition(ctx: Context, appRef: DepotRef, definitionName:
   if (components.some(c => c.origin.alsoIn))
     notes.push(note("R7-dedupe-by-name", "hypothesis", "Inline and part components with the same name are treated as one (cooked apps mirror part components inline)."));
   // R7: partsOverrides apply by component name; an override without partResource applies entity-wide [source: ArchiveXL RegisterComponentOverrides; native order hypothesis].
+  // An override's chunk mask only hides: it is ANDed with the component's own, never replacing it, so it can't show a chunk the component
+  // hides [source: ArchiveXL `ComponentState::AddHidingChunkMaskOverride` (`&=`) at 5474e34; wiki: "You can't un-hide something via
+  // partsOverrides", Modding Docs `appearance-.app-files.md`].
   const overriddenBy = new Map<string, string[]>();
   for (const entry of definition.partsOverrides) for (const override of entry.componentsOverrides) {
     for (const { model, origin } of components) {
       if (override.componentName !== model.name) continue;
       if (entry.partResource && origin.kind === "part" && entry.partResource.hash !== origin.partHash) continue;
       if (override.meshAppearance) model.meshAppearance = override.meshAppearance;
-      model.chunkMask = override.chunkMask;
+      model.chunkMask = hidingMask(model.chunkMask, override.chunkMask);
       overriddenBy.set(model.name, [...(overriddenBy.get(model.name) ?? []), "partsOverrides"]);
     }
   }

@@ -56,7 +56,7 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   // The Studio's catalogue adds only panels of modules hidden by default, which it parks, and closed-by-default panels: the arrangement
   // a person gets is unchanged.
   expect(([...PANEL_IDS] as string[]).filter(id => !GRANDFATHERED.includes(id)).sort()).toEqual([...HIDDEN_BY_DEFAULT, ...ADDED_CLOSED].sort());
-  expect(HIDDEN_BY_DEFAULT).toEqual(["save-explorer.explorer", "expressions.controls"]);
+  expect(HIDDEN_BY_DEFAULT).toEqual(["save-explorer.explorer", "expressions.controls", "poses.library"]);
   const parked = defaultDockStateFor(STUDIO_CATALOGUE, HIDDEN_BY_DEFAULT);
   expect([parked.wide.root, parked.wide.floating, parked.wide.closed]).toEqual([BEFORE.wide().root, BEFORE.wide().floating, withAddedClosed(BEFORE.wide()).closed]);
   expect([parked.compact.root, parked.compact.closed]).toEqual([BEFORE.compact().root, withAddedClosed(BEFORE.compact()).closed]);
@@ -65,7 +65,7 @@ test("the contributions reproduce the pre-step-5 panel IDs, meta, factory layout
   expect(PANEL_META["package"].title).toBe("Mod package");
   // Eye makeup's view contributes its six panels; the shell the rest.
   expect(EYE_MAKEUP_GRANDFATHERED_PANELS).toEqual(["layers", "uv", "finish", "shape", "edge", "warp"]);
-  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "save-explorer", "expressions"]);
+  expect(STUDIO_VIEWS.map(view => view.owner)).toEqual(["shell", "eye-makeup", "save-explorer", "expressions", "poses"]);
 });
 
 test("a dock layout saved before step 5 restores unchanged", () => {

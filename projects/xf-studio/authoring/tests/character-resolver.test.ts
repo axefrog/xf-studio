@@ -15,7 +15,7 @@ const SILVER = "i0_000_pwa__earring__01_silver";
 const slot = (n: number) => `eagul\\piercingmorphs\\female\\fpm${n}.morphtarget`;
 
 /** A vanilla piercing option plus, optionally, a PRC-style framework and one filled slot: no PRC-specific code involved. */
-function piercingInstallation(withFramework: boolean) {
+function piercingInstallation(withFramework: boolean, partMask?: string) {
   const vanillaAppearance = { name: SILVER, parts: [PART_ENT], overrides: [{ componentName: "i1_000_pwa__morphs_earring_04", meshAppearance: "silver", chunkMask: "18446744073709551612" }] };
   const archives: FixtureArchive[] = [{ virtualPath: "archive/pc/content/basegame_4_appearance.archive", files: {
     [FEMALE_CCO]: cco([
@@ -23,7 +23,7 @@ function piercingInstallation(withFramework: boolean) {
       appearanceOption("piercings_12", EARRING_APP, [SILVER, "i0_000_pwa__earring__02_gold"], { enabled: 0, hidden: 0, link: "piercings color", linkController: 1 }),
     ], { face: ["piercings_12"] }),
     [EARRING_APP]: app([vanillaAppearance]),
-    [PART_ENT]: ent([morphComponent("i1_000_pwa__morphs_earring_04", PART_MORPH)]),
+    [PART_ENT]: ent([morphComponent("i1_000_pwa__morphs_earring_04", PART_MORPH, "default", partMask)]),
     [PART_MORPH]: morphtarget(EARRING_MESH, 3, [["h015", "ear"]]),
     [EARRING_MESH]: mesh({ appearances: [{ name: "silver", chunkMaterials: ["silver__01", "silver__02", "silver__03"] }],
       entries: [0, 1, 2].map(i => ({ name: `silver__0${i + 1}`, local: true, index: i })),
@@ -49,8 +49,8 @@ function piercingInstallation(withFramework: boolean) {
   return fixtureInstallation(archives);
 }
 
-async function resolvePiercing12(withFramework: boolean) {
-  const { graph } = piercingInstallation(withFramework);
+async function resolvePiercing12(withFramework: boolean, partMask?: string) {
+  const { graph } = piercingInstallation(withFramework, partMask);
   const cco = await loadMergedCco(graph, "female");
   const derived = descriptorsFromUiState(cco.merged.cco, { piercings: "12", piercings_12: SILVER });
   const input: CharacterInput = { bodyGender: "female", origin: "ui-state", appearances: derived.appearances,
@@ -66,6 +66,13 @@ describe("generic resolution of a piercing choice", () => {
     expect(entry!.app!.archive).toBe("basegame_4_appearance.archive");
     expect(entry!.components.map(c => [c.name, c.origin.kind, c.geometry?.visibleChunks])).toEqual([["i1_000_pwa__morphs_earring_04", "part", [2]]]);
     expect(entry!.components[0]!.materials[0]!.template!.ref.path).toBe("engine\\materials\\multilayered.mt");
+  });
+
+  test("PREV-128: a parts override's chunk mask only hides: it is ANDed with the component's own and can't show a chunk the component hides", async () => {
+    // The part's own mask hides chunk 2; the override (hiding 0 and 1) would show it if it replaced the mask.
+    const [entry] = (await resolvePiercing12(false, (((1n << 64n) - 1n) & ~4n).toString())).appearances;
+    expect(entry!.components.map(c => [c.name, c.chunkMask, c.geometry?.visibleChunks, c.geometry?.drawsNothing])).toEqual([
+      ["i1_000_pwa__morphs_earring_04", (((1n << 64n) - 1n) & ~7n).toString(), [], true]]);
   });
 
   test("with a slot framework installed, the same vanilla choice resolves to its bank from data alone", async () => {

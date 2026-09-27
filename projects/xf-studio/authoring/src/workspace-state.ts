@@ -83,6 +83,11 @@ export type PreviewState = {
    * only when another is chosen, so a workspace that never chooses keeps its bytes.
    */
   idleClip?: string;
+  /**
+   * The photo-mode pose V holds (pose-library-design.md decision Q9: view state, like the camera; never in looks, Undo or exports): its
+   * TweakDB record and label. Present only while a pose is the body source.
+   */
+  pose?: { id: string; label: string };
 };
 export const WORKSPACE_1 = "xfas/workspace-1";
 export const WORKSPACE_2 = "xfs/workspace-2";
@@ -199,6 +204,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (typeof p.uncensored === "boolean") state.preview.uncensored = p.uncensored;
     if (typeof p.physics === "boolean") state.preview.physics = p.physics;
     if (typeof p.idleClip === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(p.idleClip) && p.idleClip !== "closeup") state.preview.idleClip = p.idleClip;
+    const pose = p.pose as { id?: unknown; label?: unknown } | undefined;
+    if (pose && typeof pose === "object" && typeof pose.id === "string" && pose.id.length <= 512 && /^[A-Za-z0-9_.\-$#]+$/.test(pose.id) &&
+      typeof pose.label === "string" && pose.label.length <= 200 && !/[\u0000-\u001f]/.test(pose.label)) state.preview.pose = { id: pose.id, label: pose.label };
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;
