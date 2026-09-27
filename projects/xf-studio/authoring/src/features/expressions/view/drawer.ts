@@ -235,13 +235,13 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     ctx.platform({ kind: "transition.set", source: "expression", ...patch });
   const animate = new Toggle({ label: "Animate changes",
     help: ["The face moves from one expression to the next instead of cutting, so you can judge how natural the change looks.",
-      "Choosing an expression under Start from, Reset, Mirror, Flip, Undo and Redo animate; a control you drag follows your hand. At 0 s a change shows at once. Photo mode blends from one expression to the next steadily over 1 s, which is the default here."],
+      "Choosing an expression under Start from, Reset, Mirror, Flip, Undo and Redo animate; a control you drag follows your hand. Photo mode blends from one expression to the next steadily over 1 s, which is the default here."],
     onChange: on => { setTransition({ enabled: on }); } });
   animate.element.classList.add("expr-animate");
   let durationStart: number | undefined;
   const duration = new SliderWithValue({ label: "Duration", min: TRANSITION_MIN, max: TRANSITION_MAX, step: 0.05, unit: "s", defaultValue: 1, reset: true,
     format: seconds => `${Number(seconds.toFixed(2))} s`,
-    help: "How long a change takes.",
+    help: "How long a change takes. At 0 s a change shows at once.",
     transaction: { begin: () => { durationStart = preview?.transition?.seconds; }, edit: seconds => { setTransition({ seconds }); },
       commit: () => { durationStart = undefined; }, cancel: () => { if (durationStart !== undefined) setTransition({ seconds: durationStart }); durationStart = undefined; } } });
   // The chosen curve's name is the readout on its label line, like Duration's value; the note line under the strip is kept for the
@@ -484,7 +484,8 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   /** Transitions: the preview's expression setting; off, Duration and Curve keep their place and read as inactive. */
   function paintTransition() {
     const setting = preview?.transition;
-    const inactive = !setting ? { disabled: true, reason: "The live face preview isn't connected here." }
+    // Without the live face preview the drawer's status line says so at the top, once; a preview that doesn't animate says it here.
+    const inactive = !preview ? { disabled: true } : !setting ? { disabled: true, reason: "Animated changes aren't available here." }
       : setting.enabled ? { disabled: false } : { disabled: true, reason: "Turn on Animate changes to set these." };
     animate.update(!!setting?.enabled, setting ? {} : inactive);
     duration.update(setting?.seconds ?? 1, inactive);

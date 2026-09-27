@@ -55,11 +55,13 @@ test("a custom Bézier is the same data as a preset: evaluated, validated and re
   expect(easingBezier(custom)).toEqual([0.42, 0, 0.58, 1]);
 });
 
-test("each curve's icon is its own Bézier, exactly", () => {
+test("each curve's icon is its own Bézier, exactly, with faint flat ticks at its ends; Linear also has end dots", () => {
   const n = (v: number) => String(Math.round(v * 100) / 100);
   for (const preset of EASINGS) {
-    const path = iconPaths(EASING_ICONS[preset.id]).join(" ");
-    if (preset.id === "linear") { expect(path).toBe("M2.5 13.5L13.5 2.5"); continue; }
+    const [path, ticks, ...rest] = iconPaths(EASING_ICONS[preset.id]);
+    expect(ticks).toBe("M0.5 13.5h2M13.5 2.5h2");
+    if (preset.id === "linear") { expect([path, rest.length]).toEqual(["M2.5 13.5L13.5 2.5", 1]); continue; }
+    expect(rest).toEqual([]);
     const [x1, y1, x2, y2] = preset.bezier;
     expect(path).toBe(`M2.5 13.5C${n(2.5 + 11 * x1)} ${n(13.5 - 11 * y1)} ${n(2.5 + 11 * x2)} ${n(13.5 - 11 * y2)} 13.5 2.5`);
   }

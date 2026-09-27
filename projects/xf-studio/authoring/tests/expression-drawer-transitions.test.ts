@@ -12,7 +12,7 @@ beforeEach(async () => { (await import("../src/studio-ui/view-state")).bindViewS
 async function drawer() {
   const { expressionDrawer } = await import("../src/features/expressions/view/drawer");
   const platform: { kind: string; [key: string]: unknown }[] = [];
-  let snapshot: FacialPreviewSnapshot = { phase: "idle", startPoints: { phase: "ready", items: [] }, samples: [],
+  let snapshot: FacialPreviewSnapshot | undefined = { phase: "idle", startPoints: { phase: "ready", items: [] }, samples: [],
     transition: { enabled: false, seconds: 1, easing: "linear" } };
   const ctx = {
     facade: { view: () => ({ part: { controls: {}, links: {} } }), editable: () => ({ available: true }), controlBegin: () => true,
@@ -28,8 +28,8 @@ async function drawer() {
   panel.update(undefined as never);
   const section = panel.spec.element.querySelector<HTMLElement>('[data-view-key="expressions.transitions"]')!;
   return { panel, section, platform, set(next: Partial<NonNullable<FacialPreviewSnapshot["transition"]>>) {
-    snapshot = { ...snapshot, transition: { ...snapshot.transition!, ...next } }; panel.update(undefined as never);
-  } };
+    snapshot = { ...snapshot!, transition: { ...snapshot!.transition!, ...next } }; panel.update(undefined as never);
+  }, disconnect() { snapshot = undefined; panel.update(undefined as never); } };
 }
 const fire = (element: Element, type: string) => (element as unknown as LightElement).dispatchEvent(lightEvent(type));
 /** What the section shows, in document order: every element and whether it is hidden (the layout must not change between states). */
@@ -84,4 +84,13 @@ test("on: the controls work, each change is one transition.set, and nothing move
   expect(platform.at(-1)).toEqual({ kind: "transition.set", source: "expression", seconds: 1 });
   set({ enabled: false });
   expect(shape(section)).toEqual(before);
+});
+
+test("without the live face preview the drawer says so once, at the top; Transitions is inactive without repeating it", async () => {
+  const { panel, section, disconnect } = await drawer();
+  disconnect();
+  const text = panel.spec.element.textContent ?? "";
+  expect(text.split("The live face preview isn't connected here.").length - 1).toBe(1);
+  expect([curveNote(section).textContent, section.querySelector<HTMLInputElement>('input[role="switch"]')!.disabled,
+    section.querySelector<HTMLInputElement>('input[type="range"]')!.disabled]).toEqual(["", true, true]);
 });

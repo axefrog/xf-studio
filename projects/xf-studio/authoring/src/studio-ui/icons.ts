@@ -1,8 +1,16 @@
 import type { EasingId } from "../platform/api/easing";
 /** Original 16px line icons for XF Studio. Stroked with currentColor; decorative unless labelled. */
-type Shape = { d: string; fill?: boolean; dash?: string };
+type Shape = { d: string; fill?: boolean; dash?: string; faint?: boolean };
 const s = (d: string): Shape => ({ d });
 const f = (d: string): Shape => ({ d, fill: true });
+/** A secondary stroke drawn at reduced strength (the easing curves' resting ends). */
+const faint = (d: string): Shape => ({ d, faint: true });
+/**
+ * An easing curve's icon: the curve itself, exactly, from rest (2.5, 13.5) to full (13.5, 2.5), with a faint 2 px tick continuing each end
+ * flat, so a curve that leaves or arrives flat runs into its ticks and a straight one meets them at a corner (that is where the gentle
+ * curves differ from Linear at 16 px).
+ */
+const curve = (d: string, ...extra: Shape[]): Shape[] => [s(d), faint("M0.5 13.5h2M13.5 2.5h2"), ...extra];
 
 const ICONS = {
   plus: [s("M8 3v10M3 8h10")],
@@ -76,14 +84,15 @@ const ICONS = {
   layouts: [s("M2.5 6.5h8v7h-8z"), s("M2.5 8.5h8"), s("M4.5 6.5v-2h8v7h-2"), s("M6.5 4.5v-2h7v7h-1")],
   category: [s("M2.5 2.5h4.5v11H2.5z"), s("M9 2.5h4.5v4.5H9zM9 9h4.5v4.5H9z")],
   dot: [f("M5.5 5.5h5v5h-5z")],
-  // Easing curves (platform/api/easing.ts), each its own cubic Bézier, exactly (never exaggerated or clamped), from rest (bottom left) to
-  // full (top right) in the 11 px box at 2.5 (tests/easing-transitions.test.ts checks every path against the catalogue's control points).
-  easeLinear: [s("M2.5 13.5L13.5 2.5")],
-  easeIn: [s("M2.5 13.5C6.17 13.5 9.83 9.83 13.5 2.5")],
-  easeOut: [s("M2.5 13.5C6.17 6.17 9.83 2.5 13.5 2.5")],
-  easeOutStrong: [s("M2.5 13.5C6.13 2.5 9.98 2.5 13.5 2.5")],
-  easeInOut: [s("M2.5 13.5C6.17 13.5 9.83 2.5 13.5 2.5")],
-  easeInOutStrong: [s("M2.5 13.5C9.65 13.5 6.35 2.5 13.5 2.5")],
+  // Easing curves (platform/api/easing.ts), each its own cubic Bézier, exactly (never exaggerated or clamped), in the 11 px box at 2.5,
+  // with faint ticks at its ends (`curve`); Linear also has a dot at each end, so it can't be taken for a gentle curve
+  // (tests/easing-transitions.test.ts checks every curve against the catalogue's control points).
+  easeLinear: curve("M2.5 13.5L13.5 2.5", f("M1.3 13.5a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0zM12.3 2.5a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0z")),
+  easeIn: curve("M2.5 13.5C6.17 13.5 9.83 9.83 13.5 2.5"),
+  easeOut: curve("M2.5 13.5C6.17 6.17 9.83 2.5 13.5 2.5"),
+  easeOutStrong: curve("M2.5 13.5C6.13 2.5 9.98 2.5 13.5 2.5"),
+  easeInOut: curve("M2.5 13.5C6.17 13.5 9.83 2.5 13.5 2.5"),
+  easeInOutStrong: curve("M2.5 13.5C9.65 13.5 6.35 2.5 13.5 2.5"),
   link: [s("M6.8 9.2l2.4-2.4"), s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7")],
   /** The link broken: its two halves apart, with break marks (PairControl's separate sides). */
   unlink: [s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7"), s("M5 2.5v1.8M2.5 5h1.8M11 13.5v-1.8M13.5 11h-1.8")],
@@ -112,6 +121,7 @@ export function icon(name: IconName, label?: string): SVGSVGElement {
     path.setAttribute("d", shape.d);
     if (shape.fill) { path.setAttribute("fill", "currentColor"); path.setAttribute("stroke", "none"); }
     if (shape.dash) path.setAttribute("stroke-dasharray", shape.dash);
+    if (shape.faint) path.setAttribute("stroke-opacity", "0.45");
     svg.append(path);
   }
   return svg;
@@ -120,5 +130,5 @@ export const iconNames = Object.keys(ICONS) as IconName[];
 /** Static SVG markup for the self-contained style guide. */
 export function iconMarkup(name: IconName) {
   return `<svg viewBox="0 0 16 16" class="icon" aria-hidden="true">${(ICONS[name] as Shape[]).map(shape =>
-    `<path d="${shape.d}"${shape.fill ? ' fill="currentColor" stroke="none"' : ""}${shape.dash ? ` stroke-dasharray="${shape.dash}"` : ""}/>`).join("")}</svg>`;
+    `<path d="${shape.d}"${shape.fill ? ' fill="currentColor" stroke="none"' : ""}${shape.dash ? ` stroke-dasharray="${shape.dash}"` : ""}${shape.faint ? ' stroke-opacity="0.45"' : ""}/>`).join("")}</svg>`;
 }

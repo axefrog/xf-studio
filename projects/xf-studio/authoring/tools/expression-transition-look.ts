@@ -162,9 +162,12 @@ try {
     await page.mouse("mouseMoved", 10, 10);
   }
   // Intensity's curves beside the Curve strip: one control, frameless on its label line.
-  for (const scheme of ["dark", "light"] as const) {
+  for (const width of [300, 480]) for (const scheme of ["dark", "light"] as const) {
+    await page.evaluate(`window.xfStudioShell.dock.moveTo("expressions.controls", { kind: "float", x: ${1420 - width}, y: 30, w: ${width}, h: 900 }, "")`);
+    await page.wait(500);
+    await scrollTo(".expr-drawer");
     await theme(scheme);
-    await snap(`${scheme}-300-transitions-and-intensity`, `(() => { const a = document.querySelector('.expr-drawer [data-view-key="expressions.transitions"]'),
+    await snap(`${scheme}-${width}-transitions-and-intensity`, `(() => { const a = document.querySelector('.expr-drawer [data-view-key="expressions.transitions"]'),
       b = document.querySelector('.expr-drawer [data-view-key="expressions.adjust-all"]'); if (!a || !b) return null;
       const r = a.getBoundingClientRect(), q = b.getBoundingClientRect(); return { getBoundingClientRect: () => ({ x: r.x, y: r.y, width: r.width, height: q.bottom - r.y }) }; })()`);
   }
@@ -216,7 +219,7 @@ try {
     [0, at - 60, at + 150, at + 1500, at + 3000].map(t => ({ at: t, label: (x: number) => `${(x / 1000).toFixed(2)} s${x >= at ? " (after the change)" : ""}` })));
   }
   // ---- The live face preview isn't connected (a host without the facial preview; no Studio host reaches it today): the drawer on its
-  // own, with the Studio's stylesheet, over a fake view context whose facial snapshot has no transition setting. ----
+  // own, with the Studio's stylesheet, over a fake view context with no facial preview. ----
   const harness = resolve(tmpdir(), `xfs-transition-harness-${Date.now()}`);
   mkdirSync(harness, { recursive: true });
   const drawerPath = resolve(import.meta.dir, "..", "src", "features", "expressions", "view", "drawer.ts").replaceAll("\\", "/");
@@ -224,7 +227,7 @@ try {
     const ctx = { facade: { view: () => ({ part: { controls: {}, links: {} } }), editable: () => ({ available: true }), controlBegin: () => true,
       controlEdit: () => ({ ok: true }), controlCommit: () => {}, controlCancel: () => {} }, dispatch: () => true, platform: () => true,
       feedback: { toast: () => {}, announce: () => {}, record: () => {} }, easing: { get: () => undefined, set: () => {} },
-      facial: { snapshot: () => ({ phase: "idle", startPoints: { phase: "ready", items: [] }, samples: [] }), retry: () => {} },
+      facial: { snapshot: () => undefined, retry: () => {} },
       presets: { list: () => ({ phase: "ready", items: [] }), capability: () => ({ available: true }), execute: async () => ({ ok: true }) },
       links: { open: async () => {} }, openSettings: () => {} };
     for (const width of [300, 480]) { const panel = expressionDrawer(ctx as never); panel.update(undefined as never);
@@ -233,7 +236,7 @@ try {
   const built = await Bun.build({ entrypoints: [resolve(harness, "entry.ts")], outdir: harness, target: "browser", format: "iife" });
   if (!built.success) throw Error(built.logs.map(String).join("\n"));
   const css = resolve(import.meta.dir, "..", "public", "studio.css").replaceAll("\\", "/");
-  writeFileSync(resolve(harness, "index.html"), `<!doctype html><html><head><link rel="stylesheet" href="file:///${css}"><style>body{margin:0;background:var(--bg-app)}
+  writeFileSync(resolve(harness, "index.html"), `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="file:///${css}"><style>body{margin:0;background:var(--bg-app)}
     #hosts{display:flex;gap:24px;padding:16px;align-items:flex-start}.harness{background:var(--bg-panel);border:1px solid var(--line)}</style></head>
     <body><div id="hosts"></div><script src="entry.js"></script></body></html>`);
   await page.send("Page.navigate", { url: `file:///${resolve(harness, "index.html").replaceAll("\\", "/")}` });
@@ -241,7 +244,10 @@ try {
   for (const scheme of ["dark", "light"] as const) {
     await theme(scheme);
     for (const [index, width] of [[0, 300], [1, 480]] as const) {
-      await snap(`${scheme}-${width}-not-connected`, `(() => { const s = document.querySelectorAll(".harness")[${index}]?.querySelector('[data-view-key="expressions.transitions"]'); return s; })()`);
+      // The drawer's top (its status line says the preview isn't connected) down to Transitions: the state is said once.
+      await snap(`${scheme}-${width}-not-connected`, `(() => { const h = document.querySelectorAll(".harness")[${index}], s = h?.querySelector('[data-view-key="expressions.transitions"]');
+        if (!h || !s) return null; const a = h.getBoundingClientRect(), b = s.getBoundingClientRect();
+        return { getBoundingClientRect: () => ({ x: a.x, y: a.y, width: a.width, height: b.bottom - a.y }) }; })()`);
     }
   }
 
