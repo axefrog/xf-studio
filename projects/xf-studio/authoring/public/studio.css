@@ -940,9 +940,15 @@ span.category { border-color: transparent; background: transparent; padding-left
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv-spin { filter: url(#xfs-pv-dark); } }
 .pane[style*="color-scheme:dark"] .pv-spin { filter: url(#xfs-pv-dark); }
 .pane[style*="color-scheme:light"] .pv-spin { filter: url(#xfs-pv-light); }
-.pv-spin[hidden] { display: none; }
+.pv-spin[hidden], .pv-live[hidden] { display: none; }
+.pv-live { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pv-strip { position: absolute; top: 0; left: 0; height: 100%; max-width: none; will-change: transform; }
 .pv-frame[data-spin] .pv-image { visibility: hidden; }
+/* The strip is on its way (drawn on first look): a small turning tick in the corner, never moving the layout. */
+.pv-frame[data-spin-wait]::after { content: ""; position: absolute; right: 4px; bottom: 4px; width: 8px; height: 8px; box-sizing: border-box;
+  border-radius: 50%; border: 1.5px solid var(--text-muted); border-top-color: transparent; opacity: .8; pointer-events: none;
+  animation: cc-fetch-turn .9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .pv-frame[data-spin-wait]::after { animation: none; border-top-color: var(--text-muted); } }
 @media (prefers-reduced-motion: reduce) { .pv-image { transition: none; } }
 @media (forced-colors: active) { .pv-image, .pv-spin { filter: none; } .pv-frame { outline: 1px solid CanvasText; } }
 @supports (corner-shape: bevel) { .pv-frame { corner-shape: bevel; } }

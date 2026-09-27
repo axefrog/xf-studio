@@ -5,7 +5,7 @@
  * caught mid-drag, and the details picture mid-drag; then the costs: each turntable strip drawn (worker timings, bytes), the wait from
  * hovering to the strip and to the first turn shown, the page's heap, and a click made while a strip is being drawn against one made idle.
  *
- *   bun tools/choice-layouts-look.ts <out dir under evidence/screenshots> [port] [--schemes light,dark] [--widths 300,480] [--tag after] [--hovers 10] [--skip 0] [--clicks | --clicks-only]
+ *   bun tools/choice-layouts-look.ts <out dir under evidence/screenshots> [port] [--schemes light,dark] [--widths 300,480] [--tag after] [--hovers 10] [--skip 0] [--clicks | --clicks-only | --gate | --spin-m]
  *
  * The rows show installed mods' hairstyles, so keep the outputs in the ignored evidence/screenshots tree. It changes the verify workspace's
  * picture layout preferences (its own state), never the person's draft.
@@ -72,6 +72,40 @@ for (const scheme of schemes) for (const width of widths) {
     await page.waitFor(`(() => { const tiles = [...${ROW}.querySelectorAll(".pv-tile")].slice(0, 24); return tiles.length > 0 && tiles.every(t => t.dataset.state !== "waiting"); })()`, 120000).catch(() => {});
     await page.wait(800);
     const before = await stats(page);
+    if (args.includes("--spin-m")) {
+      // Grid M: one tile turning on hover (strip drawn on first look), then another caught mid-drag.
+      await segment(page, "Grid"); await segment(page, "M");
+      const hovered = await tileCentre(page, 4);
+      if (hovered) {
+        await page.mouse("mouseMoved", hovered.x, hovered.y);
+        await page.waitFor(`!!document.querySelector(".pv-frame[data-spin] .pv-live:not([hidden])")`, 8000).catch(() => {});
+        // Four seconds of live turning: frames, the worker's time per frame (and with the GPU waited for), the main thread's share, long tasks.
+        const live = await page.evaluate(`(async () => { const s = window.xfsChoicePreviews.liveStats, f0 = s.frames, m0 = window.xfsLiveMeasures.length, long = [];
+          const o = new PerformanceObserver(l => long.push(...l.getEntries().map(e => e.duration))); o.observe({ type: "longtask" });
+          const t0 = performance.now(); await new Promise(r => setTimeout(r, 4000)); o.disconnect(); const seconds = (performance.now() - t0) / 1000;
+          const med = a => { const v = [...a].sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
+          const main = window.xfsLiveMeasures.slice(m0);
+          return { fps: (s.frames - f0) / seconds, workerMsMedian: med(s.frameMs.slice(-(s.frames - f0))), gpuMsMedian: med(s.gpuMs), gpuSamples: s.gpuMs.length,
+            mainMsMedian: med(main), mainMsPerSecond: main.reduce((a, b) => a + b, 0) / seconds, longTasks: long, startMs: s.startMs }; })()`);
+        report.push({ scheme, width, check: "live turn, 4 s", live });
+        await shoot(page, name("grid-m-turning"), ROW, 2, 520, false);
+      }
+      const dragged = await tileCentre(page, 1);
+      if (dragged) {
+        await page.mouse("mouseMoved", dragged.x, dragged.y);
+        await page.wait(900);
+        await page.mouse("mousePressed", dragged.x, dragged.y, { button: "left", buttons: 1, clickCount: 1 });
+        for (let i = 1; i <= 6; i++) { await page.mouse("mouseMoved", dragged.x + i * 6, dragged.y, { button: "left", buttons: 1 }); await page.wait(40); }
+        await page.waitFor(`!!document.querySelector(".pv-frame[data-spin]")`, 8000).catch(() => {});
+        await shoot(page, name("grid-m-dragging"), ROW, 2, 520, false);
+        const before = await page.evaluate(`${ROW}.querySelector(".choice[aria-selected=true]")?.dataset.position ?? null`);
+        await page.mouse("mouseReleased", dragged.x + 36, dragged.y, { button: "left", buttons: 0, clickCount: 1 });
+        await page.wait(300);
+        const after = await page.evaluate(`${ROW}.querySelector(".choice[aria-selected=true]")?.dataset.position ?? null`);
+        report.push({ scheme, width, check: "grid M drag never chooses", before, after, stats: await stats(page) });
+      }
+      continue;
+    }
     if (args.includes("--gate")) {
       // The gate's recapture: details scrolled a few rows (the picture stays, the headings stick), and list scrolled at the narrow width.
       await segment(page, "Details");

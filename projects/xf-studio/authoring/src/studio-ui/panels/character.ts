@@ -408,7 +408,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
               { value: "details", label: "Details", title: "A list with details and a large picture that turns" }],
             onSelect: layout => setPictureLayout(controls, layout) }),
           sizes: new Segmented<ChoiceSize>({ label: "Picture size", showLabel: false, compact: true,
-            options: [{ value: "s", label: "S", title: "Small pictures" }, { value: "m", label: "M", title: "Medium pictures" }, { value: "l", label: "L", title: "Large pictures that turn" }],
+            options: [{ value: "s", label: "S", title: "Small pictures" }, { value: "m", label: "M", title: "Medium pictures" }, { value: "l", label: "L", title: "Large pictures" }],
             onSelect: size => setPictureSize(controls, size) }),
           tools: h("div", { class: "cc-choice-tools", hidden: true }), hint: null, spin: null };
         // The layout keeps its place at the right; S, M and L (grid only) sit before it.

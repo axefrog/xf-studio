@@ -46,6 +46,12 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(g).toBeGreaterThan(0.18 * 255);
     expect(strip.webpBytes).toBeGreaterThan(40);
   });
+  test("a live frame: drawn straight to an ImageBitmap at the still's size, upright, matching the still where fully covered", () => {
+    const live = probe.live!;
+    expect(live.width).toBe(256);
+    for (let k = 0; k < 4; k++) expect(Math.abs(live.full[k]! - (probe.full as number[])[k]!)).toBeLessThan(3);
+    expect(live.ms).toBeLessThan(50);
+  });
   test("a chunk not in the source draws nothing, and the ground is empty", () => {
     expect(probe.unlisted[3]).toBe(0);
     expect(probe.ground[3]).toBe(0);

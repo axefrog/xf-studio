@@ -12,7 +12,7 @@
  * - **The person first.** While the V is being prepared with a person's change (`busy`), nothing new starts; the host also runs source
  *   derivations only in its background lane.
  * - **One job of each kind at a time:** one question to the host and one drawing in the worker, side by side.
- * - **Turntables on request** (phase 2): the one choice the panel wants spinning (`spin`: the hovered tile in the large grid, the choice shown
+ * - **Turntables on request** (phase 2): the one choice the panel wants spinning (`spin`: the hovered tile in the grid, the choice shown
  *   large in details) gets its turntable strip drawn from the same source, right after the chosen and hovered stills, and stored under its
  *   own key; nothing else ever draws one, so a row costs no more until someone looks. A strip once started is finished and kept.
  * - **Failures stay quiet.** A drawing that fails leaves the choice without a picture for the session (its tile keeps the glyph); a lost
@@ -31,18 +31,31 @@ export type ChoicePreviewPort = {
   stored(key: string): Promise<string | null>;
   /** Draw a source (in the worker; its turntable strip with `frames`), store it under its key and answer a URL to show it now, with the drawing's timings. */
   render(source: ChoicePreviewSource, key: string, frames?: number): Promise<{ url: string; timings?: unknown }>;
+  /**
+   * The live turn (optional): keep one source uploaded in the worker (`start`, replacing any other), draw it at any angle (`frame`: an
+   * ImageBitmap and the worker's time, with the GPU waited for when `measure`), and drop it (`stop`).
+   */
+  live?: {
+    start(source: ChoicePreviewSource): Promise<void>;
+    frame(turn: number, measure: boolean): Promise<{ bitmap: ImageBitmap; ms?: number; gpuMs?: number }>;
+    stop(): void;
+  };
 };
 /**
  * A row's pictures as the panel reads them: URLs by position, the turntable strips drawn so far (`frames` pictures side by side), the
  * positions with no picture possible, and whether work remains.
  */
 export type ChoicePreviewRow = { readonly kind: PreviewKind; readonly urls: ReadonlyMap<number, string>; readonly spins: ReadonlyMap<number, string>;
-  readonly frames: number; readonly none: ReadonlySet<number>; readonly busy: boolean };
+  readonly frames: number; readonly none: ReadonlySet<number>; readonly busy: boolean;
+  /** The live turn of the wanted choice once its source is uploaded (null while none, or while a person's change is prepared). */
+  readonly live: PreviewLive | null };
+/** A live turn: the choice it draws and a frame at any angle (null when the worker couldn't draw it). */
+export type PreviewLive = { readonly position: number; frame(turn: number): Promise<ImageBitmap | null> };
 export type PreviewAsk = { option: string; kind: PreviewKind; request: CharacterRequest; body: "female" | "male";
   /** The row's positions in view order (in view first, then nearest). */
   positions: readonly number[];
   selected: number | null; focus: number | null;
-  /** The choice whose turntable is wanted now (hovered in the large grid, or shown large in details), or null. */
+  /** The choice whose turntable is wanted now (hovered in the grid, or shown large in details), or null. */
   spin?: number | null;
   /** Preparing-ahead states by position (`r`: ready). */
   ready: (position: number) => boolean;
@@ -77,6 +90,12 @@ export class ChoicePreviewService {
     spinWaitMs: [], spinTimings: [] };
   /** The turntable wanted last and since when (the wait is measured from then). */
   private wanted: { option: string; position: number; at: number } | null = null;
+  /** The live turn: which choice, whether its source is uploaded, and the choices whose live turn failed (never retried this session). */
+  private live: { option: string; position: number; ready: boolean; view?: PreviewLive } | null = null;
+  private liveFailed = new Set<string>();
+  private lastBusy = false;
+  /** Live-turn costs: frames drawn, the worker's time per frame, and every 15th frame with the GPU waited for. */
+  readonly liveStats = { starts: 0, startMs: [] as number[], frames: 0, frameMs: [] as number[], gpuMs: [] as number[], failed: 0 };
 
   constructor(private readonly port: ChoicePreviewPort, private readonly changed: () => void, private readonly now: () => number = () => performance.now()) {
     // Measurement hook (tools and `?verify=1` sessions read the costs from the page).
@@ -98,7 +117,7 @@ export class ChoicePreviewService {
     let row = this.rows.get(ask.option);
     if (!row || row.kind !== ask.kind) {
       const view: ChoicePreviewRow = Object.freeze({ kind: ask.kind, urls: new Map<number, string>(), spins: new Map<number, string>(), frames: TURNTABLE.frames,
-        none: new Set<number>(), busy: true });
+        none: new Set<number>(), busy: true, live: null });
       row = { option: ask.option, kind: ask.kind, items: new Map(), urls: new Map(), spins: new Map(), none: new Set(), view, order: 0 };
       this.rows.set(ask.option, row);
     }
@@ -110,8 +129,60 @@ export class ChoicePreviewService {
       if (!item) row.items.set(position, { position, state: "unknown", request, tries: 0 });
       else if (item.request !== request && (item.state === "unprepared" || item.state === "unknown")) { item.state = "unknown"; item.request = request; }
     }
+    this.pumpLive(ask, row);
+    // A person's change pauses the live turn and resumes it after: the row's view says so.
+    if (ask.busy !== this.lastBusy) { this.lastBusy = ask.busy; if (this.live?.option === ask.option) this.publish(row); }
     this.pump();
     return row.view;
+  }
+  /**
+   * Keep the live turn on the wanted choice: started once its strip is there (the strip is the instant fallback while it uploads),
+   * stopped when nothing is wanted; one at a time, for the whole page.
+   */
+  private pumpLive(ask: PreviewAsk, row: Row) {
+    const live = this.port.live;
+    if (!live) return;
+    const position = ask.spin ?? null, item = position === null ? undefined : row.items.get(position);
+    const wanted = item?.source && item.turn === "done" && !this.liveFailed.has(`${ask.option}/${position}`) ? position : null;
+    if (this.live && (this.live.option !== ask.option || this.live.position !== wanted)) {
+      const was = this.rows.get(this.live.option);
+      this.live = null;
+      live.stop();
+      if (was) this.publish(was);
+    }
+    if (wanted === null || this.live) return;
+    const current: NonNullable<ChoicePreviewService["live"]> = { option: ask.option, position: wanted, ready: false };
+    this.live = current;
+    this.liveStats.starts++;
+    const began = this.now();
+    live.start(item!.source!).then(() => {
+      if (this.live !== current) return;
+      current.ready = true;
+      this.liveStats.startMs.push(this.now() - began);
+      this.publish(row);
+    }, () => {
+      this.liveFailed.add(`${current.option}/${current.position}`);
+      this.liveStats.failed++;
+      if (this.live === current) { this.live = null; this.publish(row); }
+    });
+  }
+  /** The row's live turn as the panel reads it (paused while a person's change is prepared). */
+  private liveView(row: Row): PreviewLive | null {
+    const current = this.live, live = this.port.live;
+    if (!current?.ready || current.option !== row.option || !live || this.ask?.busy) return null;
+    const stats = this.liveStats;
+    // The same object while the turn lasts, so a tile keeps showing it across the row's other updates.
+    return current.view ??= Object.freeze({ position: current.position, frame: (turn: number) => {
+      if (this.live !== current || this.ask?.busy) return Promise.resolve(null);
+      const measure = stats.frames % 15 === 0;
+      return live.frame(turn, measure).then(reply => {
+        stats.frames++;
+        if (reply.ms !== undefined && stats.frameMs.length < 2000) stats.frameMs.push(reply.ms);
+        if (reply.gpuMs !== undefined && stats.gpuMs.length < 200) stats.gpuMs.push(reply.gpuMs);
+        if (this.live !== current) { reply.bitmap.close(); return null; }
+        return reply.bitmap;
+      }, () => null);
+    } });
   }
   /** A row's pictures without asking for work (null before it was shown). */
   row(option: string): ChoicePreviewRow | null { return this.rows.get(option)?.view ?? null; }
@@ -124,7 +195,8 @@ export class ChoicePreviewService {
   }
   private publish(row: Row) {
     const busy = [...row.items.values()].some(item => item.state === "unknown" || item.state === "source" || item.state === "drawing" || item.state === "unprepared");
-    row.view = Object.freeze({ kind: row.kind, urls: new Map(row.urls), spins: new Map(row.spins), frames: TURNTABLE.frames, none: new Set(row.none), busy });
+    row.view = Object.freeze({ kind: row.kind, urls: new Map(row.urls), spins: new Map(row.spins), frames: TURNTABLE.frames, none: new Set(row.none), busy,
+      live: this.liveView(row) });
     if (!this.disposed) this.changed();
   }
 
@@ -223,6 +295,9 @@ export class ChoicePreviewService {
     }).then(url => {
       item.turn = "done";
       row.spins.set(item.position, url);
+      // The strip is there: the live turn can start (on the next ask, or now if this choice is still wanted).
+      if (this.ask?.option === row.option) queueMicrotask(() => { if (this.ask && !this.disposed) this.pumpLive(this.ask, row); });
+
       if (this.wanted?.option === row.option && this.wanted.position === item.position) this.stats.spinWaitMs.push(this.now() - this.wanted.at);
     }, () => { item.turn = "failed"; })
       .finally(() => { this.drawing = false; this.publish(row); this.pump(); });

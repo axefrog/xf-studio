@@ -18,7 +18,9 @@ export type PreviewProbe = { ok: boolean; failure?: string; size: number; webpBy
    * The turntable strip of the same source: its size, the largest channel difference between its frame 0 and the still, and the mean
    * channels at the full-coverage point seen from behind (frame frames/2), where the subject now hides the feature.
    */
-  strip?: { width: number; height: number; webpBytes: number; frame0Diff: number; behind: number[]; timings: unknown } };
+  strip?: { width: number; height: number; webpBytes: number; frame0Diff: number; behind: number[]; timings: unknown };
+  /** A live frame at turn 0 read back through a 2D canvas: its size, the full-coverage point (premultiplied, as shown), and ms per frame. */
+  live?: { width: number; full: number[]; ms: number } };
 (window as unknown as { probe?: PreviewProbe }).probe = undefined;
 
 type Quad = { name: string; x: [number, number]; y: [number, number]; z: number };
@@ -87,7 +89,16 @@ async function run(): Promise<PreviewProbe> {
     for (let k = 0; k < 4; k++) behind[k]! += sp[(y * width + back * size + x) * 4 + k]!;
     n++;
   }
-  return { ok: true, size, webpBytes: result.webp.size, full: mean([-0.05, 1.65, 0.02]), half: mean([0.05, 1.65, 0.02]), unlisted: mean([0, 1.38, 0.02]),
+  const loaded = await renderer.load(source, file => file), present = renderer.present(loaded);
+  const liveAt = performance.now();
+  for (let i = 0; i < 9; i++) present(i * 40).close();
+  const bitmap = present(0), ms = (performance.now() - liveAt) / 10;
+  const readCanvas = new OffscreenCanvas(bitmap.width, bitmap.height), read = readCanvas.getContext("2d")!;
+  read.drawImage(bitmap, 0, 0);
+  const [lx, ly] = project([-0.05, 1.65, 0.02]), livePixels = read.getImageData(Math.round(lx!) - 3, Math.round(ly!) - 3, 7, 7).data;
+  const liveFull = [0, 1, 2, 3].map(k => { let sum = 0; for (let i = k; i < livePixels.length; i += 4) sum += livePixels[i]!; return sum / 49; });
+  renderer.release(loaded);
+  return { ok: true, size, webpBytes: result.webp.size, live: { width: bitmap.width, full: liveFull, ms }, full: mean([-0.05, 1.65, 0.02]), half: mean([0.05, 1.65, 0.02]), unlisted: mean([0, 1.38, 0.02]),
     ground: mean([0.2, 1.4, 0]), timings: result.timings,
     strip: { width, height: strip.height, webpBytes: strip.webp.size, frame0Diff, behind: behind.map(v => v / n), timings: strip.timings } };
 }

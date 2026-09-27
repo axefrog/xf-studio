@@ -295,6 +295,49 @@ describe("the preview service's scheduling", () => {
     await h.settle();
     expect(h.service.row("head/hairstyle")!.spins.has(1)).toBe(true);
   });
+  test("the live turn: started for the wanted choice once its strip is there, paused while a person's change is prepared, stopped when the pointer leaves, one at a time", async () => {
+    const log: string[] = [];
+    const bitmap = { close() {} } as unknown as ImageBitmap;
+    const port: ChoicePreviewPort = {
+      async sources(_r, _o, _k, positions) { return positions.map(position => ({ position, state: "ready" as const, source: sourceAt(position) })); },
+      async subject() { return "subject"; },
+      async stored() { return null; },
+      async render(drawn, _key, frames) { return { url: `blob:${frames ? "spin" : "still"}-${positionOf(drawn)}` }; },
+      live: {
+        async start(drawn) { log.push(`start ${positionOf(drawn)}`); },
+        async frame(turn) { log.push(`frame ${turn}`); return { bitmap, ms: 1 }; },
+        stop() { log.push("stop"); },
+      },
+    };
+    const service = new ChoicePreviewService(port, () => {});
+    const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setTimeout(r, 0)); };
+    const ask = (over: Partial<PreviewAsk>): PreviewAsk => ({ option: "o", kind: "hair", request: DEFAULT_CHARACTER, body: "female", positions: [2, 3], selected: null, focus: null,
+      ready: () => true, busy: false, ...over });
+    service.update(ask({}));
+    await settle();
+    expect(log).toEqual([]);
+    service.update(ask({ focus: 2, spin: 2 }));
+    await settle();
+    service.update(ask({ focus: 2, spin: 2 }));
+    expect(log).toEqual(["start 2"]);
+    const live = service.row("o")!.live!;
+    expect(live.position).toBe(2);
+    expect(await live.frame(15)).toBe(bitmap);
+    // The same object across updates, so a tile keeps its live turn.
+    expect(service.update(ask({ focus: 2, spin: 2 })).live).toBe(live);
+    // A person's change pauses it (no frames), then it resumes.
+    expect(service.update(ask({ focus: 2, spin: 2, busy: true })).live).toBeNull();
+    expect(await live.frame(30)).toBeNull();
+    expect(service.update(ask({ focus: 2, spin: 2 })).live).toBe(live);
+    // Another choice: the first stops before the next starts; leaving stops it.
+    service.update(ask({ focus: 3, spin: 3 }));
+    await settle();
+    service.update(ask({ focus: 3, spin: 3 }));
+    service.update(ask({ spin: null }));
+    expect(log).toEqual(["start 2", "frame 15", "stop", "start 3", "stop"]);
+    expect(service.row("o")!.live).toBeNull();
+    expect(service.liveStats.frames).toBe(1);
+  });
   test("a stored strip is used without drawing", async () => {
     const log: string[] = [];
     const port: ChoicePreviewPort = {
