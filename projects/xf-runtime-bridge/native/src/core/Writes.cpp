@@ -271,6 +271,7 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
     json skipped = json::array();
     json placement;
     json placeUndo;
+    bool moved = false;
     std::string current;
     try
     {
@@ -303,29 +304,50 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
         {
             current = "place";
             const auto& place = *aRequest.place;
+            // Where the light's entity is now, or null when it can't be read (never fails the call).
+            const auto readPosition = [&](json& aInto, const char* aKey, const char* aUnknownKey) {
+                if (!aOps.position)
+                {
+                    return;
+                }
+                try
+                {
+                    aInto[aKey] = aOps.position(aRequest.light).value("position", json());
+                }
+                catch (const std::exception& e)
+                {
+                    aInto[aUnknownKey] = e.what();
+                }
+            };
+            const auto worldOf = [](const json& aPosition) {
+                return json{{"world", {aPosition.value("x", 0.0), aPosition.value("y", 0.0), aPosition.value("z", 0.0)}}};
+            };
             if (place.kind == params::LightPlacement::Kind::Camera)
             {
+                // The position before, so the undo can put the light back there (RB-59).
+                json was;
+                readPosition(was, "position", "unknown");
                 // Photo mode places a light where the camera is when it switches on: off, then on again.
                 const auto off = aOps.set(params::key::kLightState, 0.0f);
-                aOps.settle();
-                aOps.set(params::key::kLightState, 1.0f);
-                aOps.settle();
                 placement = {{"requested", "camera"}, {"route", "switched_again"}};
+                if (was["position"].is_object())
+                {
+                    placement["before"] = was["position"];
+                    placeUndo["place"] = worldOf(was["position"]);
+                    moved = true;
+                }
+                else if (was.contains("unknown"))
+                {
+                    placement["before_unknown"] = was["unknown"];
+                }
                 if (BeforeKnown(off) && off["before"].get<double>() < 0.5)
                 {
                     placeUndo["on"] = false;
                 }
-                if (aOps.position)
-                {
-                    try
-                    {
-                        placement["now"] = aOps.position(aRequest.light).value("position", json());
-                    }
-                    catch (const std::exception& e)
-                    {
-                        placement["now_unknown"] = e.what();
-                    }
-                }
+                aOps.settle();
+                aOps.set(params::key::kLightState, 1.0f);
+                aOps.settle();
+                readPosition(placement, "now", "now_unknown");
             }
             else
             {
@@ -333,32 +355,33 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
                 {
                     throw MethodError("unavailable", "this build can't move photo-mode lights");
                 }
-                const auto moved = aOps.place(aRequest.light, place);
-                aOps.settle();
-                placement = {{"requested", params::PlacementJson(place)}, {"route", "moved"}, {"before", moved.value("before", json())},
-                             {"after", moved.value("after", json())}};
-                if (moved.contains("head"))
+                const auto result = aOps.place(aRequest.light, place);
+                placement = {{"requested", params::PlacementJson(place)}, {"route", "moved"}, {"before", result.value("before", json())},
+                             {"after", result.value("after", json())}};
+                if (result.contains("head"))
                 {
-                    placement["head"] = moved["head"];
+                    placement["head"] = result["head"];
                 }
-                if (aOps.position)
+                // The undo is known from here on, whatever fails next (RB-60).
+                const auto& before = placement["before"];
+                if (before.is_object())
                 {
-                    const auto now = aOps.position(aRequest.light).value("position", json());
-                    placement["now"] = now;
-                    const auto& after = placement["after"];
-                    const bool held = now.is_object() && after.is_object() &&
-                                      std::hypot(now.value("x", 0.0) - after.value("x", 0.0), now.value("y", 0.0) - after.value("y", 0.0),
+                    placeUndo["place"] = worldOf(before);
+                }
+                moved = true;
+                aOps.settle();
+                readPosition(placement, "now", "now_unknown");
+                const auto& now = placement.contains("now") ? placement["now"] : json();
+                const auto& after = placement["after"];
+                if (now.is_object() && after.is_object())
+                {
+                    const bool held = std::hypot(now.value("x", 0.0) - after.value("x", 0.0), now.value("y", 0.0) - after.value("y", 0.0),
                                                  now.value("z", 0.0) - after.value("z", 0.0)) < 0.05;
                     placement["held"] = held;
                     if (!held)
                     {
                         placement["note"] = "photo mode put the light somewhere else again a few frames later; place \"camera\" is the fallback";
                     }
-                }
-                const auto& before = placement["before"];
-                if (before.is_object())
-                {
-                    placeUndo["place"] = {{"world", {before.value("x", 0.0), before.value("y", 0.0), before.value("z", 0.0)}}};
                 }
             }
         }
@@ -372,6 +395,13 @@ json LightSet(const params::LightRequest& aRequest, const LightOps& aOps)
             done.push_back(item.value("name", std::string()));
         }
         std::string what = done.empty() ? "no light value was changed" : "already changed: " + Join(done);
+        if (moved)
+        {
+            json undo = placeUndo;
+            undo["light"] = aRequest.light;
+            what += placeUndo.contains("place") ? "; the light was moved: photo.light.set " + undo.dump() + " puts it back"
+                                                : "; the light may have moved (its earlier position is unknown)";
+        }
         if (const auto selection = putBack(); !selection.empty())
         {
             what += "; " + selection;
@@ -735,12 +765,15 @@ json InventoryEquip(const params::InventoryEquipRequest& aRequest, const Invento
     const auto slot = step.value("slot", aRequest.slot);
     const auto previous = step.value("previous", std::string());
     const bool added = step.value("added", false);
-    bool equipped = step.value("already_equipped", false);
+    // Whether the slot holds the item is decided in the script by record ID ("matches"; RB-63), never by
+    // comparing debug names here.
+    const bool alreadyWorn = step.value("already_equipped", false);
+    bool equipped = alreadyWorn;
     json out{{"item", aRequest.item}, {"slot", slot}, {"added", added}, {"previous", previous}};
     if (!equipped)
     {
-        const auto now = PollSlot(aOps, slot, std::string(), [&](const json& aNow) { return aNow.value("item", std::string()) == aRequest.item; });
-        equipped = now.value("item", std::string()) == aRequest.item;
+        const auto now = PollSlot(aOps, slot, aRequest.item, [](const json& aNow) { return aNow.value("matches", false); });
+        equipped = now.value("matches", false);
         if (!equipped)
         {
             out["note"] = "the game took the request, but the slot didn't show the item within the wait (it may still change)";
@@ -748,7 +781,7 @@ json InventoryEquip(const params::InventoryEquipRequest& aRequest, const Invento
         }
     }
     out["equipped"] = equipped;
-    if (!previous.empty() && previous != aRequest.item)
+    if (!previous.empty() && !alreadyWorn)
     {
         out["undo"] = {{"method", "inventory.equip"}, {"params", {{"item", previous}, {"slot", slot}}}};
         if (added)
@@ -780,7 +813,7 @@ json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const Inv
         // An added item that isn't worn (another item was equipped over it) is only removed.
         const auto now = aOps.slot(std::string(), aRequest.item);
         slot = now.value("slot", slot);
-        worn = now.value("item", std::string()) == aRequest.item;
+        worn = now.value("matches", false);
     }
     if (worn)
     {
@@ -825,50 +858,130 @@ json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const Inv
     return out;
 }
 
+// --- cc.confirm / cc.back ----------------------------------------------------------------------------
+
+LeaveRoute ChooseLeave(bool aKeep, const json& aState)
+{
+    if (!aKeep)
+    {
+        return LeaveRoute::Back;
+    }
+    const auto changes = aState.find("changes");
+    const auto unchanged = aState.find("unchanged");
+    const bool noChanges = changes != aState.end() && changes->is_number_integer() && changes->get<int64_t>() == 0;
+    const bool same = unchanged != aState.end() && unchanged->is_boolean() && unchanged->get<bool>();
+    return noChanges && same ? LeaveRoute::NothingToConfirm : LeaveRoute::Confirm;
+}
+
+int32_t LeaveRouteCode(LeaveRoute aRoute)
+{
+    switch (aRoute)
+    {
+    case LeaveRoute::Back:
+        return 0;
+    case LeaveRoute::Confirm:
+        return 1;
+    case LeaveRoute::NothingToConfirm:
+        return 2;
+    }
+    return 1;
+}
+
 // --- game.save / game.load --------------------------------------------------------------------------
+
+namespace
+{
+std::chrono::steady_clock::time_point Now(const Clock& aClock)
+{
+    return aClock ? aClock() : std::chrono::steady_clock::now();
+}
+
+// Takes the bridge's save lock back when this object goes out of scope, however that happens (RB-52).
+class RelockOnExit
+{
+public:
+    RelockOnExit(const SaveOps& aOps, bool aArmed) : m_ops(aOps), m_armed(aArmed) {}
+    RelockOnExit(const RelockOnExit&) = delete;
+    RelockOnExit& operator=(const RelockOnExit&) = delete;
+    ~RelockOnExit()
+    {
+        if (m_armed && m_ops.relock)
+        {
+            try
+            {
+                m_ops.relock();
+            }
+            catch (...)
+            {
+                // relock never throws by contract; a destructor must not either.
+            }
+        }
+    }
+
+private:
+    const SaveOps& m_ops;
+    bool m_armed;
+};
+} // namespace
 
 json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
 {
+    if (aOps.guard)
+    {
+        aOps.guard();
+    }
     const auto prepared = aOps.prepare();
     const bool released = prepared.value("lock_released", false);
+    // From here on, every way out of this function takes the released lock back.
+    RelockOnExit relock(aOps, released);
     if (released)
     {
+        const auto deadline = Now(aOps.now) + std::chrono::milliseconds(kSaveUnlockWaitMs);
         bool unlocked = false;
-        for (int32_t waited = 0; waited <= kSaveUnlockWaitMs; waited += 100)
+        while (true)
         {
             if (!aOps.status().value("locked", true))
             {
                 unlocked = true;
                 break;
             }
+            if (Now(aOps.now) >= deadline)
+            {
+                break;
+            }
             aOps.sleep(std::chrono::milliseconds(100));
         }
         if (!unlocked)
         {
-            aOps.relock();
             throw MethodError("saving_locked", "the game still reported saving locked after the bridge released its own lock, so nothing was "
                                                "saved; the bridge's lock is back on");
         }
     }
+    if (aOps.guard)
+    {
+        aOps.guard();
+    }
     aOps.save();
+    const auto deadline = Now(aOps.now) + std::chrono::milliseconds(aRequest.timeoutMs);
     std::string state = "pending";
-    for (int32_t waited = 0; waited <= aRequest.timeoutMs; waited += 200)
+    while (true)
     {
         aOps.sleep(std::chrono::milliseconds(200));
         state = aOps.status().value("state", std::string("pending"));
-        if (state == "saved" || state == "failed")
+        if (state == "saved" || state == "failed" || Now(aOps.now) >= deadline)
         {
             break;
         }
     }
+    const std::string lockNote = released ? "; the bridge's save lock is back on" : "";
     if (state == "failed")
     {
-        throw MethodError("save_failed", "the game answered that the manual save failed; nothing new was saved");
+        throw MethodError("save_failed", "the game answered that the manual save failed; nothing new was saved" + lockNote);
     }
     if (state != "saved")
     {
         throw MethodError("save_uncertain", "the game took the save request but didn't confirm it within " + std::to_string(aRequest.timeoutMs / 1000) +
-                                                " s; check the game's Load menu before saving again");
+                                                " s; check the game's Load menu before saving again" + lockNote);
     }
     json out{{"saved", true}, {"slot", "a new manual save (the game names it ManualSave-<n>)"}, {"lock_overridden", released}};
     if (!aRequest.name.empty())
@@ -918,17 +1031,23 @@ json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
     json out;
     if (aRequest.latest)
     {
+        if (aOps.guard)
+        {
+            aOps.guard();
+        }
         out = aOps.latest();
     }
     else
     {
+        // A fresh list for every load: the game's own list, as the Load menu would show it now.
         aOps.list();
+        const auto deadline = Now(aOps.now) + std::chrono::milliseconds(kSaveListWaitMs);
         json list;
-        for (int32_t waited = 0; waited <= kSaveListWaitMs; waited += 100)
+        while (true)
         {
             aOps.sleep(std::chrono::milliseconds(100));
             list = aOps.saves();
-            if (list.value("ready", false))
+            if (list.value("ready", false) || Now(aOps.now) >= deadline)
             {
                 break;
             }
@@ -957,7 +1076,12 @@ json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
                                                     "'; nothing was loaded (the game lists " + std::to_string(saves.size()) + " saves" +
                                                     (some.empty() ? "" : ": " + some + (saves.size() > 12 ? ", ..." : "")) + ")");
         }
-        out = aOps.load(index, saves[static_cast<size_t>(index)]);
+        if (aOps.guard)
+        {
+            aOps.guard();
+        }
+        // The load step looks this exact name up in the game's list again and loads that position.
+        out = aOps.load(saves[static_cast<size_t>(index)]);
     }
     out["undo"] = nullptr;
     out["undo_note"] = "loading can't be undone: everything since that save was discarded, the bridge's save lock with it";

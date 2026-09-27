@@ -84,7 +84,9 @@ struct LightOps
 //    offer it, it is skipped with a note (skipped: [{name, reason}]) instead of failing the call.
 //  - place "camera" switches the light off and on again (photo mode places a light where the camera is
 //    when it switches on); a position moves the light's entity and reads it back after a few frames
-//    (held: whether photo mode kept it there).
+//    (held: whether photo mode kept it there). Both record the light's earlier position for the undo
+//    (RB-59; camera reads it first); once a light has moved, a later failure names the undo that puts
+//    it back, and a failed read-back is reported (now_unknown), never a failure (RB-60).
 json LightSet(const params::LightRequest& aRequest, const LightOps& aOps);
 
 // --- inventory.equip / inventory.unequip --------------------------------------------------------------
@@ -96,7 +98,8 @@ struct InventoryOps
     std::function<json()> equip;
     // Game thread, step 1 of unequip: {slot, previous, was_empty}.
     std::function<json()> unequip;
-    // Game thread: what a slot holds now ({slot, item, empty}); by slot name or by an item's own slot.
+    // Game thread: what a slot holds now ({slot, item, empty, matches}); by slot name or by an item's own
+    // slot. matches: the slot holds aItem, compared by record ID in the script (RB-63).
     std::function<json(const std::string& aSlot, const std::string& aItem)> slot;
     // Game thread: removes an item the bridge added this session ({removed}).
     std::function<json(const std::string& aItem)> removeAdded;
@@ -115,8 +118,16 @@ json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const Inv
 
 // --- game.save / game.load --------------------------------------------------------------------------
 
+// A clock for the save and load waits (steady_clock::now when empty; the unit tests pass a fake that
+// their sleep advances).
+using Clock = std::function<std::chrono::steady_clock::time_point()>;
+
 struct SaveOps
 {
+    // Bridge thread, before each step that changes the game (releasing the lock, asking for the save):
+    // throws MethodError (killed, writes_paused) when the kill switch or the panel's pause came since the
+    // request arrived (RB-53). Optional.
+    std::function<void()> guard;
     // Game thread: checks the moment, and with override_lock releases the bridge's own save lock
     // ({lock_released}). Throws bridge_save_lock or saving_locked.
     std::function<json()> prepare;
@@ -124,23 +135,35 @@ struct SaveOps
     std::function<json()> status;
     // Game thread: asks for one new manual save ({requested}).
     std::function<json()> save;
-    // Game thread: takes the bridge's save lock again after a released lock wasn't used.
+    // Takes the bridge's save lock again after it was released. Never throws: when the game thread can't
+    // take it now (the kill switch closed the queue, a timeout), the plugin retakes it on the next tick.
     std::function<void()> relock;
     std::function<void(std::chrono::milliseconds)> sleep;
+    Clock now;
 };
 inline constexpr int32_t kSaveUnlockWaitMs = 3000;
 
 // game.save: prepare, wait for a released lock to go (kSaveUnlockWaitMs), save, then wait for the game's
 // answer (aRequest.timeoutMs). saved: {saved: true, ...}; failed: save_failed; no answer: save_uncertain.
+// The waits are steady-clock deadlines (RB-55). Once prepare has released the bridge's lock, every way
+// out takes it back (RB-52): success, a refusal, the kill switch or pause (guard), a game-thread timeout,
+// save() throwing, save_failed and save_uncertain.
+//
+// Worst case on the server, with T the longest game-thread step (request_timeout_ms to start plus the
+// queue's running grace, GameThreadQueue::kDefaultRunningGrace; 2000 + 1000 ms by default): prepare T, the unlock wait kSaveUnlockWaitMs plus one status step T, save T, the answer wait
+// timeoutMs plus one status step T, and the relock T: timeoutMs + kSaveUnlockWaitMs + 5 T. The tools'
+// client timeout is derived from this (tools/api/catalogue.ts, saveClientTimeoutMs).
 json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps);
 
 struct LoadOps
 {
-    std::function<json()> latest;                                         // game thread: quick-load path
-    std::function<json()> list;                                           // game thread: ask for the save list
-    std::function<json()> saves;                                          // game thread: {ready, saves: [...]}
-    std::function<json(int32_t aIndex, const std::string& aName)> load; // game thread: load that save
+    std::function<void()> guard;                                  // as SaveOps::guard, before loading
+    std::function<json()> latest;                                 // game thread: quick-load path
+    std::function<json()> list;                                   // game thread: ask for the save list again
+    std::function<json()> saves;                                  // game thread: {ready, saves: [...]}
+    std::function<json(const std::string& aName)> load;           // game thread: look the name up in the list and load it
     std::function<void(std::chrono::milliseconds)> sleep;
+    Clock now;
 };
 inline constexpr int32_t kSaveListWaitMs = 5000;
 
@@ -148,9 +171,26 @@ inline constexpr int32_t kSaveListWaitMs = 5000;
 // none, -2 when several match ignoring case.
 int32_t FindSave(const std::vector<std::string>& aSaves, const std::string& aName);
 
-// game.load: latest, or the save by name from the game's list (kSaveListWaitMs). The answer lists some
-// names when the name isn't found.
+// game.load: latest, or the save by name. By name, the game's list is fetched again for every load
+// (kSaveListWaitMs, a steady-clock deadline), the name is resolved in it (FindSave), and the load step
+// looks that exact name up again in the game's list in the same game-thread step as it loads, so a list
+// that changed since can't load another save (RB-58). The answer lists some names when the name isn't
+// found. Worst case on the server: list T, the wait kSaveListWaitMs plus one step T, load T:
+// kSaveListWaitMs + 3 T (tools/api/catalogue.ts, loadClientTimeoutMs).
 json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps);
+
+// cc.confirm / cc.back: how the appearance screen is left. Back discards every change on the screen, so
+// cc.confirm uses it only when it is certain nothing changed (RB-51): aState is the script's
+// {changes, unchanged} (change events of every kind since the screen opened; every option equal to the
+// snapshot taken when the screen set its options up). A missing or unexpected value counts as changed.
+enum class LeaveRoute
+{
+    Confirm,          // ConfirmCustomizedCharacter: the look is kept
+    Back,             // cc.back: every change discarded
+    NothingToConfirm, // cc.confirm with certainly nothing changed: closed through Back, nothing discarded
+};
+LeaveRoute ChooseLeave(bool aKeep, const json& aState);
+int32_t LeaveRouteCode(LeaveRoute aRoute); // the script's mode: 0 Back, 1 Confirm, 2 NothingToConfirm
 
 // What CreatorOpen needs from the game. Each game step throws MethodError to refuse.
 struct CreatorOpenOps

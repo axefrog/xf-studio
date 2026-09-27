@@ -240,7 +240,9 @@ export async function runScript(
   let failed = false;
   let interrupted = false;
   let crash: string | null = null;
-  let paused: { at: string; next?: string } | null = null;
+  let paused: { at: string; next?: string; text?: string } | null = null;
+  // An ask shown in the game and not yet answered: cleared in the finally below, however the run ends (RB-64).
+  let askShown = false;
   let skipping = options.from !== undefined;
   const signal = options.signal;
   const steps = plan.filter((p) => p.phase === "steps");
@@ -262,11 +264,15 @@ export async function runScript(
       if (planned.step.replaced_by) record.replaced_by = planned.step.replaced_by;
       log(`     ASK: ${planned.text}`);
       record.echoed = await echo({ text: planned.text!.slice(0, 500), level: "ask", seconds: ECHO_ASK_SECONDS });
+      askShown = askShown || record.echoed === true;
       if (options.ask) {
         await untilAborted(options.ask(planned.text!, planned.label), stepSignal);
-        if (record.echoed) await echo({ clear: true });
+        if (askShown && !stepSignal?.aborted) {
+          await echo({ clear: true });
+          askShown = false;
+        }
       } else {
-        paused = { at: planned.label, next: nextLabel(planned) };
+        paused = { at: planned.label, next: nextLabel(planned), text: planned.text };
         record.skipped = true;
       }
     } else {
@@ -335,6 +341,12 @@ export async function runScript(
     failed = true;
     log(`The session stopped on an unexpected error: ${crash}`);
   } finally {
+    // An ask still on screen (interrupted while waiting, a crash, or a pause at an ask) is taken down
+    // first; a paused run shows its own closing line below instead (RB-64).
+    if (askShown) {
+      await echo({ clear: true });
+      askShown = false;
+    }
     // Restore runs exactly once, after a finished, failed, interrupted or crashed run, and never
     // when the run only paused at an ask (the session continues later). It isn't interrupted by
     // the same Ctrl+C; the command line exits at once on a second one.
@@ -349,7 +361,10 @@ export async function runScript(
     }
   }
 
-  if (!paused) {
+  // The closing line, always (RB-64): a paused run says where it waits and what it waits for.
+  if (paused) {
+    await echo({ text: `XF session paused at "${paused.at}"${paused.text ? `: ${paused.text}` : ""}`.slice(0, 500), level: "ask", seconds: ECHO_ASK_SECONDS });
+  } else {
     await echo({ text: `XF session ${interrupted ? "stopped" : failed ? "stopped early" : "complete"}: ${script.title ?? script.name}`, level: failed ? "warn" : "done", seconds: 15 });
   }
   const after = { bridge: await snapshot("bridge.info"), game: await snapshot("game.status") };

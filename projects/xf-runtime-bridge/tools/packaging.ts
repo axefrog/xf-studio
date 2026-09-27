@@ -34,6 +34,16 @@ export const PLUGIN_DIR = "red4ext/plugins/XFRuntimeBridge";
 // profile's Portrait Enhancer .tweak file overriding the XF presets (its presets 5-9 roll the camera 90
 // degrees); read last, the XF values win.
 export const PRESETS_FILE = "r6/tweaks/XFRuntimeBridge/^xf_photo_mode_presets.yaml";
+/** The presets file's name before 0.4.0; a manual upgrade leaves it behind (RB-65), so staging removes it. */
+export const OLD_PRESETS_FILE = "r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml";
+/**
+ * What whoever stages a test package must do or know beyond copying its files (RB-65); in the manifest,
+ * the README's packaging notes and the test card's restage step.
+ */
+export const STAGING_NOTES: readonly string[] = [
+  `Replace the mod's files rather than copying over them, and make sure ${OLD_PRESETS_FILE} (0.3.x's name) is gone: with both present TweakXL still reads the new file last, but the leftover is confusing.`,
+  `${PRESETS_FILE} is read after every other tweak file, so for the whole profile it overrides any other mod's photo_mode.std_preset_6..9 (Portrait Enhancer's among them); stage this package only in the dedicated test profile.`,
+];
 export const CET_DIR = "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge";
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 
@@ -113,6 +123,8 @@ export type Manifest = {
   allow_creator_leave: boolean;
   allow_live_pose: boolean;
   photo_mode_presets: string | null;
+  /** Steps and consequences for staging by hand (RB-65); empty for the default package, which carries no presets. */
+  staging_notes: string[];
   cet_panel: boolean;
   commit: string;
   source_tree_clean: true;
@@ -164,6 +176,7 @@ export function stageVariant(options: StageOptions): Manifest {
     allow_creator_leave: variant === "writes",
     allow_live_pose: variant === "writes",
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,
+    staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,

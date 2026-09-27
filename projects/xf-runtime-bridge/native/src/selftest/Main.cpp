@@ -248,6 +248,7 @@ int wmain(int argc, wchar_t** argv)
         bool creatorOpens = true;   // selftest.phase {creator_opens: false} simulates a request the menu never picks up
         int creatorOpenTicks = -1;  // >= 0: the simulated menu opens the screen after this many more ticks
         std::string creatorMode;
+        int creatorChanges = 0; // change events on the simulated appearance screen since it opened (cc.confirm, RB-51)
         bool saveLock = false;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
         std::string player = "v";            // selftest.phase {player: "johnny"}: a stand-in, not V
@@ -353,6 +354,10 @@ int wmain(int argc, wchar_t** argv)
                          "Sets the simulated game phase (self-test only).", [](const xfb::MethodContext& aContext) {
                              std::scoped_lock _(sim.mutex);
                              sim.phase = aContext.params.value("phase", std::string("gameplay"));
+                             if (sim.phase == "character_menu")
+                             {
+                                 sim.creatorChanges = 0; // a freshly opened simulated screen
+                             }
                              sim.creatorOpens = aContext.params.value("creator_opens", true);
                              sim.player = aContext.params.value("player", std::string("v"));
                              return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}, {"player", sim.player}};
@@ -690,6 +695,11 @@ int wmain(int argc, wchar_t** argv)
                                      {
                                          throw xfb::MethodError("bad_params", "simulated: option has values 0 to 12");
                                      }
+                                     if (index != 0)
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         ++sim.creatorChanges;
+                                     }
                                      return json{{"simulated", true}, {"option", request.option}, {"before", 0}, {"after", index}, {"matched_by", matchedBy},
                                                  {"undo", {{"method", "cc.apply"}, {"params", {{"option", request.option}, {"index", 0}}}}}};
                                  }));
@@ -703,8 +713,17 @@ int wmain(int argc, wchar_t** argv)
             {
                 throw xfb::MethodError("not_in_character_menu", "simulated: the game is in '" + sim.phase + "'");
             }
+            // The plugin's own choice of route (core/Writes.cpp), from the simulated screen's state.
+            const auto route = w::ChooseLeave(aKeep, json{{"changes", sim.creatorChanges}, {"unchanged", sim.creatorChanges == 0}});
             sim.phase = "gameplay";
-            return json{{"simulated", true}, {"kept", aKeep}, {"undo", nullptr}};
+            const bool nothing = route == w::LeaveRoute::NothingToConfirm;
+            json out{{"simulated", true}, {"kept", route == w::LeaveRoute::Confirm}, {"changed", sim.creatorChanges > 0},
+                     {"changes", sim.creatorChanges}, {"closed_with", route == w::LeaveRoute::Confirm ? "confirm" : "back"}, {"undo", nullptr}};
+            if (nothing)
+            {
+                out["note"] = "nothing to confirm: no option changed on this screen, so it was closed with Back (nothing was discarded)";
+            }
+            return out;
         };
     };
     // cc.open, simulated with the plugin's own sequence (core/Writes.cpp): the simulated menu opens the
@@ -1084,7 +1103,7 @@ int wmain(int argc, wchar_t** argv)
             std::scoped_lock _(sim.mutex);
             const auto slot = aItem.empty() ? aSlot : slotOf(aItem);
             const auto item = sim.worn.count(slot) ? sim.worn[slot] : std::string();
-            return json{{"slot", slot}, {"item", item}, {"empty", item.empty()}};
+            return json{{"slot", slot}, {"item", item}, {"empty", item.empty()}, {"matches", !aItem.empty() && item == aItem}};
         };
         ops.removeAdded = [](const std::string& aItem) {
             std::scoped_lock _(sim.mutex);
@@ -1178,9 +1197,10 @@ int wmain(int argc, wchar_t** argv)
                                      return out;
                                  }));
     dispatcher.Register(simWrite("game.save", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Manual save (simulated).",
-                                 [&queue](const xfb::MethodContext& aContext) {
+                                 [&queue, &dispatcher](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseGameSave(aContext.params);
                                      w::SaveOps ops;
+                                     ops.guard = [&dispatcher] { dispatcher.RequireWritesOpen(); };
                                      ops.prepare = [&request] {
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.phase != "gameplay")
@@ -1208,20 +1228,21 @@ int wmain(int argc, wchar_t** argv)
                                              },
                                              "game.save.status");
                                      };
-                                     ops.save = [] {
+                                     ops.save = [&request] {
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.gameSaveLock || sim.saveLock)
                                          {
                                              throw xfb::MethodError("saving_locked", "simulated: saving is locked");
                                          }
                                          sim.saveState = "pending";
-                                         sim.saveTicks = 3;
+                                         sim.saveTicks = request.name == "never answered" ? -1 : 3;
                                          return json{{"requested", true}};
                                      };
                                      ops.relock = [] {
                                          std::scoped_lock _(sim.mutex);
                                          sim.gameSaveLock = true;
                                          sim.relockAfterSave = false;
+                                         sim.unlockTicks = -1;
                                      };
                                      ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
                                      auto out = w::GameSave(request, ops);
@@ -1229,7 +1250,7 @@ int wmain(int argc, wchar_t** argv)
                                      return out;
                                  }));
     dispatcher.Register(simWrite("game.load", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Load (simulated).",
-                                 [&queue](const xfb::MethodContext& aContext) {
+                                 [&queue, &dispatcher](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseGameLoad(aContext.params);
                                      const auto refuse = [] {
                                          if (sim.phase != "gameplay" && sim.phase != "menu" && sim.phase != "paused")
@@ -1238,6 +1259,7 @@ int wmain(int argc, wchar_t** argv)
                                          }
                                      };
                                      w::LoadOps ops;
+                                     ops.guard = [&dispatcher] { dispatcher.RequireWritesOpen(); };
                                      ops.latest = [refuse] {
                                          std::scoped_lock _(sim.mutex);
                                          refuse();
@@ -1261,12 +1283,18 @@ int wmain(int argc, wchar_t** argv)
                                              },
                                              "game.load.saves");
                                      };
-                                     ops.load = [refuse](int32_t aIndex, const std::string& aName) {
+                                     ops.load = [refuse](const std::string& aName) {
                                          std::scoped_lock _(sim.mutex);
                                          refuse();
+                                         // As XFGame.LoadNamed: the exact name, looked up in the list the game just sent.
+                                         const auto at = std::find(sim.saves.begin(), sim.saves.end(), aName);
+                                         if (!sim.savesReady || at == sim.saves.end() || std::count(sim.saves.begin(), sim.saves.end(), aName) != 1)
+                                         {
+                                             throw xfb::MethodError("save_not_found", "simulated: the game's save list no longer has '" + aName + "'");
+                                         }
                                          sim.phase = "loading";
                                          sim.loadTicks = 4;
-                                         return json{{"requested", true}, {"route", "name"}, {"name", aName}, {"index", aIndex}};
+                                         return json{{"requested", true}, {"route", "name"}, {"name", aName}, {"index", at - sim.saves.begin()}};
                                      };
                                      ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
                                      auto out = w::GameLoad(request, ops);
@@ -1301,6 +1329,14 @@ int wmain(int argc, wchar_t** argv)
             out["carrier_restored"] = true;
             sim.carrier = sim.carrierOriginal;
             sim.carrierWritten = false;
+        }
+        // A save with override_lock cut off by the kill switch: its lock goes back on (RB-52).
+        if (sim.relockAfterSave)
+        {
+            sim.relockAfterSave = false;
+            sim.gameSaveLock = true;
+            sim.unlockTicks = -1;
+            out["save_lock_retaken"] = true;
         }
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
@@ -1423,6 +1459,7 @@ int wmain(int argc, wchar_t** argv)
                     if (sim.phase == "gameplay")
                     {
                         sim.phase = "character_menu";
+                        sim.creatorChanges = 0;
                     }
                 }
             }

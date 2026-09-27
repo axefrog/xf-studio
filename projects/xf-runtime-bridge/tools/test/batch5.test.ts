@@ -75,6 +75,32 @@ describe("ui.message and the session runner's echo", () => {
     expect(after.some((t) => t.startsWith("done:XF session complete"))).toBe(true);
   });
 
+  test("RB-64: an interrupted run takes its ask down; a paused run says where it waits", async () => {
+    await api.run("ui.message", { clear: true });
+    const controller = new AbortController();
+    const script: SessionScript = { schema: SCRIPT_SCHEMA, name: "interrupted", steps: [{ do: "ask", label: "a1", text: "Press Confirm in the creator." }] };
+    const interrupted = await runScript(script, {
+      api,
+      outDir: tempDir("xfb-b5-int-"),
+      log: () => {},
+      signal: controller.signal,
+      ask: () => {
+        controller.abort();
+        return new Promise<void>(() => {}); // the player never answers
+      },
+    });
+    expect(interrupted.outcome).toBe("interrupted");
+    const afterInterrupt = await texts(api);
+    expect(afterInterrupt.some((t) => t.includes("Press Confirm"))).toBe(false);
+    expect(afterInterrupt.some((t) => t.startsWith("warn:XF session stopped"))).toBe(true);
+
+    await api.run("ui.message", { clear: true });
+    const paused = await runScript(script, { api, outDir: tempDir("xfb-b5-pause-"), log: () => {} });
+    expect(paused.outcome).toBe("paused");
+    const afterPause = await texts(api);
+    expect(afterPause.filter((t) => t.includes("Press Confirm"))).toEqual(['ask:XF session paused at "a1": Press Confirm in the creator.']);
+  });
+
   test("--no-echo (echo: false) shows nothing", async () => {
     await api.run("ui.message", { clear: true });
     const result = await runScript(
@@ -136,23 +162,55 @@ describe("inventory, saves and loading (write classes inventory and save)", () =
     expect(state.save_lock).toBe(true);
   }, 20000);
 
+  test("RB-52: a save the game never confirms (save_uncertain) still takes the bridge's lock back", async () => {
+    await bridge(api, "selftest.phase", { phase: "gameplay" });
+    expect((await bridge(api, "selftest.state")).save_lock).toBe(true);
+    const uncertain = await api.run("game.save", { name: "never answered", override_lock: true, timeout_ms: 2000 });
+    expect(!uncertain.ok && uncertain.error.code, JSON.stringify(uncertain)).toBe("save_uncertain");
+    expect((await bridge(api, "selftest.state")).save_lock).toBe(true);
+  }, 20000);
+
+  test("with changes paused in the panel, game.save and game.load are refused and change nothing (the mid-way checks, RB-53, are unit checks)", async () => {
+    await bridge(api, "selftest.pause_writes", { paused: true });
+    try {
+      const save = await api.run("game.save", { name: "paused", override_lock: true });
+      expect(!save.ok && save.error.code).toBe("writes_paused");
+      const load = await api.run("game.load", { latest: true, discard_unsaved: true });
+      expect(!load.ok && load.error.code).toBe("writes_paused");
+      expect((await bridge(api, "selftest.state")).save_lock).toBe(true);
+    } finally {
+      await bridge(api, "selftest.pause_writes", { paused: false });
+    }
+  });
+
+  test("RB-56: game.load is refused without discard_unsaved: true, in plain words, at the tools and at the plugin", async () => {
+    const tools = await api.run("game.load", { latest: true });
+    expect(!tools.ok && tools.error.code).toBe("bad_input");
+    const refusedFalse = await api.run("game.load", { latest: true, discard_unsaved: false });
+    expect(!refusedFalse.ok && refusedFalse.error.message).toContain("discard_unsaved: true");
+    const plugin = await api.callBridge("game.load", { latest: true }, "t-rb56");
+    expect(!plugin.ok && plugin.error.code).toBe("bad_params");
+    expect(!plugin.ok && plugin.error.detail).toContain("discard_unsaved");
+    expect((await bridge(api, "selftest.state")).phase).toBe("gameplay");
+  });
+
   test("game.load by name loads that save (the lock goes with it); an unknown name lists the game's saves", async () => {
-    const missing = await api.run("game.load", { name: "ManualSave-99" });
+    const missing = await api.run("game.load", { name: "ManualSave-99", discard_unsaved: true });
     expect(!missing.ok && missing.error.code).toBe("save_not_found");
     expect(!missing.ok && missing.error.detail).toContain("AutoSave-1");
-    const both = await api.run("game.load", { latest: true, name: "AutoSave-1" });
+    const both = await api.run("game.load", { latest: true, name: "AutoSave-1", discard_unsaved: true });
     expect(!both.ok && both.error.code).toBe("bad_input");
     await bridge(api, "selftest.phase", { phase: "photo_mode" });
-    const inPhoto = await api.run("game.load", { latest: true });
+    const inPhoto = await api.run("game.load", { latest: true, discard_unsaved: true });
     expect(!inPhoto.ok && inPhoto.error.code).toBe("not_in_gameplay");
     await bridge(api, "selftest.phase", { phase: "gameplay" });
-    const loaded = await api.run("game.load", { name: "autosave-1" });
+    const loaded = await api.run("game.load", { name: "autosave-1", discard_unsaved: true });
     expect(loaded.ok, JSON.stringify(loaded)).toBe(true);
     if (loaded.ok) expect(loaded.result).toMatchObject({ requested: true, route: "name", name: "AutoSave-1" });
     const waited = await api.run("game.wait", { phase: ["gameplay"], timeout_ms: 5000 });
     expect(waited.ok).toBe(true);
     expect((await bridge(api, "selftest.state")).save_lock).toBe(false);
-    const latest = await api.run("game.load", { latest: true });
+    const latest = await api.run("game.load", { latest: true, discard_unsaved: true });
     expect(latest.ok && (latest.result as { route: string }).route).toBe("latest");
     await api.run("game.wait", { phase: ["gameplay"], timeout_ms: 5000 });
   }, 20000);

@@ -124,7 +124,7 @@ The prototype is `projects/xf-runtime-bridge/tools/lighting/mirror-map.ts` with 
 3. Is a spot light's +Y its axis for a spawned entity, and does the engine's lumen conversion treat inverse-square and linear lights the same way (the creator calibration's open question 9)?
 4. CharLi's template light settings (unit, falloff, softness, shadows): read with a WolvenKit build that accepts the 2023 format, within a memory budget.
 5. Does pinning `ExposureAreaSettings` hold photo mode's exposure fixed, and is it restored cleanly?
-6. Can the photo-mode lights themselves be moved with the teleportation facility, or does photo mode re-place them every frame? The entity route is built (bridge 0.4, `photo.light.set` `place`, which reports `held`); the [session-4 preflight](../research/runtime/runtime-bridge-test-card.md#session-4-preflight-bridge-040) answers it.
+6. Can the photo-mode lights themselves be moved with the teleportation facility, or does photo mode re-place them every frame? The entity route is built (bridge 0.4, `photo.light.set` `place`, which reports `held`). Since 0.4.1 it moves an entity only when the light indicator's projection for that index names a `gamePhotomodeLightObject` (checked by class name with `IScriptable.IsA`, since the class has no script declaration), no other light's projection names the same entity, and the indicator, when it shows a light, shows that one (`PhotomodeLightIndicatorController.m_activeIndex`); whether those checks hold in game is part of the preflight [offline]; the [session-4 preflight](../research/runtime/runtime-bridge-test-card.md#session-4-preflight-bridge-041) answers it.
 
 ## Sources
 

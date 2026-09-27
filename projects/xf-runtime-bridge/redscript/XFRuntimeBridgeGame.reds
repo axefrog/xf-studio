@@ -201,7 +201,10 @@ public abstract class XFInventory {
       return XFJson.Fail("bad_params", "unknown clothing slot '" + area + "'");
     }
     let now = XFInventory.Equipped(player, type);
-    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(now)) + ",\"empty\":" + XFJson.Flag(!ItemID.IsValid(now)) + "}";
+    // Whether the slot holds the item asked about, compared by record ID here rather than by debug name in
+    // the plugin (RB-63).
+    let matches = StrLen(item) > 0 && ItemID.IsValid(now) && ItemID.GetTDBID(now) == TDBID.Create(item);
+    return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(now)) + ",\"empty\":" + XFJson.Flag(!ItemID.IsValid(now)) + ",\"matches\":" + XFJson.Flag(matches) + "}";
   }
 
   // Step 1 of inventory.unequip: the slot by name, or the slot the item's record uses.
@@ -237,24 +240,30 @@ public abstract class XFInventory {
     return "{\"ok\":true,\"slot\":" + XFJson.Str(XFInventory.AreaName(type)) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(before)) + ",\"was_empty\":" + XFJson.Flag(!ItemID.IsValid(before)) + "}";
   }
 
-  // Removes an item from V's inventory, only one the bridge added this session, and only when it isn't worn.
+  // Removes an item from V's inventory, only the copy the bridge itself added this session (its own ItemID,
+  // RB-63: never another copy of the same record V has), and only when it isn't worn.
   public static func RemoveAdded(cid: String, item: String) -> String {
     let player = XFInventory.Player();
     if !IsDefined(player) {
       return XFJson.Fail("not_in_gameplay", "V isn't in the world");
     }
     let registry = XFBridgeRegistry.Get();
-    let id = XFInventory.FindItem(player, TDBID.Create(item));
-    if !ItemID.IsValid(id) {
-      return "{\"ok\":true,\"removed\":false,\"note\":\"V doesn't have it\"}";
+    if !IsDefined(registry) {
+      return XFJson.Fail("game_not_ready", "no game session yet");
     }
-    if !IsDefined(registry) || !registry.WasAddedByBridge(id) {
+    let id = registry.AddedItemFor(TDBID.Create(item));
+    if !ItemID.IsValid(id) {
       return XFJson.Fail("not_added_by_bridge", "'" + item + "' wasn't added by the bridge this session, so it stays in V's inventory");
+    }
+    let system = GameInstance.GetTransactionSystem(GetGameInstance());
+    if !system.HasItem(player, id) {
+      registry.ForgetAddedItem(id);
+      return "{\"ok\":true,\"removed\":false,\"note\":\"V no longer has the copy the bridge added\"}";
     }
     if EquipmentSystem.GetInstance(player).IsEquipped(player, id) {
       return XFJson.Fail("busy", "'" + item + "' is still worn; unequip it first");
     }
-    let removed = GameInstance.GetTransactionSystem(GetGameInstance()).RemoveItem(player, id, 1);
+    let removed = system.RemoveItem(player, id, 1);
     if removed {
       registry.ForgetAddedItem(id);
     }
@@ -364,6 +373,19 @@ public abstract class XFGame {
     }
   }
 
+  // The plugin's last step of every game.save that released the lock, whatever happened (RB-52): takes the
+  // bridge's save lock back now (nothing to do when the save's completion already did) and cancels the
+  // pending relock, so a save finishing later doesn't ask for it twice.
+  public static func Retake(cid: String) -> String {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) {
+      return XFJson.Fail("game_not_ready", "no game session yet");
+    }
+    registry.SetRelockAfterSave(false);
+    XFBridgeActions.EnsureSaveLock(cid);
+    return "{\"ok\":true,\"save_lock_held\":" + XFJson.Flag(registry.IsSaveLockHeld()) + "}";
+  }
+
   public static func LoadRefusal() -> String {
     let phase = XFBridgeActions.Phase();
     if Equals(phase, "gameplay") || Equals(phase, "menu") || Equals(phase, "paused") {
@@ -422,19 +444,36 @@ public abstract class XFGame {
     return out + "]}";
   }
 
-  // game.load by name, step 2: the save at this position of the game's list.
-  public static func LoadIndex(cid: String, index: Int32, name: String) -> String {
+  // game.load by name, step 2: looks the exact name up in the list the game just sent (fetched again for
+  // this load) and loads that position, in the same game-thread step (RB-58). A name that is missing or
+  // listed twice loads nothing.
+  public static func LoadNamed(cid: String, name: String) -> String {
     let refusal = XFGame.LoadRefusal();
     if StrLen(refusal) > 0 {
       return refusal;
     }
     let registry = XFBridgeRegistry.Get();
+    let handler = XFGame.Handler();
+    if !IsDefined(registry) || !IsDefined(handler) || !registry.SavesReady() {
+      return XFJson.Fail("unavailable", "the game's save list isn't available; nothing was loaded");
+    }
     let saves = registry.Saves();
-    if index < 0 || index >= ArraySize(saves) || NotEquals(saves[index], name) {
-      return XFJson.Fail("save_not_found", "the save list changed; try again");
+    let index = -1;
+    let i = 0;
+    while i < ArraySize(saves) {
+      if Equals(saves[i], name) {
+        if index >= 0 {
+          return XFJson.Fail("save_not_found", "the game lists more than one save named '" + name + "'; nothing was loaded");
+        }
+        index = i;
+      }
+      i += 1;
+    }
+    if index < 0 {
+      return XFJson.Fail("save_not_found", "the game's save list no longer has '" + name + "'; nothing was loaded");
     }
     XFBridgeLog.Warn(cid, "game.load: loading '" + name + "' (position " + IntToString(index) + "); everything since it is discarded, the bridge's save lock with it");
-    XFGame.Handler().LoadSavedGame(index);
+    handler.LoadSavedGame(index);
     return "{\"ok\":true,\"requested\":true,\"route\":\"name\",\"name\":" + XFJson.Str(name) + "}";
   }
 }

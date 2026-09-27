@@ -306,7 +306,7 @@ GameSaveRequest ParseGameSave(const json& aParams)
 
 GameLoadRequest ParseGameLoad(const json& aParams)
 {
-    RequireOnly(aParams, {"latest", "name"});
+    RequireOnly(aParams, {"latest", "name", "discard_unsaved"});
     GameLoadRequest request;
     request.latest = Boolean(aParams, "latest").value_or(false);
     if (const auto name = Text(aParams, "name", 64))
@@ -321,6 +321,14 @@ GameLoadRequest ParseGameLoad(const json& aParams)
     {
         Bad("give latest: true or a save's name (one of them)");
     }
+    // Loading throws away everything since that save, and the game's own unsaved-progress question isn't
+    // asked on this route, so the caller says so explicitly (RB-56).
+    if (!Boolean(aParams, "discard_unsaved").value_or(false))
+    {
+        Bad("loading a save discards everything since it (unsaved progress included) and the game won't ask first; "
+            "pass discard_unsaved: true to load anyway");
+    }
+    request.discardUnsaved = true;
     return request;
 }
 

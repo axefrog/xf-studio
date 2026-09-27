@@ -845,6 +845,18 @@ json InventoryUnequipMethod(const MethodContext& aContext)
     return writes::InventoryUnequip(request, ops);
 }
 
+// Multi-step writes check the kill switch and the panel's pause again before each step that changes the
+// game (RB-53); the dispatcher only checks them when the request arrives.
+std::function<void()> WritesGuard()
+{
+    return [] {
+        if (auto& state = Get(); state.bridge)
+        {
+            state.bridge->GetDispatcher().RequireWritesOpen();
+        }
+    };
+}
+
 json GameSaveMethod(const MethodContext& aContext)
 {
     const auto request = params::ParseGameSave(aContext.params);
@@ -872,16 +884,20 @@ json GameSaveMethod(const MethodContext& aContext)
             },
             "game.save");
     };
+    // Takes the bridge's save lock back through the queue; when that can't happen now (the kill switch
+    // closed the queue, a timeout), the next Running tick retakes it directly (Main.cpp, RB-52).
     ops.relock = [&queue, cid] {
         try
         {
-            RunGameTask(queue, Timeout(), [cid] { return CallScript("XFBridgeActions", "SaveLock", {}, {}, cid); }, "game.save.relock");
+            RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "Retake", {}, {}, cid); }, "game.save.relock");
         }
-        catch (const MethodError& e)
+        catch (const std::exception& e)
         {
-            log::Warn("game.save_relock_failed", std::string("what=") + e.what(), cid);
+            Get().relockOwed.store(true);
+            log::Warn("game.save_relock_deferred", std::string("what=") + e.what() + " (retaken on the next game tick)", cid);
         }
     };
+    ops.guard = WritesGuard();
     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
     return writes::GameSave(request, ops);
 }
@@ -901,16 +917,16 @@ json GameLoadMethod(const MethodContext& aContext)
     ops.saves = [&queue, cid] {
         return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "Saves", {}, {}, cid); }, "game.load.saves");
     };
-    ops.load = [&queue, cid](int32_t aIndex, const std::string& aName) {
+    ops.load = [&queue, cid](const std::string& aName) {
         return RunGameTask(
             queue, Timeout(),
-            [cid, aIndex, aName] {
-                int32_t index = aIndex;
+            [cid, aName] {
                 RED4ext::CString name(aName.c_str());
-                return CallScript("XFGame", "LoadIndex", {"Int32", "String"}, {&index, &name}, cid);
+                return CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
             },
             "game.load");
     };
+    ops.guard = WritesGuard();
     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
     return writes::GameLoad(request, ops);
 }
@@ -1143,8 +1159,11 @@ json CreatorLeave(const MethodContext& aContext, bool aKeep)
 {
     params::RequireOnly(aContext.params, {});
     params::CreatorLeaveAllowed(Get().config.allowCreatorLeave);
-    bool keep = aKeep;
-    auto result = CallScript("XFCharacter", "Leave", {"Bool"}, {&keep}, aContext.cid);
+    // Read what changed, choose the route (core/Writes.cpp, unit-tested; RB-51), then leave: both on the
+    // game thread in the same step, so nothing can change in between.
+    const auto state = CallScript("XFCharacter", "LeaveState", {}, {}, aContext.cid);
+    int32_t mode = writes::LeaveRouteCode(writes::ChooseLeave(aKeep, state));
+    auto result = CallScript("XFCharacter", "Leave", {"Int32"}, {&mode}, aContext.cid);
     result["undo"] = nullptr;
     result["undo_note"] = aKeep ? "the look is kept in the running game; load the safety save to undo it"
                                 : "every change made on the appearance screen was discarded; nothing to undo";
@@ -1415,6 +1434,16 @@ void RestoreAfterKill()
     }
     const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
     log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
+}
+
+void RetakeOwedSaveLock()
+{
+    if (!Get().relockOwed.exchange(false))
+    {
+        return;
+    }
+    const auto result = CallScript("XFGame", "Retake", {}, {}, "save-relock");
+    log::Info("game.save_relocked", SerializeJson(result), "save-relock");
 }
 
 void ReleaseCursorAfterIdle()

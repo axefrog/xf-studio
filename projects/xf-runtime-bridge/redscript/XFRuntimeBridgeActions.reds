@@ -82,12 +82,16 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // so a cc.open that timed out can tell "nothing will open" from "the screen may still open" (RB-42).
   private let m_ccOpenOutcome: String;
   private let m_ccOpenOutcomeCid: String;
-  // The appearance screen's changes (session 3's busy flag): how many real changes the screen made since
-  // it opened, when the last one started (engine time; 0 when none is pending) and when the bridge first
-  // saw the busy flag set without a pending change it knows of.
+  // The appearance screen's changes (session 3's busy flag): how many change events the screen had since it
+  // opened (a row, the system route, a colour, a preset, randomize; RB-51), when the last row change started
+  // (engine time; 0 when none is pending), when the bridge first saw the busy flag set without a pending
+  // change it knows of, whether a change still in flight was logged, and every option's value when the
+  // screen set its options up (cc.confirm closes with Back only when nothing differs from it).
   private let m_ccChanges: Int32;
   private let m_ccPendingSince: Float;
   private let m_ccBusySeenAt: Float;
+  private let m_ccInFlightLogged: Bool;
+  private let m_ccSnapshot: String;
   // inventory.equip: items the bridge itself added to V's inventory this session (only these may be removed again).
   private let m_addedItems: array<ItemID>;
   // game.save: the last manual save's state ("none", "pending", "saved", "failed"), and whether the
@@ -295,17 +299,50 @@ public class XFBridgeRegistry extends ScriptableSystem {
     this.m_ccChanges = 0;
     this.m_ccPendingSince = 0.0;
     this.m_ccBusySeenAt = 0.0;
+    this.m_ccInFlightLogged = false;
+    this.m_ccSnapshot = "";
   }
 
+  // The options as the screen set them up (OnInitializeOptionsList); "" until then.
+  public func NoteCreatorSnapshot(snapshot: String) -> Void {
+    this.m_ccSnapshot = snapshot;
+  }
+
+  // True only when the screen's options were recorded when it set them up and every one still has that value.
+  public func CreatorUnchangedSince(now: String) -> Bool {
+    return StrLen(this.m_ccSnapshot) > 0 && Equals(this.m_ccSnapshot, now);
+  }
+
+  // A row change that sets the busy flag: counted, and pending until its completion event.
   public func NoteCreatorChange(now: Float) -> Void {
     this.m_ccChanges += 1;
     this.m_ccPendingSince = MaxF(now, 0.001);
     this.m_ccBusySeenAt = 0.0;
+    this.m_ccInFlightLogged = false;
+  }
+
+  // Any other change event (the system route, a colour, a preset, randomize, the system's option updates):
+  // counted only.
+  public func NoteCreatorChangeEvent() -> Void {
+    this.m_ccChanges += 1;
   }
 
   public func NoteCreatorChangeDone() -> Void {
     this.m_ccPendingSince = 0.0;
     this.m_ccBusySeenAt = 0.0;
+    this.m_ccInFlightLogged = false;
+  }
+
+  // Every completion event restarts the busy flag's stale clock (RB-54), even when the flag stays set.
+  public func NoteCreatorCompletion() -> Void {
+    this.m_ccBusySeenAt = 0.0;
+  }
+
+  // Once per pending change: true the first time (the "still in flight" line is logged once).
+  public func TakeCreatorInFlightLog() -> Bool {
+    let first = !this.m_ccInFlightLogged;
+    this.m_ccInFlightLogged = true;
+    return first;
   }
 
   public func CreatorChanges() -> Int32 {
@@ -334,6 +371,19 @@ public class XFBridgeRegistry extends ScriptableSystem {
 
   public func WasAddedByBridge(id: ItemID) -> Bool {
     return ArrayContains(this.m_addedItems, id);
+  }
+
+  // The copy of this record the bridge added this session (the last one), or an invalid ItemID.
+  public func AddedItemFor(tdbid: TweakDBID) -> ItemID {
+    let none: ItemID;
+    let i = ArraySize(this.m_addedItems) - 1;
+    while i >= 0 {
+      if ItemID.GetTDBID(this.m_addedItems[i]) == tdbid {
+        return this.m_addedItems[i];
+      }
+      i -= 1;
+    }
+    return none;
   }
 
   public func ForgetAddedItem(id: ItemID) -> Void {
@@ -542,6 +592,20 @@ public func XFBridgeLightEntity(index: Int32) -> ref<Entity> {
   return projection.GetEntity();
 }
 
+// The light the menu's light indicator follows (0-2), or -1 when it shows none (the light tab isn't
+// active or the light is off; PhotomodeSetActiveLightEvent.GetIndex).
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeLightIndicatorIndex() -> Int32 {
+  if !inkWidgetRef.IsValid(this.m_lightIndicator) {
+    return -1;
+  }
+  let indicator = inkWidgetRef.GetController(this.m_lightIndicator) as PhotomodeLightIndicatorController;
+  if !IsDefined(indicator) {
+    return -1;
+  }
+  return indicator.m_activeIndex;
+}
+
 // V's photo-mode stand-in as the controller knows it (native-set; no script assigns it).
 @addMethod(gameuiPhotoModeMenuController)
 public func XFBridgeFakePlayer() -> wref<PlayerPuppet> {
@@ -653,7 +717,65 @@ protected cb func OnColorChange(widget: wref<inkWidget>) -> Bool {
 protected cb func OnAppearanceAppliedEvent(evt: ref<gameuiCharacterCustomizationSystem_OnAppearanceAppliedEvent>) -> Bool {
   let result = wrappedMethod(evt);
   let registry = XFBridgeRegistry.Get();
-  if IsDefined(registry) && Equals(this.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+  if IsDefined(registry) {
+    registry.NoteCreatorCompletion();
+    if Equals(this.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
+      registry.NoteCreatorChangeDone();
+    }
+  }
+  return result;
+}
+
+// The screen's options once it has set them up (from V's finalized state in the mirror's edit mode;
+// characterCreationBodyMorphMenu.script:281-301): the snapshot cc.confirm compares against (RB-51).
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnInitializeOptionsList(evt: ref<gameuiCharacterCustomizationSystem_OnInitializeOptionsListEvent>) -> Bool {
+  let result = wrappedMethod(evt);
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) {
+    registry.NoteCreatorSnapshot(XFCharacter.Snapshot());
+  }
+  return result;
+}
+
+// Every other way the screen's options change counts as a change for cc.confirm (RB-51): the system's own
+// option updates (a row, cc.apply's system route, the colour picker), a preset and randomize
+// (characterCreationBodyMorphMenu.script:303-313, 382-425).
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnOptionUpdated(evt: ref<gameuiCharacterCustomizationSystem_OnOptionUpdatedEvent>) -> Bool {
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) {
+    registry.NoteCreatorChangeEvent();
+  }
+  return wrappedMethod(evt);
+}
+
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnAppearanceSwitched(evt: ref<gameuiCharacterCustomizationSystem_OnAppearanceSwitchedEvent>) -> Bool {
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) {
+    registry.NoteCreatorChangeEvent();
+  }
+  return wrappedMethod(evt);
+}
+
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnPresetAppliedEvent(evt: ref<gameuiCharacterCustomizationSystem_OnPresetAppliedEvent>) -> Bool {
+  let result = wrappedMethod(evt);
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) {
+    registry.NoteCreatorChangeEvent();
+    registry.NoteCreatorChangeDone();
+  }
+  return result;
+}
+
+@wrapMethod(characterCreationBodyMorphMenu)
+protected cb func OnRandomizeComplete(evt: ref<gameuiCharacterCustomizationSystem_OnRandomizeCompleteEvent>) -> Bool {
+  let result = wrappedMethod(evt);
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) {
+    registry.NoteCreatorChangeEvent();
     registry.NoteCreatorChangeDone();
   }
   return result;
@@ -851,7 +973,8 @@ public abstract class XFBridgeActions {
   }
 
   // Called by the plugin once after the kill switch: undoes what the bridge left switched on
-  // (a world freeze, a hidden photo-mode menu). The save lock is deliberately kept.
+  // (a world freeze, a hidden photo-mode menu). The save lock is deliberately kept, and taken back when a
+  // save with override_lock had released it.
   public static func RestoreAfterKill(cid: String) -> String {
     let game = GetGameInstance();
     let registry = XFBridgeRegistry.Get();
@@ -878,6 +1001,13 @@ public abstract class XFBridgeActions {
     }
     if registry.CancelCreatorOpen() {
       out += ",\"creator_open_withdrawn\":true";
+    }
+    // A game.save with override_lock that the kill switch cut off: its lock goes back on now, not only
+    // when (if) the save finishes (RB-52).
+    if registry.RelockAfterSave() {
+      registry.SetRelockAfterSave(false);
+      XFBridgeActions.EnsureSaveLock(cid);
+      out += ",\"save_lock_retaken\":true";
     }
     // An appearance screen the bridge opened stays open: Back discards its changes, and the player
     // decides. The save lock stays: whatever the bridge changed (a light, the clock, a creator option) may
@@ -1147,12 +1277,40 @@ public abstract class XFPhoto {
   // entity with the teleportation facility, as CharLi moves its spawned lights about V; whether photo
   // mode keeps a moved light there is what LightPosition reads back a few frames later.
 
-  public static func LightEntity(light: Int32) -> ref<GameObject> {
+  // Light 1-3's entity, only when it is certainly that photo-mode light (RB-57): the indicator's projection
+  // for that index names a gamePhotomodeLightObject (by class name: the type has no script declaration),
+  // no other light's projection names the same entity, and the indicator, when it shows a light, shows
+  // this one (LightSet selects the light first). Otherwise null, with the reason in why.
+  public static func LightEntity(light: Int32, out why: String) -> ref<GameObject> {
     let controller = XFPhoto.Controller();
     if !IsDefined(controller) || light < 1 || light > 3 {
+      why = "photo mode's menu isn't available";
       return null;
     }
-    return controller.XFBridgeLightEntity(light - 1) as GameObject;
+    let entity = controller.XFBridgeLightEntity(light - 1);
+    if !IsDefined(entity) {
+      why = "photo mode's light " + IntToString(light) + " entity wasn't found (the light indicator has no projection for it)";
+      return null;
+    }
+    if !entity.IsA(n"gamePhotomodeLightObject") {
+      why = "the light indicator's projection " + IntToString(light) + " follows a " + NameToString(entity.GetClassName()) + ", not a photo-mode light, so nothing was moved";
+      return null;
+    }
+    let other = 0;
+    while other < 3 {
+      if other != light - 1 && controller.XFBridgeLightEntity(other) == entity {
+        why = "the light indicator names the same entity for lights " + IntToString(light) + " and " + IntToString(other + 1) + ", so which light it is isn't certain";
+        return null;
+      }
+      other += 1;
+    }
+    let shown = controller.XFBridgeLightIndicatorIndex();
+    if shown >= 0 && shown != light - 1 {
+      why = "the menu's light indicator shows light " + IntToString(shown + 1) + ", not light " + IntToString(light);
+      return null;
+    }
+    why = "";
+    return entity as GameObject;
   }
 
   // Where V's head is (the stand-in's Head slot) and which way V faces, for placing lights about V.
@@ -1191,9 +1349,10 @@ public abstract class XFPhoto {
     if !XFPhoto.Active() {
       return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
     }
-    let entity = XFPhoto.LightEntity(light);
+    let why: String;
+    let entity = XFPhoto.LightEntity(light, why);
     if !IsDefined(entity) {
-      return XFJson.Fail("unavailable", "photo mode's light " + IntToString(light) + " entity wasn't found (the light indicator has no projection for it)");
+      return XFJson.Fail("unavailable", why);
     }
     return "{\"ok\":true,\"light\":" + IntToString(light) + ",\"position\":" + XFPhoto.Vec(entity.GetWorldPosition()) + ",\"forward\":" + XFPhoto.Vec(entity.GetWorldForward()) + "}";
   }
@@ -1205,9 +1364,10 @@ public abstract class XFPhoto {
     if !XFPhoto.Active() {
       return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
     }
-    let entity = XFPhoto.LightEntity(light);
+    let why: String;
+    let entity = XFPhoto.LightEntity(light, why);
     if !IsDefined(entity) {
-      return XFJson.Fail("unavailable", "photo mode's light " + IntToString(light) + " entity wasn't found (the light indicator has no projection for it)");
+      return XFJson.Fail("unavailable", why);
     }
     let head: Vector4;
     let facing: Vector4;
@@ -1779,45 +1939,86 @@ public abstract class XFCharacter {
     return "{\"seen\":true,\"updating_finalized_state\":" + XFJson.Flag(menu.m_updatingFinalizedState) + ",\"edit_mode\":" + XFJson.Str(name) + ",\"busy\":" + XFJson.Flag(NotEquals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE)) + ",\"change_pending\":" + XFJson.Flag(pending) + ",\"changes\":" + IntToString(changes) + "}";
   }
 
+  // What cc.confirm needs to choose how to leave (the plugin chooses, core/Writes.cpp ChooseLeave): the
+  // change events since the screen opened and whether every option still equals the snapshot taken when
+  // the screen set its options up (false when there is no snapshot).
+  public static func LeaveState(cid: String) -> String {
+    if !XFBridgeActions.CharacterMenuOpen() {
+      return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open in its edit-V's-look mode");
+    }
+    let registry = XFBridgeRegistry.Get();
+    let unchanged = registry.CreatorUnchangedSince(XFCharacter.Snapshot());
+    return "{\"ok\":true,\"changes\":" + IntToString(registry.CreatorChanges()) + ",\"unchanged\":" + XFJson.Flag(unchanged) + "}";
+  }
+
   // Leaves the appearance screen through the menu's own functions (characterCreationBodyMorphMenu
-  // .script:688-712; knowledge/photo-mode.md §3.3): keep = ConfirmCustomizedCharacter (ReFinalizeState,
-  // then the menu moves on), otherwise ConfirmBackConfirmation (CancelFinalizedStateUpdate: every
-  // change discarded). The plugin refuses both unless allow_creator_leave = true.
-  public static func Leave(cid: String, keep: Bool) -> String {
+  // .script:688-712; knowledge/photo-mode.md §3.3): Confirm = ConfirmCustomizedCharacter (ReFinalizeState,
+  // then the menu moves on); Back = ConfirmBackConfirmation (CancelFinalizedStateUpdate: every change
+  // discarded). The plugin refuses both unless allow_creator_leave = true.
+  //
+  // mode (the plugin's choice): 0 Back (cc.back), 1 Confirm, 2 nothing to confirm. cc.confirm never
+  // discards a change (RB-51): mode 2 closes through Back only when it is still certain nothing changed (no
+  // change event of any kind since the screen opened, every option as when the screen set them up);
+  // otherwise it confirms.
+  public static func Leave(cid: String, mode: Int32) -> String {
     if !XFBridgeActions.CharacterMenuOpen() {
       return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open in its edit-V's-look mode");
     }
     let registry = XFBridgeRegistry.Get();
     let menu = registry.GetCharacterMenu();
     let changes = registry.CreatorChanges();
-    // Nothing changed on the screen: there is nothing to confirm, so Confirm's ReFinalizeState isn't needed
+    let unchanged = changes == 0 && registry.CreatorUnchangedSince(XFCharacter.Snapshot());
+    // Certainly nothing changed: there is nothing to confirm, so Confirm's ReFinalizeState isn't needed
     // (and a stuck busy flag can't block leaving). The screen closes through Back, which discards nothing.
-    if keep && changes == 0 {
+    if mode == 2 && unchanged {
       menu.m_busySwitchingAppearance = BusySwitchingReason.AVAILABLE;
       menu.ConfirmBackConfirmation();
-      XFBridgeLog.Info(cid, "cc.confirm: nothing to confirm (no option changed on the screen); closed with Back, nothing discarded");
+      XFBridgeLog.Info(cid, "cc.confirm: nothing to confirm (no change event, every option as when the screen opened); closed with Back, nothing discarded");
       return "{\"ok\":true,\"kept\":false,\"changed\":false,\"closed_with\":\"back\",\"note\":\"nothing to confirm: no option changed on this screen, so it was closed with Back (nothing was discarded)\"}";
     }
+    let keep = mode != 0;
     if XFCharacter.Busy(cid, menu) {
       return XFJson.Fail("busy", "the appearance screen is still applying the previous change");
     }
+    let closedWith = "back";
     if keep {
+      closedWith = "confirm";
       XFBridgeActions.EnsureSaveLock(cid);
       menu.ConfirmCustomizedCharacter();
-      XFBridgeLog.Info(cid, "cc.confirm: the look is kept (ReFinalizeState; " + IntToString(changes) + " change(s) on the screen); undo: load the safety save");
+      XFBridgeLog.Info(cid, "cc.confirm: the look is kept (ReFinalizeState; " + IntToString(changes) + " change event(s), unchanged=" + XFJson.Flag(unchanged) + "); undo: load the safety save");
     } else {
       menu.ConfirmBackConfirmation();
       XFBridgeLog.Info(cid, "cc.back: every change on the appearance screen discarded");
     }
-    return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + ",\"changed\":" + XFJson.Flag(changes > 0) + ",\"changes\":" + IntToString(changes) + "}";
+    return "{\"ok\":true,\"kept\":" + XFJson.Flag(keep) + ",\"changed\":" + XFJson.Flag(!unchanged) + ",\"changes\":" + IntToString(changes) + ",\"closed_with\":" + XFJson.Str(closedWith) + "}";
+  }
+
+  // Every option on the screen and its value, as one line ("" when the system has none), for cc.confirm's
+  // comparison with the options as the screen set them up.
+  public static func Snapshot() -> String {
+    let system = GameInstance.GetCharacterCustomizationSystem(GetGameInstance());
+    if !IsDefined(system) {
+      return "";
+    }
+    let options = system.GetUnitedOptions(true, true, true);
+    let out = "";
+    let i = 0;
+    while i < ArraySize(options) {
+      if IsDefined(options[i]) && IsDefined(options[i].info) {
+        out += NameToString(options[i].info.name) + "=" + IntToString(Cast<Int32>(options[i].currIndex)) + ";";
+      }
+      i += 1;
+    }
+    return out;
   }
 
   // Whether the appearance screen is still applying a change. The menu's busy flag is the game's own
   // readiness signal, but it can be left set when no completion will ever come (a change to the value
-  // already shown, before this build's OnSliderChange wrap; or a change whose completion event never
-  // arrives). Such a flag is stale when no change is pending and it has stayed set for 8 s, or when the
-  // pending change started more than 12 s ago; a stale flag is cleared (set back to AVAILABLE, as the
-  // completion event would) and logged, and the answer is "not busy".
+  // already shown, before this build's OnSliderChange wrap). With no change pending, such a flag is
+  // stale once it has stayed set for 8 s with no completion event in between (every completion event
+  // restarts that clock); a stale flag is cleared (set back to AVAILABLE, as the completion event
+  // would) and logged. A real change still in flight is never forced (RB-54): after 12 s it is logged
+  // once and the answer stays "busy" (cc.back still leaves).
   public static func Busy(cid: String, menu: wref<characterCreationBodyMorphMenu>) -> Bool {
     if Equals(menu.m_busySwitchingAppearance, BusySwitchingReason.AVAILABLE) {
       return false;
@@ -1828,18 +2029,18 @@ public abstract class XFCharacter {
     }
     let now = EngineTime.ToFloat(GameInstance.GetEngineTime(GetGameInstance()));
     let pending = registry.CreatorPendingSince();
-    let stale = false;
     if pending > 0.0 {
-      stale = now - pending > 12.0;
-    } else {
-      stale = now - registry.CreatorBusySeenAt(now) > 8.0;
+      if now - pending > 12.0 && registry.TakeCreatorInFlightLog() {
+        XFBridgeLog.Warn(cid, "appearance screen: a change started " + FloatToStringPrec(now - pending, 1) + " s ago is still in flight (no completion yet); not forcing it");
+      }
+      return true;
     }
-    if !stale {
+    if now - registry.CreatorBusySeenAt(now) <= 8.0 {
       return true;
     }
     menu.m_busySwitchingAppearance = BusySwitchingReason.AVAILABLE;
     registry.NoteCreatorChangeDone();
-    XFBridgeLog.Warn(cid, "appearance screen busy flag was stale (no completion came); cleared");
+    XFBridgeLog.Warn(cid, "appearance screen busy flag was stale (no change pending, no completion for 8 s); cleared");
     return false;
   }
 
@@ -2060,6 +2261,8 @@ public abstract class XFCharacter {
     if !XFCharacter.ApplyThroughRow(menu, match, index) {
       system.ApplyChangeToOption(match, Cast<Uint32>(index));
       route = "system";
+      // Counted here as well, so cc.confirm knows of the change even before the system's update event (RB-51).
+      XFBridgeRegistry.Get().NoteCreatorChangeEvent();
     }
     XFBridgeLog.Info(cid, "cc.apply " + NameToString(match.info.name) + " " + IntToString(before) + " -> " + IntToString(index) + " via " + route + "; undo: cc.apply index " + IntToString(before) + ", or Back in the mirror (discards every change)");
     return "{\"ok\":true,\"option\":" + XFJson.Name(match.info.name) + ",\"label\":" + XFJson.Str(GetLocalizedText(match.info.localizedName)) + ",\"before\":" + IntToString(before) + ",\"after\":" + IntToString(index) + ",\"count\":" + IntToString(count) + ",\"value\":" + XFJson.Str(XFCharacter.ValueLabel(match, index)) + ",\"before_value\":" + XFJson.Str(XFCharacter.ValueLabel(match, before)) + ",\"value_label\":" + XFJson.Str(XFCharacter.ValueText(match, index)) + ",\"matched_by\":" + XFJson.Str(matchedBy) + ",\"route\":" + XFJson.Str(route) + ",\"row_updated\":" + XFJson.Flag(Equals(route, "row")) + ",\"changed\":true}";
