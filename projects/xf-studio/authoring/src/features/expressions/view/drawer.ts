@@ -26,7 +26,7 @@
  * the facial preview's snapshot (the rig's controls, the installed expressions and the built-in samples) and its part presets.
  */
 import { applyCapability, button, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
-  ScrubSlider, setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
+  ScrubSlider, setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, RememberedSet, type MenuItem, type TreeGroupData, type TreeItemRef, type TreeRowData } from "../../../studio-ui/components";
 import { COMING_SOON } from "../../../studio-ui/coming-soon";
 import { centredAmount, EASING_IDS, EASING_LABELS, type EasingId } from "../../../easing";
 import type { IconName } from "../../../studio-ui/icons";
@@ -144,7 +144,8 @@ function axisPairEntry(ctx: Ctx, left: FacialAxisControl, right: FacialAxisContr
 type Start = { kind: "saved"; id: string } | { kind: "sample"; id: string } | { kind: "installed"; id: string };
 const startKey = (start: Start) => `${start.kind}:${start.id}`;
 /** Session memory of the Start from tree's open groups (saved and natural open at first). */
-const openStartGroups = new Set<string>(["saved", "natural"]);
+/** The Start from tree's open groups, remembered across reloads (Saved and Natural open by default). */
+const openStartGroups = new RememberedSet("expressions:start/", group => group === "saved" || group === "natural");
 /** Search-match ranges of `query` in `label`. */
 const matches = (label: string, query: string): [number, number][] => {
   if (!query) return [];
@@ -168,7 +169,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     onArrowDown: () => tree.focus() });
   const tree: TreeView = new TreeView({ label: "Start from", emptyText: "No expression matches.", maxRows: 6, minRows: 3,
     onActivate: key => begin(key),
-    onToggle: (group, open) => { if (open) openStartGroups.add(group); else openStartGroups.delete(group); paintStart(); },
+    onToggle: (group, open) => { openStartGroups.set(group, open); paintStart(); },
     onKey: (event, item) => {
       if (item.kind !== "row" || !item.id.startsWith("saved:")) return false;
       if (event.key === "F2") { renamePreset(item.id.slice(6), rowElement(item)); return true; }
@@ -224,14 +225,14 @@ export function expressionDrawer(ctx: Ctx): PanelController {
 
   const element = h("div", { class: "panel-content expr-drawer" },
     statusLine,
-    h("section", { class: "section", "aria-label": "Start from" },
+    h("section", { class: "section", "aria-label": "Start from", "data-view-key": "expressions.start-from" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Start from" }), h("span", { class: "block-actions" }, save)),
       startSearch.element, tree.element, presetsNote),
-    h("section", { class: "section", "aria-label": "Adjust all" },
+    h("section", { class: "section", "aria-label": "Adjust all", "data-view-key": "expressions.adjust-all" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Adjust all" }),
         helpTip("Adjust all", "Operations that change every control your expression uses at once.")),
       intensity.element),
-    h("section", { class: "section", "aria-label": "Face" },
+    h("section", { class: "section", "aria-label": "Face", "data-view-key": "expressions.face" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Face" }), faceHelp,
         h("span", { class: "block-actions" }, more, resetAll), updating.element, updatingText),
       symmetric.element, controlSearch.element, waiting, noControls, groupsHost));
@@ -292,7 +293,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   function paintStart() {
     const groups = startGroups();
     // A search shows every group with a match open; otherwise the person's own open groups.
-    const expanded = startQuery ? new Set(groups.filter(group => group.rows.length).map(group => group.id)) : openStartGroups;
+    const expanded = startQuery ? new Set(groups.filter(group => group.rows.length).map(group => group.id)) : openStartGroups.of(groups.map(group => group.id));
     const points = preview?.startPoints;
     const loading = points?.phase === "preparing" ? "Reading the installed expressions…" : undefined;
     tree.update({ groups, expanded, current: currentStart(), loading });
@@ -348,7 +349,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       commit: value => {
         const name = String(value).trim();
         void ctx.presets.execute({ kind: "partPreset.save", name }).then(outcome => {
-          if (outcome.ok) { openStartGroups.add("saved"); ctx.feedback.announce(`Saved “${name}” to your library.`); } else report(outcome);
+          if (outcome.ok) { openStartGroups.set("saved", true); ctx.feedback.announce(`Saved “${name}” to your library.`); } else report(outcome);
         });
       },
     });

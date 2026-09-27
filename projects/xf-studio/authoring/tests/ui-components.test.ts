@@ -4,7 +4,7 @@ import { installLightDom, lightEvent, uninstallLightDom, type LightElement } fro
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
-beforeEach(async () => { (await import("../src/studio-ui/components")).resetGroupSections(); document.body.replaceChildren(); });
+beforeEach(async () => { (await import("../src/studio-ui/view-state")).bindViewState(); document.body.replaceChildren(); });
 
 const lib = () => import("../src/studio-ui/components");
 const key = (element: HTMLElement, name: string) => (element as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: name }));

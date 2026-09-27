@@ -7,6 +7,7 @@ import { HeaderFitter, PanelHeader } from "../components/panel-header";
 import { iconButton } from "../components/icon-button";
 import { Splitter } from "../components/splitter";
 import { TabStrip } from "../components/tab-strip";
+import { ScrollMemory } from "../scroll-anchor";
 import { activate, allCollapsed, allGroups, applyDrop, closePanel, findGroup, foldAxes, isStripStack, keepDockExpanded, lastExpandedDocked, locate,
   openShares, parkPanels, raiseWindow, recoverWindows, revealPanel, setCollapsed, setMaximized, setSizes, setWindowRect, showPanelDocked, splitShares, splitterPair,
   summonPanel, unparkPanels, MIN_WINDOW, type DockNode, type DockState, type DockTree,
@@ -58,6 +59,11 @@ export class DockView {
   private readonly fitter = new HeaderFitter(header => this.sizeStrip(header));
   /** The cells of the rendered stacks of vertical strips, by the header each holds (`sizeStrip`). */
   private stripCells = new Map<PanelHeader, HTMLElement>();
+  /**
+   * Each shown panel's remembered scroll position (scroll-anchor.ts), under `panel:<id>`: its group's body is the scroll container, made
+   * afresh at each render, so the position comes back after a layout change, a tab switch and a reload alike.
+   */
+  private scrollMemories: ScrollMemory[] = [];
 
   constructor(private options: DockViewOptions) {
     for (const panel of options.panels) this.panels.set(panel.id, panel);
@@ -169,6 +175,9 @@ export class DockView {
   }
 
   render() {
+    // Record where each shown panel was while its content is still in place.
+    for (const memory of this.scrollMemories) memory.dispose();
+    this.scrollMemories = [];
     this.options.beforeLayout?.();
     const focused = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const tree = this.tree;
@@ -277,7 +286,7 @@ export class DockView {
     const body = h("div", { class: "dock-body", role: "tabpanel", id: bodyId, "aria-labelledby": `dock-tab-${group.active}` });
     const active = this.panels.get(group.active);
     // A collapsed group's panel is not shown (it keeps its state and repaints when expanded).
-    if (active && !group.collapsed) { body.append(active.element); shown.add(active.id); }
+    if (active && !group.collapsed) { body.append(active.element); shown.add(active.id); this.scrollMemories.push(new ScrollMemory(body, `panel:${active.id}`)); }
     body.hidden = !!group.collapsed;
     const element = h("section", { class: `dock-group${floating ? " floating" : ""}${maximized ? " maximized" : ""}${group.collapsed ? " collapsed" : ""}`,
       "data-group": group.id, "aria-label": `${names} group`,

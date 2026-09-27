@@ -14,13 +14,18 @@ export type TourRecord = "completed" | "skipped" | "declined";
  * developer IDs), off by default so the everyday interface shows only what a person uses (UI-85). Stored only once turned on.
  * `modules`: which Studio modules show (view-graph-design.md §4.2), by module ID, only where the person chose; a module not listed
  * follows its manifest's default. Presentation state: the application never reads it, and a hidden module's actions stay dispatchable.
- * `folded`: the headings a panel shows folded (expander.ts), by the panel's own key for them (e.g. `character:head/Hair`); absent means
- * open. Presentation state, remembered so a folded section stays folded; stored only while something is folded.
+ * `expanded`: whether each foldable heading, row or group is open (view-state.ts), by its view key (`<namespace>:<path>` or
+ * `<namespace>.<path>`, e.g. `character:head/Hair`, `expressions.mouth`); absent: the control's own default. Least recently set first,
+ * bounded per namespace and in all, so a row whose mod isn't loaded keeps its state until it shows again. The older `folded` list
+ * (headings folded, open by default) is read into it. Presentation state, never Undo; per workspace, independent of saved layouts.
+ * `scroll`: each remembered scroll container's anchor (scroll-anchor.ts): the element at its top edge and how far it is scrolled past,
+ * by the container's view key (e.g. `panel:character`), least recently set first. Presentation state, never Undo.
  * `layouts`: the saved layouts (layout-library.ts, view-graph-design.md §4.5); `layout` is the active one's live arrangement. Absent until
  * the person first saves, renames or otherwise changes a layout.
  */
 export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout;
-  tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean>; folded?: string[]; layouts?: LayoutLibrary;
+  tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean>; expanded?: Record<string, boolean>;
+  scroll?: Record<string, ScrollAnchor>; layouts?: LayoutLibrary;
   /**
    * The grid size of choice pictures per feature type (choice-previews-design.md §7.1: `s`, `m`, `l`), by the picture kind
    * (choice-preview.ts `PreviewKind`, e.g. `hair`); absent: the type's default. Presentation state, never Undo.
@@ -29,13 +34,20 @@ export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePrefer
   /** The easing curve chosen per multi-control operation (easing.ts; e.g. `expression-intensity`). Presentation state, never Undo. */
   easings?: Record<string, EasingId> };
 export type ChoiceSize = "s" | "m" | "l";
+/**
+ * Where a scroll container was (scroll-anchor.ts): `key` is the view key of the element at its top edge and `offset` how many pixels
+ * of it were scrolled past that edge; `near` the elements before it (nearest first, each with its own offset), tried in turn when it
+ * is gone; `top` the plain scroll position, the last resort.
+ */
+export type ScrollAnchor = { key?: string; offset?: number; near?: { key: string; offset: number }[]; top: number };
 export type UIPreferenceAction =
   | { kind: "theme.set"; theme: ThemePreference }
   | { kind: "inputHints.set"; enabled: boolean }
   | { kind: "researchTools.set"; enabled: boolean }
   | { kind: "modules.set"; module: string; shown: boolean }
   | { kind: "layout.set"; layout?: DockLayout }
-  | { kind: "folded.set"; keys: readonly string[]; folded: boolean }
+  | { kind: "expanded.set"; keys: readonly string[]; expanded: boolean }
+  | { kind: "scroll.set"; key: string; anchor?: ScrollAnchor }
   | { kind: "choiceSize.set"; type: string; size: ChoiceSize }
   | { kind: "easing.set"; scope: string; easing: EasingId }
   | { kind: "tours.record"; tourId: string; outcome: TourRecord }
@@ -51,12 +63,56 @@ const tourId = (value: unknown): value is string => typeof value === "string" &&
 const tourRecord = (value: unknown): value is TourRecord => value === "completed" || value === "skipped" || value === "declined";
 const MAX_MODULES = 64;
 const moduleId = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9.-]{0,63}$/.test(value);
-const MAX_FOLDED = 512;
+/** Remembered open states: at most this many per namespace, and in all (least recently set go first). */
+const MAX_EXPANDED_PER_NAMESPACE = 192;
+const MAX_EXPANDED = 512;
+const MAX_SCROLL = 64;
+const MAX_NEAR = 4;
+const MAX_OFFSET = 1_000_000;
 const MAX_CHOICE_TYPES = 32;
 const choiceType = (value: unknown): value is string => typeof value === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(value);
 const choiceSize = (value: unknown): value is ChoiceSize => value === "s" || value === "m" || value === "l";
-/** A panel's key for a heading: printable, bounded (a panel id, a colon, then its own path). */
-const foldKey = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9.-]{0,31}:[ -~]{1,160}$/.test(value);
+/**
+ * A view key (view-state.ts): a namespace (a panel or feature id), a colon or dot, then its own path; no control characters, bounded.
+ * Author and mod names may be in any script.
+ */
+export const viewKey = (value: unknown): value is string => typeof value === "string" && value.length <= 200 &&
+  /^[a-z0-9][a-z0-9-]{0,31}[.:][^\u0000-\u001f\u007f]+$/u.test(value);
+/** A view key's namespace: what comes before its first colon or dot (the bound per namespace goes by it). */
+export const viewNamespace = (key: string) => /^[a-z0-9-]+/.exec(key)?.[0] ?? "";
+/** An element key inside a scroll container: any text without control characters, bounded. */
+const anchorKey = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value);
+const offset = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= MAX_OFFSET;
+export function parseScrollAnchor(value: unknown): ScrollAnchor | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (!offset(candidate.top) || candidate.top < 0) return undefined;
+  const result: ScrollAnchor = { top: Math.round(candidate.top) };
+  if (anchorKey(candidate.key) && offset(candidate.offset ?? 0)) { result.key = candidate.key; result.offset = Math.round((candidate.offset as number | undefined) ?? 0); }
+  if (Array.isArray(candidate.near)) {
+    const near = candidate.near.filter((entry): entry is { key: string; offset: number } => !!entry && typeof entry === "object" &&
+      anchorKey((entry as Record<string, unknown>).key) && offset((entry as Record<string, unknown>).offset)).slice(0, MAX_NEAR)
+      .map(entry => ({ key: entry.key, offset: Math.round(entry.offset) }));
+    if (near.length) result.near = near;
+  }
+  return result;
+}
+/** The keys under `prefix` whose remembered state is folded (e.g. a panel's folded headings). */
+export function foldedKeys(preferences: Pick<UIPreferences, "expanded"> | undefined, prefix = ""): string[] {
+  return Object.entries(preferences?.expanded ?? {}).filter(([key, open]) => !open && key.startsWith(prefix)).map(([key]) => key);
+}
+/** Least recently set first: setting moves a key to the end, then the oldest go while its namespace or the whole map is over its bound. */
+function remember<T>(map: Record<string, T> | undefined, entries: readonly (readonly [string, T | undefined])[], perNamespace: number, total: number) {
+  const result = new Map(Object.entries(map ?? {}));
+  for (const [key, value] of entries) { result.delete(key); if (value !== undefined) result.set(key, value); }
+  const counts = new Map<string, number>();
+  for (const key of result.keys()) counts.set(viewNamespace(key), (counts.get(viewNamespace(key)) ?? 0) + 1);
+  for (const key of [...result.keys()]) {
+    const namespace = viewNamespace(key);
+    if ((counts.get(namespace) ?? 0) > perNamespace || result.size > total) { result.delete(key); counts.set(namespace, counts.get(namespace)! - 1); }
+  }
+  return result.size ? Object.fromEntries(result) : undefined;
+}
 
 export function defaultUIPreferences(): UIPreferences {
   return { schema: "xfs/ui-preferences-1", theme: "system", inputHints: true };
@@ -148,9 +204,19 @@ export function parseUIPreferences(value: unknown): UIPreferences {
       const modules = Object.entries(candidate.modules).filter(([id, shown]) => moduleId(id) && typeof shown === "boolean").slice(0, MAX_MODULES);
       if (modules.length) result.modules = Object.fromEntries(modules) as Record<string, boolean>;
     }
-    if (Array.isArray(candidate.folded)) {
-      const folded = [...new Set(candidate.folded.filter(foldKey))].slice(0, MAX_FOLDED);
-      if (folded.length) result.folded = folded;
+    // The older `folded` list (headings folded) first, so a newer `expanded` entry for the same key wins.
+    const legacy: [string, boolean][] = Array.isArray(candidate.folded) ? candidate.folded.filter(viewKey).map(key => [key, false]) : [];
+    const expanded = candidate.expanded && typeof candidate.expanded === "object" && !Array.isArray(candidate.expanded)
+      ? Object.entries(candidate.expanded).filter((entry): entry is [string, boolean] => viewKey(entry[0]) && typeof entry[1] === "boolean") : [];
+    const open = remember<boolean>(undefined, [...legacy, ...expanded], MAX_EXPANDED_PER_NAMESPACE, MAX_EXPANDED);
+    if (open) result.expanded = open;
+    if (candidate.scroll && typeof candidate.scroll === "object" && !Array.isArray(candidate.scroll)) {
+      const anchors = Object.entries(candidate.scroll).flatMap(([key, value]) => {
+        const anchor = viewKey(key) ? parseScrollAnchor(value) : undefined;
+        return anchor ? [[key, anchor] as const] : [];
+      });
+      const scroll = remember<ScrollAnchor>(undefined, anchors, MAX_SCROLL, MAX_SCROLL);
+      if (scroll) result.scroll = scroll;
     }
     if (candidate.choiceSizes && typeof candidate.choiceSizes === "object" && !Array.isArray(candidate.choiceSizes)) {
       const sizes = Object.entries(candidate.choiceSizes).filter(([type, size]) => choiceType(type) && choiceSize(size)).slice(0, MAX_CHOICE_TYPES);
@@ -189,12 +255,12 @@ export class UIPreferenceActions {
       if (!Object.hasOwn(known, action.module) && Object.keys(known).length >= MAX_MODULES)
         return { available: false, reason: "Too many module choices are remembered already." };
     }
-    if (action.kind === "folded.set") {
-      if (!Array.isArray(action.keys) || !action.keys.length || action.keys.length > MAX_FOLDED || !action.keys.every(foldKey) || typeof action.folded !== "boolean")
-        return { available: false, reason: "Choose which headings fold, and whether they fold." };
-      if (action.folded && new Set([...this.value.folded ?? [], ...action.keys]).size > MAX_FOLDED)
-        return { available: false, reason: "Too many folded headings are remembered already. Open a few first." };
-    }
+    // Always room: the least recently set open states and scroll anchors make way.
+    if (action.kind === "expanded.set" && (!Array.isArray(action.keys) || !action.keys.length || action.keys.length > MAX_EXPANDED ||
+        !action.keys.every(viewKey) || typeof action.expanded !== "boolean"))
+      return { available: false, reason: "Choose which headings open or fold, and which way." };
+    if (action.kind === "scroll.set" && (!viewKey(action.key) || (action.anchor !== undefined && !parseScrollAnchor(action.anchor))))
+      return { available: false, reason: "A scroll position needs its place and a bounded position." };
     if (action.kind === "choiceSize.set") {
       if (!choiceType(action.type) || !choiceSize(action.size)) return { available: false, reason: "Choose a feature type and Small, Medium or Large." };
       if (!Object.hasOwn(this.value.choiceSizes ?? {}, action.type) && Object.keys(this.value.choiceSizes ?? {}).length >= MAX_CHOICE_TYPES)
@@ -226,10 +292,12 @@ export class UIPreferenceActions {
     else if (action.kind === "modules.set") this.value.modules = { ...this.value.modules, [action.module]: action.shown };
     else if (action.kind === "choiceSize.set") this.value.choiceSizes = { ...this.value.choiceSizes, [action.type]: action.size };
     else if (action.kind === "easing.set") this.value.easings = { ...this.value.easings, [action.scope]: action.easing };
-    else if (action.kind === "folded.set") {
-      const folded = new Set(this.value.folded ?? []);
-      for (const key of action.keys) if (action.folded) folded.add(key); else folded.delete(key);
-      if (folded.size) this.value.folded = [...folded]; else delete this.value.folded;
+    else if (action.kind === "expanded.set") {
+      const open = remember(this.value.expanded, action.keys.map(key => [key, action.expanded] as const), MAX_EXPANDED_PER_NAMESPACE, MAX_EXPANDED);
+      if (open) this.value.expanded = open; else delete this.value.expanded;
+    } else if (action.kind === "scroll.set") {
+      const scroll = remember(this.value.scroll, [[action.key, action.anchor && parseScrollAnchor(action.anchor)]], MAX_SCROLL, MAX_SCROLL);
+      if (scroll) this.value.scroll = scroll; else delete this.value.scroll;
     }
     else {
       const layout = action.layout === undefined ? undefined : parseDockLayout(action.layout)!;

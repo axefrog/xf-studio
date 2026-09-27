@@ -21,7 +21,10 @@ export { SliderWithValue, type SliderWithValueOptions } from "./slider-with-valu
 export { PairControl, type PairControlOptions, type PairEdit, type Side } from "./pair-control";
 export { BipolarSlider, type BipolarSliderOptions } from "./bipolar-slider";
 export { ScrubSlider, SCRUB_REST, type ScrubCurve, type ScrubSliderOptions } from "./scrub-slider";
-export { GroupSection, resetGroupSections, type GroupSectionOptions } from "./group-section";
+export { GroupSection, type GroupSectionOptions } from "./group-section";
+// Remembered view state: folds and scroll positions across reloads (view-state.ts, scroll-anchor.ts).
+export { RememberedSet } from "../view-state";
+export { holdScroll, revealInView, ScrollMemory, VIEW_KEY, type ScrollMemoryOptions } from "../scroll-anchor";
 export { SearchField, type SearchFieldOptions } from "./search-field";
 export { Combobox, type ComboboxOptions, type ComboGroup, type ComboOption } from "./combobox";
 export { blockSection, codeBlock, PageHeader, propertyList, stack, type Gap, type Property } from "./layout";

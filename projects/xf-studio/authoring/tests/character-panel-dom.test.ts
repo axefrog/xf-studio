@@ -7,7 +7,8 @@ import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type Cr
 import { catalogueCoverage } from "../src/cc-render-coverage";
 import { deriveCharacter } from "../src/character-context";
 import { CharacterContextActions, type CreatorPort } from "../src/character-context-actions";
-import { UIPreferenceActions } from "../src/ui-preferences";
+import { foldedKeys, UIPreferenceActions } from "../src/ui-preferences";
+import { bindViewState, PreferenceViewState } from "../src/studio-ui/view-state";
 import { fixtureSource } from "./cc-fixtures";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
@@ -15,7 +16,7 @@ beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 10) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function harness() {
+async function harness(stored?: unknown) {
   const source = await fixtureSource(true);
   const { panel, mods } = panelProjection(source.catalogue, catalogueCoverage(source.catalogue), "fixture");
   const index = new CatalogueIndex(source.catalogue);
@@ -53,7 +54,9 @@ async function harness() {
   };
   const context = new CharacterContextActions({ creator: port, showSave: () => {} });
   const dispatched: { kind: string }[] = [];
-  const preferences = new UIPreferenceActions();
+  // The workspace's preferences, as a reload would restore them (`stored`), behind the remembered view state.
+  const preferences = new UIPreferenceActions(stored);
+  bindViewState(new PreferenceViewState(preferences));
   const rt = {
     port: {
       preferences,
@@ -266,7 +269,7 @@ describe("folding and help in the Character panel", () => {
     // At once, before any paint; remembered for the next session.
     expect(head.getAttribute("aria-expanded")).toBe("false");
     expect(body.hidden).toBe(true);
-    expect(h.preferences.snapshot().folded).toEqual(["character:head/eyes"]);
+    expect(foldedKeys(h.preferences.snapshot())).toEqual(["character:head/eyes"]);
     h.paint();
     expect(body.hidden).toBe(true);
     // A search leaves the fold alone; the folded heading says how many rows in it match.
@@ -280,12 +283,26 @@ describe("folding and help in the Character panel", () => {
     head.click();
     h.paint();
     expect(body.hidden).toBe(false);
-    expect(h.preferences.snapshot().folded).toBeUndefined();
+    expect(foldedKeys(h.preferences.snapshot())).toEqual([]);
     // A group folds the same way.
     const bodyGroup = h.root.querySelectorAll(".cc-group").find(element => element.getAttribute("data-group") === "body")!;
     bodyGroup.querySelector('.expander[data-level="group"]')!.click();
     expect(bodyGroup.querySelector(".cc-group-body")!.hidden).toBe(true);
-    expect(h.preferences.snapshot().folded).toEqual(["character:group/body"]);
+    expect(foldedKeys(h.preferences.snapshot())).toEqual(["character:group/body"]);
+  });
+
+  test("folds, open rows and view keys survive a reload of the workspace's preferences", async () => {
+    const first = await harness();
+    const rowMain = (root: LightElement, slot: string) => root.querySelectorAll(".cc-row").find(row => row.getAttribute("data-slot") === slot)!.querySelector(".cc-row-main")!;
+    const row = first.root.querySelectorAll(".cc-row").find(element => !element.hidden)!, slot = row.getAttribute("data-slot")!;
+    expect(row.getAttribute("data-view-key")).toStartWith("character:row:");
+    expect(sectionEl(first.root, "head/eyes").getAttribute("data-view-key")).toBe("character:head/eyes");
+    rowMain(first.root, slot).click();
+    sectionEl(first.root, "head/eyes").querySelector('.expander[data-level="subsection"]')!.click();
+    // A reload: the stored workspace JSON comes back.
+    const second = await harness(JSON.parse(JSON.stringify(first.preferences.snapshot())));
+    expect(rowMain(second.root, slot).getAttribute("aria-expanded")).toBe("true");
+    expect(sectionEl(second.root, "head/eyes").querySelector(".cc-section-body")!.hidden).toBe(true);
   });
 
   test("Expand all at the far right of a section heading opens every row; then it collapses them; the palette has the same", async () => {

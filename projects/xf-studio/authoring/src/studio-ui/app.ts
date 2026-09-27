@@ -32,6 +32,8 @@ import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
 import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
+import { bindViewState, PreferenceViewState } from "./view-state";
+import { flushScrollMemories } from "./scroll-anchor";
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -45,6 +47,11 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     expected: code => port.diagnostics.expected(code) });
   installReasonTips(document);
   installHelpTips(document);
+  // Remembered folds and scroll positions (view-state.ts) are the workspace's, before any panel is built. Scroll positions are recorded
+  // before the page is hidden: capture listeners run ahead of the workspace save's own (browser-workspace-device.ts).
+  bindViewState(new PreferenceViewState(port.preferences));
+  window.addEventListener("pagehide", flushScrollMemories, { capture: true });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flushScrollMemories(); }, { capture: true });
   const catalogue = views.catalogue;
   const rt = new StudioRuntime(port, feedback, catalogue);
   const theme = themeController(port, feedback);

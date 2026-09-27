@@ -1,13 +1,15 @@
 import { keyBinding } from "../../input-bindings";
 import { h, setAttr, setText } from "../dom";
 import { icon } from "../icons";
+import { ScrollMemory, type RestoreResult } from "../scroll-anchor";
+import type { ScrollAnchor } from "../../ui-preferences";
 
 /**
  * Tree view (style guide "Tree view"): groups of rows (poses by pack, presets by source), one nesting level, virtualised for thousands of
  * rows.
  *
- * - **Groups** expand and collapse on a click, Enter, Space, Right and Left; the owner holds the expanded set (it persists it, e.g. in
- *   `UIPreferences.folded`) and hears `onToggle`. A group with no rows is not shown.
+ * - **Groups** expand and collapse on a click, Enter, Space, Right and Left; the owner holds the expanded set (it remembers it: in its
+ *   service, or with view-state.ts `RememberedSet`) and hears `onToggle`. A group with no rows is not shown.
  * - **Rows** activate on one click or Enter (`onActivate`); there is no separate select step. A disabled row stays focusable, shows its
  *   plain reason as its tooltip and description, and does not activate. The current row carries `aria-current`.
  * - **Keyboard** (the WAI tree pattern): one tab stop (roving tabindex); Up and Down move through the visible items, Home and End jump;
@@ -19,6 +21,9 @@ import { icon } from "../icons";
  * - **Scale:** only the items in view (plus a margin, plus the focused one) are in the page, and they follow the tree's own size (a
  *   ResizeObserver) as well as scrolling and updates; items are reused by ID and updated in place, so focus and the scroll position
  *   survive updates. Every item is one row high (28 px).
+ * - **Remembered scroll** (scroll-anchor.ts): the item at the top edge and how far it is scrolled past are remembered under `remember`
+ *   (default `tree:<label>`) and brought back once the items arrive, even when they load later; a missing item falls back to the one
+ *   before it. `scrollToItem` puts any item at the top by ID, rendered or not.
  * - **Height:** by default the owner sizes the frame. With `maxRows` the frame fits its content: as tall as its visible items, up to
  *   that many rows, then the tree scrolls; `minRows` (default 1) keeps a floor so a search that shrinks the list doesn't pull what
  *   follows up and down as the person types. An empty tree is as tall as its message (at least the floor). Opening or closing a group
@@ -62,6 +67,8 @@ export type TreeViewOptions = {
   maxRows?: number;
   /** With `maxRows`: never shorter than this many rows (default 1). */
   minRows?: number;
+  /** The view key its scroll position is remembered under (default `tree:<label>`); false: not remembered. */
+  remember?: string | false;
 };
 export const TREE_ROW_HEIGHT = 28;
 const OVERSCAN = 8;
@@ -85,7 +92,8 @@ export class TreeView {
   private focusId: string | undefined;
   private readonly rendered = new Map<string, { element: HTMLElement; key: string }>();
   private frame = 0;
-  private readonly resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => this.paint()) : undefined;
+  private readonly resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => { this.paint(); this.memory?.contentChanged(); }) : undefined;
+  private readonly memory?: ScrollMemory;
   constructor(private readonly options: TreeViewOptions) {
     this.spacer = h("div", { class: "tree-spacer" });
     this.tree = h("div", { class: "tree-scroll", role: "tree", "aria-label": options.label }, this.spacer);
@@ -97,6 +105,8 @@ export class TreeView {
     this.element.addEventListener("click", event => this.click(event));
     // A taller tree shows more rows at once (UI-118): paint whenever its size changes, not only on updates and scrolling.
     this.resize?.observe(this.tree);
+    if (options.remember !== false) this.memory = new ScrollMemory(this.tree, options.remember ?? `tree:${options.label}`, { observe: false,
+      source: { capture: () => this.captureAnchor(), restore: anchor => this.restoreAnchor(anchor) } });
     // Focus that arrives by any route (a pointer, a script, assistive technology) moves the roving tab stop with it.
     this.element.addEventListener("focusin", event => {
       const item = this.itemOf(event.target);
@@ -146,6 +156,51 @@ export class TreeView {
     this.status.hidden = !state.loading;
     if (refocus && this.focusId) this.focusIdent(this.focusId);
     else this.paint();
+    this.memory?.contentChanged();
+  }
+  /**
+   * Scroll so the item (the row with that ID, else the group; `kind` picks one) sits at the top, `offset` px of it scrolled past the
+   * edge; false when it isn't in the tree (a folded group's row, or not loaded yet).
+   */
+  scrollToItem(id: string, kind?: TreeItemRef["kind"], offset = 0): boolean {
+    const index = this.flat.findIndex(item => item.ref.id === id && (kind ? item.ref.kind === kind : true));
+    if (index < 0) return false;
+    this.tree.scrollTop = index * TREE_ROW_HEIGHT + offset;
+    this.paint();
+    return true;
+  }
+  /** Stop remembering the scroll position (the tree is going away). */
+  dispose() { this.memory?.dispose(); this.resize?.disconnect(); }
+  private captureAnchor(): ScrollAnchor | undefined {
+    if (!this.tree.clientHeight) return undefined;
+    const top = Math.round(this.tree.scrollTop || 0), index = Math.floor(top / TREE_ROW_HEIGHT), item = this.flat[index];
+    if (top <= 0 || !item) return { top: Math.max(0, top) };
+    // The items before it, nearest first: a fallback puts one at the top edge.
+    const offset = top - index * TREE_ROW_HEIGHT, near: { key: string; offset: number }[] = [];
+    for (let at = index - 1; at >= 0 && near.length < 3; at--) near.push({ key: this.flat[at]!.ident, offset: 0 });
+    // The item's group last, so a row that left still finds its group.
+    const group = identOf("group", item.group.id);
+    if (item.level === 2 && !near.some(entry => entry.key === group)) near.push({ key: group, offset: 0 });
+    return { key: item.ident, offset, ...(near.length ? { near } : {}), top };
+  }
+  private restoreAnchor(anchor: ScrollAnchor): RestoreResult {
+    if (!this.tree.clientHeight || !this.flat.length) return "wait";
+    const go = (ident: string, offset: number) => {
+      const index = this.flat.findIndex(item => item.ident === ident);
+      if (index < 0) return undefined;
+      const target = index * TREE_ROW_HEIGHT + offset;
+      this.tree.scrollTop = target;
+      this.paint();
+      return Math.abs((this.tree.scrollTop || 0) - target) < 1;
+    };
+    if (anchor.key) {
+      const exact = go(anchor.key, anchor.offset ?? 0);
+      if (exact !== undefined) return exact ? "exact" : "near";
+      for (const near of anchor.near ?? []) if (go(near.key, Math.max(0, Math.min(near.offset, TREE_ROW_HEIGHT - 1))) !== undefined) return "near";
+    }
+    this.tree.scrollTop = anchor.top;
+    this.paint();
+    return anchor.key ? "wait" : "exact";
   }
   /** Move focus into the tree (its focused item, else the first). */
   focus() { const ident = this.focusId ?? this.flat[0]?.ident; if (ident) this.focusIdent(ident); }

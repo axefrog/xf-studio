@@ -20,8 +20,10 @@
  * changing; a switch that can't change says why in the line reserved under its heading and stays focusable (UI-84). Colour rows draw
  * every choice as a narrow swatch derived from the resource that wins for it, with the game's icons (character-choices.ts).
  *
- * **Folding** (expander.ts): the parts of V, their sections, the rows and a row's author groups all fold with one expander. A group's
- * or section's fold is remembered (the `folded.set` UI preference, keyed `character:<key>`); a section with rows has Expand all /
+ * **Folding** (expander.ts): the parts of V, their sections, the rows and a row's author groups all fold with one expander, and every
+ * fold is remembered across reloads (view-state.ts, keyed `character:<key>`, `character:row:<part>/<slot>` and
+ * `character:maker:<option>/<maker>`; a row whose mod isn't loaded keeps its state until it shows). Groups, sections and rows carry
+ * their key as `data-view-key`, so the panel's scroll position comes back to the same rows (scroll-anchor.ts). A section with rows has Expand all /
  * Collapse all at the far right of its heading (and in the palette), which opens or closes its rows and unfolds their author groups.
  * A search leaves folds alone: a folded heading holding matches shows how many.
  *
@@ -45,6 +47,8 @@ import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
   type CharacterToggle, type CharacterToggleState } from "../../character-panel-sections";
 import { icon } from "../icons";
+import { viewState } from "../view-state";
+import { VIEW_KEY } from "../scroll-anchor";
 import type { Frame, Port, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
@@ -262,6 +266,13 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   /** The one open row whose choices are prepared ahead: the one opened or pointed at last. */
   let aheadRow: string | null = null;
   const rowKey = (view: RowView) => `${view.row.part}/${view.row.slot}`;
+  /** A row's view key: its open state is remembered (closed by default), and a scroll position can anchor on it. */
+  const rowFold = (view: RowView) => `character:row:${rowKey(view)}`;
+  const rowOpen = (view: RowView) => {
+    const open = viewState().expanded(rowFold(view)) ?? false;
+    if (open) openRows.add(rowKey(view));
+    return open;
+  };
   /** Coverage that hides the row now: not drawn at all, or drawn only in the uncensored look while it is off. */
   const notDrawn = (option: CcPanelOption, uncensoredOn: boolean) => option.coverage[0] === "not-rendered" || (option.coverage[0] === "uncensored" && !uncensoredOn);
   const staticDetail = (panel: Readonly<CcPanel>, option: CcPanelOption, uncensoredOn: boolean) => [notDrawn(option, uncensoredOn) ? panel.notes[option.coverage[1]] || NOT_SHOWN : "",
@@ -274,10 +285,8 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   function setFolds(keys: readonly string[], fold: boolean) {
     if (!keys.length) return;
     for (const key of keys) if (fold) folded.add(key); else folded.delete(key);
-    const action = { kind: "folded.set" as const, keys, folded: fold };
-    // Presentation state: the fold shows at once; remembering it is best effort (a full store still folds for this session).
-    const preferences = port.preferences as Port["preferences"] | undefined;
-    if (preferences?.capability(action).available) preferences.dispatch(action);
+    // Presentation state: the fold shows at once; remembering it is best effort.
+    viewState().setExpanded(keys, !fold);
     paintFolds(search.value.trim().toLowerCase());
     rt.changed();
   }
@@ -347,7 +356,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
           // Expand all only where it does more than a row's own chevron: two rows or more.
           controls.rows.length > 1 ? expand => expandSection(controls, expand) : null);
         controls.heading = head.heading;
-        controls.element = h("section", { class: `cc-section${parent ? " cc-subsection" : ""}`, "data-section": entry.key }, head.row, body);
+        controls.element = h("section", { class: `cc-section${parent ? " cc-subsection" : ""}`, "data-section": entry.key, [VIEW_KEY]: fold }, head.row, body);
         return controls;
       };
       const top = group.sections.map(entry => buildSection(entry, null));
@@ -356,7 +365,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const extras = group.controls.flatMap(id => controls_[id] ? [controls_[id]!] : []);
       const body = h("div", { class: "cc-group-body", id: bodyId }, ...extras, h("div", { class: "cc-sections" }, ...top.map(section => section.element)));
       const head = heading("group", group.title, group.toggles, bodyId, () => setFolds([fold], !folded.has(fold)), null);
-      const element = h("section", { class: "cc-group", "data-group": group.id }, head.row, body);
+      const element = h("section", { class: "cc-group", "data-group": group.id, [VIEW_KEY]: fold }, head.row, body);
       return { element, heading: head.heading, sections, fold, body, title: group.title };
     });
     groupsHost.replaceChildren(...groups.map(group => group.element));
@@ -369,7 +378,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         const notShown = h("span", { class: "cc-row-not-shown", title: NOT_SHOWN, "aria-hidden": "true" }, icon("eyeOff"));
         const main = expander("row", { expanded: false, controls: id }, label, h("span", { class: "cc-row-current" }, swatch, value), notShown);
         main.classList.add("cc-row-main");
-        const controls: RowControls = { view, element: h("div", { class: "cc-row", "data-slot": view.row.slot }), main, label, value, swatch, contrast, notShown,
+        const controls: RowControls = { view, element: h("div", { class: "cc-row", "data-slot": view.row.slot, [VIEW_KEY]: rowFold(view) }), main, label, value, swatch, contrast, notShown,
           off: h("button", { class: "chip-button cc-off", type: "button", text: "Off" }),
           reset: button({ label: "Back to your V's own", icon: "reset", iconOnly: true, small: true, variant: "quiet", onClick: () => {} }),
           // A help tip only where one of the row's options has something to say; it keeps its place when the shown one has nothing (UI-68).
@@ -385,14 +394,16 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
             controls.hint = choice.position;
             askPictures(controls);
           }),
-          open: openRows.has(rowKey(view)), query: "",
+          open: rowOpen(view), query: "",
           prefetching: null, positions: [], loaded: -1,
           sizes: new Segmented<ChoiceSize>({ label: "Picture size", showLabel: false, compact: true,
             options: [{ value: "s", label: "S", title: "Small pictures" }, { value: "m", label: "M", title: "Medium pictures" }, { value: "l", label: "L", title: "Large pictures" }],
             onSelect: size => setPictureSize(controls, size) }),
           tools: h("div", { class: "cc-choice-tools", hidden: true }), hint: null };
         controls.tools.append(controls.sizes.element);
-        main.addEventListener("click", () => toggle(controls));
+        // A row the person opens shows the V's choice (its group opens and it comes into view once loaded); a row opened by Expand all
+        // or restored open on a reload doesn't move the view.
+        main.addEventListener("click", () => { toggle(controls); if (controls.open) controls.list.revealChosenNext(); });
         controls.off.addEventListener("click", () => {
           const option = current(controls);
           if (option?.off !== null && option) dispatch({ kind: "character.setOption", part: option.part, option: option.name, choice: option.off });
@@ -433,6 +444,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
     const key = rowKey(controls.view);
     if (controls.open) { openRows.add(key); aheadRow = key; }
     else { openRows.delete(key); stopPrefetch(controls); if (aheadRow === key) aheadRow = [...openRows].at(-1) ?? null; }
+    viewState().setExpanded([rowFold(controls.view)], controls.open);
     // The chevron turns at once; the list follows on the next paint.
     setExpanded(controls.main, controls.open);
     if (paint) rt.changed();
@@ -547,11 +559,8 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         if (enhancedList && detail) setHelp(controls.contrast, [CONTRAST_WORDS.markTip, detail], CONTRAST_WORDS.mark);
       }
       controls.element.classList.toggle("not-shown", notDrawn(option, uncensoredOn) || conditionalHidden);
-      const opening = controls.open && controls.list.element.hidden;
       controls.list.element.hidden = !controls.open;
       controls.tools.hidden = !controls.open || !option.preview;
-      // A row that opens shows the V's choice: its group opens and it is scrolled into view once it has loaded.
-      if (opening) controls.list.revealChosenNext();
       if (!controls.open) continue;
       // An open row lists every choice, or with a search that only its choices match, the matching ones.
       controls.query = rowMatches ? "" : query;
@@ -585,7 +594,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       }
       group.element.hidden = !any && !!query;
     }
-    readFolds(frame.preferences?.folded);
+    readFolds(viewState().folded(FOLD));
     paintFolds(query);
     updateHeadings(frame);
     noMatch.hidden = !query || visibleRows > 0 || !!found?.loading;

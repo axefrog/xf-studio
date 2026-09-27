@@ -2,7 +2,7 @@
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, previewTile, type LightListItem, type TabItem } from "../components";
+  sampleBackground, LightList, DirectionDial, previewTile, ScrollMemory, VIEW_KEY, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
 
@@ -113,6 +113,18 @@ const MOUNTS: Record<string, Mount> = {
     g.body.append(s.element); g.update({ set: 1 });
     const folded = new GroupSection({ title: "Mouth", key: "guide.mouth", level: "subsection", onReset: () => {} }); folded.update({ set: 0 });
     return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, g.element, folded.element)); },
+  "lib-view-state": () => {
+    // Scroll the list, then rebuild it: the same row comes back at the top, clip offset included (remembered for this page only here).
+    let memory: ScrollMemory | undefined;
+    const list = () => {
+      memory?.dispose();
+      const box = h("div", { style: "max-height:132px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius)" },
+        ...Array.from({ length: 16 }, (_, i) => h("div", { [VIEW_KEY]: `row-${i}`, style: "padding:6px 10px;border-bottom:1px solid var(--line-soft)", text: `Row ${i + 1}` })));
+      memory = new ScrollMemory(box, "guide.scroll");
+      return box;
+    };
+    const host = h("div", {}, list());
+    return h("div", { style: "max-width:300px" }, stack({ gap: "normal" }, host, button({ label: "Rebuild the list", icon: "reset", onClick: () => host.replaceChildren(list()) }))); },
   "lib-help-tip": () => h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Finish" }), helpTip("Finish", "How the makeup catches the light.")),
   "lib-reason-tip": () => { const b = button({ label: "Build mod files", icon: "package", onClick: () => {} }); applyCapability(b, { available: false, reason: "Choose your game folder first." }); return b; },
   "lib-menu": () => h("div", { class: "row wrap gap-s" }, button({ label: "Open a menu", icon: "more", menu: true, onClick: event => openMenu([{ kind: "heading", label: "Petal wash" },

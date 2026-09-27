@@ -299,7 +299,8 @@ export function applyCapability(control: HTMLElement, capability: { available: b
 export function section(heading: string | { title: string; help: HelpText }, ...children: (Node | null | undefined | false)[]) {
   const title = typeof heading === "string" ? heading : heading.title;
   const head = h("h3", { class: "section-title" }, h("span", { text: title }));
-  return h("section", { class: "section" }, typeof heading === "string" ? head : h("div", { class: "section-head" }, head, helpTip(title, heading.help)), ...children);
+  // Its title is its view key, so a remembered scroll position can come back to it (scroll-anchor.ts).
+  return h("section", { class: "section", "data-view-key": `section:${title}` }, typeof heading === "string" ? head : h("div", { class: "section-head" }, head, helpTip(title, heading.help)), ...children);
 }
 export function note(text = "", tone: "muted" | "warning" | "info" = "muted") {
   return h("p", { class: `note ${tone}`, text });

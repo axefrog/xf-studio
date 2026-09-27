@@ -1,7 +1,7 @@
 // Grouping a row's choices by who made them (cc-controls backlog 4a): the projection's maker groups (the base game, XF Studio by its
 // `xfs_` resources, authors as mod managers record them, else the mod's name), the host's maker reader (Vortex's records; MO2 records
 // none; hand-placed game-folder mods together), and the choice list's collapsible, keyboard-navigable groups that keep instant selection.
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { buildCatalogue, type CcCatalogue } from "../src/cc-catalogue";
 import type { CcoResource } from "../src/cco-model";
 import { BASE_GAME_GROUP, type CcChoiceGroup, type CcPanelChoice, choiceGroup, compareGroups, isXfResource, OTHER_MODS_INDEX, OWN_GROUP_MIN_CHOICES, panelProjection,
@@ -12,6 +12,8 @@ import type { VortexModIdentity } from "../src/vortex-deployment";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());
+// Folds are remembered view state (view-state.ts): each test starts with none.
+beforeEach(async () => (await import("../src/studio-ui/view-state")).bindViewState());
 afterAll(() => uninstallLightDom());
 
 /** A creator with two options: one whose choices come from the game and four mods, one with a single mod's choices. */
