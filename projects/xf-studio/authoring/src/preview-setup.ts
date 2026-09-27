@@ -97,6 +97,7 @@ const HEAD_FAILURES: Record<HeadLoadFailureCode, { message: string; next: "retry
     "or if you're using Remote Desktop, open XF Studio on the computer itself. The UV editor, library and Check keep working." },
   preview_damaged: { next: "prepare-again", message: "The prepared 3D preview files are damaged. Prepare them again from your Cyberpunk 2077 files; it usually takes under a minute." },
   preview_unreachable: { next: "retry", message: "The 3D preview files couldn't be loaded just now. Try again." },
+  body_unavailable: { next: "retry", message: "The masculine V's head couldn't be prepared from your Cyberpunk 2077 files. Try again." },
   head_load_failed: { next: "retry", message: "The 3D preview couldn't be loaded. Try again." },
 };
 const REPEATED_FAILURE = "The 3D preview still couldn't be loaded. Prepare it again from your Cyberpunk 2077 files.";
@@ -320,6 +321,16 @@ export class PreviewSetupActions {
     // Build availability depends on WolvenKit too.
     if (phase !== this.lastWolvenKit && this.lastWolvenKit !== null) this.port.localSetup.requestRefresh();
     this.lastWolvenKit = phase;
+    this.notify();
+  }
+  /**
+   * The shown V changed body, so the head loads again with that body's core (browser-head-attachment.ts asks). A load already
+   * under way is left alone; the head attachment asks again if the body still differs once it is ready.
+   */
+  reloadHead(): void {
+    if (!this.started || this.head.phase === "loading") return;
+    this.head = { phase: "waiting", code: null, failures: 0 };
+    this.follow();
     this.notify();
   }
   /** The head loads as soon as the preview is ready; a failure is kept (not latched) until a retry. */

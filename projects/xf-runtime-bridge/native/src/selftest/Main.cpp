@@ -5,7 +5,10 @@
 // clearly marked simulated values; nothing here proves anything about the game itself.
 //
 // Usage: xfb_selftest --runtime-dir <dir> [--seconds N] [--allow-writes] [--write-classes <list>] [--no-pump]
-//                    [--allow-creator-leave] [--idle-seconds N] [--no-cet]
+//                    [--allow-creator-leave] [--allow-live-pose] [--idle-seconds N] [--no-cet]
+//                    [--rearm-after-ms N]
+// --rearm-after-ms re-arms the bridge N ms after a kill switch (once its restore has run), as the in-game
+// panel's Reconnect does (the plugin's HandleRearm), up to three times.
 //        xfb_selftest --unit        (in-process checks only; no pipe)
 
 #include <Windows.h>
@@ -21,6 +24,7 @@
 #include "core/Bridge.hpp"
 #include "core/BuildInfo.hpp"
 #include "core/Layers.hpp"
+#include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
@@ -28,6 +32,7 @@
 #include "core/Writes.hpp"
 
 #include <functional>
+#include <limits>
 #include <map>
 #include <mutex>
 
@@ -66,6 +71,8 @@ int wmain(int argc, wchar_t** argv)
     bool allowCreatorLeave = false;
     uint32_t idleSeconds = 120;
     bool cet = true;
+    bool allowLivePose = false;
+    int rearmAfterMs = -1;
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
@@ -96,6 +103,14 @@ int wmain(int argc, wchar_t** argv)
         else if (arg == L"--allow-creator-leave")
         {
             allowCreatorLeave = true;
+        }
+        else if (arg == L"--allow-live-pose")
+        {
+            allowLivePose = true;
+        }
+        else if (arg == L"--rearm-after-ms" && i + 1 < argc)
+        {
+            rearmAfterMs = std::clamp(std::stoi(argv[++i]), 0, 60000);
         }
         else if (arg == L"--no-cet")
         {
@@ -130,6 +145,7 @@ int wmain(int argc, wchar_t** argv)
     config.writeClasses =
         xfb::ParseConfig("[bridge]\nallow_write_classes = " + xfb::win32::Narrow(writeClasses) + "\n").writeClasses;
     config.allowCreatorLeave = allowCreatorLeave;
+    config.allowLivePose = allowLivePose;
     config.maxRequestsPerSecond = 20;
     config.requestTimeoutMs = 1000;
     config.idleDisconnectSeconds = idleSeconds;
@@ -233,9 +249,42 @@ int wmain(int argc, wchar_t** argv)
         std::string creatorMode;
         bool saveLock = false;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
+        std::string player = "v";            // selftest.phase {player: "johnny"}: a stand-in, not V
+        // Photo-mode poses: two categories (0 Idle, 900 XF Live) and their poses; the XF carrier is pose 7 of 900.
+        int32_t poseCategory = 0;
+        int32_t pose = 1;
+        // The simulated carrier clip: 71 joints, a rotation and a translation constant key each, laid out
+        // in one block like the game's buffer (core/LivePose.hpp).
+        std::vector<xfb::livepose::RawConstKey> carrier;
+        std::vector<xfb::livepose::RawConstKey> carrierOriginal;
+        bool carrierWritten = false;
     };
     static Simulated sim;
     static xfb::writes::RestoreOnce restore;
+    {
+        namespace lp = xfb::livepose;
+        for (uint16_t joint = 0; joint < 71; ++joint)
+        {
+            lp::RawConstKey rotation{};
+            bool wSign = false;
+            const float angle = 0.01f * static_cast<float>(joint % 7);
+            lp::EncodeRotation({std::sin(angle / 2), 0.0f, 0.0f, std::cos(angle / 2)}, rotation.x, rotation.y, rotation.z, wSign);
+            rotation.header = lp::Header(joint, lp::Rotation, wSign);
+            sim.carrier.push_back(rotation);
+            lp::RawConstKey translation{lp::Header(joint, lp::Translation, false), 0, 0.0f, joint == 2 ? 1.0f : 0.1f, 0.0f};
+            sim.carrier.push_back(translation);
+        }
+        sim.carrierOriginal = sim.carrier;
+    }
+    // The simulated rig's joint names: Root, Trajectory, Hips, then joint_3 ... (RightForeArm is 40).
+    const auto jointNames = [] {
+        std::vector<std::string> names{"Root", "Trajectory", "Hips"};
+        for (int i = 3; i < 71; ++i)
+        {
+            names.push_back(i == 40 ? std::string("RightForeArm") : "joint_" + std::to_string(i));
+        }
+        return names;
+    }();
     const auto phase = [] {
         std::scoped_lock _(sim.mutex);
         return sim.phase;
@@ -272,14 +321,23 @@ int wmain(int argc, wchar_t** argv)
                              std::scoped_lock _(sim.mutex);
                              sim.phase = aContext.params.value("phase", std::string("gameplay"));
                              sim.creatorOpens = aContext.params.value("creator_opens", true);
-                             return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}};
+                             sim.player = aContext.params.value("player", std::string("v"));
+                             return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}, {"player", sim.player}};
+                         }});
+    // The in-game panel's write switch, which the self-test can't press: pauses or resumes writes.
+    dispatcher.Register({"selftest.pause_writes", xfb::Access::Read, xfb::RunOn::BridgeThread,
+                         "Pauses or resumes writes, as the CET panel does (self-test only).",
+                         [&dispatcher](const xfb::MethodContext& aContext) {
+                             dispatcher.SetWritesPaused(aContext.params.value("paused", true));
+                             return json{{"writes_paused", dispatcher.WritesPaused()}};
                          }});
     dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
-                         [phase, &config](const xfb::MethodContext& aContext) {
+                         [phase, &config, &dispatcher](const xfb::MethodContext& aContext) {
                              p::RequireOnly(aContext.params, {});
                              std::scoped_lock _(sim.mutex);
                              return json{{"simulated", true},
                                          {"allow_writes", config.allowWrites},
+                                         {"writes_paused", dispatcher.WritesPaused()},
                                          {"write_classes", xfb::WriteClassList(config)},
                                          {"phase", sim.phase},
                                          {"player_present", sim.phase == "gameplay" || sim.phase == "photo_mode"},
@@ -595,6 +653,10 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
                                          }
+                                         if (sim.player != "v")
+                                         {
+                                             throw xfb::MethodError("not_v", "simulated: the player is Johnny right now, not V");
+                                         }
                                          sim.saveLock = true;
                                          return json{{"save_lock_requested", true}};
                                      };
@@ -610,18 +672,45 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              throw xfb::MethodError("save_lock_not_held", "simulated: no save lock");
                                          }
+                                         if (sim.phase != "gameplay")
+                                         {
+                                             // The moment passed between the two steps (selftest.phase in between).
+                                             throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                         }
                                          sim.creatorMode = p::CreatorModeName(request.mode);
-                                         sim.creatorOpenTicks = sim.creatorOpens ? 2 : -1;
+                                         sim.creatorOpenTicks = sim.creatorOpens ? 2 : std::numeric_limits<int>::max(); // never picked up: pending until withdrawn
                                          return json{{"requested", true}, {"edit_mode", request.mode == p::CreatorMode::Ripperdoc ? "Ripperdoc" : "HairDresser"},
                                                      {"saving_locked", true}, {"route", "menu_event"}};
                                      };
-                                     ops.phase = [] {
-                                         std::scoped_lock _(sim.mutex);
-                                         return sim.phase;
+                                     // Through the game-thread queue, as in the plugin: after the kill switch closes it, a poll
+                                     // or the withdrawal fails at once instead of waiting out the timeout.
+                                     ops.phase = [&queue] {
+                                         return xfb::RunGameTask(
+                                                    queue, std::chrono::milliseconds(1000),
+                                                    [] {
+                                                        std::scoped_lock _(sim.mutex);
+                                                        return json{{"phase", sim.phase}};
+                                                    },
+                                                    "cc.open.wait")
+                                             .value("phase", std::string());
                                      };
-                                     ops.cancel = [] {
-                                         std::scoped_lock _(sim.mutex);
-                                         sim.creatorOpenTicks = -1;
+                                     ops.cancel = [&queue]() -> json {
+                                         try
+                                         {
+                                             return xfb::RunGameTask(
+                                                 queue, std::chrono::milliseconds(1000),
+                                                 [] {
+                                                     std::scoped_lock _(sim.mutex);
+                                                     const bool waiting = sim.creatorOpenTicks >= 0;
+                                                     sim.creatorOpenTicks = -1;
+                                                     return json{{"withdrawn", true}, {"taken", false}, {"outcome", waiting ? "withdrawn" : "none"}};
+                                                 },
+                                                 "cc.open.cancel");
+                                         }
+                                         catch (const xfb::MethodError&)
+                                         {
+                                             return json::object();
+                                         }
                                      };
                                      ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
                                      auto out = w::CreatorOpen(request, ops);
@@ -671,30 +760,194 @@ int wmain(int argc, wchar_t** argv)
                                  else
                                  {
                                      const auto seq = options.Request(request.names);
-                                     const auto values = options.WaitFor(seq, std::chrono::milliseconds(3000));
+                                     xfb::OptionsOutcome outcome;
+                                     const auto values = options.WaitFor(seq, std::chrono::milliseconds(3000), &outcome);
                                      if (!values)
                                      {
                                          options.Withdraw(seq);
-                                         out["render_options"] = {{"available", false}, {"reason", "simulated: no answer"}};
                                      }
-                                     else
-                                     {
-                                         json missing = json::array();
-                                         for (const auto& name : request.names)
-                                         {
-                                             if (!values->contains(name))
-                                             {
-                                                 missing.push_back(name);
-                                             }
-                                         }
-                                         out["render_options"] = {{"available", true}, {"values", *values}, {"missing", missing}};
-                                     }
+                                     out["render_options"] = xfb::RenderOptionsResult(request.names, values, outcome, 3000);
                                  }
                              }
                              return out;
                          }});
     dispatcher.Register(simWrite("cc.confirm", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Creator confirm (simulated).", simLeave(true)));
     dispatcher.Register(simWrite("cc.back", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Creator back (simulated).", simLeave(false)));
+    // photo.pose.set, simulated with the plugin's own sequence (writes::PoseSet): categories 0 "Idle" and 900
+    // "XF Live"; the record PhotoModePoses.xfs_live_carrier is pose 7 "XF Live Carrier" in 900.
+    dispatcher.Register(simWrite("photo.pose.set", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Pose (simulated).",
+                                 [&queue](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParsePoseSet(aContext.params);
+                                     const auto categoryOf = [](const std::string& aText) {
+                                         return aText == "XF Live" ? 900 : aText == "Idle" ? 0 : -1;
+                                     };
+                                     w::PoseSetOps ops;
+                                     auto poseText = std::make_shared<std::string>(request.pose);
+                                     ops.category = [&request, categoryOf, poseText] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.phase != "photo_mode")
+                                         {
+                                             throw xfb::MethodError("not_in_photo_mode", "simulated: photo mode is not open");
+                                         }
+                                         json out{{"before_known", true}, {"before_category", sim.poseCategory}, {"before_pose", sim.pose}};
+                                         int32_t wanted = request.categoryValue;
+                                         if (!request.record.empty())
+                                         {
+                                             if (request.record != xfb::livepose::kCarrierRecord)
+                                             {
+                                                 throw xfb::MethodError("bad_params", "simulated: no photo-mode pose record named " + request.record);
+                                             }
+                                             wanted = 900;
+                                             *poseText = xfb::livepose::kCarrierPoseLabel;
+                                             out["pose_text"] = *poseText;
+                                         }
+                                         else if (!request.category.empty())
+                                         {
+                                             wanted = categoryOf(request.category);
+                                             if (wanted < 0)
+                                             {
+                                                 throw xfb::MethodError("bad_params", "simulated: no pose category labelled '" + request.category + "'");
+                                             }
+                                         }
+                                         if (wanted < 0 || wanted == sim.poseCategory)
+                                         {
+                                             out["changed"] = false;
+                                             out["category_value"] = sim.poseCategory;
+                                             return out;
+                                         }
+                                         if (wanted != 0 && wanted != 900)
+                                         {
+                                             throw xfb::MethodError("bad_params", "simulated: category_value is 0 or 900");
+                                         }
+                                         sim.poseCategory = wanted;
+                                         sim.pose = wanted == 900 ? 7 : 1;
+                                         out["changed"] = true;
+                                         out["category_value"] = wanted;
+                                         out["category_text"] = wanted == 900 ? "XF Live" : "Idle";
+                                         return out;
+                                     };
+                                     ops.settle = [&queue] {
+                                         if (!w::WaitTicks(queue, 5, std::chrono::milliseconds(1000)))
+                                         {
+                                             throw xfb::MethodError("timeout", "simulated: no game ticks");
+                                         }
+                                     };
+                                     ops.pose = [&request, poseText] {
+                                         std::scoped_lock _(sim.mutex);
+                                         int32_t wanted = request.poseValue;
+                                         if (wanted < 0)
+                                         {
+                                             if (*poseText == xfb::livepose::kCarrierPoseLabel && sim.poseCategory == 900)
+                                             {
+                                                 wanted = 7;
+                                             }
+                                             else if (*poseText == "Stand 01" && sim.poseCategory == 0)
+                                             {
+                                                 wanted = 1;
+                                             }
+                                             else
+                                             {
+                                                 throw xfb::MethodError("bad_params", "simulated: no pose labelled '" + *poseText + "' in the current category");
+                                             }
+                                         }
+                                         const bool changed = wanted != sim.pose;
+                                         sim.pose = wanted;
+                                         return json{{"changed", changed}, {"pose_value", wanted},
+                                                     {"pose_text", wanted == 7 ? xfb::livepose::kCarrierPoseLabel : "Stand 01"}};
+                                     };
+                                     ops.restoreCategory = [](int32_t aValue) {
+                                         std::scoped_lock _(sim.mutex);
+                                         sim.poseCategory = aValue;
+                                     };
+                                     auto out = w::PoseSet(ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    // pose.live.read and pose.live.apply against the simulated carrier, through the same checks and plan as
+    // the plugin (core/LivePose.cpp); the "memory" is sim.carrier.
+    const auto simulatedCarrier = [](xfb::livepose::BufferCounts& aCounts, xfb::livepose::BufferSpans& aSpans) {
+        aCounts.numFrames = 2;
+        aCounts.numJoints = 71;
+        aCounts.numTracks = 13;
+        aCounts.numConstAnimKeys = static_cast<uint32_t>(sim.carrier.size());
+        aCounts.numConstTrackKeys = 13;
+        aCounts.dataBytes = static_cast<uint32_t>(sim.carrier.size() * 16 + 13 * 8);
+        const auto begin = reinterpret_cast<uintptr_t>(sim.carrier.data());
+        aSpans.constKeys = {begin, begin + sim.carrier.size() * 16};
+        aSpans.constTracks = {aSpans.constKeys.end, aSpans.constKeys.end + 13 * 8};
+    };
+    dispatcher.Register({"pose.live.read", xfb::Access::Read, xfb::RunOn::GameThread, "Live carrier layout (simulated).",
+                         [simulatedCarrier, jointNames](const xfb::MethodContext& aContext) {
+                             namespace lp = xfb::livepose;
+                             const auto request = p::ParsePoseLiveRead(aContext.params);
+                             std::scoped_lock _(sim.mutex);
+                             if (sim.phase != "photo_mode" || request.set != lp::kCarrierSet)
+                             {
+                                 throw xfb::MethodError("carrier_not_loaded", "simulated: the animation set " + request.set + " isn't loaded");
+                             }
+                             if (request.clip != lp::kCarrierClip)
+                             {
+                                 throw xfb::MethodError("clip_not_found", "simulated: the set has 1 clip, none named " + request.clip);
+                             }
+                             lp::BufferCounts counts;
+                             lp::BufferSpans spans;
+                             simulatedCarrier(counts, spans);
+                             auto problems = lp::CheckSpans(counts, spans);
+                             const auto keyProblems = lp::CheckConstKeys(counts, sim.carrier);
+                             problems.insert(problems.end(), keyProblems.begin(), keyProblems.end());
+                             if (!problems.empty())
+                             {
+                                 throw xfb::MethodError("layout_unrecognised", "simulated: " + problems.front());
+                             }
+                             json out{{"simulated", true}, {"found", true}, {"set", request.set}, {"clip", request.clip}, {"layout", "ok"},
+                                      {"buffer", {{"num_frames", 2}, {"num_joints", 71}, {"num_const_anim_keys", sim.carrier.size()}}},
+                                      {"keys_hash", lp::KeysHash(sim.carrier)}, {"keys", lp::DescribeKeys(sim.carrier, jointNames)},
+                                      {"joint_names", jointNames}, {"bridge_wrote", sim.carrierWritten}};
+                             const auto contract = lp::CheckCarrier(counts, sim.carrier);
+                             out["carrier_contract"] = contract.empty() ? json("ok") : json(contract);
+                             if (!request.expectHash.empty())
+                             {
+                                 out["expect_hash"] = request.expectHash;
+                                 out["matches_offline"] = request.expectHash == out["keys_hash"].get<std::string>();
+                             }
+                             return out;
+                         }});
+    dispatcher.Register(simWrite("pose.live.apply", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Live carrier write (simulated).",
+                                 [&config, jointNames](const xfb::MethodContext& aContext) {
+                                     namespace lp = xfb::livepose;
+                                     const auto request = p::ParsePoseLiveApply(aContext.params);
+                                     p::LivePoseAllowed(config.allowLivePose);
+                                     std::scoped_lock _(sim.mutex);
+                                     if (request.restore)
+                                     {
+                                         const bool was = sim.carrierWritten;
+                                         sim.carrier = sim.carrierOriginal;
+                                         sim.carrierWritten = false;
+                                         return json{{"simulated", true}, {"restored", was}, {"undo", nullptr}};
+                                     }
+                                     if (sim.phase != "photo_mode" || sim.poseCategory != 900 || sim.pose != 7)
+                                     {
+                                         throw xfb::MethodError("carrier_not_selected", "simulated: the XF live carrier isn't the selected photo-mode pose");
+                                     }
+                                     std::vector<lp::JointRotation> rotations;
+                                     for (const auto& [name, rotation] : request.joints)
+                                     {
+                                         const auto it = std::find(jointNames.begin(), jointNames.end(), name);
+                                         if (it == jointNames.end())
+                                         {
+                                             throw xfb::MethodError("bad_params", "simulated: the carrier's rig has no joint named '" + name + "'");
+                                         }
+                                         rotations.push_back({static_cast<uint16_t>(it - jointNames.begin()), rotation});
+                                     }
+                                     const auto writes = lp::PlanApply(sim.carrier, rotations, request.hips, 2);
+                                     for (const auto& write : writes)
+                                     {
+                                         sim.carrier[write.keyIndex] = write.value;
+                                     }
+                                     sim.carrierWritten = true;
+                                     return json{{"simulated", true}, {"applied", writes.size()}, {"keys_hash", lp::KeysHash(sim.carrier)},
+                                                 {"undo", {{"method", "pose.live.apply"}, {"params", {{"restore", true}}}}}};
+                                 }));
     dispatcher.Register(simWrite("world.time.set", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "Clock (simulated).",
                                  [requirePhase](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseTime(aContext.params);
@@ -731,6 +984,12 @@ int wmain(int argc, wchar_t** argv)
         {
             out["creator_open_withdrawn"] = true;
         }
+        if (sim.carrierWritten)
+        {
+            out["carrier_restored"] = true;
+            sim.carrier = sim.carrierOriginal;
+            sim.carrierWritten = false;
+        }
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
@@ -749,8 +1008,46 @@ int wmain(int argc, wchar_t** argv)
 
     queue.SetPumping(pump);
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
-    while (!gStop.load() && std::chrono::steady_clock::now() < deadline && bridge.IsListening())
+    int rearms = 0;
+    std::chrono::steady_clock::time_point killedAt{};
+    while (!gStop.load() && std::chrono::steady_clock::now() < deadline &&
+           (bridge.IsListening() || (rearmAfterMs >= 0 && rearms < 3)))
     {
+        // As the plugin's HandleRearm: once the kill switch's restore has run and the listener has stopped,
+        // re-arm with a new session (the in-game panel's Reconnect), after --rearm-after-ms.
+        if (rearmAfterMs >= 0 && bridge.RestoreReady())
+        {
+            if (killedAt == std::chrono::steady_clock::time_point{})
+            {
+                killedAt = std::chrono::steady_clock::now();
+            }
+            const bool due = std::chrono::steady_clock::now() - killedAt >= std::chrono::milliseconds(rearmAfterMs);
+            if (pump)
+            {
+                restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
+            }
+            if (due && bridge.RearmRefusal().empty() && !restore.Pending())
+            {
+                restore.Reset();
+                options.Reset();
+                std::string rearmError;
+                const bool ok = bridge.Rearm(
+                    [&session, &runtimeDir](std::string& aError) {
+                        if (!xfb::CreateSession(session, aError, std::filesystem::path(runtimeDir)))
+                        {
+                            return false;
+                        }
+                        xfb::log::SetSessionId(session.sessionId);
+                        return true;
+                    },
+                    pump, rearmError);
+                ++rearms;
+                killedAt = {};
+                xfb::log::Info("selftest.rearm", std::string("ok=") + (ok ? "true" : "false") + " error=" + rearmError);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            continue;
+        }
         if (pump)
         {
             queue.Drain(4); // the plugin does this once per engine tick

@@ -3,7 +3,7 @@ import { trustedFixture } from "./studio-presentation-fixture";
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "desktopApp", "diagnostics", "feature", "features", "files", "installDetection", "library", "links", "localSetup", "modInstall", "preferences",
+  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "desktopApp", "diagnostics", "feature", "features", "files", "installDetection", "library", "links", "localSetup", "modInstall", "module", "preferences",
     "previewReadiness", "previewSetup", "snapshot", "status", "subscribe", "viewport", "views"]);
   expect("document" in shell.authoring).toBe(false);
   // No desktop-app offer without a host that has one (the desktop app, fixtures): nothing about it is shown.

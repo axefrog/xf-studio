@@ -242,6 +242,29 @@ bool Dispatcher::IsKilled() const
     return m_killed.load();
 }
 
+void Dispatcher::Revive()
+{
+    {
+        std::scoped_lock _(m_mutex);
+        m_killReason.clear();
+    }
+    m_killed.store(false);
+    log::Info("bridge.revived", "requests are accepted again");
+}
+
+void Dispatcher::SetWritesPaused(bool aPaused)
+{
+    if (m_writesPaused.exchange(aPaused) != aPaused)
+    {
+        log::Warn("bridge.writes_paused", std::string("paused=") + (aPaused ? "true" : "false"));
+    }
+}
+
+bool Dispatcher::WritesPaused() const
+{
+    return m_writesPaused.load();
+}
+
 std::string Dispatcher::KillReason() const
 {
     std::scoped_lock _(m_mutex);
@@ -254,15 +277,18 @@ json Dispatcher::Describe() const
     for (const auto& [name, spec] : m_methods)
     {
         const auto bit = WriteClassBit(spec.access);
-        const bool enabled =
-            !IsWrite(spec.access) || (m_config.allowWrites && (bit == 0 || (m_config.writeClasses & bit) != 0));
+        const bool enabled = !IsWrite(spec.access) || (m_config.allowWrites && !m_writesPaused.load() &&
+                                                       (bit == 0 || (m_config.writeClasses & bit) != 0));
         methods.push_back({{"name", name},
                            {"access", AccessName(spec.access)},
                            {"thread", spec.runOn == RunOn::GameThread ? "game" : "bridge"},
                            {"enabled", enabled},
                            {"summary", spec.summary}});
     }
-    return json{{"methods", methods}, {"allow_writes", m_config.allowWrites}, {"write_classes", WriteClassList(m_config)}};
+    return json{{"methods", methods},
+                {"allow_writes", m_config.allowWrites},
+                {"writes_paused", m_writesPaused.load()},
+                {"write_classes", WriteClassList(m_config)}};
 }
 
 uint64_t Dispatcher::RequestCount() const
@@ -420,6 +446,12 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
         return refuse("bridge.write_refused", id, cid, "writes_disabled",
                       "write methods are off; set [bridge] allow_writes = true in config.ini", false,
                       "method=" + methodName + " reason=allow_writes_false");
+    }
+    if (IsWrite(spec.access) && m_writesPaused.load())
+    {
+        return refuse("bridge.write_refused", id, cid, "writes_paused",
+                      "writes are paused in the game's XF bridge panel (Cyber Engine Tweaks overlay); resume them there",
+                      false, "method=" + methodName + " reason=writes_paused");
     }
     if (const auto bit = WriteClassBit(spec.access); bit != 0 && (m_config.writeClasses & bit) == 0)
     {

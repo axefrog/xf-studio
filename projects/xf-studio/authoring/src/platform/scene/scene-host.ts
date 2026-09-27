@@ -5,6 +5,7 @@ import { coreSceneEvidence } from "../../scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../viewport-size";
 import { loadCoreDetail, type LoadedCoreDetail } from "../../core-detail-loader";
+import type { CoreBody } from "../../render-detail";
 import { HeadLoadError } from "../../head-load-error";
 import { createViewportBackdrop } from "../../viewport-backdrop";
 import { attachHeadCameraInput } from "../../head-camera-input";
@@ -37,8 +38,10 @@ export type SceneHostOptions = {
   stage?: StageTheme;
   /** The feature renderers to create once the head is ready (the composition's list, compose/renderers.ts). */
   renderers?: readonly FeatureRendererFactory[];
+  /** Whose core head to load: the feminine V's (default) or the masculine V's; a V of the other body needs a new scene host. */
+  body?: CoreBody;
   /** The core head record (default: the host's derived preview, core-detail-loader.ts). Probe pages inject a synthetic head. */
-  loadCore?: (renderer: THREE.WebGLRenderer) => Promise<LoadedCoreDetail>;
+  loadCore?: (renderer: THREE.WebGLRenderer, body: CoreBody) => Promise<LoadedCoreDetail>;
   /** The rig's motion (default: the game idle and blink assets, head-rig.ts). */
   loadMotion?: MotionLoader;
   /** The creator preset's grading LUT (default: the host's). */
@@ -140,7 +143,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const lighting = createLightingPresetStage({ scene, renderer, studioLights: studio.lights, loadLut: options.loadLut ?? (() => loadGradingLut()) });
   releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
-  const core: LoadedCoreDetail = await (options.loadCore ?? loadCoreDetail)(renderer);
+  const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body) => loadCoreDetail(renderer, fetch, body)))(renderer, options.body ?? "female");
+  // The creator light rig follows the body of the head it lights (the game's preview controller does the same).
+  lighting.setBodySex(core.body);
   const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };
   // The feature renderers (compose/renderers.ts), created once the head and its motion are ready.
   let features: FeatureRenderers | undefined;
@@ -261,6 +266,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     eyeShape: { choices: rig.eyeShapeChoices.length, eyesFollow: rig.eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
     profileEncoding: character.profileEncoding, idle, idleError: motion.idleError });
   const api = {
+    /** Whose core head this scene shows. */
+    body: core.body,
     scene,
     camera,
     /** Releases the V's details, the feature renderers, the WebGL renderer, its canvas, the stage and observers; the host is unusable afterwards. */
@@ -355,6 +362,14 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     },
     endFovGesture: () => { fovGestureAnchor = undefined; },
     setIdle: (enabled: boolean) => { if (rigMotion.setIdle(enabled)) frameIdle(); },
+    /** The game's preview idles prepared on this computer (idle-catalogue.ts). */
+    idles: motion.idles,
+    /** Play another of them; the framing follows the new clip's head, as enabling the idle does. */
+    selectIdle: async (id: string) => {
+      if (!motion.selectIdle) throw Error("The game's other idles aren't prepared on this computer.");
+      await motion.selectIdle(id);
+      frameIdle();
+    },
     setIdlePaused: (paused: boolean) => idle?.setPaused(paused),
     setIdleContributions: (body: boolean, face: boolean) => {
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;

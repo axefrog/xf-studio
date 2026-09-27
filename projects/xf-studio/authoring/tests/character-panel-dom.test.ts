@@ -7,6 +7,7 @@ import { choicePage, panelProjection, searchChoices, type CcPanelChoice, type Cr
 import { catalogueCoverage } from "../src/cc-render-coverage";
 import { deriveCharacter } from "../src/character-context";
 import { CharacterContextActions, type CreatorPort } from "../src/character-context-actions";
+import { UIPreferenceActions } from "../src/ui-preferences";
 import { fixtureSource } from "./cc-fixtures";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
@@ -52,8 +53,10 @@ async function harness() {
   };
   const context = new CharacterContextActions({ creator: port, showSave: () => {} });
   const dispatched: { kind: string }[] = [];
+  const preferences = new UIPreferenceActions();
   const rt = {
     port: {
+      preferences,
       authoring: { characterPanel: () => context.panel(), characterView: () => context.view(),
         characterChoices: (option: string, want?: number, query?: string) => context.choices(option, want, query), characterSearch: (query: string) => context.search(query),
         characterSwatches: (option: string) => context.swatches(option),
@@ -69,12 +72,12 @@ async function harness() {
   const controller = characterPanel(rt as never);
   const root = controller.spec.element as unknown as LightElement;
   lightDocument.body.append(root);
-  const frame = () => ({ preview: { character: context.snapshot(), preview: undefined, savedV: {}, eyeShapeOptions: undefined },
+  const frame = () => ({ preferences: preferences.snapshot(), preview: { character: context.snapshot(), preview: undefined, savedV: {}, eyeShapeOptions: undefined },
     status: { assets: { characterDetails: updating ? { phase: "ready", updating: true, drawn: [], slots: [] } : undefined } }, viewport: { head: { error: null, message: null } } }) as never;
   const paint = () => controller.update(frame());
   context.start(); await settle();
   paint(); await settle(); paint();
-  return { context, root, paint, dispatched, setFailView: (value: boolean) => { failView = value; }, prefetches, stops, fetchStates,
+  return { context, root, paint, dispatched, preferences, controller, setFailView: (value: boolean) => { failView = value; }, prefetches, stops, fetchStates,
     holdViews: (value: boolean) => { holdViews = value; }, releaseViews: () => { while (held.length) held.shift()!(); },
     setUpdating: (value: boolean) => { updating = value; } };
 }
@@ -182,8 +185,13 @@ describe("the Character panel's DOM", () => {
     const resetAll = h.root.querySelectorAll("button").find(button => button.textContent === "Reset all")!;
     resetAll.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.resetAll" });
-    // The fixture's piercing colour depends on the style switcher, so its row keeps a detail line; the eye colour has none.
-    expect(row(h.root, "Eye Color").querySelector(".cc-row-detail")).toBeNull();
+    // What a row is (the fixture's piercing colour follows the style switcher) is in its help tip, not a line; the eye colour has none.
+    expect(h.root.querySelector(".cc-row-detail")).toBeNull();
+    expect(row(h.root, "Eye Color").querySelector(".help-tip")).toBeNull();
+    // The piercing colour (following the style switcher) has one, kept in place even while its row isn't offered.
+    const tips = h.root.querySelectorAll(".cc-row").filter(element => element.querySelector(".help-tip"));
+    expect(tips.length).toBe(1);
+    expect(tips[0]!.querySelector(".help-tip")!.getAttribute("aria-label")).toStartWith("About ");
   });
 });
 
@@ -201,12 +209,14 @@ describe("one hierarchy in the Character panel (Next 4)", () => {
     // The piercings switch is on the heading of the section holding the piercing colours; the eye shape is in Eyes.
     const sectionOf = (element: LightElement) => { let at: LightElement | null = element; while (at && !at.classList.contains("cc-section")) at = at.parentNode; return at; };
     const piercings = h.root.querySelectorAll("input").find(input => input.getAttribute("aria-label") === "Show piercings in the 3D view")!;
-    expect(sectionOf(piercings)!.getAttribute("data-section")).toBe("head/FaceModification");
-    expect(h.root.querySelectorAll("select").some(select => sectionOf(select)?.getAttribute("data-section") === "head/Eyes")).toBe(true);
-    // Without a 3D preview a switch can't change: it stays focusable, says why in the line under its heading, and a click runs nothing.
+    expect(sectionOf(piercings)!.getAttribute("data-section")).toBe("head/piercings");
+    expect(h.root.querySelectorAll("select").some(select => sectionOf(select)?.getAttribute("data-section") === "head/eyes")).toBe(true);
+    // Without a 3D preview a switch can't change: it stays focusable, says why (its description and the page's reason tip; no line is
+    // reserved under the heading), and a click runs nothing.
     expect(piercings.disabled).toBe(false);
     expect(piercings.getAttribute("aria-disabled")).toBe("true");
-    expect(sectionOf(piercings)!.querySelector(".cc-heading-note")!.textContent).toContain("3D preview");
+    expect(piercings.getAttribute("data-reason")).toContain("3D preview");
+    expect(sectionOf(piercings)!.querySelector(".cc-heading-note")).toBeNull();
     const before = h.dispatched.length;
     piercings.click();
     expect(h.dispatched.length).toBe(before);
@@ -227,6 +237,89 @@ describe("one hierarchy in the Character panel (Next 4)", () => {
     expect(look(byPosition(1)).getAttribute("data-look")).toBe("gradient");
     // Replaced (`!`): the icon would show the old colour, so the derived colour shows.
     expect(look(byPosition(2)).getAttribute("data-look")).toBe("colour");
+  });
+});
+
+describe("folding and help in the Character panel", () => {
+  const sectionEl = (root: LightElement, key: string) => root.querySelectorAll(".cc-section").find(element => element.getAttribute("data-section") === key)!;
+  test("one expander for groups, sections, rows and author groups; a section folds, remembered in the UI preferences", async () => {
+    const h = await harness();
+    const levels = new Set(h.root.querySelectorAll(".expander").map(button => button.getAttribute("data-level")));
+    expect([...levels].sort()).toEqual(["group", "row", "section", "subsection"]);
+    const eyes = sectionEl(h.root, "head/eyes");
+    // Eyes sits inside Face: a subsection, one level down.
+    const head = eyes.querySelector('.expander[data-level="subsection"]')!;
+    const body = eyes.querySelector(".cc-section-body")!;
+    expect(head.getAttribute("aria-controls")).toBe(body.id);
+    expect(head.getAttribute("aria-expanded")).toBe("true");
+    head.click();
+    // At once, before any paint; remembered for the next session.
+    expect(head.getAttribute("aria-expanded")).toBe("false");
+    expect(body.hidden).toBe(true);
+    expect(h.preferences.snapshot().folded).toEqual(["character:head/eyes"]);
+    h.paint();
+    expect(body.hidden).toBe(true);
+    // A search leaves the fold alone; the folded heading says how many rows in it match.
+    const search = h.root.querySelector(".cc-search")! as unknown as { value: string };
+    search.value = "eye color";
+    h.paint(); await settle(); h.paint();
+    expect(body.hidden).toBe(true);
+    expect(eyes.querySelector(".cc-match-count")!.textContent).toBe("1");
+    expect(head.getAttribute("aria-description")).toBe("1 matching row inside");
+    search.value = "";
+    head.click();
+    h.paint();
+    expect(body.hidden).toBe(false);
+    expect(h.preferences.snapshot().folded).toBeUndefined();
+    // A group folds the same way.
+    const bodyGroup = h.root.querySelectorAll(".cc-group").find(element => element.getAttribute("data-group") === "body")!;
+    bodyGroup.querySelector('.expander[data-level="group"]')!.click();
+    expect(bodyGroup.querySelector(".cc-group-body")!.hidden).toBe(true);
+    expect(h.preferences.snapshot().folded).toEqual(["character:group/body"]);
+  });
+
+  test("Expand all at the far right of a section heading opens every row; then it collapses them; the palette has the same", async () => {
+    const h = await harness();
+    const section = h.root.querySelectorAll(".cc-section").find(element => element.querySelectorAll(".cc-row").filter(row => !row.hidden).length > 1)!;
+    const button = section.querySelector(".expand-all")!;
+    // It is the last thing on the heading row.
+    expect(section.querySelector(".cc-heading-end")!.children.at(-1)).toBe(button);
+    expect(button.getAttribute("aria-label")).toStartWith("Expand everything in ");
+    button.click();
+    h.paint(); await settle(); h.paint();
+    const shown = section.querySelectorAll(".cc-row").filter(row => !row.hidden);
+    expect(shown.every(row => row.querySelector(".cc-row-main")!.getAttribute("aria-expanded") === "true")).toBe(true);
+    expect(button.getAttribute("aria-label")).toStartWith("Collapse everything in ");
+    button.click();
+    h.paint();
+    expect(shown.every(row => row.querySelector(".cc-row-main")!.getAttribute("aria-expanded") === "false")).toBe(true);
+    // A section without rows (a contributed one) has no Expand all: nothing to expand.
+    const hair = sectionEl(h.root, "head/hair");
+    expect(hair.querySelector(".expand-all")).toBeNull();
+    // The palette: each section with rows, and every section folded or open at once.
+    const commands = h.controller.commands!();
+    const own = commands.find(command => command.title.endsWith(`› ${section.querySelector(".expander-label")!.textContent}`))!;
+    expect(own.title).toStartWith("Expand everything in ");
+    own.run();
+    h.paint();
+    expect(shown.every(row => row.querySelector(".cc-row-main")!.getAttribute("aria-expanded") === "true")).toBe(true);
+    commands.find(command => command.id === "character.fold.closeAll")!.run();
+    // Every top-level section folds (a subsection keeps its own fold inside it).
+    const topBodies = h.root.querySelectorAll(".cc-section").filter(section => !section.classList.contains("cc-subsection")).map(section => section.querySelector(".cc-section-body")!);
+    expect(topBodies.every(body => body.hidden)).toBe(true);
+    h.controller.commands!().find(command => command.id === "character.fold.openAll")!.run();
+    expect(h.root.querySelectorAll(".cc-section-body").some(body => body.hidden)).toBe(false);
+  });
+
+  test("what a heading shows is in a help tip beside it, never an inline line", async () => {
+    const h = await harness();
+    const tip = sectionEl(h.root, "head/hair").querySelector(".cc-heading")!.querySelector(".help-tip")!;
+    expect(tip.getAttribute("aria-label")).toBe("About Hair");
+    expect(tip.getAttribute("data-help")).toContain("Hair physics is not simulated");
+    expect(tip.tabIndex).toBe(0);
+    expect(h.root.textContent).not.toContain("Hair physics");
+    // The quick switch and the Files section explain themselves the same way.
+    expect(h.root.querySelectorAll(".help-tip").map(button => button.getAttribute("aria-label"))).toEqual(expect.arrayContaining(["About Show my V's own makeup", "About Files"]));
   });
 });
 

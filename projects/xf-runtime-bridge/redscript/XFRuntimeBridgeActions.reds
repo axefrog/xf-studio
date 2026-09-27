@@ -78,6 +78,10 @@ public class XFBridgeRegistry extends ScriptableSystem {
   private let m_ccOpenMode: Int32;
   private let m_ccOpenAt: Float;
   private let m_ccOpenCid: String;
+  // What became of the last request the menu took ("switched", "refused" or "expired") and whose it was,
+  // so a cc.open that timed out can tell "nothing will open" from "the screen may still open" (RB-42).
+  private let m_ccOpenOutcome: String;
+  private let m_ccOpenOutcomeCid: String;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -237,11 +241,27 @@ public class XFBridgeRegistry extends ScriptableSystem {
       return -1;
     }
     this.m_ccOpenRequested = false;
+    this.m_ccOpenOutcomeCid = this.m_ccOpenCid;
     if now - this.m_ccOpenAt > 3.0 || now < this.m_ccOpenAt {
+      this.m_ccOpenOutcome = "expired";
       XFBridgeLog.Warn(this.m_ccOpenCid, "cc.open request expired before the menu picked it up; nothing opened");
       return -1;
     }
+    this.m_ccOpenOutcome = "taken";
     return this.m_ccOpenMode;
+  }
+
+  // The menu's answer to the request it took: "switched" (the screen is opening) or "refused".
+  public func NoteCreatorOpenOutcome(outcome: String) -> Void {
+    this.m_ccOpenOutcome = outcome;
+  }
+
+  // The outcome of cid's request once the menu took it, or "" if it never did.
+  public func CreatorOpenOutcome(cid: String) -> String {
+    if Equals(this.m_ccOpenOutcomeCid, cid) {
+      return this.m_ccOpenOutcome;
+    }
+    return "";
   }
 
   public func CreatorOpenCid() -> String {
@@ -458,9 +478,11 @@ protected cb func OnXFBridgeOpenCreator() -> Bool {
   let cid = registry.CreatorOpenCid();
   let refusal = XFCharacter.OpenRefusal();
   if StrLen(refusal) > 0 {
+    registry.NoteCreatorOpenOutcome("refused");
     XFBridgeLog.Warn(cid, "cc.open: the moment passed before the menu picked the request up; nothing opened: " + refusal);
     return false;
   }
+  registry.NoteCreatorOpenOutcome("switched");
   let data = new MorphMenuUserData();
   if mode == 2 {
     data.m_editMode = gameuiCharacterCustomizationEditTag.Ripperdoc;
@@ -479,6 +501,13 @@ protected cb func OnUninitialize() -> Bool {
     registry.ClearCharacterMenu(this);
   }
   return wrappedMethod();
+}
+
+// Whether the game's save-lock manager holds a lock for this reason (its list is private; an added
+// method reads it without changing anything; saveLocksManager.script:3).
+@addMethod(SaveLocksManager)
+public func XFBridgeHolds(reason: CName) -> Bool {
+  return ArrayContains(this.m_saveLocks, reason);
 }
 
 // --- Entry points called by the plugin ---------------------------------------------------------
@@ -583,6 +612,27 @@ public abstract class XFBridgeActions {
       registry.SetSaveLockHeld(true);
       XFBridgeLog.Info(cid, "save lock requested (reason XFRuntimeBridge); kept after the kill switch; cleared by loading a save");
     }
+  }
+
+  // The plugin's own writes that don't go through a script function (pose.live.apply) take the lock here.
+  public static func SaveLock(cid: String) -> String {
+    XFBridgeActions.EnsureSaveLock(cid);
+    return "{\"ok\":true,\"save_lock_held\":true}";
+  }
+
+  // Whether the game's SaveLocksManager holds the bridge's own lock (reason XFRuntimeBridge). The request
+  // is queued, so this turns true a few ticks after EnsureSaveLock; any other lock doesn't count (RB-45).
+  public static func OwnSaveLockHeld() -> Bool {
+    let game = GetGameInstance();
+    if !GameInstance.IsValid(game) {
+      return false;
+    }
+    let container = GameInstance.GetScriptableSystemsContainer(game);
+    if !IsDefined(container) {
+      return false;
+    }
+    let manager = container.Get(n"SaveLocksManager") as SaveLocksManager;
+    return IsDefined(manager) && manager.XFBridgeHolds(n"XFRuntimeBridge");
   }
 
   // Called by the plugin once after the kill switch: undoes what the bridge left switched on
@@ -1244,8 +1294,8 @@ public abstract class XFCharacter {
     return IsStringNumber(a) && IsStringNumber(b) && StrFindFirst(a, ".") < 0 && StrFindFirst(b, ".") < 0 && StringToInt(a) == StringToInt(b);
   }
 
-  // The index of the value named or labelled `wanted`: an exact match of the internal name or the
-  // on-screen text first, else the one value whose name or text contains it. -1: none; -2: several.
+  // The index of the value named or labelled exactly `wanted` (a whole number matches as a number: "5"
+  // is "05"). -1: none; -2: several.
   public static func FindValue(option: ref<CharacterCustomizationOption>, wanted: String) -> Int32 {
     let count = XFCharacter.Count(option);
     let found = -1;
@@ -1264,8 +1314,21 @@ public abstract class XFCharacter {
     if matches > 1 {
       return -2;
     }
+    return -1;
+  }
+
+  // The one value whose name or on-screen text contains `wanted`, for words only: a number never matches
+  // part of a name, since "12" inside "h012" is a different position (RB-44). -1: none (or a number);
+  // -2: several. Apply reports such a match as matched_by "partial".
+  public static func FindPartialValue(option: ref<CharacterCustomizationOption>, wanted: String) -> Int32 {
+    if IsStringNumber(wanted) {
+      return -1;
+    }
+    let count = XFCharacter.Count(option);
+    let found = -1;
+    let matches = 0;
     let lower = StrLower(wanted);
-    i = 0;
+    let i = 0;
     while i < count {
       if StrContains(StrLower(XFCharacter.ValueLabel(option, i)), lower) || StrContains(StrLower(XFCharacter.ValueText(option, i)), lower) {
         found = i;
@@ -1438,6 +1501,14 @@ public abstract class XFCharacter {
     if !IsDefined(player) {
       return XFJson.Fail("not_in_gameplay", "V isn't in the world");
     }
+    // A Johnny section (or any other stand-in the story puts in V's place): the creator would edit the
+    // wrong character (player.script:590, 606).
+    if player.IsReplacer() {
+      if player.IsJohnnyReplacer() {
+        return XFJson.Fail("not_v", "the player is Johnny right now, not V; the appearance screen opens only for V");
+      }
+      return XFJson.Fail("not_v", "the player isn't V right now (the story has put someone else in V's place)");
+    }
     if player.IsInCombat() {
       return XFJson.Fail("not_safe_now", "V is in combat");
     }
@@ -1503,6 +1574,10 @@ public abstract class XFCharacter {
     if !IsDefined(registry) || !registry.IsSaveLockHeld() {
       return XFJson.Fail("save_lock_not_held", "the bridge hasn't taken its save lock, so the appearance screen wasn't opened");
     }
+    // The bridge's own lock, not just any lock: another system's lock may go away while the screen is open.
+    if !XFBridgeActions.OwnSaveLockHeld() {
+      return XFJson.Fail("save_lock_not_held", "the game hasn't registered the bridge's save lock yet, so the appearance screen wasn't opened; try again in a moment");
+    }
     let locks: array<gameSaveLock>;
     if !GameInstance.IsSavingLocked(game, locks) {
       return XFJson.Fail("save_lock_not_held", "the game doesn't report saving as locked yet, so the appearance screen wasn't opened; try again in a moment");
@@ -1520,12 +1595,23 @@ public abstract class XFCharacter {
     return "{\"ok\":true,\"requested\":true,\"edit_mode\":" + XFJson.Str(XFCharacter.ModeName(mode)) + ",\"saving_locked\":true,\"route\":\"menu_event\"}";
   }
 
-  // cc.open gave up waiting: withdraw the request so a late menu event opens nothing.
+  // cc.open gave up waiting: withdraw the request so a late menu event opens nothing, and say what became
+  // of it. withdrawn: nothing will open (still waiting, or the menu refused it or found it expired);
+  // taken: the menu switched to the appearance screen for it, which may still be opening (RB-42).
   public static func CancelOpen(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
-    let cancelled = IsDefined(registry) && registry.CancelCreatorOpen();
-    XFBridgeLog.Info(cid, "cc.open request withdrawn=" + XFJson.Flag(cancelled));
-    return "{\"ok\":true,\"withdrawn\":" + XFJson.Flag(cancelled) + "}";
+    if !IsDefined(registry) {
+      return "{\"ok\":true,\"withdrawn\":false,\"taken\":false,\"outcome\":\"unknown\"}";
+    }
+    let cancelled = registry.CancelCreatorOpen();
+    let outcome = registry.CreatorOpenOutcome(cid);
+    if cancelled {
+      outcome = "withdrawn";
+    }
+    let nothingOpens = cancelled || Equals(outcome, "refused") || Equals(outcome, "expired");
+    let taken = Equals(outcome, "switched") || Equals(outcome, "taken");
+    XFBridgeLog.Info(cid, "cc.open request withdrawn=" + XFJson.Flag(cancelled) + " outcome=" + outcome);
+    return "{\"ok\":true,\"withdrawn\":" + XFJson.Flag(nothingOpens) + ",\"taken\":" + XFJson.Flag(taken && !nothingOpens) + ",\"outcome\":" + XFJson.Str(outcome) + "}";
   }
 
   // cc.page: the preview camera to a region (slot "" = the menu's starting view).
@@ -1574,6 +1660,10 @@ public abstract class XFCharacter {
       // By the value's name or on-screen label (the plugin passes index -1 with a value).
       index = XFCharacter.FindValue(match, value);
       matchedBy = "value";
+      if index == -1 {
+        index = XFCharacter.FindPartialValue(match, value);
+        matchedBy = "partial";
+      }
       if index == -2 {
         return XFJson.Fail("bad_params", "more than one value of '" + option + "' matches '" + value + "'; use its index (" + XFCharacter.SomeValues(match) + ")");
       }
@@ -1643,6 +1733,176 @@ public abstract class XFCharacter {
       i += 1;
     }
     return false;
+  }
+}
+
+// --- Photo-mode poses --------------------------------------------------------------------------------
+
+// photo.pose.set and the live-pose carrier's check. Poses are chosen through the menu, as the player does:
+// attribute 5 is the category, 6 the pose in that category (knowledge/poses.md §4). Both lists come from the
+// menu's own option setup (captured in XFBridgeRegistry), so labels are the menu's texts.
+public abstract class XFPose {
+  public static func CategoryKey() -> Int32 {
+    return 5;
+  }
+
+  public static func PoseKey() -> Int32 {
+    return 6;
+  }
+
+  // A record's display name as the menu shows it: a localisation key, else the literal text.
+  public static func Label(name: CName) -> String {
+    let text = GetLocalizedTextByKey(name);
+    if StrLen(text) == 0 {
+      text = GetLocalizedText(NameToString(name));
+    }
+    return text;
+  }
+
+  // The option index whose text is `text` (or whose data is `value` when value >= 0); -1 none, -2 several.
+  public static func FindOption(item: ref<XFPhotoItem>, text: String, value: Int32) -> Int32 {
+    let found = -1;
+    let matches = 0;
+    let i = 0;
+    while i < ArraySize(item.optionData) {
+      let hit = false;
+      if value >= 0 {
+        hit = item.optionData[i] == value;
+      } else {
+        hit = Equals(item.optionTexts[i], text) || Equals(StrLower(item.optionTexts[i]), StrLower(text));
+      }
+      if hit {
+        found = i;
+        matches += 1;
+      }
+      i += 1;
+    }
+    if matches > 1 {
+      return -2;
+    }
+    return found;
+  }
+
+  public static func Item(key: Int32) -> ref<XFPhotoItem> {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) {
+      return null;
+    }
+    return registry.FindItem(Cast<Uint32>(key));
+  }
+
+  // Step 1: the category (from the record, the label or the option data) and the menu's values before.
+  public static func SelectCategory(cid: String, record: String, category: String, value: Int32) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let controller = XFPhoto.Controller();
+    let categories = XFPose.Item(XFPose.CategoryKey());
+    let poses = XFPose.Item(XFPose.PoseKey());
+    if !IsDefined(controller) || !IsDefined(categories) || !IsDefined(poses) || !Equals(categories.kind, "options") {
+      return XFJson.Fail("unavailable", "the photo-mode pose menu hasn't been seen yet; open the pose tab once, or close and reopen photo mode");
+    }
+    let beforeKnown = XFPhoto.HasValue(controller, categories) && XFPhoto.HasValue(controller, poses);
+    let beforeCategory = XFPhoto.CurrentValue(controller, categories);
+    let beforePose = XFPhoto.CurrentValue(controller, poses);
+    let out = "{\"ok\":true,\"before_known\":" + XFJson.Flag(beforeKnown) + ",\"before_category\":" + IntToString(RoundF(beforeCategory)) + ",\"before_pose\":" + IntToString(RoundF(beforePose));
+    let wantedText = category;
+    if StrLen(record) > 0 {
+      let pose = TweakDBInterface.GetPhotoModePoseRecord(TDBID.Create(record));
+      if !IsDefined(pose) {
+        return XFJson.Fail("bad_params", "no photo-mode pose record named " + record);
+      }
+      out += ",\"pose_text\":" + XFJson.Str(XFPose.Label(pose.DisplayName())) + ",\"animation\":" + XFJson.Name(pose.AnimationName());
+      let categoryName = NameToString(pose.Category());
+      let categoryRecord = TweakDBInterface.GetPhotoModePoseCategoryRecord(TDBID.Create(categoryName));
+      if !IsDefined(categoryRecord) {
+        categoryRecord = TweakDBInterface.GetPhotoModePoseCategoryRecord(TDBID.Create("PhotoModePoseCategories." + categoryName));
+      }
+      if !IsDefined(categoryRecord) {
+        return XFJson.Fail("unavailable", "the pose record " + record + " names a category (" + categoryName + ") the bridge can't find; select it by label instead");
+      }
+      wantedText = XFPose.Label(categoryRecord.DisplayName());
+    }
+    if StrLen(wantedText) == 0 && value < 0 {
+      // No category asked for: the pose is looked for in the list shown now.
+      return out + ",\"changed\":false,\"category_value\":" + IntToString(RoundF(beforeCategory)) + "}";
+    }
+    let index = XFPose.FindOption(categories, wantedText, value);
+    if index == -2 {
+      return XFJson.Fail("bad_params", "more than one pose category is labelled '" + wantedText + "'; use category_value (photo.state lists the options)");
+    }
+    if index < 0 {
+      return XFJson.Fail("bad_params", "no pose category labelled '" + wantedText + "' in the menu (" + IntToString(ArraySize(categories.optionData)) + " categories; photo.state lists them)");
+    }
+    let data = categories.optionData[index];
+    out += ",\"category_value\":" + IntToString(data) + ",\"category_text\":" + XFJson.Str(categories.optionTexts[index]);
+    if Cast<Float>(data) == beforeCategory && beforeKnown {
+      return out + ",\"changed\":false}";
+    }
+    let set = XFPhoto.SetAttribute(cid, XFPose.CategoryKey(), Cast<Float>(data));
+    if StrFindFirst(set, "\"ok\":true") < 0 {
+      return set;
+    }
+    return out + ",\"changed\":true}";
+  }
+
+  // Step 2 (after the menu rebuilt the pose list): the pose by label or option data.
+  public static func SelectPose(cid: String, pose: String, value: Int32) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let controller = XFPhoto.Controller();
+    let poses = XFPose.Item(XFPose.PoseKey());
+    if !IsDefined(controller) || !IsDefined(poses) || !Equals(poses.kind, "options") {
+      return XFJson.Fail("unavailable", "the photo-mode pose list hasn't been seen yet");
+    }
+    let index = XFPose.FindOption(poses, pose, value);
+    if index == -2 {
+      return XFJson.Fail("bad_params", "more than one pose in this category is labelled '" + pose + "'; use pose_value (photo.state lists the options)");
+    }
+    if index < 0 {
+      return XFJson.Fail("bad_params", "no pose labelled '" + pose + "' in the current category (" + IntToString(ArraySize(poses.optionData)) + " poses; photo.state lists them)");
+    }
+    let data = poses.optionData[index];
+    let before = XFPhoto.CurrentValue(controller, poses);
+    let out = ",\"pose_value\":" + IntToString(data) + ",\"pose_text\":" + XFJson.Str(poses.optionTexts[index]);
+    if Cast<Float>(data) == before && XFPhoto.HasValue(controller, poses) {
+      return "{\"ok\":true,\"changed\":false" + out + "}";
+    }
+    let set = XFPhoto.SetAttribute(cid, XFPose.PoseKey(), Cast<Float>(data));
+    if StrFindFirst(set, "\"ok\":true") < 0 {
+      return set;
+    }
+    XFBridgeLog.Info(cid, "photo pose '" + poses.optionTexts[index] + "' selected; undo: photo.pose.set with the earlier category and pose");
+    return "{\"ok\":true,\"changed\":true" + out + "}";
+  }
+
+  // pose.live.apply's precondition: photo mode open with the XF live carrier as the selected pose (its
+  // record's label, core/LivePose.hpp kCarrierPoseLabel).
+  public static func CarrierSelected(cid: String) -> String {
+    if !XFPhoto.Active() {
+      return "{\"ok\":true,\"selected\":false,\"pose\":\"none (photo mode is not open)\"}";
+    }
+    let controller = XFPhoto.Controller();
+    let poses = XFPose.Item(XFPose.PoseKey());
+    if !IsDefined(controller) || !IsDefined(poses) {
+      return "{\"ok\":true,\"selected\":false,\"pose\":\"unknown (the pose menu hasn't been seen)\"}";
+    }
+    let listItem = controller.GetMenuItem(poses.key);
+    if !IsDefined(listItem) {
+      return "{\"ok\":true,\"selected\":false,\"pose\":\"unknown\"}";
+    }
+    let index = listItem.GetSelectedOptionIndex();
+    if index < 0 || index >= ArraySize(poses.optionTexts) {
+      return "{\"ok\":true,\"selected\":false,\"pose\":\"unknown\"}";
+    }
+    let text = poses.optionTexts[index];
+    let carrier = TweakDBInterface.GetPhotoModePoseRecord(TDBID.Create("PhotoModePoses.xfs_live_carrier"));
+    let wanted = "XF Live Carrier";
+    if IsDefined(carrier) {
+      wanted = XFPose.Label(carrier.DisplayName());
+    }
+    return "{\"ok\":true,\"selected\":" + XFJson.Flag(Equals(text, wanted)) + ",\"pose\":" + XFJson.Str(text) + "}";
   }
 }
 

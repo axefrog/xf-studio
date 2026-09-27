@@ -6,6 +6,7 @@
  *
  * Types and pure helpers only: data a composition lists (`compose/modules.ts`), which the application derives from.
  */
+import type { Capability, ReasonCode } from "./capability";
 import type { SceneKind } from "./view-graph";
 
 export type ModuleId = string;
@@ -125,3 +126,16 @@ export function moduleRegistrationIssues(registration: ModuleRegistration): stri
   }
   return issues;
 }
+
+/**
+ * A module's application service as the presentation reaches it (view-graph-design.md §5; a module without a document part, such as the
+ * Save Explorer): its typed actions with capabilities and change notification. The composition registers one per module that has a
+ * service (`compose/module-services.ts`); the port hands it to that module's view only (`port.module(id)`), and the module's own type
+ * adds its detached reads. It holds no renderer, DOM or host objects.
+ */
+export type ModuleService = {
+  readonly module: ModuleId;
+  capability(action: { readonly kind: string }): Capability;
+  dispatch(action: { readonly kind: string }): Promise<{ readonly ok: boolean; readonly code?: ReasonCode; readonly message?: string }>;
+  subscribe(listener: () => void): () => void;
+};

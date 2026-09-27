@@ -33,14 +33,14 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, ren
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { descriptorsFromUiState } from "./cco-model";
-import { type BodyCensorship, type BodyScope, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
+import { type BodyCensorship, type BodyScope, bodyStateFor, planCharacterDetails, previewInput, recordMorphTexture, SLOT_WORDS, type CharacterPlan, type PlanReaders, type PlannedChunk, type PlannedComponent } from "./character-detail-plan";
 import { inputFromCharacterRequest, type CharacterRequest } from "./character-detail-request";
 import { type ComponentOverrides, loadMergedCco, NO_OVERRIDES, overridesKey, resolveCharacter, type CharacterInput, type ResolvedAppearance, type ResolvedCharacter,
   type ResolvedParam } from "./character-resolver";
 import { type ClothingFailure, resolveClothing, type ResolvedClothing } from "./clothing-resolver";
 import { clothingPorts } from "./clothing-host";
 import { refFromPath, refLabel, type DepotRef } from "./depot-path";
-import { archiveExportSource, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
+import { archiveExportSource, type ExportBase, type ExportKind, GameAssetExportError, type GameAssetExporter } from "./game-asset-export";
 import { keepGlbMeshes } from "./glb";
 import { decodePngHalved, encodePngAsync, type RgbaImage } from "./png";
 import { layerOverrides, readSetup, readTemplate, type SetupValues, type TemplateValues } from "./layered-setup";
@@ -48,12 +48,13 @@ import { templateDefaults } from "./material-template";
 import { asArray, cname, isObject, type JsonObject, type MaterialParamValue } from "./red-json";
 import { CHARACTER_DETAIL_SCHEMA, CHOICE_NAME_MAX, chunkOfMesh, decalFamilySlot, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type DetailSlotState, type LayerTextureRole, type RenderChunkMaterial,
   type RenderComponent, type RenderGradient, type RenderLayer, type RenderLayered, type RenderProfile, type RenderProfileStop, type RenderRgba,
-  type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
+  type RenderRig, type RenderSkinProfile, type RenderSourceRef, type RenderTexture, UNCOVERED_BODY } from "./render-detail";
 import { renderTemplate, templateRequired } from "./render-templates";
 import { manifestOf, writeChoiceManifest, xlIdentity } from "./choice-manifest";
 import type { LowPriority } from "./process-tree";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import type { Provenance, ResourceGraph } from "./resource-graph";
+import { puppetDeformationRigs, type PuppetRigs } from "./deformation-rig-host";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
 
@@ -248,6 +249,27 @@ function store(storeRoot: string, file: string, extension: "glb" | "png"): { fil
   if (hashed.size > 20_000) hashed.delete(hashed.keys().next().value!);
   return { file: stored.file, sha256: stored.sha256, size };
 }
+/**
+ * The puppet's deformation rigs as content-addressed program files beside the records (`<sha256>.json` in `records/`, which the asset
+ * route serves by name). A rig that can't be read or interpreted leaves a plain note; the helper joints then follow their limbs.
+ */
+async function serveRigs(graph: ResourceGraph, gender: "female" | "male", storeRoot: string, notes: string[], log: (line: string) => void): Promise<RenderRig[]> {
+  let found: PuppetRigs;
+  try { found = await puppetDeformationRigs(graph, gender, log); }
+  catch (error) { log(`The player's deformation rigs couldn't be read: ${(error as Error)?.stack ?? error}`); return []; }
+  notes.push(...found.notes);
+  return found.rigs.map(({ component, program }) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(program)), hash = sha256(bytes), file = `${hash}.json`;
+    const target = join(storeRoot, "records", file);
+    if (!existsSync(target)) {
+      mkdirSync(join(storeRoot, "records"), { recursive: true, mode: 0o700 });
+      const staging = `${target}.${process.pid}.tmp`;
+      writeFileSync(staging, bytes, { mode: 0o600 });
+      renameSync(staging, target);
+    }
+    return { component, rig: program.rig, graph: program.graph, file, sha256: hash };
+  });
+}
 function storeBytes(storeRoot: string, bytes: Uint8Array, extension: "glb" | "png"): { file: string; sha256: string } {
   const hash = sha256(bytes), name = `${hash}.${extension}`, target = join(storeRoot, "files", name);
   if (!existsSync(target) || statSync(target).size !== bytes.length) {
@@ -417,7 +439,9 @@ export class CharacterPreparationCache {
   readonly layerTemplates = new RunMap<string, { values: TemplateValues; source: RenderSourceRef } | null>();
   readonly gamma = new RunMap<string, boolean | null>();
   /** Exports by `archive id|depot path` (lower case). A tool failure is never kept, so the next preparation tries again. */
-  readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null }>();
+  readonly geometry = new RunMap<string, { glb: string | null; complete: boolean; repair?: string | null;
+    /** A plain line from XF Studio's mesh reader (native-geometry-export.ts), when it read the shape differently from the file as it stands. */
+    readerNote?: string | null }>();
   /** A texture's PNG, and mip 0's size in the game files when the PNG is a smaller mip of it (XF Studio's texture reader). */
   readonly textures = new RunMap<string, { png: string; gameSize?: { width: number; height: number } }>();
   readonly masks = new RunMap<string, { layers: string[] }>();
@@ -565,9 +589,15 @@ type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<str
   toolFailures: Set<string>; toolLabel: string | undefined;
   /** Where the time went, for the preparation's log line (PIPE-103): the first exports, the reads beside them, the layer maps after. */
   stages: string[] };
+type NativeCounts = { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number };
 /** The native texture reader's counts of an exporter that has one (native-texture-export.ts), copied. */
 const nativeTextureCounts = (exporter: GameAssetExporter) => {
-  const stats = (exporter as { nativeTextures?: { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number } }).nativeTextures;
+  const stats = (exporter as { nativeTextures?: NativeCounts }).nativeTextures;
+  return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
+};
+/** The native mesh reader's counts of an exporter that has one (native-geometry-export.ts), copied. */
+const nativeGeometryCounts = (exporter: GameAssetExporter) => {
+  const stats = (exporter as { nativeGeometry?: NativeCounts }).nativeGeometry;
   return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
 };
 /** Exports asked of the exporter, and how many of them its own disk cache answered (the rest ran WolvenKit). */
@@ -581,14 +611,15 @@ const cancelledError = () => new CharacterDetailError("character_cancelled", "Pr
  * per archive and kind for an exporter without it. What is kept never points into an exporter's work folder: a partial geometry export
  * the exporter did not cache is kept in the content-addressed store.
  */
-async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located }[], toolFailures: Set<string>, tally?: ExportTally): Promise<string | undefined> {
+async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportKind; at: Located; base?: Located }[], toolFailures: Set<string>, tally?: ExportTally): Promise<string | undefined> {
   const { cache, exporter, signal, log } = ctx;
   const into = (kind: ExportKind) => (kind === "geometry" ? cache.geometry : kind === "textures" ? cache.textures : cache.masks) as Map<string, unknown>;
-  const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string> }>();
-  for (const { kind, at } of items) {
+  const groups = new Map<string, { archive: Located["archive"]; geometry: Set<string>; textures: Set<string>; masks: Set<string>; bases: Record<string, ExportBase> }>();
+  for (const { kind, at, base } of items) {
     if (into(kind).has(`${at.archive.id}|${at.depotPath.toLowerCase()}`)) continue;
-    const group = groups.get(at.archive.id) ?? { archive: at.archive, geometry: new Set<string>(), textures: new Set<string>(), masks: new Set<string>() };
+    const group = groups.get(at.archive.id) ?? { archive: at.archive, geometry: new Set<string>(), textures: new Set<string>(), masks: new Set<string>(), bases: {} };
     group[kind].add(at.depotPath);
+    if (kind === "geometry" && base) group.bases[at.depotPath.toLowerCase()] = { depotPath: base.depotPath, archivePath: base.archive.id };
     groups.set(at.archive.id, group);
   }
   if (!groups.size) return undefined;
@@ -613,7 +644,8 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
   if (exporter.exportAll) {
     try {
       const answers = await exporter.exportAll(list.map(group => ({ source: archiveExportSource(group.archive.id, ctx.gameRoot),
-        geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks] })), signal, { lowPriority: ctx.lowPriority });
+        geometry: [...group.geometry], textures: [...group.textures], masks: [...group.masks], ...(Object.keys(group.bases).length ? { bases: group.bases } : {}) })),
+        signal, { lowPriority: ctx.lowPriority });
       answers.forEach((answer, index) => {
         const archive = list[index]!.archive;
         // What the archive's launches did answer is kept even when one of them failed: a texture both readers refuse (its WolvenKit
@@ -647,10 +679,13 @@ async function exportLocated(ctx: GatherContext, items: readonly { kind: ExportK
 async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[]): Promise<Gathered> {
   const { graph, cache, signal } = ctx;
   const toolFailures = new Set<string>();
-  const geometryAt = new Map<PlannedComponent, Located>();
+  const geometryAt = new Map<PlannedComponent, Located>(), baseAt = new Map<PlannedComponent, Located>();
   for (const component of fresh) {
     const located = locate(graph, component.drawnFrom.ref);
     if (located) geometryAt.set(component, located);
+    // A morph target's base mesh, where the game finds it (its winning archive), for the skin the mesh reader builds.
+    const base = component.baseMesh ? locate(graph, component.baseMesh.ref) : null;
+    if (base) baseAt.set(component, base);
   }
   const textureAt = new Map<string, Located>(), maskAt = new Map<string, Located>();
   for (const component of fresh) for (const material of component.materials) {
@@ -667,8 +702,8 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   const settle = <T>(work: Promise<T>) => work.then(value => ({ value }), (error: unknown) => ({ error }));
   const began = performance.now(), seconds = (from: number) => `${((performance.now() - from) / 1000).toFixed(2)} s`;
   const tally: ExportTally = { asked: 0, cached: 0 }, stages: string[] = [];
-  const texturesBefore = nativeTextureCounts(ctx.exporter);
-  const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt.values()].map(at => ({ kind: "geometry" as const, at })),
+  const texturesBefore = nativeTextureCounts(ctx.exporter), geometryBefore = nativeGeometryCounts(ctx.exporter);
+  const exportedFirst = settle(exportLocated(ctx, [...[...geometryAt].map(([component, at]) => ({ kind: "geometry" as const, at, base: baseAt.get(component) })),
     ...[...textureAt.values()].map(at => ({ kind: "textures" as const, at })), ...[...maskAt.values()].map(at => ({ kind: "masks" as const, at }))], toolFailures, tally)
     .finally(() => { stages.push(`exports ${seconds(began)}`); }));
 
@@ -749,6 +784,11 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   if (textures && texturesBefore) {
     const decoded = textures.decoded - texturesBefore.decoded, cachedNative = textures.cached - texturesBefore.cached, fellBack = textures.fellBack - texturesBefore.fellBack;
     if (decoded || cachedNative || fellBack) stages.push(`textures read natively: ${decoded} decoded in ${((textures.decodeMs - texturesBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit; WolvenKit exports ${((textures.innerMs - texturesBefore.innerMs) / 1000).toFixed(2)} s beside them`);
+  }
+  const geometry = nativeGeometryCounts(ctx.exporter);
+  if (geometry && geometryBefore) {
+    const decoded = geometry.decoded - geometryBefore.decoded, cachedNative = geometry.cached - geometryBefore.cached, fellBack = geometry.fellBack - geometryBefore.fellBack;
+    if (decoded || cachedNative || fellBack) stages.push(`meshes read natively: ${decoded} decoded in ${((geometry.decodeMs - geometryBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit`);
   }
   for (const outcome of [first, exportedLater, readsDone, laterReads]) if ("error" in outcome) throw outcome.error;
   const toolLabel = ("value" in first ? first.value : undefined) ?? ("value" in exportedLater ? exportedLater.value : undefined);
@@ -878,14 +918,14 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   }
   time("creator resource");
   cancelled();
-  // What V wears first: the feet group and the items' overrides of the body follow from it. A body turned off (or a male one, which the
-  // preview doesn't draw yet) is neither dressed nor resolved (PREV-108, PIPE-98).
+  // What V wears first: the feet group and the items' overrides of the body follow from it. A body turned off is neither dressed nor
+  // resolved (PREV-108).
   const scope = bodyScopeOf(request);
   const dressed = scope === "drawn" ? await dress(graph, request, options, log) : null;
   const clothing = dressed && !("failed" in dressed) ? dressed : null;
   if (request.clothing && scope === "drawn") time("clothing");
   cancelled();
-  const bodyState = { feet: clothing?.feet ?? "flat" } as const;
+  const bodyState = bodyStateFor(clothing?.feet, request.puppet, cco.merged.cco);
   // Only what the preview can draw is resolved: the head, and the body parts its third-person consumers read.
   input = previewInput(input, bodyState, scope === "drawn");
   const { resolved, reused: reusedAppearances } = await resolveThrough(graph, input, cco, cache, clothing?.overrides);
@@ -1056,6 +1096,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       return tool ? "tool" : "export";
     }
     if (exported.repair) note(`${component.component}: WolvenKit couldn't export its shape as it is, so it was exported from a repaired copy: ${exported.repair}.`);
+    if (exported.readerNote) note(`${component.component}: ${exported.readerNote}.`);
     const materials: RenderChunkMaterial[] = [];
     for (const material of component.materials) {
       const chunkTextures: Record<string, RenderTexture> = {};
@@ -1185,12 +1226,15 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   if (bodyWithdrawn) slots.set("body", { slot: "body", state: "unavailable", label: slots.get("body")!.label, message: UNCOVERED_BODY });
   else if (!coversServed && censoredServed.size) slots.set("body", { ...slots.get("body")!, message: CENSORED_BODY });
   if (summary.scanGaps.length) whole.push("Some installed mod files could not be read; the resolved details may differ from the game.");
+  // The puppet's deformation rigs pose the body's helper joints the way the game solves them (deformation-rig-host.ts).
+  const rigs = scope === "drawn" && components.some(item => item.slot === "body") ? await serveRigs(graph, request.bodyGender, options.storeRoot, whole, log) : [];
+  if (rigs.length) time("rigs");
   const body = {
     schema: CHARACTER_DETAIL_SCHEMA, detail: "character" as const, origin: "game-files" as const,
     character: { source: request.source, bodyGender: request.bodyGender },
     provenance: { label: `Your ${summary.route === "mo2" ? "Mod Organizer 2 profile" : "game"}'s installed files`,
       notes: recordNotes([...drops, ...whole], notes), ...(toolLabel ? { tool: toolLabel } : {}) },
-    components, slots: [...slots.values()],
+    components, slots: [...slots.values()], ...(rigs.length ? { rigs } : {}),
   };
   // What is written is what the browser's reader makes of it (PIPE-40): one shared rule set, and a part that breaks it is left out
   // with a note here, not discovered by the page.
@@ -1247,8 +1291,8 @@ async function dress(graph: ResourceGraph, request: CharacterRequest, options: {
   }
 }
 
-/** Whether a request's body is drawn: off by the viewer's Body switch, or a male V's (not drawn yet), else drawn. */
-export const bodyScopeOf = (request: CharacterRequest): BodyScope => request.body === false ? "hidden" : request.bodyGender === "male" ? "male" : "drawn";
+/** Whether a request's body is drawn: off by the viewer's Body switch, else drawn (either body gender). */
+export const bodyScopeOf = (request: CharacterRequest): BodyScope => request.body === false ? "hidden" : "drawn";
 /** How a request's body is drawn: as the game with nudity allowed only when the viewer chose it (request v7 `nudity`), else censored. */
 export const censorshipOf = (request: CharacterRequest): BodyCensorship => request.nudity === true ? "nudity" : "censored";
 /** A body whose covered skin was replaced by the game's censored skin because its underwear couldn't be served (PIPE-97). */
@@ -1317,13 +1361,14 @@ async function warmOnce(options: WarmOptions, run: CacheRun): Promise<WarmOutcom
     cancelled();
     const scopes = requests.map(bodyScopeOf);
     const worn = clothes.map(entry => entry && !("failed" in entry) ? entry : null);
-    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, { feet: worn[index]?.feet ?? "flat" },
+    const bodyStates = requests.map((request, index) => bodyStateFor(worn[index]?.feet, request.puppet, cco.merged.cco));
+    const resolved = await Promise.all(inputs.map((input, index) => input ? resolveThrough(graph, previewInput(input, bodyStates[index],
       scopes[index] === "drawn"), cco, cache, worn[index]?.overrides).then(result => result.resolved) : null));
     cancelled();
     await loadTemplates(graph, resolved.flatMap((entry, index) => entry ? [...entry.appearances.flatMap(appearance => appearance.components), ...clothingComponents(worn[index] ?? null)]
       .flatMap(component => component.materials.map(material => material.template).filter((template): template is Provenance => !!template)) : []), cache);
     const plans = resolved.map((entry, index) => entry ? planCharacterDetails(entry, cco.merged.cco, cache.defaults, cache.identities,
-      { feet: worn[index]?.feet ?? "flat" }, clothes[index] ?? null, scopes[index], undefined, censorshipOf(requests[index]!)) : null);
+      bodyStates[index], clothes[index] ?? null, scopes[index], undefined, censorshipOf(requests[index]!)) : null);
     cancelled();
     const fresh = new Map<string, PlannedComponent>();
     for (const plan of plans) for (const component of [...plan?.components ?? [], ...plan?.censoredBody ?? []]) {

@@ -3,7 +3,7 @@ import { descriptorsFromUiState, type CcoResource } from "../src/cco-model";
 import { buildCatalogue, CatalogueIndex } from "../src/cc-catalogue";
 import { activeOptions, CHARACTER_CONTEXT_FAMILY, type CharacterChoice, type CharacterSource, choicesOfPreset, deriveCharacter, linkedChoice, presetOfChoices,
   recoverSave, savedDescriptorsOf } from "../src/character-context";
-import { CharacterContextActions, type CreatorPort, storedCharacterOf } from "../src/character-context-actions";
+import { CharacterContextActions, type CreatorPort, initialBodyGender, storedCharacterOf } from "../src/character-context-actions";
 import { CC_PRESET_LIMITS, CC_PRESET_SCHEMA, parseCcPreset, readCcPreset, readPresetJson, serializeCcPreset, writeCcPreset } from "../src/cc-preset";
 import { catalogueCoverage } from "../src/cc-render-coverage";
 import { panelProjection } from "../src/cc-panel";
@@ -322,6 +322,33 @@ describe("the character context in the Studio (CharacterContextActions)", () => 
     expect(context.capability({ kind: "character.loadPreset", value: { schema: "nope" } })).toMatchObject({ available: false, reason: expect.stringContaining("not a character preset") });
     const exported = await context.exportPreset("Violet");
     expect(JSON.parse(exported.text).values).toEqual([expect.objectContaining({ option: "eyes_color", definition: "he__03_violet" })]);
+  });
+
+  test("the masculine default V is stored (a reload shows him again), and the Undo history travels to the next head (male V plan phase 1)", async () => {
+    const source = await fixtureSource();
+    const save = saveFor(descriptorsFromUiState(source.cco, { eyes_color: "he__02_blue" }));
+    // The body a head loads before its context exists: the save's, unless the stored context names the default V or a preset.
+    expect(initialBodyGender(undefined, undefined)).toBe("female");
+    expect(initialBodyGender(undefined, { ...save, isMale: true })).toBe("male");
+    expect(initialBodyGender({ origin: "default", bodyGender: "male", choices: [] }, save)).toBe("male");
+    expect(initialBodyGender({ origin: "save", choices: [] }, { ...save, isMale: true })).toBe("male");
+    expect(initialBodyGender({ origin: "preset", bodyGender: "female", choices: [] }, { ...save, isMale: true })).toBe("female");
+    const shown: (SavedV | null)[] = [];
+    const context = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved) }, { save });
+    context.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    expect(context.shownBody()).toBe("male");
+    expect(context.stored()).toEqual({ origin: "default", bodyGender: "male", choices: [] });
+    expect(context.detailRequest()).toMatchObject({ source: "default", bodyGender: "male" });
+    // The next head's context starts from the stored masculine V with the same Undo: back to the save.
+    const next = new CharacterContextActions({ creator: await port(), showSave: saved => shown.push(saved) },
+      { stored: context.stored(), history: context.history() });
+    expect(next.shownBody()).toBe("male");
+    expect(next.snapshot().undo).toBe("Show the default V");
+    next.dispatch({ kind: "character.undo" });
+    expect(next.snapshot()).toMatchObject({ origin: { kind: "save" }, bodyGender: "female", redo: "Show the default V" });
+    expect(shown.at(-1)?.groups).toEqual(save.groups);
+    // A history of another kind is ignored.
+    expect(new CharacterContextActions({ creator: await port(), showSave: () => {} }, { history: { kind: "nope" } as never }).snapshot().undo).toBeNull();
   });
 
   test("the view follows the state; nothing is stored until something is set", async () => {

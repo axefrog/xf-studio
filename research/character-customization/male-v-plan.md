@@ -1,8 +1,8 @@
 # Supporting a masculine V: resources, Studio gaps and a phased plan
 
-**Status: research plan, 27 September 2026. Nothing here is built, and nothing has runtime evidence.** Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** engine, framework or tool source; **[resource]** extracted game resources; **[wiki]** Modding Docs; **[runtime]** the running game; **[hypothesis]** not yet established. Measurements, hashes and methods are under [provenance](#provenance).
+**Status (27 September 2026): phase 1 built (`claude/male-v-core`), with phase 4 and the stubble of phase 3; phases 2, 5, 6 and 7 open. Nothing here has runtime evidence.** Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** engine, framework or tool source; **[resource]** extracted game resources; **[wiki]** Modding Docs; **[runtime]** the running game; **[offline]** the Studio preview; **[hypothesis]** not yet established. Measurements, hashes and methods are under [provenance](#provenance).
 
-The Studio draws every head detail and the body for a feminine V (body gender female) from the generic resolver's output ([head CC rendering](../../knowledge/head-cc-rendering.md), [body rendering](../../knowledge/body-rendering.md)). A masculine V gets a full creator catalogue in the Character panel, but nothing of him is drawn, and XF Eye Artistry builds only for the feminine creator. The product direction wants every character detail rendered and creator values editable "so users can check work on characters other than their own" (AGENTS.md, Character context). This page says what a masculine V needs in each layer, and in what order to build it.
+The Studio draws a feminine V and a masculine V from the generic resolver's output, each on its own core head prepared from the player's game files ([head CC rendering](../../knowledge/head-cc-rendering.md), [body rendering](../../knowledge/body-rendering.md)). XF Eye Artistry still builds only for the feminine creator. The product direction wants every character detail rendered and creator values editable "so users can check work on characters other than their own" (AGENTS.md, Character context). This page says what a masculine V needs in each layer, in what order, and [what is built](#phase-status).
 
 ## Findings in brief
 
@@ -94,9 +94,9 @@ Under the Studio's policy (`bodyOptionDraws`), a masculine V without clothing sh
 
 The gaze-triggered blink additives (`generic_facial_additives.anims`) are authored on the male player rig [resource]. For a masculine V, the idle, blink and a later expression editor would solve with the setup the game names, with no substitution. Whether the male setup's pose data deforms the masculine head as the game shows is still a [hypothesis] until an in-game comparison.
 
-## 3. The Studio today
+## 3. The Studio before phase 1
 
-Audit of `projects/xf-studio/authoring` at `4193fcb` (26 September 2026). Line numbers are at that commit.
+Audit of `projects/xf-studio/authoring` at `4193fcb` (26 September 2026). Line numbers are at that commit. The [phase status](#phase-status) says how phase 1 resolved the rows of §3.2 and which remain for later phases (the idle tools, the package resources and the verifier).
 
 ### 3.1 Already gender-neutral (flows through the generic resolver)
 
@@ -214,6 +214,28 @@ Effort: **S** about a day of agent work, **M** a few days, **L** a week or more.
 
 Phases 1 and 5 can start at once in separate worktrees. Phase 1 touches the preview core and browser gates, phase 5 the plate recipe and its tools, and the two meet only at the recipe type.
 
+### Phase status
+
+| Phase | State | What is there |
+|---|---|---|
+| 1. Masculine core head | **Built** (27 September, `claude/male-v-core`) | Below |
+| 2. Idle and blink | Open | A masculine head holds still: the prepared idle is the feminine V's, so it is not played on him (`IDLE_MASCULINE`, in plain words in the Motion panel). The game blink refuses his head through its own joint check ("made for a different head") |
+| 3. Beard | **Stubble drawn** [offline]; cards open | The stubble decal draws through the face-decal path like the makeup (beard 05, part 2, checked). The hair cards need the hair adapter on a `beard` slot |
+| 4. Masculine body | **Drawn** [offline] | The same planner, consumer groups and censorship rules as the feminine body, with the gender gate removed: body, arms, nails, personal link and the underwear cover `i0_000_pma_base_full_censored` draw, and the body mesh draws the feet (no feet controller, as §2.4 expected). His body idle rig is phase 2 |
+| 5. Masculine plate recipe | Open; a **preview-only selection** exists | Below |
+| 6. Export, 7. Session | Open | – |
+
+**What phase 1 built.**
+
+- **A core per body.** `preview-core-recipe.ts` holds `PREVIEW_CORE_RECIPES`: the feminine recipe, whose identity is unchanged (`body` is left out of the recipe hash, so every cached feminine preview stays valid), and `xfs-preview-core-male-average`, which names his head and morph target, his eye mesh with the eyeball on **chunk 2** (`submesh_02_LOD_1`), and his head mesh's first appearance `01_ca_pale` (his mesh has no `default`). The derived files share the cache, with a status file per recipe, and are served under `/assets/pma/` (the feminine core stays at `/assets/`).
+- **Prepared on first use.** The host prepares one body at a time (`snapshot(body)`, `prepare(body)`; the endpoint takes `?body=male` and `{ action, body }`). The feminine core is still prepared with the preview, the masculine one when a masculine V is first shown, with progress in the head pane (`PreviewPreparationActions.ensureBody`); it took 65 s on the maintainer's machine. If it can't be prepared, the feminine head shows with a plain notice, so the Character panel stays usable.
+- **The shown V picks the head.** The head attachment loads the core of the V that the stored context and the save name (`initialBodyGender`), and loads the head again when the V changes body (a masculine save, the other Default V, a preset), carrying the Character panel's Undo history across (`ContextHistory`). The details and the facial shape follow only their own head's body (`character-follow.ts` `headBody`). Undo across a body change works [offline].
+- **The browser gates of §3.2 are gone.** The detail request, prefetch, `characterRequestFor`, the facial-shape follow, `applySavedV` (a V of the other body is applied by that body's head), the creator rig on clear (it follows the loaded head's body) and render coverage (both bodies follow the same rules; the beard is `conditional` like the makeup) no longer assume a feminine V. `migrateLegacy` stays feminine: the retired tried-piercing fields only ever came from a feminine V.
+- **Default V for both.** The Character panel offers **Default V (feminine)** and **Default V (masculine)** (the existing `character.useDefault` action with its `bodyGender`), and so does the command palette. The masculine default V is always stored, so a reload shows him again.
+- **Drawn on a masculine V** [offline, the maintainer's install, the default masculine V]: head and skin on his core head (the resolved skin matches its surface and draws on it), eyes (None + 20 eye shapes, the eyes following), brows, lashes, hair, teeth, face decals (the personal link, the stubble), the eye makeup on his preview plate, and the body. The screenshots are private renders (the worktree's ignored `evidence/screenshots/male-v-core/`).
+
+**The preview-only plate selection** (`src/eye-plate-recipe-pma.json`, derived by `tools/derive-plate-selection.ts` by the §4.1 rule from WolvenKit 9.0.1 GLB exports of both heads): 3,010 triangles over UV area 0.041558, **1,627 vertices** (the feminine plate: 1,620), components of 20, 20, 791 and 796 vertices, **252 boundary edges in 11 loops** (feminine: 226 in 6), **one pinched boundary vertex** and no non-manifold edge; the face ranges and ID hashes are in the file. The preview assembles it from his exported head and verifies it (vertex IDs by hash, all 100 targets). Nothing in Build or the package verifier reads it. The extra loops and the pinch come from split seams or small gaps in the UV rule, and are the first thing phase 5 must resolve before an audited recipe.
+
 ## 6. In-game checks worth batching
 
 One session with a masculine V made in a new game (keep the save), plus the reference feminine V for comparison. Record the game, ArchiveXL and TweakXL versions.
@@ -257,6 +279,7 @@ One session with a masculine V made in a new game (keep the save), plus the refe
   | `…\player_female_average\h0_000_pwa_c__basehead\h0_000_pwa_c__basehead.mesh` | `e877b91a7b3f6bd678f0365d484a0dd32f7d7d4d6c13b213d2a7e73fcce874c6` (the plate recipe's audited 2.31 source) |
   | `…\player_female_average\h0_000_pwa__morphs.morphtarget` | `3e10c3f75fbefb0a9ddcf907a6275ca8a30aad915ad34acadb817ae4c9297b9e` (likewise) |
 
+- **Masculine preview plate selection** (phase 1): `tools/derive-plate-selection.ts` over the same two GLB exports prints the selection block of `src/eye-plate-recipe-pma.json` (1,627 vertices, 11 boundary loops, one pinched boundary vertex). The preview assembled it from the masculine head the maintainer's installation exported and verified its vertex IDs by hash (a 65 s preparation with WolvenKit 9.0.1 on 27 September).
 - **Plate correspondence method**: the feminine plate's faces were expanded from the recipe's `faceRangesInclusive`. Vertex UVs were matched exactly (quantised at 1e-5); triangles by sorted corner UVs at 1e-3 and 1e-4; the 3D offset is taken between the feminine plate vertex and the masculine vertex with the same UV. Lift is the offset from the nearest head vertex along that vertex's normal, as in the brows and cheeks evidence. The scripts ran under `tools/memory_guard.py` (peak 0.7 GB) and are not committed; their inputs are listed above.
 - **ArchiveXL**: 1.27.3, commit `5474e34d`, `src/App/Extensions/Customization/Extension.cpp` (template selection 779–840).
 - **Studio code**: `projects/xf-studio/authoring` at `4193fcb`.
@@ -265,5 +288,7 @@ One session with a masculine V made in a new game (keep the save), plus the refe
 
 [Head CC rendering](../../knowledge/head-cc-rendering.md) · [Body rendering](../../knowledge/body-rendering.md) · [CC file chain](../../knowledge/cc-file-chain.md) · [Eyebrows](../../knowledge/brows.md) · [Eye rendering](../../knowledge/eye-rendering.md) · [Facial expressions](../../knowledge/facial-expressions.md) · [Worn clothing](../../knowledge/clothing.md) · [Save import](../eye-artistry/save-import.md) · [Studio-to-mod pipeline](../authoring/studio-to-mod-pipeline.md) · [CC controls and presets](../backlog/cc-controls-and-presets.md)
 
-**Provisional decisions (coordinator, 27 September 2026, for the maintainer's review):** the three proposed defaults are taken: export both genders by default once the masculine plate passes its offline gates (feminine only until then); split the "Default V" button into feminine and masculine; show a preview-only masculine plate until Build accepts one. Phase 1 (masculine core head) is scheduled after the current preview tracks.
+**Provisional decisions (coordinator, 27 September 2026, for the maintainer's review):** the three proposed defaults are taken: export both genders by default once the masculine plate passes its offline gates (feminine only until then); split the "Default V" button into feminine and masculine (built); show a preview-only masculine plate until Build accepts one (built).
+
+**No masculine save exists among the reference saves** (165 saves, every one's metadata `bodyGender` Female), so phase 1 was checked on the default masculine V. A masculine save from a new game would let the save path be checked too (his own descriptors, his saved facial shape on his head); it is worth making in the §6 session.
 

@@ -6,6 +6,13 @@
    "stage": "stable",
    "feature": "eye-makeup",
    "shownByDefault": true
+  },
+  {
+   "id": "save-explorer",
+   "group": "tools",
+   "stage": "preview",
+   "feature": null,
+   "shownByDefault": false
   }
  ],
  "tools": [

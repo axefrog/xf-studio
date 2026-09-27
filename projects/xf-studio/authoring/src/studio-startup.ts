@@ -13,10 +13,13 @@ import { wolvenKitLinkUrl, type WolvenKitLink, type WolvenKitSetupActions } from
 import { PROJECT_LINKS, type ProjectLink } from "./project-links";
 import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
+import { createBrowserSaveExplorerDevice } from "./browser-save-explorer-device";
+import { createModuleServices } from "./compose/module-services";
 import { createBrowserModInstall } from "./browser-mod-install-device";
 import { builtModsOf } from "./mod-install-actions";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "./browser-head-attachment";
+import type { ContextHistory } from "./character-context-actions";
 import { rasterRegion } from "./engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "./browser-workspace-device";
@@ -111,6 +114,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
+  // Part-less modules' services (the Save Explorer), over their browser devices.
+  const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document) });
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
   const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
     verification ? "/api/verification/mod-install" : "/api/mod-install");
@@ -228,7 +233,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       ready: () => !!scene,
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
-    fileDevice, diagnostics,
+    fileDevice, diagnostics, modules: moduleServices,
   });
   // The only object handed to the presentation.
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, STUDIO_VIEW_COMPOSITION); });
@@ -272,16 +277,23 @@ async function start(host: StudioHost, root: HTMLElement) {
     void previewSetup.start();
   }
 
+  /** The workspace a head attaches with: the restored one, then (after a V changed body) the workspace as it was then. */
+  let headWorkspace = workspace, headHistory: ContextHistory | undefined;
   /** Load the 3D head and connect every head-dependent service once the preview is ready. */
   async function attachHead() {
     core.app.setPreviewUnavailable("");
     // A retry starts from nothing: an earlier head and its connections are released first (PREV-20).
     releaseHead(head);
-    const priorAssets = status.assets;
+    const priorAssets = status.assets, history = headHistory;
+    headHistory = undefined;
     let attached: AttachedHead | undefined;
     try {
       attached = await attachBrowserHead({
-        workspace, graph: views, viewport: viewportDevice, preferences,
+        workspace: headWorkspace, graph: views, viewport: viewportDevice, preferences,
+        // The shown V's body decides the core head (the masculine V's is prepared on first use); a V that changes body loads it again.
+        prepareCore: body => host.previewPreparation.ensureBody(body, (message, progress) => viewportDevice.headPending("preparing", message, progress)),
+        reload: history => { headWorkspace = session.snapshot(); headHistory = history; previewSetup.reloadHead(); }, history,
+        notice: text => adapterMessage("preview", text),
         // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
         // surfaces have no layer source until the core edits more than one live feature.
         layered: liveSurface ? [{ feature: liveSurface.feature, surface: loaded => loaded.feature(liveSurface), preview: previewDevice,

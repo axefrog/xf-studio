@@ -1,6 +1,7 @@
 import type { PreviewTextureSize } from "../../preview-quality";
 import { applyCapability, badge, button, emptyState, note, section, Segmented, SelectField, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
+import { helpTip } from "../help-tip";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -91,7 +92,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     onClick: () => rt.dispatch({ kind: "preview.resetCreatorLighting" }) });
   // A research tool (UI-85): shown only with View preferences › Show research tools.
   const diagnostics = h("details", { class: "section" }, h("summary", { text: "Research: creator lighting calibration" }),
-    note("For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise."),
+    h("div", { class: "control-line" }, h("span", { class: "muted small", text: "Calibration" }),
+      helpTip("the calibration", "For matching a creator or mirror screenshot. The capture decides these; leave them at their defaults otherwise.")),
     intensity.element, cone.element, creatorExposure.element, h("div", { class: "row" }, resetCalibration));
   const fovNote = note("");
   const fov = new Slider({ label: "Field of view (vertical)", ...rt.range("camera.setFov", "degrees"), step: 1, format: value => `${Math.round(value)}°`,
@@ -150,11 +152,11 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
   const element = h("div", { class: "panel-content" },
-    section("Camera", fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
+    section({ title: "Camera", help: ["Camera and light are workspace settings: they persist locally and never enter recipes, the look's Undo or export.",
+      "Undo here (Ctrl+Z) steps back through view and lighting changes, which keep their own history."] }, fov.element, fovNote, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section("Light", preset.element, presetNote, studioControls),
     diagnostics,
-    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)),
-    note("Camera and light are workspace settings: they persist locally and never enter recipes, the look's Undo or export. Undo here (Ctrl+Z) steps back through view and lighting changes, which keep their own history."));
+    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
@@ -227,7 +229,13 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
 
 export function motionPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
-  const idle = new Toggle({ label: "Character-creator idle", onChange: enabled => rt.dispatch({ kind: "motion.setIdle", enabled }) });
+  // The body source: Still (the bind pose) or one of the game's own preview idles (the creator's close-up and full body, the inventory…).
+  const STILL = "still";
+  const source = new SelectField<string>({ label: "Body", onChange: value => {
+    if (value === STILL) { rt.dispatch({ kind: "motion.setIdle", enabled: false }); return; }
+    rt.dispatch({ kind: "motion.setIdleClip", clip: value });
+    if (!port.authoring.previewState().motion?.idle) rt.dispatch({ kind: "motion.setIdle", enabled: true });
+  }, help: "Still, or one of the idles the game plays on V in its creator and inventory screens." });
   const pause = button({ label: "Pause idle", icon: "pause", small: true, onClick: () => {
     const motion = port.authoring.previewState().motion; rt.dispatch({ kind: "motion.setPaused", paused: !motion?.idlePaused });
   } });
@@ -235,7 +243,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     const motion = port.authoring.previewState().motion; if (!motion) return;
     rt.dispatch({ kind: "motion.setContributions", body: body ?? motion.idleBody, face: face ?? motion.idleFace });
   };
-  const head = new Toggle({ label: "Head movement", onChange: value => setContributions(value, undefined) });
+  const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
   const face = new Toggle({ label: "Facial movement", onChange: value => setContributions(undefined, value) });
   const idleNote = note("");
   const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
@@ -248,7 +256,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const blinkNote = h("p", { class: "note muted" });
   const blinkControls = h("div", {}, blink.element, h("div", { class: "row" }, play));
   const element = h("div", { class: "panel-content" },
-    section("Game idle", idle.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
+    section("Game idle", source.element, h("div", { class: "row" }, pause), head.element, face.element, idleNote),
     section("Blink", blinkControls, blinkNote));
   return {
     spec: { id: "motion", ...PANEL_META["motion"], element },
@@ -256,14 +264,17 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       const motion = frame.preview.motion;
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
         motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
-      idle.update(!!motion?.idle, unavailable);
+      const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
+      source.update([{ value: STILL, label: "Still" }, ...idles.map(entry => ({ value: entry.id, label: entry.label }))],
+        motion?.idle ? motion.idleClip : STILL, unavailable.disabled, unavailable.disabled ? unavailable.reason : undefined);
       head.update(motion?.idleBody ?? true, unavailable); face.update(motion?.idleFace ?? true, unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
       setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
-      setText(idleNote, !motion?.available ? unavailable.reason : motion.idle
-        ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "head moves" : "head still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
-        : "The character creator's close-up idle, made from your game files. Its timing may differ slightly from the game's.");
+      setText(idleNote, !motion?.available ? unavailable.reason : motion.idleLoading ? "Loading that idle; the previous one plays until it's ready."
+        : motion.idle
+        ? `${motion.idlePaused ? "Pose paused" : "Idle playing"} · ${motion.idleBody ? "body moves" : "body still"} · ${motion.idleFace ? "face moves" : "face still"}. Muting both holds the pose without losing its phase.`
+        : "The game's own idles, made from your game files: the creator's stand on the creator's lifted feet, the inventory's on V's own. Their timing may differ slightly from the game's.");
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
       blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
@@ -293,8 +304,8 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
   const stateLine = h("div", { class: "quality-state" });
   const rebuild = button({ label: "Rebuild preview", icon: "refresh", small: true, onClick: () => rt.dispatch({ kind: "quality.rebuild" }) });
   const element = h("div", { class: "panel-content" },
-    section("Makeup preview textures", tiers.element, stateLine, h("div", { class: "row" }, rebuild),
-      note("Applies to generated masks and optical maps only. Head, eye and imported textures keep their detail. Preview quality is a local preference: it never changes recipes, Undo, library revisions or the 2048² export.")));
+    section({ title: "Makeup preview textures", help: ["Applies to generated masks and optical maps only. Head, eye and imported textures keep their detail.",
+      "Preview quality is a local preference: it never changes recipes, Undo, library revisions or the 2048² export."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)));
   return {
     spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
@@ -317,9 +328,11 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
 export function activityPanel(rt: StudioRuntime): PanelController {
   const list = h("ol", { class: "activity", "aria-label": "Recent activity, newest first" });
   const empty = emptyState("Nothing yet", "Saves, checks, imports, exports and errors appear here for this session.");
-  const clearHint = note("This log lasts only until XF Studio closes. Results that matter — library revisions, package manifests — are stored by their own services.");
+  // What the log keeps, in a help tip on its heading (help-tip.ts).
+  const head = h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow", text: "This session" }),
+    helpTip("the activity log", "This log lasts only until XF Studio closes. Results that matter (library revisions, package manifests) are stored by their own services.")));
   let count = -1;
-  const element = h("div", { class: "panel-content" }, empty, list, clearHint);
+  const element = h("div", { class: "panel-content" }, head, empty, list);
   const draw = () => {
     const log = rt.feedback.log;
     const newest = log.at(-1)?.id ?? 0;

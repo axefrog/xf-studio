@@ -3,6 +3,7 @@ import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY
 import type { InstallDetectionAction } from "./install-detection-actions";
 import type { DesktopAppAction } from "./desktop-app";
 import type { ModInstallAction } from "./mod-install-actions";
+import type { PoseAction } from "./pose-actions";
 import { STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, STUDIO_LIGHT_KEYS, STUDIO_LIGHT_RANGES, STUDIO_SETUP_IDS } from "./studio-lighting";
 import type { PreviewAction } from "./preview-preparation";
 import type { PreviewSetupAction } from "./preview-setup";
@@ -89,6 +90,7 @@ export const ACTION_DESCRIPTORS = {
   "preview.setHair": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
   "preview.setDetail": inView("viewport", "workspace", "none", { detail: enumerated(["brows", "lashes"]), enabled: input("boolean") }),
   "motion.setIdle": inView("viewport", "workspace", "none", { enabled: input("boolean") }),
+  "motion.setIdleClip": inView("viewport", "workspace", "none", { clip: inputText(1, 40) }),
   "motion.setPaused": inView("viewport", "workspace", "none", { paused: input("boolean") }),
   "motion.setContributions": inView("viewport", "workspace", "none", { body: input("boolean"), face: input("boolean") }),
   "motion.setBlink": inView("viewport", "workspace", "none", { value: input("number", 0, 1) }),
@@ -153,6 +155,17 @@ export const MOD_INSTALL_DESCRIPTORS = {
   "modInstall.apply": request("host", "install-mod", { product: target("string") }),
   "modInstall.reveal": request("host", "reveal", { product: target("string") }),
 } satisfies Record<ModInstallAction["kind"], RequestDescriptor>;
+
+/**
+ * The photo-mode pose catalogue (pose-library-design.md §7; `PoseActions`, for the Poses panel to come). All read the host's own game
+ * files on its own launch route: the catalogue for a body gender, one pose's sampled clip, and Try again. None changes a recipe, the
+ * library, the workspace or Undo.
+ */
+export const POSE_DESCRIPTORS = {
+  "poses.load": request("host", "read", { bodyGender: enumerated(["female", "male"], "state") }),
+  "poses.sample": request("host", "read", { bodyGender: enumerated(["female", "male"], "state"), id: target("string") }),
+  "poses.retry": request("host", "read", { bodyGender: enumerated(["female", "male"], "state") }),
+} satisfies Record<PoseAction["kind"], RequestDescriptor>;
 
 /** Gesture payloads are proposals inside one opaque session, not standalone commands (eye makeup's, eye-makeup-descriptors.ts). */
 export const GESTURE_DESCRIPTORS = EYE_MAKEUP_GESTURE_DESCRIPTORS satisfies Record<StudioGestureProposal["kind"], ActionDescriptor>;

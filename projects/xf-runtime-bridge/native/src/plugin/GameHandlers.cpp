@@ -28,9 +28,12 @@
 #include <thread>
 #include <vector>
 
+#include "core/LivePose.hpp"
+#include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/Writes.hpp"
 #include "plugin/GameHandlers.hpp"
+#include "plugin/LivePoseMemory.hpp"
 #include "plugin/Plugin.hpp"
 #include "plugin/ScriptCall.hpp"
 
@@ -462,6 +465,11 @@ bool CallScriptHasOption(const params::AppearanceCheck& aCheck, const std::strin
     return present;
 }
 
+void XFBridgeEnsureSaveLock(const std::string& aCid)
+{
+    CallScript("XFBridgeActions", "SaveLock", {}, {}, aCid);
+}
+
 json SetPhotoAttribute(int32_t aKey, float aValue, const std::string& aCid)
 {
     return CallScript("XFPhoto", "SetAttribute", {"Int32", "Float"}, {&aKey, &aValue}, aCid);
@@ -500,7 +508,9 @@ json GameStatus(const MethodContext& aContext)
     json out{{"plugin_game_state", GameStateName(state.gameState.load())},
              {"game_version", {{"product", state.gameProductVersion}, {"file", state.gameFileVersion}}},
              {"allow_writes", state.config.allowWrites},
-             {"write_classes", WriteClassList(state.config)}};
+             {"write_classes", WriteClassList(state.config)},
+             {"writes_paused", state.bridge && state.bridge->GetDispatcher().WritesPaused()},
+             {"allow_live_pose", state.config.allowLivePose}};
     if (!state.queue.IsPumping())
     {
         out["phase"] = state.gameState.load() == 3 ? "shutting_down" : "starting";
@@ -1005,14 +1015,16 @@ json CreatorOpenMethod(const MethodContext& aContext)
         return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFBridgeActions", "Status", {}, {}, cid); }, "cc.open.wait")
             .value("phase", std::string());
     };
-    ops.cancel = [&queue, cid] {
+    ops.cancel = [&queue, cid]() -> json {
         try
         {
-            RunGameTask(queue, Timeout(), [cid] { return CallScript("XFCharacter", "CancelOpen", {}, {}, cid); }, "cc.open.cancel");
+            return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFCharacter", "CancelOpen", {}, {}, cid); },
+                               "cc.open.cancel");
         }
         catch (const MethodError& e)
         {
             log::Warn("cc.open_cancel_failed", std::string("what=") + e.what(), cid);
+            return json::object();
         }
     };
     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
@@ -1044,24 +1056,15 @@ json RenderOptions(const std::vector<std::string>& aNames, const std::string& aC
                     {"reason", "the bridge's CET layer hasn't announced itself (Cyber Engine Tweaks reads these options)"}};
     }
     const auto seq = state.options.Request(aNames);
-    const auto values = state.options.WaitFor(seq, kRenderOptionsWait);
+    OptionsOutcome outcome;
+    const auto values = state.options.WaitFor(seq, kRenderOptionsWait, &outcome);
     if (!values)
     {
         state.options.Withdraw(seq);
-        log::Warn("options.no_answer", "seq=" + std::to_string(seq), aCid);
-        return json{{"available", false},
-                    {"reason", "the CET layer didn't answer within 3 s (its overlay or a loading screen may be holding it)"}};
+        log::Warn("options.no_answer", "seq=" + std::to_string(seq) + (outcome.refusal.empty() ? "" : " refused=" + outcome.refusal),
+                  aCid);
     }
-    json missing = json::array();
-    for (const auto& name : aNames)
-    {
-        const auto it = values->find(name);
-        if (it == values->end() || it->is_null() || (it->is_string() && it->get<std::string>().empty()))
-        {
-            missing.push_back(name);
-        }
-    }
-    return json{{"available", true}, {"source", "Cyber Engine Tweaks GameOptions.Get"}, {"values", *values}, {"missing", missing}};
+    return RenderOptionsResult(aNames, values, outcome, static_cast<int>(kRenderOptionsWait.count()));
 }
 
 json GameOptionsRead(const MethodContext& aContext)
@@ -1120,6 +1123,86 @@ json WorldPause(const MethodContext& aContext)
     return writes::PauseResult(CallScript("XFWorld", "SetFrozen", {"Bool"}, {&paused}, aContext.cid));
 }
 
+// photo.pose.set: selects a photo-mode pose through the menu (attribute 5, the category, then 6, the pose),
+// as the player does; the sequence and its undo are core/Writes.cpp (writes::PoseSet). The redscript layer
+// finds the category and pose by label (a pose record gives both) or by option data.
+constexpr uint64_t kPoseSettleTicks = 5;
+
+json PhotoPoseSet(const MethodContext& aContext)
+{
+    const auto request = params::ParsePoseSet(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    auto resolvedPose = std::make_shared<std::string>(request.pose);
+    writes::PoseSetOps ops;
+    ops.category = [&queue, cid, request, resolvedPose] {
+        auto result = RunGameTask(
+            queue, Timeout(),
+            [cid, request] {
+                RED4ext::CString record(request.record.c_str());
+                RED4ext::CString category(request.category.c_str());
+                int32_t value = request.categoryValue;
+                return CallScript("XFPose", "SelectCategory", {"String", "String", "Int32"}, {&record, &category, &value}, cid);
+            },
+            "photo.pose.category");
+        if (result.contains("pose_text") && result["pose_text"].is_string() && resolvedPose->empty())
+        {
+            *resolvedPose = result["pose_text"].get<std::string>();
+        }
+        return result;
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, kPoseSettleTicks, Timeout()))
+        {
+            throw MethodError("timeout", "the game didn't tick after the pose category changed");
+        }
+    };
+    ops.pose = [&queue, cid, request, resolvedPose] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, request, resolvedPose] {
+                RED4ext::CString pose(resolvedPose->c_str());
+                int32_t value = request.poseValue;
+                return CallScript("XFPose", "SelectPose", {"String", "Int32"}, {&pose, &value}, cid);
+            },
+            "photo.pose.pose");
+    };
+    ops.restoreCategory = [&queue, cid](int32_t aValue) {
+        RunGameTask(
+            queue, Timeout(), [cid, aValue] { return SetPhotoAttribute(5, static_cast<float>(aValue), cid); },
+            "photo.pose.restore");
+    };
+    return writes::PoseSet(ops);
+}
+
+// pose.live.read: finds a loaded animation set and clip (default: the XF carrier) and checks its key
+// layout; read-only (plugin/LivePoseMemory.cpp, core/LivePose.cpp).
+json PoseLiveRead(const MethodContext& aContext)
+{
+    return live::Read(params::ParsePoseLiveRead(aContext.params), aContext.cid);
+}
+
+// pose.live.apply: writes the XF carrier clip's constant keys, only with allow_live_pose, only in photo
+// mode with the carrier selected; the undo (and the kill switch) put the carrier's own keys back.
+json PoseLiveApply(const MethodContext& aContext)
+{
+    const auto request = params::ParsePoseLiveApply(aContext.params);
+    params::LivePoseAllowed(Get().config.allowLivePose);
+    if (!request.restore)
+    {
+        const auto selected = CallScript("XFPose", "CarrierSelected", {}, {}, aContext.cid);
+        if (!selected.value("selected", false))
+        {
+            throw MethodError("carrier_not_selected",
+                              "the XF live carrier isn't the selected photo-mode pose (" +
+                                  selected.value("pose", std::string("none")) +
+                                  " is); select it with photo.pose.set {record: \"xfs_live_carrier\"} first");
+        }
+        XFBridgeEnsureSaveLock(aContext.cid);
+    }
+    return live::Apply(request, aContext.cid);
+}
+
 // Wraps a write method: marks that the bridge changed something (so the kill switch restores it)
 // and logs the change with its reversal.
 MethodSpec WriteMethod(std::string aName, Access aAccess, RunOn aRunOn, std::string aSummary,
@@ -1138,6 +1221,17 @@ MethodSpec WriteMethod(std::string aName, Access aAccess, RunOn aRunOn, std::str
 
 void RestoreAfterKill()
 {
+    if (live::HasSnapshot())
+    {
+        try
+        {
+            log::Info("bridge.kill_restored_pose", SerializeJson(live::Restore("kill-restore", true)), "kill-restore");
+        }
+        catch (const std::exception& e)
+        {
+            log::Warn("bridge.kill_restore_pose_failed", std::string("what=") + e.what(), "kill-restore");
+        }
+    }
     const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
     log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
 }
@@ -1234,6 +1328,16 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      "Confirms the appearance screen (keeps the look); off unless allow_creator_leave.", &CreatorConfirm));
     aDispatcher.Register(WriteMethod("cc.back", Access::WriteCharacter, RunOn::GameThread,
                                      "Backs out of the appearance screen, discarding its changes; off unless allow_creator_leave.", &CreatorBack));
+    aDispatcher.Register(WriteMethod("photo.pose.set", Access::WritePhoto, RunOn::BridgeThread,
+                                     "Selects a photo-mode pose through the menu (by record, label or option data).", &PhotoPoseSet));
+    aDispatcher.Register({"pose.live.read", Access::Read, RunOn::GameThread,
+                          "Finds a loaded animation clip (default: the XF live carrier) and checks its key layout; "
+                          "read-only.",
+                          &PoseLiveRead});
+    aDispatcher.Register(WriteMethod("pose.live.apply", Access::WritePhoto, RunOn::GameThread,
+                                     "Writes joint rotations into the XF live carrier clip (research); off unless "
+                                     "allow_live_pose.",
+                                     &PoseLiveApply));
     aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread,
                                      "Sets the in-game clock (normal play, or with the appearance screen open).", &WorldTimeSet));
     aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
