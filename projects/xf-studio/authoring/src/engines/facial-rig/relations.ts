@@ -46,6 +46,38 @@ function namedDirection(a: string, b: string): Omit<AxisPair, "frame"> | null {
   return null;
 }
 
+/**
+ * The opposing pairs the names alone settle, for when the solver hasn't confirmed any (it is missing, starting or its probe failed): the
+ * same proposals `findRelations` starts from (`oppositeCandidates`), kept only where the names also fix the orientation. Those are
+ * gaze (in/out per eye by its known meaning, up/down) and ends named with a world direction (l/r, up/dn, back/fwd). Skin pairs named
+ * only in/out are left one-way: on V's rig their words don't say which way they move (a nostril's "breathe in" flares outward) or
+ * whether they oppose at all (the brow raises in/out move together), so only the solver can settle them. A control joins at most one
+ * pair, the first in the given order. The solver's axes replace these once it runs; a proposal it rejects is simply absent then.
+ */
+export function proposeAxes(names: readonly string[]): AxisPair[] {
+  const present = new Set(names), used = new Set<string>(), axes: AxisPair[] = [];
+  for (const a of names) {
+    if (used.has(a)) continue;
+    for (const b of oppositeCandidates(a)) {
+      if (!present.has(b) || used.has(b)) continue;
+      let axis: AxisPair | null = null;
+      if (isHorizontalGaze(a) && isHorizontalGaze(b)) {
+        // V's left is negative: the left eye looks toward V's left when it looks out, the right eye when it looks in.
+        const towardLeft = controlSide(a) === "left" ? "out" : "in";
+        const [negative, positive] = a.endsWith(`_${towardLeft}`) ? [a, b] : [b, a];
+        axis = { negative, positive, direction: "lateral", frame: "world" };
+      } else {
+        const named = namedDirection(a, b);
+        if (named) axis = { ...named, frame: "world" };
+      }
+      if (!axis) continue;
+      used.add(a); used.add(b); axes.push(axis);
+      break;
+    }
+  }
+  return axes;
+}
+
 export function findRelations(input: RelationsInput): Relations {
   const { controls, displacement } = input;
   const index = new Map(controls.map((control, i) => [control.name, i]));

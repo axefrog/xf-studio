@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { buildAxes, counterpartName, isGaze, linkedByDefault, linkKey, oppositeCandidates, readAxis, writeAxis } from "../src/engines/facial-rig/symmetry";
-import { findRelations } from "../src/engines/facial-rig/relations";
+import { findRelations, proposeAxes } from "../src/engines/facial-rig/relations";
 import { f32 } from "../src/engines/facial-rig/vector";
 import type { RigJoint, Vec3 } from "../src/engines/facial-rig/pose";
 
@@ -85,4 +85,18 @@ test("two-way values write both ends and read back exactly; a mixed pair is show
   expect(readAxis(mixed, axis)).toMatchObject({ value: f32(0.1) - f32(0.3), mixed: true });
   expect(writeAxis(mixed, axis, 0.5)).toEqual({ eye_l_dir_in: f32(0.5) });
   expect(writeAxis({}, axis, 7)).toEqual({ eye_l_dir_in: 1 });
+});
+
+test("proposed pairs without the solver: gaze and world-named pairs, oriented as the solver orients them; in/out skin pairs stay one-way", () => {
+  const names = CONTROLS.map(([name]) => name);
+  const proposed = Object.fromEntries(proposeAxes(names).map(axis => [`${axis.negative}~${axis.positive}`, `${axis.direction}/${axis.frame}`]));
+  expect(proposed).toEqual({ "eye_l_dir_out~eye_l_dir_in": "lateral/world", "eye_r_dir_in~eye_r_dir_out": "lateral/world",
+    "eye_l_dir_dn~eye_l_dir_up": "vertical/world", "jaw_mid_shift_l~jaw_mid_shift_r": "lateral/world" });
+  // Every proposal the names settle agrees with what the solver finds from motion.
+  const controls = CONTROLS.map(([name], track) => ({ name, track: 100 + track }));
+  const solvedAxes = findRelations({ rest: REST, controls, displacement: CONTROLS.map(([, d]) => d), eyeTracks: new Set([100, 101, 102, 103, 104, 105]) }).axes
+    .map(axis => `${axis.negative}~${axis.positive}`);
+  for (const key of Object.keys(proposed)) expect(solvedAxes).toContain(key);
+  // A control joins one pair; a name without its opposite proposes nothing.
+  expect(proposeAxes(["eye_l_dir_up", "neck_up_turn"])).toEqual([]);
 });

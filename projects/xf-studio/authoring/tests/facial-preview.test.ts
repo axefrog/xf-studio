@@ -140,3 +140,26 @@ test("controls the host found move nothing are marked inert in the snapshot, and
   expect(preview.snapshot().controls).toBe(snapshot.controls);
   preview.dispose();
 });
+
+test("two-way controls: the names' proposals (marked proposed) until the solver confirms its own pairs, which replace them", async () => {
+  const control = (name: string) => ({ name, track: 1, group: "gaze" as const, label: name, text: name, side: null, partner: null, pair: null, direction: false });
+  const controls = ["eye_l_dir_in", "eye_l_dir_out", "eye_r_dir_in", "eye_r_dir_out", "eye_l_dir_up", "eye_l_dir_dn", "nose_l_breathe_in", "nose_l_breathe_out"].map(control);
+  let state = readyState({ rig: { phase: "ready", controls, joints: JOINTS }, solver: { phase: "missing", reason: "No solver here." } });
+  const preview = new FacialPreview({ state: async () => state, expressions: async () => ({ phase: "ready", items: [] }), solve: async () => solved(0) });
+  preview.start();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const before = preview.snapshot().axes!;
+  expect(before.map(axis => [axis.key, !!axis.proposed])).toEqual([["eye_l_dir_out~eye_l_dir_in", true], ["eye_r_dir_in~eye_r_dir_out", true], ["eye_l_dir_dn~eye_l_dir_up", true]]);
+  // Gaze pairs link to each other as before (one value moves both eyes the same way).
+  expect(before[0]!.link?.counterpart).toBe("eye_r_dir_in~eye_r_dir_out");
+  // The solver ran: its list wins (here it confirmed the nostril too and rejected vertical gaze).
+  state = readyState({ rig: { phase: "ready", controls, joints: JOINTS, axes: [
+    { negative: "eye_l_dir_out", positive: "eye_l_dir_in", direction: "lateral", frame: "world" },
+    { negative: "eye_r_dir_in", positive: "eye_r_dir_out", direction: "lateral", frame: "world" },
+    { negative: "nose_l_breathe_out", positive: "nose_l_breathe_in", direction: "lateral", frame: "outward" }] } });
+  preview.retry();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const after = preview.snapshot().axes!;
+  expect(after.map(axis => [axis.key, !!axis.proposed])).toEqual([["eye_l_dir_out~eye_l_dir_in", false], ["eye_r_dir_in~eye_r_dir_out", false], ["nose_l_breathe_out~nose_l_breathe_in", false]]);
+  preview.dispose();
+});

@@ -55,6 +55,8 @@ export type FacialAxisPair = { readonly negative: string; readonly positive: str
 /** A two-way control for the drawer (symmetry.ts `FacialAxis`). */
 export type FacialAxisControl = FacialAxisPair & { readonly key: string; readonly label: string; readonly ends: readonly [string, string];
   readonly side: "left" | "right" | null; readonly gaze: boolean;
+  /** Proposed by the control names alone (the solver hasn't confirmed its pairs yet); the solver's own list replaces it once it runs. */
+  readonly proposed?: true;
   /** Its symmetry: the link keys of its two ends, its counterpart axis (by key) and whether it starts linked; absent for a centre axis. */
   readonly link?: { readonly keys: readonly string[]; readonly counterpart: string; readonly byDefault: boolean } };
 

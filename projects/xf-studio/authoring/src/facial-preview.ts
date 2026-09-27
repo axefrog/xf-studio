@@ -17,6 +17,7 @@
 import { posedLocals, type RigRest, type SolvedPose } from "./engines/facial-rig/pose";
 import type { FacialAxisControl, FacialAxisPair, FacialBlink, FacialControl, FacialHostState, FacialPreviewSnapshot, FacialSolveRequest, FacialStartPoints } from "./platform/api/facial";
 import { buildAxes, counterpartName, linkedByDefault, linkKey } from "./engines/facial-rig/symmetry";
+import { proposeAxes } from "./engines/facial-rig/relations";
 
 /** A solve's answer with its buffers decoded (the device does the transport). */
 export type FacialSolved = { ok: true; frames: number; rate?: number; pose: SolvedPose; ms: number; skipped: readonly string[] } |
@@ -203,13 +204,21 @@ export class FacialPreview {
     return this.marked.controls;
   }
   private marked: { source: readonly FacialControl[]; inert: readonly string[] | undefined; controls: readonly FacialControl[] } | undefined;
-  /** The two-way controls over the host's confirmed pairs (kept until the host's list changes). */
+  /**
+   * The two-way controls: over the host's confirmed pairs once its solver has found them, else over the pairs the control names settle
+   * (`proposeAxes`: gaze and world-named pairs, marked `proposed`), so gaze is one two-way control whether or not the solver runs. Kept
+   * until the host's lists change. Values live in the part as plain control weights either way, so a proposal the solver later rejects
+   * shows again as its two one-way controls with nothing lost.
+   */
   private axes(): readonly FacialAxisControl[] | undefined {
-    const pairs = this.host?.rig.axes;
-    if (!pairs) return undefined;
-    if (this.builtAxes?.source !== pairs) {
-      const axes = buildAxes(pairs), byEnds = new Map(axes.map(axis => [`${axis.negative}~${axis.positive}`, axis]));
-      this.builtAxes = { source: pairs, axes: axes.map(axis => {
+    const rig = this.host?.rig, confirmed = rig?.axes;
+    const source: readonly FacialAxisPair[] | readonly FacialControl[] | undefined = confirmed ?? rig?.controls;
+    if (!source) return undefined;
+    if (this.builtAxes?.source !== source) {
+      const proposed = !confirmed;
+      const pairs = confirmed ?? proposeAxes(rig!.controls!.map(control => control.name));
+      const axes = buildAxes(pairs).map(axis => proposed ? { ...axis, proposed: true as const } : axis), byEnds = new Map(axes.map(axis => [`${axis.negative}~${axis.positive}`, axis]));
+      this.builtAxes = { source, axes: axes.map(axis => {
         const negative = counterpartName(axis.negative), positive = counterpartName(axis.positive);
         const other = negative && positive ? byEnds.get(`${negative}~${positive}`) : undefined;
         const keys = [linkKey(axis.negative), linkKey(axis.positive)].filter((key, i, all): key is string => !!key && all.indexOf(key) === i);
@@ -218,7 +227,7 @@ export class FacialPreview {
     }
     return this.builtAxes.axes;
   }
-  private builtAxes: { source: readonly FacialAxisPair[]; axes: readonly FacialAxisControl[] } | undefined;
+  private builtAxes: { source: readonly FacialAxisPair[] | readonly FacialControl[]; axes: readonly FacialAxisControl[] } | undefined;
   /** Solve again after a failure (the drawer's Try again). */
   retry() {
     // The host's state is asked for again: a solver that stopped or was stuck is started again there (CORE-101), and the solve follows.
