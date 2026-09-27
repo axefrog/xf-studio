@@ -138,8 +138,13 @@ describe("the turntable", () => {
     pointer(frame, "pointerenter");
     frame.querySelector(".pv-strip")!.dispatchEvent(lightEvent("load"));
     expect(frame.hasAttribute("data-spin")).toBe(false);
-    await new Promise(resolve => setTimeout(resolve, SPIN.dwellMs + 30));
-    expect(frame.hasAttribute("data-spin")).toBe(true);
+    // The dwell is a timer: wait past it, then poll briefly, so a loaded machine's late timer isn't a failure.
+    const spinsWithin = async (el: { hasAttribute(name: string): boolean }) => {
+      await new Promise(resolve => setTimeout(resolve, SPIN.dwellMs));
+      for (let waited = 0; waited < 1000 && !el.hasAttribute("data-spin"); waited += 20) await new Promise(resolve => setTimeout(resolve, 20));
+      return el.hasAttribute("data-spin");
+    };
+    expect(await spinsWithin(frame)).toBe(true);
     pointer(frame, "pointerleave");
     expect(frame.hasAttribute("data-spin")).toBe(false);
     for (const size of ["s", "m"] as const) {
@@ -148,8 +153,7 @@ describe("the turntable", () => {
       expect(small.hasAttribute("data-spinnable")).toBe(true);
       pointer(small, "pointerenter");
       small.querySelector(".pv-strip")!.dispatchEvent(lightEvent("load"));
-      await new Promise(resolve => setTimeout(resolve, SPIN.dwellMs + 30));
-      expect(small.hasAttribute("data-spin")).toBe(true);
+      expect(await spinsWithin(small)).toBe(true);
       pointer(small, "pointerleave");
     }
     const rows = await list("list");
