@@ -268,6 +268,21 @@ export const LIBRARY: readonly LibraryEntry[] = [
     drives: "Presentation state; the share is kept for the session.",
     a11y: "The gutter is a focusable <code>separator</code> named \"Resize &lt;label&gt;\" with its value; arrows adjust (Shift for bigger steps), Home and End go to the limits, Enter or a double-click shares evenly.",
     do: "Name what the gutter resizes.", avoid: "Two panes touching without a gutter." },
+  { id: "lib-swatch-card", title: "Swatch card", category: "Feature-specific", module: "components/swatch-card.ts",
+    exports: ["SwatchCard", "sampleBackground", "contrastMark", "setContrastMark", "CONTRAST_WORDS"],
+    what: "A larger look at one colour swatch, beside it, while the pointer rests on it or it has keyboard focus: the colour as it really is, its name and where it comes from. With it, the contrast-enhanced marker: a small icon a row of swatches shows while its list spreads similar colours apart (cc-swatch-display.ts, swatch-contrast.ts), so the list can be read at a glance and the card and the row's own chip keep the truth.",
+    anatomy: "Card: 48 px sample (a 24 × 64 px root-to-tip chip for a gradient) in a bevelled frame on the sunken ground · name (bold) · source (muted) · when the list is enhanced, a rule and \"True colour. The list spreads these apart to tell them apart.\" Marker: one 16 px half-filled circle, muted.",
+    variants: "Flat colour or gradient sample; with or without source; with or without the true-colour line. The marker on or off.",
+    states: "hidden; waiting (the pointer came to rest, 120 ms); shown for one swatch (moving to the next swatch follows at once); hidden again on leave, blur, Escape, a press or scrolling. Keyboard focus keeps its card when the pointer leaves. The marker off keeps its place, invisible.",
+    sizes: "Card up to 280 px wide (less on a narrow viewport), placed above the swatch, or below when there is no room, inside the viewport with a 6 px margin.",
+    when: "Colour grids whose swatches are too small to judge by eye (the Character panel's colour rows). The marker only where a list shows swatches contrast-enhanced.",
+    combine: `${code("const card = new SwatchCard(); card.attach(list, target => sampleFor(target))")}, one card per panel; ${code("setContrastMark(mark, state.enhanced.size > 0)")} next to the row's own true-colour chip.`,
+    adapt: "Floats: never moves the layout and takes no pointer events. The text wraps; the sample keeps its size.",
+    drives: "Presentation only: the owner supplies each swatch's sample from its snapshot (the true colour from the display state's <code>truth</code>).",
+    a11y: "<code>role=tooltip</code>; the swatch is described by the card while it shows (<code>aria-describedby</code>); keyboard focus shows it at once and Escape hides it. The marker is an image named by its tooltip text, hidden from assistive technology while off; the row's description also says the colours are spread apart. Forced colours keep the sample's real colour.",
+    do: "Show the true colour, not the enhanced one; say where it comes from; keep the marker next to the row's own true-colour chip.",
+    avoid: "Invented or brightened colours presented as true; a card that takes clicks or moves the layout; a marker that appears when nothing was enhanced.",
+    see: ["c-creator"] },
 ];
 
 const row = (label: string, value: string) => `<dt>${label}</dt><dd>${value}</dd>`;

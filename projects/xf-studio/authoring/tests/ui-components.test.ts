@@ -259,3 +259,37 @@ test("folder setting: says what it uses, a refusal shows inline on the reserved 
   // A cancelled picker says nothing.
   expect([picks, typed.hidden, note.textContent]).toEqual([1, true, ""]);
 });
+
+test("swatch card: shows the true colour after the pointer rests, follows to the next swatch at once, describes its swatch, hides on Escape; the marker keeps its place", async () => {
+  const { SwatchCard, contrastMark, setContrastMark, CONTRAST_WORDS } = await lib();
+  const card = new SwatchCard({ delay: 5 });
+  const list = document.createElement("div");
+  const items = [0, 1].map(n => { const item = document.createElement("button"); item.setAttribute("data-position", String(n)); list.append(item); return item; });
+  document.body.append(list);
+  const samples = [{ colours: ["#3e2117"], label: "Cold white", source: "From a pack", enhanced: true }, { colours: ["#101010", "#e0d0c0"], label: "Ombre", source: null }];
+  const detach = card.attach(list, target => { const item = target.closest("[data-position]") as HTMLElement | null;
+    return item ? { anchor: item, sample: samples[Number(item.getAttribute("data-position"))]! } : null; });
+  const over = (element: HTMLElement) => (element as unknown as LightElement).dispatchEvent(lightEvent("pointerover"));
+  over(items[0]!);
+  expect(card.element.hidden).toBe(true);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  const text = (selector: string) => card.element.querySelector(selector) as unknown as HTMLElement;
+  expect([card.element.hidden, card.element.getAttribute("role"), items[0]!.getAttribute("aria-describedby")]).toEqual([false, "tooltip", card.element.id]);
+  expect([text(".swatch-card-name").textContent, text(".swatch-card-source").textContent, text(".swatch-card-note").textContent]).toEqual(["Cold white", "From a pack", CONTRAST_WORDS.card]);
+  expect((text(".swatch-card-sample").style as unknown as Record<string, string>).background).toBe("#3e2117");
+  // Already showing: the next swatch follows at once; a gradient shows root to tip, without the true-colour line.
+  over(items[1]!);
+  expect([items[0]!.getAttribute("aria-describedby"), items[1]!.getAttribute("aria-describedby"), text(".swatch-card-note").hidden, text(".swatch-card-source").hidden]).toEqual([null, card.element.id, true, true]);
+  expect((text(".swatch-card-sample").style as unknown as Record<string, string>).background).toBe("linear-gradient(to bottom, #101010, #e0d0c0)");
+  key(list, "Escape");
+  expect([card.element.hidden, items[1]!.getAttribute("aria-describedby")]).toEqual([true, null]);
+  // Keyboard focus shows it at once.
+  (items[0] as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  expect(card.element.hidden).toBe(false);
+  detach();
+  expect(card.element.hidden).toBe(true);
+  const mark = contrastMark();
+  expect([mark.classList.contains("off"), mark.getAttribute("aria-hidden")]).toEqual([true, "true"]);
+  setContrastMark(mark, true);
+  expect([mark.classList.contains("off"), mark.getAttribute("aria-hidden"), mark.getAttribute("title")]).toEqual([false, null, CONTRAST_WORDS.markTip]);
+});

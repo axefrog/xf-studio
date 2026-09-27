@@ -7,7 +7,7 @@
  *   and small texture mips read, and the colour derived. A key whose candidate yields nothing tries the next candidate in a later round.
  *   Families go in catalogue order, the families of rows the panel asks about first; the work yields between families, so a preview
  *   preparation on the same resolver is never held up for long.
- * - **Textures** are read at a small mip (at most `SWATCH_TEXTURE_SIDE`) by the route's native decoder only; without one, a swatch that
+ * - **Textures** are read at a small mip (cc-swatch.ts `swatchTextureSide`: 64 px, 512 for a decal's diffuse) by the route's native decoder only; without one, a swatch that
  *   needs a texture falls back as the module says.
  * - **Cache.** Per body gender, route, reader identity and swatch rules (`SWATCH_VERSION`), in `<resolver cache>/swatches/`. Each family
  *   records the resources it read and the archive each came from; on load a family is kept only when every one of those resources still
@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BodyGender, CcCatalogue } from "./cc-catalogue";
-import { appearanceChunks, encodeSwatch, pickSwatchChunk, SWATCH_VERSION, swatchColours, swatchNeeds, swatchPlan, type SwatchPlan, type SwatchReads,
+import { appearanceChunks, encodeSwatch, pickSwatchChunk, SWATCH_TEXTURE_SIDE, SWATCH_VERSION, swatchColours, swatchNeeds, swatchPlan, type SwatchPlan, type SwatchReads,
   type SwatchTexture } from "./cc-swatch";
 import { planChunk } from "./character-detail-plan";
 import { gradientStops, hairProfileStops, loadTemplates } from "./character-detail-service";
@@ -28,8 +28,6 @@ import { renderTemplate } from "./render-templates";
 import type { Installation } from "./resolver-host";
 import type { Provenance } from "./resource-graph";
 
-/** Largest side of a texture mip a swatch reads. */
-export const SWATCH_TEXTURE_SIDE = 64;
 const CACHE_SCHEMA = "xfs/cc-swatches-1";
 
 type FamilyRecord = { swatches: Record<string, string>; reads: [string, string][] };
@@ -55,7 +53,8 @@ export class CreatorSwatches {
   private readonly finished = new Set<string>();
   private readonly records = new Map<string, FamilyRecord>();
   private readonly templates = { identities: new Map<string, { name: string | null; priority: string | null }>(), defaults: new Map<string, ResolvedParam[]>() };
-  private readonly textures = new Map<string, SwatchTexture | null>();
+  /** Decoded texture mips by resource, with the side each was asked for (a larger ask reads again). */
+  private readonly textures = new Map<string, { side: number; texture: SwatchTexture | null }>();
   private readonly stamps = new Map<string, string>();
   private running: Promise<void> | null = null;
   private stopped = false;
@@ -172,13 +171,13 @@ export class CreatorSwatches {
             gradients.set(id, null);
             const loaded = await graph.load(ref.ref, "gradient");
             gradients.set(id, loaded ? gradientStops(loaded.root) : null);
-          }), ...needs.textures.map(ref => this.texture(ref, textureReads))];
+          }), ...needs.textures.map((ref, at) => this.texture(ref, needs.sides[at] ?? SWATCH_TEXTURE_SIDE, textureReads))];
         }));
         this.stats.readMs += performance.now() - t1;
         const reads: SwatchReads = {
           profile: ref => profiles.get(refLabel(ref.ref).toLowerCase()) ?? null,
           gradient: ref => gradients.get(refLabel(ref.ref).toLowerCase()) ?? null,
-          texture: ref => this.textures.get(refLabel(ref.ref).toLowerCase()) ?? null,
+          texture: ref => this.textures.get(refLabel(ref.ref).toLowerCase())?.texture ?? null,
         };
         const next: string[] = [];
         for (const { key, candidate, best } of picked) {
@@ -207,22 +206,23 @@ export class CreatorSwatches {
   }
 
   /** A texture's small mip, decoded natively once per resource (null when there is no native decoder or it can't be read). */
-  private async texture(ref: Provenance, reads: Map<string, string>): Promise<void> {
+  private async texture(ref: Provenance, side: number, reads: Map<string, string>): Promise<void> {
     const id = refLabel(ref.ref).toLowerCase();
     const graph = this.installation.graph;
     const { entry, lookup } = graph.locate(ref.ref);
     if (lookup.winner) reads.set(lookup.hash, lookup.winner.id);
-    if (this.textures.has(id)) return;
-    this.textures.set(id, null);
+    const known = this.textures.get(id);
+    if (known && known.side >= side) return;
+    this.textures.set(id, { side, texture: known?.texture ?? null });
     const decoder = this.installation.native?.decoder;
     const path = entry.path ?? graph.named(entry).path;
     if (!decoder?.decodeTexture || !lookup.winner || !path) return;
     const began = performance.now();
     try {
-      const outcome = await decoder.decodeTexture({ archivePath: lookup.winner.id, hash: depotHash(path), maxSide: SWATCH_TEXTURE_SIDE });
+      const outcome = await decoder.decodeTexture({ archivePath: lookup.winner.id, hash: depotHash(path), maxSide: side });
       if (outcome.ok) {
         const image = decodePng(outcome.texture.png);
-        this.textures.set(id, { width: image.width, height: image.height, data: image.data, isGamma: outcome.texture.isGamma });
+        this.textures.set(id, { side, texture: { width: image.width, height: image.height, data: image.data, isGamma: outcome.texture.isGamma } });
       }
     } catch { /* The swatch falls back without it. */ }
     this.stats.textures++;

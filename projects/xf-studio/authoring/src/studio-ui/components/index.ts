@@ -27,3 +27,4 @@ export { SplitView, type SplitViewOptions } from "./split-view";
 export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, type TreeBadge, type TreeGroupData, type TreeItemRef, type TreeRowData, type TreeViewOptions } from "./tree-view";
 export { progressBar, type ProgressBar } from "./progress";
 export { FolderSetting, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
+export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";

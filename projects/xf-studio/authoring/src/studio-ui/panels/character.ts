@@ -48,6 +48,7 @@ import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
 import { characterDetailLine } from "./preview";
 import { ChoiceList, swatchLook } from "./character-choices";
+import { contrastMark, CONTRAST_WORDS, setContrastMark, SwatchCard, type SwatchSample } from "../components";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { ClothingState } from "../../clothing-dressing";
 import type { ClothingArea } from "../../save-loadout";
@@ -117,6 +118,8 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   moduleControls: CharacterControls = {}): PanelController {
   const port = rt.port;
   const dispatch = (action: Parameters<StudioRuntime["dispatch"]>[0]) => rt.dispatch(action);
+  // One swatch card for the panel: a larger look at the colour swatch under the pointer or focus, with its true colour (components/swatch-card.ts).
+  const swatchCard = new SwatchCard();
 
   // ---- The V and its source ----
   const source = h("p", { class: "cc-source" });
@@ -213,6 +216,8 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
 
   // ---- Rows ----
   type RowControls = { view: RowView; element: HTMLElement; main: HTMLButtonElement; label: HTMLElement; value: HTMLElement; swatch: HTMLElement;
+    /** Shown while the open list's swatches are contrast-enhanced (the header's own swatch stays the true colour). */
+    contrast: HTMLElement;
     notShown: HTMLElement; off: HTMLButtonElement; reset: HTMLButtonElement;
     /** What the row is (it follows a switcher, the 3D view can't draw it), in a help tip; only on rows where an option has something to say. */
     help: HTMLButtonElement | null; list: ChoiceList; more: HTMLButtonElement;
@@ -334,11 +339,11 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
 
   function buildRow(panel: Readonly<CcPanel>, view: RowView, id: string): RowControls {
         const label = h("span", { class: "expander-label cc-row-label" }), swatch = h("span", { class: "swatch cc-row-swatch", hidden: true });
-        const value = h("span", { class: "cc-row-value" });
+        const value = h("span", { class: "cc-row-value" }), contrast = contrastMark();
         const notShown = h("span", { class: "cc-row-not-shown", title: NOT_SHOWN, "aria-hidden": "true" }, icon("eyeOff"));
-        const main = expander("row", { expanded: false, controls: id }, label, h("span", { class: "cc-row-current" }, swatch, value), notShown);
+        const main = expander("row", { expanded: false, controls: id }, label, h("span", { class: "cc-row-current" }, contrast, swatch, value), notShown);
         main.classList.add("cc-row-main");
-        const controls: RowControls = { view, element: h("div", { class: "cc-row", "data-slot": view.row.slot }), main, label, value, swatch, notShown,
+        const controls: RowControls = { view, element: h("div", { class: "cc-row", "data-slot": view.row.slot }), main, label, value, swatch, contrast, notShown,
           off: h("button", { class: "chip-button cc-off", type: "button", text: "Off" }),
           reset: button({ label: "Back to your V's own", icon: "reset", iconOnly: true, small: true, variant: "quiet", onClick: () => {} }),
           // A help tip only where one of the row's options has something to say; it keeps its place when the shown one has nothing (UI-68).
@@ -367,9 +372,25 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
           if (option) port.authoring.characterChoices(option.id, (port.authoring.characterChoices(option.id, undefined, controls.query)?.choices.length ?? 0) + PAGE, controls.query);
         });
         controls.list.element.hidden = true;
+        // The swatch card for the list's colour swatches: the true colour, name and maker of the one under the pointer or focus.
+        swatchCard.attach(controls.list.list, target => swatchSample(controls, target));
         controls.element.append(h("div", { class: "cc-row-head" }, main, controls.help, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
           controls.list.element, controls.more);
         return controls;
+  }
+  /** The swatch card's sample for a choice item in a row's colour grid: its true colour (the host's swatch, else its own), name and maker. */
+  function swatchSample(controls: RowControls, target: HTMLElement): { anchor: HTMLElement; sample: SwatchSample } | null {
+    const item = target.closest<HTMLElement>(".swatch-choice[data-position]");
+    const option = current(controls);
+    if (!item || !option?.grid || item.classList.contains("off")) return null;
+    const position = Number(item.dataset.position);
+    const shown = port.authoring.characterSwatches(option.id);
+    const text = (shown?.truth ?? shown?.swatches)?.[position] ?? "";
+    const choice = port.authoring.characterChoices(option.id, undefined, controls.query)?.choices.find(entry => entry.position === position);
+    const colours = text ? text.replace(/^!/, "").split(">") : choice?.color ? [choice.color] : [];
+    if (!colours.length) return null;
+    return { anchor: item, sample: { colours, label: item.getAttribute("aria-label") ?? choice?.label ?? "", source: item.getAttribute("aria-description")?.split(";")[0] ?? null,
+      enhanced: !!shown?.enhanced.has(position) } };
   }
   const current = (controls: RowControls): CcPanelOption | null => {
     const panel = port.authoring.characterPanel();
@@ -433,8 +454,12 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       setText(controls.value, value ? (value.choice === option.off ? "Off" : chosenLabel) : chosenLabel);
       // The current choice's swatch: what wins for it (the row's swatches once open, else the view's), else its own colour.
       const rowSwatches = option.grid && controls.open ? port.authoring.characterSwatches(option.id) : null;
+      // The header's swatch is always the true colour, never the list's contrast-enhanced one.
+      const trueSwatches = rowSwatches ? { ...rowSwatches, swatches: rowSwatches.truth } : null;
+      const enhancedList = !!rowSwatches?.enhanced.size;
+      setContrastMark(controls.contrast, enhancedList);
       const look = value ? swatchLook({ position: value.position, color: value.color },
-        rowSwatches ?? (value.swatch ? { swatches: { [value.position]: value.swatch } as unknown as string[], icons: [], sheets: new Map(), pending: false } : null)) : null;
+        trueSwatches ?? (value.swatch ? { swatches: { [value.position]: value.swatch } as unknown as string[], icons: [], sheets: new Map(), pending: false } : null)) : null;
       controls.swatch.hidden = !look || look.kind === "none" || isOffChoice(option, value);
       if (look && look.kind !== "none") {
         controls.swatch.style.setProperty("--swatch", look.background || "transparent");
@@ -449,7 +474,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const conditionalHidden = option.coverage[0] === "conditional" && option.type === "appearance" && !!value && !isOff && details?.phase === "ready" && !drawn.has(option.name);
       const from = option.mod >= 0 ? `From ${creator.mods[option.mod]}` : "From the game";
       const own = value && value.choice !== value.own ? `Your V's own: ${value.ownLabel}.` : "";
-      const describe = [from, own, conditionalHidden ? NOT_SHOWN : ""].filter(Boolean).join(". ").replace(/\.\./g, ".");
+      const describe = [from, own, conditionalHidden ? NOT_SHOWN : "", enhancedList ? CONTRAST_WORDS.mark : ""].filter(Boolean).join(". ").replace(/\.\./g, ".");
       controls.main.title = `${option.label}: ${value?.label ?? ""} · ${describe}`;
       setAttr(controls.main, "aria-description", describe);
       controls.notShown.classList.toggle("on", conditionalHidden);

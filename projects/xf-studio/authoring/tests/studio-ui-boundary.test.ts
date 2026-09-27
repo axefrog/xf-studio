@@ -33,6 +33,8 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
   // A creator choice's maker group, the groups' shown order and the pooled "Other mods" heading (cc-panel.ts, pure over the projection).
   ["cc-panel", ["choiceGroup", "compareGroups", "OTHER_MODS_GROUP", "OTHER_MODS_INDEX"]],
+  // Swatch contrast enhancement's pure math (swatch-contrast.ts): the style guide draws its curve and a before/after specimen.
+  ["swatch-contrast", ["CONTRAST", "contrastGain", "enhanceSwatchSet", "separationWeight"]],
   // The pure input binding catalogue: hint/cursor/label derivation and key matching.
   ["input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
     "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],
