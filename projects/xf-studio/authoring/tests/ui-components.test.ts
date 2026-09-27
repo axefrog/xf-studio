@@ -290,9 +290,10 @@ test("swatch card: shows the true colour after the pointer rests, follows to the
   detach();
   expect(card.element.hidden).toBe(true);
   const mark = contrastMark();
-  expect([mark.classList.contains("off"), mark.getAttribute("aria-hidden")]).toEqual([true, "true"]);
+  // Off: a help tip that keeps its place, invisible and out of the tab order; on: a named button whose description is the tip.
+  expect([mark.tagName, mark.classList.contains("empty"), mark.getAttribute("tabindex"), mark.getAttribute("aria-label")]).toEqual(["button", true, "-1", `About ${CONTRAST_WORDS.mark}`]);
   setContrastMark(mark, true);
-  expect([mark.classList.contains("off"), mark.getAttribute("aria-hidden"), mark.getAttribute("title")]).toEqual([false, null, CONTRAST_WORDS.markTip]);
+  expect([mark.classList.contains("empty"), mark.getAttribute("tabindex"), mark.dataset.help]).toEqual([false, "0", CONTRAST_WORDS.markTip]);
 });
 
 test("folder setting: several found folders are all shown as choices with where they were found; pressing one saves it; an optional folder can be cleared", async () => {
@@ -442,9 +443,9 @@ test("choice list with swatches: the swatch card shows a choice's colour and nam
   (plain as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
   expect(card.hidden).toBe(true);
   const mark = list.element.querySelector(".contrast-mark") as unknown as HTMLElement;
-  expect(mark.classList.contains("off")).toBe(true);
+  expect(mark.classList.contains("empty")).toBe(true);
   list.update("a", undefined, { enhanced: true });
-  expect(mark.classList.contains("off")).toBe(false);
+  expect(mark.classList.contains("empty")).toBe(false);
   // Any list of choice items: a swatch item takes no tooltip; attachSwatchCard asks the owner for the sample.
   const host = document.createElement("div");
   const item = choiceItem({ label: "Cold white", title: "Cold white · From a pack", swatch: true, content: Object.assign(document.createElement("span"), { className: "swatch" }) });

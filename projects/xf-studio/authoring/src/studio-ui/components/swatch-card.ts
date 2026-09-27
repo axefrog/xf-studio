@@ -1,4 +1,5 @@
 import { clamp, h, setAttr, setText } from "../dom";
+import { setHelp } from "../help-tip";
 import { icon } from "../icons";
 
 /**
@@ -24,9 +25,9 @@ export type SwatchCardOptions = { delay?: number };
 
 /** The words the card and the marker use for contrast enhancement (one wording everywhere). */
 export const CONTRAST_WORDS = {
-  mark: "Colours spread apart",
-  markTip: "These swatches are spread apart in lightness and hue so similar colours are easier to tell apart. They keep their order; rest on one, or focus it, to see its true colour.",
-  card: "True colour. The list spreads these apart to tell them apart.",
+  mark: "More contrast",
+  markTip: "Colours shown with more contrast so you can tell them apart; hover a swatch for its true colour.",
+  card: "True colour. The list shows similar colours further apart.",
 } as const;
 
 /** CSS background for a sample: a flat colour, or a vertical root-to-tip gradient. */
@@ -138,14 +139,15 @@ export class SwatchCard {
 }
 
 /**
- * The small marker a row of swatches shows when its swatches are contrast-enhanced: one 16 px icon with a plain tooltip (its accessible
- * name says the same). `setContrastMark` turns it on and off without moving anything: an off marker keeps its place, invisible.
+ * The contrast marker a row or list of swatches shows when its swatches are contrast-enhanced: a help tip (a real button, in the tab order,
+ * named "About More contrast", its tip saying what it means) with the contrast icon. `setContrastMark` shows it only while enhanced; off,
+ * it keeps its place, invisible and out of the tab order (no layout shift). It must not sit inside another button.
  */
 export function contrastMark(): HTMLElement {
-  return h("span", { class: "contrast-mark off", title: CONTRAST_WORDS.markTip, role: "img", "aria-label": `${CONTRAST_WORDS.mark}. ${CONTRAST_WORDS.markTip}`,
-    "aria-hidden": "true" }, icon("contrast"));
+  const mark = h("button", { class: "help-tip contrast-mark", type: "button", "aria-label": `About ${CONTRAST_WORDS.mark}` }, icon("contrast"));
+  setHelp(mark, "", CONTRAST_WORDS.mark);
+  return mark;
 }
 export function setContrastMark(mark: HTMLElement, on: boolean) {
-  mark.classList.toggle("off", !on);
-  setAttr(mark, "aria-hidden", on ? undefined : "true");
+  setHelp(mark, on ? CONTRAST_WORDS.markTip : "", on ? CONTRAST_WORDS.mark : undefined);
 }

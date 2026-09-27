@@ -809,10 +809,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .swatch-card-source { color: var(--text-muted); overflow-wrap: anywhere; }
 .swatch-card-note { color: var(--text-muted); font-size: var(--fs-xs); border-top: 1px solid var(--line); padding-top: var(--sp-1); }
 .swatch-card-source[hidden], .swatch-card-note[hidden] { display: none; }
-/* The contrast-enhanced marker: one muted icon; an off marker keeps its place, invisible (no layout shift). */
-.contrast-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; color: var(--text-muted); cursor: help; }
+/* The contrast-enhanced marker is a help tip with the contrast icon (components/swatch-card.ts); off, it keeps its place, invisible. */
 .contrast-mark .icon { width: 12px; height: 12px; }
-.contrast-mark.off { visibility: hidden; }
 @media (forced-colors: active) { .swatch-card-sample { forced-color-adjust: none; } }
 /* Choices prepared ahead: a corner mark on one not prepared yet, a turning one while it is prepared, a warning one when it couldn't be.
    Absolutely placed on the item's corner (over its border, clear of its label), so a mark never moves the layout; the ring's own fill

@@ -82,8 +82,21 @@ for (const scheme of schemes) for (const width of widths) {
       if (clip) await page.screenshot(resolve(out, name("brow-pack-card")), clip);
       await page.mouse("mouseMoved", 5, 5);
     }
+    // The contrast marker's help tip (pointer rest), with the row header.
+    const markAt = await page.evaluate(`(() => { const m = ${rowOf("Eyebrow Color")}.querySelector(".contrast-mark:not(.empty)"); if (!m) return null; m.scrollIntoView({ block: "center" });
+      const r = m.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    if (markAt) {
+      await page.wait(300);
+      await page.mouse("mouseMoved", markAt.x, markAt.y);
+      await page.wait(700);
+      const clip = await page.evaluate(`(() => { const t = document.querySelector(".help-bubble:not([hidden])"); const h = ${rowOf("Eyebrow Color")}.querySelector(".cc-row-head"); if (!t || !h) return null;
+        const a = t.getBoundingClientRect(), b = h.getBoundingClientRect(); const x = Math.max(0, Math.min(a.x, b.x) - 6), y = Math.max(0, Math.min(a.y, b.y) - 6);
+        return { x, y, width: Math.min(innerWidth - x, Math.max(a.right, b.right) - x + 6), height: Math.min(innerHeight - y, Math.max(a.bottom, b.bottom) - y + 6) }; })()`);
+      if (clip) await page.screenshot(resolve(out, name("brow-pack-mark-tip")), clip);
+      await page.mouse("mouseMoved", 5, 5);
+    }
     const packState = await page.evaluate(`(() => { const r = ${rowOf("Eyebrow Color")}; const g = ${groupHead};
-      return { mark: !r.querySelector(".contrast-mark")?.classList.contains("off"), swatches: g ? [...g.querySelectorAll(".swatch-choice .swatch")].map(s => getComputedStyle(s).backgroundColor).slice(0, 40) : [] }; })()`);
+      return { mark: !r.querySelector(".contrast-mark")?.classList.contains("empty"), swatches: g ? [...g.querySelectorAll(".swatch-choice .swatch")].map(s => getComputedStyle(s).backgroundColor).slice(0, 40) : [] }; })()`);
     await close(page, "Eyebrow Color");
     // The game's own brow style.
     await choose(page, "Eyebrows", "01");

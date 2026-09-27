@@ -53,10 +53,11 @@ describe("a set of swatches", () => {
     for (const [hex] of result.colours) expect(hex).toMatch(/^#[0-9a-f]{6}$/);
   });
 
-  test("hue moves at most the cap and not at all for near-grey colours: a brown stays brown", () => {
+  test("hue moves at most the cap and chroma at most its cap: a near-black maroon never turns vivid red, a brown stays brown", () => {
     const result = enhanceSwatchSet(CLUSTERED);
     CLUSTERED.forEach(([hex], i) => {
       const out = result.colours[i]![0]!;
+      expect(chromaOf(out)).toBeLessThanOrEqual(chromaOf(hex!) * CONTRAST.maxChromaGain + 0.004);
       if (chromaOf(hex!) < CONTRAST.hueChromaFloor || chromaOf(out) < 0.01) return;
       const shift = Math.abs(((hueOf(out) - hueOf(hex!) + 540) % 360) - 180);
       // Gamut clipping at the same hue can add a little; the rotation itself is capped.

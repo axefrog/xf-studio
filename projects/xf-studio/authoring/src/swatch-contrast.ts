@@ -12,8 +12,9 @@
  *   `T` it is 1 (untouched); below, it rises as `(T/σ)^(1−γ)` (γ = ½, so the output spread is `√(σ·T)`), capped at `maxGain`. Identical
  *   colours stay identical (a zero distance scaled is zero), and a near-identical set is spread by at most `maxGain`, which keeps
  *   differences under a just-noticeable step from turning into noise. The curve is drawn in the style guide's swatch entry.
- * - **Honest limits.** Hue rotation is capped per colour (`maxHueShift`) and fades out below `hueChromaFloor`, where hue means nothing, so
- *   a brown stays brown. Lightness stays inside `[L_FLOOR, L_CEIL]` (the set is re-centred, and the gain lowered if its range would not
+ * - **Honest limits.** A stretched swatch must keep its true colour's name: its chroma is at most `maxChromaGain` × its own (lightness
+ *   does the useful spreading; a near-black maroon brightened at full saturation would read as vivid red), and hue rotation is capped per
+ *   colour (`maxHueShift`) and fades out below `hueChromaFloor`, where hue means nothing, so a brown stays brown. Lightness stays inside `[L_FLOOR, L_CEIL]` (the set is re-centred, and the gain lowered if its range would not
  *   fit); every colour is brought back into the sRGB gamut by lowering its chroma at the same lightness and hue. Order along each axis is
  *   preserved.
  */
@@ -41,7 +42,9 @@ export const CONTRAST = {
   maxGain: 3,
   maxHueGain: 2,
   /** No colour's hue moves by more than this (degrees). */
-  maxHueShift: 12,
+  maxHueShift: 5,
+  /** No colour's chroma grows beyond this multiple of its own (lightness does the spreading, not saturation). */
+  maxChromaGain: 1.25,
   /** Below this OKLab chroma a colour's hue is not moved at all; full rotation from twice it. */
   hueChromaFloor: 0.02,
   /** Overall OKLab spread of a set that is already comfortably separated (vanilla hair colours: about 0.21); see `separationWeight`. */
@@ -146,7 +149,7 @@ export function enhanceSwatchSet(swatches: readonly (readonly string[])[]): Cont
     const C0 = Math.hypot(a!, b!), h0 = Math.atan2(b!, a!);
     const L = Math.min(L_CEIL, Math.max(L_FLOOR * 0.5, centreL + gL * (L0! - meanL)));
     const s = Math.max(0, meanS + gS * (sat(L0!, C0) - meanS));
-    const C = s * Math.max(L, 0.05);
+    const C = Math.min(s * Math.max(L, 0.05), C0 * CONTRAST.maxChromaGain);
     const hueWeight = Math.max(0, Math.min(1, (C0 - CONTRAST.hueChromaFloor) / CONTRAST.hueChromaFloor));
     const shift = Math.max(-CONTRAST.maxHueShift * DEG, Math.min(CONTRAST.maxHueShift * DEG, (gH - 1) * wrap(h0 - meanH))) * hueWeight;
     return oklabToHex(L, C, h0 + shift);

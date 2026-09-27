@@ -364,7 +364,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         const label = h("span", { class: "expander-label cc-row-label" }), swatch = h("span", { class: "swatch cc-row-swatch", hidden: true });
         const value = h("span", { class: "cc-row-value" }), contrast = contrastMark();
         const notShown = h("span", { class: "cc-row-not-shown", title: NOT_SHOWN, "aria-hidden": "true" }, icon("eyeOff"));
-        const main = expander("row", { expanded: false, controls: id }, label, h("span", { class: "cc-row-current" }, contrast, swatch, value), notShown);
+        const main = expander("row", { expanded: false, controls: id }, label, h("span", { class: "cc-row-current" }, swatch, value), notShown);
         main.classList.add("cc-row-main");
         const controls: RowControls = { view, element: h("div", { class: "cc-row", "data-slot": view.row.slot }), main, label, value, swatch, contrast, notShown,
           off: h("button", { class: "chip-button cc-off", type: "button", text: "Off" }),
@@ -393,7 +393,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         controls.list.element.hidden = true;
         // The swatch card for the list's colour swatches: the true colour, name and maker of the one under the pointer or focus.
         attachSwatchCard(controls.list.list, item => swatchSample(controls, item));
-        controls.element.append(h("div", { class: "cc-row-head" }, main, controls.help, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
+        controls.element.append(h("div", { class: "cc-row-head" }, main, controls.contrast, controls.help, h("span", { class: "cc-row-actions" }, controls.off, controls.reset)),
           controls.list.element);
         return controls;
   }
