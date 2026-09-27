@@ -421,7 +421,7 @@ Colin Barré-Brisebois and Stephen Hill, [Blending in Detail](https://blog.selfs
 
 ### Jimenez et al. (2015)
 
-Jorge Jimenez, Károly Zsolnai, Adrian Jarabo, Christian Freude, Thomas Auzinger, Xian-Chun Wu, Javier von der Pahlen, Michael Wimmer and Diego Gutierrez, [Separable Subsurface Scattering](https://www.iryoku.com/separable-sss/) (Computer Graphics Forum, 2015). Its per-profile separable kernel, scaled by depth, let us recognise the game's skin subsurface-scattering passes when reading their compiled programs, and its published reference code let us identify the game's CPU kernel builder, which follows it constant for constant. That code's licence asks binary redistributions to reproduce the notice "Uses Separable SSS. Copyright (C) 2012 by Jorge Jimenez and Diego Gutierrez."; the Studio has not adapted it yet.
+Jorge Jimenez, Károly Zsolnai, Adrian Jarabo, Christian Freude, Thomas Auzinger, Xian-Chun Wu, Javier von der Pahlen, Michael Wimmer and Diego Gutierrez, [Separable Subsurface Scattering](https://www.iryoku.com/separable-sss/) (Computer Graphics Forum, 2015). Its per-profile separable kernel, scaled by depth, let us recognise the game's skin subsurface-scattering passes when reading their compiled programs, and its published reference code let us identify the game's CPU kernel builder, which follows it constant for constant. The Studio's 3D preview now reproduces that kernel and the separable blur, written from the game's decoded routine rather than copied from their code; as a precaution its release notices carry the notice their licence asks binary redistributions to reproduce, "Uses Separable SSS. Copyright (C) 2012 by Jorge Jimenez and Diego Gutierrez."
 
 ### d'Eon and Luebke (2007)
 

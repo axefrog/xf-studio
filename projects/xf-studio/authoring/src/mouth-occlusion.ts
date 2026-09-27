@@ -103,7 +103,10 @@ const OCCLUSION_FRAGMENT = /* glsl */`
 reflectedLight.directDiffuse *= vXfsOcclusion;
 reflectedLight.directSpecular *= vXfsOcclusion;
 reflectedLight.indirectDiffuse *= vXfsOcclusion;
-reflectedLight.indirectSpecular *= vXfsOcclusion;`;
+reflectedLight.indirectSpecular *= vXfsOcclusion;
+#ifdef XFS_SCATTER_INPUT
+xfsScatterE *= vXfsOcclusion; // the skin light's scatter input (skin-material.ts): the teeth's irradiance is occluded too
+#endif`;
 
 /** Patch a lit Three program (standard or physical) to scale every light term by the `xfsOcclusion` vertex attribute. */
 export function patchOcclusionShader(shader: { vertexShader: string; fragmentShader: string }) {

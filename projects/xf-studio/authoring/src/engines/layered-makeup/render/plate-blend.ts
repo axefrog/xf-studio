@@ -3,7 +3,7 @@ import { forwardDecal, gbufferColour, type Rgb } from "../../../face-decal-mater
 import { FRESNEL_EXPONENT, FRESNEL_MAX_INTENSITY } from "../finish-export";
 import { FRESNEL_TINT_TERM } from "./fresnel-tint";
 import { patchSkinLight, skinLightMapsChunk, skinLightUniforms } from "../../../skin-material";
-import type { SkinLight } from "../../../platform/api/scene";
+import { declarePass, type SkinLight } from "../../../platform/api/scene";
 
 /**
  * The Studio's authored makeup plate, drawn the way the game draws the exported plate (renderer adapter).
@@ -228,6 +228,10 @@ vec3 xfsUnderLight = vec3( 0.0 );
 	MAPS
 	#include <lights_fragment_end>
 	xfsUnderLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + reflectedLight.directSpecular + reflectedLight.indirectSpecular;
+#ifdef XFS_SCATTER_INPUT
+	xfsScatterEUnder = xfsScatterE;
+	xfsScatterE = vec3( 0.0 );
+#endif
 }
 #include <lights_physical_fragment>`;
 /** Before the output: Y and A so that A·Y + (1 − A)·L(skin) = L(blended surface) (`residualForward`). */
@@ -241,6 +245,19 @@ const RESIDUAL = /* glsl */`
 	diffuseColor.a = xfsAlpha;
 }
 #include <opaque_fragment>`;
+
+/**
+ * The plate's scatter input (research/materials/shader-skin.md §11.3), when it is lit as skin: the merged decal's √colour and metalness
+ * at its coverage (S1, S2), as the game's decal blends them, and the irradiance in the same residual form as the light,
+ * `(E(G) − (1 − A)·E(S)) / A` at the drawn alpha A, so over the skin's own irradiance it leaves E(G) plus the skin's texel detail (S0).
+ */
+const PLATE_SCATTER_OUTPUT = /* glsl */`
+#include <dithering_fragment>
+#ifdef XFS_SCATTER_INPUT
+	gl_FragColor = vec4( max( ( xfsScatterE - ( 1.0 - diffuseColor.a ) * xfsScatterEUnder ) / max( diffuseColor.a, 1e-3 ), vec3( 0.0 ) ), diffuseColor.a );
+	xfsScatterOut1 = vec4( clamp( xfsSqrtDecal, 0.0, 1.0 ), xfsCoverage );
+	xfsScatterOut2 = vec4( clamp( xfsPs.y * xfsInv, 0.0, 1.0 ), 0.0, 0.0, xfsCoverage );
+#endif`;
 
 /**
  * Patch a `MeshStandardMaterial` program into the plate's single lit pass. `skinLight` lights with the skin light (both the
@@ -265,6 +282,7 @@ export function patchPlateLightShader(shader: { vertexShader: string; fragmentSh
   fragment = replace(fragment, "#include <lights_physical_fragment>",
     BLEND.replace("MAPS", options.skinLight ? skinLightMapsChunk(chunks, "makeup plate") : "#include <lights_fragment_maps>"));
   fragment = replace(fragment, "#include <opaque_fragment>", RESIDUAL);
+  if (options.skinLight) fragment = replace(fragment, "#include <dithering_fragment>", PLATE_SCATTER_OUTPUT);
   shader.fragmentShader = fragment;
   return shader;
 }
@@ -303,11 +321,14 @@ export function createPlateLightMaterial(): { material: THREE.MeshStandardMateri
     ...skinLightUniforms({ lobes: { roughness0: 1, roughness1: 1, weight: 1 }, wrap: [0, 0, 0] }),
   };
   let skinLight = false, fresnel = false;
+  // Lit as skin, the plate is a decal over the skin for the host's scatter; lit as a standard surface there is no skin to scatter.
+  const participate = () => declarePass(material, skinLight ? { role: "decal", wrapGate: uniforms.xfsWrapGate } : { role: "skip" });
+  participate();
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, uniforms);
     patchPlateLightShader(shader, { skinLight });
   };
-  material.customProgramCacheKey = () => `xfs-plate-light-2|${skinLight ? "s" : ""}`;
+  material.customProgramCacheKey = () => `xfs-plate-light-3|${skinLight ? "s" : ""}`;
   const define = (name: string, on: boolean) => {
     const defines = { ...material.defines };
     if (on) defines[name] = ""; else delete defines[name];
@@ -329,6 +350,7 @@ export function createPlateLightMaterial(): { material: THREE.MeshStandardMateri
       }
       if (!!parameters === skinLight) return;
       skinLight = !!parameters;
+      participate();
       material.needsUpdate = true;
     },
     get fresnel() { return fresnel; },

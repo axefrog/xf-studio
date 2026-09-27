@@ -54,7 +54,7 @@ export function createCreatorLightRig() {
   return {
     group,
     /** Rebuild the rig for a body sex under the calibration switches. */
-    apply(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone" | "shadows"> & { yawOffset?: number }) {
+    apply(sex: BodySex, options: Pick<CreatorLightingOptions, "intensity" | "cone" | "shadows"> & { yawOffset?: number; casters?: readonly string[] }) {
       clear();
       specs = creatorRigSpecs(sex, options);
       const head: Vec3 = CREATOR_HEAD_SLOT[sex];
