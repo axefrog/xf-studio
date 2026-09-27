@@ -344,7 +344,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dock-group.focus-within { border-color: var(--signal-line); }
 /* Panel header (components/panel-header.ts): the tab strip, a drag area, then the actions. The actions never shrink or scroll, so
    collapse, expand and the layout menu stay whole and in reach however narrow the group; the tab strip gives up space first. */
-.dock-tabbar { display: flex; align-items: stretch; height: var(--tab-h); flex: none; min-inline-size: 0; background: var(--bg-sunken); border-bottom: 1px solid var(--line); padding-right: var(--sp-2); }
+.dock-tabbar { display: flex; align-items: stretch; height: var(--tab-h); flex: none; min-inline-size: 0; background: var(--bg-sunken); border-bottom: 1px solid var(--line); padding-inline-end: var(--sp-2); }
 .panel-header-actions { flex: none; display: flex; align-items: center; }
 .panel-header-actions > * { flex: none; }
 /* Tab strip (components/tab-strip.ts): it condenses in stages rather than overflowing: full labels, then the inactive labels cut
@@ -352,20 +352,20 @@ span.category { border-color: transparent; background: transparent; padding-left
 .tab-strip { display: flex; align-items: stretch; flex: 0 1 auto; min-inline-size: 0; overflow: hidden; }
 .dock-tabs { display: flex; min-inline-size: 0; overflow: hidden; }
 .tab-strip-more { align-self: center; }
-.dock-tab { position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-5); border: 0; border-right: 1px solid var(--line-soft); background: transparent;
+.dock-tab { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-3); padding-block: 0; padding-inline: var(--tab-pad, var(--sp-5)); border: 0; border-inline-end: 1px solid var(--line-soft); background: transparent;
   color: var(--text-muted); white-space: nowrap; font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .09em; text-transform: uppercase; touch-action: none; flex: none; }
-.dock-tab[aria-selected="true"] { padding-right: var(--sp-3); }
-.tab-strip:not([data-stage="full"]) .dock-tab:not([aria-selected="true"]) { padding: 0 var(--sp-3); gap: var(--sp-2); }
+.dock-tab[aria-selected="true"] { padding-inline-end: var(--sp-3); }
+.tab-strip:not([data-stage="full"]) .dock-tab:not([aria-selected="true"]) { padding-inline: var(--sp-3); gap: var(--sp-2); }
 .tab-strip[data-stage="truncated"] .dock-tab:not([aria-selected="true"]) .dock-tab-label { max-inline-size: 7.5em; letter-spacing: .04em; }
 .tab-strip:is([data-stage="icons"], [data-stage="overflow"]) .dock-tab:not([aria-selected="true"]) .dock-tab-label { display: none; }
 .tab-strip:is([data-stage="icons"], [data-stage="overflow"]) .dock-tab[aria-selected="true"] .dock-tab-label { max-inline-size: 9em; }
 /* The tightest headers: the active tab keeps its icon and indicator only (its name stays its tooltip and accessible name). */
-.tab-strip.active-icon .dock-tab[aria-selected="true"] { padding: 0 var(--sp-3); }
+.tab-strip.active-icon .dock-tab[aria-selected="true"] { padding-inline: var(--sp-3); }
 .tab-strip.active-icon .dock-tab[aria-selected="true"] :is(.dock-tab-label, .dock-tab-close) { display: none; }
 .dock-tab:hover { color: var(--text); background: var(--bg-hover); }
 .dock-tab[aria-selected="true"] { color: var(--text); background: var(--bg-panel); }
-.dock-tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--indicator); }
-.dock-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 0; top: 0; width: 8px; height: 4px; background: var(--accent); }
+.dock-tab[aria-selected="true"]::before { content: ""; position: absolute; inset-inline: 0; inset-block-start: 0; block-size: 2px; background: var(--indicator); }
+.dock-tab[aria-selected="true"]::after { content: ""; position: absolute; inset-inline-start: 0; inset-block-start: 0; inline-size: 8px; block-size: 4px; background: var(--accent); }
 .dock-tab[aria-selected="true"] .icon { color: var(--accent-text); }
 .dock-tab .icon { width: 14px; height: 14px; }
 .dock-tab-label { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -388,7 +388,12 @@ span.category { border-color: transparent; background: transparent; padding-left
    column it is a header row spanning its column; along a row (a single group, or a column whose groups all collapsed) a
    full-height vertical strip. A folded cell takes no share of its split, so the neighbours fill the space. */
 .dock-group.collapsed[data-fold="row"] { flex: none; }
-.dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: var(--tab-h); border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
+/* The strip is the same tab bar turned on its side: every tab rule above is written in logical properties, so the padding, gaps,
+   separators, close mark and indicator follow the text down the strip. Tabs read top to bottom with upright icons centred in a strip a
+   little wider than a bar is tall; the indicator runs down the strip's outer edge. Nothing changes size on hover or selection. */
+.dock-group.collapsed[data-fold="row"] .dock-tabbar { writing-mode: vertical-rl; flex: 1 1 auto; min-height: 0; height: auto; width: calc(var(--tab-h) + var(--sp-2));
+  border-bottom: 0; border-right: 1px solid var(--line); padding: var(--sp-2) 0; }
+.dock-tabbar[data-orientation="vertical"] { --tab-pad: var(--sp-4); }
 /* A strip shorter than its tabs condenses them in the same stages as a crowded bar; its buttons stay in reach. */
 .dock-cell[data-collapsed] > .dock-split { flex: none; }
 .dock-split > .dock-splitter.inert { cursor: default; }
