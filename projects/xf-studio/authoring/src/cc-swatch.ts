@@ -19,9 +19,13 @@
  *     sorted and rescaled, sampled at k/N, 8-bit interpolation truncated), five samples root to tip, as stored (sRGB bytes);
  *   - eyes: the iris ring's mean base colour: `eye_gradient.mt` blends the albedo toward the gradient at the mask's raw R by its A
  *     (eye-material.ts `irisBaseColour`), `eye.mt` is its albedo there (knowledge/eye-rendering.md §1–2);
- *   - brows (`mesh_decal_double_diffuse.mt`): the primary tint (the gradient map's texel at `GradientMapUV`, or `DiffuseColor`) times the
- *     diffuse texture's coverage-weighted colour, as face-decal-material.ts draws it;
+ *   - brows (`mesh_decal_double_diffuse.mt`): the primary tint (the gradient map's texel at `GradientMapUV` times `GradientMapIntensity`,
+ *     clipped at 1, or `DiffuseColor`) times the diffuse texture's tone, weighted by coverage squared as the program squares the filtered
+ *     primary alpha (knowledge/brows.md §3), as face-decal-material.ts draws it;
  *   - makeup (`mesh_decal.mt`): `DiffuseColor` times the diffuse texture's coverage-weighted colour;
+ *   - a decal's diffuse texture is read at the mip a creator close-up samples (`DECAL_TEXTURE_SIDE`), not the smallest one: a mod's own
+ *     mips can average its strands' colour with the black around them (Arkhe's Beautiful EYEBROWS II: tone linear 0.20 at 64 px, 0.36 at
+ *     512, 0.49 at 2048), which made every brow swatch of such a pack near black (knowledge/hair-shading.md §6.1);
  *   - skin (`skin.mt`): the albedo toned by `TintColor`/`TintScale` through the tint mask (skin-material.ts `tintChannel`), averaged.
  *   Texture inputs are read at a small mip; without them a decal or eye falls back to its colour parameter alone, and anything else to
  *   the definition's own `color` (the panel's caller decides).
@@ -41,7 +45,7 @@ import { type RenderAdapterId } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
 /** Version of the swatch rules; part of the host's cache key. Bump it whenever what a swatch derives to changes. */
-export const SWATCH_VERSION = 1;
+export const SWATCH_VERSION = 2;
 /** Samples of a root-to-tip gradient swatch. */
 export const GRADIENT_SAMPLES = 5;
 
@@ -198,12 +202,24 @@ export const appearanceChunks = (appearance: Pick<ResolvedAppearance, "component
 const SWATCH_TEXTURES: Partial<Record<RenderAdapterId, readonly string[]>> = {
   eye: ["Albedo", "IrisMask"], "double-diffuse-decal": ["DiffuseTexture", "GradientMap"], "mesh-decal": ["DiffuseTexture"], skin: ["Albedo", "TintColorMask"],
 };
-/** The resources a planned chunk's swatch reads: its profile, gradients and the textures above. */
+/** Largest side of a texture mip a swatch reads: small for eyes and skin (their mean barely moves), larger for a decal's diffuse texture. */
+export const SWATCH_TEXTURE_SIDE = 64;
+/**
+ * A decal's diffuse texture is read at about the level a creator close-up samples: the brow strip spans about 0.14 mm per texel at 512
+ * (knowledge/brows.md §2), roughly a screen pixel in the creator's face view. Vanilla tones barely move with the level (0.27–0.32 linear
+ * from 32 to 512 px); some mods' own mips darken steeply.
+ */
+export const DECAL_TEXTURE_SIDE = 512;
+/** The side a swatch reads one texture input at. */
+export const swatchTextureSide = (adapter: RenderAdapterId, name: string) =>
+  (adapter === "double-diffuse-decal" || adapter === "mesh-decal") && name === "DiffuseTexture" ? DECAL_TEXTURE_SIDE : SWATCH_TEXTURE_SIDE;
+/** The resources a planned chunk's swatch reads: its profile, gradients and the textures above (with the side each is read at). */
 export function swatchNeeds(adapter: RenderAdapterId, chunk: Pick<PlannedChunk, "textures" | "profiles" | "gradients">):
-  { profiles: Provenance[]; gradients: Provenance[]; textures: Provenance[] } {
+  { profiles: Provenance[]; gradients: Provenance[]; textures: Provenance[]; sides: number[] } {
+  const names = (SWATCH_TEXTURES[adapter] ?? []).filter(name => chunk.textures[name]);
   return { profiles: adapter === "hair-strand" ? Object.values(chunk.profiles) : [],
     gradients: adapter === "eye" ? Object.values(chunk.gradients) : [],
-    textures: (SWATCH_TEXTURES[adapter] ?? []).flatMap(name => chunk.textures[name] ? [chunk.textures[name]!] : []) };
+    textures: names.map(name => chunk.textures[name]!), sides: names.map(name => swatchTextureSide(adapter, name)) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -224,12 +240,13 @@ const texel = (texture: SwatchTexture, x: number, y: number, channel: number, co
 /** Sample a texture at UV (nearest texel; rows are symmetric for every use here). */
 const sample = (texture: SwatchTexture, u: number, v: number, channel: number, colour: boolean) =>
   texel(texture, Math.min(texture.width - 1, Math.max(0, Math.floor(u * texture.width))), Math.min(texture.height - 1, Math.max(0, Math.floor(v * texture.height))), channel, colour);
-/** A texture's colour weighted by its alpha (coverage), linear; null when it covers nothing. */
-function coverageColour(texture: SwatchTexture): [number, number, number] | null {
+/** A texture's colour weighted by its alpha (coverage) to `power` (2 where the program squares it), linear; null when it covers nothing. */
+function coverageColour(texture: SwatchTexture, power = 1): [number, number, number] | null {
   const sum = [0, 0, 0]; let weight = 0;
   for (let y = 0; y < texture.height; y++) for (let x = 0; x < texture.width; x++) {
-    const a = texel(texture, x, y, 3, false);
-    if (a <= 0) continue;
+    const alpha = texel(texture, x, y, 3, false);
+    if (alpha <= 0) continue;
+    const a = power === 2 ? alpha * alpha : alpha;
     for (let c = 0; c < 3; c++) sum[c]! += a * texel(texture, x, y, c, true);
     weight += a;
   }
@@ -310,7 +327,7 @@ export function swatchColours(adapter: RenderAdapterId, chunk: Pick<PlannedChunk
       }
     }
     const diffuse = texture("DiffuseTexture");
-    const cover = diffuse ? coverageColour(diffuse) ?? [1, 1, 1] : [1, 1, 1];
+    const cover = diffuse ? coverageColour(diffuse, adapter === "double-diffuse-decal" ? 2 : 1) ?? [1, 1, 1] : [1, 1, 1];
     return [linearHex(tint.map((channel, c) => channel * cover[c]!))];
   }
   if (adapter === "skin") {

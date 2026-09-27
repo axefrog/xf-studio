@@ -79,6 +79,7 @@ const ICONS = {
   /** The link broken: its two halves apart, with break marks (PairControl's separate sides). */
   unlink: [s("M7.3 4.6l1.3-1.3a2.6 2.6 0 0 1 3.7 3.7L11 8.3"), s("M8.7 11.4l-1.3 1.3a2.6 2.6 0 0 1-3.7-3.7L5 7.7"), s("M5 2.5v1.8M2.5 5h1.8M11 13.5v-1.8M13.5 11h-1.8")],
   star: [s("M8 2.3l1.75 3.55 3.9.57-2.83 2.76.67 3.89L8 11.23l-3.49 1.84.67-3.89L2.35 6.42l3.9-.57z")],
+  contrast: [s("M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z"), f("M8 2a6 6 0 0 0 0 12z")],
   starFilled: [f("M8 2.3l1.75 3.55 3.9.57-2.83 2.76.67 3.89L8 11.23l-3.49 1.84.67-3.89L2.35 6.42l3.9-.57z")],
 } satisfies Record<string, Shape[]>;
 export type IconName = keyof typeof ICONS;

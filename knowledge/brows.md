@@ -89,6 +89,8 @@ Brows render from the resolver's output for any vanilla or CCXL choice (P0 of th
 - the game's authored mips (the browser builds its own; [mip gate](../research/eye-artistry/brow-lash-mip-gate.md));
 - brow wrinkle shading from the idle solver ([brow idle gap](../research/animation/brow-idle-gap.md)); the skin program's wrinkle driver (UV-rectangle regions × animation float tracks) is decoded in the [skin reference §5.6](../research/materials/shader-skin.md#56-the-wrinkle-driver-vertex-program), while which solver outputs feed its tracks is [hypothesis].
 
+The Character panel's brow colour swatches are derived from the same chain: the strand colour (gradient × intensity × the diffuse tone, read at a 512-px mip and weighted by coverage squared). A gradient or material replacer changes them, and a set that derives dark and clustered is shown spread apart, with the true colour kept ([hair shading §6.1](hair-shading.md#61-what-a-brow-colour-looks-like-for-a-swatch)).
+
 There is no brow authoring of any kind: no part, painter, texture injection or exporter.
 
 ## 6. What this means for a brow designer

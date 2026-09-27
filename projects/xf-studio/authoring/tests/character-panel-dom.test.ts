@@ -187,11 +187,15 @@ describe("the Character panel's DOM", () => {
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.resetAll" });
     // What a row is (the fixture's piercing colour follows the style switcher) is in its help tip, not a line; the eye colour has none.
     expect(h.root.querySelector(".cc-row-detail")).toBeNull();
-    expect(row(h.root, "Eye Color").querySelector(".help-tip")).toBeNull();
+    // The row's own help tip (the contrast marker is a help tip too, invisible and out of the tab order until a list is enhanced).
+    const ownTip = (element: { querySelectorAll(selector: string): { classList: { contains(name: string): boolean } }[] }) =>
+      element.querySelectorAll(".help-tip").find(tip => !tip.classList.contains("contrast-mark")) ?? null;
+    expect(ownTip(row(h.root, "Eye Color"))).toBeNull();
+    expect(row(h.root, "Eye Color").querySelector(".contrast-mark")!.classList.contains("empty")).toBe(true);
     // The piercing colour (following the style switcher) has one, kept in place even while its row isn't offered.
-    const tips = h.root.querySelectorAll(".cc-row").filter(element => element.querySelector(".help-tip"));
+    const tips = h.root.querySelectorAll(".cc-row").filter(element => ownTip(element));
     expect(tips.length).toBe(1);
-    expect(tips[0]!.querySelector(".help-tip")!.getAttribute("aria-label")).toStartWith("About ");
+    expect((ownTip(tips[0]!) as unknown as HTMLElement).getAttribute("aria-label")).toStartWith("About ");
   });
 });
 

@@ -379,6 +379,41 @@ test("folder setting: an action that fails outright is a plain refusal on the no
   } finally { process.off("unhandledRejection", onRejection); }
 });
 
+test("swatch card: shows the true colour after the pointer rests, follows to the next swatch at once, describes its swatch, hides on Escape; the marker keeps its place", async () => {
+  const { SwatchCard, contrastMark, setContrastMark, CONTRAST_WORDS } = await lib();
+  const card = new SwatchCard({ delay: 5 });
+  const list = document.createElement("div");
+  const items = [0, 1].map(n => { const item = document.createElement("button"); item.setAttribute("data-position", String(n)); list.append(item); return item; });
+  document.body.append(list);
+  const samples = [{ colours: ["#3e2117"], label: "Cold white", source: "From a pack", enhanced: true }, { colours: ["#101010", "#e0d0c0"], label: "Ombre", source: null }];
+  const detach = card.attach(list, target => { const item = target.closest("[data-position]") as HTMLElement | null;
+    return item ? { anchor: item, sample: samples[Number(item.getAttribute("data-position"))]! } : null; });
+  const over = (element: HTMLElement) => (element as unknown as LightElement).dispatchEvent(lightEvent("pointerover"));
+  over(items[0]!);
+  expect(card.element.hidden).toBe(true);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  const text = (selector: string) => card.element.querySelector(selector) as unknown as HTMLElement;
+  expect([card.element.hidden, card.element.getAttribute("role"), items[0]!.getAttribute("aria-describedby")]).toEqual([false, "tooltip", card.element.id]);
+  expect([text(".swatch-card-name").textContent, text(".swatch-card-source").textContent, text(".swatch-card-note").textContent]).toEqual(["Cold white", "From a pack", CONTRAST_WORDS.card]);
+  expect((text(".swatch-card-sample").style as unknown as Record<string, string>).background).toBe("#3e2117");
+  // Already showing: the next swatch follows at once; a gradient shows root to tip, without the true-colour line.
+  over(items[1]!);
+  expect([items[0]!.getAttribute("aria-describedby"), items[1]!.getAttribute("aria-describedby"), text(".swatch-card-note").hidden, text(".swatch-card-source").hidden]).toEqual([null, card.element.id, true, true]);
+  expect((text(".swatch-card-sample").style as unknown as Record<string, string>).background).toBe("linear-gradient(to bottom, #101010, #e0d0c0)");
+  key(list, "Escape");
+  expect([card.element.hidden, items[1]!.getAttribute("aria-describedby")]).toEqual([true, null]);
+  // Keyboard focus shows it at once.
+  (items[0] as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  expect(card.element.hidden).toBe(false);
+  detach();
+  expect(card.element.hidden).toBe(true);
+  const mark = contrastMark();
+  // Off: a help tip that keeps its place, invisible and out of the tab order; on: a named button whose description is the tip.
+  expect([mark.tagName, mark.classList.contains("empty"), mark.getAttribute("tabindex"), mark.getAttribute("aria-label")]).toEqual(["button", true, "-1", `About ${CONTRAST_WORDS.mark}`]);
+  setContrastMark(mark, true);
+  expect([mark.classList.contains("empty"), mark.getAttribute("tabindex"), mark.dataset.help]).toEqual([false, "0", CONTRAST_WORDS.markTip]);
+});
+
 test("folder setting: several found folders are all shown as choices with where they were found; pressing one saves it; an optional folder can be cleared", async () => {
   const { FolderSetting } = await lib();
   const selected: string[] = []; let cleared = 0;
@@ -514,4 +549,31 @@ test("icon button: a mode toggle carries its pressed state and the mode class; t
   const free = new TreeView({ label: "Owner sized", onActivate: () => {}, onToggle: () => {} });
   free.update({ groups, expanded });
   expect((free.element as unknown as { style: { height?: string } }).style.height).toBeUndefined();
+});
+
+test("choice list with swatches: the swatch card shows a choice's colour and name, its item has no tooltip, and the contrast marker follows `enhanced`", async () => {
+  const { ChoiceList, swatchCard, attachSwatchCard, choiceItem } = await lib();
+  const list = new ChoiceList({ label: "Colour", onSelect: () => {}, swatchCard: true, options: [{ value: "a", label: "Auburn", title: "From a pack", swatch: "#3e2117" }, { value: "b", label: "Plain" }] });
+  document.body.append(list.element);
+  const [auburn, plain] = list.list.querySelectorAll(".choice") as unknown as HTMLElement[];
+  expect(auburn!.getAttribute("title")).toBeNull();
+  (auburn as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  const card = swatchCard().element;
+  expect([card.hidden, (card.querySelector(".swatch-card-name") as unknown as HTMLElement).textContent]).toEqual([false, "Auburn"]);
+  // A choice without a swatch shows no card.
+  (plain as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  expect(card.hidden).toBe(true);
+  const mark = list.element.querySelector(".contrast-mark") as unknown as HTMLElement;
+  expect(mark.classList.contains("empty")).toBe(true);
+  list.update("a", undefined, { enhanced: true });
+  expect(mark.classList.contains("empty")).toBe(false);
+  // Any list of choice items: a swatch item takes no tooltip; attachSwatchCard asks the owner for the sample.
+  const host = document.createElement("div");
+  const item = choiceItem({ label: "Cold white", title: "Cold white · From a pack", swatch: true, content: Object.assign(document.createElement("span"), { className: "swatch" }) });
+  host.append(item); document.body.append(host);
+  expect(item.getAttribute("title")).toBeNull();
+  const detach = attachSwatchCard(host, () => ({ colours: ["#8d513e"], label: "Cold white", source: "From a pack", enhanced: true }));
+  (item as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
+  expect([card.hidden, (card.querySelector(".swatch-card-note") as unknown as HTMLElement).hidden]).toEqual([false, false]);
+  detach();
 });
