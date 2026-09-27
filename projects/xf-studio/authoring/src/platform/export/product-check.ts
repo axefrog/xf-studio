@@ -99,6 +99,19 @@ export type ProductOutcome = {
 };
 export type ProductsCheck = { readonly result: PackageCheckResult; readonly products: readonly ProductOutcome[] };
 
+const EXTRA_ARCHIVE = /^[0-9a-z_]{1,128}$/, TWEAK_FILE = /^[a-z0-9_]{1,120}\.yaml$/;
+/** A feature's extra files must be named as the platform places them: a TweakXL file name, an overlay name other than the product's. */
+function checkExtras(extras: FeatureOutcome["extras"], archive: string, feature: string): void {
+  if (!extras) return;
+  const bad = (what: string) => refuse("package_conflict", `XF Studio couldn't plan the ${feature} files. ${UNCHANGED}`, what);
+  const tweaks = extras.tweaks ?? [], overlays = extras.overlays ?? [];
+  if (tweaks.some(name => !TWEAK_FILE.test(name)) || new Set(tweaks).size !== tweaks.length) bad(`TweakXL files ${JSON.stringify(tweaks)}`);
+  const names = overlays.map(overlay => overlay.archive);
+  if (names.some(name => !EXTRA_ARCHIVE.test(name) || name === archive) || new Set(names).size !== names.length) bad(`overlay archives ${JSON.stringify(names)}`);
+  for (const overlay of overlays) if (!overlay.inventory.length || JSON.stringify([...overlay.inventory].sort()) !== JSON.stringify(overlay.inventory))
+    bad(`overlay ${overlay.archive} inventory`);
+}
+
 /** Compare dotted versions numerically ("1.27.3" < "1.28"). */
 function newer(a: string, b: string): boolean {
   const x = a.split(".").map(Number), y = b.split(".").map(Number);
@@ -150,7 +163,9 @@ export function checkProducts(options: { readonly collection: unknown; readonly 
     for (const feature of product.features) {
       const entry = entries.get(feature)!;
       try {
-        const outcome = entry.exporter.plan({ collection: options.collection, prerequisites: options.prerequisites, diagnostics: options.diagnostics });
+        const outcome = entry.exporter.plan({ collection: options.collection, prerequisites: options.prerequisites, diagnostics: options.diagnostics,
+          product: { archive: product.archive, modName: product.modName } });
+        checkExtras(outcome.extras, product.archive, feature);
         if (options.preflight) entry.exporter.preflight?.(outcome);
         features.push({ entry, outcome });
       } catch (error) {
@@ -179,7 +194,8 @@ export function checkProducts(options: { readonly collection: unknown; readonly 
     if (other) refuse("package_conflict", `${label(other)} and ${label(feature)} would use the same names in the game's files, so they can't be ` +
       `packaged together. ${UNCHANGED}`, `${other} and ${feature} use the same namespace ${outcome.check.namespace}.`);
     namespaces.set(outcome.check.namespace, feature);
-    for (const path of outcome.inventory) {
+    for (const path of [...outcome.inventory, ...(outcome.extras?.overlays ?? []).map(overlay => `#overlay:${overlay.archive}`),
+      ...(outcome.extras?.tweaks ?? []).map(name => `#tweak:${name}`)]) {
       const owner = paths.get(path);
       if (owner) refuse("package_conflict", `${label(owner)} and ${label(feature)} would write the same game file, so they can't be packaged ` +
         `together. ${UNCHANGED}`, `${owner} and ${feature} both write ${path}.`);

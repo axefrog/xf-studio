@@ -213,6 +213,10 @@ export class ModInstallHost {
     const blocked = (why: string, next: ModInstallNextStep = "retry", changes: string[] = []): { plan: ModInstallPlan } =>
       ({ plan: { ...base, changes, blocked: readOnly ?? why, next: readOnly !== undefined ? null : next,
         token: sha(JSON.stringify([candidateId, route, why])) } });
+    // A product with files beside its archive (an expression set's TweakXL file and table archive) is copied in by hand for now.
+    if (manifest.files.length > 2)
+      return blocked(`XF Studio can't add ${quoted(modName)} for you yet: it has TweakXL files. Show it in its folder, then copy its archive and r6 folders ` +
+        "into your game folder or mod manager.", null);
     if (modName !== modName.trim() || modNameIssue(modName) !== undefined)
       return blocked("This mod's name can't be used as a folder name. Rename it in Mod package, then build it again.", "rename");
     if (route === "mo2" && /_separator$/i.test(modName))

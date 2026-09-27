@@ -36,7 +36,8 @@ export type LocalPackageManifest2 = {
   readonly omissions: readonly ExportOmission[];
   readonly requirements: FrameworkRequirements;
   readonly features: readonly ManifestFeature[];
-  readonly files: readonly [ManifestFile, ManifestFile];
+  /** The archive and its `.xl`, then any extra files (overlay archives, TweakXL files) sorted by path. */
+  readonly files: readonly [ManifestFile, ManifestFile, ...ManifestFile[]];
   readonly verifiedUnpackedFiles: number;
   readonly installed: false; readonly gameRenderingVerified: false;
 };
@@ -47,7 +48,8 @@ export type PackageManifestView = {
   readonly productId: string; readonly modName?: string; readonly archive: string;
   /** The features the archive holds and their namespaces (each may be present in only one installed XF mod). */
   readonly features: readonly { readonly feature: string; readonly namespace: string }[];
-  readonly files: readonly [ManifestFile, ManifestFile];
+  /** The archive and its `.xl`, then any extra files (a version-2 product's overlay archives and TweakXL files). */
+  readonly files: readonly [ManifestFile, ManifestFile, ...ManifestFile[]];
   readonly verifiedUnpackedFiles: number;
   /** Looks the independent verifiers checked, across the product's features (0 when a manifest records none). */
   readonly presetCount: number;
@@ -58,17 +60,24 @@ export type PackageManifestView = {
 const ARCHIVE = /^xfs_[a-z0-9_]{1,124}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FEATURE = /^[a-z][a-zA-Z0-9]*(?:-[a-z0-9]+)*$/;
-const fail = (): never => { throw Error("Candidate manifest is not a verified two-file package."); };
+const fail = (): never => { throw Error("Candidate manifest is not a verified package."); };
 
-function files(value: unknown, archive: string): [ManifestFile, ManifestFile] {
-  if (!Array.isArray(value) || value.length !== 2) return fail();
-  return value.map((entry, index) => {
+const EXTRA_FILE = (archive: string) => new RegExp(`^(?:archive/pc/mod/[0-9a-z_]{1,128}\\.archive|r6/tweaks/${archive}/[a-z0-9_]{1,120}\\.yaml)$`);
+/** The archive and `.xl`, then (version 2 only: `extras`) overlay archives and TweakXL files, sorted, each once. */
+function files(value: unknown, archive: string, extras = false): [ManifestFile, ManifestFile, ...ManifestFile[]] {
+  if (!Array.isArray(value) || value.length < 2 || (!extras && value.length !== 2)) return fail();
+  const extra = EXTRA_FILE(archive);
+  const list = value.map((entry, index) => {
     const file = entry as Partial<ManifestFile> | null;
-    if (!file || file.path !== `archive/pc/mod/${archive}.${index ? "archive.xl" : "archive"}` || typeof file.sha256 !== "string" ||
-        !/^[a-f0-9]{64}$/.test(file.sha256) || !Number.isSafeInteger(file.bytes) || file.bytes! <= 0)
+    const path = index < 2 ? `archive/pc/mod/${archive}.${index ? "archive.xl" : "archive"}` : undefined;
+    if (!file || typeof file.path !== "string" || (path ? file.path !== path : !extra.test(file.path) || file.path === `archive/pc/mod/${archive}.archive`) ||
+        typeof file.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(file.sha256) || !Number.isSafeInteger(file.bytes) || file.bytes! <= 0)
       throw Error("Candidate manifest contains an unexpected file or hash.");
     return { path: file.path, sha256: file.sha256, bytes: file.bytes! };
-  }) as [ManifestFile, ManifestFile];
+  });
+  const rest = list.slice(2).map(file => file.path);
+  if (JSON.stringify(rest) !== JSON.stringify([...new Set(rest)].sort())) throw Error("Candidate manifest contains an unexpected file or hash.");
+  return list as [ManifestFile, ManifestFile, ...ManifestFile[]];
 }
 
 /**
@@ -107,7 +116,7 @@ export function readPackageManifest(value: unknown, legacyFeature: string): Pack
   const omissionCount = (Array.isArray(input.omissions) ? input.omissions.length : 0) + (input.features as { omissions?: unknown }[])
     .reduce((sum, feature) => sum + (Array.isArray(feature.omissions) ? feature.omissions.length : 0), 0);
   return { schema: LOCAL_PACKAGE_2, productId: input.productId, modName: input.modName, archive, features,
-    files: files(input.files, archive), verifiedUnpackedFiles: input.verifiedUnpackedFiles as number, presetCount, omissionCount };
+    files: files(input.files, archive, true), verifiedUnpackedFiles: input.verifiedUnpackedFiles as number, presetCount, omissionCount };
 }
 
 /**

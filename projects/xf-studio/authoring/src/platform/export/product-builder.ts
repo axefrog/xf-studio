@@ -9,7 +9,7 @@
  */
 import { createHash } from "node:crypto";
 import {
-  copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
+  copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import {
@@ -17,7 +17,7 @@ import {
   type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type VerifierTools,
 } from "../api/export";
 import { checkProducts, type ProductOutcome } from "./product-check";
-import { listGeneratedFiles, verifyProductArchive } from "./product-verifier";
+import { listGeneratedFiles, verifyOverlayArchive, verifyProductArchive } from "./product-verifier";
 import { LOCAL_PACKAGE_2, type LocalPackageManifest2, type ManifestFile } from "./manifest";
 
 export const MAX_COLLECTION_BYTES = 16_000_000;
@@ -134,7 +134,7 @@ function timeToken(): string {
 // The pre-pack gate's path rules (restated from WolvenKit's ArchiveWriter: a sanitized, FNV-1a 64 hashed depot path;
 // unsupported extensions are skipped): the generated tree must already be canonical, so nothing is renamed or dropped.
 const SEGMENT = /^[a-z0-9_][a-z0-9_.-]*$/;
-const EXTENSIONS = [".app", ".inkcharcustomization", ".mesh", ".morphtarget", ".xbm"];
+const EXTENSIONS = [".anims", ".app", ".csv", ".inkcharcustomization", ".mesh", ".morphtarget", ".xbm"];
 function depotPathHash(path: string): bigint {
   const parts = path.split("/"), name = parts[parts.length - 1], dot = name.lastIndexOf(".");
   if (!path || path.includes("\\") || path.startsWith("/") || parts.some(part => part === "." || part === ".." || !SEGMENT.test(part) || part.endsWith(".")) ||
@@ -165,7 +165,14 @@ function prePackGate(staging: string, recorded: readonly GeneratedFile[]): void 
 
 /** One product built and verified in its intermediate folder, ready to promote. */
 type Built = { outcome: ProductOutcome; intermediate: string; token: string; archive: string; xl: string; archiveSha256: string;
-  xlSha256: string; unpacked: number; verifications: FeatureVerification[] };
+  xlSha256: string; unpacked: number; verifications: FeatureVerification[];
+  /** Files beside the archive and `.xl` (overlay archives, TweakXL files): the product path and where the verified copy is. */
+  extras: { path: string; source: string; sha256: string; bytes: number }[] };
+/** The extra files a feature's outcome plans, as paths below the product's extras folder. */
+function plannedExtras(outcome: ProductOutcome["features"][number]["outcome"], archive: string): string[] {
+  return [...(outcome.extras?.tweaks ?? []).map(name => `r6/tweaks/${archive}/${name}`),
+    ...(outcome.extras?.overlays ?? []).flatMap(overlay => overlay.inventory.map(path => `overlays/${overlay.archive}/${path}`))].sort();
+}
 
 /** Check (eligibility only) or Build (verified private candidates, one per product) for one exported collection file. */
 export async function runProductCommand(options: ProductCommandOptions): Promise<PackageCheckResult | PackageBuildResult> {
@@ -233,16 +240,21 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       mkdirSync(join(intermediate, "logs"), { recursive: true });
       const staging = join(intermediate, "archive");
       mkdirSync(staging);
-      const files: GeneratedFile[] = [], byFeature = new Map<string, readonly GeneratedFile[]>();
+      const files: GeneratedFile[] = [], byFeature = new Map<string, readonly GeneratedFile[]>(), extraFiles: GeneratedFile[] = [];
+      const extrasRoot = join(intermediate, "extras");
+      mkdirSync(extrasRoot);
       const context = (feature: string): FeatureBuildContext =>
-        ({ staging, work: join(intermediate, "features", feature), tools, prerequisites, signal: options.signal, log });
+        ({ staging, work: join(intermediate, "features", feature), extras: extrasRoot, tools, prerequisites, signal: options.signal, log });
       for (const { entry, outcome: feature } of outcome.features) {
         cancelled();
         mkdirSync(join(intermediate, "features"), { recursive: true });
         const record = await entry.exporter.build(feature, context(entry.exporter.feature));
         if (JSON.stringify(record.files.map(f => f.path).sort()) !== JSON.stringify([...feature.inventory]))
           fail("package_build_failed", `The ${entry.exporter.label} build wrote other resources than it planned.`);
+        if (JSON.stringify((record.extras ?? []).map(f => f.path).sort()) !== JSON.stringify(plannedExtras(feature, outcome.product.archive)))
+          fail("package_build_failed", `The ${entry.exporter.label} build wrote other extra files than it planned.`);
         files.push(...record.files);
+        extraFiles.push(...(record.extras ?? []));
         byFeature.set(entry.exporter.feature, record.files);
       }
       cancelled();
@@ -259,22 +271,54 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       const declaration = archiveXlText(outcome.xl);
       writeFileSync(xl, declaration, "utf8");
       const archiveSha256 = fileHash(archive), xlSha256 = fileHash(xl);
+      // The extras: exactly what the features recorded; each overlay packed on its own (its tree gated as the main one is).
+      const onDisk = listGeneratedFiles(extrasRoot);
+      if (JSON.stringify(onDisk.map(f => [f.path, f.sha256])) !== JSON.stringify([...extraFiles].sort((a, b) => a.path < b.path ? -1 : 1).map(f => [f.path, f.sha256])))
+        fail("package_build_failed", "The extra files differ from the features' records.");
+      const extras: Built["extras"] = [];
+      const overlays = outcome.features.flatMap(({ outcome: feature }) => feature.extras?.overlays ?? []);
+      for (const overlay of overlays) {
+        const members = extraFiles.filter(f => f.path.startsWith(`overlays/${overlay.archive}/`))
+          .map(f => ({ ...f, path: f.path.slice(`overlays/${overlay.archive}/`.length) }));
+        const stage = join(intermediate, "overlay-stage", overlay.archive, "archive"), out = join(intermediate, "overlay-packed", overlay.archive);
+        cpSync(join(extrasRoot, "overlays", overlay.archive), stage, { recursive: true });
+        prePackGate(stage, members);
+        mkdirSync(out, { recursive: true });
+        const packedOverlay = await tools.pack(stage, out);
+        writeFileSync(join(intermediate, "logs", `pack-${overlay.archive}.log`), packedOverlay.log, "utf8");
+        if (!isFile(join(out, "archive.archive")) || readdirSync(out).length !== 1) fail("package_build_failed", "WolvenKit did not produce exactly one overlay archive.");
+        const file = join(out, `${overlay.archive}.archive`);
+        renameSync(join(out, "archive.archive"), file);
+        extras.push({ path: `archive/pc/mod/${overlay.archive}.archive`, source: file, sha256: fileHash(file), bytes: statSync(file).size });
+      }
+      for (const tweak of extraFiles.filter(f => f.path.startsWith("r6/tweaks/")))
+        extras.push({ path: tweak.path, source: join(extrasRoot, ...tweak.path.split("/")), sha256: tweak.sha256, bytes: tweak.bytes });
+      extras.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
       writeFileSync(join(intermediate, "build.json"), JSON.stringify({ productId: outcome.product.id, archive: outcome.product.archive,
         archiveSha256, xlSha256, features: outcome.features.map(({ entry }) => ({ feature: entry.exporter.feature, exporter: entry.exporter.id,
-          files: byFeature.get(entry.exporter.feature) })),
+          files: byFeature.get(entry.exporter.feature) })), extras: extras.map(({ path, sha256, bytes }) => ({ path, sha256, bytes })),
         installed: false, gameRenderingVerified: false }) + "\n", "utf8");
       cancelled();
       // The product verifier, then each feature's own verifier on its subset (none imports its exporter).
       const verifierTools = options.verifierTools(wolvenkit, gamepath);
       const unpacked = verifyProductArchive({ archive, xl, archiveSha256, files, declaration, features: outcome.features.length,
         tools: verifierTools, work: join(intermediate, "verify") });
+      // Each overlay unbundled and compared with its recorded files; the TweakXL files as they will be promoted.
+      const overlayViews: Record<string, { root: string; files: readonly GeneratedFile[] }> = {};
+      for (const overlay of overlays) {
+        const extra = extras.find(item => item.path === `archive/pc/mod/${overlay.archive}.archive`)!;
+        overlayViews[overlay.archive] = verifyOverlayArchive({ archive: extra.source, archiveSha256: extra.sha256, tools: verifierTools,
+          work: join(intermediate, "verify-overlays", overlay.archive), files: extraFiles.filter(f => f.path.startsWith(`overlays/${overlay.archive}/`))
+            .map(f => ({ ...f, path: f.path.slice(`overlays/${overlay.archive}/`.length) })) });
+      }
+      const extrasView = extras.length ? { root: extrasRoot, tweaks: extraFiles.filter(f => f.path.startsWith("r6/tweaks/")), overlays: overlayViews } : undefined;
       const verifications: FeatureVerification[] = [];
       for (const { entry, outcome: feature } of outcome.features) {
         const ctx = context(entry.exporter.feature);
         let verification: FeatureVerification;
         try {
           verification = entry.verifier.verify({ unpacked, work: ctx.work, staging, verifyDir: join(ctx.work, "verify"), tools: verifierTools,
-            packaged: JSON.parse(feature.packaged), prerequisites });
+            packaged: JSON.parse(feature.packaged), prerequisites, ...(extrasView ? { extras: extrasView } : {}) });
         } catch (error) {
           if (error instanceof ExportRefusal) throw error;
           return fail("package_verification_failed", `Independent verifier failed: ${(error as Error).message}`);
@@ -288,7 +332,7 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       log(`independent verification complete: ${outcome.product.modName}`);
       if (unpacked.archiveSha256 !== archiveSha256 || unpacked.xlSha256 !== xlSha256)
         fail("package_verification_failed", "Independent verification does not match the build.");
-      built.push({ outcome, intermediate, token, archive, xl, archiveSha256, xlSha256, unpacked: unpacked.files.length, verifications });
+      built.push({ outcome, intermediate, token, archive, xl, archiveSha256, xlSha256, unpacked: unpacked.files.length, verifications, extras });
     }
   } catch (error) {
     if (error instanceof ExportRefusal || (error as { code?: unknown })?.code !== undefined) throw error;
@@ -316,9 +360,16 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       copyFileSync(item.archive, join(target, names[0]));
       copyFileSync(item.xl, join(target, names[1]));
       const files = names.map(name => ({ path: `archive/pc/mod/${name}`, sha256: fileHash(join(target, name)),
-        bytes: statSync(join(target, name)).size })) as [ManifestFile, ManifestFile];
+        bytes: statSync(join(target, name)).size })) as [ManifestFile, ManifestFile, ...ManifestFile[]];
       if (files[0].sha256 !== item.archiveSha256 || files[1].sha256 !== item.xlSha256)
         fail("package_verification_failed", "Promoted archive or declaration differs from the verified files.");
+      for (const extra of item.extras) {
+        const destination = join(staging, ...extra.path.split("/"));
+        mkdirSync(dirname(destination), { recursive: true });
+        copyFileSync(extra.source, destination);
+        if (fileHash(destination) !== extra.sha256) fail("package_verification_failed", "A promoted extra file differs from the verified one.");
+        files.push({ path: extra.path, sha256: extra.sha256, bytes: extra.bytes });
+      }
       const manifest: LocalPackageManifest2 = {
         schema: LOCAL_PACKAGE_2, productId: product.id, modName: product.modName, nameSource: product.nameSource, archive: product.archive,
         collectionId: planned.result.collectionId, collectionSha256: sourceHash, originalPresetCount: planned.result.originalPresetCount,
