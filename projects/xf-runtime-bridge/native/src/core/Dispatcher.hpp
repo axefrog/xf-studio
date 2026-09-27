@@ -37,10 +37,13 @@ namespace xfb
 enum class Access
 {
     Read,           // observes; never changes the game
-    Write,          // a write outside the three classes (diagnostic probes); needs allow_writes only
+    Write,          // a write outside the write classes (diagnostic probes); needs allow_writes only
     WritePhoto,     // photo mode only; gone when it closes
     WriteWorld,     // clock and freeze
     WriteCharacter, // the mirror screen's options
+    WriteInventory, // V's clothing and inventory (inventory.*); off unless allow_write_classes lists "inventory"
+    WriteSave,      // manual saves and loading (game.save, game.load); off unless the list has "save"
+    Notify,         // shows a message in the bridge's own in-game label (ui.message); not a write, never changes the game
     Control         // changes only the bridge itself (bridge.kill); always allowed, never touches the game
 };
 

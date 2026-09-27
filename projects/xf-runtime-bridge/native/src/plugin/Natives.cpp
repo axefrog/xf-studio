@@ -283,6 +283,30 @@ void OptionsReport(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aO
     });
 }
 
+// XFBridge_Messages() -> String   (CET layer: the ui.message lines to draw under the status label,
+// {"messages":[{id, text, level, remaining_ms}]}, or "" when there are none). A killed bridge shows none
+// and forgets them.
+void Messages(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    aFrame->code++; // skip ParamEnd
+    Guarded("XFBridge_Messages", [&] {
+        auto& state = Get();
+        std::string text;
+        if (state.bridge && state.bridge->GetDispatcher().IsKilled())
+        {
+            state.messages.Clear();
+        }
+        else
+        {
+            text = state.messages.Snapshot();
+        }
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(text.c_str());
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -320,7 +344,8 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_OptionsReport", &OptionsReport, "Bool", {"values"});
         RegisterGlobal(rtti, "XFBridge_Rearm", &Rearm, "String", {"reason"});
         RegisterGlobal(rtti, "XFBridge_PauseWrites", &PauseWrites, "String", {"paused"}, "Bool");
-        log::Info("rtti.register_types", "phase=post_register natives=9");
+        RegisterGlobal(rtti, "XFBridge_Messages", &Messages, "String", {});
+        log::Info("rtti.register_types", "phase=post_register natives=10");
     }
     catch (const std::exception& e)
     {

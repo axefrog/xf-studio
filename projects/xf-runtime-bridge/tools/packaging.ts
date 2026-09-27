@@ -7,7 +7,8 @@
 //   red4ext/plugins/XFRuntimeBridge/config.ini
 //   red4ext/plugins/XFRuntimeBridge/Scripts/*.reds       (added to redscript by the plugin)
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
-//   r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only)
+//   r6/tweaks/XFRuntimeBridge/^xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only; the
+//                                                         "^" makes TweakXL read it last, after other mods' presets)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/panel.lua  (CET panel; diagnostic and writes packages only)
 // The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
@@ -28,7 +29,11 @@ export const DESCRIBE: Record<Variant, string> = {
 };
 
 export const PLUGIN_DIR = "red4ext/plugins/XFRuntimeBridge";
-export const PRESETS_FILE = "r6/tweaks/XFRuntimeBridge/xf_photo_mode_presets.yaml";
+// The leading "^" puts the file in TweakXL's last-priority group, read after every other tweak file
+// (TweakXL 1.11.4 src/App/Tweaks/Declarative/TweakImporter.cpp:184-188). Session 3 found the test
+// profile's Portrait Enhancer .tweak file overriding the XF presets (its presets 5-9 roll the camera 90
+// degrees); read last, the XF values win.
+export const PRESETS_FILE = "r6/tweaks/XFRuntimeBridge/^xf_photo_mode_presets.yaml";
 export const CET_DIR = "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge";
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 
@@ -45,7 +50,11 @@ function listFiles(dir: string): string[] {
 }
 
 /** The variant's config.ini, from the project's (which must keep every switch off). */
-export function variantConfig(base: string, variant: Variant): string {
+/** The -writes package's write classes: inventory only with --allow-inventory (the maintainer's approval). */
+export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
+  options.allowInventory ? ["photo", "world", "character", "inventory", "save"] : ["photo", "world", "character", "save"];
+
+export function variantConfig(base: string, variant: Variant, options: { allowInventory?: boolean } = {}): string {
   let config = base;
   if (/^allow_writes = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_writes = false");
   if (/^allow_creator_leave = true$/m.test(config)) throw new Error("native/config/config.ini must keep allow_creator_leave = false");
@@ -58,7 +67,11 @@ export function variantConfig(base: string, variant: Variant): string {
   if (variant === "writes") {
     config = config.replace(/^allow_writes = false$/m, "allow_writes = true");
     if (!/^allow_writes = true$/m.test(config)) throw new Error("writes config did not allow writes");
-    if (!/^allow_write_classes = photo, world, character$/m.test(config)) throw new Error("writes config must allow all three write classes");
+    if (!/^allow_write_classes = photo, world, character$/m.test(config)) throw new Error("the project's config.ini must list photo, world and character");
+    // Bridge 0.4: manual saves and loading (the maintainer's request after session 3) join the three classes.
+    // The inventory class stays off: it needs the maintainer's approval, and the coordinator adds it to the
+    // staged config.ini (or packages with --allow-inventory) only once given.
+    config = config.replace(/^allow_write_classes = photo, world, character$/m, `allow_write_classes = ${WRITES_CLASSES(options).join(", ")}`);
     // Approved for the test profile (26 September 2026): the bridge may press Confirm and Back in the
     // character creator, in sessions that end by loading the safety save.
     config = config.replace(/^allow_creator_leave = false$/m, "allow_creator_leave = true");
@@ -83,6 +96,8 @@ export type StageOptions = {
   version: string;
   /** The commit the DLL was built from (its build marker). */
   commit: string;
+  /** -writes only: also allow the inventory write class (only with the maintainer's approval). */
+  allowInventory?: boolean;
 };
 
 export type StagedFile = { path: string; bytes: number; sha256: string };
@@ -93,6 +108,8 @@ export type Manifest = {
   bridge_enabled: boolean;
   allow_writes: boolean;
   write_classes: string[];
+  /** Whether inventory.equip / inventory.unequip can run (the inventory write class); needs the maintainer's approval. */
+  inventory_writes: boolean;
   allow_creator_leave: boolean;
   allow_live_pose: boolean;
   photo_mode_presets: string | null;
@@ -115,7 +132,7 @@ export function stageVariant(options: StageOptions): Manifest {
 
   put(dll, `${PLUGIN_DIR}/XFRuntimeBridge.dll`);
   put(join(projectDir, "native", "THIRD_PARTY_NOTICES.txt"), `${PLUGIN_DIR}/THIRD_PARTY_NOTICES.txt`);
-  const config = variantConfig(readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8"), variant);
+  const config = variantConfig(readFileSync(join(projectDir, "native", "config", "config.ini"), "utf8"), variant, { allowInventory: options.allowInventory });
   mkdirSync(join(stageDir, PLUGIN_DIR), { recursive: true });
   writeFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), config);
   for (const name of readdirSync(join(projectDir, "redscript"))) {
@@ -142,7 +159,8 @@ export function stageVariant(options: StageOptions): Manifest {
     variant,
     bridge_enabled: variant !== "default",
     allow_writes: variant === "writes",
-    write_classes: variant === "writes" ? ["photo", "world", "character"] : [],
+    write_classes: variant === "writes" ? WRITES_CLASSES({ allowInventory: options.allowInventory }) : [],
+    inventory_writes: variant === "writes" && options.allowInventory === true,
     allow_creator_leave: variant === "writes",
     allow_live_pose: variant === "writes",
     photo_mode_presets: variant !== "default" ? "photo_mode.std_preset_6..9 (XF full body, face, eyes, head and shoulders)" : null,

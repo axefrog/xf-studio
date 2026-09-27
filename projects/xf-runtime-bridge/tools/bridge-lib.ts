@@ -234,29 +234,32 @@ export class BridgeClient {
     }
   }
 
-  /** Sends one request. `overrides` lets tests send a wrong token or raw extra fields. */
-  call(method: string, params: Record<string, unknown> = {}, cid?: string, overrides: Record<string, unknown> = {}) {
-    return this.sendObject({ v: 1, token: this.session.token, method, params, ...(cid ? { cid } : {}), ...overrides });
+  /**
+   * Sends one request. `overrides` lets tests send a wrong token or raw extra fields; `timeoutMs` replaces
+   * the client's own wait for a method known to take longer (game.save waits for the game's answer).
+   */
+  call(method: string, params: Record<string, unknown> = {}, cid?: string, overrides: Record<string, unknown> = {}, timeoutMs?: number) {
+    return this.sendObject({ v: 1, token: this.session.token, method, params, ...(cid ? { cid } : {}), ...overrides }, timeoutMs);
   }
 
-  sendObject(request: Record<string, unknown>): Promise<BridgeResponse> {
+  sendObject(request: Record<string, unknown>, timeoutMs?: number): Promise<BridgeResponse> {
     const counter = this.nextId++;
     // A scalar id override is echoed and matched as is; any other override (array, object)
     // is answered with id null and matched to the oldest outstanding request.
     const override = request.id;
     const key = typeof override === "number" || typeof override === "string" ? override : counter;
-    return this.sendRaw(JSON.stringify({ id: counter, ...request }) + "\n", key);
+    return this.sendRaw(JSON.stringify({ id: counter, ...request }) + "\n", key, timeoutMs);
   }
 
-  sendRaw(text: string, id: number | string = this.nextId++): Promise<BridgeResponse> {
+  sendRaw(text: string, id: number | string = this.nextId++, timeoutMs = this.timeoutMs): Promise<BridgeResponse> {
     if (!this.pipe || this.closed) {
       return Promise.resolve({ v: 1, id, cid: "-", ok: false, error: { code: "disconnected", message: "not connected" } });
     }
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        resolve({ v: 1, id, cid: "-", ok: false, error: { code: "client_timeout", message: `${this.timeoutMs} ms` } });
-      }, this.timeoutMs);
+        resolve({ v: 1, id, cid: "-", ok: false, error: { code: "client_timeout", message: `${timeoutMs} ms` } });
+      }, timeoutMs);
       this.pending.set(id, (response) => {
         clearTimeout(timer);
         resolve(response);

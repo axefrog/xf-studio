@@ -203,9 +203,19 @@ describe("MCP server against a bridge with writes allowed", () => {
     // Light on/off, type and shadow: applied first, and undone as a flag and a type name.
     result = await call(mcp, "photo_light_set", { light: 1, on: true, type: "spot", shadow: true, brightness: 80 });
     expect(result.isError).toBeFalsy();
-    expect((json(result).result.applied as { key: number }[]).map((a) => a.key)).toEqual([44, 45, 46, 47]);
-    expect(json(result).result.undo_note).toContain("type"); // the simulated menu had no type yet (0)
+    // 2.31's menu has no type row (setting 45): the type is skipped with a note, the rest applies (session 3).
+    expect((json(result).result.applied as { key: number }[]).map((a) => a.key)).toEqual([44, 46, 47]);
+    expect(json(result).result.skipped).toMatchObject([{ name: "type" }]);
+    expect(json(result).result.note).toContain("keeps its type");
     expect(json(result).result.undo.params).toMatchObject({ light: 1, on: false, shadow: false, brightness: 0 });
+    // Placing light 1 about V (the simulated entity starts at the camera, where it was switched on): moved,
+    // read back, held; the undo puts it back at the camera.
+    result = await call(mcp, "photo_light_set", { light: 1, place: { azimuth: 45, elevation: 20, distance: 1.5 } });
+    expect(result.isError, text(result)).toBeFalsy();
+    expect(json(result).result.placement).toMatchObject({ route: "moved", held: true, before: { x: 0, y: 0, z: 1.6 } });
+    expect(json(result).result.undo.params.place).toEqual({ world: [0, 0, 1.6] });
+    result = await call(mcp, "photo_light_set", { light: 1, place: { camera: true } });
+    expect(json(result).result.placement).toMatchObject({ route: "switched_again" });
     result = await call(mcp, "photo_hud_hide", {});
     expect(json(result).result.cursor_hidden).toBe(true);
     expect(json(result).result.undo).toEqual({ method: "photo.hud.hide", params: { hidden: false, cursor: true } });
@@ -261,7 +271,7 @@ describe("MCP server against a bridge with writes allowed", () => {
     result = await call(mcp, "photo_exit");
     expect(json(result).result.active).toBe(false);
     expect(json(result).result.undo_note).toContain("photo.open");
-  });
+  }, 20000);
 
   test("character and world commands are refused outside their screens", async () => {
     let result = await call(mcp, "cc_apply", { option: "XF", index: 3 });
@@ -456,9 +466,11 @@ describe("MCP server permissions, no bridge, and captures", () => {
     synthetic?.close();
   });
 
-  test("--read-only exposes only read and control tools", async () => {
+  test("--read-only exposes only read, notify and control tools", async () => {
     const { tools } = await mcp.client.listTools();
-    expect(tools.length).toBe(CATALOGUE.filter((c) => c.permission === "read" || c.permission === "control").length);
+    expect(tools.length).toBe(CATALOGUE.filter((c) => ["read", "notify", "control"].includes(c.permission)).length);
+    expect(tools.some((t) => t.name === "ui_message")).toBe(true);
+    expect(tools.some((t) => t.name === "game_save" || t.name === "inventory_equip")).toBe(false);
     expect(tools.some((t) => t.name === "photo_enter")).toBe(false);
     const refused = await call(mcp, "photo_enter");
     expect(refused.isError).toBe(true);
@@ -523,7 +535,7 @@ describe("MCP server permissions, no bridge, and captures", () => {
 describe("MCP permission flags", () => {
   test("--read-only and --allow are exclusive; an empty or missing --allow list is refused", () => {
     expect(parsePermissionFlags([])).toEqual({});
-    expect(parsePermissionFlags(["--read-only"])).toEqual({ allow: ["read", "control"] });
+    expect(parsePermissionFlags(["--read-only"])).toEqual({ allow: ["read", "notify", "control"] });
     for (const args of [["--read-only", "--allow", "read"], ["--allow", "read", "--read-only"], ["--allow", ""], ["--allow", " , "], ["--allow"], ["--allow", "--no-inline-images"], ["--allow", "read", "--allow", "write-world"], ["--allow", "read,constructor"], ["--allow", "read,write-everything"]]) {
       expect("error" in parsePermissionFlags(args), args.join(" ")).toBe(true);
     }

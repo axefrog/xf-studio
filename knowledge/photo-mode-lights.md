@@ -1,6 +1,6 @@
 # Photo-mode and spawned lights (game 2.31)
 
-**Maturity: Draft.** How lights reach V in photo mode: the engine's light component, photo mode's own three lights, how mods spawn and steer extra lights (CharLi, Appearance Menu Mod, World Builder), what exposure does to the result, and how a lighting setup authored in XF Studio maps onto game lights. Consolidated on 27 September 2026 from RED4ext.SDK's generated types, the decompiled 2.31 script bundle, the game's input configuration, the installed CharLi 2.2a, Appearance Menu Mod, Photo Mode Preferences and ENV Tuner packages in the reference MO2 instance (read only), the World Builder, Codeware and Cyber Engine Tweaks sources, and the lighting mirror's offline prototype. **Nothing on this page has been seen in game yet** except the photo-mode menu attributes, which the bridge's first session dumped. The mirror design that builds on it is [research/runtime/lighting-mirror-design.md](../research/runtime/lighting-mirror-design.md).
+**Maturity: Draft.** How lights reach V in photo mode: the engine's light component, photo mode's own three lights, how mods spawn and steer extra lights (CharLi, Appearance Menu Mod, World Builder), what exposure does to the result, and how a lighting setup authored in XF Studio maps onto game lights. Consolidated on 27 September 2026 from RED4ext.SDK's generated types, the decompiled 2.31 script bundle, the game's input configuration, the installed CharLi 2.2a, Appearance Menu Mod, Photo Mode Preferences and ENV Tuner packages in the reference MO2 instance (read only), the World Builder, Codeware and Cyber Engine Tweaks sources, and the lighting mirror's offline prototype. **Little on this page has been seen in game yet:** the photo-mode menu attributes (the bridge's first session dumped them) and where a photo-mode light starts (session 3, 28 September 2026). The mirror design that builds on it is [research/runtime/lighting-mirror-design.md](../research/runtime/lighting-mirror-design.md).
 
 **Grades** follow the [knowledge rules](README.md). [installed] is a mod package in the reference install, read only (paths are inside the mod's folder, `mods/<mod name>/` under MO2). [offline] is the mirror prototype's own tests.
 
@@ -44,7 +44,7 @@ Unit, EV, attenuation, softness, source radius, type and the shadow switches hav
 |---|---|---|---|
 | 43 | Which light (1–3) the rows below edit | | [runtime] |
 | 44 | On / off | | [runtime] |
-| 45 | Spot / ambient | | [runtime] |
+| 45 | Spot / ambient | | [runtime] first session's dump; **not in the menu** on 2.31 in session 3 |
 | 46 | Shadow on / off | | [runtime] |
 | 47, 48 | Brightness, range | 0–100 each | [runtime]; [installed] Photo Mode Preferences `init.lua:102-103` |
 | 49, 50 | Inner and outer cone angle | 15–175° | [runtime] |
@@ -52,6 +52,8 @@ Unit, EV, attenuation, softness, source radius, type and the shadow switches hav
 | 10 | Exposure (Effects page) | −2.2 to +2.2 | [installed] Photo Mode Preferences `init.lua:109` |
 
 - **The lights are native entities:** `gamePhotomodeLightObject` with a `gamePhotomodeLightComponent`, a subclass of `entLightComponent` with no script-visible fields of its own [source] SDK `game/PhotomodeLightObject.hpp`, `game/PhotomodeLightComponent.hpp`. The menu receives `PhotomodeLightInitializedEvent { light: wref<Entity> }` for each, and `PhotomodeLightResetEvent` exists [source] 2.31 `orphans.script:53440-53443`; SDK `game/ui/PhotomodeLightResetEvent.hpp`. No script handles the initialised event, so the controller that receives it is native.
+- **A light starts where the camera is when it switches on** and stays there in the world [runtime] session 3 (28 September 2026): light 1 switched on before framing lit V only in one pass, and its reflection showed outside a window once the camera had moved. Switching it off and on after framing re-places it at the camera, unreliably in that session.
+- **Its entity can be reached and moved from script:** the light indicator's projection for each light names the light's entity (`GetProjection(index).GetEntity()`), a `gamePhotomodeLightObject` game object, which `TeleportationFacility.Teleport` accepts [source]; XF Runtime Bridge 0.4 moves it about V's head and aims it at V (`photo.light.set` `place`), then reads its position back (`held`). Whether photo mode keeps a moved light there is open question 6.
 - **An off-screen light keeps its place.** The light indicator projects the active light's position and shows an arrow at the screen edge while it is off screen [source] 2.31 `photoModeLightIndicatorController.script:54-110`. So a light stays in the world while the camera moves; where it starts is not traced. The input `ResetCurrentLight` (`IK_R`, left thumbstick) exists in the photo-mode context [resource] `r6/config/inputContexts.xml:207`, `inputUserMappings.xml:2071-2074`; that it puts the light back at the camera is a [hypothesis].
 - **Lights reset each time photo mode opens** [runtime], so any tool sets them each time.
 - **Which component values the sliders produce** (brightness to lumens or another unit, range to radius, hue/saturation/luminance to colour) is unknown. One read of the three components after setting each slider answers it (§7, question 1).
@@ -122,7 +124,7 @@ The prototype is `projects/xf-runtime-bridge/tools/lighting/mirror-map.ts` with 
 3. Is a spot light's +Y its axis for a spawned entity, and does the engine's lumen conversion treat inverse-square and linear lights the same way (the creator calibration's open question 9)?
 4. CharLi's template light settings (unit, falloff, softness, shadows): read with a WolvenKit build that accepts the 2023 format, within a memory budget.
 5. Does pinning `ExposureAreaSettings` hold photo mode's exposure fixed, and is it restored cleanly?
-6. Can the photo-mode lights themselves be moved with the teleportation facility, or does photo mode re-place them every frame?
+6. Can the photo-mode lights themselves be moved with the teleportation facility, or does photo mode re-place them every frame? The entity route is built (bridge 0.4, `photo.light.set` `place`, which reports `held`); the [session-4 preflight](../research/runtime/runtime-bridge-test-card.md#session-4-preflight-bridge-040) answers it.
 
 ## Sources
 

@@ -28,7 +28,8 @@ export type ImageRef = { path: string; width: number; height: number; mimeType: 
 
 /** What the command API needs from a bridge connection; the pipe client or a test fake. */
 export interface BridgeTransport {
-  call(method: string, params: Record<string, unknown>, cid: string): Promise<BridgeResponse>;
+  /** timeoutMs: a longer wait than the client's own, for a method known to take longer. */
+  call(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number): Promise<BridgeResponse>;
   close(): void;
 }
 export type TransportFactory = (session: BridgeSession) => Promise<BridgeTransport>;
@@ -54,7 +55,7 @@ const pipeTransport =
   async (session) => {
     const client = new BridgeClient(session, timeoutMs);
     await client.connect();
-    return { call: (method, params, cid) => client.call(method, params, cid), close: () => client.close() };
+    return { call: (method, params, cid, timeoutMs) => client.call(method, params, cid, {}, timeoutMs), close: () => client.close() };
   };
 
 let cidCounter = 0;
@@ -144,7 +145,7 @@ export class CommandApi {
         result = await command.local(params, { api: this, cid, captureRoot: resolve(options.captureRoot ?? this.captureRoot), signal: options.signal });
       } else {
         const bridgeParams = command.bridge!.params ? command.bridge!.params(params) : params;
-        let response = await this.callBridge(command.bridge!.method, bridgeParams, cid);
+        let response = await this.callBridge(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params));
         if (!response.ok && command.name === "bridge.kill" && response.error.code === "bridge_busy") response = this.killByFile();
         if (!response.ok) {
           const error = "error" in response ? response.error : plainBridgeError("failed");
@@ -167,13 +168,13 @@ export class CommandApi {
         code: (error as { code?: string }).code ?? "failed",
         message: (error as Error).message || "Something went wrong.",
       };
-      if (command.permission !== "read") this.audit({ event: "failed", command: name, cid, code: plain.code });
+      if (command.permission !== "read") this.audit({ event: "failed", command: name, cid, code: plain.code, ...(plain.detail ? { detail: plain.detail } : {}) });
       return { ok: false, command: name, cid, error: plain };
     }
   }
 
   /** Sends one bridge method; reconnects when the game restarted (new session id). */
-  async callBridge(method: string, params: Record<string, unknown>, cid: string): Promise<{ ok: true; result: unknown } | { ok: false; error: PlainError }> {
+  async callBridge(method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number): Promise<{ ok: true; result: unknown } | { ok: false; error: PlainError }> {
     const session = readSession(this.runtimeDir);
     if (!session) {
       this.disconnect();
@@ -188,10 +189,13 @@ export class CommandApi {
         return { ok: false, error: connectError(kind, (error as Error).message) };
       }
     }
-    this.touch();
-    const response = await this.connection.transport.call(method, params, cid);
+    // No idle close while a call is in flight: a single call can take longer than the idle time (game.save
+    // waits up to 20 s for the game), and closing the pipe under it would cut the answer off.
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+    const response = await this.connection.transport.call(method, params, cid, timeoutMs);
     if (!response.ok && (response.error?.code === "disconnected" || response.error?.code === "client_timeout")) this.disconnect();
-    this.touch();
+    if (this.connection) this.touch();
     if (response.ok) return { ok: true, result: response.result };
     return { ok: false, error: plainBridgeError(response.error?.code, response.error?.message) };
   }

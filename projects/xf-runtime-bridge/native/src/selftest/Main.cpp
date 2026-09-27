@@ -26,6 +26,7 @@
 #include "core/Layers.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
+#include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/Win32.hpp"
@@ -258,6 +259,27 @@ int wmain(int argc, wchar_t** argv)
         std::vector<xfb::livepose::RawConstKey> carrier;
         std::vector<xfb::livepose::RawConstKey> carrierOriginal;
         bool carrierWritten = false;
+        // Photo-mode lights' positions (the simulated entities), placed at the camera when first switched on.
+        std::map<int32_t, std::array<double, 3>> lights;
+        // V's clothing: slot -> item, the inventory, the items the bridge added, and an equip request the
+        // simulated equipment system handles a couple of ticks later.
+        std::map<std::string, std::string> worn;
+        std::vector<std::string> inventory{"Items.Jacket_01_basic_01"};
+        std::vector<std::string> added;
+        std::string pendingSlot;
+        std::string pendingItem;
+        int pendingTicks = -1;
+        // Saves: the game's list (newest first), the bridge's save lock as the game sees it, and a save or
+        // load in progress (ticks until it finishes).
+        std::vector<std::string> saves{"ManualSave-3", "AutoSave-1", "QuickSave-0"};
+        bool gameSaveLock = false;
+        bool relockAfterSave = false;
+        int unlockTicks = -1;
+        std::string saveState = "none";
+        int saveTicks = -1;
+        bool savesReady = false;
+        int listTicks = -1;
+        int loadTicks = -1;
     };
     static Simulated sim;
     static xfb::writes::RestoreOnce restore;
@@ -295,15 +317,26 @@ int wmain(int argc, wchar_t** argv)
             throw xfb::MethodError(aCode, std::string("simulated: the game is in '") + phase() + "'");
         }
     };
-    // One simulated attribute change, answered like XFPhoto.SetAttribute.
+    // One simulated attribute change, answered like XFPhoto.SetAttribute. 2.31's menu has no light type row
+    // (setting 45): it answers unavailable, as the game did in session 3. A light switched on is placed at
+    // the simulated camera (0, 0, 1.6), as photo mode does.
     const auto simulatedSet = [](int32_t aKey, float aValue) {
         std::scoped_lock _(sim.mutex);
         if (sim.phase != "photo_mode")
         {
             throw xfb::MethodError("not_in_photo_mode", "simulated: photo mode is not open");
         }
+        if (aKey == xfb::params::key::kLightType)
+        {
+            throw xfb::MethodError("unavailable", "photo-mode setting 45 is not in the menu right now");
+        }
         const float before = sim.attributes[aKey];
         sim.attributes[aKey] = aValue;
+        sim.gameSaveLock = true;
+        if (aKey == xfb::params::key::kLightState && aValue > 0.5f && before < 0.5f)
+        {
+            sim.lights[static_cast<int32_t>(sim.attributes[xfb::params::key::kLightSelect]) + 1] = {0.0, 0.0, 1.6};
+        }
         return json{{"simulated", true}, {"key", aKey}, {"before", before}, {"before_known", true}, {"after", aValue}};
     };
     // Marks the write for the kill switch's restore, like the plugin's WriteMethod wrapper.
@@ -439,6 +472,44 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              throw xfb::MethodError("timeout", "simulated: no game ticks");
                                          }
+                                     };
+                                     // The simulated light entities: V's head at (0.4, 6.0, 1.62) facing the camera (-Y).
+                                     ops.place = [](int32_t aLight, const p::LightPlacement& aPlace) {
+                                         std::scoped_lock _(sim.mutex);
+                                         const auto found = sim.lights.find(aLight);
+                                         if (found == sim.lights.end())
+                                         {
+                                             throw xfb::MethodError("unavailable", "simulated: light " + std::to_string(aLight) + " has never been switched on");
+                                         }
+                                         const auto before = found->second;
+                                         const double head[3] = {0.4, 6.0, 1.62};
+                                         std::array<double, 3> after{};
+                                         if (aPlace.kind == p::LightPlacement::Kind::World)
+                                         {
+                                             after = {aPlace.world[0], aPlace.world[1], aPlace.world[2]};
+                                         }
+                                         else
+                                         {
+                                             const double pi = 3.14159265358979;
+                                             const double az = aPlace.azimuth * pi / 180.0;
+                                             const double el = aPlace.elevation * pi / 180.0;
+                                             const double fx = -std::sin(az); // V faces -Y; +azimuth turns counter-clockwise
+                                             const double fy = -std::cos(az);
+                                             after = {head[0] + aPlace.distance * std::cos(el) * fx, head[1] + aPlace.distance * std::cos(el) * fy,
+                                                      head[2] + aPlace.distance * std::sin(el)};
+                                         }
+                                         found->second = after;
+                                         const auto vec = [](const std::array<double, 3>& v) { return json{{"x", v[0]}, {"y", v[1]}, {"z", v[2]}}; };
+                                         return json{{"simulated", true}, {"before", vec(before)}, {"after", vec(after)}, {"head", vec({head[0], head[1], head[2]})}};
+                                     };
+                                     ops.position = [](int32_t aLight) {
+                                         std::scoped_lock _(sim.mutex);
+                                         const auto found = sim.lights.find(aLight);
+                                         if (found == sim.lights.end())
+                                         {
+                                             throw xfb::MethodError("unavailable", "simulated: no such light");
+                                         }
+                                         return json{{"position", {{"x", found->second[0]}, {"y", found->second[1]}, {"z", found->second[2]}}}};
                                      };
                                      auto out = w::LightSet(request, ops);
                                      out["simulated"] = true;
@@ -975,6 +1046,247 @@ int wmain(int argc, wchar_t** argv)
                                      sim.frozen = paused;
                                      return w::PauseResult(json{{"simulated", true}, {"frozen", paused}, {"was_frozen", was}});
                                  }));
+    // Bridge 0.4 -----------------------------------------------------------------------------------------
+    // ui.message with the plugin's own board; selftest.messages reads what the CET layer would draw.
+    static xfb::MessageBoard messages;
+    dispatcher.Register({"ui.message", xfb::Access::Notify, xfb::RunOn::BridgeThread, "Message line (simulated CET layer).",
+                         [](const xfb::MethodContext& aContext) {
+                             auto out = messages.Post(p::ParseMessage(aContext.params));
+                             out["simulated"] = true;
+                             out["undo"] = {{"method", "ui.message"}, {"params", {{"clear", true}}}};
+                             return out;
+                         }});
+    dispatcher.Register({"selftest.messages", xfb::Access::Read, xfb::RunOn::BridgeThread, "The message lines the CET layer would draw (self-test only).",
+                         [](const xfb::MethodContext&) {
+                             const auto text = messages.Snapshot();
+                             return text.empty() ? json{{"messages", json::array()}} : json::parse(text);
+                         }});
+    // V's clothing: items named *Helmet*, *Hat* or *Cap* go in Head, *Glasses* or *Mask* in Face, anything
+    // else in OuterChest; Items.Missing_01 doesn't exist.
+    const auto slotOf = [](const std::string& aItem) -> std::string {
+        if (aItem == "Items.Missing_01")
+        {
+            return {};
+        }
+        if (aItem.find("Helmet") != std::string::npos || aItem.find("Hat") != std::string::npos || aItem.find("Cap") != std::string::npos)
+        {
+            return "Head";
+        }
+        if (aItem.find("Glasses") != std::string::npos || aItem.find("Mask") != std::string::npos)
+        {
+            return "Face";
+        }
+        return "OuterChest";
+    };
+    const auto inventoryOps = [&queue, slotOf] {
+        w::InventoryOps ops;
+        ops.slot = [slotOf](const std::string& aSlot, const std::string& aItem) {
+            std::scoped_lock _(sim.mutex);
+            const auto slot = aItem.empty() ? aSlot : slotOf(aItem);
+            const auto item = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+            return json{{"slot", slot}, {"item", item}, {"empty", item.empty()}};
+        };
+        ops.removeAdded = [](const std::string& aItem) {
+            std::scoped_lock _(sim.mutex);
+            if (std::find(sim.added.begin(), sim.added.end(), aItem) == sim.added.end())
+            {
+                throw xfb::MethodError("not_added_by_bridge", "simulated: '" + aItem + "' wasn't added by the bridge");
+            }
+            sim.added.erase(std::find(sim.added.begin(), sim.added.end(), aItem));
+            sim.inventory.erase(std::find(sim.inventory.begin(), sim.inventory.end(), aItem));
+            return json{{"removed", true}};
+        };
+        ops.settle = [&queue] {
+            if (!w::WaitTicks(queue, 2, std::chrono::milliseconds(1000)))
+            {
+                throw xfb::MethodError("timeout", "simulated: no game ticks");
+            }
+        };
+        return ops;
+    };
+    dispatcher.Register(simWrite("inventory.equip", xfb::Access::WriteInventory, xfb::RunOn::BridgeThread, "Equip (simulated).",
+                                 [inventoryOps, slotOf](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseInventoryEquip(aContext.params);
+                                     auto ops = inventoryOps();
+                                     ops.equip = [&request, slotOf] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.phase != "gameplay")
+                                         {
+                                             throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                         }
+                                         const auto slot = slotOf(request.item);
+                                         if (slot.empty())
+                                         {
+                                             throw xfb::MethodError("bad_params", "simulated: '" + request.item + "' isn't a clothing item record");
+                                         }
+                                         if (!request.slot.empty() && request.slot != slot)
+                                         {
+                                             throw xfb::MethodError("bad_params", "simulated: '" + request.item + "' goes in the " + slot + " slot");
+                                         }
+                                         bool added = false;
+                                         if (std::find(sim.inventory.begin(), sim.inventory.end(), request.item) == sim.inventory.end())
+                                         {
+                                             if (!request.addIfMissing)
+                                             {
+                                                 throw xfb::MethodError("not_in_inventory", "simulated: V doesn't have '" + request.item + "'");
+                                             }
+                                             sim.inventory.push_back(request.item);
+                                             sim.added.push_back(request.item);
+                                             added = true;
+                                         }
+                                         const auto previous = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         const bool already = previous == request.item;
+                                         if (!already)
+                                         {
+                                             sim.pendingSlot = slot;
+                                             sim.pendingItem = request.item;
+                                             sim.pendingTicks = 2;
+                                         }
+                                         sim.gameSaveLock = true;
+                                         return json{{"item", request.item}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous}};
+                                     };
+                                     auto out = w::InventoryEquip(request, ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("inventory.unequip", xfb::Access::WriteInventory, xfb::RunOn::BridgeThread, "Unequip (simulated).",
+                                 [inventoryOps, slotOf](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseInventoryUnequip(aContext.params);
+                                     auto ops = inventoryOps();
+                                     ops.unequip = [&request, slotOf] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.phase != "gameplay")
+                                         {
+                                             throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                         }
+                                         const auto slot = request.item.empty() ? request.slot : slotOf(request.item);
+                                         const auto previous = sim.worn.count(slot) ? sim.worn[slot] : std::string();
+                                         if (!request.item.empty() && !previous.empty() && previous != request.item)
+                                         {
+                                             throw xfb::MethodError("bad_params", "simulated: the slot holds '" + previous + "'");
+                                         }
+                                         if (!previous.empty())
+                                         {
+                                             sim.pendingSlot = slot;
+                                             sim.pendingItem.clear();
+                                             sim.pendingTicks = 2;
+                                         }
+                                         return json{{"slot", slot}, {"previous", previous}, {"was_empty", previous.empty()}};
+                                     };
+                                     auto out = w::InventoryUnequip(request, ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("game.save", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Manual save (simulated).",
+                                 [&queue](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseGameSave(aContext.params);
+                                     w::SaveOps ops;
+                                     ops.prepare = [&request] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.phase != "gameplay")
+                                         {
+                                             throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                         }
+                                         const bool own = sim.gameSaveLock || sim.saveLock;
+                                         if (own && !request.overrideLock)
+                                         {
+                                             throw xfb::MethodError("bridge_save_lock", "simulated: the bridge keeps saving locked");
+                                         }
+                                         if (own)
+                                         {
+                                             sim.relockAfterSave = true;
+                                             sim.unlockTicks = 2;
+                                         }
+                                         return json{{"lock_released", own}};
+                                     };
+                                     ops.status = [&queue] {
+                                         return xfb::RunGameTask(
+                                             queue, std::chrono::milliseconds(1000),
+                                             [] {
+                                                 std::scoped_lock _(sim.mutex);
+                                                 return json{{"locked", sim.gameSaveLock || sim.saveLock}, {"state", sim.saveState}};
+                                             },
+                                             "game.save.status");
+                                     };
+                                     ops.save = [] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.gameSaveLock || sim.saveLock)
+                                         {
+                                             throw xfb::MethodError("saving_locked", "simulated: saving is locked");
+                                         }
+                                         sim.saveState = "pending";
+                                         sim.saveTicks = 3;
+                                         return json{{"requested", true}};
+                                     };
+                                     ops.relock = [] {
+                                         std::scoped_lock _(sim.mutex);
+                                         sim.gameSaveLock = true;
+                                         sim.relockAfterSave = false;
+                                     };
+                                     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+                                     auto out = w::GameSave(request, ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("game.load", xfb::Access::WriteSave, xfb::RunOn::BridgeThread, "Load (simulated).",
+                                 [&queue](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseGameLoad(aContext.params);
+                                     const auto refuse = [] {
+                                         if (sim.phase != "gameplay" && sim.phase != "menu" && sim.phase != "paused")
+                                         {
+                                             throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                         }
+                                     };
+                                     w::LoadOps ops;
+                                     ops.latest = [refuse] {
+                                         std::scoped_lock _(sim.mutex);
+                                         refuse();
+                                         sim.phase = "loading";
+                                         sim.loadTicks = 4;
+                                         return json{{"requested", true}, {"route", "latest"}};
+                                     };
+                                     ops.list = [refuse] {
+                                         std::scoped_lock _(sim.mutex);
+                                         refuse();
+                                         sim.savesReady = false;
+                                         sim.listTicks = 2;
+                                         return json{{"requested", true}};
+                                     };
+                                     ops.saves = [&queue] {
+                                         return xfb::RunGameTask(
+                                             queue, std::chrono::milliseconds(1000),
+                                             [] {
+                                                 std::scoped_lock _(sim.mutex);
+                                                 return json{{"ready", sim.savesReady}, {"saves", sim.savesReady ? json(sim.saves) : json::array()}};
+                                             },
+                                             "game.load.saves");
+                                     };
+                                     ops.load = [refuse](int32_t aIndex, const std::string& aName) {
+                                         std::scoped_lock _(sim.mutex);
+                                         refuse();
+                                         sim.phase = "loading";
+                                         sim.loadTicks = 4;
+                                         return json{{"requested", true}, {"route", "name"}, {"name", aName}, {"index", aIndex}};
+                                     };
+                                     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+                                     auto out = w::GameLoad(request, ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    // What the simulated save and inventory state looks like (self-test only).
+    dispatcher.Register({"selftest.state", xfb::Access::Read, xfb::RunOn::BridgeThread, "Simulated clothing, saves and lights (self-test only).",
+                         [](const xfb::MethodContext&) {
+                             std::scoped_lock _(sim.mutex);
+                             json lights = json::object();
+                             for (const auto& [light, at] : sim.lights)
+                             {
+                                 lights[std::to_string(light)] = {at[0], at[1], at[2]};
+                             }
+                             return json{{"worn", sim.worn}, {"inventory", sim.inventory}, {"added", sim.added}, {"saves", sim.saves},
+                                         {"save_lock", sim.gameSaveLock || sim.saveLock}, {"save_state", sim.saveState}, {"phase", sim.phase},
+                                         {"lights", lights}};
+                         }});
+
     // The kill switch's restore, simulated like XFBridgeActions.RestoreAfterKill: unfreeze and
     // show the photo-mode menu; the save lock would stay.
     const auto simulatedRestore = [] {
@@ -1052,6 +1364,53 @@ int wmain(int argc, wchar_t** argv)
         {
             queue.Drain(4); // the plugin does this once per engine tick
             {
+                // The simulated equipment system, save system and loading screen.
+                std::scoped_lock _(sim.mutex);
+                if (sim.pendingTicks > 0 && --sim.pendingTicks == 0)
+                {
+                    if (sim.pendingItem.empty())
+                    {
+                        sim.worn.erase(sim.pendingSlot);
+                    }
+                    else
+                    {
+                        sim.worn[sim.pendingSlot] = sim.pendingItem;
+                    }
+                    sim.pendingTicks = -1;
+                }
+                if (sim.unlockTicks > 0 && --sim.unlockTicks == 0)
+                {
+                    sim.gameSaveLock = false;
+                    sim.saveLock = false;
+                    sim.unlockTicks = -1;
+                }
+                if (sim.saveTicks > 0 && --sim.saveTicks == 0)
+                {
+                    sim.saves.insert(sim.saves.begin(), "ManualSave-" + std::to_string(sim.saves.size() + 1));
+                    sim.saveState = "saved";
+                    sim.saveTicks = -1;
+                    if (sim.relockAfterSave)
+                    {
+                        sim.gameSaveLock = true;
+                        sim.relockAfterSave = false;
+                    }
+                }
+                if (sim.listTicks > 0 && --sim.listTicks == 0)
+                {
+                    sim.savesReady = true;
+                    sim.listTicks = -1;
+                }
+                if (sim.loadTicks > 0 && --sim.loadTicks == 0)
+                {
+                    // A loaded save: gameplay again, every bridge lock and change gone.
+                    sim.phase = "gameplay";
+                    sim.gameSaveLock = false;
+                    sim.saveLock = false;
+                    sim.worn.clear();
+                    sim.loadTicks = -1;
+                }
+            }
+            {
                 // The simulated menu picks up a cc.open request a couple of ticks later.
                 std::scoped_lock _(sim.mutex);
                 if (sim.creatorOpenTicks > 0)
@@ -1096,6 +1455,7 @@ int wmain(int argc, wchar_t** argv)
             if (bridge.RestoreReady())
             {
                 options.Cancel();
+                messages.Clear(); // a killed bridge shows no messages (XFBridge_Messages in the plugin)
             }
             restore.Tick(bridge.RestoreReady(), simulatedRestore, restoreFailed);
             // As the plugin's tick: a client dropped for idleness gives the cursor back (RB-34).

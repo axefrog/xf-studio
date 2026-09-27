@@ -16,6 +16,7 @@
 #include "core/GameThreadQueue.hpp"
 #include "core/Layers.hpp"
 #include "core/Log.hpp"
+#include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
@@ -63,6 +64,10 @@ struct State
     // game.options.read's render options: requested by the bridge, answered by the CET layer
     // (XFBridge_OptionsWanted / XFBridge_OptionsReport). Cancelled by the kill switch.
     OptionsExchange options;
+
+    // ui.message: the coordinator's short messages under the in-game label, read by the CET layer
+    // (XFBridge_Messages). Cleared by the kill switch; a killed bridge shows none.
+    MessageBoard messages;
 
     // Reconnect after the kill switch (the CET panel's button, XFBridge_Rearm): requested from script,
     // carried out by the next Running ticks once the old listener has stopped and the kill switch's

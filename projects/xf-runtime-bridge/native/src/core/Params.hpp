@@ -21,6 +21,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/Messages.hpp"
+
 namespace xfb::params
 {
 using json = nlohmann::json;
@@ -86,13 +88,39 @@ std::vector<int32_t> CameraKeys();
 // are applied first, in that order, then the values.
 // select_after selects that light in the menu once the values are set (the undo uses it to put the
 // menu's selection back).
+// place (bridge 0.4) puts the light somewhere after its values are set:
+//   "camera"                                   switch it off and on again, which makes photo mode place it
+//                                              where the camera is now (session 3: a light is placed at the
+//                                              camera when it switches on)
+//   {azimuth, elevation, distance}             about V's head, aimed at it: degrees from V's facing
+//                                              (counter-clockwise seen from above, so 90 is V's left, -180
+//                                              to 180), degrees above level (-80 to 80) and metres (0.2 to 10);
+//                                              defaults 0, 15 and 1.2
+//   {world: [x, y, z]}                         a world position (the undo), aimed at V's head
+// The last two move the light's own entity (research: whether photo mode keeps it there is read back).
+struct LightPlacement
+{
+    enum class Kind
+    {
+        Camera,
+        Around,
+        World,
+    };
+    Kind kind = Kind::Around;
+    float azimuth = 0.0f;
+    float elevation = 15.0f;
+    float distance = 1.2f;
+    std::array<float, 3> world{};
+};
 struct LightRequest
 {
     int32_t light = 1;
     int32_t selectAfter = 0; // 0 = leave the light selected
     std::vector<Attribute> attributes;
+    std::optional<LightPlacement> place;
 };
 LightRequest ParseLight(const json& aParams);
+json PlacementJson(const LightPlacement& aPlacement);
 
 // photo.expression.set: {faceId}.
 int32_t ParseExpression(const json& aParams);
@@ -294,6 +322,52 @@ TimeRequest ParseTime(const json& aParams);
 
 // world.pause: {paused}.
 bool ParsePause(const json& aParams);
+
+// ui.message: {text (1-500 characters; shown cut to MessageBoard::kMaxChars on one line), seconds (1-600,
+// default 8), level ("info" default, "ask", "warn", "done"), clear (true removes every message; with no
+// text, only that)}.
+MessageRequest ParseMessage(const json& aParams);
+
+// The clothing slots inventory.* works on (gamedataEquipmentArea names); nothing else is touched.
+std::vector<std::string> ClothingSlots();
+
+// inventory.equip: {item: a TweakDB item record (Items.Helmet_01_basic_01), slot (one of ClothingSlots,
+// checked against the item's own), add_if_missing (default false: an item V doesn't have is refused)}.
+struct InventoryEquipRequest
+{
+    std::string item;
+    std::string slot;
+    bool addIfMissing = false;
+};
+InventoryEquipRequest ParseInventoryEquip(const json& aParams);
+
+// inventory.unequip: {slot or item (one of them), remove_added (default false: also remove the item from
+// V's inventory, only if the bridge added it this session)}.
+struct InventoryUnequipRequest
+{
+    std::string slot;
+    std::string item;
+    bool removeAdded = false;
+};
+InventoryUnequipRequest ParseInventoryUnequip(const json& aParams);
+
+// game.save: {name (a label for the logs, 1-64 letters, digits, spaces, '.', '_', '-'; the game names the
+// save itself), override_lock (default false), timeout_ms (2000-60000, default 20000)}.
+struct GameSaveRequest
+{
+    std::string name;
+    bool overrideLock = false;
+    int32_t timeoutMs = 20000;
+};
+GameSaveRequest ParseGameSave(const json& aParams);
+
+// game.load: {latest: true} or {name: a save's name in the game's list (ManualSave-12)}.
+struct GameLoadRequest
+{
+    bool latest = false;
+    std::string name;
+};
+GameLoadRequest ParseGameLoad(const json& aParams);
 
 // Refuses parameters a method doesn't know (typos must not be silently ignored). Also used for
 // methods without parameters.

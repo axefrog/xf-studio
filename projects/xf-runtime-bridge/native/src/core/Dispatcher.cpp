@@ -56,6 +56,12 @@ std::string_view AccessName(Access aAccess)
         return "write-world";
     case Access::WriteCharacter:
         return "write-character";
+    case Access::WriteInventory:
+        return "write-inventory";
+    case Access::WriteSave:
+        return "write-save";
+    case Access::Notify:
+        return "notify";
     case Access::Control:
         return "control";
     }
@@ -77,6 +83,10 @@ uint32_t WriteClassBit(Access aAccess)
         return kWriteWorld;
     case Access::WriteCharacter:
         return kWriteCharacter;
+    case Access::WriteInventory:
+        return kWriteInventory;
+    case Access::WriteSave:
+        return kWriteSave;
     default:
         return 0;
     }

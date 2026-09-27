@@ -68,13 +68,89 @@ struct LightOps
     // Waits until photo mode has loaded the newly selected light's values into its sliders.
     // Throws MethodError("timeout", ...) when that doesn't happen in time.
     std::function<void()> settle;
+    // Moves light aLight's entity (place about V or at a world position), aimed at V's head:
+    // {before: {x,y,z}, after: {x,y,z}, ...}. Throws MethodError (unavailable when the entity isn't found).
+    std::function<json(int32_t aLight, const params::LightPlacement& aPlacement)> place;
+    // Where light aLight's entity is now: {position: {x,y,z}}. Optional; throws MethodError.
+    std::function<json(int32_t aLight)> position;
 };
 
-// photo.light.set: select the light, wait for photo mode to load it, set the values, then select
-// select_after if given. On a failure after the selection changed, the previous selection is put
-// back where possible, and the message says exactly what changed. The undo restores the values
-// and, when this call changed it, the menu's selection (select_after).
+// photo.light.set: select the light, wait for photo mode to load it, set the values, place it if asked
+// (place), then select select_after if given. On a failure after the selection changed, the previous
+// selection is put back where possible, and the message says exactly what changed. The undo restores the
+// values, the light's earlier position (place: {world}) and, when this call changed it, the menu's
+// selection (select_after).
+//  - type (setting 45) isn't in every game version's menu (2.31 has no type row): when photo mode doesn't
+//    offer it, it is skipped with a note (skipped: [{name, reason}]) instead of failing the call.
+//  - place "camera" switches the light off and on again (photo mode places a light where the camera is
+//    when it switches on); a position moves the light's entity and reads it back after a few frames
+//    (held: whether photo mode kept it there).
 json LightSet(const params::LightRequest& aRequest, const LightOps& aOps);
+
+// --- inventory.equip / inventory.unequip --------------------------------------------------------------
+
+struct InventoryOps
+{
+    // Game thread, step 1 of equip: checks, adds the item if asked, queues the equip request:
+    // {item, slot, added, already_equipped, previous}.
+    std::function<json()> equip;
+    // Game thread, step 1 of unequip: {slot, previous, was_empty}.
+    std::function<json()> unequip;
+    // Game thread: what a slot holds now ({slot, item, empty}); by slot name or by an item's own slot.
+    std::function<json(const std::string& aSlot, const std::string& aItem)> slot;
+    // Game thread: removes an item the bridge added this session ({removed}).
+    std::function<json(const std::string& aItem)> removeAdded;
+    // Waits a few game ticks (the equipment system handles requests on later frames).
+    std::function<void()> settle;
+};
+inline constexpr int kInventoryPolls = 15;
+
+// inventory.equip: equip, then read the slot until it shows the item (kInventoryPolls settles). The result
+// says whether it did (equipped) and carries the undo: the earlier item back, or the slot emptied (and an
+// added item removed again).
+json InventoryEquip(const params::InventoryEquipRequest& aRequest, const InventoryOps& aOps);
+// inventory.unequip: unequip the slot (or the item's slot), read it until it's empty, then remove the item
+// if asked and the bridge added it. The undo equips the earlier item again (not after a removal).
+json InventoryUnequip(const params::InventoryUnequipRequest& aRequest, const InventoryOps& aOps);
+
+// --- game.save / game.load --------------------------------------------------------------------------
+
+struct SaveOps
+{
+    // Game thread: checks the moment, and with override_lock releases the bridge's own save lock
+    // ({lock_released}). Throws bridge_save_lock or saving_locked.
+    std::function<json()> prepare;
+    // Game thread: {locked, state} (state: none, pending, saved, failed).
+    std::function<json()> status;
+    // Game thread: asks for one new manual save ({requested}).
+    std::function<json()> save;
+    // Game thread: takes the bridge's save lock again after a released lock wasn't used.
+    std::function<void()> relock;
+    std::function<void(std::chrono::milliseconds)> sleep;
+};
+inline constexpr int32_t kSaveUnlockWaitMs = 3000;
+
+// game.save: prepare, wait for a released lock to go (kSaveUnlockWaitMs), save, then wait for the game's
+// answer (aRequest.timeoutMs). saved: {saved: true, ...}; failed: save_failed; no answer: save_uncertain.
+json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps);
+
+struct LoadOps
+{
+    std::function<json()> latest;                                         // game thread: quick-load path
+    std::function<json()> list;                                           // game thread: ask for the save list
+    std::function<json()> saves;                                          // game thread: {ready, saves: [...]}
+    std::function<json(int32_t aIndex, const std::string& aName)> load; // game thread: load that save
+    std::function<void(std::chrono::milliseconds)> sleep;
+};
+inline constexpr int32_t kSaveListWaitMs = 5000;
+
+// A save's position in the game's list: the exact name, else the one name equal ignoring case; -1 when
+// none, -2 when several match ignoring case.
+int32_t FindSave(const std::vector<std::string>& aSaves, const std::string& aName);
+
+// game.load: latest, or the save by name from the game's list (kSaveListWaitMs). The answer lists some
+// names when the name isn't found.
+json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps);
 
 // What CreatorOpen needs from the game. Each game step throws MethodError to refuse.
 struct CreatorOpenOps

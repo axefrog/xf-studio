@@ -731,7 +731,188 @@ json PhotoLightSet(const MethodContext& aContext)
             throw MethodError("timeout", "photo mode didn't load the selected light's values in time");
         }
     };
+    // Moving a light's entity (research): XFPhoto.PlaceLight, then XFPhoto.LightPosition a few ticks later.
+    ops.place = [&queue, cid](int32_t aLight, const params::LightPlacement& aPlacement) {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, aLight, aPlacement] {
+                int32_t light = aLight;
+                int32_t mode = aPlacement.kind == params::LightPlacement::Kind::World ? 2 : 1;
+                float a = mode == 2 ? aPlacement.world[0] : aPlacement.azimuth;
+                float b = mode == 2 ? aPlacement.world[1] : aPlacement.elevation;
+                float c = mode == 2 ? aPlacement.world[2] : aPlacement.distance;
+                return CallScript("XFPhoto", "PlaceLight", {"Int32", "Int32", "Float", "Float", "Float"}, {&light, &mode, &a, &b, &c}, cid);
+            },
+            "photo.light.place");
+    };
+    ops.position = [&queue, cid](int32_t aLight) {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, aLight] {
+                int32_t light = aLight;
+                return CallScript("XFPhoto", "LightPosition", {"Int32"}, {&light}, cid);
+            },
+            "photo.light.position");
+    };
     return writes::LightSet(request, ops);
+}
+
+// ui.message: a short line under the bridge's in-game label (core/Messages.hpp), drawn by the CET layer.
+// Notify class: never touches the game, so no game-thread step.
+json UiMessage(const MethodContext& aContext)
+{
+    const auto request = params::ParseMessage(aContext.params);
+    auto out = Get().messages.Post(request);
+    out["undo"] = {{"method", "ui.message"}, {"params", {{"clear", true}}}};
+    out["undo_note"] = "messages also disappear by themselves after their seconds, and the kill switch clears them";
+    if (!Get().layers.Has("cet"))
+    {
+        out["note"] = "the bridge's CET layer hasn't announced itself, so nothing may be drawn (is Cyber Engine Tweaks loaded?)";
+    }
+    return out;
+}
+
+// inventory.* and game.* (bridge 0.4): multi-step, so they run on the bridge thread and send each game step
+// through the queue (core/Writes.cpp holds the sequences, unit-tested).
+constexpr uint64_t kInventorySettleTicks = 4;
+
+writes::InventoryOps InventoryOpsFor(const std::string& aCid)
+{
+    auto& queue = Get().queue;
+    writes::InventoryOps ops;
+    ops.slot = [&queue, aCid](const std::string& aSlot, const std::string& aItem) {
+        return RunGameTask(
+            queue, Timeout(),
+            [aCid, aSlot, aItem] {
+                RED4ext::CString slot(aSlot.c_str());
+                RED4ext::CString item(aItem.c_str());
+                return CallScript("XFInventory", "Slot", {"String", "String"}, {&slot, &item}, aCid);
+            },
+            "inventory.slot");
+    };
+    ops.removeAdded = [&queue, aCid](const std::string& aItem) {
+        return RunGameTask(
+            queue, Timeout(),
+            [aCid, aItem] {
+                RED4ext::CString item(aItem.c_str());
+                return CallScript("XFInventory", "RemoveAdded", {"String"}, {&item}, aCid);
+            },
+            "inventory.remove");
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, kInventorySettleTicks, Timeout()))
+        {
+            throw MethodError("timeout", "the game didn't tick while the equipment request was handled");
+        }
+    };
+    return ops;
+}
+
+json InventoryEquipMethod(const MethodContext& aContext)
+{
+    const auto request = params::ParseInventoryEquip(aContext.params);
+    const auto cid = aContext.cid;
+    auto ops = InventoryOpsFor(cid);
+    ops.equip = [cid, request] {
+        return RunGameTask(
+            Get().queue, Timeout(),
+            [cid, request] {
+                RED4ext::CString item(request.item.c_str());
+                RED4ext::CString slot(request.slot.c_str());
+                bool add = request.addIfMissing;
+                return CallScript("XFInventory", "Equip", {"String", "String", "Bool"}, {&item, &slot, &add}, cid);
+            },
+            "inventory.equip");
+    };
+    return writes::InventoryEquip(request, ops);
+}
+
+json InventoryUnequipMethod(const MethodContext& aContext)
+{
+    const auto request = params::ParseInventoryUnequip(aContext.params);
+    const auto cid = aContext.cid;
+    auto ops = InventoryOpsFor(cid);
+    ops.unequip = [cid, request] {
+        return RunGameTask(
+            Get().queue, Timeout(),
+            [cid, request] {
+                RED4ext::CString slot(request.slot.c_str());
+                RED4ext::CString item(request.item.c_str());
+                return CallScript("XFInventory", "Unequip", {"String", "String"}, {&slot, &item}, cid);
+            },
+            "inventory.unequip");
+    };
+    return writes::InventoryUnequip(request, ops);
+}
+
+json GameSaveMethod(const MethodContext& aContext)
+{
+    const auto request = params::ParseGameSave(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    writes::SaveOps ops;
+    ops.prepare = [&queue, cid, request] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, request] {
+                bool override = request.overrideLock;
+                return CallScript("XFGame", "SavePrepare", {"Bool"}, {&override}, cid);
+            },
+            "game.save.prepare");
+    };
+    ops.status = [&queue, cid] {
+        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "SavingLocked", {}, {}, cid); }, "game.save.status");
+    };
+    ops.save = [&queue, cid, request] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, request] {
+                RED4ext::CString label(request.name.c_str());
+                return CallScript("XFGame", "Save", {"String"}, {&label}, cid);
+            },
+            "game.save");
+    };
+    ops.relock = [&queue, cid] {
+        try
+        {
+            RunGameTask(queue, Timeout(), [cid] { return CallScript("XFBridgeActions", "SaveLock", {}, {}, cid); }, "game.save.relock");
+        }
+        catch (const MethodError& e)
+        {
+            log::Warn("game.save_relock_failed", std::string("what=") + e.what(), cid);
+        }
+    };
+    ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+    return writes::GameSave(request, ops);
+}
+
+json GameLoadMethod(const MethodContext& aContext)
+{
+    const auto request = params::ParseGameLoad(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    writes::LoadOps ops;
+    ops.latest = [&queue, cid] {
+        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "LoadLatest", {}, {}, cid); }, "game.load.latest");
+    };
+    ops.list = [&queue, cid] {
+        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "ListSaves", {}, {}, cid); }, "game.load.list");
+    };
+    ops.saves = [&queue, cid] {
+        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "Saves", {}, {}, cid); }, "game.load.saves");
+    };
+    ops.load = [&queue, cid](int32_t aIndex, const std::string& aName) {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, aIndex, aName] {
+                int32_t index = aIndex;
+                RED4ext::CString name(aName.c_str());
+                return CallScript("XFGame", "LoadIndex", {"Int32", "String"}, {&index, &name}, cid);
+            },
+            "game.load");
+    };
+    ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
+    return writes::GameLoad(request, ops);
 }
 
 json PhotoHudHide(const MethodContext& aContext)
@@ -1341,6 +1522,19 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread,
                                      "Sets the in-game clock (normal play, or with the appearance screen open).", &WorldTimeSet));
     aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
+
+    // Bridge 0.4: a message line under the in-game label, V's clothing, manual saves and loading.
+    aDispatcher.Register({"ui.message", Access::Notify, RunOn::BridgeThread,
+                          "Shows a short message under the bridge's in-game label (CET layer); clear removes them.", &UiMessage});
+    aDispatcher.Register(WriteMethod("inventory.equip", Access::WriteInventory, RunOn::BridgeThread,
+                                     "Equips a clothing item (adding it to V's inventory only if asked); off unless the inventory class is allowed.",
+                                     &InventoryEquipMethod));
+    aDispatcher.Register(WriteMethod("inventory.unequip", Access::WriteInventory, RunOn::BridgeThread,
+                                     "Unequips a clothing slot (and removes an item the bridge added, if asked).", &InventoryUnequipMethod));
+    aDispatcher.Register(WriteMethod("game.save", Access::WriteSave, RunOn::BridgeThread,
+                                     "Makes one new manual save; refused while the bridge's save lock is held unless overridden.", &GameSaveMethod));
+    aDispatcher.Register(WriteMethod("game.load", Access::WriteSave, RunOn::BridgeThread, "Loads the latest save or one save by name.",
+                                     &GameLoadMethod));
 
     // A write-class probe with no game effect: proves the write gate and audit log in game.
     aDispatcher.Register({"diag.write_probe", Access::Write, RunOn::GameThread,

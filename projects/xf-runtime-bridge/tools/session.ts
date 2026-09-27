@@ -1,7 +1,7 @@
 // Scripted in-game sessions: runs a JSON script of steps through the command API and writes a
 // report folder with every screenshot and a manifest.json.
 //
-//   bun tools/session.ts <script.json> [--dry-run] [--out <dir>] [--from <step label>] [--until <step label>]
+//   bun tools/session.ts <script.json> [--dry-run] [--out <dir>] [--from <step label>] [--until <step label>] [--no-echo]
 //
 // Script format (schema "xfb/session-script-1"):
 //   {
@@ -27,6 +27,12 @@
 // text and waits for Enter. Run by a harness (no terminal), it stops cleanly at the ask, without
 // running "restore", and prints the --from label that continues after it; the report folder
 // (--out) collects every part's run in one manifest.json.
+//
+// Notes and asks are also shown to the player in the game (ui.message, under the bridge's status label),
+// so the maintainer can follow the session without leaving the game: a note for 20 s, an ask until it is
+// answered (then the messages are cleared), plus a line when the run starts and ends. Best effort: a
+// bridge that isn't there, or a build without ui.message, changes nothing (the record says echoed: false).
+// --no-echo switches it off.
 //
 // Ctrl+C stops the run after the command in flight (a wait, an ask or a game.wait ends at once),
 // runs "restore" once and records the run as "interrupted"; a second Ctrl+C exits immediately.
@@ -137,6 +143,7 @@ type StepRecord = {
   undo?: string;
   files?: Record<string, string>;
   replaced_by?: string;
+  echoed?: boolean;
 };
 
 export type SessionRunOptions = {
@@ -155,7 +162,13 @@ export type SessionRunOptions = {
    * skipped, and "restore" runs once. A command already sent to the game finishes first.
    */
   signal?: AbortSignal;
+  /** Show notes and asks in the game through ui.message (default true). */
+  echo?: boolean;
 };
+
+/** Seconds a note stays up in the game; an ask stays until answered (at most ui.message's 600 s). */
+export const ECHO_NOTE_SECONDS = 20;
+export const ECHO_ASK_SECONDS = 600;
 
 /** Resolves after ms, or at once when the signal aborts. */
 const sleep = (ms: number, signal?: AbortSignal) =>
@@ -210,8 +223,19 @@ export async function runScript(
     const outcome = await api.run(name, {}, { source: "session" });
     return outcome.ok ? outcome.result : { error: outcome.error };
   };
+  // The player's view: notes and asks under the bridge's in-game label (best effort, never a failure).
+  const echo = async (input: Record<string, unknown>) => {
+    if (options.echo === false) return false;
+    try {
+      const outcome = await api.run("ui.message", input, { source: "session" });
+      return outcome.ok;
+    } catch {
+      return false;
+    }
+  };
   const startedAt = new Date().toISOString();
   const before = { bridge: await snapshot("bridge.info"), game: await snapshot("game.status") };
+  await echo({ text: `XF session: ${script.title ?? script.name}${options.from ? ` (from ${options.from})` : ""}`, level: "info", seconds: 10 });
 
   let failed = false;
   let interrupted = false;
@@ -232,12 +256,15 @@ export async function runScript(
     } else if (planned.kind === "note") {
       record.result = planned.text;
       log(`     note: ${planned.text}`);
+      record.echoed = await echo({ text: planned.text!.slice(0, 500), level: "info", seconds: ECHO_NOTE_SECONDS });
     } else if (planned.kind === "ask") {
       record.result = planned.text;
       if (planned.step.replaced_by) record.replaced_by = planned.step.replaced_by;
       log(`     ASK: ${planned.text}`);
+      record.echoed = await echo({ text: planned.text!.slice(0, 500), level: "ask", seconds: ECHO_ASK_SECONDS });
       if (options.ask) {
         await untilAborted(options.ask(planned.text!, planned.label), stepSignal);
+        if (record.echoed) await echo({ clear: true });
       } else {
         paused = { at: planned.label, next: nextLabel(planned) };
         record.skipped = true;
@@ -322,6 +349,9 @@ export async function runScript(
     }
   }
 
+  if (!paused) {
+    await echo({ text: `XF session ${interrupted ? "stopped" : failed ? "stopped early" : "complete"}: ${script.title ?? script.name}`, level: failed ? "warn" : "done", seconds: 15 });
+  }
   const after = { bridge: await snapshot("bridge.info"), game: await snapshot("game.status") };
   api.close();
   const outcome: RunOutcome = interrupted ? "interrupted" : failed ? "failed" : paused ? "paused" : "complete";
@@ -386,7 +416,7 @@ if (import.meta.main) {
   };
   const scriptPath = args.find((a, i) => !a.startsWith("--") && !valued.includes(args[i - 1]));
   if (!scriptPath || !existsSync(scriptPath)) {
-    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask]");
+    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo]");
     process.exit(2);
   }
   const script = JSON.parse(readFileSync(scriptPath, "utf8")) as SessionScript;
@@ -434,6 +464,7 @@ if (import.meta.main) {
     from: option("--from"),
     until: option("--until"),
     ask: interactive ? askOnTerminal : undefined,
+    echo: !args.includes("--no-echo"),
     scriptPath: basename(scriptPath),
   });
   lock.release();
