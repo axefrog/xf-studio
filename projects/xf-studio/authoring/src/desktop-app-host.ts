@@ -3,10 +3,13 @@
  * Windows' per-user list of installed apps with fixed arguments (no shell), looks for the app's program under its pinned install
  * folder (`%LOCALAPPDATA%\dev.axefrog.xf-studio\<channel>\app\bin\launcher.exe`), lists this checkout's desktop `artifacts/`
  * folder for a setup program it built, and reads the site's release status. The one thing it starts, and only on the endpoint's
- * confirmed POST, is that setup program or the installed app; never a path the browser sent.
+ * confirmed POST, is that setup program or the installed app; never a path the browser sent. It starts them through the Windows
+ * shell (File Explorer), as a double-click would, so they run as ordinary programs even when this server itself runs inside a
+ * Microsoft Store app (a development server started from such an app is one): a program started directly from inside one shares
+ * its private storage, where an install is invisible to the Start menu and Electrobun's setup refuses to register it.
  */
 import { spawn } from "node:child_process";
-import { lstatSync, readdirSync, readFileSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, win32 } from "node:path";
 import { DESKTOP_APP_IDENTITY, DESKTOP_BUILD_COMMAND, DESKTOP_BUILD_FOLDER, DESKTOP_INSTALLER_FOLDER, type DesktopAppStatus } from "./desktop-app";
 
@@ -31,6 +34,8 @@ export type DesktopAppHostPort = {
   readText(path: string, maxBytes: number): string | null;
   /** Regular files in a folder (links left out), or null when it can't be read. */
   listFiles(folder: string): { name: string; bytes: number; mtimeMs: number }[] | null;
+  /** Where a path really is on disk, or null when unknown. A Microsoft Store app's private storage shows up here. */
+  physicalPath?(path: string): string | null;
 };
 
 export type DesktopAppDetection = {
@@ -67,8 +72,14 @@ async function installed(port: DesktopAppHostPort): Promise<{ info: NonNullable<
   const localAppData = port.env("LOCALAPPDATA");
   if (!localAppData || !win32.isAbsolute(localAppData)) return null;
   const identityRoot = win32.join(localAppData, DESKTOP_APP_IDENTITY);
+  // An install that exists only in a Microsoft Store app's private storage (its setup ran inside that app) isn't installed for Windows.
+  const physicalRoot = port.physicalPath?.(localAppData) ?? null;
+  const appPrivate = (path: string) => {
+    const physical = physicalRoot ? port.physicalPath?.(path) ?? null : null;
+    return !!physical && lower(physical) !== lower(win32.join(physicalRoot!, win32.relative(localAppData, path)));
+  };
   const channelOf = (path: string) => inside(identityRoot, path) ? win32.relative(identityRoot, win32.resolve(path)).split("\\")[0] || null : null;
-  const launcherIn = (paths: (string | null)[]) => paths.find((path): path is string => !!path && inside(identityRoot, path) && port.isFile(path)) ?? null;
+  const launcherIn = (paths: (string | null)[]) => paths.find((path): path is string => !!path && inside(identityRoot, path) && port.isFile(path) && !appPrivate(path)) ?? null;
   const versionIn = (channel: string, fallback: string | null) => {
     try {
       const text = port.readText(win32.join(identityRoot, channel, "app", "Resources", "version.json"), 65_536);
@@ -152,6 +163,9 @@ export function createDesktopAppHostPort(env: NodeJS.ProcessEnv = process.env, p
       if (!stat || stat.size > maxBytes) return null;
       try { return readFileSync(path, "utf8"); } catch { return null; }
     },
+    physicalPath(path) {
+      try { return realpathSync.native(path); } catch { return null; }
+    },
     listFiles(folder) {
       try {
         return readdirSync(folder, { withFileTypes: true }).filter(entry => entry.isFile()).flatMap(entry => {
@@ -163,10 +177,21 @@ export function createDesktopAppHostPort(env: NodeJS.ProcessEnv = process.env, p
   };
 }
 
+/**
+ * How a program is started: on Windows through File Explorer (a new process of the Windows shell, outside any Microsoft Store app
+ * this server may run in), except for a path with a comma, which Explorer would split; elsewhere directly.
+ */
+export function launchCommand(path: string, platform: string = process.platform, env: NodeJS.ProcessEnv = process.env): { command: string; args: string[]; cwd: string } {
+  if (platform === "win32" && !path.includes(","))
+    return { command: win32.join(env.SystemRoot || env.SYSTEMROOT || "C:\\Windows", "explorer.exe"), args: [path], cwd: win32.dirname(path) };
+  return { command: path, args: [], cwd: platform === "win32" ? win32.dirname(path) : dirname(path) };
+}
+
 /** Starts a program on its own, in its folder, and lets it outlive this server. False when it couldn't be started. */
 export function launchDetached(path: string): boolean {
   try {
-    const child = spawn(path, [], { cwd: dirname(path), detached: true, stdio: "ignore", windowsHide: false });
+    const { command, args, cwd } = launchCommand(path);
+    const child = spawn(command, args, { cwd, detached: true, stdio: "ignore", windowsHide: false });
     child.on("error", () => { /* Reported as started; the program's own window says otherwise. */ });
     child.unref();
     return true;
