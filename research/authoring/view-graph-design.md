@@ -298,7 +298,7 @@ Rigs differ in light count (the studio rig has three directional lights and a pr
 - A scene change, such as a layer update or a V switch, dirties the views of that scene.
 - A layout change dirties only the resized views.
 - The idle and Play blink dirty the views of an animating scene every frame.
-- A camera still settling after a damped move dirties the views that show it until its step falls under a hundredth of a millimetre (`platform/scene/camera-settle.ts`, one per camera node, PREV-115).
+- A camera still settling after a damped move dirties the views that show it until its step falls under a hundredth of a millimetre (`platform/scene/camera-settle.ts`, one per camera node, PREV-119).
 
 **Budget.**
 

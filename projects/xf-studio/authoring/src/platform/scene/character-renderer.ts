@@ -257,7 +257,13 @@ export function createCharacterRenderer(input: {
     }
     resolvedSkin = null;
     // The previous V is released after the new one has baked, so a tried style can share a bake it keeps (PREV-78).
-    const releasePrevious = () => previous?.dispose(kept);
+    // What the next V doesn't use is kept for a later change (the part pool), except a whole slot it no longer draws (the body turned
+    // off, clothes taken off: PREV-108) and everything when no V is shown: those leave GPU memory at once.
+    const releasePrevious = () => {
+      previous?.dispose(kept);
+      const drawn = new Set(next?.components.map(item => item.component.slot) ?? []);
+      pool.releaseWhere(item => !drawn.has(item.component.slot));
+    };
     if (!next) { rigMotion.setDeformations?.([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);

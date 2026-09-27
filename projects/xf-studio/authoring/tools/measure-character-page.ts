@@ -11,7 +11,7 @@
  * With a save copy (private: keep it outside the repository), its V is loaded first and measured instead of the default V.
  *
  * Start the server first with its own port, `XFAS_DATA_DIR` and `XFS_SETTINGS_DIR` (never 4317). Each round runs: hairstyle 12,
- * hairstyle 01, a hair colour, makeup on (four rows in one step), hide makeup, reset all, and a burst (three hairstyles dispatched
+ * hairstyle 01, a hair colour, makeup on (four rows in one step), hiding and showing the V's own makeup (a viewing setting), reset all, and a burst (three hairstyles dispatched
  * back to back, then reset all). The first round may include the host's own first preparations; later rounds show prepared changes.
  */
 import { resolve } from "node:path";
@@ -42,6 +42,17 @@ try {
     console.log(JSON.stringify({ loaded: "save", slots: await page.evaluate(`${status}.slots.map(s => s.slot + ":" + s.state)`) }));
   }
 
+  /**
+   * A viewing change (the V's own makeup shown or hidden) prepares nothing: the time to the second animation frame after it, by which
+   * the scene has drawn it.
+   */
+  const measureView = (actions: object[]) => page.evaluate(`(async () => {
+    const a = window.xfStudioPresentation.authoring;
+    const t0 = performance.now();
+    for (const action of ${JSON.stringify(actions)}) a.dispatch(action);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return { total: Math.round(performance.now() - t0), marks: [], view: true };
+  })()`);
   /** Dispatch actions (several: back to back, a burst) and wait until the V shows the last with a drawn frame. */
   const measure = (label: string, actions: object[]) => page.evaluate(`(async () => {
     const stages = ["ask", "answer", "record", "loaded", "placed", "frame"];
@@ -98,14 +109,15 @@ try {
       ["hairstyle 01", [set("head/hairstyle", h01)]],
       ["hair colour", [set("head/hair_color1", colour)]],
       ["makeup on", [makeupOn]],
-      ["hide makeup", [{ kind: "character.hideOwnMakeup" }]],
+      ["hide own makeup (viewing)", [{ kind: "character.setOwnMakeup", shown: false }]],
+      ["show own makeup (viewing)", [{ kind: "character.setOwnMakeup", shown: true }]],
       ["reset all", [{ kind: "character.resetAll" }]],
       ["burst 05→07→12", [set("head/hairstyle", h05), set("head/hairstyle", h07), set("head/hairstyle", h12)]],
       ["reset all after burst", [{ kind: "character.resetAll" }]],
     ] as [string, object[]][]) {
       const profile = process.env.XFS_MEASURE_PROFILE === label && round === 1;
       if (profile) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 200 }); await page.send("Profiler.start"); }
-      const result = await measure(label, actions) as Record<string, unknown>;
+      const result = await (label.endsWith("(viewing)") ? measureView(actions) : measure(label, actions)) as Record<string, unknown>;
       if (profile) {
         const { profile: data } = await page.send<{ profile: unknown }>("Profiler.stop");
         const out = resolve(process.env.XFS_MEASURE_PROFILE_OUT ?? "page.cpuprofile");

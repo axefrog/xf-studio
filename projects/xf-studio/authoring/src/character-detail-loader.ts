@@ -270,6 +270,12 @@ export class DetailPartPool {
   }
   /** Release every kept part (another V is shown, the context was lost, or the scene is going away). */
   clear() { this.release([...this.kept.values()]); this.kept.clear(); }
+  /** Release the kept parts `leave` names (the parts of a slot the V no longer draws at all). */
+  releaseWhere(leave: (item: LoadedCharacterComponent) => boolean) {
+    const leaving = [...this.kept].filter(([, item]) => leave(item));
+    for (const [key] of leaving) this.kept.delete(key);
+    this.release(leaving.map(([, item]) => item));
+  }
   private trim() {
     const over = () => {
       if (this.kept.size > this.limits.parts) return true;

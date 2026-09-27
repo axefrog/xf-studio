@@ -19,7 +19,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
@@ -659,14 +659,14 @@ export class NativeAnswerFiles implements NativeAnswerLedger {
     // Written again when it is gone (Clear removed it this session; NATIVE-27).
     if (!file || this.writing.has(file) || (this.known.has(file) && existsSync(file))) return;
     this.known.add(file);
-    // The folder is made once per ledger, not with a synchronous call per answer (it held the host's event loop up).
-    if (!this.folderMade) {
-      try { mkdirSync(join(this.cacheDir, "native"), { recursive: true }); this.folderMade = true; }
-      catch { return; } // Advisory: the choice is checked by preparing it next time.
-    }
     this.writing.add(file);
-    // A write that fails (the folder was removed by Clear) makes the folder again next time.
-    writeFile(file, "").catch(() => { this.folderMade = false; this.known.delete(file); }).finally(() => this.writing.delete(file));
+    // Off the event loop, and the folder made once per ledger rather than with a synchronous call per answer (that held the host up);
+    // a write that fails because Clear removed the folder makes it again and writes once more. Advisory: a marker that can't be
+    // written means the choice is checked by preparing it next time.
+    const folder = join(this.cacheDir, "native"), write = () => writeFile(file, "");
+    const made = () => mkdir(folder, { recursive: true }).then(() => { this.folderMade = true; });
+    (this.folderMade ? write().catch(() => made().then(write)) : made().then(write))
+      .catch(() => { this.known.delete(file); }).finally(() => this.writing.delete(file));
   }
 }
 
