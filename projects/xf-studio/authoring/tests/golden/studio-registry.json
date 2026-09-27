@@ -58,6 +58,7 @@
   "preview.setLightingPreset",
   "preview.setCreatorLighting",
   "preview.resetCreatorLighting",
+  "preview.setCreatorShadows",
   "preview.setExposure",
   "preview.setKeyAngle",
   "preview.setStudioLight",
@@ -80,6 +81,7 @@
   "motion.setContributions",
   "motion.setBlink",
   "motion.playBlink",
+  "motion.setPhysics",
   "quality.set",
   "quality.rebuild",
   "savedV.load",
@@ -1956,6 +1958,25 @@
     }
    }
   },
+  "preview.setCreatorShadows": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "preview.setExposure": {
    "scope": [
     "viewport"
@@ -2463,6 +2484,25 @@
    "undo": "none",
    "payload": {
     "playing": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
+  "motion.setPhysics": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
      "type": "boolean",
      "required": true,
      "from": "input"
@@ -3501,6 +3541,15 @@
    "async": false
   },
   {
+   "id": "preview.setCreatorShadows",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
    "id": "preview.setExposure",
    "family": "action",
    "scope": [
@@ -3691,6 +3740,15 @@
   },
   {
    "id": "motion.playBlink",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "motion.setPhysics",
    "family": "action",
    "scope": [
     "viewport"

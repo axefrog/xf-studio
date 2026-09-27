@@ -58,8 +58,9 @@ The main rig (`woman_base.rig`, 71 joints) is what every body clip keys. Every b
 **How the Studio uses it** [source: the Studio]:
 
 1. The host reads the player entity (`PLAYER_ENTITIES`, with every ArchiveXL patch) and takes each animated component bound to another animated component. It compiles each rig and graph, read natively, into a program (`deformation-rig.ts`) and serves it beside the character record (`rigs`).
-2. The idle (`idle-animation.ts`) runs each program on the clip's pose every frame, about 0.3 ms. It drives each joint a program solves through a virtual driver. Without a program, helper joints fall back to the rig segment nearest them (`nearestDriver`).
-3. **What it fixes:** under the nearest-segment fallback, the latissimus, scapula and chest-side joints turned with the upper arm, so lowering the arms from the bind pose pulled the torso's sides in under the ribs. With the rig, the vertices mostly weighted to them move in by 11 mm on average in the close-up idle, against 38 mm before (17 against 44 in the inventory idle) [offline: the reference V's body posed both ways].
+2. The idle (`idle-animation.ts`) runs each program on the clip's pose every frame, about 0.3 ms. It drives each joint a program solves through a virtual driver. Without a program, helper joints fall back to the rig segment nearest them (`nearestDriver`). The drawn parts' dangle components (hair with physics) come after the rigs: their chain joints follow their own rig parents, or their simulation with Hair physics on ([hair physics §4](hair-physics.md#4-what-the-studio-does)), and never fall to `nearestDriver`.
+3. **Poses play on the same rigs.** A photo-mode pose chosen in the Poses panel is a body clip on the idle's rig (`src/pose-clip.ts`, [poses §9](poses.md#9-where-this-lives-in-xf-studio)), so each program runs on the posed joints exactly as on an idle's. Strong poses are where the inferred semantics away from the A pose (twist sign, bounce slopes, the spline's curve) first show; capture ask 2 checks them.
+4. **What it fixes:** under the nearest-segment fallback, the latissimus, scapula and chest-side joints turned with the upper arm, so lowering the arms from the bind pose pulled the torso's sides in under the ribs. With the rig, the vertices mostly weighted to them move in by 11 mm on average in the close-up idle, against 38 mm before (17 against 44 in the inventory idle) [offline: the reference V's body posed both ways].
 
 ## 4. Feet states and the idles
 
@@ -84,6 +85,8 @@ This agrees with the puppets:
 - With the inventory idle, or Still (the bind pose, where the flat mesh stands flat), the feet follow the footwear.
 - Footwear always lifts them.
 
+**When a mod masks the lifted feet out.** The lifted-feet choice follows the skin tone (link `skin color`): each skin tone has its own definition in `l0_000_base__full.app`, which draws the body component's chunks 5–7 (the lower shins and feet) through a parts override on `t0_000_pwa_base__full.ent` [resource: vanilla 2.31, `basegame_1_engine` and `basegame_4_appearance`]. On the reference profile two mods ship their own copy of that `.app` (a UV texture framework, which wins, and a toggleable-feet mod) in which the **first** skin tone's plain definition (`l0_000_pwa_base__01_ca_pale`) sets that override's chunk mask to `0`, while its tone variants (`…_00_warm_ivory` and the rest) keep vanilla's mask [resource: read natively from each archive]. A parts override's chunk mask only hides (ArchiveXL ANDs it; the Modding Docs' `.app` page: "You can't un-hide something via partsOverrides") [source] [wiki], and the garment feet components those copies add hide their own chunks unless a worn item's tag rule shows them. So a barefoot V on the first skin tone, which is the creator's default choice, stands without lower shins in the creator on that profile [source + resource; runtime untested: test ask 5]. The Studio draws the same, and the Character panel says so: "Feet not shown: your installed game files hide this part for this choice, as the game would."
+
 **Before this:** a barefoot V wore flat feet under the close-up clip, so her heels sank through the floor and her toes bent: the crushed feet of the report [offline].
 
 ## 5. The nails' skin
@@ -105,6 +108,7 @@ Batch with the next session. Record the game version, ArchiveXL, and the body, U
 2. **Helper joints.** Photo mode, arms raised and a kneeling pose: close-ups of a shoulder, the torso's side under the ribs and a knee, against the Studio (when poses can play there).
 3. **Creator feet.** Creator, body page, full-body view, barefoot: the feet must stand flat (the lifted mesh under the creator's clip), as the Studio's Creator full body entry shows them.
 4. **Nails.** Creator nails section with long nails: each nail must sit on its fingertip through the hand loop.
+5. **Feet on the first skin tone** (profile with the UV texture framework). Creator, body page, full-body view, barefoot: choose the first skin tone, then the second. Expected from the files: lower shins and feet missing on the first, present on the second. If the first shows feet in game, the engine keeps a cooked component's own chunk mask against a part-scoped override (the `.app`'s cooked components keep vanilla's mask), and the resolver's rule R7 must apply part-scoped overrides only to the part's own components.
 
 ## Related pages
 

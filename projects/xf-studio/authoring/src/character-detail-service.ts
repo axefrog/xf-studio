@@ -55,6 +55,7 @@ import type { LowPriority } from "./process-tree";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import { stoppableGraph, type Provenance, type ResourceGraph } from "./resource-graph";
 import { puppetDeformationRigs, type PuppetRigs } from "./deformation-rig-host";
+import { serveDangle } from "./dangle-host";
 import { NO_TRACE, type DiagnosticTrace } from "./diagnostics/model";
 import { RESOLUTION_TRACE_OPTIONS, resolutionTrace } from "./diagnostics/resolution-trace";
 
@@ -1204,10 +1205,12 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   const toServe = coversServed || !firstCovered ? plan.components
     : plan.components.flatMap(component => component === firstCovered ? plan.censoredBody : component.censor === "covered" ? [] : [component]);
   const censoredServed = new Set<RenderComponent>();
+  const plannedOf = new Map<RenderComponent, PlannedComponent>();
   for (const component of toServe) {
     const item = coverParts.has(component) ? coverParts.get(component)! : serve(component);
     if (!item) continue;
     components.push(item);
+    plannedOf.set(item, component);
     if (plan.censoredBody.includes(component)) censoredServed.add(item);
   }
   const bodyWithdrawn = !coversServed && !!firstCovered && !censoredServed.size;
@@ -1230,6 +1233,20 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   if (bodyWithdrawn) slots.set("body", { slot: "body", state: "unavailable", label: slots.get("body")!.label, message: UNCOVERED_BODY });
   else if (!coversServed && censoredServed.size) slots.set("body", { ...slots.get("body")!, message: CENSORED_BODY });
   if (summary.scanGaps.length) whole.push("Some installed mod files could not be read; the resolved details may differ from the game.");
+  // A part skinned to a dangle component (hair with physics) carries that component's spec (dangle-host.ts); one that can't be read
+  // leaves a note, and its strands follow the head.
+  const dangleNotes = new Set<string>();
+  for (let i = 0; i < components.length; i++) {
+    const item = components[i]!, planned = plannedOf.get(item)?.dangle;
+    if (!planned) continue;
+    try {
+      const served = await serveDangle(graph, planned, options.storeRoot, log);
+      for (const line of served.notes) dangleNotes.add(`Part ${item.component} of your V's ${SLOT_WORDS[item.slot].noun}: ${line}`);
+      if (served.entry) components[i] = { ...item, dangle: served.entry };
+    } catch (error) { log(`${item.component} dangle couldn't be read: ${(error as Error)?.stack ?? error}`); }
+  }
+  if (plannedOf.size && [...plannedOf.values()].some(planned => planned.dangle)) time("dangles");
+  notes.push(...dangleNotes);
   // The puppet's deformation rigs pose the body's helper joints the way the game solves them (deformation-rig-host.ts).
   const rigs = scope === "drawn" && components.some(item => item.slot === "body") ? await serveRigs(graph, request.bodyGender, options.storeRoot, whole, log) : [];
   if (rigs.length) time("rigs");

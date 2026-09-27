@@ -26,7 +26,7 @@ const vanilla: [string, BlobFlat][] = [
   ["PhotoModePoses.idle_stand_01.acceptedWeaponConfig", { type: "CName", value: "POSE_HIDE_WEAPON" }],
   ["PhotoModePoses.idle_stand_01.poseStateConfig", { type: "CName", value: "POSE_STATE_GROUND" }],
   ["PhotoModePoses.idle_stand_01.filterOutForGarmentTags", { type: "array:CName", value: ["Coat"] }],
-  ["PhotoModePoses.idle_stand_01.disableLookAtForGarmentTags", { type: "array:CName", value: ["None"] }],
+  ["PhotoModePoses.idle_stand_01.disableLookAtForGarmentTags", { type: "array:CName", value: ["None", 'CName("None")'] }],
   ["PhotoModePoses.idle_stand_01.positionOffset", { type: "Vector3", value: [0, 0, 0.35] }],
   ["PhotoModePoses.idle_stand_01.locked", { type: "Bool", value: false }],
   ["PhotoModePoses.action_01.displayName", { type: "CName", value: "LocKey#1" }],

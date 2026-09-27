@@ -451,6 +451,8 @@ It follows the [pose library design](../animation/pose-library-design.md) §6–
 | Second view | **Open a whole-body view** in the panel creates view `v2`, sharing the scene and lights, with its own camera framed by `camera.body`. It demonstrates two views of one V: a head close-up and the whole body. |
 | Later | P0–P3 of the pose library replace the placeholder list; `BodyPosePort` becomes the character scene's, so both views pose together. |
 
+**Built (27 September, claude/pose-panel; [pose library](../animation/pose-library-design.md#8-phases-and-effort) P2–P3).** The manifest and the panel `poses.library` hold the real library: search, Stand still and Idle, Frame V, Favourites, Recent and the game's categories, one click to pose V (`features/poses/`, a part-less module service like the Save Explorer's; boundary exceptions 14 and 16). There is no `poses.menu` view tool and no second view yet: the panel is the one place to choose a pose, and a second view waits for P4. The body source is still the motion service's (`MotionActions.holdPose`; a pose plays on the idle's rig) and the held pose is stored in the workspace's `preview` block with the idle (`preview.pose`), so it moves into the character scene node with the rest of the subject's motion in P3.
+
 ### 5.2 World (non-V)
 
 | Piece | Placeholder |

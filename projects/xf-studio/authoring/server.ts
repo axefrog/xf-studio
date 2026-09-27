@@ -31,6 +31,8 @@ import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetai
 import { CREATOR_ENDPOINT, createCreatorHandler } from "./src/cc-catalogue-server";
 import { createFacialHandler, FACIAL_ENDPOINT, FacialHost, locateFacialSolver } from "./src/facial-host";
 import { createPoseHandler, POSES_ENDPOINT } from "./src/pose-catalogue-server";
+import { createPosePreferencesHandler, PosePreferencesStore } from "./src/features/poses/host/preferences-store";
+import { POSE_PREFERENCES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "./src/pose-endpoint";
 import { PoseCatalogueHost } from "./src/pose-catalogue-host";
 import { createGradingLutHandler, GRADING_LUT_ASSET_PREFIX, GRADING_LUT_ENDPOINT, GradingLutHost, serveGradingLut } from "./src/grading-lut-host";
 import { consoleEcho, hostDiagnosticsAt, hostFailure, logUnhandledRejections, setProcessDiagnostics } from "./src/diagnostics/host-log";
@@ -55,6 +57,11 @@ const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verific
 const localSettings = new LocalSettingsStore(state.settingsDirectory);
 // A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
 const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
+// The Poses panel's favourites and recent poses, per user beside the settings; a verification workspace keeps its own copy (UI-98).
+const posePreferences = new PosePreferencesStore(state.settingsDirectory);
+const posePreferencesRequest = createPosePreferencesHandler(posePreferences);
+const verificationPosePreferencesRequest = createPosePreferencesHandler(new PosePreferencesStore(verificationSettingsDirectory(dataRoot),
+  { seed: () => posePreferences.load().preferences }));
 // WolvenKit: XFS_PACKAGE_WOLVENKIT, then Local setup, then XF Studio's own copy (downloaded only with consent).
 const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),
   configured: () => process.env.XFS_PACKAGE_WOLVENKIT || localSettings.load().settings.wolvenKitCli, log: diagnostics.log.logger("wolvenkit") });
@@ -210,6 +217,8 @@ const server = Bun.serve({
     if (url.pathname === CHARACTER_DETAIL_ENDPOINT) return characterDetailRequest(request);
     if (url.pathname === CREATOR_ENDPOINT) return creatorRequest(request);
     if (url.pathname === POSES_ENDPOINT) return poseRequest(request);
+    if (url.pathname === POSE_PREFERENCES_ENDPOINT) return posePreferencesRequest(request);
+    if (url.pathname === VERIFICATION_POSE_PREFERENCES_ENDPOINT) return verificationPosePreferencesRequest(request);
     if (url.pathname === GRADING_LUT_ENDPOINT) return gradingLutRequest(request);
     if (url.pathname === FACIAL_ENDPOINT || url.pathname.startsWith(`${FACIAL_ENDPOINT}/`)) return facialRequest(request);
     if (url.pathname === "/api/wolvenkit") return wolvenKitRequest(request);

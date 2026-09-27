@@ -352,3 +352,28 @@ test("a record keeps well-formed deformation rigs with a drawn body, and leaves 
   expect(parseCharacterDetail(bodyless).rigs).toBeUndefined();
   expect(parseCharacterDetail(character()).rigs).toBeUndefined();
 });
+
+test("a garment component carries its item's visual tags (the photo-mode outfit filter reads them); bad tags are refused, absent ones are fine", () => {
+  const record = character();
+  const body = record.components.find(item => item.slot === "body")!;
+  const garment = { ...body, id: "clothing:outer:7", slot: "clothing" as const, option: "OuterChest", morphs: undefined,
+    garment: { area: "OuterChest", item: "123", layer: 80, tags: ["Coat", "hide_T1"] } };
+  const parsed = parseCharacterDetail({ ...record, components: [...record.components, garment] });
+  expect(parsed.components.find(item => item.slot === "clothing")?.garment).toEqual({ area: "OuterChest", item: "123", layer: 80, tags: ["Coat", "hide_T1"] });
+  const untagged = parseCharacterDetail({ ...record, components: [...record.components, { ...garment, garment: { area: "OuterChest", item: "123", layer: 80 } }] });
+  expect(untagged.components.find(item => item.slot === "clothing")?.garment).toEqual({ area: "OuterChest", item: "123", layer: 80 });
+  // A component whose tags aren't CNames is refused (the record keeps its other parts, as for any invalid component).
+  const refused = parseCharacterDetail({ ...record, components: [...record.components, { ...garment, garment: { ...garment.garment, tags: ["not a tag!"] } }] });
+  expect(refused.components.some(item => item.slot === "clothing")).toBe(false);
+});
+
+test("a part skinned to a dangle component keeps a well-formed dangle entry; a malformed one is left out and the part stays", () => {
+  const dangle = { component: "hair_dangle", rig: "base\hair_dangle.rig", graph: "base\hair_dangle.animgraph", file: `${sha("9")}.json`, sha256: sha("9") };
+  const withDangle = (entry: unknown) => { const record = character(); (record.components[2] as unknown as Record<string, unknown>).dangle = entry; return record; };
+  expect(parseCharacterDetail(withDangle(dangle)).components[2]!.dangle).toEqual(dangle);
+  for (const broken of [{ ...dangle, file: "../x.json" }, { ...dangle, sha256: sha("8") }, { ...dangle, component: "" }, "hair_dangle"]) {
+    const parsed = parseCharacterDetail(withDangle(broken));
+    expect(parsed.components[2]!.slot).toBe("hair");
+    expect(parsed.components[2]!.dangle).toBeUndefined();
+  }
+});

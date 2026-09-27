@@ -1,11 +1,11 @@
 # Hair and dangle physics in the preview: plan
 
-**Status: design, 27 September 2026. Nothing in the Studio is built; P0's executable read is done ([§3.1](#31-data-path-p0) step 5).** Answers the question "does the Studio support the bones in hairstyles that give them physics?" (today: no) and plans how the preview should. The facts it builds on, with evidence grades, are in [hair and jewellery dangle physics](../../knowledge/hair-physics.md); this page holds the design, the phases and the provenance.
+**Status: P0–P3 built in `claude/hair-physics` (27 September 2026), off by default until the in-game calibration (P4); P5 partly ([§6](#6-phases-and-effort)).** Answers the question "does the Studio support the bones in hairstyles that give them physics?" (now: yes, from each hairstyle's own files, behind a switch until checked in game) and plans how the preview should. The facts it builds on, with evidence grades, are in [hair and jewellery dangle physics](../../knowledge/hair-physics.md); this page holds the design, the phases and the provenance.
 
 ## 1. Summary
 
 - **In game**, a hairstyle with physics adds one `entAnimatedComponent` per swinging part: a small rig (a copy of V's upper-body joints plus chains of `dyng_*` joints hanging from `Head`) and an animation graph whose one working node is a particle simulation, `animDangleConstraint_SimulationDyng`. The graph holds every parameter: per-joint mass, damping, pull toward the animated pose, whether the joint is fixed, link lengths, cone angle limits, a few capsules on V's shoulders, neck, chest and sometimes head, gravity, a fixed 0.01 s substep [resource]. Worn physics earrings use the same machinery. 84 of the 85 vanilla hair graphs and every modded one inspected use this one simulation class, and popular CCXL packs ship byte-identical copies of vanilla sets.
-- **In the Studio today** the dangle components are dropped by the resolver, and the chain joints ride the idle rigidly, each joint on whichever body segment is nearest: a strand's root on the head, its tip on the shoulder [offline]. There is no gravity, inertia or collision.
+- **In the Studio** each drawn part skinned to a dangle component carries that component's spec; its chains follow their own rig parents (the shear of PREV-110 is gone), and the Motion panel's Hair physics switch runs the game's simulation on them ([knowledge §4](../../knowledge/hair-physics.md#4-what-the-studio-does)).
 - **The plan** is one data-driven solver for that simulation class, fed by each part's own rig and graph, never by per-style or per-mod values:
   1. read and keep the dangle components (P0);
   2. make every chain follow its own rig parent rigidly, which removes today's shear on its own (P1);
@@ -36,9 +36,9 @@ Anything else in a graph (another simulation class, a node other than the five-n
 ### 3.1 Data path (P0)
 
 1. **Resolver.** `ResolvedComponent` keeps animated components: name, `rig` and `graph` depot paths, `controlBinding` and `parentTransform` bind names. Mesh components keep their `skinning.bindName`. Both follow the game's own reading of the `.app`/`.ent`, including duplicate names (first one per name until H4 answers otherwise; the choice is recorded in the record's notes).
-2. **Native reader.** Add the dangle classes to the RTTI subset (`tools/native-rtti-subset.ts`): `animAnimGraph`'s node types on the spine (`animAnimNode_Dangle`, `_PoseLsToMs`, `_PoseMsToLs`, `_SharedMetaPose`, `_ReferencePoseTerminator`, `_Output`, `_VectorInput`), `animDangleConstraint_Simulation*`, `animDyng*`, `animCollisionRoundedShape`, `animAnimFeatureEntry`. `animRig` is already there. Parity with WolvenKit's JSON on the graphs of §9 is the test, as for every other class.
-3. **`DangleSpec` reader** (a new pure module, proposed name `dangle-spec`): rig + graph → `{ component, drivenBy, baseJoints, chains: [{ joints, fixed }], particles, links, cones, ellipsoids, shapes, gravity, externalForce, substep, iterations, alpha, lookAt, unsupported[] }`, in game space (Z up, the rig's own frames), with class defaults filled in (`mass` 1, `damping` 1, `isFree` true, capsule axis (0.5, 0, 0)). It knows no hairstyle or mod.
-4. **Render record.** A `dangles` list on each character detail: the spec's identity (depot paths and hashes), the meshes it drives, and its diagnostics. The spec itself is served next to the GLB like other derived data and cached by content hash, so a CCXL pack that copies a vanilla set shares one cached spec.
+2. **Native reader.** Not needed for P0: `animRig` and `animAnimGraph` are not verified native roots, so the host reads both through WolvenKit (cached after the first read), and the spec reader fills WolvenKit's class defaults itself, so a native answer with the dangle classes left out of the RTTI subset would give the same spec. Verifying both roots with the differential harness on the §10 set, and adding them, is NATIVE-64 (it saves about 3.5 s a file on a hairstyle's first preparation).
+3. **`DangleSpec` reader** (`src/dangle-spec.ts`, built): rig + graph → `{ joints, reference, simulation: { substepTime, iterations, alpha, lookAt, gravity, externalForce, externalLinked, particles, constraints, shapes } | null, notes }`, in game space (Z up, the rig's own frames), with WolvenKit's class defaults filled in. Base joints are not listed: at run time every rig joint V has by name is a base joint. It knows no hairstyle or mod.
+4. **Render record** (built): each drawn component skinned to a dangle component carries `dangle: { component, rig, graph, file, sha256 }`, the spec stored content-addressed beside the records (`src/dangle-host.ts`), so a CCXL pack that copies a vanilla set shares one stored spec. Optional and additive; a malformed entry is left out and the part still draws. Specs that can't be simulated add a plain record note.
 5. **Executable read** (R&D inside P0). **Done, 27 September 2026.** The Dyng update in the 2.31 `Cyberpunk2077.exe` was located through the class's RTTI and read with Capstone (the `dangle` mode of [`exe_hair.py`](../materials/shader-system/exe_hair.py)). It covers the substep count and length, integration, drag, pull, mass, gravity and external force, link, cone and ellipsoid projection and their order, rounded-shape collision, look-at output and `alpha`. The pseudocode and test vectors are in [knowledge §5](../../knowledge/hair-physics.md#5-solver-arithmetic-231-executable); addresses are in [§10](#10-evidence-and-sources). Still unread: the source of the per-frame mode (world-space inertia or not), the shape branches other than Z-capsules, the cone capsule's rotation solve and the `…AltersTransforms…` branches, none of which any vanilla hair graph needs except the mode.
 
 ### 3.2 Rigid chains first (P1)
@@ -67,7 +67,7 @@ Everything runs in game space; the adapter converts V's driven joints from Three
 
 **Driving.** The base joints take the pose of the component named by `controlBinding`: `root` means V's clip joints, `deformations` the helper-joint solve (§5). The preview's V never walks, so world motion is only the pose and idle, and the game's world-motion mode (mode 1, which carries the particle state through the character's world transform) is not needed. Gravity is turned into model space by V's world rotation, which in the preview is fixed. Orbiting the camera is not character motion and must not move the hair.
 
-**Settle at rest.** When the body source is still (idle off, a held pose), the solver starts from the rigid chains and runs until settled: every free particle's speed under 1 mm/s for 0.2 simulated seconds, capped at 3 s (300 substeps). It runs in slices of at most 2 ms per frame, then stops and the viewport stops drawing. This gives the drape a pose would have after standing still: long hair lying on the shoulders, strands hanging with gravity when the head tilts. It re-settles on a pose change, a hair change, a body-shape change or switching physics on. A discrete jump (choosing a pose) resets to the rigid chains of the new pose first rather than simulating a whip between poses. The game's own reset does the same: on the graph's first evaluation and in its reset mode, every particle is placed on the pose with zero velocity and only the constraints run. The settle pass itself is a Studio addition; the game has none.
+**Settle at rest.** When the body source is still (idle off, a held pose), the solver starts from the rigid chains and runs until settled: every particle moving less than 1 mm/s (measured by displacement: a particle resting on a constraint keeps a stored half kick) for 0.2 simulated seconds, capped at 3 s (300 substeps). It runs in one go (1.4–6 ms on the vanilla sets), then the viewport stops drawing. This gives the drape a pose would have after standing still: long hair lying on the shoulders, strands hanging with gravity when the head tilts. It re-settles on a pose change, a hair change, a body-shape change or switching physics on. A discrete jump (choosing a pose) resets to the rigid chains of the new pose first rather than simulating a whip between poses. The game's own reset does the same: on the graph's first evaluation and in its reset mode, every particle is placed on the pose with zero velocity and only the constraints run. The settle pass itself is a Studio addition; the game has none.
 
 ### 3.5 Determinism
 
@@ -82,7 +82,7 @@ Everything runs in game space; the adapter converts V's driven joints from Three
 - **A scene-node setting, not a per-view one.** In the [view graph](../authoring/view-graph-design.md) a scene node owns the subject's motion (idle, blink, later a pose). Physics joins that group as `motion.physics: "off" | "on"`. A simulation is state of the scene, so two views linked to one scene show the same hair. A view that wants physics off while its neighbour has it on forks the scene, as for any other difference in content. Offering a per-view switch that silently runs two simulations of one V would break the "one source, many views" model and double the cost.
 - **Derived nodes.** `DangleSpec` is derived data of each resolved component (a graph node keyed by content hash); the solver instance is derived from the spec set and the scene's motion. A hairstyle change swaps only the affected specs.
 - **Surfaces.** A character-scene view tool beside Idle ("Hair physics"), the Motion panel's switch and a palette command, all through one typed action (`motion.setPhysics`) with a capability that refuses in plain words when nothing on V has physics ("This hairstyle doesn't move on its own") or when a part's graph is unsupported. The detail status line and the Activity view report what is simulated.
-- **Default off** until P4. After the session the default becomes the maintainer's call (question Q1).
+- **Default off** until P4; decided: on by default after calibration (Q1).
 
 ### 3.7 Performance budget
 
@@ -110,14 +110,21 @@ That branch (running) evaluates `woman_base_deformations.animgraph` for the body
 
 ## 6. Phases and effort
 
-| Phase | Scope | Depends on | Effort |
-|---|---|---|---|
-| **P0 Data and decode** | Resolver keeps animated components and skinning binds; native RTTI subset gains the dangle classes with WolvenKit parity; `DangleSpec` reader and record field; the executable read of the Dyng update (§3.1 step 5, **done**) | – | 2–3 days left (the executable read is done) |
-| **P1 Rigid chains** | Chain joints follow their rig parent; the earrings' by-name rule (§3.3); tests that every chain joint of the §9 rigs binds to `Head` | P0's spec reader (or the `.rig` alone); after body-fidelity merges | 1 day |
-| **P2 Solver** | The solver module per §3.4, settle-at-rest, determinism tests (run-to-run identity, frame-rate independence), constraint and collision unit tests, golden trajectories for `hh_033` and `hh_107` under a scripted head turn | P0 | 4–6 days |
-| **P3 Integration** | Motion pipeline order (§5), `motion.physics` on the scene node, `motion.setPhysics` action and capability, view tool, Motion panel switch, render-on-demand keep-alive while unsettled, seek and capture handling, diagnostics and Activity entries, `?verify=1` acceptance | P1, P2; view graph P1 for the scene node (until then, preview state like the idle switch) | 2–3 days |
-| **P4 Calibration** | One prepared session (H1–H6); compare motion and drape; fix formulas from evidence, never per-style constants; decide the default | P3, session | 1–2 days |
-| **P5 Worn items and other dangles** | Worn physics earrings and other dangle items through the clothing path; the same solver and cap | P3; clothing phases 5–6 for modded items | 1 day |
+| Phase | Scope | Depends on | Effort | Status |
+|---|---|---|---|---|
+| **P0 Data and decode** | Resolver keeps animated components and skinning binds; `DangleSpec` reader and record field; the executable read of the Dyng update (§3.1 step 5) | – | 2–3 days | **Done** (27 September): `ComponentModel.skinning` and `.animated`, `dangleOf`, `dangle-spec.ts`, `dangle-host.ts`, the record's `dangle`. The native roots are NATIVE-64 |
+| **P1 Rigid chains** | Chain joints follow their rig parent; the earrings' by-name rule (§3.3); tests that chain joints bind to `Head` | P0; after body-fidelity merges | 1 day | **Done**: PREV-110 fixed (`IdleAnimation` binds chain joints to their part's drivers; `tests/dangle-motion.test.ts`). The by-name rule for a mesh bound to V's skeleton takes the one dangle component that skeleton controls (H5 still open) |
+| **P2 Solver** | The solver module per §3.4, settle-at-rest, determinism tests (run-to-run identity, frame-rate independence), constraint and collision unit tests | P0 | 4–6 days | **Done**: `dangle-solver.ts` with the §5.6 vectors, determinism, the settle rule (`tests/dangle-solver.test.ts`); the real `hh_033` and `hh_107` specs run in 10–15 µs a frame [offline] |
+| **P3 Integration** | Motion pipeline order (§5), `motion.physics` on the scene node, `motion.setPhysics` action and capability, Motion panel switch, render-on-demand, seek and capture handling | P1, P2 | 2–3 days | **Done**, with the choices below. Not built: a view-tool button beside Idle and Activity entries (the switch and the palette's action cover it) |
+| **P4 Calibration** | One prepared session (H1–H6); compare motion and drape; fix formulas from evidence, never per-style constants; then physics on by default (Q1) | P3, session | 1–2 days | Waiting for the session |
+| **P5 Worn items and other dangles** | Worn physics earrings and other dangle items through the clothing path; the same solver and cap | P3; clothing phases 5–6 for modded items | 1 day | **Partly**: any worn item's mesh skinned to a dangle component, or to V's skeleton with one dangle component that skeleton controls, gets the same spec, chains and switch (Q3); not checked on a worn earring in the browser, and no cap on the number of worn dangles yet |
+
+**Choices made in P3** (each easy to revisit after P4):
+
+- **Pause freezes the hair where it is**, and a paused seek shows the motion at that time; only V standing still (Body: Still) shows the settled drape. A paused idle is a moment of motion, and a paused world is predicted to freeze the dangles in game (§5.1, H2). A held *pose* (the pose panel, later) should settle.
+- **The body is shown at the last game frame's time** while physics runs (at most 1/60 s behind the motion clock), so the hair and the body always agree and captures don't depend on the display's rate.
+- **Settle runs in one go**, not in 2 ms slices: it costs 1.4–6 ms on the vanilla sets [offline].
+- **Order per frame:** body clip → deformation rigs → dangles → skinning. A dangle's base joints are V's joints by name (the clip's, or a deformation rig's for joints only it solves), which serves both the `root` and `deformations` conventions without reading `controlBinding`.
 
 P1 is useful on its own and small. P0 + P2 + P3 give a working, switchable simulation in about two weeks; P4 makes it trustworthy.
 
@@ -146,9 +153,10 @@ A later bridge command reading the dangle component's joint transforms per frame
 
 ## 9. Questions for the maintainer
 
-1. **Q1 Default.** After calibration, should hair physics be on by default when the idle plays? *Proposed:* on with the idle and for held poses (settled), off while the idle is paused, with the switch always available.
-2. **Q2 Per-view.** Is one setting per scene (all views of the same V agree; fork the scene for a difference) acceptable? *Proposed:* yes (§3.6).
-3. **Q3 Worn items.** Should worn physics earrings and other dangle items follow the same switch? *Proposed:* yes, one switch for everything that dangles.
+1. **Q1 Default.** Decided: on by default after calibration, off until then; the switch always available.
+2. **Q2 Per-view.** Decided: one setting per scene (all views of the same V agree; fork the scene for a difference; §3.6).
+3. **Q3 Worn items.** Decided: worn physics earrings and other dangle items share the same switch.
+4. **Q4 Pause** (new). A paused idle now freezes the hair where it is (§6's choices); should it settle instead, as a held pose will?
 
 ## 10. Evidence and sources
 
@@ -191,6 +199,8 @@ Inspected on 27 September 2026, read-only; private extractions in the session sc
 | `0x3468bc0`, `0x3468b70`, `0x3468ad0`, `0x3468b20`, `0x3468c10` | Values of `Dangle/MaxPhysicsStepsCount`, `…PhysicsStepsCountLowPassFilterRc`, `…MinTimeDilatation`, `…MaxTimeDilatation`, `…SolverIterationsWhenSkippingPhysics` |
 
 Field offsets were matched to names with RED4ext.SDK `ad727771` (`Generated/anim/DyngParticle.hpp`, `DyngConstraint*.hpp`, `DangleConstraint_Simulation*.hpp`, `CollisionRoundedShape.hpp`) and enum values with WolvenKit `7876aae07` (`animDyngConstraintLinkType`, `animPendulumConstraintType`, `animPendulumProjectionType`, `animDyngParticleProjectionType`). The test vectors on the knowledge page were computed in single precision from the decoded rules with a throwaway script; they are derivations, not captures.
+
+**Browser check of P0–P3** (27 September 2026; `tools/hair-physics-look.ts` in headless Chrome, `?verify=1`, own port, disposable data, the reference MO2 route read only; private captures in the worktree's ignored `evidence/screenshots/hair-physics/`). The default V's hairstyle 1 (`hh_033`) arrived with one dangle part (43 chain bones bound to its drivers, simulated, no notes); the host read its rig and graph in 0.26 s (WolvenKit, cached). Standing still, Hair physics on settled the strands up to about 5 cm from their authored shape, mostly toward the face and down, against about 14 cm with the cones left out [offline, same spec]: the cones hold the drape. Under the inventory idle (10 frames 0.3 s apart, each re-simulated from the loop's start), the strands' tips travelled 5.5–7.5 cm with physics off (rigid on the head) and 6.8–11.1 cm with it on. The only console message was a shader compiler's precision warning. Whether this matches the game is P4's question.
 
 **Census.** Class names were counted in the raw CR2W name tables of the 525 vanilla `.animgraph` files of the expressions extraction (85 under `base\characters\common\hair`): 84 hair graphs have `animAnimNode_Dangle` with `animDangleConstraint_SimulationDyng`, 41 have `animCollisionRoundedShape`, 7 `animDyngConstraintEllipsoid`, 1 (`hh_033`) `DangleExternalInput`. Across all 525: `…SimulationPendulum` 6 (vehicles), `…SimulationSpring` 1 (`i1_002_wa_wrist__dawn__dangle`).
 

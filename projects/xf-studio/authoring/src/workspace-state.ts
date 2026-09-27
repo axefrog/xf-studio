@@ -16,7 +16,7 @@ import {parseGlitterChoices, type GlitterChoices} from "./engines/layered-makeup
 import { defaultUIPreferences, parseUIPreferences, type UIPreferences } from "./ui-preferences";
 import { isCreatorName } from "./creator-names";
 import { storedCharacterOf, type StoredCharacter } from "./character-context-actions";
-import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, validCreatorLighting, type CreatorLightingOptions,
+import { DEFAULT_CREATOR_LIGHTING, DEFAULT_LIGHTING_PRESET, LIGHTING_PRESETS, readCreatorLighting, storedCreatorLighting, type CreatorLightingOptions,
   type LightingPreset } from "./creator-lighting";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights, STUDIO_EXPOSURE_RANGE, STUDIO_KEY_ANGLE_RANGE, validStudioLights, type StudioLights } from "./studio-lighting";
 import type { ViewGraphData } from "./platform/api/view-graph";
@@ -52,6 +52,11 @@ export type PreviewState = {
    */
   uncensored?: boolean;
   /**
+   * Whether the scene simulates its V's dangles (hair and worn items with physics; `motion.setPhysics`, hair-physics-plan.md §3.6). Absent
+   * means off, the default until the in-game calibration: it is written only once the viewer changes it.
+   */
+  physics?: boolean;
+  /**
    * Retired: the piercing style an earlier build tried on the V (`character.tryChoice`): a switcher choice and a definition of the option
    * it activates. Read so an untouched workspace writes it back unchanged, and so the character context can turn it into the matching
    * Piercings choices once the catalogue is ready (CORE-74); nothing writes new values here.
@@ -78,6 +83,11 @@ export type PreviewState = {
    * only when another is chosen, so a workspace that never chooses keeps its bytes.
    */
   idleClip?: string;
+  /**
+   * The photo-mode pose V holds (pose-library-design.md decision Q9: view state, like the camera; never in looks, Undo or exports): its
+   * TweakDB record and label. Present only while a pose is the body source.
+   */
+  pose?: { id: string; label: string };
 };
 export const WORKSPACE_1 = "xfas/workspace-1";
 export const WORKSPACE_2 = "xfs/workspace-2";
@@ -192,7 +202,11 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
     if (typeof p.eyeOwnRoughness === "boolean") state.preview.eyeOwnRoughness = p.eyeOwnRoughness;
     if (typeof p.body === "boolean") state.preview.body = p.body;
     if (typeof p.uncensored === "boolean") state.preview.uncensored = p.uncensored;
+    if (typeof p.physics === "boolean") state.preview.physics = p.physics;
     if (typeof p.idleClip === "string" && /^[a-z0-9][a-z0-9-]{0,39}$/.test(p.idleClip) && p.idleClip !== "closeup") state.preview.idleClip = p.idleClip;
+    const pose = p.pose as { id?: unknown; label?: unknown } | undefined;
+    if (pose && typeof pose === "object" && typeof pose.id === "string" && pose.id.length <= 512 && /^[A-Za-z0-9_.\-$#]+$/.test(pose.id) &&
+      typeof pose.label === "string" && pose.label.length <= 200 && !/[\u0000-\u001f]/.test(pose.label)) state.preview.pose = { id: pose.id, label: pose.label };
     // The retired tried piercing style (the shared creator name rule): written back unchanged, and migrated by the character context.
     if (isCreatorName(p.piercingStyle, true) && isCreatorName(p.piercingDefinition, true)) {
       state.preview.piercingStyle = p.piercingStyle; state.preview.piercingDefinition = p.piercingDefinition;
@@ -207,8 +221,9 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
       if (finite(p[key], min, max)) state.preview[key] = p[key];
     state.preview.eyeShape = Math.round(state.preview.eyeShape);
     if (LIGHTING_PRESETS.includes(p.lightingPreset)) state.preview.lightingPreset = p.lightingPreset;
-    if (validCreatorLighting(p.creatorLighting)) state.preview.creatorLighting = { intensity: p.creatorLighting.intensity,
-      cone: p.creatorLighting.cone, exposure: p.creatorLighting.exposure };
+    // Options saved before the shadow switch read with shadows on.
+    const creatorLighting = readCreatorLighting(p.creatorLighting);
+    if (creatorLighting) state.preview.creatorLighting = creatorLighting;
     // All or nothing: a damaged or partial rig falls back to the original one.
     const lights = (p as { studioLights?: unknown }).studioLights;
     if (validStudioLights(lights)) state.preview.studioLights = { environment: lights.environment, key: lights.key,
@@ -320,8 +335,9 @@ export function serializeWorkspace(state: WorkspaceState, model: DocumentModel,
     parts: registry.minimalLook({ id: "", name: "", revision: 1, parts: loose.parts }, false).parts,
     memory: registry.writeMemory(loose.memory, options) };
   // The studio rig is stored only when adjusted: workspaces that never touch it keep their bytes (studio-lighting.ts).
-  const { studioLights, ...preview } = view.preview;
-  const storedPreview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? preview : view.preview;
+  // The creator calibration is stored as the untouched token at its defaults, and its shadow switch only when off (creator-lighting.ts).
+  const { studioLights, ...preview } = { ...view.preview, creatorLighting: storedCreatorLighting(view.preview.creatorLighting) as CreatorLightingOptions };
+  const storedPreview = sameStudioLights(studioLights, DEFAULT_STUDIO_LIGHTS) ? preview : { ...preview, studioLights };
   return { schema: WORKSPACE_2, ...(look ? { look } : {}), features, ...view, preview: storedPreview,
     ...(collections ? { collections: writeCollectionWorkspace(collections, model, options) } : {}) };
 }

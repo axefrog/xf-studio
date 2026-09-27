@@ -25,7 +25,7 @@ import { writeFileAtomic } from "./derived-cache";
 import { depotHash, refFromHash } from "./depot-path";
 import { ANIM_DECODER_VERSION, type AnimClip, type AnimRig, type AnimSetIndex, sampleClip } from "./native/anim-set";
 import type { NativeAnimOutcome, NativeAnimRequest } from "./native/anim-decode";
-import { buildPoseCatalogue, POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseBodyGender, type PoseCatalogueLoad, type PoseCatalogueState, type PoseSample, type PoseSet,
+import { buildPoseCatalogue, POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseBodyGender, type PoseCatalogueLoad, type PoseCatalogueState, type PoseMotion, type PoseSample, type PoseSet,
   type PoseTimings } from "./pose-catalogue";
 export { POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseCatalogueLoad, type PoseCatalogueState, type PoseSample, type PoseTimings } from "./pose-catalogue";
 import type { Installation, InstallationOptions } from "./resolver-host";
@@ -333,6 +333,37 @@ export class PoseCatalogueHost {
     });
     const tracks: Record<string, number> = {};
     for (const [index, value] of sampled.tracks) tracks[rig.tracks[index] ?? `track${index}`] = value;
-    return { schema: POSE_SAMPLE_SCHEMA, id, clip: { name: clip.name, set: entry.clip.set, frames: clip.frames, duration: clip.duration }, time, rig: rigPath, joints, tracks };
+    const motion = entry.clip.animated ? clipMotion(clip, rig) : null;
+    return { schema: POSE_SAMPLE_SCHEMA, id, clip: { name: clip.name, set: entry.clip.set, frames: clip.frames, duration: clip.duration }, time, rig: rigPath, joints, tracks,
+      ...(motion ? { motion } : {}) };
   }
+}
+
+/** Most frames a moving pose sends (a 361-frame clip is the longest surveyed); longer clips are sampled more sparsely over their length. */
+export const MOTION_FRAMES = 1024;
+const CHANNEL_NAMES = { position: "translation", rotation: "rotation", scale: "scale" } as const;
+const round = (value: number) => Math.round(value * 1e6) / 1e6;
+/**
+ * A moving clip's changing channels, sampled at every frame over its length (at most `MOTION_FRAMES`): the channels its animated keys
+ * address, each a flat array of 3 (translation, scale) or 4 (rotation) values per frame, rounded to 1e-6 (the 16-bit keys are coarser).
+ * Null for a clip without animated keys or length.
+ */
+export function clipMotion(clip: AnimClip, rig: AnimRig): PoseMotion | null {
+  if (!(clip.duration > 0) || clip.frames < 2 || !clip.keys.length) return null;
+  const frames = Math.min(clip.frames, MOTION_FRAMES), rate = (frames - 1) / clip.duration;
+  const addressed = new Map<string, { joint: number; channel: "position" | "rotation" | "scale" }>();
+  for (const key of clip.keys) if (rig.bones[key.joint] !== undefined) addressed.set(`${key.joint}|${key.channel}`, { joint: key.joint, channel: key.channel });
+  if (!addressed.size) return null;
+  const channels = [...addressed.values()].sort((a, b) => a.joint - b.joint || a.channel.localeCompare(b.channel))
+    .map(({ joint, channel }) => ({ joint, channel, values: [] as number[] }));
+  for (let frame = 0; frame < frames; frame++) {
+    const sampled = sampleClip(clip, frame / rate);
+    for (const channel of channels) {
+      const joint = sampled.joints.get(channel.joint), reference = rig.reference[channel.joint]!;
+      const value = channel.channel === "rotation" ? joint?.rotation ?? reference.rotation : channel.channel === "position" ? joint?.translation ?? reference.translation
+        : joint?.scale ?? reference.scale;
+      for (const component of value) channel.values.push(round(component));
+    }
+  }
+  return { rate, frames, channels: channels.map(channel => ({ bone: rig.bones[channel.joint]!, channel: CHANNEL_NAMES[channel.channel], values: channel.values })) };
 }

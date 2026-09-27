@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { extendSkin } from "../../skin";
+import { extendSkin, fullSkinDepthMaterial } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
@@ -109,6 +109,9 @@ export function createCharacterRenderer(input: {
     lashes: RENDER_ORDER.lashes, hair: 0, eyes: 0, teeth: RENDER_ORDER.skin, piercings: 0, body: RENDER_ORDER.skin, clothing: RENDER_ORDER.skin };
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
+  const SHADOW_CASTER_SLOTS = new Set<DetailSlot>(["skin", "body", "clothing"]);
+  head.castShadow = true;
+  head.customDepthMaterial = fullSkinDepthMaterial(head);
   let characterDetails: LoadedCharacterDetails | null = null;
   /**
    * How the resolved skin is shown (head-skin-placement.ts): on the core head when the launch route's head is
@@ -264,7 +267,7 @@ export function createCharacterRenderer(input: {
       const drawn = new Set(next?.components.map(item => item.component.slot) ?? []);
       pool.releaseWhere(item => !drawn.has(item.component.slot));
     };
-    if (!next) { rigMotion.setDeformations?.([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
+    if (!next) { rigMotion.setDeformations?.([]); rigMotion.setDangles?.([]); releasePrevious(); publishedBakeLimits = "[]"; applySkin(); applyEyes(); publishView(); return { limits: [] }; }
     // The same placement the brow decals were projected with (decided once per loaded skin).
     const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
     if (skinItem) {
@@ -284,6 +287,12 @@ export function createCharacterRenderer(input: {
       const shells = new Set<THREE.Mesh>(item.eyes?.shells.map(entry => entry.mesh) ?? []);
       for (const mesh of item.meshes) {
         mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
+        // The skin, body, clothing and hair strands cast the lights' shadows (lighting-preset-stage.ts); eyes, decals and lashes don't.
+        const material = mesh.material as THREE.MeshStandardMaterial;
+        // Hair strands (alpha-to-coverage cards) cast by their coverage; the cap decal and the other hair parts don't.
+        const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;
+        mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
+        if (mesh.castShadow && (mesh as THREE.SkinnedMesh).isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh as THREE.SkinnedMesh, { strandAlpha: strand });
         // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
         if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
         // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the
@@ -308,6 +317,8 @@ export function createCharacterRenderer(input: {
     // The puppet's deformation rigs first, so the body's helper joints bind to the joints the rigs solve; the blink binds before the
     // idle: it must capture the details' neutral pose before a playing idle poses them.
     rigMotion.setDeformations?.(next.rigs ?? []);
+    // Parts skinned to a dangle component: their chains follow their own rig (and its simulation with physics on), before they bind.
+    rigMotion.setDangles?.(drawnDetails().flatMap(item => item.dangle ? [{ key: item.component.id, spec: item.dangle, bones: item.bones }] : []));
     rigMotion.attach(drawnDetails().flatMap(item => item.bones));
     refreshDetailVisibility();
     return { limits: [...skinLimits(), ...bakeLimits] };
@@ -367,6 +378,8 @@ export function createCharacterRenderer(input: {
     /** Meshes of the drawn V that follow the facial shapes with the head (the body has its own shapes: `RenderComponent.morphs`). */
     drawnMeshes: () => drawnDetails().filter(item => item.component.slot !== "body" && item.component.slot !== "clothing").flatMap(item => item.meshes),
     /** Whether the V's resolved body shows now (the viewer hasn't hidden it and it loaded): the scene's depth range then covers it. */
+    /** Whether a V's details are shown (none while the first V is still being prepared). */
+    hasDetails: () => !!characterDetails,
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
     /** Release the V and every kept part (the scene is going away). */

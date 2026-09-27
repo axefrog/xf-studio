@@ -152,6 +152,9 @@ test("a layout saved with the previous factory arrangement restores exactly, not
   // The Expressions panel (a module hidden by default, which the shell parks) joins its default group too.
   locate(expected.wide, "finish")!.group.panels.push("expressions.controls");
   locate(expected.compact, "finish")!.group.panels.push("expressions.controls");
+  // So does Poses (also hidden by default).
+  locate(expected.wide, "finish")!.group.panels.push("poses.library");
+  locate(expected.compact, "finish")!.group.panels.push("poses.library");
   // Panels closed by default (Settings, Help) stay closed until someone opens them.
   expected.wide.closed.push("settings", "help"); expected.compact.closed.push("settings", "help");
   expect(restored.state).toEqual(expected);

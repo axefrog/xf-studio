@@ -208,7 +208,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .control-note.info { color: var(--text-muted); }
 /* A control's note line keeps its place once it has one (UI-90): an empty note keeps its height. */
 .control-note:not([hidden]) { display: block; min-height: 1.35em; }
-.control-note.empty { visibility: hidden; }
+/* Hidden but in place; the empty-state box (`.empty`) shares the class name, so its padding and border are taken off (UI-115). */
+.control-note.empty { visibility: hidden; padding: 0; border: 0; }
 /* A note whose text changes length as it counts keeps room for its longer form. */
 .note.steady-note { min-height: 4.2em; }
 .field { height: var(--control-h); padding: 0 var(--sp-4); background: var(--bg-sunken); border: 1px solid var(--line-strong); border-radius: 0 var(--bevel-sm) 0 0; min-width: 0; width: 100%; }
@@ -245,6 +246,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 .segment:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
 .segment[aria-pressed="true"] { background: var(--bg-panel); color: var(--text); box-shadow: inset 0 -2px 0 var(--signal); font-weight: 600; }
 .segment:disabled { opacity: .45; cursor: not-allowed; }
+/* Wrapping choices: even tiles at least as wide as the longest label (--segment-min, set by the control), as many a row as fit; a label
+   wider than the row takes the row and wraps inside its tile. */
+.segmented.wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--segment-min, 6ch)), 1fr)); width: 100%; font-size: var(--fs-sm); }
+.segmented.wrap .segment { justify-content: center; text-align: center; white-space: normal; height: auto; min-height: calc(var(--control-h) - 4px); padding-block: 2px; }
 .color-field { display: flex; gap: var(--sp-3); align-items: center; }
 .swatch-frame { display: inline-grid; width: 34px; height: var(--control-h); border: 1px solid var(--line-strong); padding: 2px; background: var(--bg-sunken); border-radius: 0 var(--bevel-sm) 0 0; flex: none; }
 .swatch-input { appearance: none; width: 100%; height: 100%; border: 0; padding: 0; background: none; cursor: pointer; }
@@ -1155,3 +1160,9 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .save-mod > summary, .save-classes > summary { list-style: none; }
 .save-mod > summary::-webkit-details-marker, .save-field > summary::-webkit-details-marker { display: none; }
 .save-field.leaf { padding-left: calc(var(--sp-3) * 2 + 1em); }
+
+/* Poses panel (features/poses/view): the library's tree view, given a height in the panel. */
+.poses-panel { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+.poses-panel .poses-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.poses-panel .poses-current { min-height: 1.4em; }
+.poses-panel .poses-tree { height: 62vh; }

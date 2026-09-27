@@ -39,7 +39,7 @@ export type ShellCommand = "palette" | "shortcuts" | "help" | "regions" | "regio
   "tour.next" | "tour.back" | "tour.skip" |
   "gesture.cancel" | "gesture.commit" |
   "tab.switch" | "tab.reorder" | "tab.close" | "tab.content" | "tab.float" |
-  "row.focus" | "row.reorder" | "row.rename" | "row.remove" | "row.duplicate" | "row.expand";
+  "row.focus" | "row.reorder" | "row.rename" | "row.remove" | "row.duplicate" | "row.expand" | "row.favourite";
 /** The UV viewport's framing commands (viewport-attachment.ts `uvCommand`). */
 export type UVViewCommand = "both" | "single" | "other" | "fit";
 export type ViewCommandId = `uv.${UVViewCommand}` | "uv.pan" | "uv.zoom";
@@ -227,7 +227,8 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { id: "rows.rename", scope: "rows", chords: [k("F2")], action: shell("row.rename"), label: "Rename the focused row" },
   { id: "rows.remove", scope: "rows", chords: [k("Delete")], action: shell("row.remove"), label: "Remove the focused row" },
   { id: "rows.duplicate", scope: "rows", chords: [k("d", { ctrl: true })], action: shell("row.duplicate"), label: "Duplicate the focused row" },
-  { id: "rows.expand", scope: "rows", chords: [k("ArrowRight"), k("ArrowLeft")], action: shell("row.expand"), label: "Open or close the focused row of a tree (Save Explorer)" },
+  { id: "rows.expand", scope: "rows", chords: [k("ArrowRight"), k("ArrowLeft")], action: shell("row.expand"), label: "Open or close the focused row of a tree (Save Explorer, Poses)" },
+  { id: "rows.favourite", scope: "rows", chords: [k("f")], action: shell("row.favourite"), label: "Star or unstar the focused pose (Poses)" },
   { id: "tour.skip", scope: "tour", chords: [k("Escape")], action: shell("tour.skip"), label: "Stop the tour (it can be replayed from Help)" },
   { id: "tour.next", scope: "tour", chords: [k("ArrowRight"), k("Enter")], action: shell("tour.next"), label: "Next step (Enter on a button presses that button)" },
   { id: "tour.back", scope: "tour", chords: [k("ArrowLeft")], action: shell("tour.back"), label: "Previous step" },

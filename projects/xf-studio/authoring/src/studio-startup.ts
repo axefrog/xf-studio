@@ -15,6 +15,8 @@ import { createBrowserLocalSetup } from "./browser-local-setup-device";
 import { createBrowserInstallDetection } from "./browser-install-detection-device";
 import { createBrowserSaveExplorerDevice, savesLocationSignal } from "./browser-save-explorer-device";
 import { createModuleServices } from "./compose/module-services";
+import { createBrowserPoseLibraryDevice } from "./browser-pose-device";
+import { PoseStageHub } from "./pose-stage";
 import { createBrowserModInstall } from "./browser-mod-install-device";
 import { builtModsOf } from "./mod-install-actions";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
@@ -117,10 +119,16 @@ async function start(host: StudioHost, root: HTMLElement) {
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
   const installDetection = createBrowserInstallDetection();
-  // Part-less modules' services (the Save Explorer), over their browser devices. The saves device reads the workspace's own saves
-  // folder and follows Settings › Saves (UI-109).
+  // Part-less modules' services (the Save Explorer, Poses), over their browser devices. The saves device reads the workspace's own saves
+  // folder and follows Settings › Saves (UI-109). Poses reach the shown V through the stage, which the head fills in once it is attached;
+  // the whole-body view goes through the application like the toolbar's.
+  const poseStage = new PoseStageHub({
+    capability: () => core.app.capability({ kind: "camera.body" }),
+    frame: () => { const done = core.app.dispatch({ kind: "camera.body" }); return done.ok ? { available: true } : { available: false, reason: done.message }; },
+  });
   const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
-    { verification, locationChanged: savesLocationSignal(localSetup) }) });
+    { verification, locationChanged: savesLocationSignal(localSetup) }),
+    poses: { device: createBrowserPoseLibraryDevice({ verification }), stage: poseStage } });
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists).
   const modInstall = createBrowserModInstall(() => builtModsOf(bootstrap?.files.snapshot().package as Parameters<typeof builtModsOf>[0]),
     verification ? "/api/verification/mod-install" : "/api/mod-install");
@@ -257,8 +265,18 @@ async function start(host: StudioHost, root: HTMLElement) {
     // Developer evidence about the loaded head (read-only): what loaded, how the V's details landed, frame timing.
     xfStudioSceneEvidence: () => scene ? structuredClone({ core: scene.evidence, characterDetails: scene.characterDetailsEvidence(),
       frames: scene.frameTiming(), plateBlend: (liveSurface && scene.feature(liveSurface)?.evidence?.()) ?? null,
-      features: scene.featureEvidence(), bands: scene.featureBands() }) : null,
-    xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null });
+      features: scene.featureEvidence(), bands: scene.featureBands(), dangles: scene.dangleEvidence() }) : null,
+    xfStudioLayeredSamples: () => scene ? scene.layeredSamples() : null,
+    // Developer captures: put the playing or paused idle at a motion time (the dangles re-simulate to it deterministically).
+    xfStudioSeekIdle: (seconds: number) => { scene?.idle?.seek(seconds); return scene?.idle?.time ?? null; },
+    // Creator rig evidence for calibration captures (tools/creator-light-look.ts): its lights, one alone, and the frame cost.
+    xfStudioCreatorRig: {
+      lights: () => scene?.lighting.rig.specs.map(spec => ({ name: spec.name, castShadow: spec.castShadow })) ?? [],
+      solo: (name: string | null) => { scene?.lighting.solo(name); scene?.requestRender(); },
+      trialYaw: (degrees: number | null) => { scene?.lighting.trialYaw(degrees); scene?.requestRender(); },
+      frameMs: (frames: number) => scene ? scene.lighting.frameCost(scene.camera, frames) : null,
+      shadowMapSize: () => scene?.lighting.rig.shadowMapSize ?? null,
+    } });
   // Library content (preset edits, switches, saves) persists; the whole port is not watched,
   // because it also publishes the save status and preview readiness (CORE-01).
   session.watch(bootstrap.collection);
@@ -322,12 +340,14 @@ async function start(host: StudioHost, root: HTMLElement) {
           } }] : [],
         // The stage backdrop follows the resolved UI theme through the renderer's typed input.
         colourScheme: matchMedia("(prefers-color-scheme: dark)"),
+        quality: previewDevice.coordinator.quality,
         attach: services => core.app.attach(services),
         persist, changed: () => statusSource.changed(),
       });
       head = attached;
       ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
       facial.attachScene(scene.face);
+      poseStage.attach({ motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
       status = { ...status, assets: { ...status.assets, loaded: true } };
       viewportDevice.headReady();
       session.setPreviewReady(); session.flush(); drawUV();
@@ -348,6 +368,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   function releaseHead(attached: AttachedHead | undefined) {
     if (head === attached) head = undefined;
     facial.attachScene(undefined);
+    poseStage.attach(null);
     attached?.dispose();
     scene = undefined; savedAppearance = undefined; previewActions = undefined; motionActions = undefined;
   }

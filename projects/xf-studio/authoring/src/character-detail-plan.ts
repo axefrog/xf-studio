@@ -65,10 +65,16 @@ import { switcherReach, type CcoOption, type CcoResource } from "./cco-model";
 import type { CharacterInput, ResolvedAppearance, ResolvedCharacter, ResolvedChunkMaterial, ResolvedComponent, ResolvedParam } from "./character-resolver";
 import { refLabel } from "./depot-path";
 import type { DetailSlot, DetailSlotState, RenderMorphTexture, RenderRgba } from "./render-detail";
-import { clampedList, decalFamilySlot, DETAIL_SLOTS, isChoiceLabel, SLOT_WORDS } from "./render-detail";
+import { clampedList, decalFamilySlot, DETAIL_SLOTS, GARMENT_TAGS_MAX, isChoiceLabel, isVisualTag, SLOT_WORDS } from "./render-detail";
 import { renderTemplate, templateTextures } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 import type { ClothingFailure, ResolvedClothing } from "./clothing-resolver";
+
+/** A garment's visual tags as the record carries them (valid CNames, unique, bounded); none: nothing. */
+const garmentTags = (tags: readonly string[]): { tags?: string[] } => {
+  const kept = [...new Set(tags.filter(isVisualTag))].slice(0, GARMENT_TAGS_MAX);
+  return kept.length ? { tags: kept } : {};
+};
 
 /** Creator slot → preview detail. Vanilla slot names from the game's character-creator resource. */
 export const DETAIL_UI_SLOTS: Readonly<Record<string, DetailSlot>> = Object.freeze({
@@ -127,7 +133,7 @@ export type PlannedComponent = {
   /** Body components: the morph targets the resolver applied (`<target>_<region>`); absent on head parts, which follow the facial shapes. */
   morphs?: string[];
   /** Garment components: the clothing area and item record that brought it, and its layer score. */
-  garment?: { area: string; item: string; layer: number | null };
+  garment?: { area: string; item: string; layer: number | null; tags?: string[] };
   /**
    * How the reader read this part's files, when that may differ from the game (resource-graph.ts `readerRuleNotes`): a value stored with
    * an older type, a watched property left out. The record's notes carry them.
@@ -138,6 +144,12 @@ export type PlannedComponent = {
    * uncensored skin), which is drawn only while every cover is.
    */
   censor?: "cover" | "covered";
+  /**
+   * The dangle component this part's mesh is skinned to (its `skinning` binding names an animated component of the same appearance: hair
+   * with physics), with the rig and graph that simulate it and the component whose pose drives its base joints (knowledge/hair-physics.md
+   * §2.1). Absent when the mesh binds to V's own skeleton.
+   */
+  dangle?: { component: string; rig: Provenance; graph: Provenance | null; drivenBy: string };
 };
 export type CharacterPlan = { components: PlannedComponent[]; slots: DetailSlotState[];
   /**
@@ -281,7 +293,25 @@ function planComponent(slot: DetailSlot, entry: ResolvedAppearance, component: R
     chunks: drawn.map(material => material.chunk), materials: drawn, skippedChunks: materials.length - drawn.length, morphTexture,
     ...(component.type === "entMorphTargetSkinnedMeshComponent" && geometry.morphTarget && geometry.mesh?.status === "archive" ? { baseMesh: geometry.mesh } : {}),
     ...(slot === "body" ? { morphs: [...new Set(component.appliedMorphs.map(morph => `${morph.target}_${morph.region}`))].slice(0, 16) } : {}),
-    ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}) };
+    ...(readerNotes.length ? { readerNotes: readerNotes.slice(0, 4) } : {}), ...dangleOf(entry, component) };
+}
+/**
+ * The dangle component a mesh is skinned to: an animated component of the same appearance with the name its `skinning` binding gives
+ * (knowledge/hair-physics.md §2.1). Several components may share that name (a CCXL pack names every part's `hair_dangle`); the one from the
+ * mesh's own part wins, else the first (the engine's rule for duplicate names is unread: hair-physics open question 3).
+ */
+export function dangleOf(entry: Pick<ResolvedAppearance, "components">, component: ResolvedComponent): { dangle?: NonNullable<PlannedComponent["dangle"]> } {
+  if (!component.skinning) return {};
+  const animated = entry.components.filter(other => other.animated?.rig?.status === "archive");
+  const named = animated.filter(other => other.name === component.skinning);
+  // A worn physics earring skins its mesh to V's skeleton (`Component`) while its one dangle component is controlled by that same skeleton:
+  // its mesh reads the dangle joints by name (knowledge/hair-physics.md §2.1 [hypothesis], in-game check H5). Only an unambiguous single
+  // candidate is taken; the joints it moves are only those V doesn't have.
+  const controlled = named.length ? [] : animated.filter(other => other.animated!.controlBinding === component.skinning);
+  const found = named.find(other => other.origin.source === component.origin.source) ?? named[0] ?? (controlled.length === 1 ? controlled[0] : undefined);
+  if (!found?.animated?.rig) return {};
+  return { dangle: { component: found.name, rig: found.animated.rig, graph: found.animated.graph?.status === "archive" ? found.animated.graph : null,
+    drivenBy: found.animated.controlBinding } };
 }
 /** The resolver's notes about how a file was read (resource-graph.ts `readerRuleNotes`). */
 const READER_RULES = new Set(["R11-stored-type", "R12-property-absent", "R13-array-past-count"]);
@@ -537,6 +567,8 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
   const planned: { component: PlannedComponent; order: number; skin: boolean; label: string; role: BodyRole; option: string }[] = [];
   const seen = new Set<string>();
   const unshown: string[] = [];
+  /** Body choices whose game files mask every chunk out (drawn as nothing, as in the game). */
+  const masked: string[] = [];
   const label = (entry: BodyEntry) => {
     const option = cco.parts[entry.part].options.find(item => item.name === entry.option);
     const word = BODY_DETAIL_WORDS[option?.uiSlot ?? ""] ?? (entry.part === "arms" ? "arms" : "body detail");
@@ -557,6 +589,10 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
       // censored skin is a stand-in only, so its absence is not.
       const unread = entry.appearance.status === "missing" || entry.appearance.status === "unreadable";
       if (role !== "censored" && (unread || entry.components.some(component => component.geometry && !component.geometry.drawsNothing))) unshown.push(label(entry));
+      // Parts whose chunk masks hide every chunk (the definition's own, or its parts overrides': a mod's appearance can mask a part out)
+      // draw nothing, as in the game: said plainly rather than dropped silently.
+      else if (role !== "censored" && entry.components.some(component => (component.geometry?.renderChunks ?? 0) > 0 && component.geometry?.visibleChunks?.length === 0))
+        masked.push(label(entry));
       continue;
     }
     for (const item of items) {
@@ -590,7 +626,10 @@ function planBody(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
       : `XF Studio can't draw your V's ${noun} yet, so ${pronoun} ${not} shown.` } };
   const fallback = hadUncensored && !coveredOk ? `The underwear the game draws on your V couldn't be read, so the ${noun} is shown in the game's censored look.` : "";
   const partly = names.length ? `Some parts of your V's ${noun} (${missing}) couldn't be read from your game files, so they aren't shown.` : "";
-  const message = [fallback, partly].filter(Boolean).join(" ");
+  const hidden = [...new Set(masked)];
+  const maskedList = clampedList(hidden, 120);
+  const maskedLine = hidden.length ? `${maskedList.charAt(0).toUpperCase()}${maskedList.slice(1)} not shown: your installed game files hide ${hidden.length === 1 ? "this part" : "these parts"} for this choice, as the game would.` : "";
+  const message = [fallback, partly, maskedLine].filter(Boolean).join(" ");
   return { components, censored: coveredOk ? censored : [], state: { slot: "body", state: "shown", label: clampedList([...new Set(drawn.map(item => item.label))]),
     ...(message ? { message } : {}) } };
 }
@@ -615,7 +654,7 @@ export function planClothing(clothing: ResolvedClothing | ClothingFailure | null
     const entry = { option: garment.area, definition: garment.definition ?? garment.label } as ResolvedAppearance;
     const items = garment.components.map(component => planComponent("clothing", entry, component, defaults, identities))
       .filter((item): item is PlannedComponent => !!item)
-      .map(item => ({ ...item, garment: { area: garment.area, item: garment.item, layer: garment.layers[item.component] ?? null } }));
+      .map(item => ({ ...item, garment: { area: garment.area, item: garment.item, layer: garment.layers[item.component] ?? null, ...garmentTags(garment.tags) } }));
     if (items.length) { planned.push(...items); shown.push(garment.label); } else unshown.push(garment.label);
   }
   planned.sort((a, b) => (a.garment!.layer ?? 0) - (b.garment!.layer ?? 0));

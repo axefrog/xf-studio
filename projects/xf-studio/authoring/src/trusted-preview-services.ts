@@ -48,6 +48,7 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   for (const detail of ["brows", "lashes"] as const)
     ports.preview.setDetail(detail, initial[detail]);
   ports.preview.setHair(initial.hair);
+  ports.preview.setPhysics?.(initial.physics === true);
 
   return {
     savedAppearance,
@@ -55,7 +56,10 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
     /** Call after the surface editor exists. Motion restores before neutral-space camera state. */
     finish() {
       ports.preview.setSurfaceControls(initial.surface);
-      const motion = new MotionActions(initial, ports.motion);
+      // Motion's scene settings (hair physics) live in the view graph's scene node, which the preview service edits.
+      let preview: PreviewActions | undefined;
+      const motion = new MotionActions(initial, ports.motion, { physics: view => preview?.scenePhysics(view) ?? initial.physics === true,
+        setPhysics: (enabled, view) => preview?.setScenePhysics(enabled, view) });
       motion.restore();
       // The head shows the restored state now: the graph's main view learns the fallbacks it needed.
       graph?.withoutHistory(() => {
@@ -64,7 +68,7 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
         graph.edit(MAIN_VIEW, "scene", { state: { eyeShape: initial.eyeShape } }, seed);
         graph.edit(MAIN_VIEW, "lights", { kind: initial.lightingPreset }, seed);
       });
-      const preview = new PreviewActions(initial, ports.preview, graph);
+      preview = new PreviewActions(initial, ports.preview, graph);
       ports.preview.setPiercings(initial.piercings);
       ports.preview.setBody?.(initial.body ?? true);
       // A saved camera is where the workspace left it, not a jump: no View and lighting step, no Back trail entry.

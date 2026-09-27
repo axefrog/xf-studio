@@ -6,15 +6,16 @@ import { SHELL_PANELS, type ViewComposition } from "../studio-ui/views/panels";
 import { EYE_MAKEUP_VIEW_BINDING } from "../features/eye-makeup/view";
 import { SAVE_EXPLORER_VIEW_BINDING } from "../features/save-explorer/view";
 import { EXPRESSIONS_VIEW_BINDING } from "../features/expressions/view";
+import { POSES_VIEW_BINDING } from "../features/poses/view";
 import { STUDIO_CATALOGUE, type StudioPanelId } from "./views";
 
 /** Every feature's bound view, in the order of `STUDIO_VIEWS`. */
 export const FEATURE_VIEWS = [EYE_MAKEUP_VIEW_BINDING, EXPRESSIONS_VIEW_BINDING] as const;
 /** Every part-less module's bound view (view-graph-design.md §5). */
-export const MODULE_VIEWS = [SAVE_EXPLORER_VIEW_BINDING] as const;
+export const MODULE_VIEWS = [SAVE_EXPLORER_VIEW_BINDING, POSES_VIEW_BINDING] as const;
 /** Every contributed panel's factory (the shell's take the runtime; a feature's or module's take only its context). */
 export const PANEL_FACTORIES: { readonly [K in StudioPanelId]: unknown } = { ...SHELL_PANELS, ...EYE_MAKEUP_VIEW_BINDING.panels, ...SAVE_EXPLORER_VIEW_BINDING.panels,
-  ...EXPRESSIONS_VIEW_BINDING.panels };
+  ...EXPRESSIONS_VIEW_BINDING.panels, ...POSES_VIEW_BINDING.panels };
 /** What the composition roots hand the shell. */
 export const STUDIO_VIEW_COMPOSITION: ViewComposition = Object.freeze({ catalogue: STUDIO_CATALOGUE, shell: SHELL_PANELS, features: FEATURE_VIEWS,
   modules: MODULE_VIEWS });

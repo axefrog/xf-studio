@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { BODY_ENVELOPE, bodyClipPlanes, previewClipPlanes } from "../../camera-depth";
-import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, frontCameraDistance, HEAD_SUBJECT, surfaceAnchoredDistance, type Subject } from "../../camera-framing";
+import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, frontCameraDistance, HEAD_SUBJECT, posedBodyFrame, posedBodySubject, surfaceAnchoredDistance,
+  type JointBox, type Subject } from "../../camera-framing";
+import type { PoseSample } from "../../pose-sample";
+import { poseClip, type PosePlacement } from "../../pose-clip";
 import { coreSceneEvidence } from "../../scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../viewport-size";
@@ -127,9 +130,24 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   front();
   // The loop keeps drawing while the camera settles after a damped move, even under the controls' own change threshold (camera-settle.ts).
   const settle = createCameraSettle(camera, controls.target);
-  /** The whole-body view: the same frontal orbit, aimed at the body's middle and far enough to fit a standing V (camera-framing.ts). */
+  /** The posed V's joints while she holds a photo-mode pose (rig space), for the whole-body view, the orbit's reach and the clip planes. */
+  let posedBox: JointBox | null = null;
+  const posed = () => posedBox && idle?.enabled && idle.posing && idle.bodyEnabled ? posedBox : null;
+  /**
+   * The whole-body view: the same frontal orbit, aimed at the body's middle and far enough to fit a standing V (camera-framing.ts); a posed
+   * V is framed by her posed joints instead (pose-library-design.md §5.3), so a sitting or lying V fills the view.
+   */
   function frameBody() {
     frontPending = false;
+    const box = posed();
+    if (box) {
+      const frame = posedBodyFrame(camera.fov, retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect), box);
+      const distance = Math.min(CAMERA_DISTANCE_RANGE.max, frame.distance);
+      controls.target.set(frame.target[0], frame.target[1], frame.target[2] + .005);
+      camera.position.set(frame.target[0], frame.target[1], frame.target[2] - distance);
+      controls.update();
+      return frame.distance > distance;
+    }
     const requested = bodyCameraDistance(camera.fov, retainedViewportAspect(host.clientWidth, host.clientHeight, camera.aspect));
     const distance = Math.min(CAMERA_DISTANCE_RANGE.max, requested);
     camera.position.set(0, BODY_FRAME.targetHeight, -distance);
@@ -143,7 +161,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const studio = createStudioLightRig(renderer, scene);
   releases.push(() => studio.dispose());
   // Lighting presets: this studio stage (default) or the game's creator screen (lighting-preset-stage.ts).
-  const lighting = createLightingPresetStage({ scene, renderer, studioLights: studio.lights, loadLut: options.loadLut ?? (() => loadGradingLut()) });
+  const lighting = createLightingPresetStage({ scene, renderer, studioLights: studio.lights, loadLut: options.loadLut ?? (() => loadGradingLut()),
+    setStudioShadowMapSize: size => studio.setShadowMapSize(size) });
   releases.push(() => lighting.dispose());
   // The core head, plate, eyes and maps load through one typed render record (see core-detail-loader).
   const core: LoadedCoreDetail = await (options.loadCore ?? ((renderer, body) => loadCoreDetail(renderer, fetch, body)))(renderer, options.body ?? "female");
@@ -164,7 +183,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const shifted = (subject: Subject): Subject => ({ radius: subject.radius,
     centre: [subject.centre[0] + idleFrameOffset.x, subject.centre[1] + idleFrameOffset.y, subject.centre[2] + idleFrameOffset.z] });
   const orbitLimits = createOrbitLimits({ camera, controls,
-    subjects: () => character.bodyShown() ? [shifted(HEAD_SUBJECT), shifted(BODY_SUBJECT)] : [shifted(HEAD_SUBJECT)],
+    subjects: () => { const box = posed(); return character.bodyShown() ? [shifted(HEAD_SUBJECT), box ? posedBodySubject(box) : shifted(BODY_SUBJECT)] : [shifted(HEAD_SUBJECT)]; },
     framing: (fov, aspect) => character.bodyShown() ? [frontCameraDistance(fov, aspect), bodyCameraDistance(fov, aspect)] : [frontCameraDistance(fov, aspect)],
     surfaces: () => [head, ...surfaces.values(), eyes],
     surfaceBounds: () => shifted(HEAD_SUBJECT),
@@ -183,6 +202,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   renderer.domElement.addEventListener("webglcontextlost", lost);
   releases.push(() => { renderer.domElement.removeEventListener("webglcontextrestored", restored); renderer.domElement.removeEventListener("webglcontextlost", lost); });
   function frameIdle() {
+    // A pose never moves the camera (decision Q3); the framing offset stays the one measured before it.
+    if (idle?.enabled && idle.posing) return;
     // Stored cameras use neutral space: take the idle's displacement off, then put the current one (zero while it is off) back on.
     camera.position.sub(idleFrameOffset); controls.target.sub(idleFrameOffset);
     rig.idleOffset(idleFrameOffset);
@@ -223,8 +244,10 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
       let clip = previewClipPlanes(controls.getDistance(), camera.position.distanceTo(centre));
       // With the body shown, the depth range covers it too (the head views are unchanged while it is hidden).
       if (character.bodyShown()) {
-        bodyCentre.set(0, BODY_ENVELOPE.centreHeight, 0).add(idleFrameOffset);
-        clip = bodyClipPlanes(clip, controls.getDistance(), camera.position.distanceTo(bodyCentre));
+        const box = posed(), subject = box ? posedBodySubject(box) : null;
+        if (subject) bodyCentre.set(subject.centre[0], subject.centre[1], subject.centre[2]);
+        else bodyCentre.set(0, BODY_ENVELOPE.centreHeight, 0).add(idleFrameOffset);
+        clip = bodyClipPlanes(clip, controls.getDistance(), camera.position.distanceTo(bodyCentre), subject?.radius);
       }
       if (clip.near !== camera.near || clip.far !== camera.far) {
         camera.near = clip.near; camera.far = clip.far; camera.updateProjectionMatrix();
@@ -323,6 +346,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     onBakeLimits: character.onBakeLimits,
     // With the renderer's live geometry and texture counts, so a V switch or a tried style can be measured (PREV-63).
     characterDetailsEvidence: () => ({ ...character.evidence(), memory: { ...renderer.info.memory } }),
+    /** Developer evidence: the drawn parts' dangles (hair physics) and their chain bones' positions. */
+    dangleEvidence: () => idle?.dangleEvidence() ?? null,
     /** Piercings are a visibility preference: the V's own (or a tried style) arrive with the character record and follow it. */
     setPiercings: (enabled: boolean) => character.setSlotVisible("piercings", enabled),
     /** The V's body (body, arms, hands, feet and their decals, and the clothes on it) is a visibility preference too; it arrives with the character record. */
@@ -379,7 +404,32 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
       await motion.selectIdle(id);
       frameIdle();
     },
+    /**
+     * Hold a photo-mode pose on V's body (pose-library-design.md §5.2), or stop holding one (null: the chosen idle's own clips come back;
+     * turning the idle off is `setIdle`'s). The camera never moves; the whole-body view frames the posed body when asked. Rejects with a
+     * plain reason when V's motion isn't prepared.
+     */
+    setPose: async (pose: { sample: PoseSample; placement?: PosePlacement } | null) => {
+      if (!motion.selectPose || !idle) throw Error("V's motion isn't prepared on this computer, so she can't hold a pose.");
+      if (pose) {
+        const built = poseClip(pose.sample, pose.placement);
+        await motion.selectPose(built);
+        rigMotion.poseChanged();
+        if (built.start > 0) idle.seek(built.start);
+        const box = idle.jointBounds(built.moves ? 12 : 1);
+        posedBox = box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
+      } else {
+        await motion.selectPose(null);
+        posedBox = null;
+        rigMotion.poseChanged();
+      }
+      invalidate();
+    },
     setIdlePaused: (paused: boolean) => idle?.setPaused(paused),
+    /** The scene's dangle simulation (hair with physics; the scene node's setting, off until calibrated). */
+    setPhysics: (enabled: boolean) => idle?.setPhysics(enabled),
+    /** The drawn parts with a dangle component, and whether any simulates (absent without the idle's rig). */
+    dangles: () => idle ? { parts: idle.dangleParts, simulated: idle.simulatedDangles, loaded: character.hasDetails() } : undefined,
     setIdleContributions: (body: boolean, face: boolean) => {
       if (!idle || (idle.bodyEnabled === body && idle.faceEnabled === face)) return;
       idle.setContributions({ body, face }); frameIdle();
@@ -404,7 +454,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     studioLighting: () => studio.state(),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
-  return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
-    "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setDetail",
+  return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
+    "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
     "setBlink", "animateBlink", "setWire", "setNormals", "setExposure", "setStage", "setLightAngle", "setStudioLights"], invalidate) };
 }

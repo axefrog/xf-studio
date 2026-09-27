@@ -81,6 +81,13 @@ export interface ResolvedComponent {
   readonly meshAppearanceResolved: { readonly requested: string; readonly used: string | null; readonly expandedFrom: string | null; readonly patchedFrom: string | null } | null;
   readonly materials: readonly ResolvedChunkMaterial[];
   readonly notes: readonly RuleNote[];
+  /** A skinned mesh's skeleton: the component its `skinning` binding names (a dangle component for hair with physics). */
+  readonly skinning?: string;
+  /**
+   * An animated component (a dangle part's simulation, knowledge/hair-physics.md §2.1): its rig and graph, and the components its
+   * `controlBinding` and `parentTransform` bindings name.
+   */
+  readonly animated?: { readonly rig: Provenance | null; readonly graph: Provenance | null; readonly controlBinding: string; readonly parentTransform: string };
 }
 export interface ResolvedAppearance {
   readonly option: string;
@@ -137,6 +144,11 @@ export function overriddenMask(name: string, chunkMask: string, overrides: Compo
   let mask: bigint; try { mask = BigInt(chunkMask); } catch { mask = ALL; }
   mask = ((mask | (byName?.show ?? 0n) | (byPrefix?.show ?? 0n)) & (byName?.hide ?? ALL) & (byPrefix?.hide ?? ALL)) & ALL;
   return { mask: mask.toString(), by: [...byName?.by ?? [], ...byPrefix?.by ?? []] };
+}
+/** A chunk mask with a hiding override applied: the chunks both leave shown (an unreadable mask reads as every chunk shown). */
+export function hidingMask(own: string, override: string): string {
+  const read = (mask: string) => { try { return BigInt(mask) & ALL; } catch { return ALL; } };
+  return (read(own) & read(override)).toString();
 }
 /** A stable key of a set of overrides (for caches keyed by what was resolved). */
 export const overridesKey = (overrides: ComponentOverrides) => !overrides.masks.size && !overrides.appearances.size ? ""
@@ -433,8 +445,12 @@ async function resolveChunkMaterial(ctx: Context, target: MeshModel, source: Mes
 async function resolveComponent(ctx: Context, component: ComponentModel, origin: ResolvedComponent["origin"], overriddenBy: string[],
   morphs: readonly { region: string; target: string }[]): Promise<ResolvedComponent> {
   const notes: RuleNote[] = [];
+  const animated = component.animated;
   const base = { name: component.name, type: component.type, origin, meshAppearance: component.meshAppearance,
-    chunkMask: component.chunkMask, overriddenBy, morphRegions: {}, appliedMorphs: [], meshAppearanceResolved: null, materials: [] };
+    chunkMask: component.chunkMask, overriddenBy, morphRegions: {}, appliedMorphs: [], meshAppearanceResolved: null, materials: [],
+    ...(component.skinning ? { skinning: component.skinning } : {}),
+    ...(animated ? { animated: { rig: animated.rig ? ctx.graph.provenance(animated.rig) : null, graph: animated.graph ? ctx.graph.provenance(animated.graph) : null,
+      controlBinding: animated.controlBinding, parentTransform: animated.parentTransform } } : {}) };
   if (!isRenderable(component.type)) return { ...base, geometry: null, notes };
   let morph = null, meshRef: DepotRef | null = component.mesh, renderChunks: number | null = null;
   let chunkLods: readonly number[] | null = null, chunkScene: readonly boolean[] | null = null;
@@ -582,13 +598,16 @@ async function resolveDefinition(ctx: Context, appRef: DepotRef, definitionName:
   if (components.some(c => c.origin.alsoIn))
     notes.push(note("R7-dedupe-by-name", "hypothesis", "Inline and part components with the same name are treated as one (cooked apps mirror part components inline)."));
   // R7: partsOverrides apply by component name; an override without partResource applies entity-wide [source: ArchiveXL RegisterComponentOverrides; native order hypothesis].
+  // An override's chunk mask only hides: it is ANDed with the component's own, never replacing it, so it can't show a chunk the component
+  // hides [source: ArchiveXL `ComponentState::AddHidingChunkMaskOverride` (`&=`) at 5474e34; wiki: "You can't un-hide something via
+  // partsOverrides", Modding Docs `appearance-.app-files.md`].
   const overriddenBy = new Map<string, string[]>();
   for (const entry of definition.partsOverrides) for (const override of entry.componentsOverrides) {
     for (const { model, origin } of components) {
       if (override.componentName !== model.name) continue;
       if (entry.partResource && origin.kind === "part" && entry.partResource.hash !== origin.partHash) continue;
       if (override.meshAppearance) model.meshAppearance = override.meshAppearance;
-      model.chunkMask = override.chunkMask;
+      model.chunkMask = hidingMask(model.chunkMask, override.chunkMask);
       overriddenBy.set(model.name, [...(overriddenBy.get(model.name) ?? []), "partsOverrides"]);
     }
   }

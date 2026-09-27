@@ -52,7 +52,7 @@ export const PREVIEW_FAMILY: SystemFamily<PreviewAction, ActionScope, typeof PRE
   actions: actionTable<PreviewAction, ActionScope>(ACTION_DESCRIPTORS, {
     "camera.front": true, "camera.body": true, "camera.setFov": true, "camera.endFovGesture": true, "camera.restore": true,
     "camera.navigate": true, "camera.back": true, "camera.forward": true, "camera.creatorFraming": true, "preview.setLightingPreset": true,
-    "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setExposure": true, "preview.setKeyAngle": true,
+    "preview.setCreatorLighting": true, "preview.resetCreatorLighting": true, "preview.setCreatorShadows": true, "preview.setExposure": true, "preview.setKeyAngle": true,
     "preview.setStudioLight": true, "preview.setStudioNeutral": true, "preview.applyStudioSetup": true, "preview.resetStudioLighting": true,
     "preview.setEyeShape": true, "preview.setPiercings": true, "preview.setBody": true, "preview.setUncensored": true,
     "preview.setSurfaceControls": true, "preview.setWire": true, "preview.setNormals": true,
@@ -74,7 +74,7 @@ export const MOTION_FAMILY: SystemFamily<MotionAction, ActionScope, typeof MOTIO
   owner: "system", id: MOTION_ID, label: "Motion", needsScene: true, thrown: "unavailable",
   actions: actionTable<MotionAction, ActionScope>(ACTION_DESCRIPTORS, {
     "motion.setIdle": true, "motion.setIdleClip": true, "motion.setPaused": true, "motion.setContributions": true,
-    "motion.setBlink": true, "motion.playBlink": true }, { "motion.setBlink": { value: "fraction" } }),
+    "motion.setBlink": true, "motion.playBlink": true, "motion.setPhysics": true }, { "motion.setBlink": { value: "fraction" } }),
 });
 
 /** Preview quality works without the scene (it sizes generated textures), but its device failures are `unavailable`. */

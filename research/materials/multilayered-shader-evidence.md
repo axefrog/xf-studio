@@ -30,7 +30,7 @@ The annotator names cb4 registers 0, 2 and 3 of this template `MultilayerMask`, 
    | 48–60 | the same chain on the **roughness** texture's R, as the colour-mask weight | template `colorMaskLevelsIn/Out` |
    | 64 | material UV scale | `matTile` (whether `tilingMultiplier` is folded in on the CPU is unseen) |
    | 68 | microblend UV scale | `mbTile` |
-   | 72 | mask-contrast factor | a function of `microblendContrast` |
+   | 72 | mask-contrast factor | `1 / microblendContrast` (see below) |
    | 76 | microblend normal scale | `microblendNormalStrength` |
    | 80, 88 (float2) | microblend and material UV offsets | `microblendOffsetU/V`, `offsetU/V` |
    | 96 | layer normal scale | resolved `normalStrength.v` |
@@ -73,7 +73,7 @@ The annotator names cb4 registers 0, 2 and 3 of this template `MultilayerMask`, 
 | Input | Choice | Why |
 |---|---|---|
 | Colour-mask levels with `Out = (0, 0)` | tint everywhere (`cm = 1`) | 263 of 386 vanilla templates, every earring template among them, store (0, 0); a straight copy would never tint, yet vanilla gold is a grey map tinted by `colorScale` and car paint a flat map [hypothesis] |
-| `microblendContrast` → offset 72 | the value itself | makes contrast a crossfade between mask and microblend, as the wiki describes, and makes contrast 0 hide a layer under an opaque microblend, as the wiki warns [wiki: `multilayered-material-properties.md`, "microblendContrast" and the page's warning] [hypothesis] |
+| `microblendContrast` → offset 72 | its reciprocal, `1 / max(contrast, 0.001)` | (1) the Blender add-on's curve `saturate((m − (1 − c)(1 − a))/c)` is the program's `saturate(k + (m − k)·c72)` with `c72 = 1/c`, exactly [community]; (2) the wiki's in-game grid of contrast 0.25/0.5/0.75/1 against mask levels 0–94 % shows low contrast truncating the microblend into hard shapes, with almost nothing drawn at a 6 % mask [wiki: `multilayered/blending-materials-for-more-gooder-colours.md` §Microblends, image `.gitbook/assets/microblend.png`]; (3) game captures of the ring and ring-black eye designs show a solid ring round a clean centre [game capture, see below]. The earlier choice, the value itself, failed all three. Every vanilla layer surveyed (117 setups under `research/consumers/`) has a contrast in 0.08–1, so the factor stays within 1–12.5 [source-supported; the CPU upload itself is unread] |
 | `colorScale` | uploaded raw | the program multiplies it raw; any CPU linearisation is unseen [hypothesis] |
 | `matTile` | × template `tilingMultiplier` | as the Blender add-on does; unseen on the CPU [community, hypothesis] |
 | `SurfaceTexAspectRatio` | the setup's `ratio` (1 in every setup seen) | [hypothesis] |
@@ -82,7 +82,7 @@ The annotator names cb4 registers 0, 2 and 3 of this template `MultilayerMask`, 
 
 ## How community tools differ
 
-- **Cyberpunk Blender add-on** (commit `7a4ee793`, `i_scene_cp77_gltf/material_types/multilayered.py` and its node groups) [community]: stacks layers bottom-up with a lerp (611–640) instead of front-to-back shares; ignores layer 0's mask and opacity (1072, 1089, 1446); uses a different contrast curve `saturate((m − (1 − c)(1 − a))/c)` (398–517); zeroes microblend normals inside the mask (459) instead of the edge weight; sums normals in XY and rebuilds Z (736–742) instead of weighted groups plus RNM, and flips G; runs the levels chains without the clamps (520–554); always tints (never reads `colorMaskLevels`, 845–907); scales UVs by `tilingMultiplier · matTile` with no frac or ratio; never reads `defaultOverrides`.
+- **Cyberpunk Blender add-on** (commit `7a4ee793`, `i_scene_cp77_gltf/material_types/multilayered.py` and its node groups) [community]: stacks layers bottom-up with a lerp (611–640) instead of front-to-back shares; ignores layer 0's mask and opacity (1072, 1089, 1446); writes the contrast as `saturate((m − (1 − c)(1 − a))/c)` (398–517), which is the program's form with the reciprocal factor (the reading the Studio now uses); zeroes microblend normals inside the mask (459) instead of the edge weight; sums normals in XY and rebuilds Z (736–742) instead of weighted groups plus RNM, and flips G; runs the levels chains without the clamps (520–554); always tints (never reads `colorMaskLevels`, 845–907); scales UVs by `tilingMultiplier · matTile` with no frac or ratio; never reads `defaultOverrides`.
 - **WolvenKit** (commit `11720772`) [community]: no shader model. Its mesh-preview bake (`RDTMeshViewModel.cs` 1829–2169) paints flat `colorScale` values over each other by mask × opacity, uses layer 0's real mask and ignores textures, microblends and input levels. Its `.mlmask` exporter (`MlmaskTools.cs`) samples the atlas nearest-neighbour, writes `<stem>_layers/<stem>_<i>.png` from layer 0 at full or low resolution, and does not flip.
 
 ## Serialized shapes [resource]
@@ -95,10 +95,23 @@ WolvenKit CLI 9.0.1, JSON header `GameVersion` 2310. A `.mlsetup` is `{layers[],
 - Trying style 12 gold resolves the jewellery framework that replaces that style's `.app`: the kept vanilla part, a nose stud (its second chunk silver through its own material) and two nostril rings from their item archives, one of them a rigid (unskinned) linked mesh.
 - A "heart" eye design (forced through the request for this check only): layers 19, 10 and 0 baked at 2048² over the eyeball's UV range (U −1.65…2.01, V −0.60…1.00); the heart shows the right way up, the default eye hidden, the wetness shell on top.
 
+## The ring eye designs against the game (27 September 2026)
+
+The maintainer's in-game captures of "Multilayer ring" and "Multilayer ring black" (creator choices 28 and 29, `ring_eye.mlsetup` / `ring_black_eye.mlsetup` over `eye_ml.mlmask`) against the Studio's renders of the same choices. The captures are private and not committed. [game capture]
+
+| Input | Values [resource] |
+|---|---|
+| `ring_eye` drawn layers | 19 (sclera veins, contrast 1, opacity 0.93, colour (0.127, 0.018, 0.018)), 8 (the ring, **contrast 0.49**, (0.167, 0.001, 0.001)), 1 (a soft annulus, **contrast 0.26**, (0.030, …)), 0 (grey 0.374), all `plastic_pattern_smooth_01_30` (`colorMaskLevelsOut` (0, 0)) |
+| `ring_black_eye` drawn layers | 8 (ring, contrast 0.49, (0.276, 0.0005, 0.0005)), 3 (black `nylon_01_30`, contrast 1, a full disc), 0 |
+| `eye_ml` layer 8 | 1 on the ring (UV radius 0.15–0.23, with two notches on its inner edge), **0.11 over the disc inside it**, 0 outside |
+| Microblend `base\surfaces\microblends\default.xbm` | RGB (126, 127, 255), **alpha 104/255**, so `k = 0.592` |
+
+With the factor taken as the value, the ring's share at mask 1 is 0.79 and at the disc's 0.11 it is 0.36: a translucent ring and a pink (ring) or dark-red (ring black) centre, which is what the Studio drew. With the reciprocal the shares are 1 and 0: a solid ring on a clean grey (ring) or black (ring black) centre, notches included, which is what the game draws. The captures also show the ring red, from a template storing `colorMaskLevelsOut` (0, 0), which supports reading that pair as "tint everywhere". An offline simulation of the stacks (flat UV tile, mean template colours) under both readings for ring, ring black, target, target black, arasaka and heart reproduced each Studio fault with the old reading (a pink "lens" over the target's sclera, arasaka's grey disc fill tinting the whole visible eye) and a clean design with the new one.
+
 ## Open questions (runtime-test candidates)
 
 1. The CPU mapping of `colorMaskLevelsOut` (0, 0) to full tint: special case or general transform?
-2. `microblendContrast` → offset 72: direct copy, reciprocal or something else?
+2. ~~`microblendContrast` → offset 72~~: the reciprocal, supported by the game captures of the ring eye designs (below); a runtime read of the layer buffer would settle it for good.
 3. Whether `colorScale` is linearised, and whether `matTile` is multiplied by `tilingMultiplier`, on the CPU.
 4. What `SurfaceTexAspectRatio`, `useNormal` and offset 112 carry.
 5. When the engine switches to `multilayered_baked` and the surface cache.
