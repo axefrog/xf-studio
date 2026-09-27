@@ -375,8 +375,8 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   };
   const head = new Toggle({ label: "Body movement", onChange: value => setContributions(value, undefined) });
   // Its reason (facial movement not in this version) is information, so it keeps the muted tone on its line.
-  const face = new Toggle({ label: "Facial movement", quietReason: true, onChange: value => setContributions(undefined, value),
-    help: "Turn off either to hold that part still. The idle keeps time, so it carries on smoothly when you turn it back on." });
+  const face = new Toggle({ label: "Facial movement", quietReason: true, onChange: value => setContributions(undefined, value), help: FACE_HELP });
+  const faceTip = face.element.querySelector<HTMLElement>(".help-tip")!;
   // The blink's reasons (the idle blinks on its own, still loading) are information, so they keep the muted tone.
   const blink = new Slider({ label: "Closure", ...rt.range("motion.setBlink", "value"), step: .01, reserveNote: true, quietReason: true,
     format: value => value < .01 ? "Open" : value > .99 ? "Closed" : `${Math.round(value * 100)}%`,
@@ -411,6 +411,8 @@ export function motionPanel(rt: StudioRuntime): PanelController {
           : motion?.pose && motion.poseLoading ? `Loading ${motion.pose.label}; V keeps her current pose until it's ready.` : "" });
       // Without a face idle (not in this version: DESK-02) the face toggle is off and says why; the body still moves.
       const faceMissing = !!motion?.available && !motion.faceAvailable;
+      // Its help describes turning the face off, which doesn't apply while there is no face motion: the tip hides (keeping its place).
+      setHelp(faceTip, faceMissing ? "" : FACE_HELP);
       head.update(motion?.idleBody ?? true, unavailable);
       face.update(faceMissing ? false : motion?.idleFace ?? true, faceMissing ? { disabled: true, reason: motion!.faceError, note: motion!.faceError } : unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
@@ -445,7 +447,9 @@ const idleTitle = (screen: string) => `The idle the game plays on V in its ${scr
 const IDLE_HELP = ["Idles the game plays on V in its character creator and inventory, made from your game files.",
   "Their timing may differ slightly from the game's."];
 /** What the blink is and how its controls work (the Blink heading's help tip). */
-export function blinkHelp(motion: Pick<MotionState, "blinkRepeatSeconds"> | undefined): string[] {
+export function blinkHelp(motion: Pick<MotionState, "blinkRepeatSeconds"> & Partial<Pick<MotionState, "blinkAvailable">> | undefined): string[] {
+  // Without the blink its controls are hidden, so the tip describing them hides too (the note line says why).
+  if (motion?.blinkAvailable === false) return [];
   const every = motion ? `, every ${Number(motion.blinkRepeatSeconds.toFixed(2))} s` : "";
   return ["The game's own blink, made from your game files: lids, lashes, brows and makeup move together.",
     `Closure scrubs the closing half. Play blink plays it at the game's speed${every}.`];
@@ -455,6 +459,9 @@ export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blin
   // Not prepared: one plain line and nothing to do (UI-86). A damaged or mismatched one says so (it was prepared, and can be again).
   return motion && !motion.blinkAvailable ? motion.blinkError ?? "" : "";
 }
+
+/** The Facial movement toggle's help tip (hidden while the idle has no face motion). */
+const FACE_HELP = "Turn off either to hold that part still. The idle keeps time, so it carries on smoothly when you turn it back on.";
 
 /** What each Rendering option does, in plain words (their help tips). */
 export const RENDERING_HELP = {

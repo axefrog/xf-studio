@@ -18,7 +18,12 @@ export const IDLE_UNAVAILABLE = "XF Studio couldn't read the character creator's
 /** Why hair physics can't be turned on, in plain words (hair-physics-plan.md §3.6). */
 export const PHYSICS_NO_DANGLES = "This hairstyle has no physics in the game.";
 export const PHYSICS_UNSUPPORTED = "This hairstyle's physics can't run here yet.";
-export const PHYSICS_NO_RIG = "Needs the idle, which XF Studio couldn't read.";
+/**
+ * Hair physics runs on the idle's rig, so without the idle it can't run. Said without claiming a failure: for a masculine V the idle isn't
+ * part of this version (`PHYSICS_MASCULINE`), and otherwise the idle simply isn't there to use.
+ */
+export const PHYSICS_NO_RIG = "Needs the idle, which isn't available.";
+export const PHYSICS_MASCULINE = "Needs the idle, which isn't part of this version for a masculine V yet.";
 export const PHYSICS_WAITING = "Available once your V's hair has loaded.";
 export { IDLE_FACE_MISSING, IDLE_MASCULINE };
 
@@ -140,7 +145,9 @@ export class MotionActions {
   /** Whether hair physics can be turned on, and the plain reason when not. */
   private physicsStatus(): { physicsAvailable: boolean; physicsReason?: string; physicsParts: number } {
     const dangles = this.port.dangles?.();
-    if (!dangles || !this.port.available) return { physicsAvailable: false, physicsReason: PHYSICS_NO_RIG, physicsParts: 0 };
+    if (!this.port.available) return { physicsAvailable: false, physicsReason: this.port.error === IDLE_MASCULINE ? PHYSICS_MASCULINE : PHYSICS_NO_RIG, physicsParts: 0 };
+    // The idle is there but the drawn parts haven't reported their dangles yet: a wait, not a failure.
+    if (!dangles) return { physicsAvailable: false, physicsReason: PHYSICS_WAITING, physicsParts: 0 };
     if (dangles.loaded === false) return { physicsAvailable: false, physicsReason: PHYSICS_WAITING, physicsParts: 0 };
     if (!dangles.parts) return { physicsAvailable: false, physicsReason: PHYSICS_NO_DANGLES, physicsParts: 0 };
     if (!dangles.simulated) return { physicsAvailable: false, physicsReason: PHYSICS_UNSUPPORTED, physicsParts: dangles.parts };
@@ -181,7 +188,7 @@ export class MotionActions {
     if (blinking && this.pose) return refusal("asset_unavailable", "Blink is off while V holds a pose: her face follows the pose's idle or your expression.");
     if (blinking && this.snapshot().idle)
       return refusal("asset_unavailable", this.faceStatus().faceAvailable ? "Blink is off while the game idle plays: the idle blinks on its own."
-        : "Blink is off while the game idle plays.");
+        : "Blink is off while the game idle plays; choose Still to use it.");
     return { available: true };
   }
   /** Restore composition before clock and camera; pause never passes through the reset path. */
