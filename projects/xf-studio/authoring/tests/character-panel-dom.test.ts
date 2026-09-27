@@ -202,7 +202,7 @@ describe("one hierarchy in the Character panel (Next 4)", () => {
     expect(h.root.querySelectorAll(".cc-group-title").map(title => title.textContent)).toEqual(["Head", "Body", "Clothing"]);
     const group = (id: string) => h.root.querySelectorAll(".cc-group").find(element => element.getAttribute("data-group") === id)!;
     // The uncensored setting and the body's switch are on Body; the clothes' switch on Clothing.
-    expect(group("body").querySelectorAll(".toggle-label").map(label => label.textContent)).toContain("Show my V uncensored, as the game can");
+    expect(group("body").querySelectorAll(".toggle-label").map(label => label.textContent)).toContain("Show my V uncensored");
     const switches = (element: LightElement) => element.querySelectorAll("input").map(input => input.getAttribute("aria-label")).filter(Boolean);
     expect(switches(group("body"))).toContain("Show the body in the 3D view");
     expect(switches(group("clothing"))).toEqual(["Show clothes in the 3D view"]);
@@ -428,13 +428,13 @@ describe("the choice list", () => {
     const h = await harness();
     for (let i = 0; i < 3; i++) { h.paint(); await settle(); }
     const text = () => h.root.querySelector(".cc-prepared-text")!.textContent;
-    expect(text()).toBe("Prepared game files on this computer: 1.5 GB.");
+    expect(text()).toBe("Prepared game files: 1.5 GB");
     const clear = h.root.querySelectorAll("button").find(button => button.textContent?.includes("Clear prepared game files"))!;
     clear.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.clearPreparedFiles" });
     h.paint();
     expect(text()).toBe("Clearing the prepared game files…");
     for (let i = 0; i < 3; i++) { await settle(); h.paint(); }
-    expect(text()).toBe("Prepared game files on this computer: 1.5 GB. Cleared 1.5 GB.");
+    expect(text()).toBe("Prepared game files: 1.5 GB · cleared 1.5 GB");
   });
 });

@@ -36,8 +36,9 @@
 import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
 import { applyCapability, button, note, section, SelectField, Toggle } from "../controls";
-import { h, isTextInput, setAttr, setText, setUnavailable } from "../dom";
-import { ExpandAll, expander, expanderLabel, setExpanded } from "../expander";
+import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
+import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
+import { propertyList } from "../components";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
@@ -46,20 +47,23 @@ import { icon } from "../icons";
 import type { Frame, Port, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
 import { PANEL_META } from "../panel-meta";
-import { characterDetailLine } from "./preview";
+import { characterDetailLine, characterDetailRows } from "./preview";
 import { ChoiceList, swatchLook } from "./character-choices";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { ClothingState } from "../../clothing-dressing";
 import type { ClothingArea } from "../../save-loadout";
 
 const NOT_SHOWN = "Not shown in the 3D view yet.";
+const CLOTHES_HELP = "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges.";
 /** The status line while a choice that wasn't prepared ahead is prepared. */
-const FIRST_TIME = "Updating… A first-time choice is read from your game files, so it takes a few seconds; after that it's instant.";
-const LEGEND = "Not prepared yet: the first time, XF Studio reads it from your game files, which takes a few seconds.";
-const LEGEND_FETCHING = "Being prepared in the background.";
+const FIRST_TIME = "Updating… The first time takes a few seconds.";
+const LEGEND = "Not prepared yet";
+const LEGEND_FETCHING = "Preparing";
+/** What the marks mean, in the legend's help tip. */
+const LEGEND_HELP = "A choice that isn't prepared yet is read from your game files when you choose it, which takes a few seconds the first time. Choices are prepared in the background, the ones in view first.";
 const STOPPED: Record<"time" | "disk" | "setup", string> = {
-  time: "Preparing ahead has paused for this row. Every choice still works; the first time takes a few seconds.",
-  disk: "Preparing ahead has paused: it used its disk space for this session. Every choice still works; the first time takes a few seconds.",
+  time: "Preparing ahead has paused for this row. Every choice still works.",
+  disk: "Preparing ahead has paused (this session's disk space is used). Every choice still works.",
   setup: "Choices are prepared for the 3D view once WolvenKit is set up.",
 };
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
@@ -152,8 +156,8 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     autocomplete: "off", spellcheck: "false" });
   // One line explains the marks on choices not prepared yet (fixed height: it never moves the rows).
   const legendText = h("span", { class: "cc-legend-text" },
-    h("span", { class: "cc-fetch-mark", "data-fetch": "pending", "aria-hidden": "true" }), ` ${LEGEND} `,
-    h("span", { class: "cc-fetch-mark", "data-fetch": "fetching", "aria-hidden": "true" }), ` ${LEGEND_FETCHING}`);
+    h("span", { class: "cc-fetch-mark", "data-fetch": "pending", "aria-hidden": "true" }), ` ${LEGEND} · `,
+    h("span", { class: "cc-fetch-mark", "data-fetch": "fetching", "aria-hidden": "true" }), ` ${LEGEND_FETCHING}`, helpTip("the marks on choices", LEGEND_HELP));
   const legendStopped = h("span", { class: "cc-legend-text", hidden: true });
   const legend = h("p", { class: "note cc-legend" }, legendText, legendStopped);
   const noMatch = note("No option or choice matches.");
@@ -161,7 +165,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
 
   // ---- Clothing: which of V's clothes the 3D view shows (a viewing setting; the panel's Undo steps it too) ----
   const clothingState = new SelectField<ClothingState>({ label: "Clothes in the 3D view", onChange: state => dispatch({ kind: "character.setClothing", state }),
-    help: "Your V's clothes as your save records them. They are drawn without the game's garment fitting, so layers can clip at the edges." });
+    help: CLOTHES_HELP });
   // One switch per clothing area the save dresses; switching one picks the areas yourself (the setting becomes "Choose areas").
   const areaToggles = new Map<ClothingArea, Toggle>();
   const clothingAreas = h("div", { class: "cc-clothing-areas" });
@@ -174,10 +178,20 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   // One reserved line: why the eye shape waits, or that it overrides the saved one (never appears or vanishes).
   const eyeNote = note("");
   eyeNote.classList.add("cc-reserved-note");
-  const uncensored = new Toggle({ label: "Show my V uncensored, as the game can", onChange: enabled => dispatch({ kind: "preview.setUncensored", enabled }),
+  const uncensored = new Toggle({ label: "Show my V uncensored", onChange: enabled => dispatch({ kind: "preview.setUncensored", enabled }),
     help: ["Off: the game's censored look, with its underwear.", "On: your V as the game shows it when nudity is allowed: nipples and genitals as you chose them, with no underwear."] });
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
   const detailNote = note("");
+  // The V's details as the 3D view draws them (ui-copy-and-layout-review.md §3.10): a folded list, one row per part of V, the reason for
+  // anything not shown in that row's help tip, and the renderer's limits in one row of their own.
+  const detailsBodyId = uid("cc-details");
+  const detailsCount = h("span", { class: "expander-count" });
+  const detailsExpander = expander("subsection", { expanded: false, controls: detailsBodyId }, expanderLabel("In the 3D view"), detailsCount);
+  const detailsBody = h("div", { class: "cc-details-body", id: detailsBodyId, hidden: true });
+  const detailsMessage = note("");
+  detailsExpander.addEventListener("click", () => { const open = !isExpanded(detailsExpander); setExpanded(detailsExpander, open); detailsBody.hidden = !open; });
+  const detailsBlock = h("div", { class: "cc-details", hidden: true }, h("div", { class: "control-line" }, h("h4", { class: "cc-details-title" }, detailsExpander),
+    helpTip("what the 3D view shows", "Your V's details as the 3D view draws them. Shading and lighting are approximate.")), detailsBody);
   // The game files prepared for the 3D view on this computer, and clearing them.
   const preparedText = h("span", { class: "cc-prepared-text" });
   const clearPrepared = button({ label: "Clear prepared game files", icon: "trash", small: true, variant: "quiet",
@@ -193,9 +207,10 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   };
   const groupsHost = h("div", { class: "cc-groups" });
   const element = h("div", { class: "panel-content cc-panel" },
-    section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, loadPreset, savePreset, useDefault, useDefaultMale,
-      h("span", { class: "cc-history" }, undo, redo)), status, messages, detailNote),
-    h("section", { class: "section cc-quick" }, ownMakeup.element, h("div", { class: "row wrap gap-s" }, resetAll)),
+    // Two rows: which V (a save or a default V) with the panel's history, then character presets with Reset all (§4 L2).
+    section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, useDefault, useDefaultMale, h("span", { class: "cc-history" }, undo, redo)),
+      h("div", { class: "row wrap gap-s" }, loadPreset, savePreset, h("span", { class: "cc-history" }, resetAll)), status, messages, detailNote, detailsBlock),
+    h("section", { class: "section cc-quick" }, ownMakeup.element),
     h("div", { class: "cc-find" }, search, legend, noMatch),
     groupsHost,
     section({ title: "Files", help: "A save is read on this computer and never changed or uploaded." }, h("div", { class: "row wrap gap-s" }, exportV),
@@ -594,9 +609,9 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const panel = port.authoring.characterPanel(), view = port.authoring.characterView();
       // The V and its source.
       const origin = context?.origin;
-      setText(source, !context ? "Your V appears once the 3D preview is ready." : origin?.kind === "save" ? "Your V from your save" + (saved.gameVersion ? ` (game ${(saved.gameVersion / 1000).toFixed(2)})` : "") + "."
-        : origin?.kind === "preset" ? `The V from the preset “${origin.name ?? "Untitled"}”.`
-        : `The character creator's default ${context.bodyGender === "male" ? "masculine" : "feminine"} V.`);
+      setText(source, !context ? "Your V appears once the 3D preview is ready." : origin?.kind === "save" ? "From your save" + (saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : "")
+        : origin?.kind === "preset" ? `From the preset “${origin.name ?? "Untitled"}”`
+        : `The creator's default ${context.bodyGender === "male" ? "masculine" : "feminine"} V`);
       applyCapability(loadSave, port.files.capability({ kind: "savedV.import" }));
       applyCapability(loadPreset, port.files.capability({ kind: "characterPreset.import" }));
       applyCapability(savePreset, port.files.capability({ kind: "characterPreset.export" }));
@@ -681,7 +696,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         !preview || !shapes.length, (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "Preview is still loading."));
       const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "These work once the 3D preview is ready.";
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
-        ? `Overriding the saved eye shape (${shapeLabel(saved.suggestedEyeShape)}) in this viewport only.` : "";
+        ? `Your V's own is ${shapeLabel(saved.suggestedEyeShape)}; this changes the 3D view only.` : "";
       // Before the preview is ready this line says why the section waits, once (UI-90).
       setText(eyeNote, !preview ? loading : overriding);
       // The game's own nudity setting, as the viewer chooses; off is the game's censored look (knowledge/body-rendering.md §3).
@@ -691,11 +706,25 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const prepared = context?.prepared;
       setText(preparedText, !prepared ? "" : prepared.clearing ? "Clearing the prepared game files…"
         : prepared.bytes === null ? "Prepared game files: checking their size…"
-          : `Prepared game files on this computer: ${prepared.bytes ? size(prepared.bytes) : "none"}.${prepared.freed ? ` Cleared ${size(prepared.freed)}.` : ""}`);
+          : `Prepared game files: ${prepared.bytes ? size(prepared.bytes) : "none"}${prepared.freed ? ` · cleared ${size(prepared.freed)}` : ""}`);
       applyCapability(clearPrepared, port.authoring.capability({ kind: "character.clearPreparedFiles" }));
+      // While the details are on their way (or failed) one line says so; the WolvenKit need is said once, by the status line.
       const detailLine = characterDetailLine(details);
-      setText(detailNote, detailLine.text);
+      setText(detailNote, detailsNeed && detailLine.text === detailsNeed ? "" : detailLine.text);
       detailNote.hidden = !detailNote.textContent;
+      const detailRows = characterDetailRows(details);
+      detailsBlock.hidden = !detailRows;
+      const detailsKey = JSON.stringify(detailRows);
+      if (detailRows && detailsBody.dataset.key !== detailsKey) {
+        detailsBody.dataset.key = detailsKey;
+        const value = (text: string, term: string, tip?: string | readonly string[]) => h("span", { class: "control-line" }, h("span", { text }), tip ? helpTip(term, tip) : null);
+        const notShown = detailRows.rows.filter(row => !row.shown && row.value !== "None").length;
+        setText(detailsCount, notShown ? `${notShown} not shown` : "");
+        detailsBody.replaceChildren(propertyList([
+          ...detailRows.rows.map(row => ({ term: row.term, value: value(row.value, row.term, row.note) })),
+          ...(detailRows.limits.length ? [{ term: "Limits", value: value(`${detailRows.limits.length} to know`, "the preview's limits", detailRows.limits) }] : []),
+        ], { label: "Your V's details in the 3D view", className: "cc-detail-list" }), ...(detailRows.message ? [note(detailRows.message)] : []));
+      }
     },
   };
 }

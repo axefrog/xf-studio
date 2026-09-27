@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { DETAIL_LIMITS, DETAIL_NOTICES } from "../src/detail-limits";
 import { HOST_SLOT_LIMITS } from "../src/render-detail";
-import { characterDetailLine, DETAIL_LIMIT_TEXT, DETAIL_NOTICE_TEXT } from "../src/studio-ui/panels/preview";
+import { characterDetailLine, characterDetailRows, DETAIL_LIMIT_TEXT, DETAIL_NOTICE_TEXT } from "../src/studio-ui/panels/preview";
 
 test("a host of another version is worded as one plain line from its code, never silence", () => {
   expect(Object.keys(DETAIL_NOTICE_TEXT).sort()).toEqual([...DETAIL_NOTICES].sort());
@@ -14,17 +14,19 @@ test("renderer limit codes are worded only by the presentation, one plain senten
   expect(Object.keys(DETAIL_LIMIT_TEXT).sort()).toEqual([...DETAIL_LIMITS].sort());
   // The codes a host writes on a record's slot are limit codes too (PIPE-84).
   for (const code of HOST_SLOT_LIMITS) expect(DETAIL_LIMITS).toContain(code);
-  const line = characterDetailLine({ phase: "ready", source: "save", message: "", notice: null, progress: null, updating: false, updateError: null, choices: 0, drawn: [], need: null, slots: [
+  const ready = { phase: "ready", source: "save", message: "", notice: null, progress: null, updating: false, updateError: null, choices: 0, drawn: [], need: null, slots: [
     { slot: "skin", state: "shown", label: "Pale", limits: ["head-shape", "skin-glow"] },
     { slot: "brows", state: "shown", label: "Style 3" },
     { slot: "lashes", state: "shown", label: "Default" },
-    { slot: "hair", state: "unavailable", label: "", limits: ["skin-glow"] },
-  ] });
-  expect(line.done).toBe(true);
-  expect(line.text).toContain(DETAIL_LIMIT_TEXT["head-shape"]);
+    { slot: "hair", state: "unavailable", label: "", limits: ["skin-glow"], message: "Your V's hair couldn't be read." },
+  ] } as const;
+  // Ready details are a list, not a line (ui-copy-and-layout-review.md §3.10).
+  expect(characterDetailLine(ready as never)).toEqual({ done: true, text: "" });
+  const list = characterDetailRows(ready as never)!;
+  expect(list.rows.map(row => [row.term, row.value])).toEqual([["Skin", "Pale"], ["Eyebrows", "Style 3"], ["Eyelashes", "Default"], ["Hair", "Not shown"]]);
+  expect(list.rows[3]!.note).toBe("Your V's hair couldn't be read.");
   // Each sentence once; a slot that isn't shown says nothing about how it would be drawn.
-  expect(line.text.split(DETAIL_LIMIT_TEXT["skin-glow"]).length).toBe(2);
-  expect(line.text).toMatch(/^Skin: Pale · Eyebrows: Style 3 · Eyelashes: Default · Hair: not shown\. An installed mod/);
+  expect(list.limits).toEqual([DETAIL_LIMIT_TEXT["head-shape"], DETAIL_LIMIT_TEXT["skin-glow"]]);
 });
 
 test("renderer and device modules carry codes, not the sentences", () => {
@@ -37,12 +39,12 @@ test("renderer and device modules carry codes, not the sentences", () => {
 });
 
 test("face details: the slot reads as plain words, and a decal the preview can't draw is one sentence from its code", () => {
-  const line = characterDetailLine({ phase: "ready", source: "save", message: "", notice: null, progress: null, updating: false, updateError: null, choices: 0, drawn: [], need: null, slots: [
+  const list = characterDetailRows({ phase: "ready", source: "save", message: "", notice: null, progress: null, updating: false, updateError: null, choices: 0, drawn: [], need: null, slots: [
     { slot: "skin", state: "shown", label: "senna, skin type 3" },
     { slot: "face", state: "shown", label: "cheeks (light brown), face cyberware", limits: ["decal-template"] },
-  ] });
-  expect(line.text).toMatch(/^Skin: senna, skin type 3 · Face details: cheeks \(light brown\), face cyberware\. /);
-  expect(line.text).toContain(DETAIL_LIMIT_TEXT["decal-template"]);
+  ] })!;
+  expect(list.rows.map(row => [row.term, row.value])).toEqual([["Skin", "Senna, skin type 3"], ["Face details", "Cheeks (light brown), face cyberware"]]);
+  expect(list.limits).toEqual([DETAIL_LIMIT_TEXT["decal-template"]]);
   // The decal family's modules carry codes too.
   const { readFileSync } = require("node:fs") as typeof import("node:fs");
   const { resolve } = require("node:path") as typeof import("node:path");

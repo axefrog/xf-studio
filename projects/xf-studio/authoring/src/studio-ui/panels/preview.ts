@@ -37,15 +37,30 @@ export const DETAIL_NOTICE_TEXT: Readonly<Record<DetailNotice, string>> = {
   "version-skew": "XF Studio was updated while it was running. Restart it to see your V's skin, face details, eyes, brows, lashes, hair, piercings and body.",
 };
 
-/** One plain line about the shown V's skin, face details, eyes, brows, lashes, hair, piercings and body, from the resolved-detail status. */
+/**
+ * One plain line about the shown V's details while they are on their way or couldn't be prepared; once they are ready the Character
+ * panel shows them as a list instead (`characterDetailRows`), so the line is empty.
+ */
 export function characterDetailLine(details: DetailStatus | undefined): { done: boolean; text: string } {
   if (!details || details.phase === "idle") return { done: false, text: "" };
   const who = details.source === "save" ? "your V" : "the default V";
-  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s skin, face details, eyes, brows, lashes, hair, piercings and body from your game files…` };
+  if (details.phase === "preparing") return { done: false, text: `Preparing ${who}'s details from your game files…` };
   if (details.phase === "failed") return { done: true, text: details.notice ? DETAIL_NOTICE_TEXT[details.notice] : details.message };
-  const parts = details.slots.map(slot => `${SLOT_NAMES[slot.slot]}: ${slot.state === "shown" ? slot.label : slot.state === "none" ? "none" : "not shown"}`);
+  return { done: true, text: "" };
+}
+/** One row of the V's details (the Character panel's "In the 3D view" list): a part of V, what the 3D view shows, and why when it doesn't. */
+export type CharacterDetailRow = { term: string; value: string; shown: boolean; note?: string };
+/**
+ * The shown V's details as rows, once they are ready (ui-copy-and-layout-review.md §3.10): each slot's label, "None" or "Not shown" with its
+ * reason; the renderer's limits, each sentence once and only for slots it draws; and the status's own line when no row already says it.
+ */
+export function characterDetailRows(details: DetailStatus | undefined): { rows: CharacterDetailRow[]; limits: string[]; message: string } | null {
+  if (!details || details.phase !== "ready") return null;
+  const capital = (text: string) => text ? text[0]!.toUpperCase() + text.slice(1) : text;
+  const rows = details.slots.map(slot => ({ term: SLOT_NAMES[slot.slot], shown: slot.state === "shown",
+    value: slot.state === "shown" ? capital(slot.label) : slot.state === "none" ? "None" : "Not shown", ...(slot.message ? { note: slot.message } : {}) }));
   const limits = [...new Set(details.slots.flatMap(slot => slot.state === "shown" ? slot.limits ?? [] : []))].map(limit => DETAIL_LIMIT_TEXT[limit]);
-  return { done: true, text: [`${parts.join(" · ")}.`, details.message, ...limits, "Shading and lighting are approximate."].filter(Boolean).join(" ") };
+  return { rows, limits, message: details.message && !rows.some(row => row.note === details.message) ? details.message : "" };
 }
 
 /** One plain line about the lighting preset and where its colour grade came from. */
