@@ -277,7 +277,25 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (batch 4, branch build, not staged)
 
-Built from this branch after its batch 4 commit; the zip and DLL hashes are recorded in the commit that follows the build (the DLL embeds the commit it was built from).
+Built 27 September 2026 on `claude/bridge-batch4` at `f194020394e9`, clean tree (`XFB_BUILD=f194020394e9ab003414365af3986b203eca04b7;dirty=0`), by `bun tools/package.ts`: version 0.3.0, batch 4 (RB-42..49, the CET panel with Reconnect and the write pause, `photo.pose.set`, `pose.live.read`, `pose.live.apply`) on top of batch 3. On that commit: `xfb_selftest --unit` OK (196 checks), self-test 263 of 263, `bun test tools` 119 of 119, typecheck, redscript lint (against the installed 2.31 `final.redscripts`, SHA-256 `2119046f…ee86`) and Lua lint clean. The default zip carries no camera presets, no CET panel and no carrier, and keeps the bridge off with `allow_writes`, `allow_creator_leave` and `allow_live_pose` false; the -diagnostic zip adds the presets and the panel, read-only; the -writes zip also allows writes, leaving the creator and the live-pose carrier. A rebuild after merging gives new hashes.
+
+| Zip | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.3.0-writes.zip` | `56f1aff69c165120d57843d3eda72e64e3cf2380477b898fed5e6ca297436519` |
+| `xf-runtime-bridge-0.3.0-diagnostic.zip` | `64f0bb501b1635dbae200753595393f4e643b07728022541aeb8c998ed306dd8` |
+| `xf-runtime-bridge-0.3.0.zip` (default) | `5d16529654c99afa6d904e146c046c9a99b9e4a2226ab606ac47bba365e42f04` |
+| (`XFRuntimeBridge.dll` inside each) | `de489a4c1726eeea1a7023f4085dcb5a52a094d049c43374d78f27f26fa41789` |
+
+**The live-pose test package**, built from the same commit by `bun tools/live-pose/build-carrier.ts` with WolvenKit 9.0.1 from the development PC's own `woman_base.rig` (a separate MO2 entry, the test profile only; its build is not byte-reproducible, WolvenKit's archive differs per run):
+
+| File | SHA-256 |
+|---|---|
+| `xf-live-pose-test-0.3.0.zip` | `4087ea3006658070a24af6ac75f770c4c212628b2fa59de8d8a21aa90de0803e` |
+| keys hash (`pose_live_read`'s `keys_hash`; pass as `expect_hash` in L2) | `0946bdcce29c7220` |
+
+The verifier read the built set back through WolvenKit: one clip, `xfs_live_carrier`, 71 joints, 142 constant keys (a rotation and a translation per joint, every one equal to the plan), 13 constant track keys, no animated keys and no fallback frames; the archive holds only `xf\live_pose\xfs_live_carrier_female.anims`.
+
+**New in this build, watch in the session:** the plugin log's load lines add `evt=live_pose.addresses_resolved … live_pose=on`; the CET overlay shows the **XF Runtime Bridge** window with Reconnect, Pause changes and Stop the bridge (test builds); `cc_open` refuses in a vehicle or a Johnny section, and a timed-out request the menu took answers `creator_open_uncertain`; `game_options_read` may list `too_long` or `skipped` render options.
 
 ## Build record (batch 3, branch build, not staged)
 
