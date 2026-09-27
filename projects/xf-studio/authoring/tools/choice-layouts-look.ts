@@ -5,7 +5,7 @@
  * caught mid-drag, and the details picture mid-drag; then the costs: each turntable strip drawn (worker timings, bytes), the wait from
  * hovering to the strip and to the first turn shown, the page's heap, and a click made while a strip is being drawn against one made idle.
  *
- *   bun tools/choice-layouts-look.ts <out dir under evidence/screenshots> [port] [--schemes light,dark] [--widths 300,480] [--tag after] [--hovers 10] [--skip 0] [--clicks | --clicks-only | --gate | --spin-m]
+ *   bun tools/choice-layouts-look.ts <out dir under evidence/screenshots> [port] [--schemes light,dark] [--widths 300,480] [--tag after] [--hovers 10] [--skip 0] [--clicks | --clicks-only | --gate | --spin-m | --tick]
  *
  * The rows show installed mods' hairstyles, so keep the outputs in the ignored evidence/screenshots tree. It changes the verify workspace's
  * picture layout preferences (its own state), never the person's draft.
@@ -72,6 +72,28 @@ for (const scheme of schemes) for (const width of widths) {
     await page.waitFor(`(() => { const tiles = [...${ROW}.querySelectorAll(".pv-tile")].slice(0, 24); return tiles.length > 0 && tiles.every(t => t.dataset.state !== "waiting"); })()`, 120000).catch(() => {});
     await page.wait(800);
     const before = await stats(page);
+    if (args.includes("--tick")) {
+      // The wait tick: strips held back (a verification hook), a tile far down the row rested on until the tick shows; the row and a 2x crop.
+      await segment(page, "Grid"); await segment(page, "M");
+      await page.evaluate(`window.xfsChoicePreviews.stripDelayMs = 6000`);
+      const tile = await tileCentre(page, 40);
+      if (tile) {
+        await page.mouse("mouseMoved", tile.x, tile.y);
+        const shown = await page.waitFor(`!!document.querySelector(".pv-frame[data-spin-wait]")`, 4000).catch(() => false);
+        await page.wait(300);
+        const box = await page.evaluate(`(() => { const f = document.querySelector(".pv-frame[data-spin-wait]"); if (!f) return null; const r = f.closest(".choice").getBoundingClientRect();
+          const tick = getComputedStyle(f, "::before"); return { x: r.x - 2, y: r.y - 2, width: r.width + 4, height: r.height + 4, tick: { width: tick.width, top: tick.top, right: tick.right, background: tick.backgroundColor } }; })()`) as { x: number; y: number; width: number; height: number; tick: unknown } | null;
+        await shoot(page, name("grid-m-wait-tick"), ROW, 2, 420, false);
+        if (box) {
+          const { tick, ...clip } = box;
+          const result = await page.send<{ data: string }>("Page.captureScreenshot", { format: "png", clip: { ...clip, scale: 2 }, captureBeyondViewport: false });
+          writeFileSync(resolve(out, name("grid-m-wait-tick-2x")), Buffer.from(result.data, "base64"));
+          report.push({ scheme, width, check: "wait tick", shown, tick });
+        }
+      }
+      await page.evaluate(`window.xfsChoicePreviews.stripDelayMs = 0`);
+      continue;
+    }
     if (args.includes("--spin-m")) {
       // Grid M: one tile turning on hover (strip drawn on first look), then another caught mid-drag.
       await segment(page, "Grid"); await segment(page, "M");

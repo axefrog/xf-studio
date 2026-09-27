@@ -95,6 +95,8 @@ export class ChoicePreviewService {
   private liveFailed = new Set<string>();
   private lastBusy = false;
   /** Live-turn costs: frames drawn, the worker's time per frame, and every 15th frame with the GPU waited for. */
+  /** Verification only (`?verify=1` capture tools set it from the page): hold each strip drawing back this long, so its wait shows. */
+  stripDelayMs = 0;
   readonly liveStats = { starts: 0, startMs: [] as number[], frames: 0, frameMs: [] as number[], gpuMs: [] as number[], failed: 0 };
 
   constructor(private readonly port: ChoicePreviewPort, private readonly changed: () => void, private readonly now: () => number = () => performance.now()) {
@@ -287,6 +289,7 @@ export class ChoicePreviewService {
       const key = await previewKey(item.source!, identity, "turntable");
       const stored = await this.port.stored(key);
       if (stored) { this.stats.spinStored++; return stored; }
+      if (this.stripDelayMs > 0) await new Promise(resolve => setTimeout(resolve, Math.min(this.stripDelayMs, 10_000)));
       const drawn = await this.port.render(item.source!, key, TURNTABLE.frames);
       this.stats.spun++;
       this.stats.spinMs.push(this.now() - began);
