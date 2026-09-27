@@ -31,8 +31,18 @@ export type CameraNodeState = { pose?: CameraState };
  * read a studio stage (`legacyStudioStage`); they are read only from a node stored before setups, which they migrate.
  */
 export type LightsState = SetupLibrary & { creatorLighting: CreatorLightingOptions; exposure: number; lightAngle: number; studioLights: StudioLights };
-/** The content filter: which character slots show (design §3.1). */
-export type DisplayState = { brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; body?: boolean };
+/**
+ * What a view shows and how it draws it (design §3.1): the content filter (which character slots show) and the view's Rendering options,
+ * each absent at its default: the skin scatter (on), the lights' shadow maps on the V (on) and the Hair look (0 Crisp … 1 Game-like).
+ * They belong to the view, not the scene, so two views of one V can compare Crisp and Game-like hair side by side.
+ */
+export type DisplayState = { brows: boolean; lashes: boolean; hair: boolean; piercings: boolean; body?: boolean;
+  skinScatter?: boolean; faceShadows?: boolean; hairLook?: number };
+/** The Rendering options a display node holds, with their defaults applied. */
+export type RenderingOptions = { skinScatter: boolean; faceShadows: boolean; hairLook: number };
+export const DEFAULT_RENDERING: Readonly<RenderingOptions> = Object.freeze({ skinScatter: true, faceShadows: true, hairLook: 0 });
+export const renderingOf = (display: DisplayState): RenderingOptions =>
+  ({ skinScatter: display.skinScatter ?? true, faceShadows: display.faceShadows ?? true, hairLook: display.hairLook ?? 0 });
 /** Each view tool's on/off state, by tool ID (`eye-makeup.surface`). */
 export type ToolsState = { on: Record<string, boolean> };
 
@@ -56,6 +66,8 @@ export const inRange = (value: unknown, min: number, max: number): value is numb
  * creator's 22 choices, the most any head offers.
  */
 export const EYE_SHAPE_RANGE = Object.freeze({ min: 0, max: 21 });
+/** The Hair look: 0 Crisp (the faithful coverage) … 1 Game-like (hair-colour-model.ts `HAIR_LOOK`). */
+export const HAIR_LOOK_RANGE = Object.freeze({ min: 0, max: 1 });
 export const CAMERA_FOV_RANGE = Object.freeze({ min: 10, max: 90 });
 /** How far a stored camera's position and target may lie from the subject's origin, in metres. */
 export const CAMERA_COORDINATE_LIMIT = 100;
@@ -123,9 +135,15 @@ const storedLights = (preview: PreviewState) => ({ exposure: preview.exposure, l
 const previewRig = (preview: PreviewState): LightingPreset => preview.lightingSetups ? rigKindOf(preview.lightingSetups) : preview.lightingPreset;
 const display: NodeCodec = { parse: state => {
   const s = state as Partial<DisplayState>;
-  if (!bool(s.brows) || !bool(s.lashes) || !bool(s.hair) || !bool(s.piercings) || !optional(s.body, bool)) return;
-  return { brows: s.brows, lashes: s.lashes, hair: s.hair, piercings: s.piercings, ...(s.body === undefined ? {} : { body: s.body }) };
+  if (!bool(s.brows) || !bool(s.lashes) || !bool(s.hair) || !bool(s.piercings) || !optional(s.body, bool) || !optional(s.skinScatter, bool) ||
+    !optional(s.faceShadows, bool) || (s.hairLook !== undefined && !inRange(s.hairLook, HAIR_LOOK_RANGE.min, HAIR_LOOK_RANGE.max))) return;
+  return { brows: s.brows, lashes: s.lashes, hair: s.hair, piercings: s.piercings, ...(s.body === undefined ? {} : { body: s.body }), ...renderingFields(s) };
 } };
+/** The Rendering options a state holds, only those present (a view that never changed one keeps its bytes). */
+function renderingFields(s: Partial<DisplayState>): Partial<DisplayState> {
+  return { ...(s.skinScatter === undefined ? {} : { skinScatter: s.skinScatter }), ...(s.faceShadows === undefined ? {} : { faceShadows: s.faceShadows }),
+    ...(s.hairLook === undefined ? {} : { hairLook: s.hairLook }) };
+}
 const tools: NodeCodec = { parse: state => {
   const on = state.on as Record<string, unknown> | undefined;
   if (!on || typeof on !== "object" || Array.isArray(on) || Object.keys(on).length > 64) return;
@@ -151,7 +169,7 @@ function mainNodes(preview: PreviewState) {
     // Read through the codec, so the node holds the setups (a workspace saved before them migrates here).
     lights: lights satisfies LightsState,
     display: { brows: preview.brows, lashes: preview.lashes, hair: preview.hair, piercings: preview.piercings,
-      ...(preview.body === undefined ? {} : { body: preview.body }) } satisfies DisplayState,
+      ...(preview.body === undefined ? {} : { body: preview.body }), ...renderingFields(preview) } satisfies DisplayState,
     tools: { on: { [LEGACY_TOOL_FIELDS.surface]: preview.surface, [LEGACY_TOOL_FIELDS.wire]: preview.wire } } satisfies ToolsState,
     rig: rigKindOf(lights),
   };
@@ -242,6 +260,7 @@ export function previewMirror(graph: ViewGraph, view = MAIN_VIEW) {
     eyeShape: f.scene.eyeShape, piercings: f.display.piercings, ...(f.display.body === undefined ? {} : { body: f.display.body }),
     ...(f.scene.uncensored === undefined ? {} : { uncensored: f.scene.uncensored }),
     ...(f.scene.physics === undefined ? {} : { physics: f.scene.physics }),
+    ...renderingFields(f.display),
     exposure: f.lights.exposure, lightAngle: f.lights.lightAngle, lightingPreset: f.rig, creatorLighting: f.lights.creatorLighting,
     studioLights: f.lights.studioLights,
     // The setups are stored only while the person has their own: otherwise the legacy fields say exactly which built-in shows.

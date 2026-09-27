@@ -89,6 +89,9 @@
   "preview.setEyeOptics",
   "preview.setHair",
   "preview.setDetail",
+  "preview.setSkinScatter",
+  "preview.setFaceShadows",
+  "preview.setHairLook",
   "motion.setIdle",
   "motion.setIdleClip",
   "motion.setPaused",
@@ -2725,6 +2728,65 @@
     }
    }
   },
+  "preview.setSkinScatter": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
+  "preview.setFaceShadows": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "enabled": {
+     "type": "boolean",
+     "required": true,
+     "from": "input"
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
+  "preview.setHairLook": {
+   "scope": [
+    "viewport"
+   ],
+   "effect": "workspace",
+   "undo": "none",
+   "payload": {
+    "value": {
+     "type": "number",
+     "required": true,
+     "from": "input",
+     "min": 0,
+     "max": 1
+    },
+    "view": {
+     "type": "string",
+     "required": false,
+     "from": "target"
+    }
+   }
+  },
   "motion.setIdle": {
    "scope": [
     "viewport"
@@ -4231,6 +4293,33 @@
   },
   {
    "id": "preview.setDetail",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setSkinScatter",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setFaceShadows",
+   "family": "action",
+   "scope": [
+    "viewport"
+   ],
+   "undo": "none",
+   "async": false
+  },
+  {
+   "id": "preview.setHairLook",
    "family": "action",
    "scope": [
     "viewport"

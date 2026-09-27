@@ -1,7 +1,7 @@
 import type { CameraState, PreviewState } from "./workspace-state";
 import { MAIN_VIEW, type ViewGraphChange, type ViewId } from "./platform/api/view-graph";
 import type { ViewGraph } from "./platform/core/view-graph";
-import { createStudioViewGraph, EYE_SHAPE_RANGE, LEGACY_TOOL_FIELDS, previewFields, previewMirror, type DisplayState, type LightsState,
+import { createStudioViewGraph, EYE_SHAPE_RANGE, HAIR_LOOK_RANGE, LEGACY_TOOL_FIELDS, renderingOf, type RenderingOptions, previewFields, previewMirror, type DisplayState, type LightsState,
   type SceneState } from "./preview-view-graph";
 import { navigateCamera, validNavigation, type CameraNavigation } from "./camera-navigation";
 import type { DistanceLimits } from "./camera-framing";
@@ -19,7 +19,7 @@ import { addLight, aimLightAtHead, duplicateLight, moveLight, BUILT_IN_SETUP_IDS
 
 export type PreviewConfig = Pick<PreviewState,
   "surface" | "wire" | "brows" | "lashes" | "hair" | "piercings" | "body" | "uncensored" | "physics" |
-  "eyeShape" | "normals" | "eyeOwnRoughness" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights" | "lightingSetups">;
+  "eyeShape" | "normals" | "eyeOwnRoughness" | "skinScatter" | "faceShadows" | "hairLook" | "exposure" | "lightAngle" | "lightingPreset" | "creatorLighting" | "studioLights" | "lightingSetups">;
 /** Every camera and preview action may name the view it acts on; without one it acts on the focused view (design §3.8). */
 export type PreviewAction = PreviewActionBody & { view?: ViewId };
 type PreviewActionBody =
@@ -64,7 +64,11 @@ type PreviewActionBody =
   | { kind: "preview.setBody"; enabled: boolean }
   | { kind: "preview.setUncensored"; enabled: boolean }
   | { kind: "preview.setSurfaceControls" | "preview.setWire" | "preview.setNormals" | "preview.setEyeOptics" | "preview.setHair"; enabled: boolean }
-  | { kind: "preview.setDetail"; detail: "brows" | "lashes"; enabled: boolean };
+  | { kind: "preview.setDetail"; detail: "brows" | "lashes"; enabled: boolean }
+  // The Rendering options (the Preview quality panel's Rendering group): how the view draws, in its display node; never the looks or the export.
+  | { kind: "preview.setSkinScatter" | "preview.setFaceShadows"; enabled: boolean }
+  /** The Hair look, 0 Crisp … 1 Game-like (hair-colour-model.ts `HAIR_LOOK`); a drag is one View and lighting step. */
+  | { kind: "preview.setHairLook"; value: number };
 export type PreviewActionResult = { limited?: boolean };
 export type PreviewCapability = { available: boolean; reason?: string };
 /** Eye-shape choices as the loaded head carries them, and whether the eyeballs follow them. */
@@ -99,6 +103,8 @@ export type PreviewPort = {
   setLighting?(source: LightingSource): void;
   setSurfaceControls(enabled: boolean): void; setWire(enabled: boolean): void; setNormals(enabled: boolean): void;
   setEyeOptics(enabled: boolean): void; setHair(enabled: boolean): void;
+  /** The Rendering options (scene-host.ts). Absent on a preview without the lighting stage or strands; the setting is still kept. */
+  setSkinScatter?(enabled: boolean): void; setFaceShadows?(enabled: boolean): void; setHairLook?(value: number): void;
   setEyeShape(index: number): void; setPiercings(enabled: boolean): void;
   /** The scene's dangle simulation (hair-physics-plan.md §3.6). Absent on a preview without the idle's rig. */
   setPhysics?(enabled: boolean): void;
@@ -181,6 +187,10 @@ export class PreviewActions {
     if ((next.scene.physics ?? false) !== (was.scene.physics ?? false)) port.setPhysics?.(next.scene.physics ?? false);
     for (const detail of ["brows", "lashes"] as const) if (next.display[detail] !== was.display[detail]) port.setDetail(detail, next.display[detail]);
     if (next.display.hair !== was.display.hair) port.setHair(next.display.hair);
+    const rendering = renderingOf(next.display), before = renderingOf(was.display);
+    if (rendering.skinScatter !== before.skinScatter) port.setSkinScatter?.(rendering.skinScatter);
+    if (rendering.faceShadows !== before.faceShadows) port.setFaceShadows?.(rendering.faceShadows);
+    if (rendering.hairLook !== before.hairLook) port.setHairLook?.(rendering.hairLook);
     if (next.display.piercings !== was.display.piercings) port.setPiercings(next.display.piercings);
     if (next.display.body !== was.display.body) port.setBody?.(next.display.body ?? true);
     if (next.surface !== was.surface) port.setSurfaceControls(next.surface);
@@ -243,7 +253,10 @@ export class PreviewActions {
       if (!valid) return refusal("invalid_value", action.key === "exposure"
         ? `Creator exposure must be between ${CREATOR_EXPOSURE_RANGE.min} and ${CREATOR_EXPOSURE_RANGE.max}.` : "That creator lighting option does not exist.");
     }
-    if (action.kind === "preview.setCreatorShadows" && typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
+    if ((action.kind === "preview.setCreatorShadows" || action.kind === "preview.setSkinScatter" || action.kind === "preview.setFaceShadows") &&
+      typeof action.enabled !== "boolean") return refusal("invalid_value", "Choose on or off.");
+    if (action.kind === "preview.setHairLook" && !(Number.isFinite(action.value) && action.value >= HAIR_LOOK_RANGE.min && action.value <= HAIR_LOOK_RANGE.max))
+      return refusal("invalid_value", "Hair look goes from Crisp (0) to Game-like (1).");
     if (action.kind === "preview.resetCreatorLighting") {
       const current = state.lights.creatorLighting;
       if (current.intensity === DEFAULT_CREATOR_LIGHTING.intensity && current.cone === DEFAULT_CREATOR_LIGHTING.cone
@@ -316,6 +329,10 @@ export class PreviewActions {
         case "preview.setHair": display({ hair: action.enabled }, shown(action.enabled, "hair")); break;
         case "preview.setDetail":
           display({ [action.detail]: action.enabled }, shown(action.enabled, action.detail === "brows" ? "eyebrows" : "eyelashes")); break;
+        case "preview.setSkinScatter": display({ skinScatter: action.enabled }, action.enabled ? "Skin scattering on" : "Skin scattering off"); break;
+        case "preview.setFaceShadows": display({ faceShadows: action.enabled }, action.enabled ? "Face shadows on" : "Face shadows off"); break;
+        case "preview.setHairLook":
+          this.graph.edit(view, "display", { state: { hairLook: action.value } }, { label: "Hair look", coalesce: "hairLook" }); break;
         default:
           if (action.kind.startsWith("preview.") && this.lightingAction(action)) this.dispatchLighting(view, action);
           break;
@@ -505,6 +522,8 @@ export class PreviewActions {
       },
     };
   }
+  /** A view's Rendering options, with their defaults applied (the Preview quality panel's Rendering group reads them). */
+  rendering(view?: ViewId): RenderingOptions { return renderingOf(this.fields(view).display); }
   /** Whether a view's scene simulates its dangles (the scene node's `physics`; off until the viewer turns it on). */
   scenePhysics(view?: ViewId): boolean { return this.fields(view).scene.physics === true; }
   /**

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { createDoubleDiffuseDecalMaterial, doubleDiffuseParameters } from "./brow-material";
 import { hairMaterialFromScalars, type ProfileEncoding } from "./hair-colour-model";
 import { attachHairColor, attachHairVertexRed, hairProfileTexture, HAIR_CAP_DECAL_MATERIAL, STRAND_COVERAGE_MATERIAL,
-  STRAND_COVERAGE_OVER_MAKEUP_MATERIAL } from "./hair-shading";
+  STRAND_COVERAGE_OVER_MAKEUP_MATERIAL, type HairLookUniform } from "./hair-shading";
 import { decalFamilySlot, type DetailSlot, type RenderChunkMaterial, type RenderTexture } from "./render-detail";
 import { bakeOrder, bakeSurface, createLayeredMaterial, layeredBakeExtent, layeredGlobals, stackProblems, uvDomain, type LayeredHandle, type LayerTextures } from "./layered-material";
 import { renderTemplate, type RenderAdapterId } from "./render-templates";
@@ -53,6 +53,8 @@ export type AdapterContext = {
   skins?: readonly ResolvedSkinSurface[];
   /** How hair profile stops are decoded (knowledge/hair-shading.md §3). */
   profileEncoding: ProfileEncoding;
+  /** The view's Hair look (0 Crisp … 1 Game-like), one uniform the scene's strands share (hair-shading.ts); Crisp when absent. */
+  hairLook?: HairLookUniform;
 };
 /**
  * The resolved skin as decals see it: its toned base colour (8-bit sRGB, null outside a browser), its head chunks, and for
@@ -189,7 +191,7 @@ const hairStrand: MaterialAdapter = {
     });
     attachHairVertexRed(mesh.geometry);
     attachHairColor(material, { kind: "strand", id, gradient, profile: profileTexture, sampleCount: profile.sampleCount,
-      material: hairMaterialFromScalars(chunk.scalars) });
+      material: hairMaterialFromScalars(chunk.scalars), ...(context.hairLook ? { look: context.hairLook } : {}) });
     return { material, owned: [profileTexture], notes: [] };
   },
 };

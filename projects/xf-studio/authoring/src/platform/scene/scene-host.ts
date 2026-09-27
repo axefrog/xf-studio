@@ -443,11 +443,19 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     setStage: (theme: StageTheme) => backdrop.setTheme(theme),
     /** Light the scene by a lighting setup (lighting-setups.ts), or the built-in game rig for the shown body. */
     setLighting: (source: LightingSource) => lighting.setSource(source),
+    // Rendering options (the Preview quality panel's Rendering group): how this view draws, never the looks or the export.
+    /** The skin's screen-space scatter (on) or the wrap stand-in (off). */
+    setSkinScatter: (enabled: boolean) => lighting.setScatter(enabled),
+    /** The lights' shadow maps on the V (creator and studio setups alike); off draws every light unshadowed. */
+    setFaceShadows: (enabled: boolean) => lighting.setShadowsEnabled(enabled),
+    /** The strands' Hair look: 0 Crisp (faithful coverage) … 1 Game-like (hair-colour-model.ts `HAIR_LOOK`). */
+    setHairLook: (value: number) => character.setHairLook(value),
     /** Evidence: the setup drawn now, and how the room is lit on this GPU. */
     lightingEvidence: () => ({ setup: lighting.shown(), environmentMode: lighting.environment.mode }),
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
   return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
     "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
-    "setBlink", "animateBlink", "setWire", "setNormals", "setStage", "setLighting"], invalidate) };
+    "setBlink", "animateBlink", "setWire", "setNormals", "setStage", "setLighting",
+    "setSkinScatter", "setFaceShadows", "setHairLook"], invalidate) };
 }

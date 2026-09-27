@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { bakeHairProfile, HAIR_DITHER, HAIR_LIGHTING_VANILLA, sampleStopsEncoded, type HairLighting, type HairMaterialParameters,
+import { bakeHairProfile, HAIR_DITHER, HAIR_LIGHTING_VANILLA, HAIR_LOOK, sampleStopsEncoded, type HairLighting, type HairMaterialParameters,
   type ProfileEncoding, type ProfileStop } from "./hair-colour-model";
 
 /** Renderer adapter for the hair.mt colour model in hair-colour-model.ts: base colour, coverage and roughness
@@ -48,29 +48,39 @@ export function attachHairVertexRed(geometry: THREE.BufferGeometry): boolean {
  * then stretched over the game's dither range (hairResolvedCoverage). Pair it with an opaque
  * alpha-to-coverage material (STRAND_COVERAGE_MATERIAL or its over-makeup variant), not alpha blending.
  */
-export function attachStrandCoverage(material: THREE.MeshStandardMaterial, alphaCutoff: number) {
+export function attachStrandCoverage(material: THREE.MeshStandardMaterial, alphaCutoff: number, look: HairLookUniform = { value: 0 }) {
   const prior = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     prior(shader, renderer);
     shader.uniforms.xfsAlphaCutoff = { value: alphaCutoff };
+    shader.uniforms.xfsHairLook = look;
     shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>
-        uniform float xfsAlphaCutoff;`).replace("#include <alphamap_fragment>", STRAND_COVERAGE_GLSL);
+        uniform float xfsAlphaCutoff, xfsHairLook;`).replace("#include <alphamap_fragment>", STRAND_COVERAGE_GLSL);
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-strand-coverage-2`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-strand-coverage-3`;
 }
 
 const glslFloat = (value: number) => value.toPrecision(9);
+/**
+ * The Hair look a view shows (0 Crisp … 1 Game-like; hair-colour-model.ts `HAIR_LOOK`) as a uniform its strand materials share: the
+ * character renderer owns one per scene and sets its value, so a change needs no recompile and never touches the export.
+ */
+export type HairLookUniform = { value: number };
 /**
  * Strand_Alpha.r remapped by AlphaCutoff, then the game's TAA-resolved dither coverage
  * (hairResolvedCoverage): every layer in a pixel meets the same threshold, uniform on
  * [offset, offset + 5·step). MSAA alpha-to-coverage keeps that nesting: its sample masks
  * grow with alpha, so overlapping layers cover about as much as the most opaque one.
+ * The Hair look (`xfsHairLook`, hairLookCoverage) blends in a mip-biased alpha, a lower
+ * threshold and the ×1.33 coverage boost; at 0 it is exactly the faithful coverage.
  */
 const STRAND_COVERAGE_GLSL = `
-        float strandAlpha = texture2D(alphaMap, vAlphaMapUv).r;
+        float strandAlpha = texture2D(alphaMap, vAlphaMapUv, xfsHairLook * ${glslFloat(HAIR_LOOK.smoothingBias)}).r;
+        float strandCutoff = xfsAlphaCutoff * (1.0 - xfsHairLook * ${glslFloat(1 - HAIR_LOOK.cutoffScale)});
         float strandRemapped = xfsAlphaCutoff >= 1.0 ? 0.0 :
-          clamp(max(strandAlpha - xfsAlphaCutoff, 0.0) / (1.0 - xfsAlphaCutoff), 0.0, 1.0);
+          clamp(max(strandAlpha - strandCutoff, 0.0) / (1.0 - strandCutoff), 0.0, 1.0);
+        strandRemapped *= 1.0 + xfsHairLook * ${glslFloat(HAIR_LOOK.coverageBoost - 1)};
         diffuseColor.a *= clamp((strandRemapped - ${glslFloat(HAIR_DITHER.offset)}) / ${glslFloat(5 * HAIR_DITHER.step)}, 0.0, 1.0);`;
 
 /**
@@ -268,6 +278,8 @@ export function attachHairLighting(material: THREE.MeshStandardMaterial, roughne
 type StrandSource = {
   kind: "strand"; id: THREE.Texture; gradient: THREE.Texture; profile: THREE.Texture;
   sampleCount: number; material: HairMaterialParameters; lighting?: HairLighting;
+  /** The view's Hair look (0 Crisp … 1 Game-like), shared by the scene's strands; Crisp when absent. */
+  look?: HairLookUniform;
 };
 type CapSource = { kind: "cap"; mask: THREE.Texture; gradient: THREE.Texture };
 
@@ -282,7 +294,7 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
         xfsStrandId: { value: source.id }, xfsStrandGradient: { value: source.gradient },
         xfsProfile: { value: source.profile }, xfsProfileSamples: { value: source.sampleCount },
         xfsShadow: { value: new THREE.Vector3(m.shadowMin, m.shadowMax, m.shadowStrength) },
-        xfsAlphaCutoff: { value: m.alphaCutoff },
+        xfsAlphaCutoff: { value: m.alphaCutoff }, xfsHairLook: source.look ?? { value: 0 },
         xfsRoughness: { value: new THREE.Vector4(m.roughnessScale, m.roughnessBias, m.shadowRoughness, m.shadowStrength) },
         ...hairLightUniforms(l),
       });
@@ -295,7 +307,7 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
         uniform sampler2D xfsStrandId, xfsStrandGradient, xfsProfile;
         uniform int xfsProfileSamples;
         uniform vec3 xfsShadow;
-        uniform float xfsAlphaCutoff;
+        uniform float xfsAlphaCutoff, xfsHairLook;
         uniform vec4 xfsRoughness;
         ${HAIR_LIGHT_UNIFORMS_GLSL}
         varying float vXfsVertexRed;
@@ -340,5 +352,5 @@ export function attachHairColor(material: THREE.MeshStandardMaterial, source: St
     }
   };
   const priorKey = material.customProgramCacheKey.bind(material);
-  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-8`;
+  material.customProgramCacheKey = () => `${priorKey()}-xfs-hair-${source.kind}-9`;
 }

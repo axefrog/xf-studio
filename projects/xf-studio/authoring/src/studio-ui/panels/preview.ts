@@ -2,7 +2,6 @@ import type { PreviewTextureSize } from "../../preview-quality";
 import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
-import { comingSoon, liveFeatures } from "../coming-soon";
 import { ChoiceList, DirectionDial, GroupSection, LightList, SliderWithValue } from "../components";
 import { openMenu, openValuePopover } from "../menu";
 import { icon } from "../icons";
@@ -103,7 +102,6 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   // A released slider (or the end of a keyboard burst) ends its View and lighting step: the next drag is a step of its own (CORE-95).
   const endEdit = () => { port.authoring.dispatch({ kind: "view.endEdit" }); };
   const capability = (action: Parameters<typeof port.authoring.capability>[0]) => port.authoring.capability(action);
-  const live = liveFeatures(port);
   const creatorFace = button({ label: "Creator face", icon: "front", small: true, title: "The creator's face-page camera: 15° lens, 1.2 m",
     onClick: () => rt.dispatch({ kind: "camera.creatorFraming", page: "face" }) });
   const creatorHair = button({ label: "Creator hair", icon: "front", small: true, title: "The creator's hair-page camera: 15° lens, 2 m",
@@ -279,19 +277,12 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const toggles = new Map<string, Toggle>();
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
-  // Skin scattering quality (shader-skin.md §11, "a viewing preference beside the lighting presets"): Coming soon until it lands.
-  const scatterEntry = comingSoon("lightingSubsurface", live);
-  const scatter = scatterEntry ? new Segmented<string>({ label: scatterEntry.label, showLabel: false, onSelect: () => {},
-    options: [{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }] }) : undefined;
-  scatter?.update(undefined, () => ({ available: false, reason: scatterEntry!.reason }));
-  const scatterControl = scatterEntry && scatter ? h("div", { class: "control" }, h("div", { class: "control-line" },
-    h("span", { class: "control-label", text: scatterEntry.label }), helpTip(scatterEntry.label, scatterEntry.reason)), scatter.element) : null;
   const element = h("div", { class: "panel-content" },
     section({ title: "Camera", help: ["Camera and light are saved with your workspace; they never change your looks or your mod.",
       "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section({ title: "Light", help: LIGHT_HELP }, setupList.element, setupActions, surroundings.element, lightsGroup.element),
     diagnostics,
-    section("Display", toolToggles, normals.element, scatterControl, h("div", { class: "research-only" }, optics.element, opticsNote)));
+    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)));
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
@@ -461,6 +452,16 @@ export function blinkNoteLine(motion: Pick<MotionState, "blinkAvailable" | "blin
   return motion && !motion.blinkAvailable ? motion.blinkError ?? "" : "";
 }
 
+/** What each Rendering option does, in plain words (their help tips). */
+export const RENDERING_HELP = {
+  scatter: "Light spreads a little under your V's skin, as in the game: shadow edges soften and turn warm, while lit skin stays neutral, not reddened.",
+  shadows: "The lights cast shadows on your V's face and body, such as the nose's shadow. Turn off to see the face evenly lit.",
+  hairLook: ["Crisp shows each strand as sharply as the hair's own files draw it. Game-like approximates the thicker, softer hair the game shows after smoothing.",
+    "Preview only: your looks and your mod are unchanged."],
+} as const;
+/** The Hair look's readout: its two ends by name, per cent between them (the value is 0 Crisp … 1 Game-like). */
+export const hairLookText = (percent: number) => percent < .5 ? "Crisp" : percent > 99.5 ? "Game-like" : `${Math.round(percent)} %`;
+
 export function qualityPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
   const sizes: PreviewTextureSize[] = [512, 1024, 2048, 4096];
@@ -468,9 +469,22 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
     onSelect: size => rt.dispatch({ kind: "quality.set", size }) });
   const stateLine = h("div", { class: "quality-state" });
   const rebuild = button({ label: "Rebuild preview", icon: "refresh", small: true, onClick: () => rt.dispatch({ kind: "quality.rebuild" }) });
+  // Rendering (how the 3D view draws; the view's display node, View and lighting history): library Toggles and a SliderWithValue. The
+  // crease occlusion switch joins this group when it lands (claude/fix-plate-seam).
+  const endEdit = () => { port.authoring.dispatch({ kind: "view.endEdit" }); };
+  const scatter = new Toggle({ label: "Skin scattering", help: RENDERING_HELP.scatter,
+    onChange: enabled => rt.dispatch({ kind: "preview.setSkinScatter", enabled }) });
+  const shadows = new Toggle({ label: "Face shadows", help: RENDERING_HELP.shadows,
+    onChange: enabled => rt.dispatch({ kind: "preview.setFaceShadows", enabled }) });
+  const hairLook = new SliderWithValue({ label: "Hair look", min: 0, max: 100, step: 1, unit: "%", format: hairLookText, help: RENDERING_HELP.hairLook,
+    defaultValue: 0, reset: true, transaction: {
+      edit: value => { const action = { kind: "preview.setHairLook" as const, value: value / 100 }; rt.report(action.kind, port.authoring.dispatch(action)); },
+      commit: endEdit, cancel: endEdit } });
   const element = h("div", { class: "panel-content" },
     section({ title: "Makeup preview textures", help: ["The size of the makeup textures in the 3D view. The head and eyes keep their own detail.",
-      "Saved on this computer; your looks and your mod are unchanged."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)));
+      "Saved on this computer; your looks and your mod are unchanged."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)),
+    section({ title: "Rendering", help: ["How the 3D view draws your V. Saved with your workspace; your looks and your mod are unchanged.",
+      "Ctrl+Z in this panel undoes these with the other view and lighting changes."] }, scatter.element, shadows.element, hairLook.element));
   return {
     spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
@@ -486,6 +500,15 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
           h("span", { class: "muted small", text: `About ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB of memory at this size.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));
+      const preview = frame.preview.preview;
+      const gate = (action: Parameters<typeof port.authoring.capability>[0]) => {
+        const allowed = port.authoring.capability(action);
+        return { disabled: !allowed.available, reason: allowed.reason };
+      };
+      const scattering = preview?.skinScatter ?? true, shadowing = preview?.faceShadows ?? true, look = preview?.hairLook ?? 0;
+      scatter.update(scattering, gate({ kind: "preview.setSkinScatter", enabled: !scattering }));
+      shadows.update(shadowing, gate({ kind: "preview.setFaceShadows", enabled: !shadowing }));
+      hairLook.update(look * 100, gate({ kind: "preview.setHairLook", value: look }));
     },
   };
 }

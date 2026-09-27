@@ -42,6 +42,10 @@ export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
   ports.preview.setEyeShape(initial.eyeShape);
   ports.preview.setWire(initial.wire);
   ports.preview.setNormals(initial.normals);
+  // The Rendering options, each at its default unless the viewer changed it (skin scatter and face shadows on, Crisp hair).
+  ports.preview.setSkinScatter?.(initial.skinScatter ?? true);
+  ports.preview.setFaceShadows?.(initial.faceShadows ?? true);
+  ports.preview.setHairLook?.(initial.hairLook ?? 0);
   // The shown lighting setup (a workspace saved before setups migrates: lighting-setups.ts).
   const lights = previewLights(initial);
   ports.preview.setLighting?.(lightingSource({ setup: lights.setup, setups: lights.setups }, lights.creatorLighting));

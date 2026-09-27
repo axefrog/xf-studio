@@ -26,7 +26,7 @@ export const SHELL_VIEW = {
     { id: "motion", title: "Motion", icon: "motion", order: 140, slot: "inspect",
       description: "The game's idles and blink." },
     { id: "quality", title: "Preview quality", icon: "quality", order: 150, slot: "inspect",
-      description: "Makeup texture size and memory." },
+      description: "Makeup texture size, memory and how the 3D view draws." },
     { id: "activity", title: "Activity", icon: "activity", order: 160, slot: "closed",
       description: "What happened this session: results, warnings and errors." },
     // Settings has no home among the docked groups: summoned, it opens floating, and later where the person last had it (`summonPanel`).
