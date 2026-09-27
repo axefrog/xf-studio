@@ -70,7 +70,7 @@ export function posesPanel(ctx: Ctx): PanelController {
   const state = h("div", { class: "poses-state" });
   const count = h("p", { class: "note muted poses-count" });
   tree.element.classList.add("poses-tree");
-  const limits = note("Props, weapons and vehicles aren't drawn, so V poses empty-handed. Hair keeps its rest shape, and clothes don't yet make room for the body in strong poses.");
+  const limits = note("Props, weapons and vehicles aren't drawn, so V poses empty-handed. Clothes don't yet make room for the body in strong poses.");
   const element = h("div", { class: "panel-content poses-panel" }, search.element, h("div", { class: "poses-actions" }, still, idle, frame), current, outfit, state, count,
     tree.element, limits);
 
