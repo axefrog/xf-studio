@@ -278,3 +278,79 @@ test("folder setting: says what it uses, a refusal shows inline on the reserved 
   // A cancelled picker says nothing.
   expect([picks, typed.hidden, note.textContent]).toEqual([1, true, ""]);
 });
+
+test("bipolar slider: the readout names the direction, drags snap to the centre, Enter types an exact value, Delete returns to the centre, mixed until edited", async () => {
+  const { BipolarSlider } = await lib();
+  const { calls, t } = log();
+  const control = new BipolarSlider({ label: "Look sideways", min: -100, max: 100, step: 1, unit: "%", ends: { negative: "Left", positive: "Right" }, transaction: t });
+  document.body.append(control.element);
+  const readout = control.element.querySelector<HTMLElement>(".readout-value")!, field = control.element.querySelector<HTMLInputElement>(".readout-input")!;
+  const track = control.element.querySelector<HTMLElement>(".bipolar-track")! as unknown as LightElement;
+  control.update(20);
+  expect([readout.textContent, control.input.getAttribute("aria-valuetext"), control.element.classList.contains("set"), control.resetButton!.classList.contains("idle")])
+    .toEqual(["20 % right", "20 % right", true, false]);
+  expect([track.style.values.get("--zero"), track.style.values.get("--lo"), track.style.values.get("--hi")]).toEqual(["0.5", "0.5", "0.6"]);
+  expect(Array.from((control.element.querySelector(".bipolar-ends")! as unknown as LightElement).children).map(e => e.textContent)).toEqual(["Left", "Right"]);
+  control.update(-35);
+  expect([readout.textContent, track.style.values.get("--lo"), track.style.values.get("--hi")]).toEqual(["35 % left", "0.325", "0.5"]);
+  control.update(0);
+  expect([readout.textContent, control.element.classList.contains("set"), control.resetButton!.classList.contains("idle")]).toEqual(["0", false, true]);
+  // A pointer drag near the centre records exactly 0; a keyboard step stays exact.
+  fire(control.input, "pointerdown");
+  control.input.value = "2"; fire(control.input, "input");
+  expect(calls).toEqual(["begin", "edit 0"]);
+  fire(control.input, "pointerup"); fire(control.input, "change");
+  calls.length = 0;
+  control.input.value = "2"; fire(control.input, "input"); fire(control.input, "blur");
+  expect(calls).toEqual(["begin", "edit 2", "commit"]);
+  calls.length = 0;
+  // Enter types in the readout's place: "30 left" is -30, one step; Escape changes nothing; focus returns to the slider.
+  control.update(2);
+  key(control.input, "Enter");
+  expect([field.hidden, readout.hidden, field.value, document.activeElement === (field as unknown)]).toEqual([false, true, "2", true]);
+  field.value = "30 left"; key(field, "Enter");
+  expect([calls, field.hidden, document.activeElement === (control.input as unknown)]).toEqual([["begin", "edit -30", "commit"], true, true]);
+  calls.length = 0;
+  control.update(-30);
+  readout.click(); field.value = "90"; key(field, "Escape");
+  expect([calls, readout.textContent]).toEqual([[], "30 % left"]);
+  field.hidden = true;
+  readout.click(); field.value = "250"; key(field, "Enter");
+  expect(calls).toEqual(["begin", "edit 100", "commit"]);
+  calls.length = 0;
+  // Delete (and the reset) return to the centre as one step.
+  control.update(100);
+  key(control.input, "Delete");
+  expect(calls).toEqual(["begin", "edit 0", "commit"]);
+  calls.length = 0;
+  // Mixed: the readout says so, the value text keeps the net value, nothing is edited until the person moves it.
+  control.update(10, { mixed: true });
+  expect([readout.textContent, control.input.getAttribute("aria-valuetext"), control.element.classList.contains("mixed"), control.element.classList.contains("set"), calls])
+    .toEqual(["Mixed", "Mixed: 10 % right", true, true, []]);
+  control.resetButton!.click();
+  expect(calls).toEqual(["begin", "edit 0", "commit"]);
+  // Disabled: the range is disabled, the readout can't be edited and the reset stays out of sight.
+  control.update(40, { disabled: true, reason: "Your V's face isn't read yet." });
+  readout.click();
+  expect([control.input.disabled, control.input.title, field.hidden, control.resetButton!.classList.contains("idle")]).toEqual([true, "Your V's face isn't read yet.", true, true]);
+});
+
+test("icon button: a mode toggle carries its pressed state and the mode class; tree view: maxRows fits the frame to its visible items", async () => {
+  const { iconButton, TreeView } = await lib();
+  const mirror = iconButton({ label: "Mirror sides: Brows", icon: "mirror", mode: true, pressed: true });
+  expect([mirror.classList.contains("mode"), mirror.getAttribute("aria-pressed")]).toEqual([true, "true"]);
+  expect(iconButton({ label: "Hide Petal wash", icon: "eye", pressed: true }).classList.contains("mode")).toBe(false);
+  const expanded = new Set<string>();
+  const groups = [{ id: "a", label: "Saved", rows: [{ id: "a1", label: "Smirk" }, { id: "a2", label: "Calm" }] }, { id: "b", label: "Natural", rows: Array.from({ length: 12 }, (_, i) => ({ id: `b${i}`, label: `Sample ${i}` })) }];
+  const tree = new TreeView({ label: "Start from", maxRows: 6, minRows: 3, onActivate: () => {}, onToggle: () => {} });
+  const height = () => (tree.element as unknown as { style: { height?: string } }).style.height;
+  tree.update({ groups, expanded });
+  expect(height()).toBe(`${3 * 28 + 2}px`);
+  tree.update({ groups, expanded: new Set(["a"]) });
+  expect(height()).toBe(`${4 * 28 + 2}px`);
+  tree.update({ groups, expanded: new Set(["a", "b"]) });
+  expect(height()).toBe(`${6 * 28 + 2}px`);
+  const free = new TreeView({ label: "Owner sized", onActivate: () => {}, onToggle: () => {} });
+  free.update({ groups, expanded });
+  expect((free.element as unknown as { style: { height?: string } }).style.height).toBeUndefined();
+});

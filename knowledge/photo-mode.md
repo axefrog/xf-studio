@@ -112,6 +112,8 @@ To leave safely from script, call the menu's own `ConfirmBackConfirmation()` (di
 
 ## 5. Lights
 
+The light component itself, what scripts can change on it, CharLi in detail, the spawning routes and how a Studio lighting setup maps onto game lights are on [photo-mode and spawned lights](photo-mode-lights.md); the mirror built on them is designed in [research/runtime/lighting-mirror-design.md](../research/runtime/lighting-mirror-design.md).
+
 ### 5.1 Photo-mode lights
 
 | Attribute | Meaning | Grade |
@@ -140,7 +142,7 @@ Both mods spawn their own light entities and control them through the light comp
 | Control | `FindComponentByName(name)`, then `SetColor(Color)`, `SetIntensity`, `SetRadius`, `SetAngles(inner, outer)`, `ToggleLight(bool)` | Finds components whose class contains `LightComponent`; same setters. Local shadows can't be switched at run time, so AMM respawns the `_shadows` variant. | [source] CharLi `cl.glow.lua:1562-1688`; AMM `Modules/light.lua:310-327, 375-455, 506-514, 571-589` |
 | Remove | `GetEntity():Destroy()` with a destruction poll; everything on CET shutdown | `Dispose()` | [source] CharLi `cl.glow.lua:333-366, 1490`, `cl.core.lua:1646-1655` |
 
-`exEntitySpawner` is a CET function. From redscript, Codeware's `DynamicEntitySystem` is the equivalent (AMM spawns NPCs with it) [source] AMM `Modules/spawn.lua:3-25, 602-612`. Neither mod's templates may be reused, so a bridge rig needs its own light entity, or a base-game entity with a light component [hypothesis].
+`exEntitySpawner` is a CET function. From redscript, Codeware's `DynamicEntitySystem` is the equivalent (AMM spawns NPCs with it) [source] AMM `Modules/spawn.lua:3-25, 602-612`. A third route sets every light field, not only those with a setter: World Builder spawns an empty entity through Codeware's `StaticEntitySystem` and adds a light component built from data as the entity assembles ([photo-mode lights §3](photo-mode-lights.md#3-spawning-lights-from-a-mod)). None of these mods' templates may be reused (no open licence, [provenance follow-ups](../research/provenance-followups.md)), so a bridge rig needs its own light entity.
 
 **A scripted light sweep** follows from this: spawn one spot light, then for each step set its position on a circle around V's head (fixed radius and height, azimuth in steps), aim it at the head, wait a frame and capture. With photo-mode lights alone, a sweep can vary brightness, colour and cone but not direction.
 
@@ -205,7 +207,7 @@ Attribute numbers can shift with the game version and with mods that add rows; t
 2. When Character Customization Anywhere opens the creator on 2.31, is `m_updatingFinalizedState` false, and does its Confirm keep the look? (Read the menu's field through the bridge, or check whether the bottom buttons show the new-game labels.)
 3. Which `m_editMode` does the in-world mirror pass, and does the native `ReFinalizeState` save or autosave? Does `cc.open`'s idle-scenario event open the creator anywhere in the world (no mirror scene around V), as Character Customization Anywhere's pause-menu redirect does?
 4. Is the camera PRESET placed relative to V's spawn position and yaw, and how does collision change it? Can the camera entity from `PhotomodeCameraSwitchedEvent` be teleported and stay put?
-5. Where does a photo-mode light start when switched on, and can its entity be caught and moved?
+5. Where does a photo-mode light start when switched on, and can its entity be caught and moved? (Step T2 of the [lighting mirror's first session](../research/runtime/lighting-mirror-design.md#6-the-first-game-session-test-plan) reads it.)
 6. Does the AMM-style `Hide` context hide the photo-mode cursor without side effects on the menu's mouse input?
 7. Does the system send `OnOptionUpdated` after an external `ApplyChangeToOption`, for any option type?
 
