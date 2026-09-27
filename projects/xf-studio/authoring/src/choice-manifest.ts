@@ -10,7 +10,9 @@
  * - each read still resolves to the same entry in the same archive, and is answered without WolvenKit for that archive's current path,
  *   size and modification time: in the resolver's JSON cache, or answered natively before by the same native reader (resolver-host.ts
  *   `ResolverFetcher.isCached`; a changed archive or reader has another key, so a mod updated in place is not ready);
- * - each export's archive still wins its path, and the exporter's cache has it for that archive's current identity.
+ * - each export's archive still wins its path, and the exporter's cache has it for that archive's current identity; a morph target's
+ *   export also names the base mesh its skin came from (its depot path and winning archive), which must still win and match the cache
+ *   entry (NATIVE-60).
  * Anything else (a mod installed, updated, removed or reordered so another archive wins; a cache file evicted or cleared) makes the
  * choice "not prepared" again, and preparing it reads only what changed. The caches themselves stay the authority: a manifest only
  * says whether a preparation would need WolvenKit.
@@ -36,9 +38,10 @@ export type ChoiceManifest = {
   xl: string;
   /** [depot hash read, archive entry hash, archive id or null when no archive provided it]. */
   reads: [string, string, string | null][];
-  /** [kind, depot path, archive id]. */
-  exports: [ExportKind, string, string][];
+  /** [kind, depot path, archive id], and for a morph target whose base mesh was located, [..., base depot path, base archive id]. */
+  exports: ManifestExport[];
 };
+export type ManifestExport = [ExportKind, string, string] | [ExportKind, string, string, string, string];
 
 /** The manifest name of a request on a route (`route`: the route's identity and WolvenKit's). */
 export const choiceKey = (route: string, request: CharacterRequest) =>
@@ -67,9 +70,10 @@ export function parseChoiceManifest(value: unknown): ChoiceManifest | null {
     if (archive !== null && !text(archive)) return null;
   }
   for (const item of manifest.exports as unknown[]) {
-    if (!Array.isArray(item) || item.length !== 3) return null;
-    const [kind, path, archive] = item as unknown[];
+    if (!Array.isArray(item) || (item.length !== 3 && item.length !== 5)) return null;
+    const [kind, path, archive, basePath, baseArchive] = item as unknown[];
     if (typeof kind !== "string" || !EXPORT_KINDS.has(kind) || !text(path, 1024) || !text(archive)) return null;
+    if (item.length === 5 && (!text(basePath, 1024) || !text(baseArchive))) return null;
   }
   return manifest as ChoiceManifest;
 }
@@ -84,16 +88,16 @@ export function writeChoiceManifest(dir: string, key: string, manifest: ChoiceMa
 }
 
 /** A manifest of what a preparation read and exported, on the installation it used. */
-export function manifestOf(graph: ResourceGraph, reads: Iterable<string>, exports: Iterable<[ExportKind, string, string]>, tool: string, xl: string): ChoiceManifest {
+export function manifestOf(graph: ResourceGraph, reads: Iterable<string>, exports: Iterable<ManifestExport>, tool: string, xl: string): ChoiceManifest {
   const entries: ChoiceManifest["reads"] = [];
   for (const hash of new Set(reads)) {
     const { entry, lookup } = graph.locate(refFromHash(hash));
     entries.push([hash, entry.hash, lookup.winner?.id ?? null]);
   }
   const seen = new Set<string>(), unique: ChoiceManifest["exports"] = [];
-  for (const [kind, path, archive] of exports) {
-    const key = `${kind}|${path.toLowerCase()}|${archive}`;
-    if (!seen.has(key)) { seen.add(key); unique.push([kind, path, archive]); }
+  for (const item of exports) {
+    const key = [item[0], item[1].toLowerCase(), item[2], item[3]?.toLowerCase() ?? "", item[4] ?? ""].join("|");
+    if (!seen.has(key)) { seen.add(key); unique.push([...item] as ManifestExport); }
   }
   return { schema: CHOICE_MANIFEST_SCHEMA, tool, xl, reads: entries, exports: unique };
 }
@@ -139,10 +143,12 @@ function readProblem([hash, entryHash, archive]: ChoiceManifest["reads"][number]
   if (lookup.winner && !check.fetcher.isCached(lookup.winner, entry.hash)) return `${hash} isn't in the resolver's cache for ${lookup.winner.name}`;
   return null;
 }
-function exportProblem([kind, path, archive]: ChoiceManifest["exports"][number], check: ManifestCheck): string | null {
+function exportProblem([kind, path, archive, basePath, baseArchive]: ManifestExport, check: ManifestCheck): string | null {
   const winner = check.graph.locate(refFromPath(path)).lookup.winner;
   if (winner?.id !== archive) return `another archive provides ${path}`;
-  if (!check.exporter.has!(kind, path, archiveExportSource(archive, check.gameRoot))) return `${path} isn't in the export cache for ${winner.name}`;
+  if (basePath !== undefined && check.graph.locate(refFromPath(basePath)).lookup.winner?.id !== baseArchive) return `another archive provides ${basePath}`;
+  const base = basePath !== undefined && baseArchive !== undefined ? { depotPath: basePath, archivePath: baseArchive } : undefined;
+  if (!check.exporter.has!(kind, path, archiveExportSource(archive, check.gameRoot), base)) return `${path} isn't in the export cache for ${winner.name}`;
   return null;
 }
 /** Whether a manifest holds on the installation opened now. */

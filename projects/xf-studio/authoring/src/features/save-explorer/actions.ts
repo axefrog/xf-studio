@@ -4,8 +4,8 @@
  * with capabilities; no DOM, file or network code: the host device (`SaveExplorerDevice`) lists, reads and picks, and the pure read model
  * (explorer.ts) decodes. Nothing here writes a save, and nothing is persisted: an open save lives only in memory.
  *
- * Long work yields between steps (`yieldToHost`): the container opens in one step, then each package and the world-object stream are
- * checked one at a time so the tree's decode status fills in without holding the page.
+ * Long work yields between steps (`yieldToHost`): the container opens in one step, then each package is checked in one step and the
+ * world-object stream in bounded steps (SAVE-06), so the tree's decode status fills in without holding the page.
  */
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
 import { openExplorer, type EntryPage, type ModDataView, type NodeInspection, type ObjectInspection, type ObjectRef, type SaveExplorer, type SaveSummary,
@@ -19,13 +19,17 @@ import { parseSaveListing, parseSaveTypeNames, type SaveListing, type SaveTypeNa
 export type SaveExplorerDevice = {
   list(): Promise<unknown>;
   read(folder: string): Promise<Uint8Array>;
-  /** A save file chosen by the person (for saves outside the saves folder); undefined when they cancel. */
-  pick(): Promise<{ name: string; bytes: Uint8Array } | undefined>;
+  /**
+   * A save file chosen by the person (for saves outside the saves folder), undefined when they cancel: its name and size, and its bytes
+   * read only when asked (the service checks the size first; SAVE-08).
+   */
+  pick(): Promise<PickedSave | undefined>;
   names(): Promise<unknown>;
   /** Where the view can load a listed save's screenshot from, or null. */
   thumbnail(folder: string): string | null;
 };
 
+export type PickedSave = { readonly name: string; readonly size: number; bytes(): Promise<Uint8Array> };
 export type SaveExplorerView = "nodes" | "mods";
 export type SaveExplorerAction =
   | { kind: "saves.refresh" }
@@ -118,10 +122,15 @@ export class SaveExplorerActions {
       case "saves.refresh": return this.refresh();
       case "saves.open": return this.openListed(action.folder);
       case "saves.openFile": {
-        let picked: { name: string; bytes: Uint8Array } | undefined;
+        let picked: PickedSave | undefined;
         try { picked = await this.device!.pick(); } catch { return { ok: false, code: "unavailable", message: "The file couldn't be read. Try again." }; }
         if (!picked) return { ok: true, message: "No file chosen." };
-        return this.openBytes(picked.bytes, { kind: "file", name: picked.name });
+        const source = { kind: "file" as const, name: picked.name };
+        // Refused by its size before anything is read (SAVE-08).
+        if (!(picked.size <= MAX_SAVE_BYTES)) { this.generation++; return this.tooLarge(source); }
+        let bytes: Uint8Array;
+        try { bytes = await picked.bytes(); } catch { return { ok: false, code: "unavailable", message: "The file couldn't be read. Try again." }; }
+        return this.openBytes(bytes, source);
       }
       case "saves.close":
         this.generation++; this.explorer = null;
@@ -205,14 +214,16 @@ export class SaveExplorerActions {
     return this.openBytes(bytes, { kind: "listed", folder }, generation);
   }
 
+  private tooLarge(source: NonNullable<SaveExplorerState["open"]["source"]>): SaveExplorerOutcome {
+    const message = "That file is larger than any Cyberpunk 2077 save, so it wasn't opened.";
+    this.publish({ open: { phase: "failed", source, message, checking: false } });
+    return { ok: false, code: "limit", message };
+  }
+
   private async openBytes(bytes: Uint8Array, source: NonNullable<SaveExplorerState["open"]["source"]>, generation = ++this.generation): Promise<SaveExplorerOutcome> {
     // A later open or a close superseded this one while its bytes were read.
     if (generation !== this.generation) return { ok: true };
-    if (bytes.byteLength > MAX_SAVE_BYTES) {
-      const message = "That file is larger than any Cyberpunk 2077 save, so it wasn't opened.";
-      this.publish({ open: { phase: "failed", source, message, checking: false } });
-      return { ok: false, code: "limit", message };
-    }
+    if (bytes.byteLength > MAX_SAVE_BYTES) return this.tooLarge(source);
     this.publish({ open: { phase: "loading", source, checking: false } });
     const names = await this.ensureNames();
     await this.yieldToHost();
@@ -229,12 +240,15 @@ export class SaveExplorerActions {
     const first = explorer.save.roots[0] ?? null;
     this.publish({ open: { phase: "ready", source, summary: explorer.summary(), checking: true },
       selection: { node: first, object: null, view: this.state.selection.view }, revision: this.state.revision + 1 });
-    // Fill in the tree's decode status one node at a time.
+    // Fill in the tree's decode status one node at a time, each in bounded steps (the world objects take several).
     for (const id of explorer.pending()) {
-      await this.yieldToHost();
-      if (generation !== this.generation) return { ok: true };
-      explorer.check(id);
-      this.publish({ revision: this.state.revision + 1 });
+      let done = false;
+      while (!done) {
+        await this.yieldToHost();
+        if (generation !== this.generation) return { ok: true };
+        done = explorer.checkStep(id);
+        this.publish({ revision: this.state.revision + 1 });
+      }
     }
     if (generation === this.generation) this.publish({ open: { ...this.state.open, checking: false }, revision: this.state.revision + 1 });
     return { ok: true };

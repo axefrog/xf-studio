@@ -6,17 +6,17 @@ import { SaveExplorerActions, saveExplorerFacade, type SaveExplorerDevice, type 
 import { explorerPanel } from "../src/features/save-explorer/view/panel";
 import type { ModuleViewContext } from "../src/studio-ui/views/feature-view";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
-import { syntheticSave } from "./fixtures/synthetic-explorer-save";
+import { nestedSave, syntheticSave } from "./fixtures/synthetic-explorer-save";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 5) => new Promise(resolve => setTimeout(resolve, ms));
 
-function harness() {
+function harness(read: () => Uint8Array = syntheticSave) {
   const device: SaveExplorerDevice = {
     list: async () => ({ available: true, saves: [{ folder: "ManualSave-7", kind: "manual", savedAt: "2026-09-20T10:00:00.000Z", location: "Watson", level: 3,
       lifePath: "Nomad", gameVersion: "2.31", saveVersion: 269, bytes: 100, screenshot: false, modded: false }] }),
-    read: async () => syntheticSave(), pick: async () => undefined, thumbnail: () => null,
+    read: async () => read(), pick: async () => undefined, thumbnail: () => null,
     names: async () => ({ engine: { enums: ["gameStatIDType"], bitfields: [], classes: [], properties: [] },
       scripts: { available: true, names: ["DoorControllerPS", "m_isOpen", "SomeMod.OutfitState", "App.DynamicEntitySystemPS"] } }),
   };
@@ -115,5 +115,25 @@ describe("Save Explorer panel", () => {
     await settle();
     expect(texts(root.querySelectorAll("details.save-mod").map(group => group.querySelector("strong")!))).toEqual(["App", "SomeMod"]);
     expect(lightDocument.body).toBeDefined();
+  });
+
+  test("an inspected field's children are built when it is first opened (SAVE-03)", async () => {
+    const { panel, root, facade } = harness(() => nestedSave(200));
+    panel.spec.visibility?.(true);
+    await settle();
+    root.querySelector("button.save-row")!.dispatchEvent(lightEvent("click"));
+    await settle(20);
+    const node = facade.tree().find(row => row.encoding === "package")!.id;
+    await facade.dispatch({ kind: "saves.selectNode", node });
+    await facade.dispatch({ kind: "saves.inspect", ref: { node, kind: "chunk", index: 0 } });
+    await settle();
+    const rows = root.querySelector("div.save-object")!.querySelector("details.save-field")!;
+    const list = rows.querySelector("ul")!;
+    expect(list.childElementCount).toBe(0);
+    rows.open = true;
+    rows.dispatchEvent(lightEvent("toggle"));
+    expect(list.childElementCount).toBe(200);
+    // Each row is closed and empty in turn until opened.
+    expect(list.querySelector("details.save-field")!.querySelector("ul")!.childElementCount).toBe(0);
   });
 });

@@ -2,7 +2,7 @@
 // fields, newest first, no user name), the file endpoint's refusals (paths, links, unknown parts), the names endpoint, the origin check,
 // and the host sources (the Saved Games folder from the registry or profile, and the script bundles the launch route loads).
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSavesHandler, describeSave, listSaves } from "../src/features/save-explorer/host/saves-server";
@@ -71,6 +71,26 @@ describe("saves endpoints", () => {
     expect(names.scripts).toEqual({ available: true, names: ["DoorControllerPS", "m_isOpen"] });
     const missing = parseSaveTypeNames(await (await handler({ bundles: [join(root, "none.redscripts")] })(get("/api/saves/types"))).json());
     expect(missing.scripts).toMatchObject({ available: false, names: [], reason: expect.stringMatching(/Game & tools/) });
+  });
+
+  test("a saves folder that is itself a link or junction is followed; a linked save folder below it is still refused (SAVE-07)", async () => {
+    // A junction on Windows (no rights needed), a directory link elsewhere: Saved Games moved to another drive.
+    const outer = mkdtempSync(join(tmpdir(), "xfs-saves-link-")), link = join(outer, "Cyberpunk 2077"), inner = join(root, "Linked-1");
+    try {
+      symlinkSync(root, link, "junction");
+      symlinkSync(join(root, "QuickSave-0"), inner, "junction");
+      const listing = parseSaveListing(await (await handler({ root: link })(get("/api/saves"))).json());
+      expect(listing.available).toBe(true);
+      expect(listing.saves.map(save => save.folder)).toEqual(["QuickSave-0", "ManualSave-1", "AutoSave-3"]);
+      const data = await handler({ root: link })(get("/api/saves/file?save=ManualSave-1&part=data"));
+      expect([...new Uint8Array(await data.arrayBuffer())]).toEqual([1, 2, 3, 4]);
+      expect((await handler({ root: link })(get("/api/saves/file?save=Linked-1&part=data"))).status).toBe(404);
+      expect(await (await handler({ root: join(outer, "missing") })(get("/api/saves"))).json()).toMatchObject({ available: false });
+    } finally {
+      // Links are removed on their own, never through them.
+      for (const path of [inner, link]) { try { unlinkSync(path); } catch { try { rmSync(path); } catch { /* gone */ } } }
+      rmSync(outer, { recursive: true, force: true });
+    }
   });
 
   test("a host without a saves folder says so plainly; other origins and methods are refused", async () => {

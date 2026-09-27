@@ -118,8 +118,11 @@ export interface GameAssetExporter {
    * collide): the answers in `requests` order. Missing resources are absent. Optional: a caller without it opens a session per source.
    */
   exportAll?(requests: readonly ExportRequest[], signal?: AbortSignal, options?: ExportOptions): Promise<ExportAnswer[]>;
-  /** Whether a usable cache entry exists for a resource (no hashing: its files are present at their recorded sizes). */
-  has?(kind: ExportKind, depotPath: string, source: ExportSource): boolean;
+  /**
+   * Whether a usable cache entry exists for a resource (no hashing: its files are present at their recorded sizes). `base` is a morph
+   * target's located base mesh, as in `ExportRequest.bases` (a reader that builds the skin from it answers only for the same base).
+   */
+  has?(kind: ExportKind, depotPath: string, source: ExportSource, base?: ExportBase): boolean;
 }
 
 /** The one process call this module needs: uncook `depotPaths` from `source` into `outDir`, keeping depot-relative paths. */

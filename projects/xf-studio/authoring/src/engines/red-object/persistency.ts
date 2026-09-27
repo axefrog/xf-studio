@@ -37,13 +37,19 @@ export type PersistHash = { readonly $hash: string; readonly name?: string };
 export type PersistProperty = { readonly nameHash: bigint; readonly typeHash: bigint; readonly value: PersistValue };
 export type PersistObject = { readonly $class: bigint; readonly props: readonly PersistProperty[] };
 export type PersistOpaque = { readonly $opaque: string; readonly bytes: number };
+/** A decoded entry; `values` counts what it decoded to (a caller's memory accounting). */
 export type PersistDecode =
-  | { readonly ok: true; readonly object: PersistObject }
-  | { readonly ok: false; readonly reason: string; readonly raw: Uint8Array; readonly partial: PersistObject };
+  | { readonly ok: true; readonly object: PersistObject; readonly values: number }
+  | { readonly ok: false; readonly reason: string; readonly raw: Uint8Array; readonly partial: PersistObject; readonly values: number };
 
 export class PersistencyError extends Error { override name = "PersistencyError"; }
 
 const MAX_ENTRIES = 1_000_000, MAX_DEPTH = 32;
+/**
+ * Values one entry may decode to (properties, array elements and nested values); an entry past it is kept raw (SAVE-02). A 2.x save's
+ * largest entry decodes to 458 values (468,570 across its 99,697 entries).
+ */
+export const MAX_ENTRY_VALUES = 50_000;
 
 /** The index of a `PersistencySystem2` node body (the bytes after its u32 ID): every entry's ID, class hash and extent. */
 export function readPersistencyIndex(body: Uint8Array): PersistencyIndex {
@@ -77,6 +83,8 @@ export function decodePersistencyEntry(body: Uint8Array, entry: PersistencyEntry
   const bytes = entry.start < 0 ? new Uint8Array(0) : body.subarray(entry.start, entry.start + entry.size);
   const r = new Reader(bytes);
   const top: PersistProperty[] = [];
+  let values = 0;
+  const count = (n: number) => { values += n; if (values > MAX_ENTRY_VALUES) throw new Stop("it holds more values than any save's entry does"); };
   const hashAt = () => { const p = r.pos; r.take(8); return r.view.getBigUint64(p, true); };
   const named = (hash: bigint): PersistHash => {
     const name = types.name(hash)?.name;
@@ -84,6 +92,7 @@ export function decodePersistencyEntry(body: Uint8Array, entry: PersistencyEntry
   };
   const value = (typeHash: bigint, depth: number): PersistValue => {
     if (depth > MAX_DEPTH) throw new Stop("nested deeper than any save does");
+    count(1);
     const type = types.type(typeHash);
     if (!type) throw new Stop(`type ${typeHash.toString(16)} isn't in the save's type database`);
     const name = type.name;
@@ -91,9 +100,12 @@ export function decodePersistencyEntry(body: Uint8Array, entry: PersistencyEntry
       case "class": return properties(typeHash, depth + 1, false);
       case "handle": { const cls = hashAt(); return properties(cls, depth + 1, false); }
       case "array": {
-        const count = r.u32();
-        if (count > bytes.length - r.pos) throw new Stop(`${count} elements can't fit`);
-        return Array.from({ length: count }, () => value(type.inner, depth + 1));
+        const length = r.u32();
+        if (length > bytes.length - r.pos) throw new Stop(`${length} elements can't fit`);
+        if (length > MAX_ENTRY_VALUES - values) count(length); // Refused before anything is allocated.
+        const out: PersistValue[] = [];
+        for (let i = 0; i < length; i++) out.push(value(type.inner, depth + 1));
+        return out;
       }
       case "static-array": case "native-array": throw new Stop(`${name ?? "a fixed array"}: fixed arrays aren't walked yet`);
       default: {
@@ -134,9 +146,9 @@ export function decodePersistencyEntry(body: Uint8Array, entry: PersistencyEntry
   };
   try {
     const object = properties(entry.classHash, 0, true, top);
-    return { ok: true, object };
+    return { ok: true, object, values };
   } catch (error) {
     const reason = error instanceof Stop ? error.message : error instanceof Error ? `it ends early (${error.message})` : "it can't be read";
-    return { ok: false, reason, raw: bytes, partial: { $class: entry.classHash, props: top } };
+    return { ok: false, reason, raw: bytes, partial: { $class: entry.classHash, props: top }, values };
   }
 }

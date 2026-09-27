@@ -8,10 +8,10 @@ import { join } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex } from "../src/archive-precedence";
 import { readArchiveXlConfig } from "../src/archivexl-config";
 import { DEFAULT_CHARACTER, type CharacterRequest } from "../src/character-detail-request";
-import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceManifest, xlIdentity } from "../src/choice-manifest";
+import { choiceKey, manifestHolds, manifestOf, readChoiceManifest, writeChoiceManifest, xlIdentity, type ManifestExport } from "../src/choice-manifest";
 import { ChoicePrefetcher, type PrefetchDeps, requestKey } from "../src/choice-prefetch";
 import { depotHash, refFromPath } from "../src/depot-path";
-import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
+import { archiveExportSource, createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, PARTIAL_RUNS, type UncookRun, usedThisSession } from "../src/game-asset-export";
 import { clearPrepared, evictPrepared, preparedSize } from "../src/prepared-files";
 import { backgroundExtraction, foregroundExtraction, WolvenKitFetcher } from "../src/resolver-host";
 import { ResourceGraph } from "../src/resource-graph";
@@ -226,6 +226,26 @@ describe("a prepared choice across sessions (manifests)", () => {
     expect(check()).toBe(true);
     rmSync(join(setup.exports, "resources"), { recursive: true, force: true });
     expect(check()).toBe(false);
+  });
+
+  test("a morph target's export names its base mesh: the base must still win, and the exporter is asked for that base (NATIVE-60)", async () => {
+    const root = temporary(), setup = installationOnDisk(root), first = setup.open();
+    const mod = join(root, "mod.archive"), base = join(root, "base.archive");
+    await setup.exporter.exportAll!([{ source: archiveExportSource(mod, root), geometry: ["mod\\hair\\b.mesh"], textures: [], masks: [] }]);
+    const asked: unknown[] = [];
+    const exporter: GameAssetExporter = { ...setup.exporter, has: (kind, path, source, located) => { asked.push(located); return setup.exporter.has!(kind, path, source, located); } };
+    const dir = join(root, "choices");
+    const holds = (item: ManifestExport) => {
+      writeChoiceManifest(dir, "k", manifestOf(first.graph, [], [item], first.fetcher.tool, "xl"));
+      return manifestHolds(readChoiceManifest(dir, "k")!, { graph: first.graph, fetcher: first.fetcher, exporter, gameRoot: root, tool: first.fetcher.tool, xl: "xl" });
+    };
+    expect(holds(["geometry", "mod\\hair\\b.mesh", mod, "base\\hair\\a.mesh", base])).toBe(true);
+    expect(asked.at(-1)).toEqual({ depotPath: "base\\hair\\a.mesh", archivePath: base });
+    // Another archive wins the base mesh now: not prepared.
+    expect(holds(["geometry", "mod\\hair\\b.mesh", mod, "base\\hair\\a.mesh", mod])).toBe(false);
+    // A manifest without a base asks without one.
+    expect(holds(["geometry", "mod\\hair\\b.mesh", mod])).toBe(true);
+    expect(asked.at(-1)).toBeUndefined();
   });
 });
 

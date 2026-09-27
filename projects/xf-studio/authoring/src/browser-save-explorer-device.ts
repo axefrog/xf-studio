@@ -7,7 +7,8 @@
 export type BrowserSaveExplorerDevice = {
   list(): Promise<unknown>;
   read(folder: string): Promise<Uint8Array>;
-  pick(): Promise<{ name: string; bytes: Uint8Array } | undefined>;
+  /** A chosen file's name and size; its bytes are read only when asked (the service checks the size first). */
+  pick(): Promise<{ name: string; size: number; bytes(): Promise<Uint8Array> } | undefined>;
   names(): Promise<unknown>;
   thumbnail(folder: string): string | null;
 };
@@ -23,16 +24,16 @@ export function createBrowserSaveExplorerDevice(doc: Document = document): Brows
     read: async folder => new Uint8Array(await (await get(`/api/saves/file?save=${encodeURIComponent(folder)}&part=data`)).arrayBuffer()),
     names: async () => (await get("/api/saves/types")).json(),
     thumbnail: folder => `/api/saves/file?save=${encodeURIComponent(folder)}&part=screenshot`,
-    pick: () => new Promise((resolve, reject) => {
+    pick: () => new Promise(resolve => {
       const input = doc.createElement("input");
       input.type = "file"; input.accept = ".dat"; input.hidden = true;
-      const done = async () => {
+      const done = () => {
         input.remove();
         const file = input.files?.[0];
         if (!file) { resolve(undefined); return; }
-        try { resolve({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }); } catch (error) { reject(error); }
+        resolve({ name: file.name, size: file.size, bytes: async () => new Uint8Array(await file.arrayBuffer()) });
       };
-      input.addEventListener("change", () => { void done(); }, { once: true });
+      input.addEventListener("change", done, { once: true });
       input.addEventListener("cancel", () => { input.remove(); resolve(undefined); }, { once: true });
       doc.body.append(input);
       input.click();

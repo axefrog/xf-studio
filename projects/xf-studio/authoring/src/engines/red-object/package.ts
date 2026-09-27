@@ -20,7 +20,9 @@
  * Strictness, so a hostile file can't make one value decode many times: tables are capped (`MAX_NAMES`, `MAX_CHUNKS`) and names are
  * decoded only when used; sections lie in order inside the package; a chunk ends where the next one starts; within an object the first
  * value starts right after the field table, offsets strictly increase and each value ends exactly where the next begins; counts can't
- * exceed the bytes left; nesting and decoded values are capped.
+ * exceed the bytes left; nesting and decoded values are capped. A save package's names lie inside its name data, and what they decode to
+ * is capped per package (`MAX_PACKAGE_NAME_BYTES`) and, through a caller's shared `NameBudget`, per reading of a save, so many
+ * descriptors pointing at the same bytes can't multiply them (SAVE-01).
  */
 
 export type PackageVariant = "resource" | "save" | "save-plain";
@@ -31,6 +33,14 @@ export class PackageFrameError extends Error {
 
 /** Names a package may list (fields index them by a u16) and chunks it may hold (far above any save's script data; CORE-92). */
 export const MAX_NAMES = 65_536, MAX_CHUNKS = 65_536;
+/**
+ * Name bytes one save package may decode, and one reading of a save (every package it opens, `NameBudget`). A 2.x save's ten
+ * packages declare 19 KB of names in all, the largest 17 KB (SAVE-01).
+ */
+export const MAX_PACKAGE_NAME_BYTES = 1024 * 1024, MAX_OPEN_NAME_BYTES = 8 * 1024 * 1024;
+/** Decoded name bytes left for every package one reading opens; each decoded name takes its length. */
+export type NameBudget = { remaining: number };
+export const nameBudget = (bytes = MAX_OPEN_NAME_BYTES): NameBudget => ({ remaining: bytes });
 const MAX_DEPTH = 32, MAX_VALUES = 1_000_000;
 
 export type PackageReference = { readonly offset: number; readonly length: number; readonly sync: boolean };
@@ -53,6 +63,8 @@ export type PackageFrame = {
   readonly referenceCount: number;
   /** A name by index, decoded once when first used. */
   name(index: number): string;
+  /** A name by index without keeping it (a caller reading every name once: `packageNames`). */
+  peekName(index: number): string;
   /** A name's stored length (without the NUL), for a caller's accounting. */
   nameLength(index: number): number;
   reference(index: number): PackageReference & { readonly data: Uint8Array };
@@ -63,8 +75,11 @@ export type PackageFrame = {
 const utf8 = new TextDecoder("utf-8", { fatal: false });
 const malformed = (message: string) => new PackageFrameError(message, "malformed");
 
-/** Read a package's frame. Throws `PackageFrameError` when the bytes are not a package of `variant`. */
-export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant): PackageFrame {
+/**
+ * Read a package's frame. Throws `PackageFrameError` when the bytes are not a package of `variant`. `names` is the reading's shared budget
+ * of decoded name bytes.
+ */
+export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant, options: { readonly names?: NameBudget } = {}): PackageFrame {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (bytes.length < 24) throw malformed("The package is truncated.");
   const u32 = (at: number) => { if (at + 4 > bytes.length) throw malformed("The package is truncated."); return view.getUint32(at, true); };
@@ -95,18 +110,32 @@ export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant): Pa
   if (nameCount > MAX_NAMES) throw new PackageFrameError(`A package with ${nameCount} names is not read.`, "limit");
   // A save's packages are capped here; a resource package's chunks are counted against its decode session's budget instead.
   if (variant !== "resource" && chunkCount > MAX_CHUNKS) throw new PackageFrameError(`A package with ${chunkCount} chunks is not read.`, "limit");
+  // A save package's names lie inside its name data and what they decode to is capped, per package and per reading (SAVE-01); a
+  // resource package's names are counted against its decode session's budget instead (native/red-package.ts).
+  const saveNames = variant !== "resource", budget = options.names;
+  let decodedNames = 0;
   const names = new Map<number, string>();
   const nameSpan = (index: number) => {
     if (!Number.isInteger(index) || index < 0 || index >= nameCount) throw malformed(`Package name ${index} doesn't exist.`);
     const d = view.getUint32(base + nameDesc + index * 4, true), offset = d & 0xffffff, length = Math.max(0, (d >>> 24) - 1);
     if (offset + length > size) throw malformed("A package name lies outside the package.");
+    if (saveNames && (offset < nameData || offset + length >= chunkDesc)) throw malformed(`Package name ${index} lies outside the name data.`);
     return { offset, length };
+  };
+  const decodeName = (index: number) => {
+    const span = nameSpan(index);
+    if (saveNames) {
+      if (decodedNames + span.length > MAX_PACKAGE_NAME_BYTES) throw new PackageFrameError("The package spells out more names than a save's does.", "limit");
+      if (budget && budget.remaining < span.length) throw new PackageFrameError("The save's packages spell out more names than a save does.", "limit");
+      decodedNames += span.length;
+      if (budget) budget.remaining -= span.length;
+    }
+    return utf8.decode(bytes.subarray(base + span.offset, base + span.offset + span.length));
   };
   const name = (index: number) => {
     const known = names.get(index);
     if (known !== undefined) return known;
-    const span = nameSpan(index);
-    const value = utf8.decode(bytes.subarray(base + span.offset, base + span.offset + span.length));
+    const value = decodeName(index);
     names.set(index, value);
     return value;
   };
@@ -128,7 +157,7 @@ export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant): Pa
   }
   return { variant, version, layout, sections, rootCount, rootIndex, cruids, bytes, view, base, size,
     offsets: { refDesc, refData, nameDesc, nameData, chunkDesc, chunkData }, nameCount, referenceCount, name,
-    nameLength: index => nameSpan(index).length, reference, chunks };
+    peekName: index => names.get(index) ?? decodeName(index), nameLength: index => nameSpan(index).length, reference, chunks };
 }
 
 /**
@@ -136,14 +165,14 @@ export function readPackageFrame(bytes: Uint8Array, variant: PackageVariant): Pa
  * CRUID list) first, then `save-plain`. Decided by the structure alone, and strictly: the first chunk must start exactly at the chunk
  * data. Returns null when neither fits.
  */
-export function detectSavePackage(body: Uint8Array): { frame: PackageFrame; trailing: number } | null {
+export function detectSavePackage(body: Uint8Array, options: { readonly names?: NameBudget } = {}): { frame: PackageFrame; trailing: number } | null {
   if (body.length < 28) return null;
   const view = new DataView(body.buffer, body.byteOffset, body.byteLength), size = view.getUint32(0, true);
   if (size < 24 || size > body.length - 4 || body[4] !== 4) return null;
   const bytes = body.subarray(4, 4 + size);
   for (const variant of ["save", "save-plain"] as const) {
     try {
-      const frame = readPackageFrame(bytes, variant);
+      const frame = readPackageFrame(bytes, variant, options);
       const first = frame.chunks[0];
       if (first && first.start !== frame.base + frame.offsets.chunkData) continue;
       if (frame.offsets[frame.sections === 7 ? "refDesc" : "nameDesc"] !== 0) continue;
@@ -286,9 +315,18 @@ export function decodeChunk(frame: PackageFrame, index: number, types: PackageTy
 export const field = (object: PackageValue | undefined, name: string): PackageValue | undefined =>
   object && typeof object === "object" && !Array.isArray(object) && "fields" in object ? object.fields[name] : undefined;
 
-/** Every name the package's objects spell out (class, field and type names), as candidate names for hashes elsewhere in the save. */
-export function packageNames(frame: PackageFrame): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < frame.nameCount; i++) { try { out.push(frame.name(i)); } catch { /* a broken name is no candidate */ } }
-  return out;
+/**
+ * Every name the package's objects spell out (class, field and type names), as candidate names for hashes elsewhere in the save: read one
+ * at a time as the caller takes them, and not kept by the frame. Ends early when the reading's name budget runs out.
+ */
+export function* packageNames(frame: PackageFrame): Generator<string> {
+  for (let i = 0; i < frame.nameCount; i++) {
+    let name: string;
+    try { name = frame.peekName(i); }
+    catch (error) {
+      if (error instanceof PackageFrameError && error.kind === "limit") return;
+      continue; // A broken name is no candidate.
+    }
+    yield name;
+  }
 }

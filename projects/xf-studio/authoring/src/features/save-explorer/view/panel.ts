@@ -146,8 +146,8 @@ export function explorerPanel(ctx: Ctx): PanelController {
         onClick: () => { objectsShown += OBJECTS_PAGE; nodeKey = ""; ctx.changed(); } }));
     }
     if (inspection.kind === "persistency") {
-      body.push(note(`${number(inspection.filled)} world objects (of ${number(inspection.entries)} slots); ${number(inspection.walked)} read completely. ` +
-        "An object that isn't read completely is kept exactly as the game wrote it."));
+      body.push(note(`${number(inspection.filled)} world objects (of ${number(inspection.entries)} slots); ${number(inspection.walked)} read completely` +
+        (inspection.complete ? ". " : " so far, still checking the rest. ") + "An object that isn't read completely is kept exactly as the game wrote it."));
       if (inspection.notWalked.length) body.push(h("ul", { class: "save-reasons" }, inspection.notWalked.slice(0, 6).map(reason => h("li", { text: `${number(reason.count)}: ${reason.reason}` }))));
       const filter = h("input", { type: "search", class: "field", placeholder: "Filter by class, e.g. Door", value: entryFilter, "aria-label": "Filter world objects by class" });
       filter.addEventListener("change", () => { entryFilter = filter.value; entryOffset = 0; nodeKey = ""; ctx.changed(); });
@@ -190,8 +190,13 @@ export function explorerPanel(ctx: Ctx): PanelController {
       : field.value !== undefined ? h("span", { class: `save-field-value${field.opaque ? " muted" : ""}`, text: field.value }) : null;
     const describe = field.named ? NAMED_TEXT[field.named] : undefined;
     if (field.children?.length || field.more) {
-      const details = h("details", { class: "save-field" }, h("summary", { title: describe }, ...label, value),
-        h("ul", {}, (field.children ?? []).map(child => h("li", {}, fieldView(child)))), field.more ? note(`${number(field.more)} more not shown.`) : null);
+      // Children are built when the field is first opened (SAVE-03), so a deep object costs only what the person opens.
+      const list = h("ul", {});
+      const details = h("details", { class: "save-field" }, h("summary", { title: describe }, ...label, value), list,
+        field.more ? note(`${number(field.more)} more not shown.`) : null);
+      details.addEventListener("toggle", () => {
+        if (details.open && !list.childElementCount) list.replaceChildren(...(field.children ?? []).map(child => h("li", {}, fieldView(child))));
+      });
       return details;
     }
     return h("div", { class: "save-field leaf", title: describe }, ...label, value);

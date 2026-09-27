@@ -2,9 +2,9 @@
 // node and object inspections with names resolved by source, world objects paged and filtered, the generic mod-data view, and the
 // service's actions, capabilities and stale-result handling over a fake device. No real save is read.
 import { describe, expect, test } from "bun:test";
-import { openExplorer, SaveExplorerActions, saveExplorerFacade, type SaveExplorerDevice, type SaveListing, type SaveTypeNames } from "../src/features/save-explorer";
+import { MAX_SAVE_BYTES, openExplorer, SaveExplorerActions, saveExplorerFacade, type SaveExplorerDevice, type SaveListing, type SaveTypeNames } from "../src/features/save-explorer";
 import { fnv1a64 } from "../src/engines/red-object/hash";
-import { EXPLORER_NAMES as NAMES, EXPLORER_TYPES as TYPES, syntheticSave } from "./fixtures/synthetic-explorer-save";
+import { EXPLORER_NAMES as NAMES, EXPLORER_TYPES as TYPES, manyEntriesSave, syntheticSave } from "./fixtures/synthetic-explorer-save";
 
 describe("explorer read model", () => {
   test("the tree gives every node its encoding and size; packages and world objects are checked one node at a time", () => {
@@ -90,8 +90,9 @@ describe("explorer service", () => {
   const listing: SaveListing[] = [{ folder: "QuickSave-0", kind: "quick", savedAt: "2026-09-26T19:19:32.000Z", location: "Watson", level: 6, lifePath: "Corporate",
     gameVersion: "2.31", saveVersion: 269, bytes: 1000, screenshot: true, modded: true }];
   const names: SaveTypeNames = { engine: NAMES.engine, scripts: { available: true, names: NAMES.scripts } };
+  const picked = (name: string, bytes: Uint8Array, size = bytes.length) => ({ name, size, bytes: async () => bytes });
   const device = (overrides: Partial<SaveExplorerDevice> = {}): SaveExplorerDevice => ({
-    list: async () => ({ available: true, saves: listing }), read: async () => syntheticSave(), pick: async () => ({ name: "sav.dat", bytes: syntheticSave() }),
+    list: async () => ({ available: true, saves: listing }), read: async () => syntheticSave(), pick: async () => picked("sav.dat", syntheticSave()),
     names: async () => names, thumbnail: folder => `/thumb/${folder}`, ...overrides });
   const now = () => Promise.resolve();
 
@@ -133,9 +134,36 @@ describe("explorer service", () => {
     const cancelled = new SaveExplorerActions(device({ pick: async () => undefined }), now);
     expect(await cancelled.dispatch({ kind: "saves.openFile" })).toMatchObject({ ok: true, message: "No file chosen." });
     expect(cancelled.snapshot().open.phase).toBe("none");
-    const junk = new SaveExplorerActions(device({ pick: async () => ({ name: "notes.txt", bytes: new Uint8Array(100) }) }), now);
+    const junk = new SaveExplorerActions(device({ pick: async () => picked("notes.txt", new Uint8Array(100)) }), now);
     expect(await junk.dispatch({ kind: "saves.openFile" })).toMatchObject({ ok: false, code: "invalid_value" });
     expect(junk.snapshot().open).toMatchObject({ phase: "failed", message: expect.stringMatching(/couldn't be opened as a Cyberpunk 2077 save/) });
+  });
+
+  test("a picked file larger than any save is refused by its size, before its bytes are read (SAVE-08)", async () => {
+    let reads = 0;
+    const huge = new SaveExplorerActions(device({ pick: async () => ({ name: "huge.dat", size: MAX_SAVE_BYTES + 1, bytes: async () => { reads++; return new Uint8Array(0); } }) }), now);
+    expect(await huge.dispatch({ kind: "saves.openFile" })).toMatchObject({ ok: false, code: "limit" });
+    expect(huge.snapshot().open).toMatchObject({ phase: "failed", source: { kind: "file", name: "huge.dat" }, message: expect.stringMatching(/larger than any/) });
+    expect(reads).toBe(0);
+  });
+
+  test("the world objects are checked in bounded steps, yielding to the page between them (SAVE-06)", async () => {
+    // Enough entries for several steps of the walk.
+    let yields = 0;
+    const service = new SaveExplorerActions(device({ read: async () => manyEntriesSave(2_000) }), () => { yields++; return Promise.resolve(); });
+    await service.dispatch({ kind: "saves.refresh" });
+    expect(await service.dispatch({ kind: "saves.open", folder: "QuickSave-0" })).toEqual({ ok: true });
+    const row = service.tree().find(item => item.encoding === "persistency")!;
+    expect(row).toMatchObject({ status: "decoded", detail: expect.stringMatching(/^2,000 world objects, 100.0 % read/) });
+    expect(yields).toBeGreaterThan(3);
+    const explorer = openExplorer(manyEntriesSave(2_000), {});
+    let steps = 0;
+    while (!explorer.checkStep(row.id)) steps++;
+    expect(steps).toBeGreaterThan(1);
+    // Inspecting the node before the walk ends takes one step and says it is still counting.
+    const fresh = openExplorer(manyEntriesSave(2_000), {}), first = fresh.node(row.id);
+    expect(first).toMatchObject({ kind: "persistency", complete: false });
+    expect(fresh.tree().find(item => item.id === row.id)?.status).toBe("checking");
   });
 
   test("without name sources the save still opens; a failed listing says what to do; no device refuses every action", async () => {

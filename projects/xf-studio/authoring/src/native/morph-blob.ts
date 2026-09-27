@@ -35,6 +35,9 @@ export interface MorphTargetInfo {
   /** Diffs and stored (halved) mapping counts per chunk of the base blob. */
   readonly diffs: readonly number[];
   readonly mappings: readonly number[];
+  /** Where each chunk's diffs and mapping entries start (running sums from `start` and `mappingStart` × 2; NATIVE-59). */
+  readonly diffStarts: readonly number[];
+  readonly mappingStarts: readonly number[];
 }
 export interface MorphTargetLayout {
   /** `baseMesh`'s depot path, or its hash when the file names it by hash (`#<decimal>`); null when empty. */
@@ -91,13 +94,17 @@ export function morphTargetLayout(root: RedObject, limits: MeshLimits = DEFAULT_
     throw new NativeMalformedError(`The morph target's header tables are shorter than its ${count} targets.`);
   const diffs = bufferBytes(fieldOf(blob, "diffsBuffer"), "diffs buffer"), mapping = bufferBytes(fieldOf(blob, "mappingBuffer"), "mapping buffer");
   const chunks = base.chunks.length;
+  if (count * chunks > limits.maxTargetChunks)
+    throw new NativeBudgetError(`The morph target's ${count} targets on ${chunks} chunks are more than the reader writes (at most ${limits.maxTargetChunks}).`);
   const targets: MorphTargetInfo[] = [];
   for (let t = 0; t < count; t++) {
     const entry = objectAt(entries[t]);
     const perChunk = countList(diffCounts[t], `target ${t} diff counts`), perChunkMapping = countList(mappingCounts[t], `target ${t} mapping counts`);
     if (perChunk.length < chunks || perChunkMapping.length < chunks) throw new NativeMalformedError(`Target ${t} counts diffs for ${perChunk.length} of ${chunks} chunks.`);
     let diffEnd = starts[t]!, mappingEnd = mappingStarts[t]! * 2;
+    const diffStarts: number[] = [], chunkMappingStarts: number[] = [];
     for (let c = 0; c < chunks; c++) {
+      diffStarts.push(diffEnd); chunkMappingStarts.push(mappingEnd);
       const stored = perChunkMapping[c]!;
       // A chunk that counts diffs but no mapping is read as having none, and its count takes no room before the next chunk's diffs
       // (as WolvenKit reads it; a bookkeeping slip in some files).
@@ -111,7 +118,8 @@ export function morphTargetLayout(root: RedObject, limits: MeshLimits = DEFAULT_
       throw new NativeMalformedError(`Target ${t}'s diffs or mapping lie outside their buffers.`);
     targets.push({ name: nameText(fieldOf(entry, "name")), region: nameText(fieldOf(entry, "regionName")),
       faceRegion: String(fieldOf(entry, "faceRegion") ?? "FACE_REGION_NONE"), start: starts[t]!, mappingStart: mappingStarts[t]!,
-      scale: vector4(scales[t]), offset: vector4(offsets[t]), diffs: perChunk.slice(0, chunks), mappings: perChunkMapping.slice(0, chunks) });
+      scale: vector4(scales[t]), offset: vector4(offsets[t]), diffs: perChunk.slice(0, chunks), mappings: perChunkMapping.slice(0, chunks),
+      diffStarts, mappingStarts: chunkMappingStarts });
   }
   return { baseMesh: referencePath(fieldOf(root, "baseMesh")), base, targets, diffsBuffer: diffs.bytes, mappingBuffer: mapping.bytes };
 }
@@ -131,8 +139,7 @@ export interface ChunkDeltas {
 export function chunkDeltas(layout: MorphTargetLayout, t: number, c: number): ChunkDeltas {
   const target = layout.targets[t]!, chunk = layout.base.chunks[c]!;
   const n = target.mappings[c] ? target.diffs[c]! : 0;
-  let diffAt = target.start, mapAt = target.mappingStart * 2;
-  for (let p = 0; p < c; p++) { diffAt += target.diffs[p]!; mapAt += target.mappings[p]! * 2; }
+  const diffAt = target.diffStarts[c]!, mapAt = target.mappingStarts[c]!;
   const diffs = layout.diffsBuffer(), mapping = layout.mappingBuffer();
   const dv = new DataView(diffs.buffer, diffs.byteOffset, diffs.byteLength), mv = new DataView(mapping.buffer, mapping.byteOffset, mapping.byteLength);
   const seen = new Uint8Array(chunk.numVertices);

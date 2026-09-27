@@ -9,9 +9,11 @@
  *   installed `final.redscripts` defines (read-only labels; the bundle is read, never written).
  *
  * Nothing here writes. Paths never leave the host: a save is named by its folder name, which must be a plain child folder of the saves
- * folder (no links, no separators), and files are read by bounded, link-refusing reads. Logs name saves by folder only.
+ * folder (no links, no separators), and files are read by bounded, link-refusing reads. Logs name saves by folder only. The saves folder
+ * itself is the host's own finding, so it is resolved once per request, a link or junction at it followed (Saved Games moved to another
+ * drive; SAVE-07); links below it are still refused.
  */
-import { closeSync, fstatSync, lstatSync, openSync, readdirSync, readSync } from "node:fs";
+import { closeSync, fstatSync, lstatSync, openSync, readdirSync, readSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readScriptBundleNames } from "../../../engines/red-object/script-bundle";
 import type { EngineTypes } from "../../../engines/red-object/type-oracle";
@@ -50,6 +52,11 @@ function readFile(path: string, max: number): Uint8Array<ArrayBuffer> | null {
   finally { if (fd !== undefined) closeSync(fd); }
 }
 const isDirectory = (path: string) => { try { const s = lstatSync(path); return s.isDirectory() && !s.isSymbolicLink(); } catch { return false; } };
+/** The saves folder the host found, with a link or junction at it followed, or null when it isn't a folder. */
+export function resolveSavesRoot(root: string | null): string | null {
+  if (!root) return null;
+  try { const real = realpathSync.native(root); return statSync(real).isDirectory() ? real : null; } catch { return null; }
+}
 const fileInfo = (path: string) => { try { const s = lstatSync(path); return s.isFile() && !s.isSymbolicLink() ? s : null; } catch { return null; } };
 
 /** The game's fields a listing shows, from a save's metadata; anything else (the user name above all) is dropped here. */
@@ -125,9 +132,9 @@ export function createSavesHandler(sources: SavesHostSources, log?: (message: st
       return json(value);
     }
     let root: string | null;
-    try { root = await sources.root(); } catch { root = null; }
+    try { root = resolveSavesRoot(await sources.root()); } catch { root = null; }
     if (url.pathname === "/api/saves") {
-      if (!root || !isDirectory(root)) {
+      if (!root) {
         const result: SaveListingResult = { available: false, saves: [],
           reason: "XF Studio couldn't find your Cyberpunk 2077 saves folder. You can still open a save with Open a save file…" };
         return json(result);

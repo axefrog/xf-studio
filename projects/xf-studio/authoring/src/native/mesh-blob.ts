@@ -31,16 +31,23 @@ export interface MeshLimits {
   readonly maxBones: number;
   /** Morph targets one morph target resource may list. */
   readonly maxTargets: number;
+  /** Targets times the base blob's chunks (each target counts and writes something per chunk; NATIVE-59). */
+  readonly maxTargetChunks: number;
   /** Indices one chunk may list. */
   readonly maxIndices: number;
-  /** Bytes of vertex data and morph deltas one decode may write (the GLB's binary chunk, estimated before anything is allocated). */
+  /**
+   * Bytes one decode may hold at its peak: the decoded chunks, their glTF form, the writer's copies and the GLB, with the morph deltas
+   * (mesh-glb.ts `estimateBytes`, estimated before anything is allocated; NATIVE-58).
+   */
   readonly maxOutputBytes: number;
 }
 /**
  * Measured on the 559 cached WolvenKit exports of the reference setup (519 meshes, 40 morph targets): at most 23 chunks, 254 bones,
- * 105 targets, 65,447 vertices and 385,512 indices in a chunk, and a 64 MB WolvenKit GLB. Each cap is well above that.
+ * 105 targets, 65,447 vertices and 385,512 indices in a chunk, 504,036 LOD 1 vertices in a mesh (a hair mod's, about 330 MB at the
+ * decode's peak), and a 64 MB WolvenKit GLB. Each cap is above that.
  */
-export const DEFAULT_MESH_LIMITS: MeshLimits = Object.freeze({ maxChunks: 1024, maxBones: 4096, maxTargets: 1024, maxIndices: 4_000_000, maxOutputBytes: 512 * 2 ** 20 });
+export const DEFAULT_MESH_LIMITS: MeshLimits = Object.freeze({ maxChunks: 1024, maxBones: 4096, maxTargets: 1024, maxTargetChunks: 16_384, maxIndices: 4_000_000,
+  maxOutputBytes: 512 * 2 ** 20 });
 
 /** Bytes of each packing type this reader knows the width of. */
 const PACKING_BYTES: Readonly<Record<string, number>> = {
@@ -80,6 +87,8 @@ export interface MeshChunk {
   readonly elements: readonly VertexElement[];
   /** Where the chunk's 16-bit indices start in the render buffer. */
   readonly indexOffset: number;
+  /** Where each stream it uses starts and how many bytes it spans (every vertex at its stride, the last one's elements). */
+  readonly vertexSpans: readonly (readonly [start: number, bytes: number])[];
 }
 export interface MeshBlob {
   readonly quantizationScale: readonly [number, number, number, number];
@@ -210,17 +219,19 @@ function chunkLayout(info: RedObject | null, index: number, sizes: { vertexBuffe
     used[stream]! += size;
   }
   // Every stream an element uses must lie inside the vertex buffer at its own stride.
+  const vertexSpans: [number, number][] = [];
   for (let stream = 0; stream < VERTEX_STREAMS; stream++) {
     if (!used[stream]) continue;
     const start = streamOffsets[stream] ?? -1, stride = strides[stream] ?? -1;
     if (start < 0 || stride < used[stream]!) throw new NativeMalformedError(`Chunk ${index}'s stream ${stream} (${used[stream]} bytes a vertex) has stride ${stride} at ${start}.`);
-    if (numVertices && start + (numVertices - 1) * stride + used[stream]! > sizes.vertexBufferSize)
-      throw new NativeMalformedError(`Chunk ${index}'s stream ${stream} lies outside the vertex buffer.`);
+    const span = numVertices ? (numVertices - 1) * stride + used[stream]! : 0;
+    if (numVertices && start + span > sizes.vertexBufferSize) throw new NativeMalformedError(`Chunk ${index}'s stream ${stream} lies outside the vertex buffer.`);
+    vertexSpans.push([start, span]);
   }
   if (!elements.some(element => element.usage === "PS_Position" && element.stream === 0))
     throw new NativeUnsupportedError(`Chunk ${index} has no positions in stream 0.`);
   return { index, lodMask: countOf(info, "lodMask", `chunk ${index} LOD mask`), vertexFactory: countOf(info, "vertexFactory", `chunk ${index} vertex factory`),
-    numVertices, numIndices, streamOffsets, strides, elements, indexOffset };
+    numVertices, numIndices, streamOffsets, strides, elements, indexOffset, vertexSpans };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
