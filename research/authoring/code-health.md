@@ -573,7 +573,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
-- None since `0cd96cc` (deep review, 28 September 2026).
+- **Runtime bridge 0.5.2** (`projects/xf-runtime-bridge`, claude/bridge-052): the game gate (`native/src/core/ScriptLayer.cpp`, the dispatcher's `SetGameGate`, the check in `plugin/ScriptCall.cpp`; RB-76, session 5's crash), the tools' pacer and `rate_limited` retries (`tools/api/command-api.ts`, RB-77), and two new write paths into the running game: the wardrobe (`redscript/XFRuntimeBridgeWardrobe.reds`, `wardrobe.equip` in the inventory class, with a kill-switch restore) and `photo.camera.place` (research: teleports photo mode's camera entity). Review focus: every script call path honours the gate (the Running tick's restore, relock and cursor release included) and nothing waits forever when an event never comes (the 30 s load timeout, a stale Scripts folder that never reports), the pacer and retries never repeating a write that ran, the wardrobe snapshot's exact restore (outfit, then each area) and its kill-switch copy, and `photo.camera.place`'s class check and 30 m bound.
 
 ## Subsystem register
 

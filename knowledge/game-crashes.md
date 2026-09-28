@@ -20,6 +20,7 @@
 | Fingerprint (game 2.31) | Message | Trigger | Grade |
 |---|---|---|---|
 | `Cyberpunk2077.exe+0x1e28769` | read at `0x0` | A native member function called with no context, inside `rtti::Function::InternalCallNative`. Met when a plugin called a redscript function with `RED4ext::ExecuteFunction(nullptr, …)` and that script called `TweakDBInterface.GetInt` (probe) or `TDBID.ToStringDEBUG`: script calls them as statics, but they are native members and receive the script's (null) context (§2.1). The same script function completed when CET called it. Seen three times (reports `…-20260926-181257-…`, `…-181813-…`, `…-182825-…`). | [runtime]; cause [runtime] disassembly + [source] |
+| `Cyberpunk2077.exe+0x28b9b75` | read at `0x48` (a null object's field) | A script call made **while a save was loading**: the XF bridge's `game.status` ran its redscript `XFBridgeActions.Status` on the main thread 0.1 s after the bridge's scriptable system logged `OnDetach` (the session being torn down for `game.load`), and the game crashed inside the script VM's native calls (the stack runs from `XFRuntimeBridge.dll` through `rtti::Function::InternalCall*` at `exe+0x146xxx`). Seen once (report `…-20260929-070312-…`, session 5, with a showroom head spawned) (§2.3). | [runtime]; cause [runtime] log order + stack, the exact native [unverified] |
 | `Cyberpunk2077.exe+0xe6abad` / `+0xe6abb0` | read at `0x0` / `0xFFFFFFFFFFFFFFFF` | The launch right after a crash, before the main menu (reports `…-171210-…`, `…-181531-…`). The next launch after that usually works. | [runtime]; cause [hypothesis] |
 | `Codeware.dll+0x36a59` | read at a heap address | A launch after a crash (report `…-182616-…`), in Codeware | [runtime]; cause unknown |
 | `Cyberpunk2077.exe+0x2a52f36`, code `0x80000003` | *Watchdog timeout! (120 seconds)* | The engine's watchdog: the main loop didn't report for 120 s (report `…-20260913-195258-…`) | [runtime]; trigger unknown |
@@ -39,6 +40,14 @@ The fix, giving every call a context and a caller frame as CET does, passed its 
 
 On this profile a crash is often followed by a second one at the next launch, before the main menu, and the launch after that works. The launch-time crashes fault at the same game offset (`exe+0xe6abad`) each time, which suggests one repeatable cause rather than chance. [hypothesis]: a file the game or a mod writes while running (a cache, settings or state file) is left half-written by the crash, read and rejected badly at the next start, then rewritten cleanly. Testable by listing files in the game folder, MO2's `overwrite/` and `%LOCALAPPDATA%\CD Projekt Red\` whose modification time falls between a crash and the failed launch.
 
+### 2.3 Calling scripts while a save loads
+
+What happened [runtime] (29 September 2026, session 5, bridge 0.5.1; the plugin log of that launch, read before RED4ext pruned it, and the crash report named above): `game.load {latest: true}` asked the game to load at 07:03:11.174 and returned. A `game.status` (from `game.wait`) arrived at 11.289 and waited in the bridge's game-thread queue: the engine didn't tick the plugin's Running update for about a second. At 12.143 the bridge's scriptable system logged `XFBridgeSystem.OnDetach`, on the main thread. At 12.268 the queued task ran `XFBridgeActions.Status` (it reads the game instance's photo-mode, UI, time and save-lock systems), and the game crashed on the main thread reading `0x48` at `exe+0x28b9b75`. The minidump's stack scan shows the bridge's DLL below the script VM's call frames.
+
+Why (confidence: medium-high): a scriptable system's `OnDetach` is the session being torn down; a script run afterwards reaches systems of a game instance that is going away, and a native dereferences one of them. Scripts attach again on a loading thread about a second later, and the loaded session's player attaches last (10-60 s later in the logs of 29 September) [runtime]. Script calls before a load ran fine at the main menu and in gameplay for three sessions [runtime].
+
+**Rule for a native plugin: call into scripts only between the session's player attach and its detach, and check that on the game thread right before each call**, not when the request was queued (the detach can come while it waits). The XF bridge (0.5.2) has its redscript layer report `attach`, `player_attach` and `detach` (`XFBridge_ScriptLayer`, called first in `OnDetach`), closes the gate itself the moment `game.load` asks the game to load, refuses every script call with `game_loading` while closed, and answers `game.status` from the plugin's side (`phase: "loading"`); the kill switch's restore and a save relock wait for the gate ([design §3.3](../research/runtime/runtime-bridge-design.md#33-threading)). Whether the showroom head spawned at the time played a part is open; session 6 retests `game.load` with and without one.
+
 ## 3. Finding the crashing call in few restarts
 
 Each crash costs a restart, and on this profile often two (§2.2). A probe answers "which call?" in one crash:
@@ -51,6 +60,8 @@ Each crash costs a restart, and on this profile often two (§2.2). A probe answe
 Restore the committed files after the probe; a probe is never committed.
 
 ## Open questions
+
+- Which native faults at `exe+0x28b9b75` (the address library names no function there), and is a script call at any point of a load unsafe, or only between the detach and the next attach?
 
 - What does the launch after a crash read that makes it fail (§2.2)?
 - Does `Codeware.dll+0x36a59` recur, and under what conditions?
