@@ -184,37 +184,56 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         {
             log::Debug("game.drained", "tasks=" + std::to_string(ran));
         }
+        // Every call this tick makes into the game's scripts waits for a live scripted session (RB-76: session 5
+        // crashed on a script call made just after the script layer detached for a load).
+        const bool scriptsReady = state.scriptLayer.Ready();
+        if (state.scriptLayer.TakeDetaches() > 0 && state.relockOwed.exchange(false))
+        {
+            // The session game.save released the lock in is gone, and with it every change the lock protected.
+            log::Info("game.save_relock_dropped", "reason=session_detached (a load discards the bridge's changes)", "save-relock");
+        }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
-        // write can run after this undo; RestoreOnce runs it here directly, once, after a write.
+        // write can run after this undo; RestoreOnce runs it here directly, once, after a write,
+        // and only once the game's scripts can be called (it waits through a load).
         if (state.bridge && state.bridge->RestoreReady())
         {
             state.options.Cancel(); // no render-option request survives the kill switch
         }
-        state.restore.Tick(state.bridge && state.bridge->RestoreReady(), &RestoreAfterKill, [](const std::string& aWhat) {
-            log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
-        });
+        state.restore.Tick(state.bridge && state.bridge->RestoreReady() && scriptsReady, &RestoreAfterKill,
+                           [](const std::string& aWhat) { log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore"); });
         // A save lock game.save released and couldn't retake through the queue (RB-52). Runs even after
-        // the kill switch: the lock is the one thing the kill switch keeps.
-        try
-        {
-            RetakeOwedSaveLock();
-        }
-        catch (const std::exception& e)
-        {
-            log::Warn("game.save_relock_failed", std::string("what=") + e.what(), "save-relock");
-        }
-        HandleRearm(state);
-        // A client dropped for idleness can't be driving photo mode any more: give the cursor back
-        // (RB-34). Only after a write, since only a write hides it.
-        if (state.bridge && state.bridge->TakeIdleDisconnect() && state.restore.WritesUsed() && !state.restore.Done())
+        // the kill switch: the lock is the one thing the kill switch keeps. Waits for the scripts, like the restore.
+        if (scriptsReady)
         {
             try
             {
-                ReleaseCursorAfterIdle();
+                RetakeOwedSaveLock();
             }
             catch (const std::exception& e)
             {
-                log::Warn("bridge.idle_cursor_release_failed", std::string("what=") + e.what(), "idle-release");
+                log::Warn("game.save_relock_failed", std::string("what=") + e.what(), "save-relock");
+            }
+        }
+        HandleRearm(state);
+        // A client dropped for idleness can't be driving photo mode any more: give the cursor back
+        // (RB-34). Only after a write, since only a write hides it. Between sessions there is no cursor flag to
+        // release (the registry holding it goes with the session).
+        if (state.bridge && state.bridge->TakeIdleDisconnect() && state.restore.WritesUsed() && !state.restore.Done())
+        {
+            if (!scriptsReady)
+            {
+                log::Info("bridge.idle_cursor_release_skipped", "reason=scripts_not_ready", "idle-release");
+            }
+            else
+            {
+                try
+                {
+                    ReleaseCursorAfterIdle();
+                }
+                catch (const std::exception& e)
+                {
+                    log::Warn("bridge.idle_cursor_release_failed", std::string("what=") + e.what(), "idle-release");
+                }
             }
         }
         return false;
@@ -355,6 +374,8 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     // Every engine address a game call needs, resolved now rather than lazily at the first call, where a
     // missing one would end the game (RB-32). Without them the bridge still runs, refusing game methods.
     ResolveScriptCallAddresses();
+    // Every game-thread method and step waits for a live scripted session, checked right before it runs (RB-76).
+    SetGameGate([](const std::string& aWhat) { Get().scriptLayer.Require(aWhat); });
     live::ResolveAddresses(); // the live-pose commands' own engine addresses (refused for the session if missing)
 
     RegisterStates(aHandle, aSdk);

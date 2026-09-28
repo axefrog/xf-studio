@@ -518,9 +518,30 @@ json GameStatus(const MethodContext& aContext)
         out["phase"] = state.gameState.load() == 3 ? "shutting_down" : "starting";
         return out;
     }
+    // While the game's scripts can't be called (a save loading, the game starting), the plugin answers by itself
+    // (RB-76): game.wait polls this through a load, and session 5's crash was this very call made just after the
+    // script layer detached. Checked again on the game thread, right before the call, since the detach can come
+    // while the request waits in the queue.
     const auto cid = aContext.cid;
-    out.update(RunGameTask(
-        state.queue, Timeout(), [cid] { return CallScript("XFBridgeActions", "Status", {}, {}, cid); }, "game.status"));
+    if (!state.scriptLayer.Ready())
+    {
+        out.update(writes::StatusWhileLoading(state.scriptLayer.Phase(), state.scriptLayer.Describe()));
+        return out; // no game-thread step at all: the engine may not tick during a load
+    }
+    auto answer = RunGameTask(
+        state.queue, Timeout(),
+        [cid]() -> json {
+            auto& layer = Get().scriptLayer;
+            if (!layer.Ready())
+            {
+                return writes::StatusWhileLoading(layer.Phase(), layer.Describe());
+            }
+            auto status = CallScript("XFBridgeActions", "Status", {}, {}, cid);
+            status["script_layer"] = layer.Describe();
+            return status;
+        },
+        "game.status", false);
+    out.update(answer);
     return out;
 }
 
@@ -847,6 +868,85 @@ json InventoryUnequipMethod(const MethodContext& aContext)
     return writes::InventoryUnequip(request, ops);
 }
 
+std::function<void()> WritesGuard();
+
+// photo.camera.place (0.5.2, research): moves photo mode's camera entity, then reads the active camera a few frames later
+// to see whether photo mode kept it there (writes::CameraPlaceResult).
+json PhotoCameraPlace(const MethodContext& aContext)
+{
+    const auto request = params::ParseCameraPlace(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    auto step = RunGameTask(
+        queue, Timeout(),
+        [cid, request] {
+            float x = static_cast<float>(request.position[0]), y = static_cast<float>(request.position[1]), z = static_cast<float>(request.position[2]);
+            float tx = static_cast<float>(request.lookAt[0]), ty = static_cast<float>(request.lookAt[1]), tz = static_cast<float>(request.lookAt[2]);
+            return CallScript("XFPhoto", "PlaceCamera", {"Float", "Float", "Float", "Float", "Float", "Float"}, {&x, &y, &z, &tx, &ty, &tz}, cid);
+        },
+        "photo.camera.place");
+    if (!writes::WaitTicks(queue, 4, Timeout()))
+    {
+        throw MethodError("timeout", "the game didn't tick after the camera moved; photo.subject shows where it is");
+    }
+    const auto reading = RunGameTask(queue, Timeout(), [cid] { return CallScript("XFPhoto", "CameraReading", {}, {}, cid); }, "photo.camera.read");
+    return writes::CameraPlaceResult(request, step, reading);
+}
+
+// wardrobe.state (0.5.2): the active outfit and what each clothing area shows.
+json WardrobeState(const MethodContext& aContext)
+{
+    params::RequireOnly(aContext.params, {});
+    return CallScript("XFWardrobe", "State", {}, {}, aContext.cid);
+}
+
+// wardrobe.equip (0.5.2): one wardrobe change (or the undo's exact restore) through the equipment system's own
+// requests (redscript XFWardrobe), then the wardrobe read until it shows it (writes::WardrobeEquip).
+json WardrobeEquipMethod(const MethodContext& aContext)
+{
+    const auto request = params::ParseWardrobeEquip(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    writes::WardrobeOps ops;
+    ops.change = [&queue, cid, request] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, request] {
+                if (request.mode == "restore")
+                {
+                    // Begin, one slot each, then apply: all in this one game-thread step.
+                    int32_t set = request.set;
+                    CallScript("XFWardrobe", "RestoreBegin", {"Int32"}, {&set}, cid);
+                    for (const auto& slot : request.slots)
+                    {
+                        RED4ext::CString area(slot.area.c_str());
+                        RED4ext::CString item(slot.item.c_str());
+                        bool hidden = slot.hidden;
+                        CallScript("XFWardrobe", "RestoreSlot", {"String", "String", "Bool"}, {&area, &item, &hidden}, cid);
+                    }
+                    return CallScript("XFWardrobe", "RestoreFinish", {}, {}, cid);
+                }
+                RED4ext::CString mode(request.mode.c_str());
+                int32_t set = request.set;
+                RED4ext::CString item(request.item.c_str());
+                RED4ext::CString area(request.area.c_str());
+                return CallScript("XFWardrobe", "Change", {"String", "Int32", "String", "String"}, {&mode, &set, &item, &area}, cid);
+            },
+            "wardrobe.equip");
+    };
+    ops.state = [&queue, cid] {
+        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFWardrobe", "State", {}, {}, cid); }, "wardrobe.state");
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, 3, Timeout()))
+        {
+            throw MethodError("timeout", "the game didn't tick while the wardrobe changed");
+        }
+    };
+    WritesGuard()();
+    return writes::WardrobeEquip(request, ops);
+}
+
 // Multi-step writes check the kill switch and the panel's pause again before each step that changes the
 // game (RB-53); the dispatcher only checks them when the request arrives.
 std::function<void()> WritesGuard()
@@ -911,7 +1011,15 @@ json GameLoadMethod(const MethodContext& aContext)
     auto& queue = Get().queue;
     writes::LoadOps ops;
     ops.latest = [&queue, cid] {
-        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "LoadLatest", {}, {}, cid); }, "game.load.latest");
+        return RunGameTask(
+            queue, Timeout(),
+            [cid] {
+                auto result = CallScript("XFGame", "LoadLatest", {}, {}, cid);
+                // In the same game-thread step (RB-76): no script call until the loaded session is ready.
+                Get().scriptLayer.OnLoadRequested();
+                return result;
+            },
+            "game.load.latest");
     };
     ops.list = [&queue, cid] {
         return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "ListSaves", {}, {}, cid); }, "game.load.list");
@@ -924,7 +1032,9 @@ json GameLoadMethod(const MethodContext& aContext)
             queue, Timeout(),
             [cid, aName] {
                 RED4ext::CString name(aName.c_str());
-                return CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
+                auto result = CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
+                Get().scriptLayer.OnLoadRequested(); // as for the latest save (RB-76)
+                return result;
             },
             "game.load");
     };
@@ -1657,6 +1767,9 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register(WriteMethod("photo.camera.set", Access::WritePhoto, RunOn::GameThread,
                                      "Photo-mode camera and subject settings (FOV, roll, focus, DOF, V's placement), or reset.",
                                      &PhotoCameraSet));
+    aDispatcher.Register(WriteMethod("photo.camera.place", Access::WritePhoto, RunOn::BridgeThread,
+                                     "Research: moves photo mode's camera entity to a position aimed at a point, and reads whether it held.",
+                                     &PhotoCameraPlace));
     aDispatcher.Register(WriteMethod("photo.light.set", Access::WritePhoto, RunOn::BridgeThread, "Selects a photo-mode light and sets its values.",
                                      &PhotoLightSet));
     aDispatcher.Register(WriteMethod("photo.hud.hide", Access::WritePhoto, RunOn::GameThread, "Hides or shows the photo-mode interface and its mouse cursor.", &PhotoHudHide));
@@ -1700,6 +1813,12 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      &InventoryEquipMethod));
     aDispatcher.Register(WriteMethod("inventory.unequip", Access::WriteInventory, RunOn::BridgeThread,
                                      "Unequips a clothing slot (and removes an item the bridge added, if asked).", &InventoryUnequipMethod));
+    // Bridge 0.5.2: the wardrobe (outfits decide what each clothing area shows), in the inventory write class.
+    aDispatcher.Register({"wardrobe.state", Access::Read, RunOn::GameThread,
+                          "The active wardrobe outfit, what each clothing area shows, and the stored outfits.", &WardrobeState});
+    aDispatcher.Register(WriteMethod("wardrobe.equip", Access::WriteInventory, RunOn::BridgeThread,
+                                     "Applies or clears a wardrobe outfit, shows an item in the active outfit, or restores a snapshot.",
+                                     &WardrobeEquipMethod));
     aDispatcher.Register(WriteMethod("game.save", Access::WriteSave, RunOn::BridgeThread,
                                      "Makes one new manual save; refused while the bridge's save lock is held unless overridden.", &GameSaveMethod));
     aDispatcher.Register(WriteMethod("game.load", Access::WriteSave, RunOn::BridgeThread, "Loads the latest save or one save by name.",

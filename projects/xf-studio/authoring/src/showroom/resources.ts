@@ -45,10 +45,17 @@ export const HEAD_JOINT: Vec3 = [0, -0.0403, 1.6397];
 /** The head mesh's lowest vertex: the neck's cut. [resource] */
 export const NECK_CUT_Z = 1.4617;
 
-/** The pedestal: a square column whose top covers the neck's cut, on a wider base slab. */
+/**
+ * The pedestal: one square column the neck sits down into. In game (session 5, 29 September 2026) every head floated a
+ * few centimetres above a column that topped out 8 mm above the neck's cut, so the head draws a little higher than the
+ * rig's reference pose puts it [runtime; the cause, the face rig's pose without animation, is a hypothesis]. The
+ * panel's own bounds are exactly x −1…0, y −1…0, z 0…1 [resource: `q110_black_box.mesh` serialized with WolvenKit 9.0.1],
+ * so the gap isn't the box. The column now rises 6 cm above the cut (the neck's lowest part sits inside it) and reaches
+ * 1.5 m below the entity's origin, so a head the bridge raises to the camera's eye line (showroom.spawn height_m) still
+ * stands on the floor; unraised, that part is under the floor. The base slab is gone: raised, it would float.
+ */
 export const PEDESTAL = Object.freeze({
-  column: { width: 0.24, top: 1.47, centreY: -0.07 },
-  base: { width: 0.44, height: 0.04 },
+  column: { width: 0.24, top: 1.52, bottom: -1.5, centreY: -0.07 },
 });
 
 /** Stable component ID from its name: 63 bits of SHA-256 (WolvenKit reads a component ID as a signed 64-bit number), never 0. */
@@ -113,13 +120,13 @@ function staticBox(name: string, position: Vec3, scale: Vec3) {
     mesh: ref(SHOWROOM_VANILLA.box), meshAppearance: cname("default"), chunkMask: FULL_CHUNK_MASK, forceLODLevel: -1,
     localTransform: worldTransform(position), visualScale: { $type: "Vector3", X: scale[0], Y: scale[1], Z: scale[2] } };
 }
-/** The box's corner is at its origin, so a box scaled by (w, w, h) is centred on (x, y) by an offset of +w/2 on each axis. */
+/**
+ * The box's corner is at its origin, so a box scaled by (w, w, h) is centred on (x, y) by an offset of +w/2 on each axis,
+ * and placed at z = bottom it spans bottom…bottom + h.
+ */
 export function pedestalBoxes(): { name: string; position: Vec3; scale: Vec3 }[] {
-  const c = PEDESTAL.column, b = PEDESTAL.base;
-  return [
-    { name: "xfs_pedestal", position: [c.width / 2, c.centreY + c.width / 2, 0], scale: [c.width, c.width, c.top] },
-    { name: "xfs_plinth", position: [b.width / 2, c.centreY + b.width / 2, 0], scale: [b.width, b.width, b.height] },
-  ];
+  const c = PEDESTAL.column;
+  return [{ name: "xfs_pedestal", position: [c.width / 2, c.centreY + c.width / 2, c.bottom], scale: [c.width, c.width, c.top - c.bottom] }];
 }
 
 /** The showroom's `.app`: one appearance per preset, each the same head, eyes and pedestal with that preset's plate appearance. */

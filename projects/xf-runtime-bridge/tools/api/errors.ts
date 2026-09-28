@@ -11,7 +11,10 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   unauthorized: "The game bridge refused the connection key. Restart the game so the bridge writes a fresh session file.",
   killed:
     "The game bridge was switched off with its kill switch. In the game, open the Cyber Engine Tweaks overlay and press Reconnect in the XF Runtime Bridge window (test builds), or restart the game.",
-  rate_limited: "Too many requests in a short time. Wait a second and try again.",
+  rate_limited:
+    "The game bridge was sent too many requests in a short time, and it was still refusing after the tools waited a few seconds. Nothing was changed by the refused request. Wait a moment and try again.",
+  game_loading:
+    "The game is loading (or still starting), so the bridge doesn't call into it until the loaded session's player is in; nothing was called or changed. Wait with game_wait for phase gameplay, then try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
     "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom; inventory stays off until the maintainer allows it, and showroom is listed only by the XF test profile's build). Nothing was changed.",
@@ -68,6 +71,8 @@ const BRIDGE_MESSAGES: Record<string, string> = {
     "That would change nothing in the game, so it wasn't sent: V's photo-mode face animation runs on the stand-in (target puppet, the default), not on the head item. Leave target out.",
   unverified_index:
     "That face table index matches an expression only by its place in the list, which isn't reliable with an expression pack installed, so nothing was applied. Use an index photo_state found by name (table_index_verified), or pass force: true to apply it anyway.",
+  face_table_unreadable:
+    "Photo mode's expression records couldn't be read, so the bridge can't check which face table index an expression has; nothing was applied. Pass unlisted: true to apply the index anyway (photo_state with options shows face_table).",
   stale_match:
     "The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh.",
   not_in_character_menu:
@@ -92,6 +97,8 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   no_such_piece: "The showroom has no head with that index. showroom_state lists the heads it has.",
   spawn_refused: "The game's entity spawner refused the showroom entity, so nothing was spawned. The plugin log has the details.",
   not_ready: "The game can't spawn entities yet. Wait until V can move, then try again.",
+  no_active_outfit:
+    "V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first.",
   unsupported: "This game doesn't offer a safe way to do that yet.",
   unavailable: "That part of the game isn't available right now.",
   failed: "Something went wrong inside the game bridge. The plugin log has the details.",

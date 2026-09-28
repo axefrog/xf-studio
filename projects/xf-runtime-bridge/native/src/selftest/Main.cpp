@@ -15,6 +15,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <atomic>
 #include <chrono>
@@ -31,6 +32,7 @@
 #include "core/OptionsExchange.hpp"
 #include "core/Showroom.hpp"
 #include "core/Params.hpp"
+#include "core/ScriptLayer.hpp"
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
 
@@ -78,7 +80,9 @@ std::string SimValueName(const std::string& aOption, int32_t aIndex)
 // list position; table_index is the face record's faceId. Like session 4's install with an expression pack,
 // the entries from 50 on are offset by 4; the last three were matched only by list position (their names
 // match no face record, or several), so their table index is unverified (RB-72).
-json SimExpressionList()
+// aReadable = false (selftest.phase {face_table_readable: false}) is session 5's game: the face table read nothing, so
+// the options carry no table index (RB-78).
+json SimExpressionList(bool aReadable = true)
 {
     json list = json::array();
     for (int32_t i = 0; i < 60; ++i)
@@ -86,10 +90,20 @@ json SimExpressionList()
         const std::string text = i == 0 ? "Neutral" : i == 1 ? "Charm" : i == 56 ? "Static: Sleeping" : i == 52 ? "Static: Skeptical" :
                                  i == 55 ? "Static: Shock" : "Face " + std::to_string(i);
         const bool byLabel = i < 57;
+        if (!aReadable)
+        {
+            list.push_back({{"data", i}, {"text", text}});
+            continue;
+        }
         list.push_back({{"data", i}, {"text", text}, {"table_index", i < 50 ? i : i + 4}, {"table_index_by", byLabel ? "label" : "position"},
                         {"table_index_verified", byLabel}});
     }
     return list;
+}
+
+json SimFaceTable(bool aReadable)
+{
+    return json{{"listed", 60}, {"readable", aReadable ? 60 : 0}, {"source", aReadable ? "names" : ""}};
 }
 
 BOOL WINAPI OnConsoleCtrl(DWORD)
@@ -298,6 +312,22 @@ int wmain(int argc, wchar_t** argv)
         bool saveLock = false;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
         std::string player = "v";            // selftest.phase {player: "johnny"}: a stand-in, not V
+        bool faceTableReadable = true;       // selftest.phase {face_table_readable: false}: session 5's unread face table
+        bool cameraHolds = false;            // selftest.phase {camera_holds: true}: photo mode keeps a moved camera (0.5.2)
+        std::array<double, 3> cameraAt{0.0, 0.0, 1.6};
+        // The wardrobe (0.5.2): the active outfit (0 none), what each area shows of it, the stored outfits, the items the
+        // wardrobe knows, and the snapshot the kill switch restores (the wardrobe before the bridge's first change).
+        struct WardrobeArea
+        {
+            std::string item;
+            bool hidden = false;
+        };
+        int wardrobeSet = 0;
+        std::map<std::string, WardrobeArea> wardrobeAreas;
+        std::map<int, std::map<std::string, std::string>> wardrobeSets{{1, {{"OuterChest", "Items.Jacket_01_basic_01"}}},
+                                                                       {2, {{"Head", "Items.Cap_01_basic_01"}, {"OuterChest", "Items.Jacket_01_basic_01"}}}};
+        std::vector<std::string> wardrobeStored{"Items.Jacket_01_basic_01", "Items.Cap_01_basic_01"};
+        json wardrobeSnapshot;
         // Photo-mode poses: two categories (0 Idle, 900 XF Live) and their poses; the XF carrier is pose 7 of 900.
         int32_t poseCategory = 0;
         int32_t pose = 1;
@@ -344,6 +374,23 @@ int wmain(int argc, wchar_t** argv)
     static Simulated sim;
     sim.codeware = codeware;
     static xfb::writes::RestoreOnce restore;
+    // The script layer's readiness (RB-76), as the plugin keeps it: the simulated session is up from the start;
+    // selftest.script_layer moves it, and the simulated load detaches, attaches and lets the player in. With
+    // detach_before_next_task, the next game-thread task sees the detach first, as session 5's game.status did.
+    static xfb::ScriptLayer simLayer;
+    static std::atomic<bool> detachBeforeNextTask{false};
+    simLayer.OnAttach();
+    simLayer.OnPlayerAttach();
+    const auto applyPendingDetach = [] {
+        if (detachBeforeNextTask.exchange(false))
+        {
+            simLayer.OnDetach();
+        }
+    };
+    xfb::SetGameGate([applyPendingDetach](const std::string& aWhat) {
+        applyPendingDetach();
+        simLayer.Require(aWhat);
+    });
     {
         namespace lp = xfb::livepose;
         for (uint16_t joint = 0; joint < 71; ++joint)
@@ -430,6 +477,9 @@ int wmain(int argc, wchar_t** argv)
                              sim.creatorRow = aContext.params.value("creator_row", std::string());
                              sim.photoTimeHours = aContext.params.value("photo_time_hours", false);
                              sim.photoTimeLabel = aContext.params.value("photo_time_label", std::string("TIME OF DAY"));
+                             sim.faceTableReadable = aContext.params.value("face_table_readable", true);
+                             sim.cameraHolds = aContext.params.value("camera_holds", false);
+                             sim.cameraAt = {0.0, 0.0, 1.6};
                              return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}, {"player", sim.player}};
                          }});
     // The in-game panel's write switch, which the self-test can't press: pauses or resumes writes.
@@ -439,11 +489,29 @@ int wmain(int argc, wchar_t** argv)
                              dispatcher.SetWritesPaused(aContext.params.value("paused", true));
                              return json{{"writes_paused", dispatcher.WritesPaused()}};
                          }});
-    dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
-                         [phase, &config, &dispatcher](const xfb::MethodContext& aContext) {
-                             p::RequireOnly(aContext.params, {});
-                             std::scoped_lock _(sim.mutex);
-                             return json{{"simulated", true},
+    dispatcher.Register({"selftest.script_layer", xfb::Access::Read, xfb::RunOn::BridgeThread,
+                         "Moves the simulated script layer (attach, player_attach, detach, detach_before_next_task, load_requested; self-test only).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto event = aContext.params.value("event", std::string());
+                             if (event == "detach_before_next_task")
+                             {
+                                 detachBeforeNextTask.store(true);
+                             }
+                             else if (event == "load_requested")
+                             {
+                                 simLayer.OnLoadRequested();
+                             }
+                             else if (!simLayer.OnEvent(event))
+                             {
+                                 throw xfb::MethodError("bad_params", "event must be attach, player_attach, detach, detach_before_next_task or load_requested");
+                             }
+                             return simLayer.Describe();
+                         }});
+    // game.status as the plugin answers it (RB-76): from the bridge's side while the scripts can't be called, and
+    // checked again on the game thread right before the (simulated) script call.
+    const auto simStatus = [&config, &dispatcher]() -> json {
+        std::scoped_lock _(sim.mutex);
+        return json{{"simulated", true},
                                          {"allow_writes", config.allowWrites},
                                          {"writes_paused", dispatcher.WritesPaused()},
                                          {"write_classes", xfb::WriteClassList(config)},
@@ -456,7 +524,41 @@ int wmain(int argc, wchar_t** argv)
                                          {"cursor_hidden", sim.cursorHidden},
                                          {"face_index", sim.faceIndex},
                                          {"world_time_seconds", sim.clock},
-                                         {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}}};
+                                         {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}},
+                                         {"script_layer", simLayer.Describe()}};
+    };
+    dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
+                         [&queue, &config, &dispatcher, simStatus, applyPendingDetach](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {});
+                             // What the plugin adds from its own side, loading or not.
+                             const auto loading = [&config, &dispatcher] {
+                                 auto out = w::StatusWhileLoading(simLayer.Phase(), simLayer.Describe());
+                                 out["simulated"] = true;
+                                 out["allow_writes"] = config.allowWrites;
+                                 out["writes_paused"] = dispatcher.WritesPaused();
+                                 out["write_classes"] = xfb::WriteClassList(config);
+                                 return out;
+                             };
+                             if (!simLayer.Ready())
+                             {
+                                 return loading();
+                             }
+                             if (!queue.IsPumping())
+                             {
+                                 return simStatus();
+                             }
+                             return xfb::RunGameTask(
+                                 queue, std::chrono::milliseconds(1000),
+                                 [simStatus, applyPendingDetach, loading]() -> json {
+                                     applyPendingDetach();
+                                     if (!simLayer.Ready())
+                                     {
+                                         xfb::log::Info("selftest.status_while_loading", "the script layer detached while game.status waited");
+                                         return loading();
+                                     }
+                                     return simStatus();
+                                 },
+                                 "game.status", false);
                          }});
     dispatcher.Register({"player.appearance", xfb::Access::Read, xfb::RunOn::GameThread,
                          "Character state (simulated).", [phase](const xfb::MethodContext& aContext) {
@@ -523,11 +625,12 @@ int wmain(int argc, wchar_t** argv)
                                  // option data is the list position; table_index is the face record's faceId. Like
                                  // session 4's install with an expression pack, the entries from 50 on are offset by 4.
                                  json expression{{"key", 28}, {"label", "FACIAL EXPRESSION"}, {"kind", "options"}, {"option_count", 60}, {"start", 0}};
+                                 std::scoped_lock _(sim.mutex);
                                  if (request.options)
                                  {
-                                     expression["options"] = SimExpressionList();
+                                     expression["face_table"] = SimFaceTable(sim.faceTableReadable);
+                                     expression["options"] = SimExpressionList(sim.faceTableReadable);
                                  }
-                                 std::scoped_lock _(sim.mutex);
                                  const auto it = sim.attributes.find(p::key::kExpression);
                                  expression["value"] = it == sim.attributes.end() ? 0.0 : static_cast<double>(it->second);
                                  out["menu"].push_back(expression);
@@ -664,6 +767,39 @@ int wmain(int argc, wchar_t** argv)
     // along +Y, and V's head placed by the pose tab's offsets (keys 8, 9, 37) and rotation (key 7)
     // through a slightly skewed mapping, projected with a vertical field of view (key 1, 35 until
     // set) at aspect 2.4. Enough to drive tools/api/framing.ts end to end offline.
+    // photo.camera.place (0.5.2), simulated: the camera entity moves, and photo mode keeps it there only with camera_holds.
+    dispatcher.Register(simWrite("photo.camera.place", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Camera placement (simulated).",
+                                 [&queue](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseCameraPlace(aContext.params);
+                                     const auto vec = [](const std::array<double, 3>& aV) { return json{{"x", aV[0]}, {"y", aV[1]}, {"z", aV[2]}}; };
+                                     const auto step = xfb::RunGameTask(
+                                         queue, std::chrono::milliseconds(1000),
+                                         [&request, vec] {
+                                             std::scoped_lock _(sim.mutex);
+                                             if (sim.phase != "photo_mode")
+                                             {
+                                                 throw xfb::MethodError("not_in_photo_mode", "simulated: photo mode is not open");
+                                             }
+                                             const auto before = sim.cameraAt;
+                                             if (sim.cameraHolds)
+                                             {
+                                                 sim.cameraAt = request.position;
+                                             }
+                                             sim.gameSaveLock = true;
+                                             return json{{"entity", "gamePhotoModeCameraObject"}, {"asked", vec(request.position)},
+                                                         {"before", {{"position", vec(before)}, {"forward", {{"x", 0.0}, {"y", 1.0}, {"z", 0.0}}}}}};
+                                         },
+                                         "photo.camera.place");
+                                     w::WaitTicks(queue, 2, std::chrono::milliseconds(1000));
+                                     json reading;
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         reading = json{{"position", vec(sim.cameraAt)}, {"forward", {{"x", 0.0}, {"y", 1.0}, {"z", 0.0}}}, {"fov", 35.0}};
+                                     }
+                                     auto out = w::CameraPlaceResult(request, step, reading);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
     dispatcher.Register({"photo.subject", xfb::Access::Read, xfb::RunOn::GameThread, "V's head and the camera (simulated).",
                          [requirePhase](const xfb::MethodContext& aContext) {
                              const auto request = p::ParseSubject(aContext.params);
@@ -690,7 +826,7 @@ int wmain(int argc, wchar_t** argv)
                              const double head[3] = {root[0] + fx * 0.03, root[1] + fy * 0.03, root[2] + 1.62};
                              const double target[3] = {head[0] + fx * request.forward + rx * request.right,
                                                        head[1] + fy * request.forward + ry * request.right, head[2] + request.up};
-                             const double cam[3] = {0.0, 0.0, 1.6};
+                             const double cam[3] = {sim.cameraAt[0], sim.cameraAt[1], sim.cameraAt[2]};
                              const double aspect = 2.4;
                              const double t = std::tan(fov * pi / 360.0);
                              const auto project = [&](double aX, double aY, double aZ) {
@@ -777,7 +913,13 @@ int wmain(int argc, wchar_t** argv)
                                      const auto request = p::ParseExpressionIndex(aContext.params);
                                      requirePhase("photo_mode", "not_in_photo_mode");
                                      // The plugin's check against the list's table indices (core/Writes.cpp, RB-72).
-                                     const auto standing = w::CheckFaceIndex(request, json{{"seen", true}, {"entries", SimExpressionList()}});
+                                     bool readable = true;
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         readable = sim.faceTableReadable;
+                                     }
+                                     const auto standing = w::CheckFaceIndex(
+                                         request, json{{"seen", true}, {"face_table", SimFaceTable(readable)}, {"entries", SimExpressionList(readable)}});
                                      std::scoped_lock _(sim.mutex);
                                      const auto menu = sim.attributes.find(p::key::kExpression);
                                      const bool known = menu != sim.attributes.end();
@@ -1297,9 +1439,160 @@ int wmain(int argc, wchar_t** argv)
         };
         return ops;
     };
+    // The wardrobe (0.5.2), simulated as XFWardrobe reads and changes it (sim.mutex held by the callers).
+    static const std::vector<std::string> wardrobeAreaNames{"Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"};
+    const auto wardrobeApplySet = [](int aSet) {
+        sim.wardrobeSet = aSet;
+        for (const auto& area : wardrobeAreaNames)
+        {
+            if (aSet == 0)
+            {
+                sim.wardrobeAreas[area] = {};
+                continue;
+            }
+            const auto& set = sim.wardrobeSets[aSet];
+            const auto it = set.find(area);
+            sim.wardrobeAreas[area] = it != set.end() ? Simulated::WardrobeArea{it->second, false} : Simulated::WardrobeArea{"", true};
+        }
+    };
+    const auto wardrobeShows = [](const std::string& aArea) -> std::string {
+        const auto& area = sim.wardrobeAreas[aArea];
+        if (area.hidden)
+        {
+            return "hidden";
+        }
+        if (sim.wardrobeSet > 0 && !area.item.empty())
+        {
+            return "outfit";
+        }
+        return sim.worn.count(aArea) && !sim.worn[aArea].empty() ? "equipped" : "empty";
+    };
+    const auto wardrobeSnapshot = [] {
+        json slots = json::array();
+        for (const auto& area : wardrobeAreaNames)
+        {
+            slots.push_back({{"area", area}, {"item", sim.wardrobeAreas[area].item}, {"hidden", sim.wardrobeAreas[area].hidden}});
+        }
+        return json{{"set", sim.wardrobeSet}, {"slots", slots}};
+    };
+    const auto wardrobeState = [wardrobeShows] {
+        json areas = json::array();
+        for (const auto& area : wardrobeAreaNames)
+        {
+            areas.push_back({{"area", area},
+                             {"shows", wardrobeShows(area)},
+                             {"outfit_item", sim.wardrobeAreas[area].item},
+                             {"hidden", sim.wardrobeAreas[area].hidden},
+                             {"equipped", sim.worn.count(area) ? sim.worn[area] : std::string()}});
+        }
+        json sets = json::array();
+        for (const auto& [set, items] : sim.wardrobeSets)
+        {
+            json list = json::array();
+            for (const auto& [area, item] : items)
+            {
+                list.push_back({{"area", area}, {"item", item}});
+            }
+            sets.push_back({{"set", set}, {"items", list}});
+        }
+        return json{{"simulated", true}, {"set", sim.wardrobeSet}, {"active", sim.wardrobeSet > 0}, {"enabled", true}, {"areas", areas}, {"sets", sets}};
+    };
+    dispatcher.Register({"wardrobe.state", xfb::Access::Read, xfb::RunOn::GameThread, "The wardrobe (simulated).",
+                         [wardrobeState](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {});
+                             std::scoped_lock _(sim.mutex);
+                             return wardrobeState();
+                         }});
+    dispatcher.Register(simWrite("wardrobe.equip", xfb::Access::WriteInventory, xfb::RunOn::BridgeThread, "Wardrobe (simulated).",
+                                 [&queue, slotOf, wardrobeApplySet, wardrobeSnapshot, wardrobeState](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseWardrobeEquip(aContext.params);
+                                     w::WardrobeOps ops;
+                                     ops.change = [&request, slotOf, wardrobeApplySet, wardrobeSnapshot] {
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.phase != "gameplay")
+                                         {
+                                             throw xfb::MethodError("not_in_gameplay", "simulated: the game is in '" + sim.phase + "'");
+                                         }
+                                         const auto before = wardrobeSnapshot();
+                                         const auto known = [](const std::string& aItem) {
+                                             return std::find(sim.wardrobeStored.begin(), sim.wardrobeStored.end(), aItem) != sim.wardrobeStored.end() ||
+                                                    std::find(sim.inventory.begin(), sim.inventory.end(), aItem) != sim.inventory.end();
+                                         };
+                                         if (request.mode == "set")
+                                         {
+                                             if (!sim.wardrobeSets.count(request.set))
+                                             {
+                                                 throw xfb::MethodError("bad_params", "simulated: no outfit in slot " + std::to_string(request.set));
+                                             }
+                                             wardrobeApplySet(request.set);
+                                         }
+                                         else if (request.mode == "clear")
+                                         {
+                                             if (sim.wardrobeSet == 0)
+                                             {
+                                                 return json{{"changed", false}, {"before", before}};
+                                             }
+                                             wardrobeApplySet(0);
+                                         }
+                                         else if (request.mode == "item")
+                                         {
+                                             if (sim.wardrobeSet == 0)
+                                             {
+                                                 throw xfb::MethodError("no_active_outfit", "simulated: no outfit is active");
+                                             }
+                                             if (!known(request.item))
+                                             {
+                                                 throw xfb::MethodError("not_in_inventory", "simulated: nothing has '" + request.item + "'");
+                                             }
+                                             sim.wardrobeAreas[slotOf(request.item)] = {request.item, false};
+                                         }
+                                         else if (request.mode == "equipped" || request.mode == "hidden")
+                                         {
+                                             sim.wardrobeAreas[request.area] = {"", request.mode == "hidden"};
+                                         }
+                                         else
+                                         {
+                                             for (const auto& slot : request.slots)
+                                             {
+                                                 if (!slot.item.empty() && !known(slot.item))
+                                                 {
+                                                     throw xfb::MethodError("not_in_inventory", "simulated: nothing has '" + slot.item + "' any more");
+                                                 }
+                                             }
+                                             wardrobeApplySet(request.set);
+                                             if (request.set > 0)
+                                             {
+                                                 for (const auto& slot : request.slots)
+                                                 {
+                                                     sim.wardrobeAreas[slot.area] = {slot.item, slot.item.empty() && slot.hidden};
+                                                 }
+                                             }
+                                         }
+                                         sim.gameSaveLock = true;
+                                         if (sim.wardrobeSnapshot.is_null())
+                                         {
+                                             sim.wardrobeSnapshot = before; // the kill switch puts the session's first state back
+                                         }
+                                         return json{{"changed", true}, {"before", before}};
+                                     };
+                                     ops.state = [wardrobeState] {
+                                         std::scoped_lock _(sim.mutex);
+                                         return wardrobeState();
+                                     };
+                                     ops.settle = [&queue] {
+                                         if (!w::WaitTicks(queue, 2, std::chrono::milliseconds(1000)))
+                                         {
+                                             throw xfb::MethodError("timeout", "simulated: no game ticks");
+                                         }
+                                     };
+                                     auto out = w::WardrobeEquip(request, ops);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
     dispatcher.Register(simWrite("inventory.equip", xfb::Access::WriteInventory, xfb::RunOn::BridgeThread, "Equip (simulated).",
                                  [inventoryOps, slotOf](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseInventoryEquip(aContext.params);
+                                     // (the equip step reads sim.wardrobeAreas for the outfit note)
                                      auto ops = inventoryOps();
                                      ops.equip = [&request, slotOf] {
                                          std::scoped_lock _(sim.mutex);
@@ -1336,7 +1629,14 @@ int wmain(int argc, wchar_t** argv)
                                              sim.pendingTicks = 2;
                                          }
                                          sim.gameSaveLock = true;
-                                         return json{{"item", request.item}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous}};
+                                         json step{{"item", request.item}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous}};
+                                         // As XFWardrobe.AreaNote: an active outfit (or a hidden area) decides what the area shows.
+                                         const auto& area = sim.wardrobeAreas[slot];
+                                         if (area.hidden || (sim.wardrobeSet > 0 && !area.item.empty()))
+                                         {
+                                             step["outfit"] = {{"set", sim.wardrobeSet}, {"area", slot}, {"shows", area.hidden ? "hidden" : "outfit"}, {"outfit_item", area.item}};
+                                         }
+                                         return step;
                                      };
                                      auto out = w::InventoryEquip(request, ops);
                                      out["simulated"] = true;
@@ -1439,6 +1739,7 @@ int wmain(int argc, wchar_t** argv)
                                          refuse();
                                          sim.phase = "loading";
                                          sim.loadTicks = 4;
+                                         simLayer.OnLoadRequested(); // as the plugin, in the same step (RB-76)
                                          return json{{"requested", true}, {"route", "latest"}};
                                      };
                                      ops.list = [refuse] {
@@ -1468,6 +1769,7 @@ int wmain(int argc, wchar_t** argv)
                                          }
                                          sim.phase = "loading";
                                          sim.loadTicks = 4;
+                                         simLayer.OnLoadRequested();
                                          return json{{"requested", true}, {"route", "name"}, {"name", aName}, {"index", at - sim.saves.begin()}};
                                      };
                                      ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
@@ -1662,6 +1964,18 @@ int wmain(int argc, wchar_t** argv)
             out["showroom_cleared"] = sim.showroom.size();
             sim.showroom.clear();
         }
+        // The wardrobe before the bridge's first change this session (0.5.2), as XFWardrobe.RestoreAfterKill.
+        if (sim.wardrobeSnapshot.is_object())
+        {
+            const auto snapshot = sim.wardrobeSnapshot;
+            sim.wardrobeSet = snapshot.value("set", 0);
+            for (const auto& slot : snapshot["slots"])
+            {
+                sim.wardrobeAreas[slot.value("area", std::string())] = {slot.value("item", std::string()), slot.value("hidden", false)};
+            }
+            out["wardrobe_restored"] = snapshot;
+            sim.wardrobeSnapshot = nullptr;
+        }
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
@@ -1767,8 +2081,19 @@ int wmain(int argc, wchar_t** argv)
                         --item.ticks;
                     }
                 }
+                // The simulated load's script lifecycle (RB-76): the session detaches, the new one attaches on the
+                // next tick, and its player attaches as the load ends.
+                if (sim.loadTicks == 3)
+                {
+                    simLayer.OnDetach();
+                }
+                else if (sim.loadTicks == 2)
+                {
+                    simLayer.OnAttach();
+                }
                 if (sim.loadTicks > 0 && --sim.loadTicks == 0)
                 {
+                    simLayer.OnPlayerAttach();
                     // A loaded save: gameplay again, every bridge lock and change gone.
                     sim.phase = "gameplay";
                     sim.gameSaveLock = false;

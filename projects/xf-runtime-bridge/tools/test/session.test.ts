@@ -264,7 +264,9 @@ describe("runScript against the self-test host", () => {
         await flip.connect();
         flipped = (await flip.call("selftest.phase", { phase: "character_menu" }, `t-flip-${attempt}`)).ok;
       } catch {
-        await sleep(100);
+        // The runner's idle close (150 ms after each poll) must come before the next try: the pipe's connect waits
+        // synchronously in this same process, so a try made while the runner is connected blocks its idle timer too.
+        await sleep(300);
       } finally {
         flip.close();
       }

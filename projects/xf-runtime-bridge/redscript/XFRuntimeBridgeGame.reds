@@ -184,7 +184,8 @@ public abstract class XFInventory {
       EquipmentSystem.GetInstance(player).QueueRequest(request);
     }
     XFBridgeLog.Info(cid, "inventory.equip " + item + " in " + XFInventory.AreaName(itemArea) + " (added=" + XFJson.Flag(added) + ", before '" + XFInventory.ItemName(previous) + "'); undo: equip the earlier item, or unequip, and remove an added item");
-    return "{\"ok\":true,\"item\":" + XFJson.Str(item) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(itemArea)) + ",\"added\":" + XFJson.Flag(added) + ",\"already_equipped\":" + XFJson.Flag(already) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(previous)) + "}";
+    // 0.5.2: an active wardrobe outfit (or a hidden area) decides what the area shows, whatever is equipped there.
+    return "{\"ok\":true,\"item\":" + XFJson.Str(item) + ",\"slot\":" + XFJson.Str(XFInventory.AreaName(itemArea)) + ",\"added\":" + XFJson.Flag(added) + ",\"already_equipped\":" + XFJson.Flag(already) + ",\"previous\":" + XFJson.Str(XFInventory.ItemName(previous)) + XFWardrobe.AreaNote(player, itemArea) + "}";
   }
 
   // What a slot holds now (the second step reads it a few frames after the request).

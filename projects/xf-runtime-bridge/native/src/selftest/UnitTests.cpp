@@ -28,6 +28,7 @@
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
 #include "core/ScriptFrame.hpp"
+#include "core/ScriptLayer.hpp"
 #include "core/Session.hpp"
 #include "core/Showroom.hpp"
 #include "core/Writes.hpp"
@@ -943,6 +944,16 @@ void FaceTests()
               w::CheckFaceIndex(faceIndex(R"({"index":56,"unlisted":true})"), json::object()) == "unlisted");
     Check("RB-72: a list not seen yet is unavailable",
           ParamsCode([&] { w::CheckFaceIndex(faceIndex(R"({"index":60})"), json{{"seen", false}}); }) == "unavailable");
+    // 0.5.2 (RB-78): session 5's list had no table index at all (the face table read nothing).
+    const json unreadable{{"seen", true}, {"face_table", {{"listed", 207}, {"readable", 0}, {"source", "names"}}},
+                          {"entries", {{{"data", 0}}, {{"data", 56}}}}};
+    Check("0.5.2 (RB-78): an unreadable face table says so (face_table_unreadable), and unlisted still applies",
+          ParamsCode([&] { w::CheckFaceIndex(faceIndex(R"({"index":60})"), unreadable); }) == "face_table_unreadable" &&
+              w::CheckFaceIndex(faceIndex(R"({"index":60,"unlisted":true})"), unreadable) == "unlisted");
+    auto readable = faceList;
+    readable["face_table"] = {{"listed", 3}, {"readable", 3}, {"source", "names"}};
+    Check("0.5.2 (RB-78): a readable face table checks indices as before",
+          w::CheckFaceIndex(faceIndex(R"({"index":60})"), readable) == "label");
 
     // 0.5.1 (RB-71): cc.apply by index with the row and value read before.
     const auto expected = p::ParseCharacterApply(json::parse(R"({"option":"makeupLips_color","index":6,"expect_option":"makeupLips_09","expect_value":"lips_09_06"})"));
@@ -2381,6 +2392,192 @@ void ShowroomTests()
     }
 }
 
+// 0.5.2 (RB-76): the script layer's gate, the dispatcher's game gate on the game thread, and game.status's own
+// answer while loading.
+std::string GateCode(xfb::ScriptLayer& aLayer, xfb::ScriptLayer::Clock::time_point aNow)
+{
+    try
+    {
+        aLayer.Require("test", aNow);
+        return "ok";
+    }
+    catch (const xfb::MethodError& e)
+    {
+        return e.code;
+    }
+}
+
+void ScriptLayerTests()
+{
+    using Clock = xfb::ScriptLayer::Clock;
+    const auto t0 = Clock::now();
+    xfb::ScriptLayer layer;
+    Check("0.5.2 (RB-76): no script calls before the script layer attaches (the game starting)",
+          !layer.Ready(t0) && GateCode(layer, t0) == "game_loading" && layer.Phase(t0) == "starting");
+    layer.OnAttach(t0);
+    Check("0.5.2 (RB-76): attached but no player yet (a save loading) still refuses",
+          !layer.Ready(t0) && GateCode(layer, t0) == "game_loading" && layer.Phase(t0) == "loading");
+    layer.OnPlayerAttach(t0);
+    Check("0.5.2 (RB-76): the player attached: script calls allowed", layer.Ready(t0) && GateCode(layer, t0) == "ok");
+    layer.OnDetach(t0);
+    Check("0.5.2 (RB-76): a detach (session 5's crash moment) closes the gate at once",
+          !layer.Ready(t0) && GateCode(layer, t0) == "game_loading" && layer.Describe(t0)["state"] == "detached");
+    Check("0.5.2 (RB-76): the detach is counted once for the plugin's tick (it drops an owed save relock)",
+          layer.TakeDetaches() == 1 && layer.TakeDetaches() == 0);
+    layer.OnPlayerAttach(t0);
+    Check("0.5.2 (RB-76): a player attach without the system's attach (out of order) keeps the gate closed", !layer.Ready(t0));
+    layer.OnAttach(t0);
+    layer.OnPlayerAttach(t0);
+    Check("0.5.2 (RB-76): attach then player attach opens it again", layer.Ready(t0));
+    layer.OnLoadRequested(t0);
+    Check("0.5.2 (RB-76): game.load closes the gate before the game detaches",
+          !layer.Ready(t0 + 1s) && layer.Describe(t0 + 1s)["load_pending"] == true);
+    layer.OnDetach(t0 + 2s);
+    Check("0.5.2 (RB-76): the load's detach clears the pending load; the gate stays closed until the new player",
+          !layer.Ready(t0 + 2s) && layer.Describe(t0 + 2s)["load_pending"] == false);
+    layer.OnAttach(t0 + 3s);
+    layer.OnPlayerAttach(t0 + 20s);
+    Check("0.5.2 (RB-76): the loaded session's player opens it", layer.Ready(t0 + 20s));
+    layer.OnLoadRequested(t0 + 30s);
+    Check("0.5.2 (RB-76): a requested load that never detaches reopens the gate after the timeout",
+          !layer.Ready(t0 + 30s + xfb::ScriptLayer::kLoadStartTimeout - 1s) && layer.Ready(t0 + 30s + xfb::ScriptLayer::kLoadStartTimeout + 1s));
+    Check("0.5.2 (RB-76): unknown events are ignored", !layer.OnEvent("reload", t0) && layer.Ready(t0 + 90s));
+
+    const auto loading = xfb::writes::StatusWhileLoading("loading", layer.Describe());
+    Check("0.5.2 (RB-76): game.status while loading answers from the plugin: phase loading, no photo mode, no player",
+          loading["phase"] == "loading" && loading["answered_by"] == "plugin" && loading["photo_mode_can_open"] == false &&
+              loading["player_present"] == false && loading.contains("script_layer"));
+
+    // The dispatcher's game gate runs on the game thread right before the task, not when it was queued.
+    xfb::GameThreadQueue queue;
+    queue.SetPumping(true);
+    xfb::ScriptLayer gateLayer;
+    gateLayer.OnAttach();
+    gateLayer.OnPlayerAttach();
+    std::atomic<bool> detachFirst{false};
+    std::atomic<int> ran{0};
+    xfb::SetGameGate([&](const std::string& aWhat) {
+        if (detachFirst.exchange(false))
+        {
+            gateLayer.OnDetach(); // the game detached between the queueing and the task (session 5)
+        }
+        gateLayer.Require(aWhat);
+    });
+    std::atomic<bool> stop{false};
+    std::thread pump([&] {
+        while (!stop.load())
+        {
+            queue.Drain(4);
+            std::this_thread::sleep_for(2ms);
+        }
+    });
+    std::string code = "ok";
+    try
+    {
+        xfb::RunGameTask(queue, 1000ms, [&] { ++ran; return json::object(); }, "unit.gated");
+    }
+    catch (const xfb::MethodError& e)
+    {
+        code = e.code;
+    }
+    Check("0.5.2 (RB-76): a gated game-thread step runs while the session is up", code == "ok" && ran.load() == 1);
+    detachFirst.store(true);
+    code = "ok";
+    try
+    {
+        xfb::RunGameTask(queue, 1000ms, [&] { ++ran; return json::object(); }, "unit.gated");
+    }
+    catch (const xfb::MethodError& e)
+    {
+        code = e.code;
+    }
+    Check("0.5.2 (RB-76): a step queued before a detach and run after it is refused game_loading and never runs",
+          code == "game_loading" && ran.load() == 1);
+    json answer;
+    try
+    {
+        answer = xfb::RunGameTask(
+            queue, 1000ms,
+            [&] { return gateLayer.Ready() ? json{{"phase", "gameplay"}} : xfb::writes::StatusWhileLoading(gateLayer.Phase(), gateLayer.Describe()); },
+            "unit.status", false);
+    }
+    catch (const xfb::MethodError& e)
+    {
+        answer = json{{"error", e.code}};
+    }
+    Check("0.5.2 (RB-76): an ungated step (game.status) decides for itself and answers loading", answer.value("phase", "") == "loading");
+    stop.store(true);
+    pump.join();
+    xfb::SetGameGate({});
+}
+
+// 0.5.2: the wardrobe's parameters, what counts as the change having shown, the undo, and inventory.equip's
+// outfit note; and photo.camera.set's exposure.
+void WardrobeTests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    const auto parse = [](const char* aText) { return p::ParseWardrobeEquip(json::parse(aText)); };
+    Check("0.5.2 wardrobe.equip: one change at a time (set, clear, item, area with show, restore)",
+          parse(R"({"set":3})").mode == "set" && parse(R"({"clear":true})").mode == "clear" &&
+              parse(R"({"item":"Items.Helmet_01_basic_01"})").mode == "item" && parse(R"({"area":"Head","show":"hidden"})").mode == "hidden" &&
+              parse(R"({"restore":{"set":0}})").mode == "restore" &&
+              ParamsCode([&] { parse(R"({"set":1,"clear":true})"); }) == "bad_params" &&
+              ParamsCode([&] { parse("{}"); }) == "bad_params");
+    Check("0.5.2 wardrobe.equip: bounds (outfits 1-7, clear only true, show needs an area, no Outfit area, a slot once)",
+          ParamsCode([&] { parse(R"({"set":8})"); }) == "bad_params" && ParamsCode([&] { parse(R"({"set":0})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"clear":false})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"show":"equipped"})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"area":"Outfit","show":"hidden"})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"restore":{"set":1,"slots":[{"area":"Head"},{"area":"Head"}]}})"); }) == "bad_params");
+    const auto restore = parse(R"({"restore":{"set":2,"slots":[{"area":"Head","item":"","hidden":true},{"area":"OuterChest","item":"Items.Jacket_01_basic_01","hidden":false}]}})");
+    Check("0.5.2 wardrobe.equip: a restore keeps every area as given (an empty item is no outfit item)",
+          restore.set == 2 && restore.slots.size() == 2 && restore.slots[0].item.empty() && restore.slots[0].hidden &&
+              restore.slots[1].item == "Items.Jacket_01_basic_01");
+
+    const json state{{"set", 2},
+                     {"areas",
+                      {{{"area", "Head"}, {"shows", "hidden"}, {"outfit_item", ""}, {"hidden", true}},
+                       {{"area", "OuterChest"}, {"shows", "outfit"}, {"outfit_item", "Items.Jacket_01_basic_01"}, {"hidden", false}},
+                       {{"area", "Legs"}, {"shows", "equipped"}, {"outfit_item", ""}, {"hidden", false}}}}};
+    Check("0.5.2 wardrobe: the change has shown when the reading agrees (set, item, hidden, equipped, restore)",
+          w::WardrobeShows(parse(R"({"set":2})"), state) && !w::WardrobeShows(parse(R"({"set":1})"), state) &&
+              !w::WardrobeShows(parse(R"({"clear":true})"), state) &&
+              w::WardrobeShows(parse(R"({"item":"Items.Jacket_01_basic_01"})"), state) &&
+              w::WardrobeShows(parse(R"({"area":"Head","show":"hidden"})"), state) &&
+              w::WardrobeShows(parse(R"({"area":"Legs","show":"equipped"})"), state) && w::WardrobeShows(restore, state));
+
+    w::WardrobeOps ops;
+    int settles = 0;
+    ops.change = [] { return json{{"changed", true}, {"before", {{"set", 0}, {"slots", json::array()}}}}; };
+    ops.state = [&] { return settles >= 2 ? state : json{{"set", 0}, {"areas", json::array()}}; };
+    ops.settle = [&] { ++settles; };
+    const auto out = w::WardrobeEquip(parse(R"({"set":2})"), ops);
+    Check("0.5.2 wardrobe.equip waits until the outfit shows, and its undo restores the snapshot exactly",
+          out["shown"] == true && settles == 2 &&
+              out["undo"] == json{{"method", "wardrobe.equip"}, {"params", {{"restore", {{"set", 0}, {"slots", json::array()}}}}}}, out.dump());
+    ops.change = [] { return json{{"changed", false}, {"before", {{"set", 0}}}}; };
+    const auto noop = w::WardrobeEquip(parse(R"({"clear":true})"), ops);
+    Check("0.5.2 wardrobe.equip clear with no outfit is a no-op with no undo", noop["changed"] == false && noop["undo"].is_null());
+
+    w::InventoryOps inventory;
+    inventory.equip = [] {
+        return json{{"item", "Items.Helmet_01_basic_01"}, {"slot", "Head"}, {"added", true}, {"already_equipped", false}, {"previous", ""},
+                    {"outfit", {{"set", 1}, {"area", "Head"}, {"shows", "hidden"}, {"outfit_item", ""}}}};
+    };
+    inventory.slot = [](const std::string&, const std::string&) { return json{{"slot", "Head"}, {"item", "Items.Helmet_01_basic_01"}, {"matches", true}}; };
+    inventory.settle = [] {};
+    const auto equipped = w::InventoryEquip(p::ParseInventoryEquip(json::parse(R"({"item":"Items.Helmet_01_basic_01","add_if_missing":true})")), inventory);
+    Check("0.5.2 inventory.equip says when an active outfit hides the equipped item (sessions 4 and 5's helmet)",
+          equipped["equipped"] == true && equipped["hidden_by_outfit"] == true && equipped["outfit"]["shows"] == "hidden" &&
+              equipped["outfit_note"].get<std::string>().find("wardrobe.equip") != std::string::npos, equipped.dump());
+
+    const auto camera = p::ParseCamera(json::parse(R"({"exposure":1.5,"contrast":0.2})"));
+    Check("0.5.2 photo.camera.set takes exposure (menu 10) and contrast (11), named for the undo",
+          camera.attributes.size() == 2 && camera.attributes[0].key == 10 && camera.attributes[0].name == "exposure" &&
+              camera.attributes[1].key == 11 && p::CameraParamName(10) == "exposure");
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -2404,6 +2601,8 @@ int RunUnitTests()
     InventoryAndSaveTests();
     Rb51To60Tests();
     ShowroomTests();
+    ScriptLayerTests();
+    WardrobeTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

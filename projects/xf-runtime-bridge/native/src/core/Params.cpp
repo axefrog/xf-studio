@@ -287,6 +287,158 @@ InventoryUnequipRequest ParseInventoryUnequip(const json& aParams)
     return request;
 }
 
+CameraPlaceRequest ParseCameraPlace(const json& aParams)
+{
+    RequireOnly(aParams, {"position", "look_at"});
+    const auto point = [&](const char* aKey) {
+        const auto it = aParams.find(aKey);
+        if (it == aParams.end() || !it->is_array() || it->size() != 3)
+        {
+            Bad(std::string("'") + aKey + "' must be [x, y, z] in world metres");
+        }
+        std::array<double, 3> out{};
+        for (size_t i = 0; i < 3; ++i)
+        {
+            if (!(*it)[i].is_number() || !std::isfinite((*it)[i].get<double>()) || std::abs((*it)[i].get<double>()) > 100000.0)
+            {
+                Bad(std::string("'") + aKey + "' must hold three finite numbers");
+            }
+            out[i] = (*it)[i].get<double>();
+        }
+        return out;
+    };
+    CameraPlaceRequest request;
+    request.position = point("position");
+    request.lookAt = point("look_at");
+    const double dx = request.lookAt[0] - request.position[0], dy = request.lookAt[1] - request.position[1],
+                 dz = request.lookAt[2] - request.position[2];
+    if (std::sqrt(dx * dx + dy * dy + dz * dz) < 0.05)
+    {
+        Bad("the camera and the point it looks at must be at least 5 cm apart");
+    }
+    return request;
+}
+
+const std::vector<std::string>& WardrobeAreas()
+{
+    static const std::vector<std::string> areas{"Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"};
+    return areas;
+}
+
+namespace
+{
+std::string WardrobeArea(const json& aParams, const char* aKey)
+{
+    const auto area = Text(aParams, aKey, 32);
+    if (!area)
+    {
+        return {};
+    }
+    const auto& areas = WardrobeAreas();
+    if (std::find(areas.begin(), areas.end(), *area) == areas.end())
+    {
+        Bad(std::string("'") + aKey + "' must be one of Head, Face, OuterChest, InnerChest, Legs or Feet");
+    }
+    return *area;
+}
+} // namespace
+
+WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
+{
+    RequireOnly(aParams, {"set", "clear", "item", "area", "show", "restore"});
+    WardrobeEquipRequest request;
+    int given = 0;
+    if (const auto set = Integer(aParams, "set", 1, 7))
+    {
+        request.mode = "set";
+        request.set = static_cast<int32_t>(*set);
+        ++given;
+    }
+    if (const auto clear = Boolean(aParams, "clear"))
+    {
+        if (!*clear)
+        {
+            Bad("'clear' takes true (take the active outfit off)");
+        }
+        request.mode = "clear";
+        ++given;
+    }
+    request.item = ItemName(aParams);
+    if (!request.item.empty())
+    {
+        request.mode = "item";
+        ++given;
+    }
+    request.area = WardrobeArea(aParams, "area");
+    const auto show = Text(aParams, "show", 16);
+    if (!request.area.empty() || show)
+    {
+        if (request.area.empty() || !show || (*show != "equipped" && *show != "hidden"))
+        {
+            Bad("give area with show: \"equipped\" (the area shows what is equipped there) or \"hidden\" (nothing)");
+        }
+        request.mode = *show;
+        ++given;
+    }
+    if (const auto it = aParams.find("restore"); it != aParams.end() && !it->is_null())
+    {
+        if (!it->is_object())
+        {
+            Bad("'restore' must be {set, slots} (a wardrobe.equip answer's undo)");
+        }
+        RequireOnly(*it, {"set", "slots"});
+        const auto set = Integer(*it, "set", 0, 7);
+        if (!set)
+        {
+            Bad("'restore.set' is required: 0 (no outfit) or 1-7");
+        }
+        request.set = static_cast<int32_t>(*set);
+        const auto slots = it->find("slots");
+        if (slots != it->end() && !slots->is_null())
+        {
+            if (!slots->is_array() || slots->size() > WardrobeAreas().size())
+            {
+                Bad("'restore.slots' must be a list of at most 6 {area, item, hidden}");
+            }
+            for (const auto& entry : *slots)
+            {
+                if (!entry.is_object())
+                {
+                    Bad("each of 'restore.slots' must be {area, item, hidden}");
+                }
+                RequireOnly(entry, {"area", "item", "hidden"});
+                WardrobeSlot slot;
+                slot.area = WardrobeArea(entry, "area");
+                if (slot.area.empty())
+                {
+                    Bad("each of 'restore.slots' needs its area");
+                }
+                if (const auto item = entry.find("item"); item != entry.end() && item->is_string() && !item->get<std::string>().empty())
+                {
+                    slot.item = ItemName(entry);
+                }
+                slot.hidden = Boolean(entry, "hidden").value_or(false);
+                for (const auto& earlier : request.slots)
+                {
+                    if (earlier.area == slot.area)
+                    {
+                        Bad("'restore.slots' names " + slot.area + " twice");
+                    }
+                }
+                request.slots.push_back(slot);
+            }
+        }
+        request.mode = "restore";
+        ++given;
+    }
+    if (given != 1)
+    {
+        Bad(given ? "give one wardrobe change: set, clear, item, area with show, or restore"
+                  : "give set (an outfit 1-7), clear: true, item (a clothing record), area with show, or restore");
+    }
+    return request;
+}
+
 GameSaveRequest ParseGameSave(const json& aParams)
 {
     RequireOnly(aParams, {"name", "override_lock", "timeout_ms"});
@@ -358,7 +510,7 @@ CameraRequest ParseCamera(const json& aParams)
 {
     RequireOnly(aParams,
                 {"camera_preset", "fov", "roll", "focal_distance", "aperture", "dof", "autofocus", "look_at", "look_at_part",
-                 "grain", "chromatic_aberration", "subject", "reset"});
+                 "grain", "chromatic_aberration", "exposure", "contrast", "vignette", "highlights", "subject", "reset"});
     CameraRequest request;
     request.reset = Boolean(aParams, "reset").value_or(false);
     if (const auto preset = Integer(aParams, "camera_preset", 0, 9))
@@ -375,6 +527,11 @@ CameraRequest ParseCamera(const json& aParams)
     AddOption(request.attributes, aParams, "look_at_part", key::kLookAtPart);
     Add(request.attributes, aParams, "grain", key::kGrain, 0, 1);
     Add(request.attributes, aParams, "chromatic_aberration", key::kChromaticAberration, -2, 2);
+    // The effects page (0.5.2): wide bounds here; the menu's own range (exposure -2.2 to 2.2) is checked in game.
+    Add(request.attributes, aParams, "exposure", key::kExposure, -10, 10);
+    Add(request.attributes, aParams, "contrast", key::kContrast, -10, 10);
+    Add(request.attributes, aParams, "vignette", key::kVignette, -10, 10);
+    Add(request.attributes, aParams, "highlights", key::kHighlights, -10, 10);
     if (const auto it = aParams.find("subject"); it != aParams.end() && !it->is_null())
     {
         if (!it->is_object())
@@ -402,7 +559,8 @@ CameraRequest ParseCamera(const json& aParams)
     if (!request.reset && request.attributes.empty())
     {
         Bad("give at least one camera setting (camera_preset, fov, roll, focal_distance, aperture, dof, autofocus, "
-            "look_at, look_at_part, grain, chromatic_aberration or subject), or reset = true");
+            "look_at, look_at_part, grain, chromatic_aberration, exposure, contrast, vignette, highlights or subject), "
+            "or reset = true");
     }
     return request;
 }
@@ -433,6 +591,14 @@ std::string CameraParamName(int32_t aKey)
         return "grain";
     case key::kChromaticAberration:
         return "chromatic_aberration";
+    case key::kExposure:
+        return "exposure";
+    case key::kContrast:
+        return "contrast";
+    case key::kVignette:
+        return "vignette";
+    case key::kHighlights:
+        return "highlights";
     case key::kSubjectYaw:
         return "subject.yaw";
     case key::kSubjectLeftRight:
@@ -451,6 +617,7 @@ std::vector<int32_t> CameraKeys()
     // The preset first: resetting it moves the camera, and the other keys then reset on top.
     return {key::kCameraPreset, key::kFov, key::kRoll, key::kFocalDistance, key::kAperture, key::kDepthOfField,
             key::kAutofocus,   key::kLookAt,   key::kLookAtPart,    key::kGrain,        key::kChromaticAberration,
+            key::kExposure,    key::kContrast, key::kVignette,      key::kHighlights,
             key::kSubjectYaw,  key::kSubjectLeftRight, key::kSubjectNearFar, key::kSubjectUpDown};
 }
 

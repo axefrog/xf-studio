@@ -163,8 +163,19 @@ private:
 // For bridge-thread methods that need several game-thread steps with a pause between them (for
 // example selecting a photo-mode light, then setting it a few frames later). Throws MethodError
 // with the same codes a game-thread method would answer (timeout, busy, game_not_running, ...).
+// aGated = false only for a step that decides for itself what to do while the game's scripts can't be called
+// (game.status answers "loading" from the plugin's side then).
 nlohmann::json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout,
-                           const std::function<nlohmann::json()>& aTask, const std::string& aLabel);
+                           const std::function<nlohmann::json()>& aTask, const std::string& aLabel, bool aGated = true);
+
+// The game gate (bridge 0.5.2, RB-76): a process-wide check run on the game thread right before every game-thread
+// method and every gated RunGameTask step, after the task was queued, so a request queued before the game's
+// scripts detached (a save loading) and run after it is refused instead of calling into a session being torn
+// down. It throws a MethodError (game_loading) to refuse. The plugin sets it to its ScriptLayer; the self-test
+// host to its simulated one. No gate set: everything runs.
+using GameGate = std::function<void(const std::string& aWhat)>;
+void SetGameGate(GameGate aGate);
+void RequireGameGate(const std::string& aWhat);
 
 // Accepts client-provided correlation ids only if they are short and plain.
 bool IsValidCid(const std::string& aCid);

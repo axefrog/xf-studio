@@ -28,6 +28,10 @@ import { summarizeSettings, type SettingsGroups } from "./options.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
+import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
+
+/** game.status refusals game.wait waits through: the engine not ticking for a moment while a save loads (0.5.2). */
+const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_not_running", "game_loading"]);
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
@@ -406,6 +410,56 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
   }
 }
 
+/**
+ * The camera position and look-at point photo.camera.place asks for (0.5.2): a world point, V's head, or a showroom
+ * head's eyes as the target; the camera at a world position, or distance_m from the target at azimuth_deg (from the
+ * way the target faces, counter-clockwise seen from above, as photo.light.set's azimuth) and elevation_deg. Pure.
+ */
+export function cameraPlacement(
+  target: ShowroomVec3,
+  facing: ShowroomVec3,
+  input: { position?: number[]; distance_m?: number; azimuth_deg?: number; elevation_deg?: number },
+): { position: ShowroomVec3; look_at: ShowroomVec3 } {
+  if (input.position) return { position: input.position as ShowroomVec3, look_at: target };
+  const d = input.distance_m ?? 1.5, az = ((input.azimuth_deg ?? 0) * Math.PI) / 180, el = ((input.elevation_deg ?? 0) * Math.PI) / 180;
+  const n = Math.hypot(facing[0], facing[1]) || 1;
+  const fx = facing[0] / n, fy = facing[1] / n;
+  const dx = fx * Math.cos(az) - fy * Math.sin(az), dy = fx * Math.sin(az) + fy * Math.cos(az);
+  const round = (v: number) => Math.round(v * 1e4) / 1e4;
+  return {
+    position: [round(target[0] + d * Math.cos(el) * dx), round(target[1] + d * Math.cos(el) * dy), round(target[2] + d * Math.sin(el))],
+    look_at: target.map(round) as ShowroomVec3,
+  };
+}
+
+/** photo.camera.place: resolves the target (a point, V's head, or a showroom head's eyes), then asks the bridge to move the camera. */
+async function runCameraPlace(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const given = ["look_at", "target", "piece"].filter((key) => input[key] !== undefined);
+  if (given.length !== 1) throw planError("bad_input", "Give one target: look_at (a world point), target: v (V's head) or piece (a showroom head's index).");
+  if (input.position !== undefined && (input.distance_m !== undefined || input.azimuth_deg !== undefined || input.elevation_deg !== undefined))
+    throw planError("bad_input", "Give position, or distance_m with azimuth_deg and elevation_deg, not both.");
+  let target: ShowroomVec3;
+  let facing: ShowroomVec3 = [0, 1, 0];
+  if (input.look_at !== undefined) {
+    target = input.look_at as ShowroomVec3;
+  } else if (input.target === "v") {
+    const subject = await bridgeCall(context, "photo.subject", { up: 0.075, forward: 0.09, right: 0 });
+    const t = subject.target as { x: number; y: number; z: number };
+    const f = subject.subject_forward as { x: number; y: number; z: number };
+    target = [t.x, t.y, t.z];
+    facing = [f.x, f.y, 0];
+  } else {
+    const state = await bridgeCall(context, "showroom.state", {});
+    const piece = ((state.pieces as { index: number; position: ShowroomVec3; yaw: number }[] | undefined) ?? []).find((p) => p.index === input.piece);
+    if (!piece) throw planError("no_such_piece", `The showroom has no head ${String(input.piece)}; showroom_state lists them.`);
+    target = toWorld(piece.position, piece.yaw, eyesOf([0, -0.0403, 1.6397]));
+    facing = facingOf(piece.yaw);
+  }
+  const placement = cameraPlacement(target, facing, input as { position?: number[]; distance_m?: number; azimuth_deg?: number; elevation_deg?: number });
+  const placed = await bridgeCall(context, "photo.camera.place", placement);
+  return { value: { ...placement, ...placed } };
+}
+
 /** photo.light.set: place {camera: true} goes to the bridge as "camera" (the schema has no string-or-object). */
 export function lightParams(input: Record<string, unknown>): Record<string, unknown> {
   const place = input.place as Record<string, unknown> | undefined;
@@ -654,8 +708,10 @@ export const CATALOGUE: readonly CommandDef[] = [
       let last = "unknown";
       for (;;) {
         const status = await api.callBridge("game.status", {}, cid);
-        if (!status.ok) throw Object.assign(new Error(status.error.message), { plain: status.error });
-        last = String((status.result as { phase?: string }).phase);
+        // While a save loads the engine may not tick for a moment: a step that timed out or found the queue busy is
+        // the loading screen, not a failure (0.5.2), so the wait goes on.
+        if (!status.ok && !WAIT_THROUGH.has(status.error.code)) throw Object.assign(new Error(status.error.message), { plain: status.error });
+        last = status.ok ? String((status.result as { phase?: string }).phase) : "loading";
         if (wanted.includes(last)) return { value: { phase: last, waited_ms: Math.round(performance.now() - started) } };
         if (performance.now() - started >= timeout) {
           throw planError("wait_timeout", `The game didn't reach ${wanted.join(" or ")} within ${Math.round(timeout / 1000)} s; it is in ${last}.`);
@@ -716,7 +772,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.state",
     title: "Photo mode state",
     description:
-      "Whether photo mode is open or allowed, and (with menu) every photo-mode menu item the game set up: its number, label, range or options and current value. options adds each option list (for example every expression with its menu value, data, and its face table index, table_index, with table_index_by saying whether it was matched by the expression's name or, less surely, by its position).",
+      "Whether photo mode is open or allowed, and (with menu) every photo-mode menu item the game set up: its number, label, range or options and current value. options adds each option list (for example every expression with its menu value, data, and its face table index, table_index, with table_index_by saying whether it was matched by the expression's name or, less surely, by its position; the expression item's face_table says how many of photo mode's expression records were listed and could be read, so an option without table_index is explained).",
     permission: "read",
     input: obj({ menu: bool("Include the menu items."), options: bool("Include every option list (implies menu).") }),
     bridge: { method: "photo.state" },
@@ -763,7 +819,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     title: "Frame the photo-mode shot",
     description: `Sets the photo-mode camera: a named preset (${Object.entries(CAMERA_PRESETS)
       .map(([name, preset]) => `${name}: ${preset.description}${preset.calibrated ? "" : " (not yet calibrated)"}`)
-      .join("; ")}) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, film grain, chromatic aberration, photo mode's own camera preset, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened.`,
+      .join("; ")}) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, film grain, chromatic aberration, the effects page's exposure, contrast, vignette and highlights, photo mode's own camera preset, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened.`,
     permission: "write-photo",
     input: obj({
       preset: oneOf("A named framing; explicit values override it.", Object.keys(CAMERA_PRESETS)),
@@ -778,6 +834,10 @@ export const CATALOGUE: readonly CommandDef[] = [
       look_at_part: int("What V looks with: 1 head, 2 eyes (see photo_state options).", 0, 1000),
       grain: num("Film grain, 0 to 1 (0 = off).", 0, 1),
       chromatic_aberration: num("Chromatic aberration, -2 to 2 (0 = off).", -2, 2),
+      exposure: num("Exposure (the effects page, menu 10): photo mode offers -2.2 to 2.2, 0 = unchanged. Lifts a dark scene for a capture.", -10, 10),
+      contrast: num("Contrast (the effects page, menu 11), in photo mode's own range (0 = unchanged).", -10, 10),
+      vignette: num("Vignette (the effects page, menu 12), in photo mode's own range.", -10, 10),
+      highlights: num("Highlights (the effects page, menu 24), in photo mode's own range.", -10, 10),
       subject: {
         description: "V's placement in front of the camera (photo mode's pose tab).",
         ...obj({
@@ -791,6 +851,24 @@ export const CATALOGUE: readonly CommandDef[] = [
     }),
     undo: "the result's undo parameters restore each previous value; reset (or the open-defaults preset) restores how photo mode opened.",
     bridge: { method: "photo.camera.set", params: expandCamera },
+  },
+  {
+    name: "photo.camera.place",
+    title: "Place the photo-mode camera (research)",
+    description:
+      "Research (0.5.2): moves photo mode's own camera to a place and aims it, instead of moving V in front of it (photo mode's menu only moves V: up_down, near_far and left_right). Target: look_at (a world point), target v (V's eyes) or piece (a showroom head's eyes, for framing the finish showroom). Where: position (a world point), or distance_m from the target (default 1.5) at azimuth_deg (from the way the target faces, counter-clockwise seen from above: 0 in front, 90 its left) and elevation_deg. The camera's entity is moved with the teleportation facility, then the active camera is read a few frames later: held says whether photo mode kept it there (session 6's question; if not, photo mode places its camera itself and nothing is left to undo). Within 30 m of V, in photo mode only.",
+    permission: "write-photo",
+    input: obj({
+      look_at: { type: "array", description: "A world point to aim at, [x, y, z] metres.", items: num("A coordinate.", -100000, 100000), minItems: 3, maxItems: 3 },
+      target: oneOf("v: aim at V's eyes.", ["v"]),
+      piece: int("Aim at this showroom head's eyes (its lineup index).", 0, 23),
+      position: { type: "array", description: "Where the camera goes, [x, y, z] world metres (instead of distance_m).", items: num("A coordinate.", -100000, 100000), minItems: 3, maxItems: 3 },
+      distance_m: num("Metres from the target, 0.2 to 10. Default 1.5.", 0.2, 10),
+      azimuth_deg: num("Degrees around the target from the way it faces, counter-clockwise seen from above (0 in front). Default 0.", -180, 180),
+      elevation_deg: num("Degrees above the target's level (negative: below). Default 0.", -60, 60),
+    }),
+    undo: "the result's undo puts the camera back where it was, looking the same way; closing photo mode resets the camera anyway.",
+    local: runCameraPlace,
   },
   {
     name: "photo.light.set",
@@ -1069,7 +1147,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "inventory.equip",
     title: "Equip a clothing item on V",
     description:
-      "Equips a clothing item on V by its item record (for example Items.Helmet_01_basic_01), as the inventory screen does, and waits until the slot shows it. With add_if_missing, an item V doesn't have is added to V's inventory first (and remembered, so inventory_unequip can remove it again). Clothing slots only (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit); only in normal play, not in combat or a scene. Needs the inventory permission, which the bridge's settings keep off until the maintainer allows it.",
+      "Equips a clothing item on V by its item record (for example Items.Helmet_01_basic_01), as the inventory screen does, and waits until the slot shows it. With add_if_missing, an item V doesn't have is added to V's inventory first (and remembered, so inventory_unequip can remove it again). Clothing slots only (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit); only in normal play, not in combat or a scene. When an active wardrobe outfit (or a hidden area) decides what the slot shows, the item is equipped but doesn't draw: the answer says so (hidden_by_outfit, outfit) and wardrobe_equip is the next step. Needs the inventory permission, which the bridge's settings keep off until the maintainer allows it.",
     permission: "write-inventory",
     input: obj(
       {
@@ -1081,6 +1159,56 @@ export const CATALOGUE: readonly CommandDef[] = [
     ),
     undo: "the result's undo equips the earlier item again, or empties the slot (removing an item the bridge added); loading a save also undoes it.",
     bridge: { method: "inventory.equip", timeoutMs: () => 15000 },
+  },
+  {
+    name: "wardrobe.state",
+    title: "Read V's wardrobe outfit",
+    description:
+      "The wardrobe outfit V wears (set 1-7, or 0 for none) and, for each clothing area (Head, Face, OuterChest, InnerChest, Legs, Feet), what it shows: outfit (the outfit's item), hidden (nothing: the outfit leaves the area empty, or headgear is hidden), equipped or empty; plus what is equipped there and the wardrobe's stored outfits. An active outfit overrides what the equipment slots show, which is why an equipped helmet can stay invisible.",
+    permission: "read",
+    input: obj({}),
+    bridge: { method: "wardrobe.state" },
+  },
+  {
+    name: "wardrobe.equip",
+    title: "Change V's wardrobe outfit",
+    description:
+      "Changes what V's clothing shows through the wardrobe, as the wardrobe screen does (the equipment system's own requests; stored outfits are never edited or saved): set applies outfit 1-7; clear takes the outfit off, so V shows what is equipped; item shows that clothing item in its area of the active outfit (the item must be in V's inventory or the wardrobe); area with show equipped makes that area show what is equipped there, and show hidden hides it; restore (the undo) puts back exactly the outfit and each area a snapshot recorded. Waits until the wardrobe shows the change. Only in normal play, not in combat or a scene. Needs the inventory permission; the kill switch puts back the wardrobe as it was before the bridge's first change.",
+    permission: "write-inventory",
+    input: obj({
+      set: int("Apply this wardrobe outfit (1-7; wardrobe_state lists the stored ones).", 1, 7),
+      clear: bool("true: take the active outfit off."),
+      item: str("Show this clothing item record in its area of the active outfit, for example Items.Helmet_01_basic_01.", { pattern: "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", maxLength: 128 }),
+      area: oneOf("The clothing area for show.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"]),
+      show: oneOf("With area: equipped (the area shows what is equipped there) or hidden (nothing).", ["equipped", "hidden"]),
+      restore: {
+        description: "A wardrobe_equip answer's undo: the outfit (0 none) and what each area showed.",
+        ...obj(
+          {
+            set: int("The outfit that was active, 0 for none.", 0, 7),
+            slots: {
+              type: "array",
+              description: "What each area showed.",
+              items: {
+                description: "One area as the snapshot had it.",
+                ...obj(
+                {
+                  area: oneOf("The clothing area.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"]),
+                  item: str("The outfit's item in the area (empty: none).", { maxLength: 128 }),
+                  hidden: bool("Whether the area was hidden."),
+                },
+                ["area"],
+                ),
+              },
+              maxItems: 6,
+            },
+          },
+          ["set"],
+        ),
+      },
+    }),
+    undo: "the result's undo (wardrobe_equip with restore) puts the outfit and every area back exactly; the kill switch restores the wardrobe as it was before the bridge's first change.",
+    bridge: { method: "wardrobe.equip", timeoutMs: () => 15000 },
   },
   {
     name: "inventory.unequip",
@@ -1189,7 +1317,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "showroom.spawn",
     title: "Set out the finish showroom",
     description:
-      "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, distance_m in front of the camera (in photo mode) or V. Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
+      "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, each head's eyes distance_m from the camera (in photo mode) or V's eyes, as photo_frame's distance_m measures to V, and at height_m above V's ground (default: the camera's height with the camera as anchor, so the heads look straight into it; a head's natural height with V as anchor). Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
     permission: "write-showroom",
     input: obj({
       manifest: str("The showroom build's folder, or its manifest.json.", { maxLength: 1024 }),
@@ -1197,8 +1325,9 @@ export const CATALOGUE: readonly CommandDef[] = [
       presets: { type: "array", description: "Which presets, by name, preset ID or appearance, in lineup order. Default: all of them (at most 24).", items: str("A preset's name, ID or appearance.", { maxLength: 120 }), minItems: 1, maxItems: 24 },
       layout: oneOf("arc (default): on a circle about the camera or V, each head facing it. row: a straight line across the view, all facing back along it.", ["arc", "row"]),
       spacing_m: num("Distance between neighbouring heads, 0.3 to 5 m. Default 0.7.", 0.3, 5),
-      distance_m: num("How far in front of the camera or V, 0.8 to 10 m. Default 2.5.", 0.8, 10),
-      lateral_m: num("Shift the whole lineup to the right as the camera or V sees it (negative: left), -5 to 5 m. With distance_m equal to the camera's distance from V, a head at lateral 0.6 stands beside her on the same arc. Default 0.", -5, 5),
+      distance_m: num("How far each head's eyes are from the camera (or V's eyes), 0.8 to 10 m, in 3D. Default 2.5.", 0.8, 10),
+      height_m: num("The heads' eye height above V's ground, 0.5 to 3.2 m. Default: the camera's height (anchor camera), else a head's natural 1.69 m. The pedestals reach 1.5 m below a head's natural place, so a head raised more than that ends in the air.", 0.5, 3.2),
+      lateral_m: num("Shift the whole lineup to the right as the camera or V sees it (negative: left), -5 to 5 m. With distance_m equal to photo_frame's distance_m (the camera to V's face), a head at lateral 0.6 stands beside her on the same arc and appears at her scale. Default 0.", -5, 5),
       anchor: oneOf("camera (default in photo mode) or v (default in normal play).", ["camera", "v"]),
       replace: bool("Remove the heads set out earlier first (default true)."),
     }),

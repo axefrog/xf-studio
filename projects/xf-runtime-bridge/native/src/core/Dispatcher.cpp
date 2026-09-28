@@ -155,15 +155,44 @@ std::string SerializeJson(const json& aValue)
     return aValue.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
+namespace
+{
+std::mutex gGateMutex;
+GameGate gGate;
+} // namespace
+
+void SetGameGate(GameGate aGate)
+{
+    std::scoped_lock _(gGateMutex);
+    gGate = std::move(aGate);
+}
+
+void RequireGameGate(const std::string& aWhat)
+{
+    GameGate gate;
+    {
+        std::scoped_lock _(gGateMutex);
+        gate = gGate;
+    }
+    if (gate)
+    {
+        gate(aWhat);
+    }
+}
+
 json RunGameTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
-                 const std::string& aLabel)
+                 const std::string& aLabel, bool aGated)
 {
     json envelope;
     std::string error;
     const auto result = aQueue.Run(
-        [aTask]() -> json {
+        [aTask, aGated, aLabel]() -> json {
             try
             {
+                if (aGated)
+                {
+                    RequireGameGate(aLabel);
+                }
                 return json{{"ok", true}, {"result", aTask()}};
             }
             catch (const MethodError& e)
@@ -508,9 +537,11 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
             std::string error;
             const auto grace = GameThreadQueue::kDefaultRunningGrace;
             const auto result = m_queue.Run(
-                [fn, context]() -> json {
+                [fn, context, methodName]() -> json {
                     try
                     {
+                        // Checked here, on the game thread just before the call, not when the request was queued (RB-76).
+                        RequireGameGate(methodName);
                         return json{{"ok", true}, {"result", fn(context)}};
                     }
                     catch (const MethodError& e)

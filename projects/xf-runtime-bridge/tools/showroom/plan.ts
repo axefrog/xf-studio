@@ -113,7 +113,25 @@ export function choosePieces(showrooms: readonly Showroom[], wanted?: readonly s
 }
 
 export type Anchor = { origin: Vec3; forward: Vec3; ground: number };
-export type Placement = { index: number; position: Vec3; yaw: number };
+export type Placement = { index: number; position: Vec3; yaw: number; eyes?: Vec3 };
+
+/**
+ * A showroom head's eyes in its entity frame (0.5.2): the eye joints 5.1 cm above the head joint (1.691 m against 1.640 m
+ * in the head rig's reference pose [resource]) and about 9 cm in front of it (the anatomical estimate photo.frame uses for
+ * V's eyes [hypothesis]). Distances and heights are measured to this point, as photo.frame's distance_m is to V's.
+ */
+export const eyesOf = (headJoint: Vec3): Vec3 => [headJoint[0], round(headJoint[1] + 0.09), round(headJoint[2] + 0.0513)];
+
+/** How far below the entity's origin the pedestal's column reaches (the showroom build's PEDESTAL.column.bottom). */
+export const PEDESTAL_BELOW_M = 1.5;
+
+/**
+ * Layout by the heads' eyes (0.5.2). height: the eyes' height above the ground; anchorEye: the height (world Z) of the
+ * point distances are measured from (the camera, or V's eyes). Each head's eyes stand `distance` from that point in 3D
+ * (session 5: heads laid out by their entity origin, about 13 cm behind the face, and by horizontal distance, came out
+ * closer than V at the "same" distance and looked larger), and the entity is raised or lowered so its eyes are at `height`.
+ */
+export type EyeLayout = { eyes: Vec3; height: number; anchorEye: number };
 
 const RAD = Math.PI / 180;
 /** The yaw (degrees) that turns a head's +Y toward the horizontal direction d. */
@@ -133,7 +151,19 @@ const round = (v: number) => Math.round(v * 1e4) / 1e4;
  * every head facing the anchor, so the camera sees each head from the front. Heads stand on V's ground; their order runs
  * left to right as the anchor sees them. `lateral` (metres) shifts the lineup to the anchor's right, or left when negative.
  */
-export function planLayout(anchor: Anchor, count: number, layout: "row" | "arc", spacing: number, distance: number, lateral = 0): Placement[] {
+export function planLayout(anchor: Anchor, count: number, layout: "row" | "arc", spacing: number, distance: number, lateral = 0, byEyes?: EyeLayout): Placement[] {
+  if (byEyes) {
+    const eyeZ = anchor.ground + byEyes.height, dz = eyeZ - byEyes.anchorEye;
+    if (Math.abs(dz) >= distance - 0.05)
+      throw planError("bad_input", `height_m puts the heads' eyes ${Math.abs(dz).toFixed(2)} m ${dz > 0 ? "above" : "below"} the camera or V, as far as distance_m (${distance} m) or more; give a larger distance_m or a height nearer the camera's.`);
+    const flat = Math.sqrt(distance * distance - dz * dz);
+    return planLayout(anchor, count, layout, spacing, flat, lateral).map((p) => {
+      const face = facingOf(p.yaw);
+      // p.position is where the eyes go (on the ground plane): the entity's origin sits behind them along its facing.
+      const origin: Vec3 = [p.position[0] - face[0] * byEyes.eyes[1], p.position[1] - face[1] * byEyes.eyes[1], eyeZ - byEyes.eyes[2]];
+      return { index: p.index, position: origin.map(round) as Vec3, yaw: p.yaw, eyes: [p.position[0], p.position[1], round(eyeZ)] };
+    });
+  }
   const f = horizontal(anchor.forward), r: Vec3 = [f[1], -f[0], 0];
   const out: Placement[] = [];
   for (let i = 0; i < count; i++) {

@@ -44,6 +44,7 @@
 #include "core/Dispatcher.hpp"
 #include "core/Log.hpp"
 #include "core/ScriptFrame.hpp"
+#include "plugin/Plugin.hpp"
 
 namespace xfb::plugin
 {
@@ -186,6 +187,9 @@ void CallFunction(RED4ext::CBaseFunction* aFn, RED4ext::IScriptable* aContext, c
         log::Warn("script.call_off_thread", "fn=" + aWhat, aCid);
         throw MethodError("failed", "a game call was attempted off the game thread: " + aWhat);
     }
+    // Only while the scripted session is up (RB-76): session 5 crashed the game with a call made 0.1 s after the
+    // script layer detached for a load. Checked here, on the game thread, right before every call.
+    Get().scriptLayer.Require(aWhat);
     if (aValues.size() != aFn->params.size)
     {
         throw MethodError("failed", aWhat + " takes " + std::to_string(aFn->params.size) + " arguments, " +

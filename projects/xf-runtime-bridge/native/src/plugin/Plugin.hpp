@@ -18,6 +18,7 @@
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
+#include "core/ScriptLayer.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
 
@@ -64,6 +65,11 @@ struct State
     // game.save with override_lock: set when the save lock couldn't be taken back through the queue
     // (the kill switch closed it, a timeout); the next Running tick retakes it directly (RB-52).
     std::atomic<bool> relockOwed{false};
+
+    // Whether the game's scripts may be called now (bridge 0.5.2, RB-76): moved by our redscript layer's lifecycle
+    // (XFBridge_ScriptLayer) and by game.load; checked right before every script call (ScriptCall.cpp, the
+    // dispatcher's game gate) and before the Running tick's own calls (Main.cpp).
+    ScriptLayer scriptLayer;
 
     // game.options.read's render options: requested by the bridge, answered by the CET layer
     // (XFBridge_OptionsWanted / XFBridge_OptionsReport). Cancelled by the kill switch.

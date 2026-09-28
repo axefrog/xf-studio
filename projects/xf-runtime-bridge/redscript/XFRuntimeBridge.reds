@@ -54,10 +54,14 @@ public abstract class XFBridgeQuery {
 
 // Lifecycle logging. Scriptable systems are created by the game per session; OnAttach runs
 // when the game instance attaches the system, OnPlayerAttach when the player puppet attaches.
+// Each also tells the plugin (XFBridge_ScriptLayer, bridge 0.5.2): the plugin calls into our scripts only
+// between a session's player attach and its detach (core/ScriptLayer.hpp). OnDetach tells it first, before
+// anything else, so a call queued meanwhile is refused instead of reaching a session being torn down.
 public class XFBridgeSystem extends ScriptableSystem {
   private let m_playerAttachCount: Int32;
 
   private func OnAttach() -> Void {
+    XFBridge_ScriptLayer("attach");
     XFBridgeLog.Info("rs-attach", "XFBridgeSystem.OnAttach");
     let reply = XFBridge_Ping("redscript", "rs-attach");
     XFBridgeLog.Debug("rs-attach", s"native ping reply: \(reply)");
@@ -71,12 +75,14 @@ public class XFBridgeSystem extends ScriptableSystem {
   }
 
   private func OnDetach() -> Void {
+    XFBridge_ScriptLayer("detach");
     XFBridgeLog.Info("rs-detach", "XFBridgeSystem.OnDetach");
   }
 
   private func OnPlayerAttach(request: ref<PlayerAttachRequest>) -> Void {
     this.m_playerAttachCount += 1;
     XFBridgeLog.Info("rs-player", s"XFBridgeSystem.OnPlayerAttach count=\(this.m_playerAttachCount)");
+    XFBridge_ScriptLayer("player_attach");
   }
 
   public static func GetInstance(game: GameInstance) -> ref<XFBridgeSystem> {

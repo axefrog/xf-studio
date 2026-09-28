@@ -330,6 +330,32 @@ void CreatorRedirectNative(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, 
     });
 }
 
+// XFBridge_ScriptLayer(event: String) -> Bool   (XFBridgeSystem's lifecycle: "attach", "player_attach", "detach";
+// core/ScriptLayer.hpp, RB-76). Script calls are allowed only between a session's player attach and its detach.
+// Runs on whichever thread the game attaches or detaches on; it only moves the gate's state.
+void ScriptLayerEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    RED4ext::CString event;
+    RED4ext::GetParameter(aFrame, &event);
+    aFrame->code++; // skip ParamEnd
+
+    if (aOut)
+    {
+        *aOut = false;
+    }
+    Guarded("XFBridge_ScriptLayer", [&] {
+        const bool known = Get().scriptLayer.OnEvent(ToStd(event));
+        if (!known)
+        {
+            log::Warn("script_layer.unknown_event", "event=" + Sanitize(ToStd(event), 32));
+        }
+        if (aOut)
+        {
+            *aOut = known;
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -369,7 +395,8 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_PauseWrites", &PauseWrites, "String", {"paused"}, "Bool");
         RegisterGlobal(rtti, "XFBridge_Messages", &Messages, "String", {});
         RegisterGlobal(rtti, "XFBridge_CreatorRedirect", &CreatorRedirectNative, "String", {"state"});
-        log::Info("rtti.register_types", "phase=post_register natives=11");
+        RegisterGlobal(rtti, "XFBridge_ScriptLayer", &ScriptLayerEvent, "Bool", {"event"});
+        log::Info("rtti.register_types", "phase=post_register natives=12");
     }
     catch (const std::exception& e)
     {

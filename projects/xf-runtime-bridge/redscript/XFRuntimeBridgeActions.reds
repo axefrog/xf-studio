@@ -110,6 +110,10 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // game.load by name: the save list the game answered with (OnSavesForLoadReady).
   private let m_saves: array<String>;
   private let m_savesReady: Bool;
+  // wardrobe.equip (0.5.2): the wardrobe before the bridge's first change this session (the kill switch puts it back),
+  // and a restore being assembled area by area.
+  private let m_wardrobeSnapshot: ref<XFWardrobeSnapshot>;
+  private let m_wardrobeRestore: ref<XFWardrobeSnapshot>;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -458,6 +462,27 @@ public class XFBridgeRegistry extends ScriptableSystem {
     ArrayRemove(this.m_addedItems, id);
   }
 
+  // The wardrobe before the bridge's first change this session; later changes keep the first.
+  public func NoteWardrobeSnapshot(snapshot: ref<XFWardrobeSnapshot>) -> Void {
+    if !IsDefined(this.m_wardrobeSnapshot) {
+      this.m_wardrobeSnapshot = snapshot;
+    }
+  }
+
+  public func TakeWardrobeSnapshot() -> ref<XFWardrobeSnapshot> {
+    let snapshot = this.m_wardrobeSnapshot;
+    this.m_wardrobeSnapshot = null;
+    return snapshot;
+  }
+
+  public func SetWardrobeRestore(snapshot: ref<XFWardrobeSnapshot>) -> Void {
+    this.m_wardrobeRestore = snapshot;
+  }
+
+  public func WardrobeRestore() -> ref<XFWardrobeSnapshot> {
+    return this.m_wardrobeRestore;
+  }
+
   // Saves --------------------------------------------------------------------------------------
 
   public func SetSaveState(state: String) -> Void {
@@ -659,6 +684,22 @@ public func XFBridgeLightEntity(index: Int32) -> ref<Entity> {
     return null;
   }
   return projection.GetEntity();
+}
+
+// The photo-mode camera's entity (0.5.2, research): the native menu tells the light indicator which camera is active
+// (PhotomodeCameraSwitchedEvent -> OnSetActiveCamera keeps it in m_currentCamera; photoModeLightIndicatorController
+// .script:47-49), a gamePhotoModeCameraObject, a game object (RED4ext.SDK game/PhotoModeCameraObject.hpp). Null when the
+// indicator hasn't been told one.
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeCameraEntity() -> ref<Entity> {
+  if !inkWidgetRef.IsValid(this.m_lightIndicator) {
+    return null;
+  }
+  let indicator = inkWidgetRef.GetController(this.m_lightIndicator) as PhotomodeLightIndicatorController;
+  if !IsDefined(indicator) {
+    return null;
+  }
+  return indicator.m_currentCamera;
 }
 
 // The light the menu's light indicator follows (0-2), or -1 when it shows none (the light tab isn't
@@ -1129,6 +1170,8 @@ public abstract class XFBridgeActions {
     // decides. The save lock stays: whatever the bridge changed (a light, the clock, a creator option) may
     // still be live, and a save now would keep it. The lock is not persistent; loading a save
     // clears it.
+    // The wardrobe as it was before the bridge's first change this session (0.5.2).
+    out += XFWardrobe.RestoreAfterKill(cid);
     if registry.IsSaveLockHeld() {
       out += ",\"save_lock_kept\":true";
     }
@@ -1151,6 +1194,28 @@ public abstract class XFBridgeActions {
 }
 
 // --- Photo mode ----------------------------------------------------------------------------------
+
+// The photo-mode expression records as photo mode lists them (0.5.2, RB-78): each record's menu label and faceId,
+// in list order; faceId -1 where a listed name has no record.
+public class XFFaceTable {
+  public let labels: array<String>;
+  public let faceIds: array<Int32>;
+  public let listed: Int32;
+  public let readable: Int32;
+  public let source: String;
+
+  public func Add(record: ref<PhotoModeFace_Record>) -> Void {
+    this.listed += 1;
+    if IsDefined(record) {
+      ArrayPush(this.labels, XFPose.Label(record.DisplayName()));
+      ArrayPush(this.faceIds, record.FaceId());
+      this.readable += 1;
+    } else {
+      ArrayPush(this.labels, "");
+      ArrayPush(this.faceIds, -1);
+    }
+  }
+}
 
 public abstract class XFPhoto {
   public static func Controller() -> wref<gameuiPhotoModeMenuController> {
@@ -1214,6 +1279,11 @@ public abstract class XFPhoto {
     if Equals(item.kind, "options") {
       out += ",\"option_count\":" + IntToString(ArraySize(item.optionData)) + ",\"start\":" + IntToString(item.startData);
       if withOptions {
+        let faces: ref<XFFaceTable>;
+        if item.key == 28u {
+          faces = XFPhoto.FaceTable();
+          out += ",\"face_table\":" + XFPhoto.FaceTableJson(faces);
+        }
         out += ",\"options\":[";
         let i = 0;
         while i < ArraySize(item.optionData) {
@@ -1221,8 +1291,8 @@ public abstract class XFPhoto {
             out += ",";
           }
           out += "{\"data\":" + IntToString(item.optionData[i]) + ",\"text\":" + XFJson.Str(item.optionTexts[i]);
-          if item.key == 28u {
-            out += XFPhoto.FaceTableIndex(item.optionTexts[i], item.optionData[i]);
+          if IsDefined(faces) {
+            out += XFPhoto.FaceTableIndex(faces, item.optionTexts[i], item.optionData[i]);
           }
           out += "}";
           i += 1;
@@ -1239,19 +1309,47 @@ public abstract class XFPhoto {
   // photo.state (0.4.2): an expression option's face table index next to the menu's value. The menu's
   // option data is the option's position in the list, while the face animation is chosen by the record's
   // faceId (session 4, R2: menu 56 "Static: Sleeping" was table index 60 with the Mega Pack installed).
-  // The records are photo_mode.character.faceAnimations (PhotoModeFace records: displayName, faceId;
-  // knowledge/facial-expressions.md). Matched by the option's text against each record's display name when
-  // exactly one matches ("label", verified), else by position in that list ("position": unverified, since
-  // session 4 showed position isn't the table index with an expression pack installed; RB-72); "" if neither.
-  public static func FaceTableIndex(text: String, data: Int32) -> String {
-    let records = TweakDBInterface.GetForeignKeyArray(t"photo_mode.character.faceAnimations");
+  // The records are listed by photo_mode.character.faceAnimations, which is an array of record NAMES
+  // (string[] in the game's own photomode.tweak, and TweakXL's !append-once adds names), not of record IDs:
+  // 0.4.2-0.5.1 read it with GetForeignKeyArray, which finds nothing in a string flat, so in game every option
+  // came back without a table index (session 5, RB-78). 0.5.2 reads the names (GetStringArray) and turns each
+  // into its record; the ID list is kept as a fallback. Matched by the option's text against each record's
+  // display name when exactly one matches ("label", verified), else by position in that list ("position":
+  // unverified, since session 4 showed position isn't the table index with an expression pack; RB-72).
+  public static func FaceTable() -> ref<XFFaceTable> {
+    let table = new XFFaceTable();
+    let names = TweakDBInterface.GetStringArray(t"photo_mode.character.faceAnimations");
+    let i = 0;
+    while i < ArraySize(names) {
+      let record = TweakDBInterface.GetPhotoModeFaceRecord(TDBID.Create(names[i]));
+      table.Add(record);
+      i += 1;
+    }
+    table.source = "names";
+    if table.readable == 0 {
+      let ids = TweakDBInterface.GetForeignKeyArray(t"photo_mode.character.faceAnimations");
+      if ArraySize(ids) > 0 {
+        table = new XFFaceTable();
+        i = 0;
+        while i < ArraySize(ids) {
+          table.Add(TweakDBInterface.GetPhotoModeFaceRecord(ids[i]));
+          i += 1;
+        }
+        table.source = "ids";
+      } else {
+        table.listed = ArraySize(names);
+      }
+    }
+    return table;
+  }
+
+  public static func FaceTableIndex(table: ref<XFFaceTable>, text: String, data: Int32) -> String {
     let found = -1;
     let matches = 0;
     let i = 0;
-    while i < ArraySize(records) {
-      let record = TweakDBInterface.GetPhotoModeFaceRecord(records[i]);
-      if IsDefined(record) && Equals(XFPose.Label(record.DisplayName()), text) {
-        found = record.FaceId();
+    while i < ArraySize(table.labels) {
+      if Equals(table.labels[i], text) {
+        found = table.faceIds[i];
         matches += 1;
       }
       i += 1;
@@ -1259,17 +1357,20 @@ public abstract class XFPhoto {
     if matches == 1 {
       return ",\"table_index\":" + IntToString(found) + ",\"table_index_by\":\"label\",\"table_index_verified\":true";
     }
-    if data >= 0 && data < ArraySize(records) {
-      let byPosition = TweakDBInterface.GetPhotoModeFaceRecord(records[data]);
-      if IsDefined(byPosition) {
-        return ",\"table_index\":" + IntToString(byPosition.FaceId()) + ",\"table_index_by\":\"position\",\"table_index_verified\":false";
-      }
+    if data >= 0 && data < ArraySize(table.faceIds) && table.faceIds[data] >= 0 {
+      return ",\"table_index\":" + IntToString(table.faceIds[data]) + ",\"table_index_by\":\"position\",\"table_index_verified\":false";
     }
     return "";
   }
 
+  // What photo.state and photo.expression.index say about the face table (0.5.2): how many records the list named,
+  // how many could be read, and from which flat, so a missing table index is explained instead of silent.
+  public static func FaceTableJson(table: ref<XFFaceTable>) -> String {
+    return "{\"listed\":" + IntToString(table.listed) + ",\"readable\":" + IntToString(table.readable) + ",\"source\":" + XFJson.Str(table.source) + "}";
+  }
+
   // photo.expression.index's list (0.5.1, RB-72): every expression option's face table index, for the plugin's
-  // check (core/Writes.cpp CheckFaceIndex). Read-only.
+  // check (core/Writes.cpp CheckFaceIndex). Read-only. 0.5.2: with the face table's own summary (face_table).
   public static func FaceIndexEntries(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
     let item: ref<XFPhotoItem>;
@@ -1279,7 +1380,8 @@ public abstract class XFPhoto {
     if !IsDefined(item) || !Equals(item.kind, "options") {
       return "{\"ok\":true,\"seen\":false}";
     }
-    let out = "{\"ok\":true,\"seen\":true,\"entries\":[";
+    let table = XFPhoto.FaceTable();
+    let out = "{\"ok\":true,\"seen\":true,\"face_table\":" + XFPhoto.FaceTableJson(table) + ",\"entries\":[";
     let i = 0;
     while i < ArraySize(item.optionData) {
       if i > 0 {
@@ -1289,7 +1391,7 @@ public abstract class XFPhoto {
       if i < ArraySize(item.optionTexts) {
         text = item.optionTexts[i];
       }
-      out += "{\"data\":" + IntToString(item.optionData[i]) + XFPhoto.FaceTableIndex(text, item.optionData[i]) + "}";
+      out += "{\"data\":" + IntToString(item.optionData[i]) + XFPhoto.FaceTableIndex(table, text, item.optionData[i]) + "}";
       i += 1;
     }
     return out + "]}";
@@ -1490,6 +1592,66 @@ public abstract class XFPhoto {
     }
     why = "";
     return entity as GameObject;
+  }
+
+  // photo.camera.place (0.5.2, research: whether photo mode keeps a camera moved this way is session 6's question). Moves
+  // the photo-mode camera's entity to a world position, aimed at a world point, through the teleportation facility, as
+  // PlaceLight moves a light; only within 30 m of V's stand-in. Answers the camera as it was (the undo) and where the
+  // entity is now; the plugin reads the active camera a few frames later to see whether photo mode kept it (held).
+  public static func PlaceCamera(cid: String, x: Float, y: Float, z: Float, tx: Float, ty: Float, tz: Float) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let controller = XFPhoto.Controller();
+    if !IsDefined(controller) {
+      return XFJson.Fail("unavailable", "photo mode's menu isn't available");
+    }
+    let entity = controller.XFBridgeCameraEntity();
+    if !IsDefined(entity) {
+      return XFJson.Fail("unavailable", "photo mode hasn't named its camera entity yet (the light indicator has none); move the camera once, or reopen photo mode");
+    }
+    if !entity.IsA(n"gamePhotoModeCameraObject") {
+      return XFJson.Fail("unavailable", "the light indicator's camera is a " + NameToString(entity.GetClassName()) + ", not photo mode's camera, so nothing was moved");
+    }
+    let camera = entity as GameObject;
+    let head: Vector4;
+    let facing: Vector4;
+    if !XFPhoto.HeadAndFacing(head, facing) {
+      return XFJson.Fail("unavailable", "V's photo-mode stand-in hasn't been seen yet; close and reopen photo mode");
+    }
+    let target = new Vector4(x, y, z, 1.0);
+    let away = new Vector4(target.X - head.X, target.Y - head.Y, target.Z - head.Z, 0.0);
+    if SqrtF(away.X * away.X + away.Y * away.Y + away.Z * away.Z) > 30.0 {
+      return XFJson.Fail("too_far", "that place is more than 30 m from V");
+    }
+    let aim = new Vector4(tx - x, ty - y, tz - z, 0.0);
+    let length = SqrtF(aim.X * aim.X + aim.Y * aim.Y + aim.Z * aim.Z);
+    if length < 0.05 {
+      return XFJson.Fail("bad_params", "the camera and the point it looks at are less than 5 cm apart");
+    }
+    let angles = Quaternion.ToEulerAngles(Quaternion.BuildFromDirectionVector(new Vector4(aim.X / length, aim.Y / length, aim.Z / length, 0.0), new Vector4(0.0, 0.0, 1.0, 0.0)));
+    let system = GameInstance.GetCameraSystem(GetGameInstance());
+    let before: Transform;
+    let hadBefore = system.GetActiveCameraWorldTransform(before);
+    let beforeForward = system.GetActiveCameraForward();
+    XFBridgeActions.EnsureSaveLock(cid);
+    GameInstance.GetTeleportationFacility(GetGameInstance()).Teleport(camera, target, angles);
+    XFBridgeLog.Info(cid, "photo camera moved to " + XFPhoto.Vec(target) + " aimed at (" + FloatToString(tx) + ", " + FloatToString(ty) + ", " + FloatToString(tz) + "); undo: place it back");
+    let out = "{\"ok\":true,\"entity\":" + XFJson.Str(NameToString(entity.GetClassName())) + ",\"asked\":" + XFPhoto.Vec(target);
+    if hadBefore {
+      out += ",\"before\":{\"position\":" + XFPhoto.Vec(before.position) + ",\"forward\":" + XFPhoto.Vec(beforeForward) + "}";
+    }
+    return out + "}";
+  }
+
+  // The active camera now (photo.camera.place's read-back).
+  public static func CameraReading(cid: String) -> String {
+    let system = GameInstance.GetCameraSystem(GetGameInstance());
+    let now: Transform;
+    if !system.GetActiveCameraWorldTransform(now) {
+      return XFJson.Fail("unavailable", "the camera system reported no active camera");
+    }
+    return "{\"ok\":true,\"position\":" + XFPhoto.Vec(now.position) + ",\"forward\":" + XFPhoto.Vec(system.GetActiveCameraForward()) + ",\"fov\":" + XFJson.Num(system.GetActiveCameraFOV()) + "}";
   }
 
   // Where V's head is (the stand-in's Head slot) and which way V faces, for placing lights about V.

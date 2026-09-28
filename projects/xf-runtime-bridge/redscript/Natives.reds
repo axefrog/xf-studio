@@ -18,3 +18,7 @@ public static native func XFBridge_Messages() -> String
 // cc.open's pause-menu redirect asks the plugin what to do (core/Writes.hpp CreatorRedirect): "redirect",
 // "foreign", "expired", "refused", "withdrawn", "none", or "" when it can't say (the pause menu then opens).
 public static native func XFBridge_CreatorRedirect(state: String) -> String
+// The script layer's lifecycle (core/ScriptLayer.hpp, bridge 0.5.2): "attach", "player_attach", "detach". The plugin
+// calls into our scripts only between a session's player attach and its detach (session 5 crashed on a call made just
+// after a detach, while a save loaded).
+public static native func XFBridge_ScriptLayer(event: String) -> Bool

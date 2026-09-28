@@ -101,9 +101,11 @@ XF Finish Showroom is XF Studio's in-game test equipment for judging makeup fini
 | `xfs_head` | `h0_000_pwa_c__basehead.mesh`, appearance `01_ca_pale` unless the build chooses another tone | `face_rig` | [unverified] |
 | `xfs_eyes` | `he_000_pwa_c__basehead.mesh` (lashes, eye, wetness), a gradient eye colour | `face_rig` | [unverified] |
 | `xfs_plate` | the build's own copy of the preset's eye plate, mesh appearance `xfs_p<preset>`, lifted 0.4 mm like XF Eye Artistry's | `face_rig` | plate and materials [offline: the eye-makeup verifier]; drawing [unverified] |
-| `xfs_pedestal`, `xfs_plinth` | the creator box's own black panel `q110_black_box.mesh`, scaled into a column under the neck and a base slab | the entity | [unverified] |
+| `xfs_pedestal` | the creator box's own black panel `q110_black_box.mesh` (bounds exactly x −1…0, y −1…0, z 0…1 [resource]), scaled into a 0.24 m column from 1.5 m below the origin to 6 cm above the neck's cut, so the neck sits down into it and a head raised to the camera's eye line still stands on the floor (0.5.2; the base slab is gone) | the entity | column drawn [runtime] session 5; the seated neck [unverified] |
 
 The heads are feminine for now: the plate the pipeline prepares first is hers. Vanilla meshes are referenced by path, never copied.
+
+**What session 5 showed** (29 September 2026) [runtime]: the heads spawned, faced the camera or V, and wore their eyes, lashes and makeup; the maintainer judged their materials a match for V's ("you pretty well nailed the mannequin head's materials"). Every head drew a few centimetres above its column, which then topped out 8 mm above the neck's cut, so the head draws higher than the rig's reference pose puts it [runtime]; why (the face rig's pose without animation) is a hypothesis, and the build now seats the neck 6 cm into a taller column. The heads also looked slightly larger than V at the "same" distance: the bridge measured that distance to the entity's origin, about 13 cm behind the face, and horizontally; since 0.5.2 it places each head's eyes at the distance asked, in 3D, as `photo.frame`'s `distance_m` measures to V [offline].
 
 ### 4.2 Light rigs as templates
 

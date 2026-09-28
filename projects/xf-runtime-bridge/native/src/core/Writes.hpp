@@ -321,6 +321,29 @@ bool WaitTicks(const GameThreadQueue& aQueue, uint64_t aTicks, std::chrono::mill
 
 // The kill switch's restore, at most once per process: only after a write ran, and only once the
 // bridge says it is ready (killed, and the queue closed so no write can follow it).
+// photo.camera.set's research sibling photo.camera.place (0.5.2): the script's answer (asked, before) and the active
+// camera read a few frames later; held when photo mode kept the camera within 5 cm of where it was put. The undo
+// puts the camera back where it was, looking the way it looked.
+json CameraPlaceResult(const params::CameraPlaceRequest& aRequest, json aStep, const json& aReading);
+
+// wardrobe.equip (0.5.2): the change (or the restore) in one game-thread step, then the wardrobe read until it shows
+// it. change answers {changed, before: {set, slots}}; state is wardrobe.state's reading ({set, areas: [{area, shows,
+// outfit_item, hidden, equipped}]}). The undo restores `before` exactly.
+struct WardrobeOps
+{
+    std::function<json()> change;
+    std::function<json()> state;
+    std::function<void()> settle;
+};
+// Whether a wardrobe reading shows the change asked for (a set active, none, an area showing the item, equipped or
+// hidden, or every area of a restore).
+bool WardrobeShows(const params::WardrobeEquipRequest& aRequest, const json& aState);
+json WardrobeEquip(const params::WardrobeEquipRequest& aRequest, const WardrobeOps& aOps);
+
+// game.status while the game's scripts can't be called (RB-76: a save loading, the game starting): the plugin's own
+// answer, with no game call. aPhase is ScriptLayer::Phase() ("loading" or "starting"), aLayer its Describe().
+json StatusWhileLoading(const std::string& aPhase, const json& aLayer);
+
 class RestoreOnce
 {
 public:
