@@ -199,10 +199,10 @@ test("hair strands draw nothing into a body-only shadow map and cast as before i
   const depth = strand.customDepthMaterial!, renderer = {} as THREE.WebGLRenderer, geometry = strand.geometry;
   const draw = (mesh: THREE.Mesh, material: THREE.Material, bodyOnly: boolean) => {
     const shadowCamera = new THREE.PerspectiveCamera();
-    if (bodyOnly) setBodyCastersOnly({ camera: shadowCamera } as THREE.LightShadow, true);
-    mesh.onBeforeShadow(renderer, mesh, new THREE.PerspectiveCamera(), shadowCamera, geometry, material, null as never);
+    if (bodyOnly) setBodyCastersOnly({ camera: shadowCamera } as unknown as THREE.LightShadow, true);
+    mesh.onBeforeShadow(renderer, mesh as unknown as THREE.Scene, new THREE.PerspectiveCamera(), shadowCamera, geometry, material, null as never);
     const during = [material.depthWrite, material.colorWrite];
-    mesh.onAfterShadow(renderer, mesh, new THREE.PerspectiveCamera(), shadowCamera, geometry, material, null as never);
+    mesh.onAfterShadow(renderer, mesh as unknown as THREE.Scene, new THREE.PerspectiveCamera(), shadowCamera, geometry, material, null as never);
     return { during, after: [material.depthWrite, material.colorWrite] };
   };
   expect(draw(strand, depth, true)).toEqual({ during: [false, false], after: [true, true] });
