@@ -166,7 +166,7 @@ Program `12806642364631437234`; all steps [observed] unless marked. UV is UV0 th
 
 ### 5.3 Tone
 
-`w = |TintScale| · TintColorMask.R`; `t = TintScale ≥ 0 ? TintColor · a : overlay(a, TintColor)`; `a′ = a + w · (saturate(t) − a)` (`%424`–`%466`). Overlay is the standard `a < 0.5 ? 2at : 1 − 2(1 − a)(1 − t)` per channel. `TintColor`'s encoding into the program (byte/255 or sRGB-decoded) is [hypothesis] ([materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions)).
+`w = |TintScale| · TintColorMask.R`; `t = TintScale ≥ 0 ? TintColor · a : overlay(a, TintColor)`; `a′ = a + w · (saturate(t) − a)` (`%424`–`%466`). Overlay is the standard `a < 0.5 ? 2at : 1 − 2(1 − a)(1 − t)` per channel. `TintColor` arrives sRGB-decoded (RGB through the engine's sRGB-to-linear table, alpha byte/255), as the material constant-buffer packer converts every `Color` parameter [observed in the executable; [materials §1.2](../../knowledge/materials-and-shaders.md#12-parameter-types)].
 
 ### 5.4 Blood flow and secondary albedo
 
@@ -422,7 +422,7 @@ So the game's texture set does not draw a white seam. Under skin's dual lobe the
 3. **The combine's tinted term.** Whether the `A` input (`t6`) is the environment specular or the ambient diffuse, and where `SkinAmbientIntensity_Factor` and `SkinAmbientMix_Factor` act.
 4. Which setting selects the `UseTranslucency` setup (session 4: it runs with the Character Subsurface Translucency toggle on), what `cb1[41]` and the transmission's `t3.y` are, and which path gives a local light its transmission (§6.4).
 5. Whether the engine fills `TextureRegionsCB` and `FloatTracksDataCB` from `defaultfaceregions.regionset` and the facial solver's wrinkle outputs for photo-mode and creator faces (§5.6: the names match one to one), and the rectangles' axis order.
-6. `TintColor` encoding (byte/255 or sRGB-decoded): [materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions). Session 4's tone frames lean to sRGB decoding [offline, provisional] ([experiment 029 §4.2](../../experiments/029-session-4/README.md#42-n52-tone-strength-and-tintcolor-encoding)).
+6. ~~`TintColor` encoding~~ **Answered: sRGB-decoded** [observed in the executable] ([materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions)); session 4's tone frames agree [runtime, provisional] ([experiment 029 §4.2](../../experiments/029-session-4/README.md#42-n52-tone-strength-and-tintcolor-encoding)). The preview has decoded it so since 29 September.
 7. What happens with more than 8 skin profiles on screen.
 8. The three siblings (`skin_blendable`, `skin_morph`, `blackwall_blendable_skin`) are not decompiled.
 

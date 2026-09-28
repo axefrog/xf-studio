@@ -128,6 +128,10 @@ test("colour-shift presets write linear coverage, a uniform base colour and norm
   const k = fresnelConstants(shift);
   expect(Math.max(k.FresnelColor.Red, k.FresnelColor.Green, k.FresnelColor.Blue)).toBe(255);
   expect(k.FresnelColorIntensity).toBeCloseTo(2 * .8 * ((0xd4 / 255 + .055) / 1.055) ** 2.4, 5);
+  // The engine sRGB-decodes Color parameters (materials open question 11), so the stored bytes decode to the normalised linear colour.
+  const decode = (b: number) => { const v = b / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; };
+  const linear = [1, 3, 5].map(i => decode(parseInt(shift.color.slice(i, i + 2), 16))), peak = Math.max(...linear);
+  [k.FresnelColor.Red, k.FresnelColor.Green, k.FresnelColor.Blue].forEach((byte, c) => expect(Math.abs(decode(byte) - linear[c]! / peak)).toBeLessThan(.004));
   expect(fresnelConstants({ ...shift, strength: 0 }).FresnelColorIntensity).toBe(0);
 });
 

@@ -34,8 +34,8 @@ import { declarePass } from "./platform/api/scene";
  */
 export type Rgb = [number, number, number];
 /**
- * How a `Color` parameter's bytes reach the program. The engine's encoding is open (materials open question 11); the
- * decal family uses the same sRGB decoding as the brow adapter, so brows and the other face decals agree [hypothesis].
+ * How a `Color` parameter's bytes reach the program: sRGB-decoded RGB, as the 2.31 executable's material constant-buffer
+ * packer converts every `Color` parameter [source] (materials open question 11). The brow adapter decodes the same way.
  */
 export type DecalColourEncoding = "srgb-decoded" | "byte";
 export const DECAL_COLOUR_ENCODING: DecalColourEncoding = "srgb-decoded";

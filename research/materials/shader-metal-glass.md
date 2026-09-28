@@ -217,7 +217,7 @@ A depth-compare `discard` against a texture (`t63`) runs when `MaterialModifiers
 
 | Chunk | Template | Values that differ from the defaults | Result |
 |---|---|---|---|
-| Gorilla Arms `glass` (all six meshes) | `glass_onesided` | `TintColor` (240, 235, 228), `IOR` 1.32, **`GlassSpecularColor` (0, 0, 0)**, `NormalStrength` 4.45, `Roughness` `grey.xbm`, `GlassRoughnessBias` 0, `BlurRadius` 1 | **No reflection at all**: the pane only tints (about 0.94/0.92/0.89 if colours arrive as byte/255, 0.87/0.83/0.78 if sRGB-decoded) and distorts and blurs what is behind it |
+| Gorilla Arms `glass` (all six meshes) | `glass_onesided` | `TintColor` (240, 235, 228), `IOR` 1.32, **`GlassSpecularColor` (0, 0, 0)**, `NormalStrength` 4.45, `Roughness` `grey.xbm`, `GlassRoughnessBias` 0, `BlurRadius` 1 | **No reflection at all**: the pane only tints (0.87/0.83/0.78: `Color` parameters arrive sRGB-decoded) and distorts and blurs what is behind it |
 | Gorilla Arms `inside_layer` | `metal_base` | its own normal map only | Grey rough dielectric behind the glass |
 | Gorilla Arms `dec_end_1`, `decal_end_01` | `metal_base`, `enableMask` 1 | `garment_decals_d02`, `BaseColorScale` 0.448, metalness `black × 0.955 + 0.425`, roughness `white × 0.733 + 0.439` | Alpha-tested decal, metalness 0.425, roughness 0.87 |
 | Gorilla Arms `dec_end_2`, `decal_5`, `decals_dark_spots1`, `decal_interior` | `metal_base`, `enableMask` 1 | decal atlases; `dark_spots` metalness 0.33 and roughness 0 (scale 0) | Alpha-tested decals |
@@ -258,7 +258,7 @@ Ranks 1 and 3 together make the arm cyberware of the [render coverage](../charac
 
 ## 8. Open questions
 
-1. How do `Color` parameters reach the shaders (byte/255 or sRGB-decoded)? It sets the Gorilla Arms tint (§5); the same question is [materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions).
+1. ~~How do `Color` parameters reach the shaders?~~ **Answered: sRGB-decoded** [observed in the executable] ([materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions)); the Gorilla Arms tint is 0.87/0.83/0.78 (§5).
 2. Does `enableMask` set `MaterialModifiersConsts[0].x` and select the Discarded variant? Which draws use `metal_base`'s `post_gbuffer` pass?
 3. What are the per-frame emissive constants (`k₁`, `k₃`, `cb[47]`, `cb[48]`), and is the main term `2^EV`?
 4. What fills the deferred reflection target for Standard pixels, and what does the glass's `t56` buffer hold?

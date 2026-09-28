@@ -133,8 +133,8 @@ A second mesh sheet just outside each eyeball (0–0.8 mm, median 0.2 mm) coveri
 ```hlsl
 m      = Mask(uv0);                                   // raw UV, linear texture
 shadow = saturate(Intensity * pow(m.r, Exponent));    // 0.7·R^0.8 in vanilla
-lum    = dot(pow(ShadowColor.rgb/255, 2.2), 0.33);    // only the colour's mean matters: 0.094 in vanilla
-alpha  = saturate(1 + fog * shadow * (lum - 1));      // multiplies what is behind; 0.37 at full mask
+lum    = dot(pow(ShadowColor.rgb, 2.2), 0.33);        // ShadowColor arrives sRGB-decoded; only the mean matters: 0.011 in vanilla
+alpha  = saturate(1 + fog * shadow * (lum - 1));      // multiplies what is behind; 0.31 at full mask
 rw     = clamp(WetnessRoughness * m.g, 0.04, 1);      // 0.42 in vanilla
 spec   = Σ lights  D_GGX(Nv·H, rw) · Vis(rw) · lightColour · shadowing;   // vertex normal Nv, no Fresnel, no N·L
 out    = float4(spec * exposure * WetnessStrength * m.b, alpha);          // final = out.rgb + dst·alpha
@@ -198,7 +198,7 @@ Consequences [resource]: every CCXL eye is **texture-only `eye.mt`**: no gradien
 1. **Arithmetic** (unit test, offline): a TypeScript twin of §2.2 against hand-computed cases: a straight view at the pupil gives `uvC` = (0.5, 0.5); at the limbus it gives radius 0.151; a 30° view shifts `uvI` by the refracted offset; `iris` is 1 at r = 0.145 and 0 at 0.185; the octahedral round trip is exact to 10 bits.
 2. **Gaze**: through the idle's gaze sweep the pupil stays centred on its iris, the iris slides against the limbus at grazing angles, and there is no ring at the 0.145–0.185 blend.
 3. **Orientation**: with an asymmetric test albedo, the preview's iris orientation matches the shader's `1 − v` rule on both eyes.
-4. **Shell**: the eye corners and the band under the upper lid darken to about 37 % at full mask; the tear line lights only near the mirror direction of a light.
+4. **Shell**: the eye corners and the band under the upper lid darken to about 31 % at full mask; the tear line lights only near the mirror direction of a light.
 5. **In game**: the creator eyes page (camera `UI_Eyes`, 1.2 m, 15° FOV) under the [creator lighting preset](creator-lighting.md), measured with its patch method: iris mean colour for gradient light blue, red and brown against the §2.3 predictions; the `Main_Eyes` catch light's position and size on the cornea; the corner darkening. Test asks 9–12 of the [head render plan](head-cc-rendering.md#in-game-test-asks).
 
 ### 6.5 Ranked plan (visual gain per effort)

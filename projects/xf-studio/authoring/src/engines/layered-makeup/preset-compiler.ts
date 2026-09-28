@@ -243,7 +243,7 @@ export function compileFresnelPreset(value: unknown, region: CompileRegion, size
       shift: { color: shift.color, strength: shift.strength },
       material: fresnelMaterial(shift),
       limitations: [
-        "Experimental: FresnelColor is written assuming the engine passes Color parameters to shaders as byte/255 without sRGB decoding.",
+        "Experimental: FresnelColor is written sRGB-encoded, since the engine sRGB-decodes Color parameters before the shader reads them.",
         "The shift is one additive colour weighted by |1 - N.V|^2 over the whole preset; it is not thin-film or multichrome.",
         "MaterialModifiersConsts[2].x also scales the shift at runtime; its value on the player head is unknown.",
         "Head-UV texture: the gradient-recolour template has no UV transform, so this route cannot use the plate-local window.",

@@ -314,7 +314,9 @@ export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPre
   if (route === "glitter") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 1, NormalsBlendingMode: 1, ...transform };
   const { shift } = fresnelPigment(preset);
   const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
-  const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(v / peak)) : [0, 0, 0];
+  // Color parameters reach the program sRGB-decoded (the engine's constant-buffer packer), so the normalised linear colour is stored encoded.
+  const encode = (v: number) => v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055;
+  const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(encode(v / peak))) : [0, 0, 0];
   return { DiffuseAlpha: 1, RoughnessMetalnessAlpha: 1, NormalAlpha: 0, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
     RoughnessScale: 0, RoughnessBias: .32, MetalnessScale: 0, MetalnessBias: .08, FadeOutOffset: 1000, FadeOutDistance: 1,
     FresnelColorIntensity: round6(2 * shift.strength * peak), FresnelExponent: 2,

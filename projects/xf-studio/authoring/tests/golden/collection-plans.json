@@ -1,5 +1,5 @@
 {
- "capturedFrom": "pre-migration code, commit 9dbf576; finish defaults (Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only); package digests recaptured on claude/shimmer-rework for Shimmer's grain (shimmer-grain-1); Shimmer export note reworded after the UI gate (text only, package digests only)",
+ "capturedFrom": "pre-migration code, commit 9dbf576; finish defaults (Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only); package digests recaptured on claude/shimmer-rework for Shimmer's grain (shimmer-grain-1); Shimmer export note reworded after the UI gate (text only, package digests only); FresnelColor written sRGB-encoded (the engine sRGB-decodes Color parameters, materials open question 11) on claude/preview-tint-srgb (Colour-shifting presets' plan digests only)",
  "fixtures": {
   "005-preset-collection/collection.json": {
    "parsed": "3b041e67b224e33f01cc7acaf30f8d2f09face9f8c4c3b0e902057da515c9569",
@@ -13,8 +13,8 @@
   },
   "016-finish-board/finish-board.collection.json": {
    "parsed": "d759aa1e56d494f34ca767d1e7eaa44522d940d911bfd7378c84364e2f23bbd7",
-   "plan": "310d01555b2fadd89a31213920615faa3449afb9e7be2ba6d1a55f8d5f2feec1",
-   "packaged": "c51d3af56a05de7af0782ac62abc7fd0f8d7ef14e3d6a6efd356d74fe9f198bf"
+   "plan": "7c32e2243f45afffcb48999344a2b13362500f764bdeace20cdfcc2c9fe58f6c",
+   "packaged": "4866df218ce8ae2a9b9388b07dccde849594ced80dff0fe6855d241476fccdda"
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "parsed": "f31c45e98590fd2bd70924d3b52d884cbe0b869b9cee30acec934b7df0a5078e",

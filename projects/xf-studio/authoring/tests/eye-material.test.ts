@@ -84,12 +84,13 @@ describe("eye sampling rule", () => {
 
 describe("wetness shell", () => {
   const vanilla = shellParameters({ scalars: { Intensity: 0.7, Exponent: 0.8 }, colours: { ShadowColor: [125, 58, 58, 255] } });
-  test("the darkening: neutral grey from the colour's mean, 0.37 at full mask, nothing where the mask is black", () => {
-    expect(shellLuminance([125, 58, 58])).toBeCloseTo(0.0942, 4);
+  test("the darkening: neutral grey from the sRGB-decoded colour's mean, 0.31 at full mask, nothing where the mask is black", () => {
+    // ShadowColor arrives sRGB-decoded (materials open question 11), then the program raises it to 2.2 itself.
+    expect(shellLuminance([125, 58, 58])).toBeCloseTo(0.01074, 4);
     expect(vanilla).toMatchObject({ intensity: 0.7, exponent: 0.8, wetnessRoughness: 1, wetnessStrength: 4 });
-    expect(shellAlpha(1, vanilla)).toBeCloseTo(0.366, 3);
+    expect(shellAlpha(1, vanilla)).toBeCloseTo(0.3075, 3);
     expect(shellAlpha(0, vanilla)).toBe(1);
-    expect(shellAlpha(0.5, vanilla)).toBeCloseTo(1 - 0.7 * 0.5 ** 0.8 * (1 - 0.0941), 3);
+    expect(shellAlpha(0.5, vanilla)).toBeCloseTo(1 - 0.7 * 0.5 ** 0.8 * (1 - 0.01074), 3);
     // Template defaults when the chain sets nothing.
     expect(shellParameters({ scalars: {}, colours: {} })).toMatchObject({ intensity: 1, exponent: expect.closeTo(2.2, 5) });
   });
@@ -173,7 +174,7 @@ describe("eye adapters", () => {
     const material = adapted.material as THREE.MeshStandardMaterial;
     expect([material.transparent, material.depthWrite, material.depthTest, material.side]).toEqual([true, false, true, THREE.DoubleSide]);
     expect([material.blending, material.blendSrc, material.blendDst]).toEqual([THREE.CustomBlending, THREE.OneFactor, THREE.SrcAlphaFactor]);
-    expect((adapted.eye as EyeShellHandle).parameters.luminance).toBeCloseTo(0.0942, 4);
+    expect((adapted.eye as EyeShellHandle).parameters.luminance).toBeCloseTo(0.01074, 4);
   });
 
   test("a layered design is hidden and says so with a code; elsewhere a generic layered code", () => {

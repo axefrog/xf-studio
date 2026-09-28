@@ -5,13 +5,17 @@
  * untrimmed where a clip's data buffers are needed) and get plain data back. No mod is named: whatever the resolver says wins is read.
  */
 import { asArray, cname, cr2wRoot, depotRef, HandleScope, isObject, packageChunks, type JsonObject } from "./red-json";
-import type { DepotRef } from "./depot-path";
+import { refFromPath, type DepotRef } from "./depot-path";
 import { buildVocabulary, type FacialVocabulary } from "./engines/facial-rig/vocabulary";
 import { rigRestFromRed, type RigRest } from "./engines/facial-rig/pose";
 import { clipControlVector, decodeClipTracks, type ClipTracks } from "./engines/facial-rig/anim-tracks";
 import type { FacialStartPoint } from "./platform/api/facial";
 
-/** The player face the Studio's head is: the female basehead skeleton and its own facial setup (design D1; the blink and idle use it). */
+/**
+ * The player face the Studio's head is: the female basehead skeleton, and the female head's own facial setup beside it. The face is solved
+ * with the setup V's face rig names instead (`readFaceRigSetup`: the male player setup in the base game, which session 4 read live in photo
+ * mode; design D1). `FACE_SETUP` is the fallback when the rig names none, and the comparison choice (`XFS_FACIAL_SETUP=female-head`).
+ */
 export const FACE_SKELETON = "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\h0_000_pwa_c__basehead_skeleton.rig";
 export const FACE_SETUP = "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\h0_000_pwa_c__basehead_rigsetup.facialsetup";
 /** The head's and the eyes' morph targets: each eye shape's joint binds, which the blink re-seats its rig on (knowledge/facial-animation.md §4). */
@@ -33,11 +37,11 @@ export const PHOTO_MODE_FACE_RIG = "base\\characters\\head\\player_base_heads\\a
 const fileName = (path: string) => path.split(/[\\/]/).at(-1) ?? path;
 
 /** The vocabulary and rest pose from the serialized skeleton and facial setup. Throws a plain error when they don't fit. */
-export function readFaceRig(skeleton: unknown, setup: unknown): { vocabulary: FacialVocabulary; rest: RigRest } {
+export function readFaceRig(skeleton: unknown, setup: unknown, setupPath: string = FACE_SETUP): { vocabulary: FacialVocabulary; rest: RigRest } {
   const rig = cr2wRoot(skeleton).root, facial = cr2wRoot(setup).root;
   const mapping = isObject(facial.info) && isObject(facial.info.tracksMapping) ? facial.info.tracksMapping : null;
   if (!mapping) throw Error("The facial setup has no track mapping.");
-  const vocabulary = buildVocabulary({ rig: fileName(FACE_SKELETON), setup: fileName(FACE_SETUP),
+  const vocabulary = buildVocabulary({ rig: fileName(FACE_SKELETON), setup: fileName(setupPath),
     trackNames: asArray(rig.trackNames).map(cname), referenceTracks: asArray(rig.referenceTracks).map(Number),
     mapping: { numEnvelopes: Number(mapping.numEnvelopes), numMainPoses: Number(mapping.numMainPoses),
       numLipsyncOverrides: Number(mapping.numLipsyncOverrides), numWrinkles: Number(mapping.numWrinkles) } });
@@ -114,6 +118,45 @@ export function readTable(document: unknown): Record<string, string>[] {
   const root = cr2wRoot(document).root;
   const headers = asArray(root.compiledHeaders).map(value => String(value));
   return asArray(root.compiledData).map(row => Object.fromEntries(asArray(row).map((value, index) => [headers[index] ?? String(index), String(value)])));
+}
+
+/** The male player facial setup every base-game player face rig names (knowledge/facial-expressions.md §1). */
+export const PLAYER_FACE_SETUP = "base\\characters\\head\\pma\\h0_001_ma_c__player\\h0_001_ma_c__player_rigsetup.facialsetup";
+/**
+ * A readable depot path for a facial setup reference: its own path, else the base game's setups by hash (face rigs store the reference as
+ * a hash only), else the hash.
+ */
+export function faceSetupPath(ref: DepotRef): string {
+  return ref.path ?? [PLAYER_FACE_SETUP, FACE_SETUP].find(path => refFromPath(path).hash === ref.hash) ?? `#${ref.hash}`;
+}
+
+/** Every `face_rig` animated component of every appearance of the given `.app` documents, in order. */
+function faceRigComponents(apps: readonly unknown[]): JsonObject[] {
+  const out: JsonObject[] = [];
+  for (const app of apps) {
+    const root = cr2wRoot(app).root, scope = new HandleScope(root);
+    for (const definition of asArray(root.appearances).map(item => scope.data(item)).filter((item): item is JsonObject => !!item)) {
+      const components = [...packageChunks(definition.compiledData), ...asArray(definition.components).map(item => scope.data(item)).filter((c): c is JsonObject => !!c)];
+      for (const component of components) if (/AnimatedComponent$/.test(String(component.$type)) && cname(component.name) === "face_rig") out.push(component);
+    }
+  }
+  return out;
+}
+
+/**
+ * The facial setup V's face rig names for a face skeleton: the `facialSetup` of the `face_rig` animated components whose `rig` is that
+ * skeleton, reading the rig's `.app` and then each ArchiveXL patch of it in patch order; the last one found wins [hypothesis: a patch that
+ * re-declares the component replaces it]. Null when none names one. In the base game every player face rig names the male player setup
+ * with each gender's own skeleton [resource], and the live photo-mode face solves with it [runtime, session 4].
+ */
+export function readFaceRigSetup(apps: readonly unknown[], skeleton: string = FACE_SKELETON): DepotRef | null {
+  const wanted = refFromPath(skeleton).hash;
+  let found: DepotRef | null = null;
+  for (const component of faceRigComponents(apps)) {
+    const rig = depotRef(component.rig), setup = depotRef(component.facialSetup);
+    if (rig?.hash === wanted && setup) found = setup;
+  }
+  return found;
 }
 
 /** One animation set on the face rig, as an appearance lists it (a reference may carry only its hash, as the game stores it). */

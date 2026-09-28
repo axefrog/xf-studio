@@ -110,7 +110,11 @@ def tint_encoding() -> None:
                                     tone_factor(LIMESTONE, mode, m) / tone_factor(IVORY, mode, m)])
                 fits.append((float(np.sqrt(np.mean((p - target) ** 2))), float(m)))
             rms, m = min(fits)
-            print(f"      {mode:4s}: best mask weight {m:.2f}, rms {rms:.3f}")
+            # Robustness: a free per-region tone-curve exponent k (display ratio = albedo ratio ** k) with the mask weight at most 1.
+            free = min((float(np.sqrt(np.mean((np.concatenate([tone_factor(AMBER, mode, w) / tone_factor(IVORY, mode, w),
+                         tone_factor(LIMESTONE, mode, w) / tone_factor(IVORY, mode, w)]) ** k - target) ** 2))), float(w), float(k))
+                        for w in np.linspace(0, 1, 101) for k in np.linspace(0.6, 2.0, 71))
+            print(f"      {mode:4s}: best mask weight {m:.2f}, rms {rms:.3f}; with a free exponent: rms {free[0]:.3f} (m {free[1]:.2f}, k {free[2]:.2f})")
 
 
 def link_tone() -> None:

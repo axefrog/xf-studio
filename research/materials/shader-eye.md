@@ -275,7 +275,7 @@ A second sheet just outside each eyeball (0–0.8 mm, median 0.2 mm), covering t
 ```hlsl
 m      = Mask(uv0);                                    // raw UV, linear texture
 shadow = saturate(Intensity * pow(m.r, Exponent));      // 0.7·R^0.8 in vanilla
-lum    = dot(pow(ShadowColor.rgb, 2.2), 0.33);          // ShadowColor as passed (bytes/255): 0.094 in vanilla
+lum    = dot(pow(ShadowColor.rgb, 2.2), 0.33);          // ShadowColor as passed, sRGB-decoded by the engine: 0.011 in vanilla
 alpha  = saturate(1 + fogT * shadow * (lum - 1));       // fogT: volumetric-fog transmittance at the pixel (t38), 1 without fog
 rw     = clamp(WetnessRoughness * m.g, 0.04, 1);        // 0.42 in vanilla
 spec   = Σ lights D_GGX(Nv·H, rw) · Vis_eye(rw) · C · shadowing;   // vertex normal, no Fresnel, no N·L
@@ -283,7 +283,7 @@ out    = float4(min(spec * exposure * WetnessStrength * m.b, 65000), alpha);   /
 ```
 
 - The probe term is compiled as `exp2(log2(0)·4)`, i.e. **zero**: the shell adds no environment reflection [observed].
-- Only the mean of `ShadowColor` after the program's own 2.2 power matters, so the darkening is **neutral grey** (to 37 % at a full mask in vanilla). That the program applies its own 2.2 suggests `Color` parameters arrive as bytes/255 [source-supported inference; [materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions)].
+- Only the mean of `ShadowColor` after the program's own 2.2 power matters, so the darkening is **neutral grey** (to 31 % at a full mask in vanilla). The program's own 2.2 once suggested that `Color` parameters arrive as bytes/255; the executable shows they arrive sRGB-decoded ([materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions)), so the power applies on top of the decoding [observed]. With byte/255 the darkening would stop at 37 %.
 - Drawn after lighting in `transparent_back_face`, depth test on, depth write off, both sides, `EMP_Front`.
 
 ### 7.1 `eye_shadow_blendable.mt`
