@@ -16,7 +16,7 @@ V's face is a solver rig. An animation drives **414 float tracks** on the face s
 | Lipsync pose outputs | 141 | Despite the name, values lip-sync clips write and the solver adds to the main-pose weights ([lip sync](lipsync.md)) |
 | Wrinkle outputs | 33 | Solver outputs, each `1 − (1 − w)²` of one control, named after the regions of `defaultfaceregions.regionset` that the skin shader wrinkles (§8) |
 
-The **reference values** matter for anything additive: envelopes and override weights rest at 1, every main pose at 0 [resource]. The main poses are 121 face poses (with 133 in-betweens, 255 correctives, 68 limits and 31 influences), 12 eye poses and 18 tongue poses that share the two jaw controls [resource: pwa basehead facialsetup, measured by the wiki/add-on survey in the evidence note]. The solver order and stages are documented in the add-on's `animation/facial/solver.py` (pinned commit `7a4ee793`) [source].
+The **reference values** matter for anything additive: override weights and most envelopes rest at 1 (`antiStretch`, `lipSyncEnvelope` and the four muzzles rest at 0), every main pose at 0 [resource]. The main poses are 121 face poses (with 133 in-betweens, 255 correctives, 68 limits and 31 influences), 12 eye poses and 18 tongue poses that share the two jaw controls [resource: pwa basehead facialsetup, measured by the wiki/add-on survey in the evidence note]. The solver's stages are described, in our own words, in the clean-room [facial solver specification](../research/animation/facial-solver-spec.md), read from the add-on at pinned commit `7a4ee793` [source].
 
 **Artist-friendly controls** exist by name and mostly come in left/right pairs [resource]:
 

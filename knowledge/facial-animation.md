@@ -1,6 +1,6 @@
 # Facial animation and the blink
 
-**Maturity: Draft.** Consolidated from the installed 2.31 facial rig, facial setups, morph targets and face animation sets, read offline with WolvenKit and the Cyberpunk Blender Add-on's facial solver on 23 to 27 September 2026. Nothing here has runtime evidence of its own. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[hypothesis]** not yet established. Measurements, hashes and commands are in [the game's blink](../research/animation/game-blink.md) and [character-creator idle](../research/animation/cc-idle.md).
+**Maturity: Draft.** Consolidated from the installed 2.31 facial rig, facial setups, morph targets and face animation sets, read offline with WolvenKit and the Cyberpunk Blender Add-on's facial solver on 23 to 27 September 2026; §1 revised on 28 September from the clean-room reading of that solver. Nothing here has runtime evidence of its own. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[hypothesis]** not yet established. Measurements, hashes and commands are in [the game's blink](../research/animation/game-blink.md) and [character-creator idle](../research/animation/cc-idle.md).
 
 This page answers how V's face is animated, and in particular how a blink closes the eyes, and what the Studio reproduces.
 
@@ -9,9 +9,11 @@ This page answers how V's face is animated, and in particular how a blink closes
 **Clip** (float tracks over time) → added to the rig's `referenceTracks` → **414 control values** → **`.facialsetup`** (envelopes, limits, influences, inbetweens, main poses, correctives) → **solver** → local rotation and translation per joint → **`.rig`** (344 joints) → skinning of the head, eye, brows, lashes and face decals.
 
 - A face clip animates **controls**, not bones: float tracks such as `eye_l_blink` (track 21), `eye_r_blink` (22), `eye_l_dir_dn` (114) or `jaw_mid_open`. The female head rig has 414 tracks and 344 joints [resource].
-- Face clips are mostly `AdditiveFromRefPose`: their values add to the rig's `referenceTracks`, which switch the envelopes on (`faceEnvelope`, `upperFace`, `lowerFace` = 1) [resource]. Playing such a clip as bone animation gives a static face [resource].
-- The `.facialsetup` turns controls into joint motion in stages: envelopes (with muzzles), global limits, influences between poses, upper/lower-face scaling, lipsync overrides, inbetween poses, correctives that fire on combinations of poses, then wrinkle outputs. Poses are local rotation/translation deltas applied after each joint's rest; the face part has no scale poses [resource, source: the IO Suite solver].
-- The Studio runs the add-on's pinned, unmodified solver offline as an external tool and plays the result; its code is never copied into the app (it is GPL-3.0) [source].
+- Face clips are mostly `AdditiveFromRefPose`: their values add to the rig's `referenceTracks` [resource]. Of the 13 envelope tracks, `faceEnvelope`, `upperFace`, `lowerFace`, the left and right lipsync envelopes and the two JALI strengths rest at 1; `antiStretch`, `lipSyncEnvelope` and the four muzzles rest at 0 [resource]. Playing such a clip as bone animation gives a static face [resource].
+- The `.facialsetup` turns controls into joint motion in three parts solved in turn (tongue, eyes, face), each in stages: envelopes (muzzles mute the eye, brow and gaze groups), speech limits, influences between poses, upper/lower-face scaling, lipsync overrides, added lipsync poses, influences again, in-betweens, correctives that fire on combinations of poses and in-betweens, corrective influences, pose blending, then wrinkle outputs. Poses are local rotation/translation deltas applied after each joint's rest: translations add, rotations are post-multiplied, each scaled toward identity by normalised lerp. Every joint a pose moves on the female head has an identity rest rotation and unit scale [resource, reference: the IO Suite solver]. The full behaviour, with the data fields and edge cases, is the [facial solver specification](../research/animation/facial-solver-spec.md).
+- At rest `lipSyncEnvelope` is 0, which switches the speech limits and lipsync overrides off entirely; a limit also needs `muzzleLips` raised to pull a weight down [reference].
+- The IO Suite does not read `faceEnvelope`, `antiStretch` or the left/right lipsync envelopes, ignores the setup's **scale poses** (the pupil narrow and wide poses scale the pupil joint; one tongue pose scales too), and treats a corrective-entry flag as a minimum LOD, so three lip correctives (`lips_together_dn__Corr` and the two `jaw_mid_open0__lips_together_*__Corr`) never fire at full detail. The ignored pupil scales are why the Studio's inert-control check finds that both `…pupil_narrow` controls move nothing. Whether the game does the same is open in each case ([specification §7](../research/animation/facial-solver-spec.md#7-where-the-io-suite-may-differ-from-the-game)) [resource, reference; game behaviour a hypothesis].
+- The Studio runs the add-on's pinned, unmodified solver offline as an external tool and plays the result; its code is never copied into the app (it is GPL-3.0-or-later) [source]. An MIT in-app solver is to be written from the clean-room specification and checked against that external solver as a black box [source].
 
 ## 2. How a blink closes the eye
 
@@ -80,6 +82,7 @@ Why the creator shows movement above V's eyes that the Studio's close-up idle ba
 5. Does the closed lid on deep-set shapes uncover skin outside the eye plate in game?
 6. Do lashes rigged to other lid joints than the lid skin under them (the "Lush Manga Eyelashes" mesh) leave the closed lid in game as they do in the preview (§5)?
 7. Is the brow and lid movement seen above V's eyes in the creator the eyes-section showcase (§6), and how much do wrinkle shading and live gaze add?
+8. Where does the game's solver differ from the IO Suite's reading: pupil scale poses, `faceEnvelope`, the lips muzzle, the corrective-entry flag, the double influence pass ([specification §7](../research/animation/facial-solver-spec.md#7-where-the-io-suite-may-differ-from-the-game))?
 
 ## In-game test asks
 
@@ -93,4 +96,4 @@ Batch into one prepared session; record the game version and the face-rig and mo
 
 ## Related pages
 
-[Facial expressions and idles](facial-expressions.md) · [Character-creator idle](../research/animation/cc-idle.md) · [The game's blink](../research/animation/game-blink.md) · [Brow idle gap](../research/animation/brow-idle-gap.md) · [CC file chain](cc-file-chain.md) · [Eye rendering](eye-rendering.md) · [Brows](brows.md) · [Tooling](tooling.md)
+[Facial expressions and idles](facial-expressions.md) · [Facial solver specification](../research/animation/facial-solver-spec.md) · [Character-creator idle](../research/animation/cc-idle.md) · [The game's blink](../research/animation/game-blink.md) · [Brow idle gap](../research/animation/brow-idle-gap.md) · [CC file chain](cc-file-chain.md) · [Eye rendering](eye-rendering.md) · [Brows](brows.md) · [Tooling](tooling.md)
