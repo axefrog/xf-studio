@@ -1,5 +1,5 @@
 {
- "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); collection plan digests recaptured on claude/export-alpha2 for the hx_ makeup component prefix",
+ "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); collection plan digests recaptured on claude/export-alpha2 for the hx_ makeup component prefix; package digests recaptured on claude/shimmer-rework for Shimmer's grain (shimmer-grain-1)",
  "recipes": {
   "eye-artistry/recipe-1": {
    "recipe": "bec95166e1104aeaccba8465585abc6b204848a14aae7bb2721f47049b573fc1",
@@ -1921,24 +1921,24 @@
    "direct": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
     "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
-    "packaged": "2538e4b4fdc37304fcc522de2f93df4e01bfae5e90591764ab7937e497e2ea7c"
+    "packaged": "36cf1a344a79b39851f87d689a5dd9d9b794c597b79a19a9c1cab8c2b38e3e57"
    },
    "minimal": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
     "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
-    "packaged": "2538e4b4fdc37304fcc522de2f93df4e01bfae5e90591764ab7937e497e2ea7c"
+    "packaged": "36cf1a344a79b39851f87d689a5dd9d9b794c597b79a19a9c1cab8c2b38e3e57"
    },
    "collection-2": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
     "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
-    "packaged": "2538e4b4fdc37304fcc522de2f93df4e01bfae5e90591764ab7937e497e2ea7c"
+    "packaged": "36cf1a344a79b39851f87d689a5dd9d9b794c597b79a19a9c1cab8c2b38e3e57"
    }
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "direct": {
     "parsed": "f8375741933c8f24281b06d64d7ccdb5b6a2fea4d257d449fa07ba1236c34f56",
     "plan": "66d833d42d5c5a9d58f2ec1246de97241e1b014e503df51841ff5e6988635641",
-    "packaged": "db9234dbb425a5659ad2a14871d8f2d5a6425a63597eeae4771b5e5d667c67f6"
+    "packaged": "d03f1212c50835f8456dc66cf15354d61a1577761f7e75cd1a614c3b06f315db"
    },
    "minimal": {
     "parsed": "f8375741933c8f24281b06d64d7ccdb5b6a2fea4d257d449fa07ba1236c34f56"
@@ -1951,7 +1951,7 @@
    "direct": {
     "parsed": "304fe2356856dac4fa0e52a18b2bec7e1f1a12413d8fab4a2820262f846a17e4",
     "plan": "7dbb4f484f83140f6f8c30b6339557a395475e48352d98036c646c5ca7624089",
-    "packaged": "287487bff3729c18a97809f001a17d1634161c16b2ca76dc1c5e821fe6eaffff"
+    "packaged": "d0387599f8d864a64d562038e91e03fe8037fc00758441b64f39843a83764512"
    },
    "minimal": {
     "parsed": "304fe2356856dac4fa0e52a18b2bec7e1f1a12413d8fab4a2820262f846a17e4"
@@ -1964,7 +1964,7 @@
    "direct": {
     "parsed": "2827a08f547a7f3b741f9803879f53e40578674572b3dc44a8e2e40ead0840ee",
     "plan": "cc0150b4e73f8837ad6f85998edb61ada70461602980b8da7b8d76d298b6190e",
-    "packaged": "a2faa55ed9f2aaa9ff45758f54b44e6abbcb73456ece8f2845e4d713c0541169"
+    "packaged": "857b0bd368a29330390f0b815656d9638730d6405612451c7795f455bd45a7bd"
    },
    "minimal": {
     "parsed": "2827a08f547a7f3b741f9803879f53e40578674572b3dc44a8e2e40ead0840ee"

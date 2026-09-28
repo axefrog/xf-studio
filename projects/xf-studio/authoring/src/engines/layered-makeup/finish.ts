@@ -1,6 +1,6 @@
-/** Deterministic, UV-anchored flake study shared by preview and texture export.
- * These are material inputs, not baked light or animated emissive sparkle.
- * Game normal encoding/blend calibration and subpixel variance filtering remain pending.
+/** Deterministic, UV-anchored classic flake study: classic Glitter, and the earlier (browser-only) Shimmer preview.
+ * These are material inputs, not baked light or animated emissive sparkle. Game-matched Shimmer, the one that
+ * exports, uses its own grain instead (shimmer-grain.ts).
  */
 export type Finish =
   | "matte"
@@ -41,7 +41,7 @@ export function finishDescription(finish: Finish, surface: string) {
     metallic: "A continuous metallic sheen without separate flakes.",
     glossy: "A smooth, wet-looking shine over colour.",
     iridescent: `The colour turns toward a chosen shift colour as ${surface} curves away from view.`,
-    shimmer: "Fine reflective facets that sparkle close up and merge into a soft sheen at a distance.",
+    shimmer: "A soft, pearly sheen. Tiny sparkles show only up close.",
     glitter:
       "Distinct reflective flakes — an experimental glitter approximation.",
   }[canonicalFinish(finish)];
@@ -105,39 +105,6 @@ export function createFlakeJob(size: number, finish: "shimmer" | "glitter", p: L
       }
       return done;
     },
-  };
-}
-
-/**
- * The classic Shimmer facet field evaluated at one authored UV, for export textures that do not
- * cover the head atlas one to one (the plate-local window). Facets are the same UV-anchored cells,
- * centres, radii and tilts as `createFlakeJob(size, "shimmer", p)`; only the antialiased edge follows
- * the target's own texel size: `texelsU`/`texelsV` are target texels per unit of u and v, and the edge
- * ramps over one target texel along the direction away from the facet centre. With texelsU =
- * texelsV = size it is the head-UV bake's rule (radius + ½ − distance, in texels). Returns the same
- * bytes the bake writes: normal X, Y and roughness, metalness in its surface G and B.
- */
-export function shimmerFacetSampler(p: LegacyFlakes, texelsU: number, texelsV: number) {
-  const cells = p.cells * 2, radius = 0.39 / cells;
-  return (u: number, v: number) => {
-    const cx = Math.min(cells - 1, Math.max(0, Math.floor(u * cells))), cy = Math.min(cells - 1, Math.max(0, Math.floor(v * cells)));
-    let a = 0, nx = 0, ny = 0, nz = 1;
-    if (random(cx, cy, p.seed) < p.density) {
-      const px = (cx + 0.5 + (random(cx, cy, p.seed + 1) - 0.5) * 0.3) / cells;
-      const py = (cy + 0.5 + (random(cx, cy, p.seed + 2) - 0.5) * 0.3) / cells;
-      const azimuth = random(cx, cy, p.seed + 4) * Math.PI * 2;
-      const angle = Math.sqrt(random(cx, cy, p.seed + 5)) * p.tilt * 0.4;
-      nx = Math.sin(angle) * Math.cos(azimuth); ny = Math.sin(angle) * Math.sin(azimuth); nz = Math.cos(angle);
-      const du = u - px, dv = v - py, d = Math.hypot(du, dv);
-      // Texels per UV along the outward direction; at the centre any direction is inside anyway.
-      const ramp = d > 0 ? Math.hypot(du / d * texelsU, dv / d * texelsV) : Math.max(texelsU, texelsV);
-      a = Math.max(0, Math.min(1, 0.5 + (radius - d) * ramp));
-    }
-    const vx = nx * a, vy = ny * a, vz = 1 + (nz - 1) * a, len = Math.hypot(vx, vy, vz);
-    return {
-      normalX: Math.round(((vx / len) * 0.5 + 0.5) * 255), normalY: Math.round(((vy / len) * 0.5 + 0.5) * 255),
-      roughness: Math.round((0.48 * (1 - a) + 0.32 * a) * 255), metalness: Math.round(a * 0.35 * 255),
-    };
   };
 }
 

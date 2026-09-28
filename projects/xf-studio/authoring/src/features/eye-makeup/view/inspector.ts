@@ -215,10 +215,13 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         setAttr(classicSection.querySelector(".help-tip")!, "aria-label", `About ${flakesTitle}`);
         // Shimmer is an experimental export; classic Glitter is preview only, so its tip doesn't call it experimental.
         setHelp(classicSection.querySelector<HTMLElement>(".help-tip")!, glitter ? "Turn the head to see the flakes catch the light."
+          : layer.optics ? ["Close up, tiny sparkles catch the light as the head turns; further away they blend into the sheen.", "Experimental: may look different in game."]
           : ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."]);
         // A layer without stored flakes shows the classic model's defaults from the catalogue (UI-93).
         const legacy = flakes && !("model" in flakes) ? flakes as ReadonlyDeep<LegacyFlakes> : glitterModel.defaults as { cells: number; density: number; tilt: number };
         classic.cells.update(legacy.cells); classic.density.update(legacy.density); classic.tilt.update(legacy.tilt);
+        // Fineness shows only where it applies: game-matched Shimmer's grain has one size (the application refuses it).
+        classic.cells.element.hidden = !ctx.facade.capability({ kind: "glitter.setClassic", layerId: layer.id, key: "cells", value: legacy.cells }).available;
       }
       if (!irregularSection.hidden && flakes && "model" in flakes && flakes.model === "irregular-planar-1") {
         const f = flakes as ReadonlyDeep<IrregularFlakes>, target = { kind: "layer" as const, id: layer.id };

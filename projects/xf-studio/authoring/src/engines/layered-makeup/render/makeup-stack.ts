@@ -9,6 +9,7 @@ import {isDirectGlint} from "../direct-glint-settings";
 import {flatSurface,FRESNEL_SURFACE,layerExport,planPresetExport} from "../finish-export";
 import {installFresnelTint} from "./fresnel-tint";
 import {previewFacetChains} from "../route-mip-chains";
+import { SHIMMER_GRAIN } from "../shimmer-grain";
 import {createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
 import {createPlateComposite} from "./plate-composite";
 import { renderBand, RENDER_ORDER, type FeatureRenderer, type SkinLight } from "../../../platform/api/scene";
@@ -99,8 +100,9 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     !isDirectGlint(layer.flakes);
   const keyFor = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
     ? studioIrregularOpticalKey(layer.flakes,size,fineGlitter)
-    // Game-matched Shimmer bakes the same flakes but uploads route-filtered mip chains.
-    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size, ...(layer.optics ? [layer.optics.model] : [])]);
+    // Game-matched Shimmer bakes the export's grain (shimmer-grain.ts) and uploads route-filtered mip chains.
+    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size, ...(layer.optics ? [layer.optics.model] : []),
+      ...(canonicalFinish(layer.finish) === "shimmer" && layer.optics ? [SHIMMER_GRAIN.model] : [])]);
   const albedoKeyFor = (layer:Layer,size:number) => isIrregular(layer.flakes) && layer.finish === "glitter"
     ? irregularAlbedoKey(studioIrregularOpticalKey(layer.flakes,size,fineGlitter),maskAlphaKey(layer,size),layer.color,layer.flakes.color)
     : undefined;

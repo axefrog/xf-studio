@@ -8,7 +8,8 @@
 //             Matte, Satin, Metallic, and the game-matched single-lobe Glossy.
 // - "faceted" the same template plus a tangent normal map in NormalsBlendingMode 1
 //             (reoriented composite with the skin normal; flat texels leave it untouched).
-//             Game-matched Shimmer; other flat finishes may share the preset.
+//             Game-matched Shimmer: a uniform pearly surface plus a fine grain of tilted normals
+//             (shimmer-grain.ts); other flat finishes may share the preset.
 // - "fresnel" base/materials/mesh_decal_gradientmap_recolor_blendable.mt: a base colour plus
 //             FresnelColor·intensity·(1−N·V)^exponent added before the G-buffer square root.
 //             The addition is per draw, not per texel, so a colour-shift preset must consist
@@ -101,8 +102,8 @@ export const FINISH_EXPORT = {
     summary: "Experimental: built as one smooth reflection. Not yet checked in game.",
     earlierModel: "a separate clear coat" },
   shimmer: { gameOptics: true, route: "faceted", experimental: true,
-    layerNote: "Built as fine facets that merge into a sheen at a distance. Not yet checked in game.",
-    summary: "Experimental: built as fine facets that merge into a sheen at a distance. Not yet checked in game.",
+    layerNote: "Built as a soft, pearly sheen with a fine sparkle grain. Not yet checked in game.",
+    summary: "Experimental: built as a soft, pearly sheen with a fine sparkle grain. Not yet checked in game.",
     earlierModel: "browser-only facet filtering" },
   iridescent: { gameOptics: true, route: "fresnel", experimental: true,
     layerNote: "Built as one shift tint toward the lid's edges. Not yet checked in game.",

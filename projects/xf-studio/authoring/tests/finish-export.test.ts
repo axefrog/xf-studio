@@ -13,7 +13,7 @@ import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 import { facetedReference, maskReference } from "../src/features/eye-makeup/verify/texture-checks";
 import { expectedMaterialValues } from "../src/features/eye-makeup/verify/resource-checks";
-import { compileFacetedPreset, compileFlatPreset, compileFresnelPreset, compilePreset, initialRecipe, raster } from "./fixtures/eye-region";
+import { compileFacetedPreset, compileFlatPreset, compileFresnelPreset, compilePreset, initialRecipe, raster, rasterWindow } from "./fixtures/eye-region";
 import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
 
@@ -103,12 +103,14 @@ test("glossy is a flat low-roughness dielectric and flat-only output is unchange
   expect(Object.keys(compiled.maps)).toEqual(["diffuse", "roughness", "metalness"]);
 });
 
-test("faceted presets add facet normals only where Shimmer covers, flat elsewhere", () => {
+test("faceted presets add grain normals only where Shimmer covers, flat elsewhere", () => {
   const r = recipe({ finish: "matte", opacity: 1 }, { finish: "shimmer", optics: game, opacity: 1, points: initialRecipe().layers[1].points });
-  const c = compileFacetedPreset(r, 512);
-  const shimmerMask = raster(r.layers[1], 512), matteMask = raster(r.layers[0], 512);
+  // The plate window's texel density: one grain per texel (a head-UV map this coarse holds only their mean, flat).
+  const window = { u0: .266, u1: .734, v0: .176, v1: .326 }, W = 2048, H = 512;
+  const c = compileFacetedPreset(r, { kind: "window", width: W, height: H, window });
+  const shimmerMask = rasterWindow(r.layers[1], W, H, window), matteMask = rasterWindow(r.layers[0], W, H, window);
   let tilted = 0;
-  for (let p = 0; p < 512 * 512; p++) {
+  for (let p = 0; p < W * H; p++) {
     const tilt = Math.abs(c.normal[p * 2] - 128) + Math.abs(c.normal[p * 2 + 1] - 128);
     if (!shimmerMask[p * 4 + 3]) expect(tilt).toBe(0);
     else if (tilt > 10) tilted++;
@@ -130,12 +132,14 @@ test("colour-shift presets write linear coverage, a uniform base colour and norm
 });
 
 test("route mip chains agree byte for byte with the verifier's independent references on the finish board", () => {
-  const shimmer = compileFacetedPreset(board.presets[1].recipe, 256);
-  const chain = facetedMipChain(shimmer.diffuse, shimmer.roughness, shimmer.metalness, shimmer.normal, 256);
-  const reference = facetedReference(shimmer.diffuse, shimmer.roughness, shimmer.metalness, shimmer.normal, 256);
+  // The board's left lid on a window at the plate's texel density, where each texel is one grain.
+  const W = 1024, H = 256, window = { u0: .28, u1: .28 + W / 4096, v0: .19, v1: .19 + H / 4096 };
+  const shimmer = compileFacetedPreset(board.presets[1].recipe, { kind: "window", width: W, height: H, window });
+  const chain = facetedMipChain(shimmer.diffuse, shimmer.roughness, shimmer.metalness, shimmer.normal, W, H);
+  const reference = facetedReference(shimmer.diffuse, shimmer.roughness, shimmer.metalness, shimmer.normal, W, H);
   expect(chain.roughness).toEqual(reference.roughness);
   expect(chain.normal).toEqual(reference.normalXY);
-  const flat = flatMipChain(shimmer.diffuse, shimmer.roughness, shimmer.metalness, 256);
+  const flat = flatMipChain(shimmer.diffuse, shimmer.roughness, shimmer.metalness, W, H);
   let widened = 0;
   for (let level = 1; level < chain.roughness.length; level++)
     chain.roughness[level].forEach((value, t) => { expect(value).toBeGreaterThanOrEqual(flat.roughness[level][t]); if (value > flat.roughness[level][t]) widened++; });
