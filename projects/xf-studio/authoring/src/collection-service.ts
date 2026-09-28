@@ -328,7 +328,7 @@ export class CollectionService {
             const draft = stored
               ? collectionDraft(stored.collection, model, stored.revision)
               : collectionDraft({ schema: COLLECTION_2, id: crypto.randomUUID(), name: "My collection",
-                presets: [{ ...newLook(id, this.legacy.name.trim() || "First look", model),
+                presets: [{ ...newLook(id, this.legacy.name.trim() || "Preset 1", model),
                   parts: { [model.live]: model.parts.envelope(model.live, current.recipe) } }] }, model);
             if (stored) {
               this.remember(stored.collection, stored.revision);

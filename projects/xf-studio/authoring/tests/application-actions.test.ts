@@ -70,6 +70,24 @@ test("a new preset's default name never repeats another preset's", () => {
   // "Untitled look" removed after "Preset 2" was added: the next count is taken, so the next free number follows.
   expect(newPresetName([{ name: "Preset 2" }])).toBe("Preset 3");
   expect(newPresetName([{ name: "Preset 3" }, { name: "Preset 4" }])).toBe("Preset 5");
+  // A removed preset Restore can bring back keeps its name: Preset 2 removed, Add gives Preset 3, not a second Preset 2.
+  expect(newPresetName([{ name: "Preset 1" }], [{ name: "Preset 2" }])).toBe("Preset 3");
+});
+
+test("add, remove, add, then Restore never leaves two presets with one name (CORE-124)", () => {
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  let draft = collectionDraft({ schema: "xfas/collection-1" as const, id: id(99), name: "Collection",
+    presets: [{ id: id(1), name: "Preset 1", revision: 1, recipe: initialRecipe() }] }, STUDIO_DOCUMENTS);
+  const names = () => draft.collection.presets.map(preset => preset.name);
+  draft = editPresets(draft, { kind: "add", newId: id(2) }, STUDIO_DOCUMENTS);
+  draft = editPresets(draft, { kind: "add", newId: id(3) }, STUDIO_DOCUMENTS);
+  expect(names()).toEqual(["Preset 1", "Preset 2", "Preset 3"]);
+  draft = editPresets(draft, { kind: "remove", id: id(3) }, STUDIO_DOCUMENTS);
+  draft = editPresets(draft, { kind: "add", newId: id(4) }, STUDIO_DOCUMENTS);
+  expect(names()).toEqual(["Preset 1", "Preset 2", "Preset 4"]);
+  draft = editPresets(draft, { kind: "restore" }, STUDIO_DOCUMENTS);
+  expect(names()).toEqual(["Preset 1", "Preset 2", "Preset 3", "Preset 4"]);
+  expect(new Set(names()).size).toBe(names().length);
 });
 
 test("preset add and copy take their IDs from the host: the pure operation is deterministic (CORE-44)", () => {
