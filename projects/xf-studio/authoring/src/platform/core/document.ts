@@ -296,12 +296,12 @@ export class PartRegistry implements HistoryParts {
   writePresetMinimal(look: Look): LegacyPreset | Look { return this.legacyPreset(look) ?? this.minimalLook(look); }
   /**
    * The oldest collection schema that holds this collection exactly: `xfas/collection-1` (readable
-   * by 0.1.0-alpha.1) when every look is legacy-representable, else `xfs/collection-2` with each
-   * part in the oldest part schema that holds it.
+   * by every build) when every look is legacy-representable, else `xfs/collection-2` (readable from
+   * 0.1.0-alpha.2, the oldest published release) with each part in the oldest part schema that holds it.
    */
   writeMinimal(collection: LookCollection): LegacyCollection | LookCollection {
     const presets = collection.presets.map(look => this.legacyPreset(look));
-    // A package plan is an optional field either schema carries (0.1.0-alpha.1 reads collection-1 and ignores it).
+    // A package plan is an optional field either schema carries (a build that predates it ignores it).
     // A kept plan (CORE-91) goes back exactly as it came.
     const plan = collection.packagePlan ? { packagePlan: storedPackagePlan(collection.packagePlan) as ModPackagePlan } : {};
     return presets.every((preset): preset is LegacyPreset => preset !== undefined)

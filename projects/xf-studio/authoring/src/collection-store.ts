@@ -6,27 +6,18 @@ import { NEWER_LOOKS_LIBRARY_MESSAGE } from "./collection-workspace";
 import type { PartRegistry } from "./platform/core/document";
 import { hostFailure } from "./diagnostics/host-log";
 
-/**
- * Why a save that needs `xfs/collection-2` is refused. The released 0.1.0-alpha.1 lists a library
- * only while the latest revision of every collection is `xfas/collection-1` (one other row makes
- * its whole list fail), and saves on top of a collection only while that revision is too; so no
- * row it cannot read is ever written into the shared library (CORE-30). Such collections still
- * live in the workspace and export to files.
- */
-export const COLLECTION_2_LIBRARY_MESSAGE = "This collection has parts the released XF Studio 0.1.0-alpha.1 can't read, " +
-  "so it isn't saved to the library, which that version also opens. Your draft is kept: export the collection to a file to keep a copy.";
-
 /** A library revision: the collection as looks (`xfs/collection-2` in memory), whatever schema its row was written in. */
 export type StoredCollection = { collection: LookCollection; revision: number; updatedAt: string };
 export type CollectionSummary = { id: string; name: string; revision: number; count: number; updatedAt: string };
 /**
  * The local collection library (SQLite v2; no DDL change for the look model). Rows describe their
  * own schema: rows written before the look model hold `xfas/collection-1` JSON and are never
- * rewritten. A save writes each new row in the oldest schema that holds it exactly, so a library
- * of eye-makeup looks stays readable by 0.1.0-alpha.1; a collection that needs `xfs/collection-2`
- * is refused rather than written where that release reads (`COLLECTION_2_LIBRARY_MESSAGE`).
- * Rows of either schema read (feature-module platform §2). The part registry is injected by the
- * server roots.
+ * rewritten. A save writes each new row in the oldest schema that holds it exactly:
+ * `xfas/collection-1` while every look is eye makeup alone, else `xfs/collection-2` (a look with an
+ * expression, say). Rows of either schema read (feature-module platform §2), here and in
+ * 0.1.0-alpha.2, the oldest published release, which opens the same library. (0.1.0-alpha.1 read
+ * collection-1 only, and a save that needed collection-2 was refused for it (CORE-30); it was never
+ * published, so that gate is retired (CORE-123).) The part registry is injected by the server roots.
  */
 export class CollectionLibrary {
   private db: Database;
@@ -94,9 +85,8 @@ export class CollectionLibrary {
       if (isNewerData(error)) throw new LibraryError(NEWER_LOOKS_LIBRARY_MESSAGE, 422);
       throw new LibraryError("Invalid collection; nothing was saved.");
     }
-    // Every row this save writes must be one 0.1.0-alpha.1 reads (CORE-30).
+    // The oldest schema that holds it: rows 0.1.0-alpha.2 reads either way (CORE-123).
     const stored = this.parts.writeMinimal(collection);
-    if (stored.schema !== COLLECTION_1) throw new LibraryError(COLLECTION_2_LIBRARY_MESSAGE, 422);
     return this.db.transaction(() => {
       const latest = this.db.query("SELECT MAX(revision) AS revision FROM collection_revisions WHERE collection_id=?")
         .get(collection.id) as { revision: number | null } | null;

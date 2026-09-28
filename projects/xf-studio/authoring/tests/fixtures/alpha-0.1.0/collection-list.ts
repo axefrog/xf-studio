@@ -1,5 +1,5 @@
 /**
- * The released 0.1.0-alpha.1's collection-library list and its collection reader, vendored from
+ * The tagged (never published) 0.1.0-alpha.1's collection-library list and its collection reader, vendored from
  * the tagged commit `60a60e9` (`src/collection-store.ts` `CollectionLibrary.list()` and
  * `src/preset-collection.ts` `parseCollection()`), so tests can check what that release does with
  * a library this build writes (CORE-30). The code is as released; only the recipe parser is

@@ -9,7 +9,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COLLECTION_2_LIBRARY_MESSAGE, CollectionLibrary } from "../src/collection-store";
+import { CollectionLibrary } from "../src/collection-store";
 import { STUDIO_PARTS, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { defaultClusteredGlintFlakes, defaultDirectGlintFlakes, defaultFineSpeckleFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
 import { EYE_MAKEUP, EYE_MAKEUP_PART_1, EYE_MAKEUP_PART_2, eyeMakeupPartCodec } from "../src/features/eye-makeup";
@@ -195,17 +195,20 @@ test("saving a library whose rows hold pinned part-1 recipes adds no revision; a
     const saved = library.save({ collection: current.collection, revision: current.revision });
     expect(saved.collection.presets.map(p => p.revision)).toEqual(current.collection.presets.map(p => p.revision));
     expect(count()).toBe(before);
-    // The step-2 collection-2 revision reads, but saving a collection that needs collection-2 (the hair part) is
-    // refused: 0.1.0-alpha.1 lists the library only while every collection's latest row is collection-1 (CORE-30).
+    // The step-2 collection-2 revision reads, and a collection that needs collection-2 (the hair part) saves as a
+    // collection-2 revision, which 0.1.0-alpha.2 reads (CORE-123); its unchanged looks add no version.
     const mixed = library.get(v2.id);
     expect(mixed.collection.presets[0].parts.hair).toEqual(hair);
-    expect(() => library.save({ collection: mixed.collection, revision: mixed.revision })).toThrow(COLLECTION_2_LIBRARY_MESSAGE);
+    const resaved = library.save({ collection: mixed.collection, revision: mixed.revision });
+    expect(resaved.revision).toBe(mixed.revision + 1);
     expect(count()).toBe(before);
+    expect(JSON.parse((raw.query("SELECT collection_json FROM collection_revisions WHERE collection_id=? ORDER BY revision DESC LIMIT 1")
+      .get(v2.id) as { collection_json: string }).collection_json).schema).toBe(COLLECTION_2);
     // Without that part, an edit adds exactly one version, in the oldest schema that holds it: collection-1 again.
     const edited = structuredClone(mixed.collection);
     delete edited.presets[0].parts.hair;
     recipeOf(edited.presets[0]).layers[0].opacity = 0.25;
-    library.save({ collection: edited, revision: mixed.revision });
+    library.save({ collection: edited, revision: resaved.revision });
     expect(count()).toBe(before + 1);
     const row = JSON.parse((raw.query("SELECT preset_json FROM collection_preset_versions ORDER BY rowid DESC LIMIT 1").get() as { preset_json: string }).preset_json);
     expect(row.parts).toBeUndefined();

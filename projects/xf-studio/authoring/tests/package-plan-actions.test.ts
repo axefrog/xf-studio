@@ -52,7 +52,7 @@ test("with eye makeup alone there is one mod, named XF Eye Artistry; it can be r
   // A mod name is part of the collection: the draft now has unsaved changes.
   expect(f.svc.persistence()).toMatchObject({ dirty: true, structureDirty: true, dirtyPresets: [] });
   expect(f.svc.snapshot()!.collection.packagePlan).toEqual({ schema: PACKAGE_PLAN_1, products: [{ id: ID, name: "My looks", features: [] }] });
-  // Saved as collection-1 with the plan beside it, which the released 0.1.0-alpha.1 reads (and ignores).
+  // Saved as collection-1 with the plan beside it, which even the unpublished 0.1.0-alpha.1 reads (and ignores).
   expect((await f.svc.execute({ kind: "save" })).ok).toBe(true);
   const stored = STUDIO_PARTS.writeMinimal(f.saved()!);
   expect(stored.schema).toBe(COLLECTION_1);

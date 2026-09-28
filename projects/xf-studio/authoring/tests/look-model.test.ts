@@ -13,7 +13,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COLLECTION_2_LIBRARY_MESSAGE, CollectionLibrary } from "../src/collection-store";
+import { CollectionLibrary } from "../src/collection-store";
 import { CollectionService, type CollectionTransport } from "../src/collection-service";
 import type { EditorSnapshot } from "../src/collection-session";
 import { collectionDraft, emptyMemory, parseCollectionWorkspace, readCollectionWorkspaceV1 } from "../src/collection-workspace";
@@ -272,19 +272,22 @@ test("saving an unchanged collection adds no preset revision; a change adds exac
   } finally { try { library.close(); } catch { /* already closed */ } legacy.cleanup(); }
 });
 
-test("a look the legacy format cannot hold is refused by the library, never written where 0.1.0-alpha.1 reads", () => {
+test("a look the legacy format cannot hold is saved as a collection-2 revision, and older rows are never rewritten", () => {
   const legacy = legacyLibrary();
   const library = new CollectionLibrary(legacy.path, STUDIO_PARTS);
   try {
     const current = library.get(legacy.rows.list[2].id), edited = structuredClone(current.collection);
     edited.presets[0].parts.hair = { schema: "xfs/hair-part-3", body: { strands: 3 } };
     const before = legacy.dump();
-    // The alpha lists a library only while every collection's latest row is collection-1 (CORE-30).
-    expect(() => library.save({ collection: edited, revision: current.revision })).toThrow(COLLECTION_2_LIBRARY_MESSAGE);
-    expect(legacy.dump()).toEqual(before);
-    expect(library.list().find(item => item.id === current.collection.id)?.revision).toBe(current.revision);
-    // The collection-2 writer still serves collection files (Export collection), which the alpha refuses cleanly.
-    expect(STUDIO_PARTS.writeMinimal(edited).schema).toBe(COLLECTION_2);
+    // 0.1.0-alpha.2, the oldest published release, reads collection-2 rows (CORE-123; the unpublished alpha.1 didn't).
+    const saved = library.save({ collection: edited, revision: current.revision });
+    expect(saved.revision).toBe(current.revision + 1);
+    const after = legacy.dump();
+    expect(after.collection_revisions.slice(0, before.collection_revisions.length)).toEqual(before.collection_revisions);
+    const newest = after.collection_revisions.at(-1)!;
+    expect(JSON.parse(newest.collection_json as string).schema).toBe(COLLECTION_2);
+    expect(library.get(current.collection.id).collection.presets[0].parts.hair).toEqual({ schema: "xfs/hair-part-3", body: { strands: 3 } });
+    expect(library.list().find(item => item.id === current.collection.id)?.revision).toBe(saved.revision);
   } finally { library.close(); legacy.cleanup(); }
 });
 
