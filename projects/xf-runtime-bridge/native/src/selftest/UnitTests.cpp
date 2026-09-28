@@ -29,6 +29,7 @@
 #include "core/Params.hpp"
 #include "core/ScriptFrame.hpp"
 #include "core/Session.hpp"
+#include "core/Showroom.hpp"
 #include "core/Writes.hpp"
 
 namespace
@@ -2107,6 +2108,141 @@ void Rb51To60Tests()
     }
 }
 
+// XF Finish Showroom (bridge 0.5): parameter checks (only the showroom's own templates and names), the showroom write class,
+// and the place / turn / clear sequences against fake game steps.
+void ShowroomTests()
+{
+    namespace s = xfb::showroom;
+    const std::string head = "axefrog\\appearance_studio\\collections\\4426018f6966620881cdcb78569544ab\\showroom\\xfs_showroom.ent";
+    const std::string rig = "axefrog\\appearance_studio\\collections\\4426018f6966620881cdcb78569544ab\\showroom\\xfs_showroom_rig.ent";
+    const std::string preset = "xfs_p0170d3e01f014a519c3e000000000005";
+    const auto item = [&](int aIndex, const std::string& aTemplate, const std::string& aAppearance) {
+        return json{{"index", aIndex}, {"template", aTemplate}, {"appearance", aAppearance}, {"label", "Gloss A"},
+                    {"x", 100.5}, {"y", 202.0}, {"z", 10.0}, {"yaw", 180.0}};
+    };
+    const auto place = s::ParsePlace(json{{"items", {item(0, head, preset), item(1, head, "xfs_p0170d3e01f014a519c3e000000000006")}}}, s::Kind::Piece);
+    Check("showroom.place parses pieces, replace on by default", place.items.size() == 2 && place.replace && place.items[1].index == 1 &&
+                                                                      place.items[0].templatePath == head && place.items[0].yaw == 180.0);
+    Check("showroom.place refuses another entity (only the showroom's own head template)",
+          ParamsCode([&] { s::ParsePlace(json{{"items", {item(0, "base\\characters\\entities\\player\\player_wa_fpp.ent", preset)}}}, s::Kind::Piece); }) == "bad_params");
+    Check("showroom.place refuses the rig template as a head, and a rig name as a preset",
+          ParamsCode([&] { s::ParsePlace(json{{"items", {item(0, rig, preset)}}}, s::Kind::Piece); }) == "bad_params" &&
+              ParamsCode([&] { s::ParsePlace(json{{"items", {item(0, head, "xfs_rig_key")}}}, s::Kind::Piece); }) == "bad_params");
+    Check("showroom.lights accepts the rig and its three profiles, index -1 for V",
+          ParamsCode([&] { s::ParsePlace(json{{"items", {item(-1, rig, "xfs_rig_creator"), item(0, rig, "xfs_rig_creator_face"), item(1, rig, "xfs_rig_key")}}}, s::Kind::Rig); }) == "ok");
+    Check("showroom.lights refuses an unknown profile", ParamsCode([&] { s::ParsePlace(json{{"items", {item(0, rig, "xfs_rig_disco")}}}, s::Kind::Rig); }) == "bad_params");
+    Check("showroom.place refuses a duplicated index, an empty list, 25 pieces and an unknown field",
+          ParamsCode([&] { s::ParsePlace(json{{"items", {item(0, head, preset), item(0, head, preset)}}}, s::Kind::Piece); }) == "bad_params" &&
+              ParamsCode([&] { s::ParsePlace(json{{"items", json::array()}}, s::Kind::Piece); }) == "bad_params" &&
+              ParamsCode([&] {
+                  json many = json::array();
+                  for (int i = 0; i < 25; ++i)
+                  {
+                      many.push_back(item(i % 24, head, preset));
+                  }
+                  s::ParsePlace(json{{"items", many}}, s::Kind::Piece);
+              }) == "bad_params" &&
+              ParamsCode([&] {
+                  auto bad = item(0, head, preset);
+                  bad["scale"] = 2;
+                  s::ParsePlace(json{{"items", {bad}}}, s::Kind::Piece);
+              }) == "bad_params");
+    Check("showroom.place refuses a non-finite or out-of-range place and a yaw beyond 360", ParamsCode([&] {
+                                                                                               auto bad = item(0, head, preset);
+                                                                                               bad["yaw"] = 400;
+                                                                                               s::ParsePlace(json{{"items", {bad}}}, s::Kind::Piece);
+                                                                                           }) == "bad_params" &&
+                                                                                               ParamsCode([&] {
+                                                                                                   auto bad = item(0, head, preset);
+                                                                                                   bad["z"] = 1e9;
+                                                                                                   s::ParsePlace(json{{"items", {bad}}}, s::Kind::Piece);
+                                                                                               }) == "bad_params");
+    Check("showroom.turn and showroom.clear check their input",
+          s::ParseTurn(json::parse(R"({"turns":[{"index":2,"yaw":-45}]})")).at(0).yaw == -45.0 &&
+              ParamsCode([] { s::ParseTurn(json::parse(R"({"turns":[{"index":24,"yaw":0}]})")); }) == "bad_params" &&
+              s::ParseClear(json::object()) == "all" && s::ParseClear(json::parse(R"({"what":"lights"})")) == "lights" &&
+              ParamsCode([] { s::ParseClear(json::parse(R"({"what":"everything"})")); }) == "bad_params");
+    Check("the showroom write class is off by default and read from allow_write_classes",
+          (xfb::ParseConfig("").writeClasses & xfb::kWriteShowroom) == 0 &&
+              (xfb::ParseConfig("[bridge]\nallow_write_classes = photo, showroom\n").writeClasses & xfb::kWriteShowroom) != 0 &&
+              xfb::AccessName(xfb::Access::WriteShowroom) == "write-showroom" && xfb::IsWrite(xfb::Access::WriteShowroom) &&
+              xfb::WriteClassBit(xfb::Access::WriteShowroom) == xfb::kWriteShowroom);
+
+    // The sequences against fake steps.
+    struct Fake
+    {
+        std::vector<std::string> steps;
+        int pendingPolls = 2;
+        int failAt = -1;
+        int guards = 0;
+        s::Ops Ops()
+        {
+            s::Ops ops;
+            ops.guard = [this] { ++guards; };
+            ops.spawn = [this](s::Kind, const s::Placement& aItem) {
+                if (aItem.index == failAt)
+                {
+                    throw xfb::MethodError("too_far", "that place is more than 30 m from V");
+                }
+                steps.push_back("spawn " + std::to_string(aItem.index));
+                return json{{"entity", std::to_string(500 + aItem.index)}};
+            };
+            ops.clear = [this](const std::string& aWhat) {
+                steps.push_back("clear " + aWhat);
+                return json{{"removed_pieces", 3}, {"removed_lights", 0}};
+            };
+            ops.turn = [this](int32_t aIndex, double aYaw) {
+                steps.push_back("turn " + std::to_string(aIndex));
+                return json{{"index", aIndex}, {"previous_yaw", 90.0}, {"yaw", aYaw}};
+            };
+            ops.status = [this] { return json{{"pending", pendingPolls > 0 ? pendingPolls-- : 0}}; };
+            ops.settle = [this] { steps.push_back("settle"); };
+            return ops;
+        }
+    };
+    {
+        Fake fake;
+        const auto out = s::Place(place, fake.Ops());
+        Check("showroom.place clears earlier pieces first, spawns each, waits until they are in, and undoes with showroom.clear",
+              fake.steps.size() >= 4 && fake.steps[0] == "clear pieces" && fake.steps[1] == "spawn 0" && fake.steps[2] == "spawn 1" &&
+                  fake.guards == 3 && out["placed"].size() == 2 && out["placed"][0]["entity"] == "500" &&
+                  out["undo"]["method"] == "showroom.clear" && out["undo"]["params"]["what"] == "pieces" && !out.contains("note"),
+              xfb::SerializeJson(out));
+    }
+    {
+        Fake fake;
+        fake.failAt = 1;
+        std::string message;
+        try
+        {
+            s::Place(place, fake.Ops());
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + ": " + e.what();
+        }
+        Check("a refusal part-way keeps its code and says what was placed and how to remove it",
+              message.rfind("too_far", 0) == 0 && message.find("after 1 were placed; showroom.clear removes them") != std::string::npos, message);
+    }
+    {
+        Fake fake;
+        fake.pendingPolls = 1000;
+        const auto out = s::Place(place, fake.Ops());
+        Check("entities still spawning when the wait ends are reported, not refused", out.contains("note"), xfb::SerializeJson(out));
+    }
+    {
+        Fake fake;
+        const auto out = s::TurnPieces(s::ParseTurn(json::parse(R"({"turns":[{"index":0,"yaw":30},{"index":1,"yaw":60}]})")), fake.Ops());
+        Check("showroom.turn turns each piece and its undo turns them back to their earlier yaws",
+              fake.steps.size() == 2 && out["undo"]["method"] == "showroom.turn" && out["undo"]["params"]["turns"].size() == 2 &&
+                  out["undo"]["params"]["turns"][0]["yaw"] == 90.0,
+              xfb::SerializeJson(out));
+        const auto cleared = s::Clear("all", fake.Ops());
+        Check("showroom.clear removes everything and says how to place it again", cleared["what"] == "all" && cleared["undo"].is_null(),
+              xfb::SerializeJson(cleared));
+    }
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -2129,6 +2265,7 @@ int RunUnitTests()
     LightPlacementTests();
     InventoryAndSaveTests();
     Rb51To60Tests();
+    ShowroomTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

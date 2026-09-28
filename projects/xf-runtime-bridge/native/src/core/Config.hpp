@@ -12,13 +12,14 @@
 
 namespace xfb
 {
-// Write classes for [bridge] allow_write_classes (photo, world, character, inventory, save). The default
-// (no allow_write_classes key) is the first three: inventory and save must be listed by name.
+// Write classes for [bridge] allow_write_classes (photo, world, character, inventory, save, showroom). The default
+// (no allow_write_classes key) is the first three: inventory, save and showroom must be listed by name.
 inline constexpr uint32_t kWritePhoto = 1;
 inline constexpr uint32_t kWriteWorld = 2;
 inline constexpr uint32_t kWriteCharacter = 4;
 inline constexpr uint32_t kWriteInventory = 8; // V's clothing and inventory; only with the maintainer's approval
 inline constexpr uint32_t kWriteSave = 16;     // manual saves and loading
+inline constexpr uint32_t kWriteShowroom = 32; // XF Finish Showroom props and light rigs (showroom.*); the test profile only
 
 struct Config
 {
@@ -48,6 +49,6 @@ struct Config
 Config ParseConfig(const std::string& aText);
 Config LoadConfig(const std::filesystem::path& aPath);
 std::string DescribeConfig(const Config& aConfig);
-// ["photo", "world", "character", "inventory", "save"]: the classes aConfig allows.
+// ["photo", "world", "character", "inventory", "save", "showroom"]: the classes aConfig allows.
 std::vector<std::string> WriteClassList(const Config& aConfig);
 } // namespace xfb

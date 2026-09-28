@@ -7,6 +7,7 @@
 | Part | Time | Needs |
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
+| [Finish showroom checks](#finish-showroom-checks-bridge-050) | 30-35 min | Only with the 0.5.0 -writes build, Codeware and XF Finish Showroom staged, and an XF Eye Artistry build of the same collection and commit; a dim interior at night with 4 m clear in front of V |
 | [Session 5 checks](#session-5-checks-bridge-042) | 20-25 min | Only with the 0.4.2 build staged; V in her apartment, on foot, then in the street; the game window in front |
 | [Session 4 preflight](#session-4-preflight-bridge-041) | 20-30 min | Only with the 0.4.1 build staged; V in her apartment, on foot; the maintainer's answer on inventory writes |
 | [Next session: autonomy checks](#next-session-autonomy-checks-expression-checks-then-session-2-continued) | 15–20 min | V in the world in an open, quiet spot; the game window in front |
@@ -78,6 +79,36 @@ A staging checklist. Nothing here launches anything; the maintainer's everyday p
 7. **Baseline capture:** `python tools/capture_session.py --label bridge-phase2-pre --profile "XF Studio diagnostic 2026-09-25"`.
 
 8. **Tell the maintainer before the session:** use a save next to a mirror (V's apartment bathroom works); make a new manual save when asked, before the first change (this profile shares the save folder, and after the first change the bridge holds a save lock until a save is loaded; the kill switch does not release it); bind the kill hotkey once the game is at the main menu (first-session step 1); the game must run in **borderless windowed** or windowed mode for captures that include overlays, and the screenshot route is recorded either way.
+
+## Finish showroom checks (bridge 0.5.0)
+
+Only with the 0.5.0 -writes build and XF Finish Showroom staged ([pipeline guide](../authoring/studio-to-mod-pipeline.md#xf-finish-showroom-a-test-mod-of-mannequin-heads), [knowledge](../../knowledge/skin-on-spawned-objects.md)). **First the fidelity check**: one showroom head beside V, both wearing the same preset under the same light; only if the head is a fair stand-in does the lineup follow. C is the coordinator, M the maintainer; tool names are the MCP names. `<s2>` and `<gb>` stand for the two showroom build folders (session 2's collection and the Glitter board), as the coordinator's staging receipt names them.
+
+**Stage first** (coordinator, MO2 closed; the dedicated test profile only):
+- **Bridge:** replace the `XF Runtime Bridge` entry's files with `xf-runtime-bridge-0.5.0-writes.zip`. Its manifest says `"version": "0.5.0"` and `"write_classes": ["photo", "world", "character", "save", "showroom"]`.
+- **Codeware:** check that the profile loads Codeware 1.20 or newer, and report the version. The showroom spawns through it; nothing installs it for the maintainer.
+- **XF Finish Showroom:** one new MO2 mod entry, `XF Finish Showroom`, holding both showroom archives in `archive/pc/mod/` (`xfs_showroom_4426018f…` from session 2's collection, `xfs_showroom_d11f5a7f…` from the Glitter board). Each archive stands alone and needs no `.archive.xl`. Place the entry after XF Eye Artistry; it shares no path with it.
+- **XF Eye Artistry for V:** stage a build of `experiments/020-session-2/session-2.collection.json` (`--diagnostics`) from the same commit as the showroom, so that V and the heads carry byte-identical textures of the same compile. The staged session 2 build was compiled before today's finish defaults and the Shimmer grain. Record both archives' SHA-256.
+- **Setting:** a disposable save in a dim interior at night, with about 4 m clear in front of V. Photo mode's lights stay off, ReShade effects off, Ultra+ off (as for session 4's repeats).
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| F1 | M, C | M loads the save; V on foot in the clear spot; the game window in front. C: `bridge_info`, `showroom_state` | `plugin_version` 0.5.0; `showroom_state` answers `codeware: true` with no pieces | `codeware: false`: C reports it and stops the showroom rows |
+| F2 | C, M | `cc_open`, `cc_apply {option: "XF", label: "Gloss A"}`, `cc_confirm` (M opens the creator with F12 if `cc_open` refuses) | V wears Gloss A · as before | — |
+| F3 | C | In normal play: `showroom_spawn {manifest: "<s2>", presets: ["Gloss A · as before"], anchor: "v", distance_m: 1.5}`; then `capture_screenshot {}` | One head on a black pedestal 1.5 m in front of V, **facing her**, eyes at about her eye height, with lashes and eyes and **Gloss A on its lids**; `placed` 1 and `state.pending` 0 | Facing away: yaw sign wrong, so record it and use `showroom_rotate {yaw_deg: 180}`. Floating, sunk, collapsed or at the entity's origin: the rig pose is wrong (knowledge open question 3). Pink or black skin: a missing texture. No makeup: ArchiveXL expansion or the plate. Capture each case and stop the showroom rows |
+| F4 | C | `photo_open`; `world_time_set {hours: 2}`; `photo_frame {target: "face"}`; note `distance_m`. Then `showroom_spawn {manifest: "<s2>", presets: ["Gloss A · as before"], anchor: "camera", distance_m: <distance_m>, lateral_m: 0.6}` | Spawned **in photo mode**: the head stands beside V at the same distance from the camera, both facing it | Nothing appears, or `pending` stays above 0: spawning waits for the world. Then `photo_exit`, spawn with `anchor: "v"`, `lateral_m: 0.6`, `distance_m: 0.8` and turn V, and record that spawning needs normal play |
+| F5 | C | `photo_camera_set {fov: 20}`; `showroom_light {manifest: "<s2>", rig: "key", target: "piece", piece: 0}` and `showroom_light {manifest: "<s2>", rig: "key", target: "v", replace: false}`; `photo_hud_hide {}`; `capture_screenshot {}` | The same key light on both faces (0.6 m apart, neither key reaches the other face by the plan's estimate; at 0.45 m one would add about 20 %): V and the head side by side, **Gloss A reading the same** (sheen, colour, edges) | Record which differs. The head's skin is a neutral tone, so compare the makeup, not the skin |
+| F6 | C | `showroom_light {manifest: "<s2>", rig: "creator", target: "v"}` (replaces the rigs), capture; then `showroom_light {manifest: "<s2>", rig: "creator", target: "piece", piece: 0}`, capture | The full creator rig on each in turn: V lit like the creator's mirror screen (cyan-white rim on her left, magenta behind her right, key low front-left), then the head lit the same way in its own frame | The rig lights the wrong side: spot axes or yaw sign (record). Much brighter or darker than the mirror: photo mode's exposure (compare with photo mode exposure −1 and +1) |
+| F7 | C | With the head's creator rig: `showroom_rotate {sweep: {from_deg: -40, to_deg: 40, steps: 5, capture: true, region: "full", name: "fidelity-sweep"}}` | Five frames; the highlight moves across the head's lids and the head returns to 0 at the end | — |
+| F8 | M | Verdict: does the head show Gloss A as V does (F5, F6)? | Yes: the showroom is a fair stand-in, go on to L1. No: record what differs, then run L1–L3 only as a relative comparison | — |
+| L1 | C | `showroom_clear {}`; `showroom_spawn {manifests: ["<s2>", "<gb>"], presets: ["Gloss A · as before", "Gloss B · skin rough", "Gloss C · all rough", "Gloss D · rough +0.12", "Shimmer · strong", "Metal ramp · lifted", "Glitter A · base", "Glitter C · size", "Glitter E · accent"], anchor: "camera", distance_m: 2.5, spacing_m: 0.6}`; `photo_camera_set {fov: 45}`; capture | Nine heads on an arc, each facing the camera, in that order left to right | Fewer: `showroom_state` names the missing ones |
+| L2 | C | `showroom_light {manifest: "<s2>", rig: "key"}`; capture; then `showroom_rotate {sweep: {from_deg: -60, to_deg: 60, steps: 9, capture: true, region: "full", name: "lineup-key"}}` | Identical key light on every head (`spill_worst` 0); the sweep moves each highlight the same way. Judge whether Gloss A–D separate, whether the Shimmer grain reads as a fine sheen with sparkle rather than dots, and whether Glitter points flash as the heads turn | — |
+| L3 | C | For each of Gloss A, Gloss C, Shimmer · strong, Glitter A · base and Glitter E · accent, one at a time: `showroom_spawn {manifests: ["<s2>", "<gb>"], presets: ["<name>"], anchor: "camera", distance_m: 2.2}`, `showroom_light {manifest: "<s2>", rig: "creator"}`, `photo_camera_set {fov: 9}`, capture, then `showroom_rotate {sweep: {from_deg: -30, to_deg: 30, steps: 5, capture: true, region: "face", name: "<name>"}}` | The creator rig, the camera and the sweep identical for each preset: a like-for-like set of close-ups | — |
+| L4 | C | `capture_burst {region: "face", frames: 10}` on Glitter A at 0°, then again with the head at +10° (`showroom_rotate {yaw_deg: 10}`) | Glitter points twinkle frame to frame or with the turn (the Glitter board's motion question) | — |
+| K1 | C, M | `bridge_kill {}`; M looks | Every head and rig vanishes; the plugin log has `bridge.kill_cleared_showroom`. M presses Reconnect | Anything left: record it and load the save |
+| K2 | C, M | `showroom_spawn {manifest: "<s2>", presets: ["Gloss A · as before"]}`, then M loads the save (or `game_load {latest: true, discard_unsaved: true}`); after the load, `showroom_state` | Nothing in the world after the load; `showroom_state` has no pieces | A head survives the load: record it (static entities should not persist) |
+
+Evidence: every answer's JSON (spawn plans, spill estimates, sweep frames), the captures (F3–F7 as a fidelity sheet, L1–L3 as a lineup sheet and per-preset strips, L4's burst manifest), the plugin log's `showroom` lines, the Codeware version, and the three archives' SHA-256.
 
 ## Session 5 checks (bridge 0.4.2)
 
@@ -340,6 +371,21 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
+
+## Build record (bridge 0.5.0 and XF Finish Showroom, branch build, not staged)
+
+Built 28 September 2026 on `claude/finish-showroom` at `a56457384407`, clean tree (manifest `"commit": "a56457384407872677b999db25108f82860fa944"`, `"source_tree_clean": true`), by `bun tools/package.ts`: version 0.5.0, the showroom commands on top of 0.4.2. On that commit: `xfb_selftest --unit` UNIT OK, self-test 346 of 346, `bun test tools` 195 of 196 (the screen-route capture test needs its synthetic window uncovered on the desktop), typecheck, the Lua lint, and the redscript lint both without Codeware (the fallback class) and with Codeware `v1.20.4`'s scripts (the spawning class) against a copy of the 2.31 bundle.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.5.0-writes.zip` (`write_classes` photo, world, character, save, showroom) | `2e955bac4c712d4debc3556b06c298fc775948891fdfc1ce5a15bfe4395879bb` |
+| `xf-runtime-bridge-0.5.0-diagnostic.zip` | `3c363033ff31aac6e62a83db868513b9e60871eaebc02f443b152babec310961` |
+| `xf-runtime-bridge-0.5.0.zip` (default) | `d909b0ba463faaa6a8eee6e7223ca01e6f469d50f4bba5cc75eb2583d1e7f3f2` |
+| (`XFRuntimeBridge.dll` inside each) | `a9f697d2a4af14aa776ab56be4ea1174daed784676b5349946eb05615832254e` |
+| XF Finish Showroom, session 2's collection: `xfs_showroom_4426018f6966620881cdcb78569544ab.archive` (12 heads) | `a5166b659a7000c2bf295bf452848ef9f2ae0f4603e78b081f8b0e31d818412c` |
+| XF Finish Showroom, the Glitter board: `xfs_showroom_d11f5a7fd3192b9e4f6dd14f343578b8.archive` (6 heads) | `fef65ae8f843f45e9c2eac63ce8d882172c94514d297471d2c5c87712db0fb49` |
+
+The showroom archives were built at `d5c9e34` by `projects/xf-studio/authoring/tools/build_showroom_package.ts --diagnostics` from the reference installation's cached plate, each independently verified, with their `xfs/showroom-package-1` manifests beside them in the Studio's ignored `dist/` ([pipeline guide](../authoring/studio-to-mod-pipeline.md#xf-finish-showroom-a-test-mod-of-mannequin-heads)). XF Eye Artistry for the fidelity check is built at staging time from the same commit. **New in this build, watch in the session:** everything in the [finish showroom checks](#finish-showroom-checks-bridge-050); nothing else changed from 0.4.2.
 
 ## Build record (bridge 0.4.2, branch build, not staged)
 

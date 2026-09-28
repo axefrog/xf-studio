@@ -73,16 +73,16 @@ describe("packages", () => {
     expect(config).toContain("THIS COPY ALLOWS WRITES");
     expect(existsSync(join(stageDir, PANEL_FILE))).toBe(true);
     expect(manifest.files.some((f) => /\.archive/.test(f.path))).toBe(false); // the carrier is its own test package
-    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, cet_panel: true, write_classes: ["photo", "world", "character", "save"], inventory_writes: false });
+    expect(manifest).toMatchObject({ allow_writes: true, allow_creator_leave: true, allow_live_pose: true, cet_panel: true, write_classes: ["photo", "world", "character", "save", "showroom"], inventory_writes: false });
     // Bridge 0.4: saves and loading are allowed; V's inventory is not, until the maintainer approves it.
-    expect(config).toMatch(/^allow_write_classes = photo, world, character, save$/m);
+    expect(config).toMatch(/^allow_write_classes = photo, world, character, save, showroom$/m);
   });
 
   test("only --allow-inventory adds the inventory class to the writes package, and the manifest records it", () => {
     const stageDir = join(work, "writes-inventory");
     const manifest = stageVariant({ projectDir, variant: "writes", dll, stageDir, version: "0.0.0", commit: "0".repeat(40), allowInventory: true });
-    expect(readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8")).toMatch(/^allow_write_classes = photo, world, character, inventory, save$/m);
-    expect(manifest).toMatchObject({ inventory_writes: true, write_classes: ["photo", "world", "character", "inventory", "save"] });
+    expect(readFileSync(join(stageDir, PLUGIN_DIR, "config.ini"), "utf8")).toMatch(/^allow_write_classes = photo, world, character, inventory, save, showroom$/m);
+    expect(manifest).toMatchObject({ inventory_writes: true, write_classes: ["photo", "world", "character", "inventory", "save", "showroom"] });
     const diagnostic = stageVariant({ projectDir, variant: "diagnostic", dll, stageDir: join(work, "diag-inventory"), version: "0.0.0", commit: "0".repeat(40), allowInventory: true });
     expect(diagnostic).toMatchObject({ allow_writes: false, inventory_writes: false, write_classes: [] });
   });

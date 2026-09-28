@@ -317,7 +317,7 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 
 ### MisterChedda
 
-[Responsive NPCs](https://www.nexusmods.com/cyberpunk2077/mods/14800) and [Responsive V](https://www.nexusmods.com/cyberpunk2077/mods/22694), per the creator link on both Nexus pages. Responsive NPCs showed how far the game's reaction manager can be bent from script: reactions to V's clothing, a naked or broke V, gang vehicles and the current district, read through NPC archetype visual tags and affiliations. Responsive V showed that a voiceset scene can be patched as it loads, the route we plan for voiced reactions. Studied only.
+[Responsive NPCs](https://www.nexusmods.com/cyberpunk2077/mods/14800) and [Responsive V](https://www.nexusmods.com/cyberpunk2077/mods/22694), per the creator link on both Nexus pages. Responsive NPCs showed how far the game's reaction manager can be bent from script: reactions to V's clothing, a naked or broke V, gang vehicles and the current district, read through NPC archetype visual tags and affiliations. Responsive V showed that a voiceset scene can be patched as it loads, the route we plan for voiced reactions. [V's Faceplate (H10)](https://www.nexusmods.com/cyberpunk2077/mods/24599), named by the creator link on its page and its archive's own paths, showed that V's own face, skin and makeup can appear on a prop in the world: it places Phantom Liberty's own V-in-a-tank entity, which carries only the character creator's controllers, with a quest phase, a scene and a sector, and that study shaped XF Finish Showroom's mannequin heads. Studied only.
 
 ### Nail mods
 

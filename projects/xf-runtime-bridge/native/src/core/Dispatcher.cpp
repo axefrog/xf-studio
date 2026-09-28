@@ -60,6 +60,8 @@ std::string_view AccessName(Access aAccess)
         return "write-inventory";
     case Access::WriteSave:
         return "write-save";
+    case Access::WriteShowroom:
+        return "write-showroom";
     case Access::Notify:
         return "notify";
     case Access::Control:
@@ -87,6 +89,8 @@ uint32_t WriteClassBit(Access aAccess)
         return kWriteInventory;
     case Access::WriteSave:
         return kWriteSave;
+    case Access::WriteShowroom:
+        return kWriteShowroom;
     default:
         return 0;
     }

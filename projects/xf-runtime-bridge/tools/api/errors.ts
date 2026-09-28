@@ -14,7 +14,7 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   rate_limited: "Too many requests in a short time. Wait a second and try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
-    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save; inventory stays off until the maintainer allows it). Nothing was changed.",
+    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom; inventory stays off until the maintainer allows it, and showroom is listed only by the XF test profile's build). Nothing was changed.",
   write_mismatch:
     "The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again.",
   writes_paused:
@@ -78,6 +78,16 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   save_not_found: "No save has that name in the game's list, so nothing was loaded. The detail lists some of the names the game shows.",
   not_in_inventory: "V doesn't have that item. Nothing was changed. Ask again with add_if_missing to add one to V's inventory first.",
   not_added_by_bridge: "That item wasn't added by the bridge this session, so it stays in V's inventory. Nothing was removed.",
+  codeware_missing:
+    "The showroom spawns its heads and lights through Codeware, which the game hasn't loaded. Install Codeware 1.20 or newer from its official release page (the bridge never installs it), then restart the game. Nothing was spawned.",
+  showroom_missing:
+    "The game doesn't have the XF Finish Showroom build these heads come from. Stage that showroom build in the test profile (the coordinator does this), restart the game, then try again. Nothing was spawned.",
+  not_in_world: "The showroom works while V is in the world or in photo mode. Close menus (or leave the appearance screen) and try again.",
+  too_far: "That place is more than 30 m from V, so nothing was spawned there. Move V closer or spawn nearer (distance_m).",
+  not_spawned_yet: "That head isn't in the world yet (the game spawns them over a few frames). Try again in a moment; showroom_state shows when it is in.",
+  no_such_piece: "The showroom has no head with that index. showroom_state lists the heads it has.",
+  spawn_refused: "The game's entity spawner refused the showroom entity, so nothing was spawned. The plugin log has the details.",
+  not_ready: "The game can't spawn entities yet. Wait until V can move, then try again.",
   unsupported: "This game doesn't offer a safe way to do that yet.",
   unavailable: "That part of the game isn't available right now.",
   failed: "Something went wrong inside the game bridge. The plugin log has the details.",

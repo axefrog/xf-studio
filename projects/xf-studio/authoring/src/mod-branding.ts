@@ -37,6 +37,13 @@ export const EYE_MAKEUP_MOD = Object.freeze({
   predecessorMods: Object.freeze(["XF Eye Artistry CCXL - Dev"] as const),
 });
 
+/**
+ * XF Finish Showroom: the in-game test mod of mannequin heads, one per makeup preset, that the runtime bridge
+ * spawns to judge finishes side by side (src/showroom). A test mod for the dedicated test profile, never a
+ * player-facing export; it has no selector.
+ */
+export const FINISH_SHOWROOM_MOD = Object.freeze({ modName: "XF Finish Showroom" });
+
 /** Mod-list entries XF Eye Artistry is placed beside, in order of preference. */
 export const eyeMakeupRelatedEntries: readonly string[] =
   Object.freeze([...EYE_MAKEUP_MOD.legacyModFolders, ...EYE_MAKEUP_MOD.predecessorMods]);
