@@ -1,5 +1,5 @@
 {
- "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); collection plan digests recaptured on claude/export-alpha2 for the hx_ makeup component prefix; package digests recaptured on claude/shimmer-rework for Shimmer's grain (shimmer-grain-1); Shimmer export note reworded after the UI gate (text only, package digests only)",
+ "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); collection plan digests recaptured on claude/export-alpha2 for the hx_ makeup component prefix; package digests recaptured on claude/shimmer-rework for Shimmer's grain (shimmer-grain-1); Shimmer export note reworded after the UI gate (text only, package digests only); FresnelColor written sRGB-encoded (the engine sRGB-decodes Color parameters, materials open question 11) on claude/preview-tint-srgb (Colour-shifting presets' material constants, notes and package digests only)",
  "recipes": {
   "eye-artistry/recipe-1": {
    "recipe": "bec95166e1104aeaccba8465585abc6b204848a14aae7bb2721f47049b573fc1",
@@ -1920,18 +1920,18 @@
   "016-finish-board/finish-board.collection.json": {
    "direct": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
-    "packaged": "0f4e888d3763f5d7752aba2f6346ff51c2f0d89ec2747141b3d62f8dc364e9bd"
+    "plan": "dcb43d5bc7e375e6dcf95359f52ef10b6f6aea3370699915fd3686933353ff19",
+    "packaged": "a72282a07f64cf531eddff196b45965a27364bcb13cc077aac4aa29afb31bf8b"
    },
    "minimal": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
-    "packaged": "0f4e888d3763f5d7752aba2f6346ff51c2f0d89ec2747141b3d62f8dc364e9bd"
+    "plan": "dcb43d5bc7e375e6dcf95359f52ef10b6f6aea3370699915fd3686933353ff19",
+    "packaged": "a72282a07f64cf531eddff196b45965a27364bcb13cc077aac4aa29afb31bf8b"
    },
    "collection-2": {
     "parsed": "f088e7758dc6aed65f8ad36a149c72ceca9d8607c17d76503f3deac215fecdb7",
-    "plan": "8215cd0d4e34fb50e08de735cc731bafcb31e7244d9ab33a078ef8725d528523",
-    "packaged": "0f4e888d3763f5d7752aba2f6346ff51c2f0d89ec2747141b3d62f8dc364e9bd"
+    "plan": "dcb43d5bc7e375e6dcf95359f52ef10b6f6aea3370699915fd3686933353ff19",
+    "packaged": "a72282a07f64cf531eddff196b45965a27364bcb13cc077aac4aa29afb31bf8b"
    }
   },
   "017-plate-depth/depth-candidate.collection.json": {

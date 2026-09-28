@@ -186,12 +186,15 @@ export type TextureChannel = "diffuse" | "roughness" | "metalness" | "normal" | 
 
 const toByte = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
 const srgbDecode = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+const srgbEncode = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
 
 /** Fresnel colour constants for a shift colour and strength (0–1). The colour is normalised to its
- * peak linear channel (most byte precision) and the peak moves into the intensity. */
+ * peak linear channel (most byte precision) and the peak moves into the intensity. `FresnelColor` is written sRGB-encoded, because the
+ * engine's material constant-buffer packer sRGB-decodes every `Color` parameter's RGB (knowledge/materials-and-shaders.md, open question 11
+ * [source]), so the program receives the normalised linear colour. */
 export function fresnelConstants(shift: { color: string; strength: number }) {
   const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
-  const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(v / peak)) : [0, 0, 0];
+  const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(srgbEncode(v / peak))) : [0, 0, 0];
   return { FresnelColor: { Red, Green, Blue, Alpha: 255 },
     FresnelColorIntensity: Math.round(FRESNEL_MAX_INTENSITY * shift.strength * peak * 1e6) / 1e6,
     FresnelExponent: FRESNEL_EXPONENT };

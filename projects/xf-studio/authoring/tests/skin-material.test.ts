@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { materialAdapter, type AdapterContext, type ChunkTextures } from "../src/character-material-adapters";
 import { compareHeadSurfaces, type HeadSurface } from "../src/head-surface";
 import type { RenderChunkMaterial, RenderSkinProfile, RenderTexture } from "../src/render-detail";
-import { createSkinMaterial, imageTexels, patchSkinShader, SKIN_TEMPLATE_DEFAULTS, skinBaseColour, skinBaseImage, skinBaseTexels, skinLobes, skinParameters,
+import { createSkinMaterial, imageTexels, patchSkinShader, SKIN_TEMPLATE_DEFAULTS, SKIN_TINT_ENCODING, skinBaseColour, skinBaseImage, skinBaseTexels, skinLobes, skinParameters,
   skinRoughness, tintChannel, tintUnits, VANILLA_SKIN_PROFILE } from "../src/skin-material";
 import { sampleUnderlayAlbedo } from "../src/brow-material";
 import { passParticipation } from "../src/platform/api/scene";
@@ -39,9 +39,20 @@ describe("tone tint maths (decompiled skin G-buffer program)", () => {
     expect(tintChannel(0.2, 0, 1, 1)).toBe(0);
   });
 
-  test("TintColor bytes reach the program as byte/255 unless the encoding is switched", () => {
-    close(tintUnits([255, 0, 128]), [1, 0, 128 / 255]);
-    expect(tintUnits([128, 128, 128], "srgb-decoded")[0]).toBeCloseTo(0.2158605, 6);
+  test("TintColor bytes reach the program sRGB-decoded (the engine's Color packing) unless the encoding is switched", () => {
+    expect(SKIN_TINT_ENCODING).toBe("srgb-decoded");
+    close(tintUnits([255, 0, 128]), [1, 0, 0.2158605]);
+    close(tintUnits([255, 0, 128], "byte"), [1, 0, 128 / 255]);
+  });
+
+  test("session 4's tones: amber against warm ivory darkens by about 45 % at full mask, limestone lowers green more than blue", () => {
+    // Warm ivory overlays (255, 245, 181) at -0.15, senna amber multiplies (199, 116, 112) at 0.52, limestone (131, 149, 83) at 0.38
+    // (knowledge/head-cc-rendering.md §2); a mid-dark albedo so the overlay is 2aT (experiment 029 §4.2's prediction).
+    const toned = (bytes: number[], scale: number) => tintUnits(bytes).map(t => tintChannel(0.3, t, scale, 1) / 0.3);
+    const ivory = toned([255, 245, 181], -0.15), amber = toned([199, 116, 112], 0.52), limestone = toned([131, 149, 83], 0.38);
+    close(amber.map((v, k) => v / ivory[k]!), [0.676, 0.508, 0.571], 3);
+    const ratio = limestone.map((v, k) => v / ivory[k]!);
+    expect(ratio[2]! / ratio[1]!).toBeGreaterThan(1);
   });
 
   test("the secondary albedo composites by influence · A, tinted toward the toned base", () => {
@@ -115,7 +126,7 @@ describe("skin parameters from a resolved chunk", () => {
 
   test("every parameter maps from the chain; the profile gives the two lobes and the subsurface stand-in", () => {
     const p = skinParameters(chunk());
-    close(p.tintColor, [1, 245 / 255, 181 / 255]);
+    close(p.tintColor, tintUnits([255, 245, 181]));
     expect(p).toMatchObject({ tintScale: -0.15, detailNormalInfluence: 0.8, microDetailInfluence: 0.8, microDetailUVScale: [20, 15],
       detailRoughnessBias: [1, 0.93], cavityIntensity: SKIN_TEMPLATE_DEFAULTS.CavityIntensity, secondaryInfluence: 1, secondaryTintInfluence: 1,
       emissiveEV: 2, profile: "engine\\materials\\defaults\\default.sp" });
@@ -185,7 +196,7 @@ describe("skin shader", () => {
       secondary: t() }, params);
     const shader = { uniforms: {} as Record<string, { value: unknown }>, ...program() };
     material.onBeforeCompile(shader as never, {} as never);
-    close((shader.uniforms.xfsTint!.value as THREE.Vector4).toArray(), [202 / 255, 177 / 255, 153 / 255, 0.7]);
+    close((shader.uniforms.xfsTint!.value as THREE.Vector4).toArray(), [...tintUnits([202, 177, 153]), 0.7]);
     close((shader.uniforms.xfsLobes!.value as THREE.Vector3).toArray(), [1, 1.6, 0.8]);
     expect((shader.uniforms.xfsSkinScalars!.value as THREE.Vector4).w).toBe(1);
     handle.setNormals(false);

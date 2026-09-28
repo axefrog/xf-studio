@@ -1,5 +1,5 @@
 {
- "capturedFrom": "8413f25; finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only); Shimmer grain (shimmer-grain-1) recaptured on claude/shimmer-rework (Shimmer presets' maps and packages only); Shimmer seed streams re-keyed (PREV-185: presets with a seed other than 2077) and the Shimmer manifest note given the grain's real pitch and the BC5 measurement (PIPE-124, PIPE-125) on claude/cleanup-review5-studio (Shimmer presets' normal maps and compiled records only)",
+ "capturedFrom": "8413f25; finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only); Shimmer grain (shimmer-grain-1) recaptured on claude/shimmer-rework (Shimmer presets' maps and packages only); Shimmer seed streams re-keyed (PREV-185: presets with a seed other than 2077) and the Shimmer manifest note given the grain's real pitch and the BC5 measurement (PIPE-124, PIPE-125) on claude/cleanup-review5-studio (Shimmer presets' normal maps and compiled records only); FresnelColor written sRGB-encoded (the engine sRGB-decodes Color parameters, materials open question 11) on claude/preview-tint-srgb (Colour-shifting presets' material constants, notes and package digests only)",
  "fixtures": {
   "005-preset-collection/collection.json": {
    "plan": "3bb563e5e8ed96631ec08a9d2b12338f51b9f3f3f2cbf8285cc9005aec2b9bc3",
@@ -14,8 +14,8 @@
    "archiveXl": "5789485c2578d5f990a5de6a1e6dc54f89727686f530055c5e4ccb920ae848cb"
   },
   "016-finish-board/finish-board.collection.json": {
-   "plan": "310d01555b2fadd89a31213920615faa3449afb9e7be2ba6d1a55f8d5f2feec1",
-   "materials": "a9e04116c4f78d55441cd0798002bd7d80fdea9ff0c098b93001a6bf3673023e",
+   "plan": "7c32e2243f45afffcb48999344a2b13362500f764bdeace20cdfcc2c9fe58f6c",
+   "materials": "db3cdeef5f2e999de3c98ac364a601c2304451860209ef893cb630fdc0f3987e",
    "morph": "7c7626dc2d125020de6a4f9760c2c1768a07abc062c7cbbf33fcc256fe32b5c8",
    "archiveXl": "75ff8bbef90207197012d8004260c17159f20f358d26664356fabd633049c556",
    "maps": {
@@ -41,7 +41,7 @@
     "xfs_p7a6d3c101f014a519c3e000000000006_metalness.raw": "7a34ef8a555aa2d774268facf62792d7b884b191d9e0bbd29bd1447fa9618b0e",
     "xfs_p7a6d3c101f014a519c3e000000000006_reference.raw": "05670663fcd19e11e113f35f203253833a73d2dae6042d670f99e9505533ec34"
    },
-   "compiled": "6f58bf4bb59a5257c5ac63513b3bb0203ae4c0feb49a9b0152b43424f17925d1"
+   "compiled": "0c011ff72128e5534704f9b914b2127bccea187e5e2495f2abb4fb8a4b2c3a56"
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "plan": "67627709595728f5765f07e0cd77ed3da4a2cf025eb802e46dcf49ab4f1f70a9",

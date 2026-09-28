@@ -27,11 +27,13 @@ import type { RenderChunkMaterial, RenderSkinProfile } from "./render-detail";
 import { declarePass, SCATTER_INPUT_OUTPUTS, type PassSkinProfile } from "./platform/api/scene";
 
 /**
- * How a `TintColor` byte reaches the program. The engine's encoding is still open (materials open
- * question 11); byte/255 is the working choice, and it sets how strong every tone is [hypothesis].
+ * How a `TintColor` byte reaches the program: sRGB-decoded. The 2.31 executable's material constant-buffer packer turns every `Color`
+ * parameter's RGB into linear floats through the engine's sRGB-to-linear table and its alpha into byte/255 [source], and session 4's
+ * tone frames fit that decoding better than byte/255 [runtime, provisional] (knowledge/materials-and-shaders.md §7, open question 11).
+ * It sets how strong every tone is. `"byte"` stays selectable for comparisons.
  */
 export type SkinTintEncoding = "byte" | "srgb-decoded";
-export const SKIN_TINT_ENCODING: SkinTintEncoding = "byte";
+export const SKIN_TINT_ENCODING: SkinTintEncoding = "srgb-decoded";
 
 /** `skin.mt` 2.31 template defaults for the scalars the adapter reads [resource]; the record normally carries them already. */
 export const SKIN_TEMPLATE_DEFAULTS = Object.freeze({

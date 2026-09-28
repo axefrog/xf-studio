@@ -8,6 +8,7 @@ the CPU bake of `.hp` profiles. Never modifies the game; prints to stdout only.
   python exe_hair.py fill      # the function copying options into cb0; register of each option
   python exe_hair.py dis RVA [END]   # disassemble (hex RVAs), e.g. the bake at 0xaeb374 0xaeb690
   python exe_hair.py dangle    # the dangle (Dyng) solver's methods and the Dangle/* engine settings
+  python exe_hair.py params    # material parameter type codes and how the constant-buffer packer converts each (Color: sRGB)
 
 Needs the Capstone Python package (pure disassembler, BSD-3-Clause): either importable, or
 unpacked under <XF_TOOLS_DIR>/capstone/<version>/site (XF_TOOLS_DIR defaults to a `tools`
@@ -266,6 +267,36 @@ def dangle() -> None:
             print(f"  {key}: {default:g}  (value RVA {var + 0x30:#x})")
 
 
+# The 2.31 material constant-buffer packer (called per stage, vertex then pixel, by 0x1eb374): a loop over 4-byte layout
+# entries {u16 data offset, u8 parameter type, u8 register} that writes one float4 per register. Its type switch is here.
+PACKER_SWITCH = (0x4ff5d9, 0x4ff744)
+# The engine's sRGB tables, built by 0xf55d0: 256 half floats, then (at +0x200) 256 float32 sRGB-to-linear values.
+SRGB_TABLES = 0x3485770
+PARAMETER_CLASSES = ["CMaterialParameterTexture", "CMaterialParameterColor", "CMaterialParameterCube", "CMaterialParameterVector",
+                     "CMaterialParameterScalar", "CMaterialParameterTextureArray", "CMaterialParameterStructBuffer", "CMaterialParameterCpuNameU64",
+                     "CMaterialParameterSkinParameters", "CMaterialParameterMultilayerSetup", "CMaterialParameterMultilayerMask",
+                     "CMaterialParameterHairParameters", "CMaterialParameterFoliageParameters", "CMaterialParameterTerrainSetup",
+                     "CMaterialParameterGradient", "CMaterialParameterDynamicTexture"]
+
+
+def params() -> None:
+    """Each material parameter class's type code (vtable slot 28 returns it; slot 29 the value's size), then the packer's switch."""
+    for name in PARAMETER_CLASSES:
+        c = class_vtable(name)
+        if "vtable" not in c:
+            print(f"{name}: vtable not found")
+            continue
+        code, size = (disasm(vslot(c["vtable"], i), vslot(c["vtable"], i) + 8)[0] for i in (28, 29))
+        print(f"{name}: type {code.op_str.split(',')[1].strip()}, value size {size.op_str.split(',')[1].strip() if size.mnemonic == 'mov' else '?'}")
+    print(f"packer switch {PACKER_SWITCH[0]:#x}..{PACKER_SWITCH[1]:#x} (reads of {SRGB_TABLES:#x} + 0x200 are the float sRGB table):")
+    for ins in disasm(*PACKER_SWITCH):
+        note = "  ; sRGB-to-linear table" if "+ 0x200]" in ins.op_str and ins.mnemonic == "movss" and "r9" in ins.op_str else ""
+        t = rip_target(ins)
+        if t is not None and off(t) is not None and "0x31eef6c" in f"{t:#x}":
+            note = "  ; 1/255"
+        print(f"  {ins.address - BASE:#x}: {ins.mnemonic} {ins.op_str}{note}")
+
+
 def main() -> None:
     cmd = sys.argv[1] if len(sys.argv) > 1 else "options"
     if cmd == "options":
@@ -275,6 +306,8 @@ def main() -> None:
         fill(options())
     elif cmd == "dangle":
         dangle()
+    elif cmd == "params":
+        params()
     elif cmd == "dis":
         start = int(sys.argv[2], 16)
         end = int(sys.argv[3], 16) if len(sys.argv) > 3 else start + 0x100

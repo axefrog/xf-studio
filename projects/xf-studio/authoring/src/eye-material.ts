@@ -98,7 +98,10 @@ export type EyeParameters = {
   optics: EyeOptics;
 };
 export type ShellParameters = { intensity: number; exponent: number; shadowColor: [number, number, number];
-  /** `dot(pow(ShadowColor/255, 2.2), 0.33)`: only the colour's mean reaches the program. */
+  /**
+   * `dot(pow(ShadowColor, 2.2), 0.33)` on the colour as the program receives it, sRGB-decoded like every `Color` parameter (the 2.31 material
+   * constant-buffer packer [source]; knowledge/materials-and-shaders.md open question 11), then the program's own 2.2 power: only the mean reaches it.
+   */
   luminance: number; wetnessRoughness: number; wetnessStrength: number };
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -116,7 +119,7 @@ export function eyeParameters(chunk: Pick<RenderChunkMaterial, "scalars">): EyeP
 }
 
 export function shellLuminance(colour: readonly number[]): number {
-  return [0, 1, 2].reduce((sum, k) => sum + ((colour[k] ?? 0) / 255) ** 2.2, 0) * 0.33;
+  return [0, 1, 2].reduce((sum, k) => sum + srgbToLinear((colour[k] ?? 0) / 255) ** 2.2, 0) * 0.33;
 }
 
 export function shellParameters(chunk: Pick<RenderChunkMaterial, "scalars" | "colours">): ShellParameters {

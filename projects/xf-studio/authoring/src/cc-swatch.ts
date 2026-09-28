@@ -45,7 +45,7 @@ import { type RenderAdapterId } from "./render-templates";
 import type { Provenance } from "./resource-graph";
 
 /** Version of the swatch rules; part of the host's cache key. Bump it whenever what a swatch derives to changes. */
-export const SWATCH_VERSION = 2;
+export const SWATCH_VERSION = 3;
 /** Samples of a root-to-tip gradient swatch. */
 export const GRADIENT_SAMPLES = 5;
 
@@ -334,7 +334,8 @@ export function swatchColours(adapter: RenderAdapterId, chunk: Pick<PlannedChunk
     const albedo = texture("Albedo");
     if (!albedo) return null;
     const mask = texture("TintColorMask");
-    const tint = (chunk.colours.TintColor ?? [0, 0, 0, 0]).slice(0, 3).map(channel => channel / 255);
+    // `Color` parameters reach the program sRGB-decoded (skin-material.ts `SKIN_TINT_ENCODING`).
+    const tint = (chunk.colours.TintColor ?? [0, 0, 0, 0]).slice(0, 3).map(channel => srgbToLinear(channel / 255));
     const scale = Math.max(-1, Math.min(1, scalar("TintScale", 0)));
     const sum = [0, 0, 0]; let count = 0;
     for (let y = 0; y < albedo.height; y++) for (let x = 0; x < albedo.width; x++) {
