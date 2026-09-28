@@ -141,4 +141,4 @@ Details and citations: [design §7](../research/runtime/runtime-bridge-design.md
 
 ## Related pages
 
-[Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [Test card](../research/runtime/runtime-bridge-test-card.md) · [Photo mode and the creator from script](photo-mode.md) · [Mod loading](mod-loading.md) · [Game crashes](game-crashes.md) · [Validation](../docs/validation.md) · [Toolchain](../docs/toolchain.md)
+[Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [The game's UI (ink)](ink-ui.md) · [Test card](../research/runtime/runtime-bridge-test-card.md) · [Photo mode and the creator from script](photo-mode.md) · [Mod loading](mod-loading.md) · [Game crashes](game-crashes.md) · [Validation](../docs/validation.md) · [Toolchain](../docs/toolchain.md)
