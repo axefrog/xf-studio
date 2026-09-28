@@ -1,6 +1,6 @@
 # Facial animation and the blink
 
-**Maturity: Draft.** Consolidated from the installed 2.31 facial rig, facial setups, morph targets and face animation sets, read offline with WolvenKit and the Cyberpunk Blender Add-on's facial solver on 23 to 27 September 2026; §1 revised on 28 September from the clean-room reading of that solver, and §1 and §5 again the same day when XF Studio's own solver replaced it in the app. Nothing here has runtime evidence of its own. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[hypothesis]** not yet established. Measurements, hashes and commands are in [the game's blink](../research/animation/game-blink.md) and [character-creator idle](../research/animation/cc-idle.md).
+**Maturity: Draft.** Consolidated from the installed 2.31 facial rig, facial setups, morph targets and face animation sets, read offline with WolvenKit and the Cyberpunk Blender Add-on's facial solver on 23 to 27 September 2026; §1 revised on 28 September from the clean-room reading of that solver, and §1 and §5 again the same day when XF Studio's own solver replaced it in the app. Nothing here has runtime evidence of its own except the report in §7. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs, **[runtime]** running game, **[hypothesis]** not yet established. Measurements, hashes and commands are in [the game's blink](../research/animation/game-blink.md) and [character-creator idle](../research/animation/cc-idle.md).
 
 This page answers how V's face is animated, and in particular how a blink closes the eyes, and what the Studio reproduces.
 
@@ -74,6 +74,20 @@ Why the creator shows movement above V's eyes that the Studio's close-up idle ba
 
 **Reading adopted by the Studio** [hypothesis until test ask 5]: the brow lowering and lid narrowing seen in game are mostly the eyes-section showcase, with wrinkle shading and live gaze as further contributors. The Motion panel offers **Creator close-up, eyes section**: the close-up body with the showcase once and then the close-up loop, blended as [CC idle](../research/animation/cc-idle.md#the-games-other-preview-idles) describes. The close-up stays the default idle; the showcase is never labelled or looped as the idle.
 
+## 7. Why smiles bunch beside the nose
+
+A smile made with the mouth-corner controls forms a sharp lump beside the nose and upper lip, and the cheek under the eye barely lifts. The same lump shows in game [runtime, report of 28 September]. It is the facial setup's data, not the preview: the preview solves with the pinned solver itself, and replaying its stages one at a time reproduces the solve exactly [offline]. Numbers, the setup entries behind them and what a retune would change are in [facial correctives tuning](../research/animation/facial-correctives-tuning.md).
+
+| Fact | Detail | Grade |
+|---|---|---|
+| The cause | The main pose `lips_[lr]_corner_up` (one in-between, linear) lifts the fold line beside the nose and lip (`jaw_nosabial_rowA_1`, `mug_mouth_rowB_3`) about 10.6 mm at weight 1, the row just outside it 2.5 mm and the malar cheek (`eye_check_rowD_0`) 1.3 mm. The gap between the first two rows closes by 31 % at 0.3, 56 % at 0.7 and 46 % at 1: the skin folds into a ridge | [resource] [offline] |
+| The cheek raiser doesn't round it | `eye_[lr]_oculi_squint_outer_lower` moves the malar cheek mostly forward (3.7 mm at 1, 1.9 mm up) and never reaches the fold line; smile plus raise still closes the gap 54 % | [offline] |
+| No corrective for it | None of the 255 face correctives combines a mouth control with the cheek raiser, sneer or nasolabial deepener; the two-corner smile corrective only turns lip joints | [resource] |
+| Influences hide the fill | `lips_[lr]_nasolabialDeepener` is capped at 1 − `corner_up`, and `corner_wide` by corner up, mid shift, jaw open and stretch together: in the reported expression the deepener set at 100 % solves at 26 % | [resource] [offline] |
+| Limits don't apply | The global limits act only while `lipSyncEnvelope` is above 0; it rests at 0 | [resource] [source] |
+
+`tools/facial_attribution.py` reports, for any saved expression, each stage's effect on the control weights, the in-betweens and correctives that fire, and how far each one moves chosen joints (by switching it off and solving again). A retune, in the preview and as an optional in-game override, is banked as a later feature ([backlog](../research/backlog/README.md#later-features--discuss-with-the-maintainer-before-building-each)); the in-game comparison is [N13](../research/runtime/next-sessions-plan.md#n13-cheek-check-smiles-in-photo-mode).
+
 ## Open questions
 
 1. Which facial setup does the engine solve V's face with: the female head's own or the male player setup the face-rig entity names? A probe is prepared (the bridge's `face.rig.read`, check R1 on the [test card](../research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2); a CET fallback in [experiment 022](../experiments/022-session-3/README.md#part-d-expression-console-checks-optional)).
@@ -85,6 +99,7 @@ Why the creator shows movement above V's eyes that the Studio's close-up idle ba
 7. Is the brow and lid movement seen above V's eyes in the creator the eyes-section showcase (§6), and how much do wrinkle shading and live gaze add?
 8. Where does the game's solver differ from the IO Suite's reading: pupil scale poses, `faceEnvelope`, the lips muzzle, the corrective-entry flag, the double influence pass ([specification §7](../research/animation/facial-solver-spec.md#7-where-the-io-suite-may-differ-from-the-game))? Each is a compile option of XF Studio's solver, so a runtime comparison can switch one at a time.
 9. With a mod that replaces `ui_female_face.anims` without the creator's clips (§5), does the creator's face hold still in game?
+10. Does the game's smile lump sit where and as large as the preview's, and does wrinkle shading change how it reads (§7; [N13](../research/runtime/next-sessions-plan.md#n13-cheek-check-smiles-in-photo-mode))?
 
 ## In-game test asks
 
@@ -96,7 +111,8 @@ Batch into one prepared session; record the game version and the face-rig and mo
 4. **Mod lashes on closed lids.** With the CCXL "Lush Manga Eyelashes" chosen, photo mode, eyes closed, one frontal and one three-quarter close-up of the left eye; then the same with vanilla lashes. If the outer lashes kink upward off the lid as in the preview (`evidence/screenshots/head-fixes/lashes-compare.png`, private), the mod's rigging does it in game too.
 5. **The eyes section's brows** (§6). A fixed camera on the creator's head: 25 s hovering only a head-camera row (skin), then 25 s moving back and forth between an XF Eye Artistry row and the eyebrows row. Do the brows lower and the lids narrow only in the second? Compare with the Studio's **Creator close-up** and **Creator close-up, eyes section** idles (`evidence/screenshots/idle-brows/`, private). The runtime bridge can read the active clip and the paperdoll flags meanwhile.
 6. **A replaced creator face set** (§5). With Appearance Menu Mod's female facial expressions installed, open the creator's head camera and watch V's face for 25 s: does it blink and move as the close-up idle does, or hold still?
+7. **Smile lump** (§7): the [N13](../research/runtime/next-sessions-plan.md#n13-cheek-check-smiles-in-photo-mode) cheek check, three prepared expressions at three yaws beside the Studio's renders.
 
 ## Related pages
 
-[Facial expressions and idles](facial-expressions.md) · [Facial solver specification](../research/animation/facial-solver-spec.md) · [Character-creator idle](../research/animation/cc-idle.md) · [The game's blink](../research/animation/game-blink.md) · [Brow idle gap](../research/animation/brow-idle-gap.md) · [CC file chain](cc-file-chain.md) · [Eye rendering](eye-rendering.md) · [Brows](brows.md) · [Tooling](tooling.md)
+[Facial expressions and idles](facial-expressions.md) · [Facial correctives tuning](../research/animation/facial-correctives-tuning.md) · [Facial solver specification](../research/animation/facial-solver-spec.md) · [Character-creator idle](../research/animation/cc-idle.md) · [The game's blink](../research/animation/game-blink.md) · [Brow idle gap](../research/animation/brow-idle-gap.md) · [CC file chain](cc-file-chain.md) · [Eye rendering](eye-rendering.md) · [Brows](brows.md) · [Tooling](tooling.md)

@@ -7,6 +7,7 @@ import type { GradingLut, GradingLutSource } from "./grading-lut";
 import { installShadowFilter } from "./shadow-filter";
 import { createSkinScatter } from "./platform/scene/skin-scatter";
 import { createContactShadows, setContactShadows } from "./platform/scene/contact-shadow";
+import { bodyCastersOnly, contactOnly, setBodyCastersOnly } from "./platform/scene/shadow-casters";
 import { contactShadowUniforms } from "./skin-material";
 import type { ScatterQuality } from "./platform/scene/skin-scatter-kernel";
 import { createStudioEnvironment, type StudioEnvironment } from "./studio-environment";
@@ -68,6 +69,8 @@ export function createLightListRig() {
     light.castShadow = spec.shadows;
     // The game's character contact shadows (platform/scene/contact-shadow.ts), on a light that shadows at all: the shadow switch turns both off.
     setContactShadows(light, spec.shadows && !!spec.game && spec.game.contactShadows !== "none");
+    // A light the game shadows only by the contact march: its map is a stand-in and holds the body's own shapes, no hair (shadow-casters.ts).
+    setBodyCastersOnly(light.shadow, contactOnly(spec.game));
     if (!spec.shadows) return;
     if (!isSpot(light)) {
       const d = Math.hypot(spec.position[0] - spec.target[0], spec.position[1] - spec.target[1], spec.position[2] - spec.target[2]);
@@ -342,7 +345,7 @@ export function shadowState(scene: THREE.Scene): string {
     if (light.isLight && light.castShadow && light.shadow) {
       const e = light.matrixWorld.elements;
       const t = (light as THREE.DirectionalLight).target?.matrixWorld.elements;
-      lights += `${light.uuid}:${light.shadow.mapSize.x}:${e[12]!.toFixed(4)},${e[13]!.toFixed(4)},${e[14]!.toFixed(4)}` +
+      lights += `${light.uuid}:${light.shadow.mapSize.x}:${bodyCastersOnly(light.shadow) ? "body" : "all"}:${e[12]!.toFixed(4)},${e[13]!.toFixed(4)},${e[14]!.toFixed(4)}` +
         (t ? `>${t[12]!.toFixed(4)},${t[13]!.toFixed(4)},${t[14]!.toFixed(4)};` : ";");
       // A spot light's cone follows its rotation too.
       affine(e);

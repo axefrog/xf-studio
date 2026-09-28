@@ -1,6 +1,6 @@
 # Next in-game sessions: ranked plan
 
-**Status (28 September 2026): session 3 ([experiment 028](../../experiments/028-session-3/README.md#5-results-28-september-2026)) ran in part.** It answered N2's Shimmer, Metal, Depth and Lines rows (removed below; results on the experiment page and the [pipeline guide](../authoring/studio-to-mod-pipeline.md#plate-lift-at-build)) and left the Gloss verdict inconclusive under the creator's light (1.5, now with a controlled light) and the headgear check unrun (2.6, now for the `hx_` build). N3 (Glitter) opens the next session, with an alpha.2-built export beside it. It gathers every open in-game ask into twelve sittings of 20–30 minutes, driven by the coordinator through the [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md). Sittings are ordered by value per minute and grouped by shared setup. When a sitting has run, record its results on the source pages and tick the row here with the date. Delete rows once their answers are on the source page. The bridge's conventions, failure handling and kill switch are on the [test card](runtime-bridge-test-card.md).
+**Status (28 September 2026): session 3 ([experiment 028](../../experiments/028-session-3/README.md#5-results-28-september-2026)) ran in part.** It answered N2's Shimmer, Metal, Depth and Lines rows (removed below; results on the experiment page and the [pipeline guide](../authoring/studio-to-mod-pipeline.md#plate-lift-at-build)) and left the Gloss verdict inconclusive under the creator's light (1.5, now with a controlled light) and the headgear check unrun (2.6, now for the `hx_` build). N3 (Glitter) opens the next session, with an alpha.2-built export beside it. It gathers every open in-game ask into thirteen sittings of 20–30 minutes, driven by the coordinator through the [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md). Sittings are ordered by value per minute and grouped by shared setup. When a sitting has run, record its results on the source pages and tick the row here with the date. Delete rows once their answers are on the source page. The bridge's conventions, failure handling and kill switch are on the [test card](runtime-bridge-test-card.md).
 
 **Who does what.** The maintainer (**M**) starts MO2 and the game, loads the save, makes the safety save, opens the creator when asked (F12 with Character Customization Anywhere, or a mirror), and does anything in the inventory, MO2 or the game's settings. The coordinator (**C**) drives everything else with the bridge: MCP tools, or `bun tools/bridge-client.ts run <command>` (dotted names) in `projects/xf-runtime-bridge`. Scripted runs use `bun tools/session.ts <script> --out <folder> [--from <label>]`. Agents never launch the game or MO2.
 
@@ -20,6 +20,7 @@
 | [N10](#n10-inventory-cyberware-bare-body-clothing) | Inventory: cyberware, bare body, clothing | 30 | Gorilla Arms, holster state, garment hide tags | A save with Gorilla Arms; tagged mod garments |
 | [N11](#n11-xf-expressions-set-in-photo-mode-r4r5) | XF Expressions set in photo mode (R4–R5) | 25 | Listed, plays as the preview, Mega Pack faces still work | **Stage** one expression-set build by hand (M, MO2 closed), relaunch; best after N7's R1–R2 |
 | [N12](#n12-masculine-v-xf-eye-artistry-for-him) | Masculine V: XF Eye Artistry for him | 30 | Male V plan §6 checks 1–4 (selector, placement and lids, same look on both, save) and 5–7 | **A new-game masculine V** (M makes and keeps the save); a both-body build staged in place of the alpha.2 export |
+| [N13](#n13-cheek-check-smiles-in-photo-mode) | Cheek check: smiles in photo mode | 10 | Whether the game bunches the cheek beside the nose exactly as the preview does | **Stage** the built Cheek check set (M, MO2 closed), relaunch; not at the same time as N11's set |
 
 **Why this order.** N1 and N2 close [session 2](../../experiments/020-session-2/README.md): the Gloss verdict sets the finish defaults, and the headgear row checks the alpha.2 export's `hx_` component. Neither blocks `v0.1.0-alpha.2` any more. N1 also proves the autonomy features that every later sitting depends on. N3 decides the Glitter route, the next finish for XF Eye Artistry. N4 answers the attachment questions for piercings, the next feature. N5–N8 settle preview-parity questions, most of them without any player step once the creator or photo mode is open. N9 and N10 cost the most player time.
 
@@ -225,6 +226,28 @@ The first in-game test of the masculine selector ([male V plan §6](../character
 | 12.7 | §6.6–6.7 Body and voice | Censored body, voice independence | Photo mode, all slots stripped (**M**); then the feminine-voice masculine V: the XF row and one preset | 4 | Captures | Bare chest and the underwear bottom, `nipples_02` when chosen; with the feminine voice nothing visible differs and the XF row behaves the same |
 
 Afterwards M may leave the both-body build staged (it replaces the alpha.2 export for the feminine V too; her files are the same bytes). Results go to the [male V plan](../character-customization/male-v-plan.md) (§6 and phase status) and the pipeline guide's boundaries. The creator-row and mirror asks of the blocked list can run in the same new-game creator before 12.2.
+
+## N13. Cheek check: smiles in photo mode
+
+A report on 28 September found smiles "almost impossible" to make natural: the cheek bunches into a sharp lump beside the nose and upper lip instead of lifting under the eye, and the same lump shows in game. Offline the lump is the game's own `lips_[lr]_corner_up` pose, not the preview ([facial correctives tuning §1](../animation/facial-correctives-tuning.md#1-the-diagnosis)). This sitting checks that the game's lump is the preview's, at the same place and size, so a later retune can be judged in the preview first. It also tells whether the game's wrinkle shading changes how it reads.
+
+**Candidate (built 28 September, offline).** An XF Expressions set **"Cheek check"**, built **For my game** on the reference route with the Studio's product host, three expressions after the Mega Pack's 217 rows:
+
+| faceId | Expression | Controls |
+|---:|---|---|
+| 217 | Glee (the reported saved expression) | 46 controls; corner up 0.74, nasolabial deepener 1, cheek raise 0.79, sneer 0.54 |
+| 218 | Cheek check smile | `lips_[lr]_corner_up` 0.7 |
+| 219 | Cheek check smile and raise | the same plus `eye_[lr]_oculi_squint_outer_lower` 0.5 |
+
+Files (private, ignored): `experiments/026-natural-expressions/generated/cheek-check/dist/xfs_cc4ee0000000040008000000000000001-*/`, mod name "XF Expressions - Cheek check". SHA-256: main archive `545b358d…d3e473`, table overlay `331d6d81…5939a6b`, `.archive.xl` `6bb91ff1…a9de30`, TweakXL file `a421af3b…31b8eb`; the verifier passed, `gameRenderingVerified: false`. The Studio's renders of all three (and neutral) at front, 35° and 55° are in `local/captures/rendering/2026-09-28-cheek-hair/cheek-check-studio-*` (private). **M, MO2 closed:** add the build's `archive` and `r6` folders as one new MO2 mod "XF Expressions - Cheek check" in the test profile only, enabled. Only one XF Expressions set at a time: remove it before N11's set is staged, or put these three into N11's set instead (their faceIds then follow that set's).
+
+| # | Ask | Settles → unblocks | Drive (C unless stated) | Min | Evidence | Pass / fail |
+|---|---|---|---|---:|---|---|
+| 13.1 | Listed and loaded | The build plays at all | `photo_open`, `photo_state {options: true}`; ArchiveXL log line naming `xfs_expressions_xc4ee00000000` on both photo-mode face-rig appearances | 2 | Option JSON, log | Three entries at faceId 217–219 with their names |
+| 13.2 | The lump, three views | Game against preview for the cheek | Look-at off (`photo_camera_set {look_at: 0}`), HUD hidden, `photo_frame {target: "face"}`; for 217, 218, 219 and then vanilla Happy (faceId 7): `photo_expression_set`, wait 2 s, capture at `photo_frame {yaw_offset: 0, 35, 55}` | 6 | Captures `n13-<faceId>-<yaw>` beside the Studio renders | Pass: the lump sits beside the nostril and upper lip at the same place and about the same size as in the Studio at 35° and 55°, and the malar cheek barely lifts. Record any fold or wrinkle shading the preview lacks |
+| 13.3 | Smile against smile and raise | Whether the cheek raiser rounds the cheek in game | Compare 218 and 219 at 55° | 1 | The same captures | Offline the raiser moves the malar cheek mostly forward and doesn't soften the lump; a clearly rounder cheek in 219 in game would mean the engine does more than the solver (a wrinkle map, a corrective the setup doesn't list) |
+
+Afterwards M disables the mod (MO2 closed). Results go to [facial correctives tuning](../animation/facial-correctives-tuning.md) and [facial animation §7](../../knowledge/facial-animation.md#7-why-smiles-bunch-beside-the-nose).
 
 ## Blocked or not ready
 

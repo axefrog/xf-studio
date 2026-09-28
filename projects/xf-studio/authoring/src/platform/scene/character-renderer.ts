@@ -10,6 +10,7 @@ import { priorityRank } from "../../render-templates";
 import type { DetailLimit } from "../../detail-limits";
 import { layeredContextRestored } from "../../layered-material";
 import { characterDetailsEvidence } from "../../scene-evidence";
+import { keepOutOfBodyOnlyShadows } from "./shadow-casters";
 import { RENDER_ORDER, type CharacterSlot, type CharacterView, type SkinUnderlayPort, type SupersededPart } from "../api/scene";
 import type { HeadRig } from "./head-rig";
 
@@ -294,6 +295,8 @@ export function createCharacterRenderer(input: {
         // Hair strands (alpha-to-coverage cards) cast by their coverage; the cap decal and the other hair parts don't.
         const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;
         mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
+        // Strands stay out of the stand-in maps of contact-only lights (shadow-casters.ts).
+        if (strand) keepOutOfBodyOnlyShadows(mesh);
         if (mesh.castShadow && (mesh as THREE.SkinnedMesh).isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh as THREE.SkinnedMesh, { strandAlpha: strand });
         // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
         if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
