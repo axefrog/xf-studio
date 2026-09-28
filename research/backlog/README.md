@@ -114,6 +114,8 @@ In order:
 
    **Animated preset changes** (requested 28 September 2026; in progress): an option to ease between expression presets over 0–3 s instead of cutting, to judge how natural a transition looks. Poses follow. Its easings are the shared catalogue the timeline editor will use.
 
+   **XF Natural Face Overrides** (idea, 28 September 2026; banked until the current product reaches 1.0): an optional, opinionated XF core mod the Studio offers to install, which retunes the game's facial setup for more natural expressions. The first target is the smile's cheek, which bulges into a sharp lump beside the nose in game and in the preview. It needs substantial in-game testing across dialogue, photo mode, the creator and both rigs. The design note comes from the cheek diagnosis (claude/fix-cheek-hair).
+
    **Timeline animation editor** (R&D requested 28 September 2026; not started): author animated expressions, poses and idles on a timeline. The requested features:
    - keyframes, with tweakable easing between them;
    - several tracks, with each animatable element in only one track at a time;
