@@ -67,8 +67,14 @@ describe("showroom resources", () => {
     const plate = appearances[1].components.find((c: any) => c.name.$value === "xfs_plate");
     expect(plate.meshAppearance.$value).toBe("xfs_p2");
     expect(plate.mesh.DepotPath.$value).toBe("a\\models\\xfs_eye_plate.mesh");
-    const [column] = pedestalBoxes();
-    expect(column!.scale[2]).toBeGreaterThanOrEqual(NECK_CUT_Z);
+    const boxes = pedestalBoxes();
+    expect(boxes.map(b => b.name)).toEqual(["xfs_pedestal"]);
+    const column = boxes[0]!;
+    // Session 5: the head floated over a column 8 mm above the cut; the neck now sits 6 cm down into it, and the column
+    // reaches 1.5 m below the origin so a head raised to the camera's eye line still stands on the floor.
+    expect(column.position[2] + column.scale[2]).toBeCloseTo(NECK_CUT_Z + 0.0583, 3);
+    expect(column.position[2]).toBeLessThanOrEqual(-1);
+    expect(appearances[0].components.length).toBe(5);
     const entity = entityTemplate("a/showroom/xfs_showroom.app", ["xfs_p1", "xfs_p2"]).Data.RootChunk;
     expect(entity.entity.Data.$type).toBe("gameObject");
     expect(entity.defaultAppearance.$value).toBe("xfs_p1");

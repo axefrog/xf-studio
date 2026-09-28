@@ -944,6 +944,16 @@ void FaceTests()
               w::CheckFaceIndex(faceIndex(R"({"index":56,"unlisted":true})"), json::object()) == "unlisted");
     Check("RB-72: a list not seen yet is unavailable",
           ParamsCode([&] { w::CheckFaceIndex(faceIndex(R"({"index":60})"), json{{"seen", false}}); }) == "unavailable");
+    // 0.5.2 (RB-78): session 5's list had no table index at all (the face table read nothing).
+    const json unreadable{{"seen", true}, {"face_table", {{"listed", 207}, {"readable", 0}, {"source", "names"}}},
+                          {"entries", {{{"data", 0}}, {{"data", 56}}}}};
+    Check("0.5.2 (RB-78): an unreadable face table says so (face_table_unreadable), and unlisted still applies",
+          ParamsCode([&] { w::CheckFaceIndex(faceIndex(R"({"index":60})"), unreadable); }) == "face_table_unreadable" &&
+              w::CheckFaceIndex(faceIndex(R"({"index":60,"unlisted":true})"), unreadable) == "unlisted");
+    auto readable = faceList;
+    readable["face_table"] = {{"listed", 3}, {"readable", 3}, {"source", "names"}};
+    Check("0.5.2 (RB-78): a readable face table checks indices as before",
+          w::CheckFaceIndex(faceIndex(R"({"index":60})"), readable) == "label");
 
     // 0.5.1 (RB-71): cc.apply by index with the row and value read before.
     const auto expected = p::ParseCharacterApply(json::parse(R"({"option":"makeupLips_color","index":6,"expect_option":"makeupLips_09","expect_value":"lips_09_06"})"));

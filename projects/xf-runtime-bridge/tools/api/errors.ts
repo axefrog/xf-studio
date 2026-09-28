@@ -71,6 +71,8 @@ const BRIDGE_MESSAGES: Record<string, string> = {
     "That would change nothing in the game, so it wasn't sent: V's photo-mode face animation runs on the stand-in (target puppet, the default), not on the head item. Leave target out.",
   unverified_index:
     "That face table index matches an expression only by its place in the list, which isn't reliable with an expression pack installed, so nothing was applied. Use an index photo_state found by name (table_index_verified), or pass force: true to apply it anyway.",
+  face_table_unreadable:
+    "Photo mode's expression records couldn't be read, so the bridge can't check which face table index an expression has; nothing was applied. Pass unlisted: true to apply the index anyway (photo_state with options shows face_table).",
   stale_match:
     "The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh.",
   not_in_character_menu:

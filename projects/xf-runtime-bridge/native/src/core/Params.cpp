@@ -358,7 +358,7 @@ CameraRequest ParseCamera(const json& aParams)
 {
     RequireOnly(aParams,
                 {"camera_preset", "fov", "roll", "focal_distance", "aperture", "dof", "autofocus", "look_at", "look_at_part",
-                 "grain", "chromatic_aberration", "subject", "reset"});
+                 "grain", "chromatic_aberration", "exposure", "contrast", "vignette", "highlights", "subject", "reset"});
     CameraRequest request;
     request.reset = Boolean(aParams, "reset").value_or(false);
     if (const auto preset = Integer(aParams, "camera_preset", 0, 9))
@@ -375,6 +375,11 @@ CameraRequest ParseCamera(const json& aParams)
     AddOption(request.attributes, aParams, "look_at_part", key::kLookAtPart);
     Add(request.attributes, aParams, "grain", key::kGrain, 0, 1);
     Add(request.attributes, aParams, "chromatic_aberration", key::kChromaticAberration, -2, 2);
+    // The effects page (0.5.2): wide bounds here; the menu's own range (exposure -2.2 to 2.2) is checked in game.
+    Add(request.attributes, aParams, "exposure", key::kExposure, -10, 10);
+    Add(request.attributes, aParams, "contrast", key::kContrast, -10, 10);
+    Add(request.attributes, aParams, "vignette", key::kVignette, -10, 10);
+    Add(request.attributes, aParams, "highlights", key::kHighlights, -10, 10);
     if (const auto it = aParams.find("subject"); it != aParams.end() && !it->is_null())
     {
         if (!it->is_object())
@@ -402,7 +407,8 @@ CameraRequest ParseCamera(const json& aParams)
     if (!request.reset && request.attributes.empty())
     {
         Bad("give at least one camera setting (camera_preset, fov, roll, focal_distance, aperture, dof, autofocus, "
-            "look_at, look_at_part, grain, chromatic_aberration or subject), or reset = true");
+            "look_at, look_at_part, grain, chromatic_aberration, exposure, contrast, vignette, highlights or subject), "
+            "or reset = true");
     }
     return request;
 }
@@ -433,6 +439,14 @@ std::string CameraParamName(int32_t aKey)
         return "grain";
     case key::kChromaticAberration:
         return "chromatic_aberration";
+    case key::kExposure:
+        return "exposure";
+    case key::kContrast:
+        return "contrast";
+    case key::kVignette:
+        return "vignette";
+    case key::kHighlights:
+        return "highlights";
     case key::kSubjectYaw:
         return "subject.yaw";
     case key::kSubjectLeftRight:
@@ -451,6 +465,7 @@ std::vector<int32_t> CameraKeys()
     // The preset first: resetting it moves the camera, and the other keys then reset on top.
     return {key::kCameraPreset, key::kFov, key::kRoll, key::kFocalDistance, key::kAperture, key::kDepthOfField,
             key::kAutofocus,   key::kLookAt,   key::kLookAtPart,    key::kGrain,        key::kChromaticAberration,
+            key::kExposure,    key::kContrast, key::kVignette,      key::kHighlights,
             key::kSubjectYaw,  key::kSubjectLeftRight, key::kSubjectNearFar, key::kSubjectUpDown};
 }
 

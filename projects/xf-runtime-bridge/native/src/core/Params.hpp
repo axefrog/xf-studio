@@ -46,6 +46,12 @@ inline constexpr int32_t kLightState = 44; // STATE: option data 0 Off, 1 On (fi
 inline constexpr int32_t kLightType = 45;  // option data 1 Spot, 2 Ambient (same dump)
 inline constexpr int32_t kLightShadow = 46; // SHADOW: option data 0 Off, 1 On (same dump)
 inline constexpr int32_t kChromaticAberration = 13; // -2 to 2 (same dump)
+// The effects page (0.5.2): exposure -2.2 to 2.2, contrast, vignette and highlights (menu keys from the first
+// session's dump; knowledge/photo-mode.md §8.1). Every value is checked against the menu's own range before it is set.
+inline constexpr int32_t kExposure = 10;
+inline constexpr int32_t kContrast = 11;
+inline constexpr int32_t kVignette = 12;
+inline constexpr int32_t kHighlights = 24;
 inline constexpr int32_t kGrain = 25;                // 0 to 1 (same dump)
 inline constexpr int32_t kCameraPreset = 23; // PRESET: 0 Customization, 1-9 photo_mode.std_preset_1..9 (same dump)
 inline constexpr int32_t kLightBrightness = 47;
@@ -66,7 +72,8 @@ struct Attribute
 };
 
 // photo.camera.set: {camera_preset, fov, roll, focal_distance, aperture, dof, autofocus, look_at,
-// look_at_part, grain, chromatic_aberration, subject: {yaw, left_right, near_far, up_down}, reset}. camera_preset (key 23) comes
+// look_at_part, grain, chromatic_aberration, exposure, contrast, vignette, highlights (0.5.2),
+// subject: {yaw, left_right, near_far, up_down}, reset}. camera_preset (key 23) comes
 // first, so the other values apply to the camera where the preset put it. reset = true restores every camera and
 // subject setting to its value when photo mode opened, and cannot be combined with values.
 struct CameraRequest

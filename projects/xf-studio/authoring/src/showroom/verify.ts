@@ -30,6 +30,8 @@ const EXPECTED = Object.freeze({
   /** Head joint in the rig's reference pose (entity frame), and the neck's cut. */
   headJoint: [0, -0.0403, 1.6397] as const,
   neckCut: 1.4617,
+  /** How far the column rises past the neck's cut (session 5: the head drew a few centimetres high). */
+  pedestalOverlap: 0.04,
   profiles: ["xfs_rig_creator", "xfs_rig_creator_face", "xfs_rig_key"] as const,
 });
 const FIXED = 1 / 131072;
@@ -212,7 +214,7 @@ export function verifyShowroomArchive(input: ShowroomVerifyInput): ShowroomVerif
   for (const definition of definitions) {
     const piece = name(definition.name);
     const byName = new Map((definition.components as Json[]).map(c => [name(c.name), c]));
-    ensure(definition.components.length === 6 && byName.size === 6, `${piece} has other components than the head, eyes, plate, rig and pedestal`);
+    ensure(definition.components.length === 5 && byName.size === 5, `${piece} has other components than the head, eyes, plate, rig and pedestal`);
     const rig = byName.get("face_rig");
     ensure(rig?.$type === "entAnimatedComponent" && path(rig.rig) === EXPECTED.faceRig && path(rig.graph) === EXPECTED.faceGraph
       && path(rig.facialSetup) === EXPECTED.facialSetup, `${piece}'s face rig is not the player head's`);
@@ -224,16 +226,20 @@ export function verifyShowroomArchive(input: ShowroomVerifyInput): ShowroomVerif
       ensure(parent?.$type === "entHardTransformBinding" && name(parent.bindName) === "face_rig"
         && skin?.$type === "entSkinningBinding" && name(skin.bindName) === "face_rig", `${piece}'s ${component} is not skinned to the face rig`);
     }
-    for (const box of ["xfs_pedestal", "xfs_plinth"]) {
-      const c = byName.get(box);
-      ensure(c?.$type === "entMeshComponent" && path(c.mesh) === EXPECTED.box && name(c.meshAppearance) === "default", `${piece}'s ${box} is not the creator box's panel`);
+    {
+      const c = byName.get("xfs_pedestal");
+      ensure(c?.$type === "entMeshComponent" && path(c.mesh) === EXPECTED.box && name(c.meshAppearance) === "default", `${piece}'s xfs_pedestal is not the creator box's panel`);
       const s = c.visualScale, p = c.localTransform?.Position;
-      // The panel spans x and y from −1 to 0 and z from 0 to 1 before scaling: its footprint is [px − sx, px] × [py − sy, py].
+      // The panel spans x and y from −1 to 0 and z from 0 to 1 before scaling: its footprint is [px − sx, px] × [py − sy, py],
+      // its height pz…pz + sz.
       const centre = [bits(p?.x) - Number(s?.X) / 2, bits(p?.y) - Number(s?.Y) / 2];
-      ensure(near(centre[0]!, 0, 2 * FIXED) && centre[1]! < EXPECTED.headJoint[1] + 0.05 && centre[1]! > EXPECTED.headJoint[1] - 0.1 && near(bits(p?.z), 0, FIXED),
-        `${piece}'s ${box} is not centred under the head`);
-      if (box === "xfs_pedestal") ensure(Number(s?.Z) >= EXPECTED.neckCut && Number(s?.Z) < EXPECTED.neckCut + 0.05 && Number(s?.X) > 0.12,
-        `${piece}'s pedestal doesn't reach the neck's cut or is narrower than the neck`);
+      ensure(near(centre[0]!, 0, 2 * FIXED) && centre[1]! < EXPECTED.headJoint[1] + 0.05 && centre[1]! > EXPECTED.headJoint[1] - 0.1,
+        `${piece}'s pedestal is not centred under the head`);
+      const bottom = bits(p?.z), top = bottom + Number(s?.Z);
+      // The neck sits down into the column (session 5 saw the head float over a top 8 mm above the cut), and the column
+      // reaches below the origin so a raised head still stands on the floor.
+      ensure(top >= EXPECTED.neckCut + EXPECTED.pedestalOverlap && top < EXPECTED.neckCut + 0.1 && bottom <= -1 && Number(s?.X) > 0.12,
+        `${piece}'s pedestal doesn't seat the neck, reach below the origin, or is narrower than the neck`);
     }
   }
 

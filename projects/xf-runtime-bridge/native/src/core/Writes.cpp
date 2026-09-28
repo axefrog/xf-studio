@@ -359,6 +359,16 @@ std::string CheckFaceIndex(const params::ExpressionIndexRequest& aRequest, const
     {
         throw MethodError("unavailable", "the photo-mode expression list hasn't been seen yet; close and reopen photo mode, or pass unlisted");
     }
+    // 0.5.2 (RB-78): the script says how much of the face table it could read. With none of it, no index can be
+    // checked, which is a different problem from an index that isn't listed: say so, and how to go on.
+    if (const auto table = aList.find("face_table"); table != aList.end() && table->is_object() &&
+                                                     table->value("readable", -1) == 0)
+    {
+        throw MethodError("face_table_unreadable",
+                          "photo mode's expression records couldn't be read (photo_mode.character.faceAnimations listed " +
+                              std::to_string(table->value("listed", 0)) +
+                              ", none readable), so no table index can be checked; pass unlisted: true to apply the index anyway");
+    }
     bool verified = false;
     bool byPosition = false;
     for (const auto& entry : *entries)

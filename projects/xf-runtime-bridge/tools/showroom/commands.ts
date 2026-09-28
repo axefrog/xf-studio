@@ -6,7 +6,7 @@
 import { captureWindow, CaptureError, type CaptureRecord } from "../capture/capture.ts";
 import type { CommandContext, CommandResult } from "../api/catalogue.ts";
 import {
-  choosePieces, facingOf, planError, planLayout, readShowroom, spill, spacingFor, toWorld, yawFacing,
+  choosePieces, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, readShowroom, spill, spacingFor, toWorld, yawFacing,
   type Anchor, type RigPlacement, type RigProfile, type Showroom, type Vec3,
 } from "./plan.ts";
 
@@ -38,20 +38,37 @@ const manifestsOf = (input: Json): Showroom[] => {
   return paths.map(readShowroom);
 };
 
-/** showroom.spawn: the chosen presets' heads in a row or an arc in front of V or the camera. */
+/**
+ * showroom.spawn: the chosen presets' heads in a row or an arc in front of V or the camera. Distances run from the camera
+ * (or V's eyes) to each head's eyes, and the heads stand with their eyes at height_m above V's ground: by default the
+ * camera's height with the camera as anchor (session 5's close-ups at 1.3 m showed only the crowns), a head's natural
+ * height with V as anchor (0.5.2).
+ */
 export async function runShowroomSpawn(input: Json, context: CommandContext): Promise<CommandResult> {
   const showrooms = manifestsOf(input);
   const pieces = choosePieces(showrooms, input.presets as string[] | undefined);
-  const { anchor, from } = await anchorOf(context, input.anchor as string | undefined);
+  const { anchor, from, raw } = await anchorOf(context, input.anchor as string | undefined);
   const layout = (input.layout as "row" | "arc" | undefined) ?? "arc";
   const spacing = (input.spacing_m as number | undefined) ?? 0.7, distance = (input.distance_m as number | undefined) ?? 2.5;
   const lateral = (input.lateral_m as number | undefined) ?? 0;
-  const placements = planLayout(anchor, pieces.length, layout, spacing, distance, lateral);
+  const eyes = eyesOf(showrooms[0]!.headJoint);
+  const cameraZ = (raw.camera as { position: Vec3 } | undefined)?.position[2];
+  const defaultHeight = from === "camera" && cameraZ !== undefined ? cameraZ - anchor.ground : eyes[2];
+  const height = Math.round(((input.height_m as number | undefined) ?? defaultHeight) * 1000) / 1000;
+  const anchorEye = from === "camera" ? anchor.origin[2] : anchor.ground + eyes[2];
+  const placements = planLayout(anchor, pieces.length, layout, spacing, distance, lateral, { eyes, height, anchorEye });
+  const raise = Math.round((height - eyes[2]) * 1000) / 1000;
+  const notes: string[] = [];
+  if (raise > PEDESTAL_BELOW_M) notes.push(`The heads stand ${raise} m above their natural height; the pedestals reach only ${PEDESTAL_BELOW_M} m down, so they end in the air.`);
+  if (raise < -0.3) notes.push(`The heads stand ${-raise} m below their natural height, so their pedestals and necks may be under the floor.`);
   const items = placements.map((p, i) => ({ index: p.index, template: pieces[i]!.template, appearance: pieces[i]!.appearance, label: pieces[i]!.name,
     x: p.position[0], y: p.position[1], z: p.position[2], yaw: p.yaw }));
   const placed = await call(context, "showroom.place", { items, replace: input.replace !== false }, 30000);
-  return { value: { anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral,
-    pieces: items.map((item) => ({ index: item.index, label: item.label, appearance: item.appearance, position: [item.x, item.y, item.z], yaw: item.yaw })),
+  return { value: { anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral, height_m: height,
+    height_from: input.height_m !== undefined ? "given" : from === "camera" ? "camera" : "natural", raised_m: raise,
+    measured_to: "each head's eyes, from the camera (or V's eyes)",
+    pieces: items.map((item, i) => ({ index: item.index, label: item.label, appearance: item.appearance, position: [item.x, item.y, item.z], eyes: placements[i]!.eyes, yaw: item.yaw })),
+    ...(notes.length ? { notes } : {}),
     ...placed } };
 }
 

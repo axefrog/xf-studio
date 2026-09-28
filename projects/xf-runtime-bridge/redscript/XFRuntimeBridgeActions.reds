@@ -1152,6 +1152,28 @@ public abstract class XFBridgeActions {
 
 // --- Photo mode ----------------------------------------------------------------------------------
 
+// The photo-mode expression records as photo mode lists them (0.5.2, RB-78): each record's menu label and faceId,
+// in list order; faceId -1 where a listed name has no record.
+public class XFFaceTable {
+  public let labels: array<String>;
+  public let faceIds: array<Int32>;
+  public let listed: Int32;
+  public let readable: Int32;
+  public let source: String;
+
+  public func Add(record: ref<PhotoModeFace_Record>) -> Void {
+    this.listed += 1;
+    if IsDefined(record) {
+      ArrayPush(this.labels, XFPose.Label(record.DisplayName()));
+      ArrayPush(this.faceIds, record.FaceId());
+      this.readable += 1;
+    } else {
+      ArrayPush(this.labels, "");
+      ArrayPush(this.faceIds, -1);
+    }
+  }
+}
+
 public abstract class XFPhoto {
   public static func Controller() -> wref<gameuiPhotoModeMenuController> {
     let registry = XFBridgeRegistry.Get();
@@ -1214,6 +1236,11 @@ public abstract class XFPhoto {
     if Equals(item.kind, "options") {
       out += ",\"option_count\":" + IntToString(ArraySize(item.optionData)) + ",\"start\":" + IntToString(item.startData);
       if withOptions {
+        let faces: ref<XFFaceTable>;
+        if item.key == 28u {
+          faces = XFPhoto.FaceTable();
+          out += ",\"face_table\":" + XFPhoto.FaceTableJson(faces);
+        }
         out += ",\"options\":[";
         let i = 0;
         while i < ArraySize(item.optionData) {
@@ -1221,8 +1248,8 @@ public abstract class XFPhoto {
             out += ",";
           }
           out += "{\"data\":" + IntToString(item.optionData[i]) + ",\"text\":" + XFJson.Str(item.optionTexts[i]);
-          if item.key == 28u {
-            out += XFPhoto.FaceTableIndex(item.optionTexts[i], item.optionData[i]);
+          if IsDefined(faces) {
+            out += XFPhoto.FaceTableIndex(faces, item.optionTexts[i], item.optionData[i]);
           }
           out += "}";
           i += 1;
@@ -1239,19 +1266,47 @@ public abstract class XFPhoto {
   // photo.state (0.4.2): an expression option's face table index next to the menu's value. The menu's
   // option data is the option's position in the list, while the face animation is chosen by the record's
   // faceId (session 4, R2: menu 56 "Static: Sleeping" was table index 60 with the Mega Pack installed).
-  // The records are photo_mode.character.faceAnimations (PhotoModeFace records: displayName, faceId;
-  // knowledge/facial-expressions.md). Matched by the option's text against each record's display name when
-  // exactly one matches ("label", verified), else by position in that list ("position": unverified, since
-  // session 4 showed position isn't the table index with an expression pack installed; RB-72); "" if neither.
-  public static func FaceTableIndex(text: String, data: Int32) -> String {
-    let records = TweakDBInterface.GetForeignKeyArray(t"photo_mode.character.faceAnimations");
+  // The records are listed by photo_mode.character.faceAnimations, which is an array of record NAMES
+  // (string[] in the game's own photomode.tweak, and TweakXL's !append-once adds names), not of record IDs:
+  // 0.4.2-0.5.1 read it with GetForeignKeyArray, which finds nothing in a string flat, so in game every option
+  // came back without a table index (session 5, RB-78). 0.5.2 reads the names (GetStringArray) and turns each
+  // into its record; the ID list is kept as a fallback. Matched by the option's text against each record's
+  // display name when exactly one matches ("label", verified), else by position in that list ("position":
+  // unverified, since session 4 showed position isn't the table index with an expression pack; RB-72).
+  public static func FaceTable() -> ref<XFFaceTable> {
+    let table = new XFFaceTable();
+    let names = TweakDBInterface.GetStringArray(t"photo_mode.character.faceAnimations");
+    let i = 0;
+    while i < ArraySize(names) {
+      let record = TweakDBInterface.GetPhotoModeFaceRecord(TDBID.Create(names[i]));
+      table.Add(record);
+      i += 1;
+    }
+    table.source = "names";
+    if table.readable == 0 {
+      let ids = TweakDBInterface.GetForeignKeyArray(t"photo_mode.character.faceAnimations");
+      if ArraySize(ids) > 0 {
+        table = new XFFaceTable();
+        i = 0;
+        while i < ArraySize(ids) {
+          table.Add(TweakDBInterface.GetPhotoModeFaceRecord(ids[i]));
+          i += 1;
+        }
+        table.source = "ids";
+      } else {
+        table.listed = ArraySize(names);
+      }
+    }
+    return table;
+  }
+
+  public static func FaceTableIndex(table: ref<XFFaceTable>, text: String, data: Int32) -> String {
     let found = -1;
     let matches = 0;
     let i = 0;
-    while i < ArraySize(records) {
-      let record = TweakDBInterface.GetPhotoModeFaceRecord(records[i]);
-      if IsDefined(record) && Equals(XFPose.Label(record.DisplayName()), text) {
-        found = record.FaceId();
+    while i < ArraySize(table.labels) {
+      if Equals(table.labels[i], text) {
+        found = table.faceIds[i];
         matches += 1;
       }
       i += 1;
@@ -1259,17 +1314,20 @@ public abstract class XFPhoto {
     if matches == 1 {
       return ",\"table_index\":" + IntToString(found) + ",\"table_index_by\":\"label\",\"table_index_verified\":true";
     }
-    if data >= 0 && data < ArraySize(records) {
-      let byPosition = TweakDBInterface.GetPhotoModeFaceRecord(records[data]);
-      if IsDefined(byPosition) {
-        return ",\"table_index\":" + IntToString(byPosition.FaceId()) + ",\"table_index_by\":\"position\",\"table_index_verified\":false";
-      }
+    if data >= 0 && data < ArraySize(table.faceIds) && table.faceIds[data] >= 0 {
+      return ",\"table_index\":" + IntToString(table.faceIds[data]) + ",\"table_index_by\":\"position\",\"table_index_verified\":false";
     }
     return "";
   }
 
+  // What photo.state and photo.expression.index say about the face table (0.5.2): how many records the list named,
+  // how many could be read, and from which flat, so a missing table index is explained instead of silent.
+  public static func FaceTableJson(table: ref<XFFaceTable>) -> String {
+    return "{\"listed\":" + IntToString(table.listed) + ",\"readable\":" + IntToString(table.readable) + ",\"source\":" + XFJson.Str(table.source) + "}";
+  }
+
   // photo.expression.index's list (0.5.1, RB-72): every expression option's face table index, for the plugin's
-  // check (core/Writes.cpp CheckFaceIndex). Read-only.
+  // check (core/Writes.cpp CheckFaceIndex). Read-only. 0.5.2: with the face table's own summary (face_table).
   public static func FaceIndexEntries(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
     let item: ref<XFPhotoItem>;
@@ -1279,7 +1337,8 @@ public abstract class XFPhoto {
     if !IsDefined(item) || !Equals(item.kind, "options") {
       return "{\"ok\":true,\"seen\":false}";
     }
-    let out = "{\"ok\":true,\"seen\":true,\"entries\":[";
+    let table = XFPhoto.FaceTable();
+    let out = "{\"ok\":true,\"seen\":true,\"face_table\":" + XFPhoto.FaceTableJson(table) + ",\"entries\":[";
     let i = 0;
     while i < ArraySize(item.optionData) {
       if i > 0 {
@@ -1289,7 +1348,7 @@ public abstract class XFPhoto {
       if i < ArraySize(item.optionTexts) {
         text = item.optionTexts[i];
       }
-      out += "{\"data\":" + IntToString(item.optionData[i]) + XFPhoto.FaceTableIndex(text, item.optionData[i]) + "}";
+      out += "{\"data\":" + IntToString(item.optionData[i]) + XFPhoto.FaceTableIndex(table, text, item.optionData[i]) + "}";
       i += 1;
     }
     return out + "]}";

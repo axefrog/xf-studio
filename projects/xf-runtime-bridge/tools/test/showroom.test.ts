@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { findCommand } from "../api/catalogue.ts";
-import { choosePieces, facingOf, lightAt, planLayout, readShowroom, spacingFor, spill, toLocal, toWorld, yawFacing, type Vec3 } from "../showroom/plan.ts";
+import { choosePieces, eyesOf, facingOf, lightAt, planLayout, readShowroom, spacingFor, spill, toLocal, toWorld, yawFacing, type Vec3 } from "../showroom/plan.ts";
 import { normalise } from "../showroom/commands.ts";
 import { projectDir, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
@@ -64,6 +64,21 @@ describe("showroom plan (offline arithmetic)", () => {
     expect(row.map((p) => p.position[0])).toEqual([99.3, 100, 100.7]);
   });
 
+  test("0.5.2: by the eyes: each head's eyes stand distance_m from the camera in 3D at height_m, the entity behind and below them", () => {
+    const anchor = { origin: [100, 200, 12.2] as Vec3, forward: [0, 1, -0.3] as Vec3, ground: 10 };
+    const eyes = eyesOf([0, -0.0403, 1.6397]);
+    expect(eyes).toEqual([0, 0.0497, 1.691]);
+    // At the camera's eye line (session 5's close-ups at 1.3 m showed only the crowns): eyes at the camera's height.
+    const level = planLayout(anchor, 1, "arc", 0.7, 1.3, 0, { eyes, height: 2.2, anchorEye: 12.2 })[0]!;
+    expect(near(level.eyes![2], 12.2) && near(Math.hypot(level.eyes![0] - 100, level.eyes![1] - 200), 1.3)).toBe(true);
+    expect(near(level.position[2], 12.2 - 1.691)).toBe(true); // raised 0.509 m: the column still reaches the floor
+    expect(near(level.position[1], 200 + 1.3 + 0.0497)).toBe(true); // the entity's origin stands behind the eyes
+    // Lower than the camera: the 3D distance holds, so the heads come no closer than asked (and look no larger than V).
+    const low = planLayout(anchor, 1, "arc", 0.7, 1.3, 0, { eyes, height: 1.7, anchorEye: 12.2 })[0]!;
+    expect(near(Math.hypot(low.eyes![0] - 100, low.eyes![1] - 200, low.eyes![2] - 12.2), 1.3)).toBe(true);
+    expect(() => planLayout(anchor, 1, "arc", 0.7, 1.0, 0, { eyes, height: 1.0, anchorEye: 12.2 })).toThrow(/height_m/);
+  });
+
   test("the key light reaches only its own head; the full creator rig spills onto neighbours until they are about 3 m apart", () => {
     const head = showroom.headJoint;
     expect(showroom.rigs.creator.lights.reduce((s, l) => s + lightAt(l, head), 0)).toBeGreaterThan(0);
@@ -104,9 +119,12 @@ describe("showroom.* against the self-test host", () => {
     expect(result.placed).toHaveLength(3);
     expect(result.state.pending).toBe(0);
     expect(result.state.pieces.map((p: any) => p.label)).toEqual(["Gloss A · as before", "Gloss B · skin rough", "Gloss C · all rough"]);
-    // V stands at (100, 200) facing +Y in the simulation: the middle head is 2.5 m ahead, facing back at her.
+    // V stands at (100, 200) facing +Y in the simulation: the middle head's eyes are 2.5 m ahead at a head's natural
+    // height, facing back at her (0.5.2: distances run to the eyes, and the entity stands 5 cm behind them).
     const middle = result.pieces[1];
-    expect(near(middle.position[0], 100) && near(middle.position[1], 202.5)).toBe(true);
+    expect(near(middle.eyes[0], 100) && near(middle.eyes[1], 202.5)).toBe(true);
+    expect(near(middle.position[1], 202.5497, 1e-3) && near(middle.position[2], 10, 1e-3)).toBe(true);
+    expect(result).toMatchObject({ height_from: "natural", raised_m: 0, height_m: 1.691 });
     expect(near(Math.abs(normalise(middle.yaw)), 180)).toBe(true);
     expect(result.undo).toEqual({ method: "showroom.clear", params: { what: "pieces" } });
   });

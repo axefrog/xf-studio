@@ -79,7 +79,9 @@ std::string SimValueName(const std::string& aOption, int32_t aIndex)
 // list position; table_index is the face record's faceId. Like session 4's install with an expression pack,
 // the entries from 50 on are offset by 4; the last three were matched only by list position (their names
 // match no face record, or several), so their table index is unverified (RB-72).
-json SimExpressionList()
+// aReadable = false (selftest.phase {face_table_readable: false}) is session 5's game: the face table read nothing, so
+// the options carry no table index (RB-78).
+json SimExpressionList(bool aReadable = true)
 {
     json list = json::array();
     for (int32_t i = 0; i < 60; ++i)
@@ -87,10 +89,20 @@ json SimExpressionList()
         const std::string text = i == 0 ? "Neutral" : i == 1 ? "Charm" : i == 56 ? "Static: Sleeping" : i == 52 ? "Static: Skeptical" :
                                  i == 55 ? "Static: Shock" : "Face " + std::to_string(i);
         const bool byLabel = i < 57;
+        if (!aReadable)
+        {
+            list.push_back({{"data", i}, {"text", text}});
+            continue;
+        }
         list.push_back({{"data", i}, {"text", text}, {"table_index", i < 50 ? i : i + 4}, {"table_index_by", byLabel ? "label" : "position"},
                         {"table_index_verified", byLabel}});
     }
     return list;
+}
+
+json SimFaceTable(bool aReadable)
+{
+    return json{{"listed", 60}, {"readable", aReadable ? 60 : 0}, {"source", aReadable ? "names" : ""}};
 }
 
 BOOL WINAPI OnConsoleCtrl(DWORD)
@@ -299,6 +311,7 @@ int wmain(int argc, wchar_t** argv)
         bool saveLock = false;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
         std::string player = "v";            // selftest.phase {player: "johnny"}: a stand-in, not V
+        bool faceTableReadable = true;       // selftest.phase {face_table_readable: false}: session 5's unread face table
         // Photo-mode poses: two categories (0 Idle, 900 XF Live) and their poses; the XF carrier is pose 7 of 900.
         int32_t poseCategory = 0;
         int32_t pose = 1;
@@ -448,6 +461,7 @@ int wmain(int argc, wchar_t** argv)
                              sim.creatorRow = aContext.params.value("creator_row", std::string());
                              sim.photoTimeHours = aContext.params.value("photo_time_hours", false);
                              sim.photoTimeLabel = aContext.params.value("photo_time_label", std::string("TIME OF DAY"));
+                             sim.faceTableReadable = aContext.params.value("face_table_readable", true);
                              return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}, {"player", sim.player}};
                          }});
     // The in-game panel's write switch, which the self-test can't press: pauses or resumes writes.
@@ -593,11 +607,12 @@ int wmain(int argc, wchar_t** argv)
                                  // option data is the list position; table_index is the face record's faceId. Like
                                  // session 4's install with an expression pack, the entries from 50 on are offset by 4.
                                  json expression{{"key", 28}, {"label", "FACIAL EXPRESSION"}, {"kind", "options"}, {"option_count", 60}, {"start", 0}};
+                                 std::scoped_lock _(sim.mutex);
                                  if (request.options)
                                  {
-                                     expression["options"] = SimExpressionList();
+                                     expression["face_table"] = SimFaceTable(sim.faceTableReadable);
+                                     expression["options"] = SimExpressionList(sim.faceTableReadable);
                                  }
-                                 std::scoped_lock _(sim.mutex);
                                  const auto it = sim.attributes.find(p::key::kExpression);
                                  expression["value"] = it == sim.attributes.end() ? 0.0 : static_cast<double>(it->second);
                                  out["menu"].push_back(expression);
@@ -847,7 +862,13 @@ int wmain(int argc, wchar_t** argv)
                                      const auto request = p::ParseExpressionIndex(aContext.params);
                                      requirePhase("photo_mode", "not_in_photo_mode");
                                      // The plugin's check against the list's table indices (core/Writes.cpp, RB-72).
-                                     const auto standing = w::CheckFaceIndex(request, json{{"seen", true}, {"entries", SimExpressionList()}});
+                                     bool readable = true;
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         readable = sim.faceTableReadable;
+                                     }
+                                     const auto standing = w::CheckFaceIndex(
+                                         request, json{{"seen", true}, {"face_table", SimFaceTable(readable)}, {"entries", SimExpressionList(readable)}});
                                      std::scoped_lock _(sim.mutex);
                                      const auto menu = sim.attributes.find(p::key::kExpression);
                                      const bool known = menu != sim.attributes.end();

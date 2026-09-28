@@ -721,7 +721,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.state",
     title: "Photo mode state",
     description:
-      "Whether photo mode is open or allowed, and (with menu) every photo-mode menu item the game set up: its number, label, range or options and current value. options adds each option list (for example every expression with its menu value, data, and its face table index, table_index, with table_index_by saying whether it was matched by the expression's name or, less surely, by its position).",
+      "Whether photo mode is open or allowed, and (with menu) every photo-mode menu item the game set up: its number, label, range or options and current value. options adds each option list (for example every expression with its menu value, data, and its face table index, table_index, with table_index_by saying whether it was matched by the expression's name or, less surely, by its position; the expression item's face_table says how many of photo mode's expression records were listed and could be read, so an option without table_index is explained).",
     permission: "read",
     input: obj({ menu: bool("Include the menu items."), options: bool("Include every option list (implies menu).") }),
     bridge: { method: "photo.state" },
@@ -768,7 +768,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     title: "Frame the photo-mode shot",
     description: `Sets the photo-mode camera: a named preset (${Object.entries(CAMERA_PRESETS)
       .map(([name, preset]) => `${name}: ${preset.description}${preset.calibrated ? "" : " (not yet calibrated)"}`)
-      .join("; ")}) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, film grain, chromatic aberration, photo mode's own camera preset, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened.`,
+      .join("; ")}) and/or explicit values: field of view, roll, focus distance, aperture, depth of field, autofocus, film grain, chromatic aberration, the effects page's exposure, contrast, vignette and highlights, photo mode's own camera preset, and V's placement in front of the camera (subject: yaw, left_right, near_far, up_down). Values are checked against the ranges photo mode itself offers. reset puts everything back to how photo mode opened.`,
     permission: "write-photo",
     input: obj({
       preset: oneOf("A named framing; explicit values override it.", Object.keys(CAMERA_PRESETS)),
@@ -783,6 +783,10 @@ export const CATALOGUE: readonly CommandDef[] = [
       look_at_part: int("What V looks with: 1 head, 2 eyes (see photo_state options).", 0, 1000),
       grain: num("Film grain, 0 to 1 (0 = off).", 0, 1),
       chromatic_aberration: num("Chromatic aberration, -2 to 2 (0 = off).", -2, 2),
+      exposure: num("Exposure (the effects page, menu 10): photo mode offers -2.2 to 2.2, 0 = unchanged. Lifts a dark scene for a capture.", -10, 10),
+      contrast: num("Contrast (the effects page, menu 11), in photo mode's own range (0 = unchanged).", -10, 10),
+      vignette: num("Vignette (the effects page, menu 12), in photo mode's own range.", -10, 10),
+      highlights: num("Highlights (the effects page, menu 24), in photo mode's own range.", -10, 10),
       subject: {
         description: "V's placement in front of the camera (photo mode's pose tab).",
         ...obj({
@@ -1194,7 +1198,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "showroom.spawn",
     title: "Set out the finish showroom",
     description:
-      "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, distance_m in front of the camera (in photo mode) or V. Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
+      "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, each head's eyes distance_m from the camera (in photo mode) or V's eyes, as photo_frame's distance_m measures to V, and at height_m above V's ground (default: the camera's height with the camera as anchor, so the heads look straight into it; a head's natural height with V as anchor). Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
     permission: "write-showroom",
     input: obj({
       manifest: str("The showroom build's folder, or its manifest.json.", { maxLength: 1024 }),
@@ -1202,8 +1206,9 @@ export const CATALOGUE: readonly CommandDef[] = [
       presets: { type: "array", description: "Which presets, by name, preset ID or appearance, in lineup order. Default: all of them (at most 24).", items: str("A preset's name, ID or appearance.", { maxLength: 120 }), minItems: 1, maxItems: 24 },
       layout: oneOf("arc (default): on a circle about the camera or V, each head facing it. row: a straight line across the view, all facing back along it.", ["arc", "row"]),
       spacing_m: num("Distance between neighbouring heads, 0.3 to 5 m. Default 0.7.", 0.3, 5),
-      distance_m: num("How far in front of the camera or V, 0.8 to 10 m. Default 2.5.", 0.8, 10),
-      lateral_m: num("Shift the whole lineup to the right as the camera or V sees it (negative: left), -5 to 5 m. With distance_m equal to the camera's distance from V, a head at lateral 0.6 stands beside her on the same arc. Default 0.", -5, 5),
+      distance_m: num("How far each head's eyes are from the camera (or V's eyes), 0.8 to 10 m, in 3D. Default 2.5.", 0.8, 10),
+      height_m: num("The heads' eye height above V's ground, 0.5 to 3.2 m. Default: the camera's height (anchor camera), else a head's natural 1.69 m. The pedestals reach 1.5 m below a head's natural place, so a head raised more than that ends in the air.", 0.5, 3.2),
+      lateral_m: num("Shift the whole lineup to the right as the camera or V sees it (negative: left), -5 to 5 m. With distance_m equal to photo_frame's distance_m (the camera to V's face), a head at lateral 0.6 stands beside her on the same arc and appears at her scale. Default 0.", -5, 5),
       anchor: oneOf("camera (default in photo mode) or v (default in normal play).", ["camera", "v"]),
       replace: bool("Remove the heads set out earlier first (default true)."),
     }),
