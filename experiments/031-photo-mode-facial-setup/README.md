@@ -1,6 +1,6 @@
 # 031: the photo-mode facial setup against the female head's own (design D1)
 
-**Status:** offline comparison run on 29 September 2026; the preview now solves with the setup V's face rig names (design D1). The render comparison in the Studio is still to take (below). Evidence grades follow the [knowledge rules](../../knowledge/README.md).
+**Status:** offline comparison and Studio render comparison run on 29 September 2026; the preview now solves with the setup V's face rig names (design D1). Evidence grades follow the [knowledge rules](../../knowledge/README.md).
 
 **Question.** Session 4's R1 found the live photo-mode face solving with the male player setup `base\characters\head\pma\h0_001_ma_c__player\h0_001_ma_c__player_rigsetup.facialsetup`, on the female skeleton, for a feminine V [runtime] ([experiment 029 §3.5](../029-session-4/README.md#35-n7-photo-mode-expressions-parity-eye-and-skin-light)). The Studio solved with the female head's own `h0_000_pwa_c__basehead_rigsetup.facialsetup`. Do the two differ, and does it show on the face?
 
@@ -55,7 +55,19 @@ Over the 15 vanilla female photo-mode expressions with a pose (`photomode_female
 - The facial host solves with the setup V's photo-mode face rig names for the female skeleton (`readFaceRigSetup`, `facial-host.ts` `faceSetup`), read from the winning `.app` and its ArchiveXL patches, so a mod that re-points the face rig is followed without any mod-specific code. The blink, the held expressions and the idle all share that compiled face, and every solved pose records the setup's file name. `XFS_FACIAL_SETUP=female-head` (localhost only) solves with the female head's own setup for comparisons; it is also the fallback when the rig names no setup the game has.
 - The expression export is unaffected: it writes control vectors, and the one setup input it reads (the track mapping) is identical in both setups.
 
+## In the Studio: render comparison
+
+[`render_compare.ts`](render_compare.ts) starts two isolated, disposable-data Studio servers from this checkout (the default, and one with `XFS_FACIAL_SETUP=female-head`), renders the same vectors on the reference V in a headless Chrome with [experiment 026's `expression-look.ts`](../026-natural-expressions/expression-look.ts) (hair off, idle off, fixed cameras, front and three-quarter), and [`render_sheet.py`](render_sheet.py) compares the frames. Each server reported the setup it solved with (`h0_001_ma_c__player_rigsetup.facialsetup` and `h0_000_pwa_c__basehead_rigsetup.facialsetup`). The renders are private (the player's own game assets, `projects/xf-studio/authoring/evidence/screenshots/facial-setup-d1/`, with `sheet.png`) [observed in the browser]:
+
+| Expression | View | Mean difference (0–255) | Pixels differing by more than 8 |
+|---|---|---:|---:|
+| Smile 0.5 | front / three-quarter | 0.99 / 0.60 | 2.9 % / 1.8 % |
+| Smile 0.7 | front / three-quarter | 1.17 / 0.74 | 3.8 % / 2.3 % |
+| Smile 0.7 with cheek raise 0.5 | front / three-quarter | 1.45 / 0.91 | 4.6 % / 2.7 % |
+
+Where it shows: the mouth parting and the lips' outline (the lip corners sit differently), the cheek's silhouette in three-quarter view, and, with the cheek raise, the lower lids. At a close face framing under the Studio's light the change is subtle rather than striking: the two faces read as the same expression with a slightly different mouth line and cheek contour. The installed `facial_happy` and `facial_charming` weren't rendered (the servers hadn't read the installed expressions when the renders asked for them); the joint numbers above cover them.
+
 ## Still to take
 
-- **A render comparison in the Studio.** The same expressions (smile 0.5 and 0.7, `facial_happy`) drawn on the reference V with each setup (`XFS_FACIAL_SETUP=female-head` against the default), front and three-quarter, in isolated `?verify=1` workspaces with headless capture ([experiment 026's `expression-look.ts`](../026-natural-expressions/expression-look.ts)). Held back on 29 September while a game session left too little free memory.
 - In game, whether the creator and gameplay faces use the same setup (the creator and gameplay face rig `.app` files name it too [resource]; `face.rig.read` there answers it).
+- The smile lump's size in game against the preview, now with the same setup, at a matched lens and light ([facial animation, question 10](../../knowledge/facial-animation.md#open-questions)).
