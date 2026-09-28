@@ -10,6 +10,14 @@ const IDENTITY = new THREE.Matrix4();
 /** The most dangle checkpoints kept for one loop of the idle (each a few kilobytes a simulated part). */
 const CHECKPOINTS_PER_LOOP = 32;
 
+/** An idle's face clip on its face skeleton. */
+export type FaceClip = { source: THREE.Object3D; clip: THREE.AnimationClip;
+  /**
+   * A face clip that plays once up to here and loops from here to its end: a creator section's one-shot showcase before the loop
+   * (idle-catalogue.ts `face.loopFrom`). Absent: the whole clip loops.
+   */
+  loopFrom?: number };
+
 /** Compose decoded body motion and an offline-solved facial clip in world bind space. */
 export class IdleAnimation {
   readonly mixer: THREE.AnimationMixer;
@@ -40,7 +48,10 @@ export class IdleAnimation {
   private readonly delta = new THREE.Matrix4();
   private readonly local = new THREE.Matrix4();
   private readonly faceDelta = new THREE.Matrix4();
-  private readonly faceMixer?: THREE.AnimationMixer;
+  private faceMixer?: THREE.AnimationMixer;
+  private faceClip?: FaceClip;
+  /** The idle's face clip on its face skeleton, when it has one (given at construction or later through `setFace`). */
+  get facial(): FaceClip | undefined { return this.faceClip; }
   /** Driver lookups and their bind-pose inverses, kept so bones loaded later bind to the same neutral pose. */
   private readonly drivers = new Map<string, { driver: THREE.Object3D; inverseBind: THREE.Matrix4 }>();
   private readonly faceDrivers = new Map<string, { driver: THREE.Object3D; inverseBind: THREE.Matrix4 }>();
@@ -71,25 +82,37 @@ export class IdleAnimation {
   /** V at its bind pose (the idle off). */
   private readonly stillDelta: DeltaOf = name => this.drivers.has(name) ? IDENTITY : null;
   constructor(readonly source: THREE.Object3D, public clip: THREE.AnimationClip,
-    targets: THREE.Object3D[], ancestry: Record<string, string | null>,
-    readonly facial?: { source: THREE.Object3D; clip: THREE.AnimationClip;
-      /**
-       * A face clip that plays once up to here and loops from here to its end: a creator section's one-shot showcase before the loop
-       * (idle-catalogue.ts `face.loopFrom`). Absent: the whole clip loops.
-       */
-      loopFrom?: number }) {
+    targets: THREE.Object3D[], ancestry: Record<string, string | null>, facial?: FaceClip) {
     source.updateMatrixWorld(true);
     source.traverse(o => this.drivers.set(o.name, { driver: o, inverseBind: o.matrixWorld.clone().invert() }));
-    if (facial) {
-      facial.source.updateMatrixWorld(true);
-      facial.source.traverse(o => this.faceDrivers.set(o.name, { driver: o, inverseBind: o.matrixWorld.clone().invert() }));
-      this.faceMixer = new THREE.AnimationMixer(facial.source);
-      this.faceMixer.clipAction(facial.clip).setLoop(THREE.LoopRepeat,Infinity).play();
-    }
+    if (facial) this.startFace(facial);
     this.ancestry = ancestry;
     this.bind(targets);
     this.mixer = new THREE.AnimationMixer(source);
     this.mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+  }
+  private startFace(facial: FaceClip) {
+    this.faceClip = facial;
+    facial.source.updateMatrixWorld(true);
+    facial.source.traverse(o => this.faceDrivers.set(o.name, { driver: o, inverseBind: o.matrixWorld.clone().invert() }));
+    this.faceMixer = new THREE.AnimationMixer(facial.source);
+    this.faceMixer.clipAction(facial.clip).setLoop(THREE.LoopRepeat, Infinity).play();
+  }
+  /**
+   * Give an idle that started without a face its face clip, once the host has read it (PREV-174: the body doesn't wait for the face). The
+   * bones already bound take their face joints by name; a face with a one-shot showcase starts it now. An idle that has a face keeps it
+   * (`setClips` changes the clip).
+   */
+  setFace(facial: FaceClip) {
+    if (this.faceClip) return;
+    this.startFace(facial);
+    for (const binding of this.bindings) {
+      const face = this.faceDrivers.get(binding.bone.name);
+      if (face) { binding.faceDriver = face.driver; binding.inverseFaceBind = face.inverseBind; }
+    }
+    this.faceStart = facial.loopFrom !== undefined ? this.elapsed : 0;
+    if (this.enabled) this.update(0);
+    this.onChange?.();
   }
   private readonly ancestry: Record<string, string | null>;
   /** The clip rig's bone segments at rest (a joint to each child joint), for placing helper joints the export gives no parent. */

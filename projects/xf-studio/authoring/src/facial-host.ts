@@ -291,6 +291,11 @@ type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTra
 type Preparation = { key: string; controller: AbortController; promise: Promise<void>;
   /** Settles once the face (rig and setup) is read or has failed: what the idle's face and the blink wait for. */
   rigReady: Promise<void>; rigSettled?: () => void; installation?: Installation;
+  /**
+   * Settles when something asks for the installed expressions (`expressions()`, the Expressions view): the idle's face and the blink need
+   * only the face, so they never start that read (PREV-179).
+   */
+  startPointsWanted: Promise<void>; wantStartPoints?: () => void;
   rig: FacialHostState["rig"]; rigData?: Rig; expressions: FacialStartPoints; solver: FacialHostState["solver"]; process?: FacialSolverProcess;
   /** The started solver's readiness, the inert check included: a solve waiting for a restarted solver waits for this. */
   starting?: Promise<void>;
@@ -366,7 +371,12 @@ export class FacialHost {
       expressions: { phase: entry.expressions.phase, ...(entry.expressions.reason ? { reason: entry.expressions.reason } : {}), count: entry.expressions.items.length },
       samples: EXPRESSION_SAMPLES };
   }
-  expressions(): FacialStartPoints { return structuredClone(this.ensure().expressions); }
+  /** The installed expressions; asking starts reading them (after the face) if nothing asked before. */
+  expressions(): FacialStartPoints {
+    const entry = this.ensure();
+    entry.wantStartPoints?.();
+    return structuredClone(entry.expressions);
+  }
   async settled(): Promise<void> { await this.current?.promise; }
   /** Check the route before answering (PIPE-59), as the character details do. */
   async refresh(): Promise<void> {
@@ -408,9 +418,12 @@ export class FacialHost {
     const previous = this.current;
     previous?.controller.abort(); previous?.process?.dispose();
     const entry: Preparation = { key, controller: new AbortController(), promise: Promise.resolve(), rigReady: Promise.resolve(),
-      rig: { phase: "preparing" }, expressions: { phase: "preparing", items: [] }, solver: { phase: "starting" }, restarts: [],
-      failures: previous?.key === key ? previous.failures : 0 };
+      startPointsWanted: Promise.resolve(), rig: { phase: "preparing" }, expressions: { phase: "preparing", items: [] }, solver: { phase: "starting" },
+      restarts: [], failures: previous?.key === key ? previous.failures : 0 };
     entry.rigReady = new Promise<void>(settle => { entry.rigSettled = settle; });
+    // A retry of the same installation keeps a request for the installed expressions made before it.
+    const wanted = previous?.key === key && previous.wantStartPoints === undefined;
+    entry.startPointsWanted = wanted ? Promise.resolve() : new Promise<void>(settle => { entry.wantStartPoints = () => { entry.wantStartPoints = undefined; settle(); }; });
     this.current = entry;
     entry.promise = Promise.all([(previous?.promise ?? Promise.resolve()).catch(() => {}), this.clearing]).then(() => this.prepare(entry, settings)).finally(() => entry.rigSettled?.()).catch(error => {
       if (error instanceof Superseded || entry.controller.signal.aborted) return;
@@ -502,7 +515,9 @@ export class FacialHost {
     entry.rig = { phase: "ready" };
     entry.rigSettled?.();
     this.startSolver(entry);
-    // The installed expressions, after the face (the editor works without them).
+    // The installed expressions, after the face (the editor works without them), and only once something asks for them (PREV-179).
+    await new Promise<void>(settle => { if (signal.aborted) return settle(); void entry.startPointsWanted.then(settle); signal.addEventListener("abort", () => settle(), { once: true }); });
+    superseded();
     try { entry.expressions = await this.readStartPoints(installation, cli, tool, vocabulary, signal); }
     catch (error) {
       if (error instanceof Superseded || signal.aborted) throw error;
@@ -520,8 +535,9 @@ export class FacialHost {
     const location = this.options.solver();
     if ("missing" in location) { entry.solver = { phase: "missing", reason: location.missing }; return; }
     const rig = entry.rigData!, inProcess = "inProcess" in location;
-    // XF Studio's own solver has its compiled face: the documents (the setup's is large) are needed only by the oracle's files.
-    if (inProcess && rig.compiled) rig.documents = undefined;
+    // With XF Studio's own solver the documents (the setup's is tens of MB) are needed only by the oracle's files: dropped whether the face
+    // compiled or not (PREV-180).
+    if (inProcess) rig.documents = undefined;
     if (inProcess && !rig.compiled && !this.options.spawn) {
       entry.solver = { phase: "failed", kind: "in-app", reason: "XF Studio couldn't read V's face from your game files, so the live face preview is off. Your expression still saves with the look." };
       return;

@@ -976,6 +976,8 @@ export class StudioApplication {
   /** The facial preview as a feature's drawer shows it (undefined until the root connects one). */
   facialPreview(): FacialPreviewSnapshot | undefined { return this.services.facial?.snapshot(); }
   facialRetry() { this.services.facial?.retry(); }
+  /** The Expressions view is showing: the installed expressions are read (facial-preview.ts `installed`). */
+  facialInstalled() { this.services.facial?.installed(); }
   /** A library request's capability, routed by the registry to the `library` family. */
   requestCapability(request: CollectionRequest): StudioCapability {
     return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.capability(request) : unknownCommand();

@@ -36,10 +36,12 @@ export function createBrowserScenePreviewPorts(scene: Scene, options: {
     motion: {
       get idle() { return scene.idle; },
       available: scene.evidence.idle.available, error: scene.evidence.idle.error,
-      face: { available: scene.evidence.idle.facialControlsApplied, error: scene.evidence.idle.faceError || undefined },
+      // Read live: the idle's face can arrive after the scene started (PREV-174).
+      get face() { return { available: scene.evidence.idle.facialControlsApplied, error: scene.evidence.idle.faceError || undefined }; },
+      onFaceChange: listener => scene.onIdleFaceChange(listener),
       blink: { available: scene.evidence.blink?.available ?? false, error: scene.evidence.blink?.error || undefined,
         repeatSeconds: scene.evidence.blink?.repeatSeconds },
-      idles: scene.idles?.idles ?? [], selectIdle: scene.selectIdle,
+      get idles() { return scene.idles?.idles ?? []; }, selectIdle: scene.selectIdle,
       setIdle: scene.setIdle, setIdlePaused: scene.setIdlePaused,
       setIdleContributions: scene.setIdleContributions, setBlink: scene.setBlink,
       animateBlink: scene.animateBlink,

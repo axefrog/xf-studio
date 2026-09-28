@@ -32,10 +32,15 @@ export function coreSceneEvidence(input: {
       repeatSeconds: input.blink?.repeatSeconds, rig: input.blink?.description.rig, mappedBones: input.blink?.bindings.length ?? 0 },
     eyeShape: input.eyeShape,
     profileEncoding: input.profileEncoding,
-    idle: { available: !!idle, error: input.idleError, faceError: input.faceError ?? "", clip: idle?.clip.name, duration: idle?.clip.duration,
-      mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
-      faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 },
+    idle: idleEvidence(idle, input.idleError, input.faceError ?? ""),
   };
+}
+
+/** The idle's part of the scene evidence (taken again when its face arrives after the scene started). */
+export function idleEvidence(idle: IdleAnimation | undefined, idleError: string, faceError: string) {
+  return { available: !!idle, error: idleError, faceError, clip: idle?.clip.name, duration: idle?.clip.duration,
+    mappedBones: idle?.bindings.length ?? 0, unmappedBones: idle?.unmapped ?? [], facialControlsApplied: !!idle?.facial,
+    faceDuration: idle?.facial?.clip.duration, faceMappedBones: idle?.bindings.filter(b => b.faceDriver).length ?? 0 };
 }
 
 /** The raw UV0 range of a mesh (the eye's is not folded into one tile). */

@@ -507,6 +507,8 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   return {
     spec: { id: "expressions.controls", ...EXPRESSIONS_PANEL_META["expressions.controls"], element },
     update() {
+      // Showing asks for the installed expressions (read once, only when the Expressions view is used).
+      ctx.facial.installed?.();
       preview = ctx.facial.snapshot();
       current = part();
       const shown = statusText(preview);

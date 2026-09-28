@@ -4,7 +4,7 @@ import { BODY_FRAME, BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, fr
   type JointBox, type Subject } from "../../camera-framing";
 import type { PoseSample } from "../../pose-sample";
 import { poseClip, type PosePlacement } from "../../pose-clip";
-import { coreSceneEvidence } from "../../scene-evidence";
+import { coreSceneEvidence, idleEvidence } from "../../scene-evidence";
 import { bindRenderTriggers, createRenderScheduler, invalidating } from "../../render-scheduler";
 import { retainedViewportAspect, visibleViewportSize } from "../../viewport-size";
 import { loadCoreDetail, type LoadedCoreDetail } from "../../core-detail-loader";
@@ -287,6 +287,13 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const evidence = coreSceneEvidence({ coreDetail, meshes: rig.meshes, blink, blinkError: motion.blinkError,
     eyeShape: { choices: rig.eyeShapeChoices.length, eyesFollow: rig.eyesFollowShape, eyeMorphTargets: eyes.morphTargetInfluences?.length ?? 0 },
     profileEncoding: character.profileEncoding, idle, idleError: motion.idleError, faceError: motion.faceError ?? "" });
+  // The idle's face can arrive after the scene starts (PREV-174): its evidence follows, and a frame shows it.
+  const faceChanged = new Set<() => void>();
+  releases.push(motion.onFaceChange?.(() => {
+    evidence.idle = idleEvidence(idle, motion.idleError, motion.faceError ?? "");
+    invalidate();
+    for (const listener of faceChanged) listener();
+  }) ?? (() => {}));
   const api = {
     /** Whose core head this scene shows. */
     body: core.body,
@@ -391,8 +398,10 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     },
     endFovGesture: () => { fovGestureAnchor = undefined; },
     setIdle: (enabled: boolean) => { if (rigMotion.setIdle(enabled)) frameIdle(); },
-    /** The game's preview idles prepared on this computer (idle-catalogue.ts). */
-    idles: motion.idles,
+    /** The game's preview idles prepared on this computer (idle-catalogue.ts); the latest (the eyes section joins once the faces are known). */
+    get idles() { return motion.idles; },
+    /** Listen for the idle's face arriving after the scene started (`evidence.idle` has changed); returns the unsubscribe. */
+    onIdleFaceChange: (listener: () => void) => { faceChanged.add(listener); return () => { faceChanged.delete(listener); }; },
     /** Play another of them; the framing follows the new clip's head, as enabling the idle does. */
     selectIdle: async (id: string) => {
       if (!motion.selectIdle) throw Error("The game's other idles aren't prepared on this computer.");

@@ -465,7 +465,10 @@ test("extra file kinds: overlay archives beside the main one, TweakXL files in t
   expect(extraFileKind(`archive/pc/mod/0${NS}_table.archive`, NS)).toBe("overlay-archive");
   expect(extraFileKind(`r6/tweaks/${NS}/${NS}.yaml`, NS)).toBe("tweakxl");
   for (const path of [`archive/pc/mod/${NS}.archive`, `archive/pc/mod/${NS}.archive.xl`, "archive/pc/mod/other.xl", `r6/tweaks/xfs_other/${NS}.yaml`,
-    `r6/tweaks/${NS}.yaml`, `r6/tweaks/${NS}/sub/${NS}.yaml`, `r6/scripts/${NS}/${NS}.reds`, `bin/x64/plugins/${NS}.dll`, `r6/tweaks/${NS}/../x.yaml`])
+    `r6/tweaks/${NS}.yaml`, `r6/tweaks/${NS}/sub/${NS}.yaml`, `r6/scripts/${NS}/${NS}.reds`, `bin/x64/plugins/${NS}.dll`, `r6/tweaks/${NS}/../x.yaml`,
+    // An overlay archive carries the product's own name (PIPE-123): a generic name could collide with another mod's in archive/pc/mod.
+    "archive/pc/mod/basegame_table.archive", "archive/pc/mod/0other_table.archive", `archive/pc/mod/0${NS}.archive`, `archive/pc/mod/0${NS}_.archive`,
+    `archive/pc/mod/x${NS}_table.archive`])
     expect(extraFileKind(path, NS)).toBeNull();
 });
 

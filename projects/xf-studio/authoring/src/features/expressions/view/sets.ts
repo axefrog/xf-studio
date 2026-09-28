@@ -363,7 +363,7 @@ export function expressionSets(ctx: Ctx): PanelController {
       }
       applyCapability(newSet, ctx.presets.capability({ kind: "partPresetSet.create", name: "x" }));
       membersSection.hidden = !set; modSection.hidden = !set;
-      if (!set) return;
+      if (!set) { installRows.clear(); signature = ""; result.replaceChildren(); return; }
       setText(setTitle, `In “${set.name}”`);
       // The row whose expression the Expression panel holds is selected (its Remove is then reachable from the keyboard).
       const origin = (ctx.facade.view()?.part as ExpressionPart | undefined)?.origin;
@@ -393,7 +393,11 @@ export function expressionSets(ctx: Ctx): PanelController {
       progress.classList.toggle("idle", !running || running === "reveal");
       setText(progressText, running === "build" ? "Building…" : running === "check" ? "Checking…" : "");
       const next = JSON.stringify([set.id, set.revision, exports.results[set.id], presets.items.map(item => [item.id, item.name, item.revision])]);
-      if (next !== signature) { signature = next; result.replaceChildren(...renderResult(set, exports.results[set.id], presets.items)); }
+      if (next !== signature) {
+        signature = next; result.replaceChildren(...renderResult(set, exports.results[set.id], presets.items));
+        // Only the rows the shown result holds are kept: a row of another set, a deleted one or an older result goes (CORE-119).
+        for (const [product, row] of installRows) if (!result.contains(row.element)) installRows.delete(product);
+      }
       // The install rows follow every paint: availability, and what happened last.
       for (const [product, row] of installRows) {
         setText(row.add.querySelector("span")!, ctx.modInstall.label());

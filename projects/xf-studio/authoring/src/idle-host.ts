@@ -27,7 +27,7 @@ import { PLAYER_ENTITIES } from "./clothing-resolver";
 import { animatedComponents } from "./deformation-rig-host";
 import { writeFileAtomic } from "./derived-cache";
 import { depotHash, refFromHash, refFromPath } from "./depot-path";
-import { bakeFrames, bakedRest, clipFrame, clipTimes, introFrames } from "./engines/facial-rig/bake";
+import { bakeFrames, bakedRest, clipFrame, clipTimes, introFrames, MAX_BAKE_SECONDS } from "./engines/facial-rig/bake";
 import { clipTracksFromKeys, type ClipTracks } from "./engines/facial-rig/anim-tracks";
 import { FACE_SKELETON, UI_FACE_SET } from "./facial-catalogue";
 import { IDLE_FACE_MISSING, IDLE_FACE_PREPARING } from "./game-blink-messages";
@@ -61,6 +61,12 @@ const FAILED = "XF Studio couldn't read the character creator's idle from your g
 export class IdleSetupError extends Error { constructor() { super(NEEDS_SETUP); } }
 
 type AnimDecoder = (request: NativeAnimRequest) => Promise<NativeAnimOutcome>;
+/** The face set's clips (names, lengths) in the archive they are read from, with that archive's identity (path, size, time). */
+type FaceIndex = { clips: Map<string, { duration: number; type: string }>; archive: string; stamp: string; hash: string };
+/** What the idle's faces are solved from: the compiled face and the face set's clip index; or why the idle's face is off. */
+type FaceInputs = { source: FaceSource; index: FaceIndex } | { reason: string };
+/** An archive's identity for a cache key: an archive updated in place gets another (PREV-175). */
+const archiveStamp = (path: string) => { try { const s = statSync(path); return `${path}|${s.size}|${s.mtimeMs}`; } catch { return path; } };
 /** Where a catalogue entry's clip lives: the set's winning archive and hash, and the set's rig. */
 type ClipSource = { archive: string; set: string; setHash: string; clip: string; rigArchive: string; rigHash: string; rigPath: string };
 /** What the build reads from the game, as cached on disk (the prepared faces are joined when answering). */
@@ -110,8 +116,8 @@ export class IdleHost {
   private entry: { key: string; promise: Promise<NativeIdles>; done: NativeIdles | null; error: string | null } | null = null;
   private readonly bodies = new Map<string, Promise<PoseSample | null>>();
   private readonly faceRecords = new Map<string, Promise<FaceClipRecord | null>>();
-  /** The face set's clips (names, lengths), once per installation key, and why faces are off when they are. */
-  private faceIndex: { key: string; promise: Promise<{ clips: Map<string, { duration: number; type: string }>; archive: string; hash: string } | { reason: string }> } | null = null;
+  /** The face set's clips (names, lengths), once per installation key, and why faces are off when they are (a transient failure isn't kept). */
+  private faceIndex: { key: string; promise: Promise<FaceIndex | { reason: string }> } | null = null;
   constructor(private readonly options: IdleHostOptions) {}
 
   private cacheDir(key: string) { return join(this.options.resolverCache, "idles", key); }
@@ -179,21 +185,37 @@ export class IdleHost {
       return error instanceof IdleSetupError ? { schema: IDLE_STATE_SCHEMA, phase: "needs-setup", message: NEEDS_SETUP }
         : { schema: IDLE_STATE_SCHEMA, phase: "failed", message: FAILED };
     }
-    // Each idle's face, solved by XF Studio's own facial solver where the face and its clip can be read.
-    const { faces, reason } = await this.gameFaces(idles);
+    // Each idle's face, solved by XF Studio's own facial solver where the face and its clip can be read. The state answers at once: while
+    // the face is still being read it says so (`facePending`) and the page asks again (PREV-174); the body never waits for it.
+    const inputs = this.faceInputs();
+    const settled = inputs ? await Promise.race([inputs, new Promise<null>(done => setTimeout(() => done(null), IdleHost.FACE_WAIT_MS))]) : { reason: "" };
+    const { faces, reason } = settled ? this.gameFaces(idles, settled) : { faces: new Map<string, IdleEntry>(), reason: FACE_PREPARING };
     const catalogue = idleCatalogue({ entries: idles.entries, left: idles.left, durations: new Map(Object.entries(idles.durations)), source: idles.source, faces });
     return { schema: IDLE_STATE_SCHEMA, phase: "ready", message: "", source: "game", catalogue, rig: idles.rig,
-      ancestry: rigAncestry(idles.face?.joints ?? idles.rig.joints), face: idles.face, ...(reason ? { faceReason: reason } : {}) };
+      ancestry: rigAncestry(idles.face?.joints ?? idles.rig.joints), face: idles.face, ...(reason ? { faceReason: reason } : {}),
+      ...(settled ? {} : { facePending: true as const }) };
   }
 
-  /** How long the idles' state waits for the face before answering without it (the next state asks again). */
-  static readonly FACE_WAIT_MS = 30_000;
+  /** How long the idles' state waits for the face before answering it as pending (0: only what is already known). */
+  static FACE_WAIT_MS = 0;
 
-  /** The face set's clip index (native), once per installation key; or why the idle's face is off. */
-  private readFaceIndex(): Promise<{ clips: Map<string, { duration: number; type: string }>; archive: string; hash: string } | { reason: string }> {
+  /** The compiled face and the face set's index, or why the idle's face is off; null when this host solves no faces. */
+  private faceInputs(): Promise<FaceInputs> | null {
+    const faces = this.options.faces;
+    if (!faces) return null;
+    return (async (): Promise<FaceInputs> => {
+      const source = await faces().catch(() => ({ reason: FACE_UNREADABLE }));
+      if ("reason" in source) return source;
+      const index = await this.readFaceIndex();
+      return "reason" in index ? index : { source, index };
+    })();
+  }
+
+  /** The face set's clip index (native), once per installation key; or why the idle's face is off. A failure to read it is tried again. */
+  private readFaceIndex(): Promise<FaceIndex | { reason: string }> {
     const key = this.key();
     if (this.faceIndex?.key === key) return this.faceIndex.promise;
-    const promise = (async () => {
+    const promise: Promise<FaceIndex | { reason: string }> = (async () => {
       const route = this.options.route();
       if (!route) return { reason: NEEDS_SETUP };
       const open = this.options.open ?? (await import("./installation-registry")).acquireInstallation;
@@ -203,13 +225,13 @@ export class IdleHost {
       // The winning copy of the face set, unless it lacks the creator's loop: a mod that replaces the set with other clips (an expression pack
       // for photo mode) would leave the creator's face without its clips, and what the game then plays is untested, so the next copy that
       // has them is read (knowledge/facial-animation.md §5, open question) [hypothesis].
-      let first: { clips: Map<string, { duration: number; type: string }>; archive: string; hash: string } | null = null;
+      let first: FaceIndex | null = null;
       for (const archive of lookup.candidates) {
         const outcome = await decode({ archivePath: archive.id, hash: ref.hash, op: "index" });
         if (!outcome.ok || !outcome.index) continue;
         const clips = new Map<string, { duration: number; type: string }>();
         for (const info of outcome.index.clips) if (!clips.has(info.name) && (info.buffer === "simd" || info.buffer === "compressed")) clips.set(info.name, { duration: info.duration, type: info.animationType });
-        const found = { clips, archive: archive.id, hash: ref.hash };
+        const found = { clips, archive: archive.id, stamp: archiveStamp(archive.id), hash: ref.hash };
         first ??= found;
         if (clips.has(CREATOR_LOOP)) {
           if (archive !== lookup.winner) this.options.log?.(`The winning ${UI_FACE_SET} (${lookup.winner.providerName || lookup.winner.name}) has no ${CREATOR_LOOP}; the idle's face reads the copy in ${archive.providerName || archive.name}.`);
@@ -217,21 +239,21 @@ export class IdleHost {
         }
       }
       return first ?? { reason: FACE_UNREADABLE };
-    })().catch(error => { this.options.log?.(`The idle's face clips couldn't be listed: ${(error as Error)?.message ?? error}`); return { reason: FACE_UNREADABLE }; });
+    })().catch(error => {
+      // Not kept (PREV-176): the installation couldn't be opened or the reader stopped, which the next question may not meet.
+      this.options.log?.(`The idle's face clips couldn't be listed: ${(error as Error)?.message ?? error}`);
+      if (this.faceIndex?.promise === promise) this.faceIndex = null;
+      return { reason: FACE_UNREADABLE };
+    });
     this.faceIndex = { key, promise };
     return promise;
   }
 
   /** Each entry's face (by entry id), where the compiled face and the face set's clip are there; else the reason faces are off. */
-  private async gameFaces(idles: NativeIdles): Promise<{ faces: Map<string, IdleEntry>; reason?: string }> {
+  private gameFaces(idles: NativeIdles, inputs: FaceInputs): { faces: Map<string, IdleEntry>; reason?: string } {
     const faces = new Map<string, IdleEntry>();
-    if (!this.options.faces) return { faces };
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const waited = new Promise<{ reason: string }>(done => { timer = setTimeout(() => done({ reason: FACE_PREPARING }), IdleHost.FACE_WAIT_MS); });
-    const source = await Promise.race([this.options.faces().catch(() => ({ reason: FACE_UNREADABLE })), waited]).finally(() => clearTimeout(timer));
-    if ("reason" in source) return { faces, reason: source.reason };
-    const index = await this.readFaceIndex();
-    if ("reason" in index) return { faces, reason: index.reason };
+    if ("reason" in inputs) return { faces, ...(inputs.reason ? { reason: inputs.reason } : {}) };
+    const { index } = inputs;
     const entries = idles.entries.map(entry => ({ id: entry.id, clip: entry.clip, screen: entry.screen }));
     for (const entry of idles.entries) {
       const clip = faceClipFor(entry, index.clips);
@@ -262,13 +284,20 @@ export class IdleHost {
   }
   private async bakeFace(id: string): Promise<FaceClipRecord | null> {
     const idles = await this.ensure(), key = this.entry!.key;
-    if (!this.options.faces) return null;
-    const source = await this.options.faces();
-    if ("reason" in source) return null;
-    const { faces } = await this.gameFaces(idles), entry = faces.get(id)?.face;
-    const index = await this.readFaceIndex();
-    if (!entry || "reason" in index) return null;
-    const file = join(this.cacheDir(key), `face-${createHash("sha256").update(`${source.identity}|${index.archive}|${id}|${entry.clip}`).digest("hex").slice(0, 24)}.json`);
+    const inputs = await this.faceInputs();
+    if (!inputs || "reason" in inputs) return null;
+    const { source, index } = inputs, entry = this.gameFaces(idles, inputs).faces.get(id)?.face;
+    if (!entry) return null;
+    // Refused before decoding: a clip longer than the bake takes (PREV-173).
+    const length = (name: string) => index.clips.get(name)?.duration ?? 0;
+    const seconds = id === EYES_SECTION_ID ? EYES_LOOP_FROM + length(CREATOR_LOOP) : length(entry.clip);
+    if (!(seconds <= MAX_BAKE_SECONDS)) {
+      this.options.log?.(`The idle's face ${entry.clip} is ${Math.round(seconds)} s long, more than the ${MAX_BAKE_SECONDS} s XF Studio bakes; it holds still.`);
+      return null;
+    }
+    // Keyed by what it is solved from (PREV-175): the face's identity, the face set's archive identity and hash, and the clip reader's version.
+    const identity = `${source.identity}|${index.stamp}|${index.hash}|${ANIM_DECODER_VERSION}|${id}|${entry.clip}`;
+    const file = join(this.cacheDir(key), `face-${createHash("sha256").update(identity).digest("hex").slice(0, 24)}.json`);
     const cached = readJson(file) as FaceClipRecord | null;
     if (cached?.schema === FACE_MOTION_SCHEMA && cached.clip?.name === `${entry.clip}_face`) return cached;
     const route = this.options.route();
@@ -289,7 +318,7 @@ export class IdleHost {
     const rig = source.rig, started = performance.now();
     let frames: Float32Array[], times: number[];
     if (id === EYES_SECTION_ID) {
-      const [intro, loop] = await Promise.all([clip(EYES_SHOWCASE), clip("ui_closeup_shot")]);
+      const [intro, loop] = await Promise.all([clip(EYES_SHOWCASE), clip(CREATOR_LOOP)]);
       ({ frames, times } = introFrames(rig, intro, loop, { rate: FACE_RATE, blend: EYES_BLEND, loopFrom: EYES_LOOP_FROM }));
     } else {
       const loop = await clip(entry.clip);

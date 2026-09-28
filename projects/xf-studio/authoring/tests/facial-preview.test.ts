@@ -267,3 +267,30 @@ test("the blink clip carries on through a transition instead of restarting at ev
   expect(h.held[0]!.continues).toBeUndefined();
   expect(h.held.slice(1).every(pose => pose.continues)).toBe(true);
 });
+
+test("the installed expressions are asked for only once the Expressions view shows, then until they are read (PREV-179)", async () => {
+  let now = 0, asked = 0;
+  const timers = new Map<number, { at: number; run: () => void }>();
+  let next = 1;
+  const timer: FacialTimer = { set: (run, ms) => { const id = next++; timers.set(id, { at: now + ms, run }); return id; }, clear: id => timers.delete(id as number), now: () => now };
+  const advance = (ms: number) => { now += ms; for (const [id, entry] of [...timers]) if (entry.at <= now) { timers.delete(id); entry.run(); } };
+  // The host hasn't been asked, so its installed expressions stay "preparing" until the first ask.
+  const device: FacialDevicePort = { state: async () => readyState({ expressions: { phase: asked ? "ready" : "preparing", count: asked ? 1 : 0 } }),
+    expressions: async () => (++asked < 2 ? { phase: "preparing", items: [] } : { phase: "ready", items: [] }), solve: async () => solved(0) };
+  const preview = new FacialPreview(device, timer);
+  preview.start(); await settle();
+  expect(asked).toBe(0);
+  // Nothing to wait for while nobody wants them: the state isn't polled.
+  expect(timers.size).toBe(0);
+  expect(preview.snapshot().startPoints.phase).toBe("preparing");
+  preview.installed(); await settle();
+  expect(asked).toBe(1);
+  expect(timers.size).toBe(1);
+  advance(10_000); await settle();
+  expect(asked).toBe(2);
+  expect(preview.snapshot().startPoints.phase).toBe("ready");
+  expect(timers.size).toBe(0);
+  preview.installed(); await settle();
+  expect(asked).toBe(2);
+  preview.dispose();
+});

@@ -79,7 +79,7 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       hints: (slot: HTMLElement, host: HTMLElement) => new ViewportInputHints(port.viewport, "uv", slot, host),
     }),
     readiness: () => readinessText(new Frame(port)),
-    facial: Object.freeze({ snapshot: () => port.facial.snapshot(), retry: () => port.facial.retry() }),
+    facial: Object.freeze({ snapshot: () => port.facial.snapshot(), retry: () => port.facial.retry(), installed: () => port.facial.installed?.() }),
     presets: Object.freeze({
       list: () => port.presets.list(owner),
       sets: () => port.presets.sets(owner),
