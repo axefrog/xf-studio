@@ -108,10 +108,18 @@ public class XFHudFrame {
     frame.anchor = "top_right";
     frame.scale = 1.0;
     for line in StrSplit(text, "\n") {
-      let f = StrSplit(line, "\t");
-      if ArraySize(f) < 2 {
-        continue;
-      }
+      frame.Read(StrSplit(line, "\t"));
+    }
+    if frame.scale < 0.5 || frame.scale > 2.5 {
+      frame.scale = 1.0;
+    }
+    return frame;
+  }
+
+  // One record of the frame (redscript has no `continue`, so each line is read here).
+  private func Read(f: array<String>) -> Void {
+    let frame = this;
+    if ArraySize(f) >= 2 {
       let key = f[0];
       if Equals(key, "xfhud") {
         frame.valid = Equals(f[1], "1");
@@ -159,10 +167,6 @@ public class XFHudFrame {
         }
       }
     }
-    if frame.scale < 0.5 || frame.scale > 2.5 {
-      frame.scale = 1.0;
-    }
-    return frame;
   }
 }
 
@@ -685,29 +689,36 @@ public class XFInkOverlay extends ScriptableSystem {
     }
     let used = 0;
     for item in registry.Items() {
-      if !Equals(item.kind, "pieces") {
-        continue;
+      if this.PlacePlate(item, projector, used) {
+        used += 1;
       }
-      let entity = XFInkHost.Entity(item.id);
-      if !IsDefined(entity) {
-        continue;
-      }
-      let origin = entity.GetWorldPosition();
-      let f = entity.GetWorldForward();
-      let point = new Vector4(origin.X + f.X * 0.10, origin.Y + f.Y * 0.10, origin.Z + 1.35, 1.0);
-      let s = projector.Project(point);
-      if s.W <= 0.0 || s.W > 15.0 || AbsF(s.X) > 1.2 || AbsF(s.Y) > 1.2 {
-        continue;
-      }
-      let plate = this.Plate(used);
-      used += 1;
-      plate.SetText(IntToString(item.index + 1) + "  " + item.label);
-      plate.SetTranslation(new Vector2((s.X + 1.0) * 0.5 * this.m_width, (s.Y + 1.0) * 0.5 * this.m_height));
-      let size = ClampF(3.0 / MaxF(s.W, 0.5), 0.55, 1.0);
-      plate.SetScale(new Vector2(size, size));
-      plate.SetOpacity(ClampF((15.0 - s.W) / 5.0, 0.0, 1.0));
-      plate.SetVisible(true);
     }
     this.HidePlates(used);
+  }
+
+  // One head's label, if its pedestal is in view within 15 m; answers whether it used plate `slot`.
+  private func PlacePlate(item: ref<XFShowroomItem>, projector: ref<XFProjector>, slot: Int32) -> Bool {
+    if !Equals(item.kind, "pieces") {
+      return false;
+    }
+    let entity = XFInkHost.Entity(item.id);
+    if !IsDefined(entity) {
+      return false;
+    }
+    let origin = entity.GetWorldPosition();
+    let f = entity.GetWorldForward();
+    let point = new Vector4(origin.X + f.X * 0.10, origin.Y + f.Y * 0.10, origin.Z + 1.35, 1.0);
+    let s = projector.Project(point);
+    if s.W <= 0.0 || s.W > 15.0 || AbsF(s.X) > 1.2 || AbsF(s.Y) > 1.2 {
+      return false;
+    }
+    let plate = this.Plate(slot);
+    plate.SetText(IntToString(item.index + 1) + "  " + item.label);
+    plate.SetTranslation(new Vector2((s.X + 1.0) * 0.5 * this.m_width, (s.Y + 1.0) * 0.5 * this.m_height));
+    let size = ClampF(3.0 / MaxF(s.W, 0.5), 0.55, 1.0);
+    plate.SetScale(new Vector2(size, size));
+    plate.SetOpacity(ClampF((15.0 - s.W) / 5.0, 0.0, 1.0));
+    plate.SetVisible(true);
+    return true;
   }
 }
