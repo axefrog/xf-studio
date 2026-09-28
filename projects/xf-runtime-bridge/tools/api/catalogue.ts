@@ -1078,7 +1078,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "inventory.equip",
     title: "Equip a clothing item on V",
     description:
-      "Equips a clothing item on V by its item record (for example Items.Helmet_01_basic_01), as the inventory screen does, and waits until the slot shows it. With add_if_missing, an item V doesn't have is added to V's inventory first (and remembered, so inventory_unequip can remove it again). Clothing slots only (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit); only in normal play, not in combat or a scene. Needs the inventory permission, which the bridge's settings keep off until the maintainer allows it.",
+      "Equips a clothing item on V by its item record (for example Items.Helmet_01_basic_01), as the inventory screen does, and waits until the slot shows it. With add_if_missing, an item V doesn't have is added to V's inventory first (and remembered, so inventory_unequip can remove it again). Clothing slots only (Head, Face, OuterChest, InnerChest, Legs, Feet, Outfit); only in normal play, not in combat or a scene. When an active wardrobe outfit (or a hidden area) decides what the slot shows, the item is equipped but doesn't draw: the answer says so (hidden_by_outfit, outfit) and wardrobe_equip is the next step. Needs the inventory permission, which the bridge's settings keep off until the maintainer allows it.",
     permission: "write-inventory",
     input: obj(
       {
@@ -1090,6 +1090,53 @@ export const CATALOGUE: readonly CommandDef[] = [
     ),
     undo: "the result's undo equips the earlier item again, or empties the slot (removing an item the bridge added); loading a save also undoes it.",
     bridge: { method: "inventory.equip", timeoutMs: () => 15000 },
+  },
+  {
+    name: "wardrobe.state",
+    title: "Read V's wardrobe outfit",
+    description:
+      "The wardrobe outfit V wears (set 1-7, or 0 for none) and, for each clothing area (Head, Face, OuterChest, InnerChest, Legs, Feet), what it shows: outfit (the outfit's item), hidden (nothing: the outfit leaves the area empty, or headgear is hidden), equipped or empty; plus what is equipped there and the wardrobe's stored outfits. An active outfit overrides what the equipment slots show, which is why an equipped helmet can stay invisible.",
+    permission: "read",
+    input: obj({}),
+    bridge: { method: "wardrobe.state" },
+  },
+  {
+    name: "wardrobe.equip",
+    title: "Change V's wardrobe outfit",
+    description:
+      "Changes what V's clothing shows through the wardrobe, as the wardrobe screen does (the equipment system's own requests; stored outfits are never edited or saved): set applies outfit 1-7; clear takes the outfit off, so V shows what is equipped; item shows that clothing item in its area of the active outfit (the item must be in V's inventory or the wardrobe); area with show equipped makes that area show what is equipped there, and show hidden hides it; restore (the undo) puts back exactly the outfit and each area a snapshot recorded. Waits until the wardrobe shows the change. Only in normal play, not in combat or a scene. Needs the inventory permission; the kill switch puts back the wardrobe as it was before the bridge's first change.",
+    permission: "write-inventory",
+    input: obj({
+      set: int("Apply this wardrobe outfit (1-7; wardrobe_state lists the stored ones).", 1, 7),
+      clear: bool("true: take the active outfit off."),
+      item: str("Show this clothing item record in its area of the active outfit, for example Items.Helmet_01_basic_01.", { pattern: "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", maxLength: 128 }),
+      area: oneOf("The clothing area for show.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"]),
+      show: oneOf("With area: equipped (the area shows what is equipped there) or hidden (nothing).", ["equipped", "hidden"]),
+      restore: {
+        description: "A wardrobe_equip answer's undo: the outfit (0 none) and what each area showed.",
+        ...obj(
+          {
+            set: int("The outfit that was active, 0 for none.", 0, 7),
+            slots: {
+              type: "array",
+              description: "What each area showed.",
+              items: obj(
+                {
+                  area: oneOf("The clothing area.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"]),
+                  item: str("The outfit's item in the area (empty: none).", { maxLength: 128 }),
+                  hidden: bool("Whether the area was hidden."),
+                },
+                ["area"],
+              ),
+              maxItems: 6,
+            },
+          },
+          ["set"],
+        ),
+      },
+    }),
+    undo: "the result's undo (wardrobe_equip with restore) puts the outfit and every area back exactly; the kill switch restores the wardrobe as it was before the bridge's first change.",
+    bridge: { method: "wardrobe.equip", timeoutMs: () => 15000 },
   },
   {
     name: "inventory.unequip",

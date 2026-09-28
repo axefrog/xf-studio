@@ -2511,6 +2511,73 @@ void ScriptLayerTests()
     xfb::SetGameGate({});
 }
 
+// 0.5.2: the wardrobe's parameters, what counts as the change having shown, the undo, and inventory.equip's
+// outfit note; and photo.camera.set's exposure.
+void WardrobeTests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    const auto parse = [](const char* aText) { return p::ParseWardrobeEquip(json::parse(aText)); };
+    Check("0.5.2 wardrobe.equip: one change at a time (set, clear, item, area with show, restore)",
+          parse(R"({"set":3})").mode == "set" && parse(R"({"clear":true})").mode == "clear" &&
+              parse(R"({"item":"Items.Helmet_01_basic_01"})").mode == "item" && parse(R"({"area":"Head","show":"hidden"})").mode == "hidden" &&
+              parse(R"({"restore":{"set":0}})").mode == "restore" &&
+              ParamsCode([&] { parse(R"({"set":1,"clear":true})"); }) == "bad_params" &&
+              ParamsCode([&] { parse("{}"); }) == "bad_params");
+    Check("0.5.2 wardrobe.equip: bounds (outfits 1-7, clear only true, show needs an area, no Outfit area, a slot once)",
+          ParamsCode([&] { parse(R"({"set":8})"); }) == "bad_params" && ParamsCode([&] { parse(R"({"set":0})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"clear":false})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"show":"equipped"})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"area":"Outfit","show":"hidden"})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"restore":{"set":1,"slots":[{"area":"Head"},{"area":"Head"}]}})"); }) == "bad_params");
+    const auto restore = parse(R"({"restore":{"set":2,"slots":[{"area":"Head","item":"","hidden":true},{"area":"OuterChest","item":"Items.Jacket_01_basic_01","hidden":false}]}})");
+    Check("0.5.2 wardrobe.equip: a restore keeps every area as given (an empty item is no outfit item)",
+          restore.set == 2 && restore.slots.size() == 2 && restore.slots[0].item.empty() && restore.slots[0].hidden &&
+              restore.slots[1].item == "Items.Jacket_01_basic_01");
+
+    const json state{{"set", 2},
+                     {"areas",
+                      {{{"area", "Head"}, {"shows", "hidden"}, {"outfit_item", ""}, {"hidden", true}},
+                       {{"area", "OuterChest"}, {"shows", "outfit"}, {"outfit_item", "Items.Jacket_01_basic_01"}, {"hidden", false}},
+                       {{"area", "Legs"}, {"shows", "equipped"}, {"outfit_item", ""}, {"hidden", false}}}}};
+    Check("0.5.2 wardrobe: the change has shown when the reading agrees (set, item, hidden, equipped, restore)",
+          w::WardrobeShows(parse(R"({"set":2})"), state) && !w::WardrobeShows(parse(R"({"set":1})"), state) &&
+              !w::WardrobeShows(parse(R"({"clear":true})"), state) &&
+              w::WardrobeShows(parse(R"({"item":"Items.Jacket_01_basic_01"})"), state) &&
+              w::WardrobeShows(parse(R"({"area":"Head","show":"hidden"})"), state) &&
+              w::WardrobeShows(parse(R"({"area":"Legs","show":"equipped"})"), state) && w::WardrobeShows(restore, state));
+
+    w::WardrobeOps ops;
+    int settles = 0;
+    ops.change = [] { return json{{"changed", true}, {"before", {{"set", 0}, {"slots", json::array()}}}}; };
+    ops.state = [&] { return settles >= 2 ? state : json{{"set", 0}, {"areas", json::array()}}; };
+    ops.settle = [&] { ++settles; };
+    const auto out = w::WardrobeEquip(parse(R"({"set":2})"), ops);
+    Check("0.5.2 wardrobe.equip waits until the outfit shows, and its undo restores the snapshot exactly",
+          out["shown"] == true && settles == 2 &&
+              out["undo"] == json{{"method", "wardrobe.equip"}, {"params", {{"restore", {{"set", 0}, {"slots", json::array()}}}}}}, out.dump());
+    ops.change = [] { return json{{"changed", false}, {"before", {{"set", 0}}}}; };
+    const auto noop = w::WardrobeEquip(parse(R"({"clear":true})"), ops);
+    Check("0.5.2 wardrobe.equip clear with no outfit is a no-op with no undo", noop["changed"] == false && noop["undo"].is_null());
+
+    w::InventoryOps inventory;
+    inventory.equip = [] {
+        return json{{"item", "Items.Helmet_01_basic_01"}, {"slot", "Head"}, {"added", true}, {"already_equipped", false}, {"previous", ""},
+                    {"outfit", {{"set", 1}, {"area", "Head"}, {"shows", "hidden"}, {"outfit_item", ""}}}};
+    };
+    inventory.slot = [](const std::string&, const std::string&) { return json{{"slot", "Head"}, {"item", "Items.Helmet_01_basic_01"}, {"matches", true}}; };
+    inventory.settle = [] {};
+    const auto equipped = w::InventoryEquip(p::ParseInventoryEquip(json::parse(R"({"item":"Items.Helmet_01_basic_01","add_if_missing":true})")), inventory);
+    Check("0.5.2 inventory.equip says when an active outfit hides the equipped item (sessions 4 and 5's helmet)",
+          equipped["equipped"] == true && equipped["hidden_by_outfit"] == true && equipped["outfit"]["shows"] == "hidden" &&
+              equipped["outfit_note"].get<std::string>().find("wardrobe.equip") != std::string::npos, equipped.dump());
+
+    const auto camera = p::ParseCamera(json::parse(R"({"exposure":1.5,"contrast":0.2})"));
+    Check("0.5.2 photo.camera.set takes exposure (menu 10) and contrast (11), named for the undo",
+          camera.attributes.size() == 2 && camera.attributes[0].key == 10 && camera.attributes[0].name == "exposure" &&
+              camera.attributes[1].key == 11 && p::CameraParamName(10) == "exposure");
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -2535,6 +2602,7 @@ int RunUnitTests()
     Rb51To60Tests();
     ShowroomTests();
     ScriptLayerTests();
+    WardrobeTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

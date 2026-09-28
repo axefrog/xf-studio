@@ -97,6 +97,8 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   no_such_piece: "The showroom has no head with that index. showroom_state lists the heads it has.",
   spawn_refused: "The game's entity spawner refused the showroom entity, so nothing was spawned. The plugin log has the details.",
   not_ready: "The game can't spawn entities yet. Wait until V can move, then try again.",
+  no_active_outfit:
+    "V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first.",
   unsupported: "This game doesn't offer a safe way to do that yet.",
   unavailable: "That part of the game isn't available right now.",
   failed: "Something went wrong inside the game bridge. The plugin log has the details.",

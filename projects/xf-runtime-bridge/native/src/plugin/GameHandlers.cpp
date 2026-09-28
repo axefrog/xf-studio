@@ -868,6 +868,62 @@ json InventoryUnequipMethod(const MethodContext& aContext)
     return writes::InventoryUnequip(request, ops);
 }
 
+std::function<void()> WritesGuard();
+
+// wardrobe.state (0.5.2): the active outfit and what each clothing area shows.
+json WardrobeState(const MethodContext& aContext)
+{
+    params::RequireOnly(aContext.params, {});
+    return CallScript("XFWardrobe", "State", {}, {}, aContext.cid);
+}
+
+// wardrobe.equip (0.5.2): one wardrobe change (or the undo's exact restore) through the equipment system's own
+// requests (redscript XFWardrobe), then the wardrobe read until it shows it (writes::WardrobeEquip).
+json WardrobeEquipMethod(const MethodContext& aContext)
+{
+    const auto request = params::ParseWardrobeEquip(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    writes::WardrobeOps ops;
+    ops.change = [&queue, cid, request] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid, request] {
+                if (request.mode == "restore")
+                {
+                    // Begin, one slot each, then apply: all in this one game-thread step.
+                    int32_t set = request.set;
+                    CallScript("XFWardrobe", "RestoreBegin", {"Int32"}, {&set}, cid);
+                    for (const auto& slot : request.slots)
+                    {
+                        RED4ext::CString area(slot.area.c_str());
+                        RED4ext::CString item(slot.item.c_str());
+                        bool hidden = slot.hidden;
+                        CallScript("XFWardrobe", "RestoreSlot", {"String", "String", "Bool"}, {&area, &item, &hidden}, cid);
+                    }
+                    return CallScript("XFWardrobe", "RestoreFinish", {}, {}, cid);
+                }
+                RED4ext::CString mode(request.mode.c_str());
+                int32_t set = request.set;
+                RED4ext::CString item(request.item.c_str());
+                RED4ext::CString area(request.area.c_str());
+                return CallScript("XFWardrobe", "Change", {"String", "Int32", "String", "String"}, {&mode, &set, &item, &area}, cid);
+            },
+            "wardrobe.equip");
+    };
+    ops.state = [&queue, cid] {
+        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFWardrobe", "State", {}, {}, cid); }, "wardrobe.state");
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, 3, Timeout()))
+        {
+            throw MethodError("timeout", "the game didn't tick while the wardrobe changed");
+        }
+    };
+    WritesGuard()();
+    return writes::WardrobeEquip(request, ops);
+}
+
 // Multi-step writes check the kill switch and the panel's pause again before each step that changes the
 // game (RB-53); the dispatcher only checks them when the request arrives.
 std::function<void()> WritesGuard()
@@ -1731,6 +1787,12 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      &InventoryEquipMethod));
     aDispatcher.Register(WriteMethod("inventory.unequip", Access::WriteInventory, RunOn::BridgeThread,
                                      "Unequips a clothing slot (and removes an item the bridge added, if asked).", &InventoryUnequipMethod));
+    // Bridge 0.5.2: the wardrobe (outfits decide what each clothing area shows), in the inventory write class.
+    aDispatcher.Register({"wardrobe.state", Access::Read, RunOn::GameThread,
+                          "The active wardrobe outfit, what each clothing area shows, and the stored outfits.", &WardrobeState});
+    aDispatcher.Register(WriteMethod("wardrobe.equip", Access::WriteInventory, RunOn::BridgeThread,
+                                     "Applies or clears a wardrobe outfit, shows an item in the active outfit, or restores a snapshot.",
+                                     &WardrobeEquipMethod));
     aDispatcher.Register(WriteMethod("game.save", Access::WriteSave, RunOn::BridgeThread,
                                      "Makes one new manual save; refused while the bridge's save lock is held unless overridden.", &GameSaveMethod));
     aDispatcher.Register(WriteMethod("game.load", Access::WriteSave, RunOn::BridgeThread, "Loads the latest save or one save by name.",

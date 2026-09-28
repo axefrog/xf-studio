@@ -110,6 +110,10 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // game.load by name: the save list the game answered with (OnSavesForLoadReady).
   private let m_saves: array<String>;
   private let m_savesReady: Bool;
+  // wardrobe.equip (0.5.2): the wardrobe before the bridge's first change this session (the kill switch puts it back),
+  // and a restore being assembled area by area.
+  private let m_wardrobeSnapshot: ref<XFWardrobeSnapshot>;
+  private let m_wardrobeRestore: ref<XFWardrobeSnapshot>;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -456,6 +460,27 @@ public class XFBridgeRegistry extends ScriptableSystem {
 
   public func ForgetAddedItem(id: ItemID) -> Void {
     ArrayRemove(this.m_addedItems, id);
+  }
+
+  // The wardrobe before the bridge's first change this session; later changes keep the first.
+  public func NoteWardrobeSnapshot(snapshot: ref<XFWardrobeSnapshot>) -> Void {
+    if !IsDefined(this.m_wardrobeSnapshot) {
+      this.m_wardrobeSnapshot = snapshot;
+    }
+  }
+
+  public func TakeWardrobeSnapshot() -> ref<XFWardrobeSnapshot> {
+    let snapshot = this.m_wardrobeSnapshot;
+    this.m_wardrobeSnapshot = null;
+    return snapshot;
+  }
+
+  public func SetWardrobeRestore(snapshot: ref<XFWardrobeSnapshot>) -> Void {
+    this.m_wardrobeRestore = snapshot;
+  }
+
+  public func WardrobeRestore() -> ref<XFWardrobeSnapshot> {
+    return this.m_wardrobeRestore;
   }
 
   // Saves --------------------------------------------------------------------------------------
@@ -1129,6 +1154,8 @@ public abstract class XFBridgeActions {
     // decides. The save lock stays: whatever the bridge changed (a light, the clock, a creator option) may
     // still be live, and a save now would keep it. The lock is not persistent; loading a save
     // clears it.
+    // The wardrobe as it was before the bridge's first change this session (0.5.2).
+    out += XFWardrobe.RestoreAfterKill(cid);
     if registry.IsSaveLockHeld() {
       out += ",\"save_lock_kept\":true";
     }

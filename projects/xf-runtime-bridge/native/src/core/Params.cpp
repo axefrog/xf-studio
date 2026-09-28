@@ -287,6 +287,126 @@ InventoryUnequipRequest ParseInventoryUnequip(const json& aParams)
     return request;
 }
 
+const std::vector<std::string>& WardrobeAreas()
+{
+    static const std::vector<std::string> areas{"Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"};
+    return areas;
+}
+
+namespace
+{
+std::string WardrobeArea(const json& aParams, const char* aKey)
+{
+    const auto area = Text(aParams, aKey, 32);
+    if (!area)
+    {
+        return {};
+    }
+    const auto& areas = WardrobeAreas();
+    if (std::find(areas.begin(), areas.end(), *area) == areas.end())
+    {
+        Bad(std::string("'") + aKey + "' must be one of Head, Face, OuterChest, InnerChest, Legs or Feet");
+    }
+    return *area;
+}
+} // namespace
+
+WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
+{
+    RequireOnly(aParams, {"set", "clear", "item", "area", "show", "restore"});
+    WardrobeEquipRequest request;
+    int given = 0;
+    if (const auto set = Integer(aParams, "set", 1, 7))
+    {
+        request.mode = "set";
+        request.set = static_cast<int32_t>(*set);
+        ++given;
+    }
+    if (const auto clear = Boolean(aParams, "clear"))
+    {
+        if (!*clear)
+        {
+            Bad("'clear' takes true (take the active outfit off)");
+        }
+        request.mode = "clear";
+        ++given;
+    }
+    request.item = ItemName(aParams);
+    if (!request.item.empty())
+    {
+        request.mode = "item";
+        ++given;
+    }
+    request.area = WardrobeArea(aParams, "area");
+    const auto show = Text(aParams, "show", 16);
+    if (!request.area.empty() || show)
+    {
+        if (request.area.empty() || !show || (*show != "equipped" && *show != "hidden"))
+        {
+            Bad("give area with show: \"equipped\" (the area shows what is equipped there) or \"hidden\" (nothing)");
+        }
+        request.mode = *show;
+        ++given;
+    }
+    if (const auto it = aParams.find("restore"); it != aParams.end() && !it->is_null())
+    {
+        if (!it->is_object())
+        {
+            Bad("'restore' must be {set, slots} (a wardrobe.equip answer's undo)");
+        }
+        RequireOnly(*it, {"set", "slots"});
+        const auto set = Integer(*it, "set", 0, 7);
+        if (!set)
+        {
+            Bad("'restore.set' is required: 0 (no outfit) or 1-7");
+        }
+        request.set = static_cast<int32_t>(*set);
+        const auto slots = it->find("slots");
+        if (slots != it->end() && !slots->is_null())
+        {
+            if (!slots->is_array() || slots->size() > WardrobeAreas().size())
+            {
+                Bad("'restore.slots' must be a list of at most 6 {area, item, hidden}");
+            }
+            for (const auto& entry : *slots)
+            {
+                if (!entry.is_object())
+                {
+                    Bad("each of 'restore.slots' must be {area, item, hidden}");
+                }
+                RequireOnly(entry, {"area", "item", "hidden"});
+                WardrobeSlot slot;
+                slot.area = WardrobeArea(entry, "area");
+                if (slot.area.empty())
+                {
+                    Bad("each of 'restore.slots' needs its area");
+                }
+                if (const auto item = entry.find("item"); item != entry.end() && item->is_string() && !item->get<std::string>().empty())
+                {
+                    slot.item = ItemName(entry);
+                }
+                slot.hidden = Boolean(entry, "hidden").value_or(false);
+                for (const auto& earlier : request.slots)
+                {
+                    if (earlier.area == slot.area)
+                    {
+                        Bad("'restore.slots' names " + slot.area + " twice");
+                    }
+                }
+                request.slots.push_back(slot);
+            }
+        }
+        request.mode = "restore";
+        ++given;
+    }
+    if (given != 1)
+    {
+        Bad(given ? "give one wardrobe change: set, clear, item, area with show, or restore"
+                  : "give set (an outfit 1-7), clear: true, item (a clothing record), area with show, or restore");
+    }
+    return request;
+}
+
 GameSaveRequest ParseGameSave(const json& aParams)
 {
     RequireOnly(aParams, {"name", "override_lock", "timeout_ms"});

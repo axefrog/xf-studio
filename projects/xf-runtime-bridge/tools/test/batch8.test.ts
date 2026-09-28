@@ -154,3 +154,83 @@ describe("bridge 0.5.2: pacing and rate limits (RB-77)", () => {
     expect(rateLimitWaits(4000)).toEqual([150, 300, 600, 1000, 1000]);
   });
 });
+
+describe("bridge 0.5.2: the wardrobe (outfits decide what each clothing area shows)", () => {
+  let host: Host;
+  let api: CommandApi;
+  beforeAll(async () => {
+    host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom,inventory"], 90);
+    api = apiFor(host);
+  });
+  afterAll(async () => {
+    api?.close();
+    await host?.stop();
+  });
+
+  test("with an outfit that leaves the head empty, an equipped helmet is equipped but hidden, and the answer says so", async () => {
+    await phase(api, "gameplay");
+    const outfit = await api.run("wardrobe.equip", { set: 1 });
+    expect(outfit.ok, JSON.stringify(outfit)).toBe(true);
+    if (outfit.ok) expect(outfit.result).toMatchObject({ changed: true, shown: true, undo: { method: "wardrobe.equip", params: { restore: { set: 0 } } } });
+    const helmet = await api.run("inventory.equip", { item: "Items.Helmet_01_basic_01", add_if_missing: true });
+    expect(helmet.ok, JSON.stringify(helmet)).toBe(true);
+    if (helmet.ok) expect(helmet.result).toMatchObject({ equipped: true, hidden_by_outfit: true, outfit: { set: 1, area: "Head", shows: "hidden" } });
+    const state = await api.run("wardrobe.state", {});
+    expect(state.ok && (state.result as { areas: { area: string; shows: string; equipped: string }[] }).areas.find((a) => a.area === "Head")).toMatchObject({ shows: "hidden", equipped: "Items.Helmet_01_basic_01" });
+  });
+
+  test("the helmet into the outfit (item), then show: equipped, then the undo restores the outfit exactly", async () => {
+    const before = await api.run("wardrobe.state", {});
+    expect(before.ok).toBe(true);
+    const into = await api.run("wardrobe.equip", { item: "Items.Helmet_01_basic_01" });
+    expect(into.ok, JSON.stringify(into)).toBe(true);
+    if (!into.ok) return;
+    const result = into.result as { shown: boolean; state: { areas: { area: string; shows: string; outfit_item: string }[] }; undo: { params: Record<string, unknown> } };
+    expect(result.shown).toBe(true);
+    expect(result.state.areas.find((a) => a.area === "Head")).toMatchObject({ shows: "outfit", outfit_item: "Items.Helmet_01_basic_01" });
+    const undone = await api.run("wardrobe.equip", result.undo.params);
+    expect(undone.ok, JSON.stringify(undone)).toBe(true);
+    const after = await api.run("wardrobe.state", {});
+    if (before.ok && after.ok) expect((after.result as { areas: unknown }).areas).toEqual((before.result as { areas: unknown }).areas);
+
+    const shown = await api.run("wardrobe.equip", { area: "Head", show: "equipped" });
+    expect(shown.ok && (shown.result as { state: { areas: { area: string; shows: string }[] } }).state.areas.find((a) => a.area === "Head")?.shows).toBe("equipped");
+  });
+
+  test("refusals: item with no outfit active, both set and clear, an unknown outfit, an item nobody has; nothing to clear is a no-op", async () => {
+    const off = await api.run("wardrobe.equip", { clear: true });
+    expect(off.ok, JSON.stringify(off)).toBe(true);
+    const noop = await api.run("wardrobe.equip", { clear: true });
+    expect(noop.ok && (noop.result as { changed: boolean; undo: unknown }).changed).toBe(false);
+    const item = await api.run("wardrobe.equip", { item: "Items.Helmet_01_basic_01" });
+    expect(!item.ok && item.error.code).toBe("no_active_outfit");
+    const both = await api.run("wardrobe.equip", { set: 1, clear: true });
+    expect(!both.ok && both.error.code).toBe("bad_params");
+    const unknown = await api.run("wardrobe.equip", { set: 5 });
+    expect(!unknown.ok && unknown.error.code).toBe("bad_params");
+    await api.run("wardrobe.equip", { set: 2 });
+    const nobody = await api.run("wardrobe.equip", { item: "Items.Glasses_99" });
+    expect(!nobody.ok && nobody.error.code).toBe("not_in_inventory");
+  });
+
+  test("the kill switch puts the wardrobe back as it was before the bridge's first change", async () => {
+    const killed = await api.run("bridge.kill", {});
+    expect(killed.ok, JSON.stringify(killed)).toBe(true);
+    for (let i = 0; i < 40 && !host.log.some((l) => l.includes("bridge.kill_restored")); i++) await new Promise((r) => setTimeout(r, 50));
+    const line = host.log.find((l) => l.includes("bridge.kill_restored")) ?? "";
+    expect(line).toContain("wardrobe_restored");
+    expect(line).toContain('"set":0');
+  });
+
+  test("the inventory write class gates both, and wardrobe.state is a read", async () => {
+    const { findCommand } = await import("../api/catalogue.ts");
+    expect(findCommand("wardrobe.equip")!.permission).toBe("write-inventory");
+    expect(findCommand("wardrobe.state")!.permission).toBe("read");
+    const locked = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world"], 20);
+    const other = apiFor(locked);
+    const refused = await other.run("wardrobe.equip", { set: 1 });
+    expect(!refused.ok && refused.error.code).toBe("write_class_disabled");
+    other.close();
+    await locked.stop();
+  });
+});

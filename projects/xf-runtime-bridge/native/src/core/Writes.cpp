@@ -1016,6 +1016,15 @@ json InventoryEquip(const params::InventoryEquipRequest& aRequest, const Invento
         }
     }
     out["equipped"] = equipped;
+    // 0.5.2 (sessions 4 and 5's helmet): equipped, but an active wardrobe outfit (or a hidden area) decides what shows.
+    if (const auto outfit = step.find("outfit"); outfit != step.end() && outfit->is_object())
+    {
+        out["outfit"] = *outfit;
+        out["hidden_by_outfit"] = true;
+        out["outfit_note"] = outfit->value("shows", std::string()) == "hidden"
+                                 ? "the item is equipped, but the " + slot + " area is hidden (an empty area of the active wardrobe outfit, or hidden headgear), so it doesn't draw; wardrobe.equip with item puts it into the outfit, or with area and show: equipped shows it"
+                                 : "the item is equipped, but the active wardrobe outfit shows another item in the " + slot + " area; wardrobe.equip with item puts this one into the outfit, or clear: true takes the outfit off";
+    }
     if (!previous.empty() && !alreadyWorn)
     {
         out["undo"] = {{"method", "inventory.equip"}, {"params", {{"item", previous}, {"slot", slot}}}};
@@ -1323,6 +1332,121 @@ json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
     out["note"] = "the game is loading; wait for game_wait with phase gameplay before the next command";
     return out;
 }
+bool WardrobeShows(const params::WardrobeEquipRequest& aRequest, const json& aState)
+{
+    const auto set = aState.value("set", -1);
+    const auto areas = aState.value("areas", json::array());
+    const auto areaOf = [&](const std::string& aName) -> json {
+        for (const auto& area : areas)
+        {
+            if (area.is_object() && area.value("area", std::string()) == aName)
+            {
+                return area;
+            }
+        }
+        return json::object();
+    };
+    // Items are compared by record name as the script writes them (TDBID.ToStringDEBUG); a request names the record.
+    const auto sameItem = [](const std::string& aShown, const std::string& aWanted) {
+        return aShown == aWanted || aShown == "<TDBID:" + aWanted + ">" ||
+               (aShown.size() > aWanted.size() && aShown.find(aWanted) != std::string::npos);
+    };
+    if (aRequest.mode == "set")
+    {
+        return set == aRequest.set;
+    }
+    if (aRequest.mode == "clear")
+    {
+        return set == 0;
+    }
+    if (aRequest.mode == "item")
+    {
+        for (const auto& area : areas)
+        {
+            if (area.is_object() && area.value("shows", std::string()) == "outfit" &&
+                sameItem(area.value("outfit_item", std::string()), aRequest.item))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (aRequest.mode == "equipped" || aRequest.mode == "hidden")
+    {
+        const auto shows = areaOf(aRequest.area).value("shows", std::string());
+        return aRequest.mode == "hidden" ? shows == "hidden" : (shows == "equipped" || shows == "empty");
+    }
+    if (aRequest.mode == "restore")
+    {
+        if (set != aRequest.set)
+        {
+            return false;
+        }
+        if (aRequest.set == 0)
+        {
+            return true;
+        }
+        for (const auto& slot : aRequest.slots)
+        {
+            const auto area = areaOf(slot.area);
+            if (!slot.item.empty())
+            {
+                if (area.value("shows", std::string()) != "outfit" || !sameItem(area.value("outfit_item", std::string()), slot.item))
+                {
+                    return false;
+                }
+            }
+            else if (area.value("hidden", false) != slot.hidden)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+json WardrobeEquip(const params::WardrobeEquipRequest& aRequest, const WardrobeOps& aOps)
+{
+    auto step = aOps.change();
+    json out{{"mode", aRequest.mode}};
+    const auto before = step.value("before", json());
+    if (!step.value("changed", false))
+    {
+        out["changed"] = false;
+        out["state"] = aOps.state();
+        out["undo"] = nullptr;
+        out["undo_note"] = "nothing changed (no outfit was active)";
+        return out;
+    }
+    json state;
+    bool shown = false;
+    for (int i = 0; i < kInventoryPolls && !shown; ++i)
+    {
+        aOps.settle();
+        state = aOps.state();
+        shown = WardrobeShows(aRequest, state);
+    }
+    out["changed"] = true;
+    out["shown"] = shown;
+    out["state"] = state;
+    if (!shown)
+    {
+        out["note"] = "the game took the request, but the wardrobe didn't show the change within the wait (it may still change)";
+    }
+    if (before.is_object())
+    {
+        out["undo"] = {{"method", "wardrobe.equip"}, {"params", {{"restore", before}}}};
+        out["undo_note"] = "puts the wardrobe back exactly: the outfit that was active (or none) and what each area showed";
+    }
+    else
+    {
+        out["undo"] = nullptr;
+        out["undo_note"] = "the wardrobe's earlier state wasn't reported";
+    }
+    return out;
+}
+
 json StatusWhileLoading(const std::string& aPhase, const json& aLayer)
 {
     return json{{"phase", aPhase},

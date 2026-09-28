@@ -386,6 +386,31 @@ struct InventoryUnequipRequest
 };
 InventoryUnequipRequest ParseInventoryUnequip(const json& aParams);
 
+// wardrobe.equip (0.5.2): exactly one of
+//   {set: 1-7}                                   apply that wardrobe outfit
+//   {clear: true}                                take the active outfit off (V shows what is equipped)
+//   {item: record}                               show that item in its area of the active outfit
+//   {area: Head|Face|OuterChest|InnerChest|Legs|Feet, show: "equipped"|"hidden"}
+//                                                an area shows what is equipped there, or nothing
+//   {restore: {set: 0-7, slots: [{area, item, hidden}]}}   the undo: exactly the wardrobe a snapshot recorded
+struct WardrobeSlot
+{
+    std::string area;
+    std::string item; // empty: the area shows no outfit item
+    bool hidden = false;
+};
+struct WardrobeEquipRequest
+{
+    std::string mode; // set, clear, item, equipped, hidden, restore
+    int32_t set = 0;
+    std::string item;
+    std::string area;
+    std::vector<WardrobeSlot> slots;
+};
+WardrobeEquipRequest ParseWardrobeEquip(const json& aParams);
+// The areas an outfit covers (Outfit itself isn't one).
+const std::vector<std::string>& WardrobeAreas();
+
 // game.save: {name (a label for the logs, 1-64 letters, digits, spaces, '.', '_', '-'; the game names the
 // save itself), override_lock (default false), timeout_ms (2000-60000, default 20000)}.
 struct GameSaveRequest
