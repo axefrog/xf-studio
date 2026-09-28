@@ -16,6 +16,7 @@ Research notes, contracts and evidence for XF Studio and related Cyberpunk 2077 
 | [jewellery/](jewellery/) | Vanilla piercing preview, PRC inventory/preview/catalogue audit, jewellery construction-set proposal, earring references. |
 | [nails/](nails/nail-salon-design.md) | Nail Salon design: how V's nails render, a nail-board vector editor, nail finishes and an additive export to the game's Nails row. |
 | [runtime/](runtime/runtime-bridge-design.md) | Runtime access: base mods per mod type, the local bridge design, the agent autonomy capability matrix and the bridge test card. |
+| [mod-ecosystem/](mod-ecosystem/README.md) | Survey of the installed mods: triage by class, ranked functionality mods, the most-hooked game functions, hook conflicts and the deep-dive plan. |
 | [archive-xl/](archive-xl/) | ArchiveXL expansion strategy (legacy matrix lessons) and pinned upstream source notes. |
 | [consumers/](consumers/README.md) | Locally extracted third-party resources for research (payloads ignored; manifests/notes tracked). |
 
