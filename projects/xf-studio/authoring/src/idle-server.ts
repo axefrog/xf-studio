@@ -25,7 +25,7 @@ export function createIdleHandler(host: Pick<IdleHost, "state" | "body" | "face"
       if (face !== null) {
         if (!isIdleId(face)) return json({ code: "invalid", error: "Unknown idle." }, 400);
         const record = await host.face(face);
-        return record ? json(record) : json({ code: "missing_target", error: "That idle's facial movement couldn't be read from your game files." }, 404);
+        return record ? json(record) : json({ code: "missing_target", error: "That idle's face couldn't be read from your game files." }, 404);
       }
       const body = url.searchParams.get("body");
       if (body === null) return json(await host.state());

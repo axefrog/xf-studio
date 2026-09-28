@@ -347,8 +347,9 @@ test("an idle without face motion: the body plays, the face says why in plain wo
   const motion = new MotionActions(freshWorkspace().preview, port);
   // The face's reason comes from one place and is true in every state (Still, body off): it names no failure and no body motion.
   expect(motion.snapshot()).toMatchObject({ available: true, faceAvailable: false, faceError: IDLE_FACE_MISSING });
-  expect(IDLE_FACE_MISSING).toContain("couldn't read V's facial movement from your game files");
-  expect(IDLE_FACE_MISSING).not.toMatch(/body moves|version/);
+  expect(IDLE_FACE_MISSING).toBe("V's face holds still during the idle: XF Studio couldn't read it from your game files.");
+  // V can be masculine: no "her" or "his" for V.
+  expect(IDLE_FACE_MISSING).not.toMatch(/(?:her|his|she|he)|body moves|version/i);
   // Without the idle playing the blink works; while it plays, the refusal gives the next step and doesn't claim the idle blinks.
   expect(motion.capability({ kind: "motion.playBlink", playing: true }).available).toBe(true);
   motion.dispatch({ kind: "motion.setIdle", enabled: true });

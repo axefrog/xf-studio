@@ -20,15 +20,17 @@ export const IDLE_MASCULINE = "The character creator's idle for a masculine V is
  * solver, but here that didn't work (the host usually gives its own reason instead). The body moves and the face holds still, and the Motion
  * panel says so (DESK-02).
  */
-export const IDLE_FACE_MISSING = "XF Studio couldn't read V's facial movement from your game files, so her face holds still during the idle.";
+export const IDLE_FACE_MISSING = "V's face holds still during the idle: XF Studio couldn't read it from your game files.";
+/** The idle's face is still being read (a progress state; the face moves once it's ready). */
+export const IDLE_FACE_PREPARING = "Reading V's face from your game files… It moves once it's ready.";
 /**
  * The blink couldn't be read from the game files (the host usually gives its own reason instead): a person is told plainly, with nothing
  * to do (UI-86). It claims nothing about the idle, whose face may hold still too (DESK-04).
  */
 export const GAME_BLINK_MISSING = "XF Studio couldn't read the game's blink from your game files.";
-/** The asset is there but isn't a readable blink (cut short, overwritten, not a GLB). */
-export const GAME_BLINK_DAMAGED = "The prepared blink is damaged; prepare it again.";
-/** The asset reads, but none of its joints are in the preview head's skeleton. */
-export const GAME_BLINK_NO_JOINTS = "The prepared blink has none of this head's eyelid joints, so it can't move the eyes; prepare it again from this head's game files.";
-/** The asset's joints have this head's names but sit elsewhere (another body type's or a modded skeleton). */
-export const GAME_BLINK_OTHER_HEAD = "The prepared blink was made for a different head, so its eyelids would turn about the wrong places; prepare it again from this head's game files.";
+/** The blink's data isn't readable (cut short, overwritten, not a blink); a rare failure with nothing for the person to do (UI-86). */
+export const GAME_BLINK_DAMAGED = "XF Studio couldn't read the game's blink: its data is damaged.";
+/** The blink reads, but none of its joints are in the preview head's skeleton. */
+export const GAME_BLINK_NO_JOINTS = "The game's blink has none of this head's eyelid joints, so it can't move V's eyes.";
+/** The blink's joints have this head's names but sit elsewhere (another body type's or a modded skeleton). */
+export const GAME_BLINK_OTHER_HEAD = "The game's blink was made for a different head, so its eyelids would turn about the wrong places.";

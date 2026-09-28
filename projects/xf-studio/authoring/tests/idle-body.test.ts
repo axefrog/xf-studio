@@ -127,7 +127,7 @@ describe("the idle host and its endpoint", () => {
       // The face is ready but its clips can't be listed (the game can't be opened here): no faces, in plain words.
       reason = null;
       const later = await host.state();
-      expect(later.phase === "ready" && later.source === "game" && later.faceReason).toContain("couldn't read V's face");
+      expect(later.phase === "ready" && later.source === "game" && later.faceReason).toBe("V's face holds still during the idle: XF Studio couldn't read it from your game files.");
       expect(await host.face("closeup")).toBeNull();
       // A body whose clip the cache can't place is null, not an error.
       expect(await host.body("closeup")).toBeNull();

@@ -30,6 +30,7 @@ import { depotHash, refFromHash, refFromPath } from "./depot-path";
 import { bakeFrames, bakedRest, clipFrame, clipTimes, introFrames } from "./engines/facial-rig/bake";
 import { clipTracksFromKeys, type ClipTracks } from "./engines/facial-rig/anim-tracks";
 import { FACE_SKELETON, UI_FACE_SET } from "./facial-catalogue";
+import { IDLE_FACE_MISSING, IDLE_FACE_PREPARING } from "./game-blink-messages";
 import type { FaceSource } from "./facial-host";
 import { motionClip, motionRest } from "./facial-host";
 import { FACE_MOTION_SCHEMA, type FaceClipRecord } from "./platform/api/facial";
@@ -46,9 +47,9 @@ import type { Installation, InstallationOptions } from "./resolver-host";
 /** Version of what this host derives (the catalogue rule, the sample's shape); part of the disk cache's key with the decoder's. */
 export const IDLE_HOST_VERSION = 1;
 const NEEDS_SETUP = "V's idle comes from your game. Choose your game folder in Settings › Game.";
-/** Why the idle's face holds still: its face or clips couldn't be read, or it is still being read. */
-const FACE_UNREADABLE = "XF Studio couldn't read V's face from your game files, so her face holds still during the idle.";
-const FACE_PREPARING = "V's face is still being read from your game files; her face moves once it's ready.";
+/** Why the idle's face holds still: its face or clips couldn't be read (the Motion panel's one sentence for it), or it is still being read. */
+const FACE_UNREADABLE = IDLE_FACE_MISSING;
+const FACE_PREPARING = IDLE_FACE_PREPARING;
 /** The idle's face is solved at this rate (the developer bakes' rate). */
 const FACE_RATE = 30;
 /** The eyes section: its showcase clip, the 0.5 s blends and where the loop starts (research/animation/cc-idle.md). */

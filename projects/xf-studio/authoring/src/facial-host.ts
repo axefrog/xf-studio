@@ -24,6 +24,7 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import { runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
+import { IDLE_FACE_MISSING } from "./game-blink-messages";
 import { bakeClips, bakedRest, clipFrame, eyeShapeSeats, type BakedFrames, type BakedRest } from "./engines/facial-rig/bake";
 import { compileFacialRig, createFacialPose, solveFace, type CompiledFacialRig } from "./engines/facial-rig/solver";
 import { morphBinds, nativeClip, nativeDocument, nativeSetClips } from "./facial-native";
@@ -319,7 +320,7 @@ export const STALE_TEMP_MS = 60 * 60_000;
 export const MAX_WAITING_CLIENTS = 8;
 
 const fingerprint = (path: string) => { try { const s = statSync(path); return `${path}|${s.size}|${s.mtimeMs}`; } catch { return path; } };
-const NOT_SET_UP = "Live expressions read your V's face from your game files: choose your game folder in Settings.";
+const NOT_SET_UP = "Live expressions read V's face from your game files: choose your game folder in Settings.";
 /** The solver's program couldn't be started at all (no Python on this computer, CORE-99). */
 export const SOLVER_NOT_SET_UP = "The facial solver isn't set up on this computer, so the live face preview is off. You can still set every " +
   "control: your expression is saved with the look.";
@@ -522,7 +523,7 @@ export class FacialHost {
     // XF Studio's own solver has its compiled face: the documents (the setup's is large) are needed only by the oracle's files.
     if (inProcess && rig.compiled) rig.documents = undefined;
     if (inProcess && !rig.compiled && !this.options.spawn) {
-      entry.solver = { phase: "failed", kind: "in-app", reason: "XF Studio's facial solver couldn't read V's facial setup, so the live face preview is off. Your expression is still saved with the look." };
+      entry.solver = { phase: "failed", kind: "in-app", reason: "XF Studio couldn't read V's face from your game files, so the live face preview is off. Your expression still saves with the look." };
       return;
     }
     entry.solver = { phase: "starting", kind: inProcess ? "in-app" : "oracle" };
@@ -580,8 +581,9 @@ export class FacialHost {
     const entry = this.ensure();
     await entry.rigReady;
     const rig = entry.rigData;
-    if (!rig) return { reason: entry.rig.reason ?? "V's face couldn't be read from your game files." };
-    if (!rig.compiled) return { reason: "XF Studio's facial solver couldn't read V's facial setup." };
+    // The idle's own words (the Motion panel shows them): not the Expression panel's.
+    if (entry.rig.phase === "unconfigured") return { reason: IDLE_FACE_NEEDS_SETUP };
+    if (!rig?.compiled) return { reason: IDLE_FACE_MISSING };
     return { rig: rig.compiled, identity: `${FACE_BAKE_VERSION}|${rig.identity}`, skeleton: rig.vocabulary.rig, setup: rig.vocabulary.setup,
       installation: entry.installation ?? null };
   }
@@ -883,6 +885,11 @@ export class FacialHost {
   }
 }
 
+/**
+ * The idle's face without a game folder. Not reached through the idle today (the idle itself needs the game folder first and says so), kept
+ * so the idle never shows the Expression panel's words.
+ */
+const IDLE_FACE_NEEDS_SETUP = "Choose your game folder in Settings to see V's face move during the idle.";
 /** The blink endpoint's answer while a developer uses the IO Suite oracle (the page then reads the prepared blink asset, if any). */
 const ORACLE_BLINK = "The facial solver oracle is in use, so the blink is the developer preparation's (XFS_PREPARED_MOTION=on serves it).";
 /** The closure slider's steps (21 solved instants from open to the clip's closed frame). */
