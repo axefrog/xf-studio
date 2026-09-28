@@ -2,7 +2,8 @@
  * Each adapter follows an inspected post-G-buffer decal program (see finish-export.ts).
  * None claims equivalence to the browser's separately lit transparent layers.
  */
-import { canonicalFinish, defaultFlakes, bakeFlakes, shimmerFacetSampler, type LegacyFlakes } from "./finish";
+import { canonicalFinish, defaultFlakes, type LegacyFlakes } from "./finish";
+import { bakeShimmerGrain, SHIMMER_GRAIN } from "./shimmer-grain";
 import {
   flatSurface, fresnelMaterial, planPresetExport, ROUTE_ADAPTER,
   type ExportRoute, type TextureChannel,
@@ -81,26 +82,14 @@ const layerMask = (layer: Layer, t: Target) => t.head ? raster(layer, t.width, t
 const hexBytes = (color: string) => [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
 const sqrtLinear = (color: string) => hexBytes(color).map(b => Math.sqrt(srgbToLinear(b / 255)));
 
-/** Per-texel optical inputs of one layer: constant surface, or the classic Shimmer facet bake. */
+/** Per-texel optical inputs of one layer: a constant surface, or Shimmer's grain (shimmer-grain.ts) on the target's own grid. */
 function layerOptics(layer: Layer, t: Target) {
   const finish = canonicalFinish(layer.finish);
   if (finish === "shimmer") {
     const flakes = (layer.flakes && !("model" in layer.flakes) ? layer.flakes : defaultFlakes()) as LegacyFlakes;
-    if (!t.head) {
-      // The same UV-anchored facets, evaluated at each window texel's authored UV with a one-texel edge.
-      const du = (t.window.u1 - t.window.u0) / t.width, dv = (t.window.v1 - t.window.v0) / t.height;
-      const facet = shimmerFacetSampler(flakes, 1 / du, 1 / dv), count = t.width * t.height;
-      const normal = new Uint8Array(count * 2), surface = new Uint8Array(count * 2);
-      for (let y = 0, p = 0; y < t.height; y++) for (let x = 0; x < t.width; x++, p++) {
-        const f = facet(t.window.u0 + (x + .5) * du, t.window.v0 + (y + .5) * dv);
-        normal[p * 2] = f.normalX; normal[p * 2 + 1] = f.normalY; surface[p * 2] = f.roughness; surface[p * 2 + 1] = f.metalness;
-      }
-      return { roughness: (p: number) => surface[p * 2] / 255, metalness: (p: number) => surface[p * 2 + 1] / 255,
-        normal: (p: number): [number, number] => [unorm(normal[p * 2]), unorm(normal[p * 2 + 1])] };
-    }
-    const bake = bakeFlakes(t.width, "shimmer", flakes);
-    return { roughness: (p: number) => bake.surface[p * 4 + 1] / 255, metalness: (p: number) => bake.surface[p * 4 + 2] / 255,
-      normal: (p: number): [number, number] => [unorm(bake.normal[p * 4]), unorm(bake.normal[p * 4 + 1])] };
+    const grain = bakeShimmerGrain(flakes, t.width, t.height, t.window);
+    return { roughness: (p: number) => grain.surface[p * 4 + 1] / 255, metalness: (p: number) => grain.surface[p * 4 + 2] / 255,
+      normal: (p: number): [number, number] => [unorm(grain.normal[p * 4]), unorm(grain.normal[p * 4 + 1])] };
   }
   const surface = flatSurface(finish);
   if (!surface) throw new UnsupportedMaterialError([{ id: layer.id, finish }]);
@@ -198,12 +187,13 @@ export function compileFacetedPreset(value: unknown, region: CompileRegion, spac
     metadata: {
       adapter: ROUTE_ADAPTER.faceted, layerOrder: plan.included.map(l => l.id), coveredTexels,
       diffuseEncoding: "sRGB RGB, linear sqrt(coverage) alpha; import with IsGamma=true",
-      scalarEncoding: "linear red channel; lower roughness mips widened by unresolved facet slope variance",
+      scalarEncoding: "linear red channel; lower roughness mips widened by unresolved grain slope variance",
       normalEncoding: "tangent X, Y as UNORM; flat outside coverage; BC5 via TCM_Normalmap",
       material: { ...FLAT_MATERIAL, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1 },
       limitations: [
-        "Experimental: normal alpha follows the colour-map alpha (sqrt coverage), and NormalsBlendingMode 1 fades facets below about 11 degrees of tilt.",
-        "Facet tilt direction follows the texture's green axis, whose on-plate sign is untested; random facet azimuths make the statistics sign-independent.",
+        `Experimental Shimmer (${SHIMMER_GRAIN.model}): a uniform surface (roughness ${SHIMMER_GRAIN.roughness}, metalness ${SHIMMER_GRAIN.metalness}) with a fine grain of tilted normals, ${SHIMMER_GRAIN.cellsPerUv} cells per unit of head UV; every tilted grain (${SHIMMER_GRAIN.tiltFloorDeg} degrees or more) clears NormalsBlendingMode 1's fade.`,
+        "Normal alpha follows the colour-map alpha (sqrt coverage).",
+        "Grain tilt direction follows the texture's green axis, whose on-plate sign is untested; random grain azimuths make the statistics sign-independent.",
         ...spaceNote(t),
         "Game rendering and perceived browser/game equivalence remain unverified.",
       ],

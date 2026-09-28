@@ -1,5 +1,6 @@
 import { createRasterJob, type Layer } from "./recipe";
 import { createFlakeJob, defaultFlakes, isIrregular, type FlakeMaps } from "./finish";
+import { createShimmerGrainJob } from "./shimmer-grain";
 import { createFlakeCatalogueJob, createRegionFlakeCatalogueJob, createFlakeBakeJob, createFlakeColourJob,
   FLAKE_LIMITS } from "./flake-field";
 import { maskAlphaKey, studioIrregularOpticalKey, irregularAlbedoKey } from "./makeup-dependencies";
@@ -172,10 +173,11 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
           (layer.finish === "shimmer" || layer.finish === "glitter" && !isDirectGlint(layer.flakes))) {
           await pause();
           if (!token.cancelled) {
-            const optical = createFlakeJob(size,layer.finish,
-              isIrregular(layer.flakes) || isDirectGlint(layer.flakes) ? defaultFlakes() : layer.flakes ?? defaultFlakes());
+            const flakes = isIrregular(layer.flakes) || isDirectGlint(layer.flakes) ? defaultFlakes() : layer.flakes ?? defaultFlakes();
+            // Game-matched Shimmer previews the export's grain; the earlier Shimmer study and classic Glitter keep the flake bake.
+            const optical = layer.finish === "shimmer" && layer.optics ? createShimmerGrainJob(flakes,size) : createFlakeJob(size,layer.finish,flakes);
             await drain(optical,256);
-            if (!token.cancelled) optics = {size: optical.size,normal: optical.normal,surface: optical.surface};
+            if (!token.cancelled) optics = {size,normal: optical.normal,surface: optical.surface};
           }
         }
         if (token.cancelled) post({ i: token.i, version: token.version, cancelled: true });

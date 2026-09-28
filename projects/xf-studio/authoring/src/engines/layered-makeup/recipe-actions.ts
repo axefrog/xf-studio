@@ -163,6 +163,9 @@ export function recipeActionCapability(state: RecipeActionState, action: RecipeA
     return refuse({ code: "mode", field: "model", message: "Select a direct-light Glitter model first." });
   if (action.kind === "glitter.setClassic" && (isIrregular(layer.flakes) || isDirectGlint(layer.flakes)))
     return refuse({ code: "mode", field: "model", message: "Select a classic flake model first." });
+  // Game-matched Shimmer's grain has one true-to-scale size (shimmer-grain.ts); only its amount and angle apply.
+  if (action.kind === "glitter.setClassic" && action.key === "cells" && canonicalFinish(layer.finish) === "shimmer" && layer.optics)
+    return refuse({ code: "mode", field: "cells", message: "Shimmer's sparkles have one fixed size." });
   if (action.kind === "layer.useGameOptics" && !hasGameOptics(layer.finish))
     return refuse({ code: "mode", field: "finish", message: "Only Glossy, Shimmer and Colour-shifting have a game-matched model." });
   if (action.kind === "layer.useGameOptics" && layer.optics)

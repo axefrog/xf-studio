@@ -1,6 +1,7 @@
 import {expect,test} from "bun:test";
 import {createHash} from "node:crypto";
 import {bakeFlakes,createFlakeJob,defaultFlakes,type Flakes} from "../src/engines/layered-makeup/finish";
+import {bakeShimmerGrain} from "../src/engines/layered-makeup/shimmer-grain";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
 import { initialRecipe, raster, EYE_RASTER_REGION } from "./fixtures/eye-region";
 
@@ -78,4 +79,13 @@ test("nonoptical, disabled and opt-out requests avoid the optical phase",async()
     await processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:32,bakeOptics});
     expect(result?.cancelled).not.toBe(true);if(result&&!result.cancelled){expect(result.size).toBe(32);expect(result.optics).toBeUndefined();expect(result.data).toEqual(raster(layer,32));}
   }
+});
+
+test("game-matched Shimmer previews the export's grain; the earlier study keeps the classic facets",async()=>{
+  const layer=initialRecipe().layers[0];layer.finish="shimmer";layer.flakes=defaultFlakes();layer.enabled=true;
+  layer.optics={model:"game-matched-1"};let result:RasterResponse|undefined;
+  const processor=createRasterProcessor(r=>{result=r;},async()=>{},()=>0);
+  await processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:64,bakeOptics:true});
+  expect(result?.cancelled).not.toBe(true);
+  if(result&&!result.cancelled){const grain=bakeShimmerGrain(defaultFlakes(),64);expect(result.optics?.normal).toEqual(grain.normal);expect(result.optics?.surface).toEqual(grain.surface);}
 });

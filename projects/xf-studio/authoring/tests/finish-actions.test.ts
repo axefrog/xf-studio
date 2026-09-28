@@ -194,3 +194,22 @@ test("a host without user-level history reads the same timeline mapper", () => {
   expect(bare.historyTimeline()).toEqual({ ...f.app.historyTimeline(), redoCount: 0 });
   expect(bare.historyTimeline().steps.map(step => step.label)).toEqual(["Opacity"]);
 });
+
+test("game-matched Shimmer takes flake density and spread but refuses fineness; the earlier study and classic Glitter keep it", () => {
+  const f = fixture(shown(initialRecipe()));
+  f.ok({ kind: "layer.setFinish", layerId: f.layer(0).id, finish: "shimmer" });
+  expect(f.layer(0).optics).toBeDefined();
+  const cells = { kind: "glitter.setClassic", layerId: f.layer(0).id, key: "cells", value: 64 } as const;
+  expect(f.app.capability(cells)).toMatchObject({ available: false });
+  expect(f.app.dispatch(cells)).toMatchObject({ ok: false });
+  f.ok({ kind: "glitter.setClassic", layerId: f.layer(0).id, key: "density", value: .5 });
+  f.ok({ kind: "glitter.setClassic", layerId: f.layer(0).id, key: "tilt", value: .8 });
+  f.ok({ kind: "layer.setFinish", layerId: f.layer(1).id, finish: "glitter" });
+  f.ok({ kind: "glitter.setClassic", layerId: f.layer(1).id, key: "cells", value: 64 });
+  // A Shimmer layer still in the earlier browser study keeps its classic facets.
+  const earlier = initialRecipe();
+  Object.assign(earlier.layers[0], { finish: "shimmer", enabled: true });
+  delete earlier.layers[0].optics;
+  const g = fixture(earlier);
+  g.ok({ kind: "glitter.setClassic", layerId: g.layer(0).id, key: "cells", value: 64 });
+});

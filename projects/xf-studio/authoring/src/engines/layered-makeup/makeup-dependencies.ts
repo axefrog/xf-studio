@@ -1,4 +1,5 @@
 import { canonicalFinish, defaultFlakes, isIrregular, type LegacyFlakes } from "./finish";
+import { SHIMMER_GRAIN } from "./shimmer-grain";
 import { FLAKE_LIMITS, FLAKE_MATERIAL, FLAKE_SUBSAMPLES, FLAKE_SUBSAMPLES_16,
   validStudioIrregularSettings, type IrregularFlakes, type FlakeNormalStudyMode } from "./flake-field";
 import type { Layer } from "./recipe";
@@ -120,5 +121,7 @@ export function irregularAlbedoKey(optics: OpticalKey, alpha: AlphaKey, baseColo
 export function previewOpticalKey(layer: ReadonlyDeep<Layer>, size: number, fine: FineGlitterScope) {
   return isIrregular(layer.flakes) && layer.finish === "glitter"
     ? studioIrregularOpticalKey(layer.flakes, size, fine)
-    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
+    // Game-matched Shimmer bakes its grain, not the classic flakes.
+    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size,
+      ...(canonicalFinish(layer.finish) === "shimmer" && layer.optics ? [SHIMMER_GRAIN.model] : [])]);
 }

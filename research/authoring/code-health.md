@@ -81,6 +81,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-157 | Low | Component library (SliderWithValue) | `SliderWithValue` has no relabel method, so game-matched Shimmer's density slider still reads "Flake density" under its "Shimmer sparkles" heading, and Glint density rewrites its label through the DOM (`features/eye-makeup/view/inspector.ts`). Add a relabel API in the component library, then name it "Sparkle density" for Shimmer (UI gate on the Shimmer rework, 28 September 2026) | Open, UI component track |
 | UI-154 | Low | Components (DirectionDial) | The dial's resize bar shares only CSS with the Size bar; its drag and key handling are separate code with no Delete or Escape revert. Move it onto the Size bar component | Open, UI track |
 | UI-155 | Low | Save Explorer | The node tree's default height (60% of the window) isn't snapped to whole rows, so it can end partway through a row | Open |
 | UI-156 | Low | Poses | The pose tree keeps its full 20-row frame when a search leaves only a few rows (as the old fixed 62vh did); consider fitting the rows up to the chosen height | Open |

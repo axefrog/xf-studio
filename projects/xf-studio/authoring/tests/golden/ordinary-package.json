@@ -1,5 +1,5 @@
 {
- "capturedFrom": "8413f25; finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only)",
+ "capturedFrom": "8413f25; finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only); Shimmer grain (shimmer-grain-1) recaptured on claude/shimmer-rework (Shimmer presets' maps and packages only)",
  "fixtures": {
   "005-preset-collection/collection.json": {
    "plan": "3bb563e5e8ed96631ec08a9d2b12338f51b9f3f3f2cbf8285cc9005aec2b9bc3",
@@ -24,9 +24,9 @@
     "xfs_p7a6d3c101f014a519c3e000000000001_metalness.raw": "bfe3ecb6b63d74937591bc5b96a36e4ea792ed3f11b378f5449a55c8e69920e9",
     "xfs_p7a6d3c101f014a519c3e000000000001_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p7a6d3c101f014a519c3e000000000002_diffuse.raw": "ebf49bace6d38f10eb42f2fc643b166fecdb269b1412e9e2a7724e012cdaacc9",
-    "xfs_p7a6d3c101f014a519c3e000000000002_roughness.raw": "a1d1d7b758a0bfb179779ddd3116795d79c87df8927eef134dcaa93cb07b8618",
-    "xfs_p7a6d3c101f014a519c3e000000000002_metalness.raw": "5b2300e6d495314ee590a56be5c63676f114cfbb46dd933345bc0a822e9bc3e7",
-    "xfs_p7a6d3c101f014a519c3e000000000002_normal.raw": "1bc976cd48f4a829fd6fed76867c58cebc2769e875c540c5fdb374678b07b874",
+    "xfs_p7a6d3c101f014a519c3e000000000002_roughness.raw": "044171717e3a1591348dc5fc2c868b2e33f4b626e91300c6c31d7c3e188aa580",
+    "xfs_p7a6d3c101f014a519c3e000000000002_metalness.raw": "1cb440059ca352bf8b8eae0ea44bf8cf07400289825822c68bd4065d1496980a",
+    "xfs_p7a6d3c101f014a519c3e000000000002_normal.raw": "4c7f2848e7b19365da3018d672b291bc171a599c415c880b58d51911783d02cf",
     "xfs_p7a6d3c101f014a519c3e000000000002_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p7a6d3c101f014a519c3e000000000003_mask.raw": "641d7f293f33ddea819b1b88a36563a08f503ecb2bfe66aee0225213d41a2824",
     "xfs_p7a6d3c101f014a519c3e000000000003_gradient.raw": "3150db30922aa90d33af755f3f1c8bf0bb19ebb189d38cba55051fc7a88189b5",
@@ -41,7 +41,7 @@
     "xfs_p7a6d3c101f014a519c3e000000000006_metalness.raw": "7a34ef8a555aa2d774268facf62792d7b884b191d9e0bbd29bd1447fa9618b0e",
     "xfs_p7a6d3c101f014a519c3e000000000006_reference.raw": "05670663fcd19e11e113f35f203253833a73d2dae6042d670f99e9505533ec34"
    },
-   "compiled": "eb4df3ff41525fe39672e1717baf8af5611bc711d157f3705769a889533cc896"
+   "compiled": "1ec28e53c0e9bfdc3a0e1d4b2918b08cffec66cb85d9dceb30f0108a189bd6fe"
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "plan": "67627709595728f5765f07e0cd77ed3da4a2cf025eb802e46dcf49ab4f1f70a9",
@@ -94,9 +94,9 @@
     "xfs_p0170d3e01f014a519c3e000000000008_metalness.raw": "bfe3ecb6b63d74937591bc5b96a36e4ea792ed3f11b378f5449a55c8e69920e9",
     "xfs_p0170d3e01f014a519c3e000000000008_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p0170d3e01f014a519c3e000000000009_diffuse.raw": "ebf49bace6d38f10eb42f2fc643b166fecdb269b1412e9e2a7724e012cdaacc9",
-    "xfs_p0170d3e01f014a519c3e000000000009_roughness.raw": "ef96f17cb9fd09121d794bb3183f0208be1d48b3de1b61173a1871f4e2232247",
-    "xfs_p0170d3e01f014a519c3e000000000009_metalness.raw": "046e62333d7c98f58e3f96ea2a2588294f517ad975e3c958c750e98a44729410",
-    "xfs_p0170d3e01f014a519c3e000000000009_normal.raw": "d3f09a929190fe8d7c6b53e5c8b5ab87d7a2c26dacf4e3380a8c5fcd1fa88a13",
+    "xfs_p0170d3e01f014a519c3e000000000009_roughness.raw": "30888a6b81731405448bf3b5dc1758145dce2b3e74a7a6671c67752cd8458670",
+    "xfs_p0170d3e01f014a519c3e000000000009_metalness.raw": "22c93163d16034d4ef24b981de80b3d2a16d3bff4aec0fd046f31efb46f28218",
+    "xfs_p0170d3e01f014a519c3e000000000009_normal.raw": "1c65b4a80716ef1c7cb8636833147ac158ff48757541e7458a6663e869b6cbbd",
     "xfs_p0170d3e01f014a519c3e000000000009_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p0170d3e01f014a519c3e000000000010_diffuse.raw": "9de670284b2fbc25f30912f5062753cde333e2680a112221c01113bdd11e8451",
     "xfs_p0170d3e01f014a519c3e000000000010_roughness.raw": "d635daede8ff4b609e403320a1be44e619857ec6f2a0c71a2318f33edd36144d",
@@ -110,7 +110,7 @@
     "xfs_p019a0b1c2d3e4f508a6b000000000002_roughness.raw": "e2d36a52f19ecbe42505b5243f382666f4de2389cb81846d40cf0920bc6db884",
     "xfs_p019a0b1c2d3e4f508a6b000000000002_metalness.raw": "30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58"
    },
-   "compiled": "cdb982eed8fff50f312244c8f477102843f5914d4cd648f50c90812fc4360cb2"
+   "compiled": "691e2eb7eeae40636287802bc8bdcfa538762bd993bde228971867f5d6fe65fe"
   }
  }
 }

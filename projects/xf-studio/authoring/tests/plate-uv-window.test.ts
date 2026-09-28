@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { bakeFlakes, shimmerFacetSampler } from "../src/engines/layered-makeup/finish";
+import { defaultFlakes } from "../src/engines/layered-makeup/finish";
+import { bakeShimmerGrain, grainCellsPerTexel } from "../src/engines/layered-makeup/shimmer-grain";
 import { ROUTE_UV_WINDOW } from "../src/engines/layered-makeup/finish-export";
 import { flatMipChain, mipDimensions } from "../src/engines/layered-makeup/flat-mip-chain";
 import { REFERENCE_GRID, referenceCrop } from "../src/package-bake";
@@ -80,24 +81,21 @@ test("rasterWindow is raster's evaluator on another grid: identical bytes on the
   expect(() => rasterWindow(l, 0, 8, window)).toThrow("size");
 });
 
-test("the Shimmer facet sampler reproduces the head-UV bake and sharpens edges to the window's texels", () => {
-  const flakes = { cells: 128, density: .65, tilt: .65, seed: 2077 }, size = 512;           // cell size exactly 2 texels
-  const bake = bakeFlakes(size, "shimmer", flakes), sample = shimmerFacetSampler(flakes, size, size);
-  for (let y = 0; y < size; y += 3) for (let x = 0; x < size; x += 5) {
-    const f = sample((x + .5) / size, (y + .5) / size), i = (y * size + x) * 4;
-    expect([f.normalX, f.normalY, f.roughness, f.metalness]).toEqual([bake.normal[i], bake.normal[i + 1], bake.surface[i + 1], bake.surface[i + 2]]);
+test("Shimmer's grain sits one grain per plate-window texel, and a window compile carries it where Shimmer covers", () => {
+  const window = plateUvWindow(BUILT_IN), { width, height } = WINDOW_TEXTURE;
+  expect(grainCellsPerTexel(width, height, window)).toEqual({ u: 1, v: 1 });
+  const shimmer = { schema: "xfs/recipe-11", uv: "gltf-uv0-top-left", layers: [layer({ finish: "shimmer", optics: { model: "game-matched-1" }, opacity: 1 } as Partial<Layer>)] };
+  const compiled = compilePreset(shimmer, { kind: "window", width, height, window });
+  const grain = bakeShimmerGrain(defaultFlakes(), width, height, window), a = compiled.maps.diffuse!;
+  let full = 0;
+  for (let t = 0; t < width * height; t += 7) {
+    if (a[t * 4 + 3] !== 255) continue;
+    full++;
+    // A fully covered texel is the grain itself: its tilt, and the one uniform surface.
+    expect([compiled.maps.normal![t * 2], compiled.maps.normal![t * 2 + 1]]).toEqual([grain.normal[t * 4], grain.normal[t * 4 + 1]]);
+    expect([compiled.maps.roughness![t], compiled.maps.metalness![t]]).toEqual([grain.surface[t * 4 + 1], grain.surface[t * 4 + 2]]);
   }
-  // At window density a facet's edge ramps over one window texel: more fully tilted texels, fewer partial ones.
-  const window = plateUvWindow(BUILT_IN), dense = shimmerFacetSampler(flakes, 2048 / (window.u1 - window.u0), 512 / (window.v1 - window.v0));
-  const coarse = shimmerFacetSampler(flakes, 1024, 1024);
-  let denseEdge = 0, coarseEdge = 0;
-  for (let k = 0; k < 4000; k++) {
-    const u = .3 + .14 * (k % 80) / 80, v = .21 + .035 * Math.floor(k / 80) / 50;
-    const m = (f: { metalness: number }) => f.metalness > 0 && f.metalness < Math.round(.35 * 255);
-    if (m(dense(u, v))) denseEdge++;
-    if (m(coarse(u, v))) coarseEdge++;
-  }
-  expect(denseEdge).toBeLessThan(coarseEdge / 2);
+  expect(full).toBeGreaterThan(1000);
 });
 
 test("window compiles: each route's grid, head-UV Fresnel, and coverage that matches the head raster", () => {

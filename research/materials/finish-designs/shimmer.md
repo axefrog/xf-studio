@@ -1,38 +1,69 @@
 # Shimmer / pearl
 
-**Status:** experimental export (faceted decal), game-matched model only. First seen in game on 25 September: the default fine facets (128 cells, tilt 0.65) read as a diffused gloss rather than sparkle at photo-mode distances. On 28 September the stronger setting (*Shimmer · strong*, 64 cells, tilt 1.0) showed a static field of dots with no flash as V moved ([experiment 028](../../../experiments/028-session-3/README.md#5-results-28-september-2026)), judged under the creator's soft light with DLSS on. **Under a controlled neutral photo-mode light (session 4, [experiment 029](../../../experiments/029-session-4/README.md#32-finish-sweep-gloss-ad-shimmer-metal-plan-15)) it reads as a regular grid of dots far too large**, as if shown at microscope scale. So the rework needs randomised, much finer facets (the plate window allows about 0.13 mm texels), or a sheen-first design ([finishes backlog, Open 7](../../backlog/glitter-material.md#open)).
+**Status:** experimental export (faceted decal), game-matched model only. The current build is **shimmer-grain-1**: a uniform pearly surface with a one-texel sparkle grain. It has **not been in game**. It replaces the classic facet bake. In game, that bake read as a diffused gloss at its default (25 September). At *Shimmer · strong* it was a static field of dots (session 3, 28 September) and, under a neutral key light at face framing, a regular grid of dots far too large (session 4). [Experiment 030](../../../experiments/030-shimmer-grain/README.md) measures why and checks the grain offline. The in-game check is the [Shimmer grain row](../../runtime/next-sessions-plan.md#shimmer-grain-check) of the sessions plan.
 
 ## Intended look
 
-A fine reflective sheen: many tiny reflective particles that sparkle individually when the eye is close and merge into a soft, luminous sheen at normal viewing distance ([finish taxonomy](../makeup-finish-taxonomy.md)). Pearl is grouped here. The supplied references show this transition: the copper reference 3 reads as a continuous reflective band, while the purple references show individual points only close up ([reference review](../glitter-reference-review.md), [manifest](../../backlog/glitter-visual-references.json)).
+A fine reflective sheen: many tiny particles that sparkle individually when the eye is close and merge into a soft, luminous sheen at normal viewing distance ([finish taxonomy](../makeup-finish-taxonomy.md)). Pearl is grouped here. The supplied references show this transition: the copper reference 3 reads as a continuous reflective band, while the purple references show individual points only close up ([reference review](../glitter-reference-review.md), [manifest](../../backlog/glitter-visual-references.json)). Glitter, not Shimmer, is the finish with individually visible flakes.
 
-## Engine routes, ranked
+## What the engine allows
 
-| Rank | Route | Evidence | What it can and cannot do |
-|---|---|---|---|
-| **1 (implemented)** | `base/materials/mesh_decal.mt` with the classic Shimmer facet bake as a tangent normal map, `NormalAlpha` 1, `UseNormalAlphaTex` 0, **`NormalsBlendingMode` 1**, per-texel roughness/metalness from the same bake, and roughness mips widened by lost facet variance | Pixel program `16098255505177109230` (SHA-256 `35e8c18f…c3d`), decompiled: in mode 1 the program loads the existing G-buffer normal (`t74`), composes the decal normal with it by reoriented normal mapping in the plate's tangent frame, and writes normal alpha = `saturate(50 − 50·z) × NormalAlpha × DiffuseTexture.a`, where z = sqrt(1 − x² − y²) of the sampled map. In mode 0 it replaces the normal with alpha = `NormalAlpha × a`. [source] | Real, light- and view-dependent facet reflections where facets are larger than a pixel. Flat texels (z = 1) write **nothing**, so the skin's own normal detail survives between facets and wherever the preset has no Shimmer. One normal and one roughness per pixel: sub-pixel facets cannot keep separate reflections. |
-| 2 | Flat sheen only: moderate roughness plus low metalness (a pearlescent single lobe) | Same program without a normal map. [source] | Matches the far-field look but loses all close-up sparkle, which is the finish's defining difference from Satin in photo mode. Kept as the fallback if facets misbehave. |
-| 3 | Add a weak Fresnel tint (pearl interference) through `mesh_decal_gradientmap_recolor_blendable` | See [Colour-shifting](colour-shifting.md). [source] | Pearl's hue sheen, but it would force the whole preset through that template and its one-pigment rule. Not built. |
+- **One surface per pixel.** The G-buffer holds one normal, one roughness, one metalness and one colour. Skin has no anisotropy (only hair does), no sheen lobe, no clear coat and no specular tint ([materials and shaders §2](../../../knowledge/materials-and-shaders.md)). An anisotropic or two-lobe pearl is therefore not expressible on the eye plate [source].
+- **Pigment is sub-pixel.** Pearl and shimmer pigment platelets are a few tens of micrometres [general background, not sourced here]. The plate window's texel is 0.13 × 0.12 mm, and a screen pixel covers roughly 0.1 mm at an eye close-up and 0.2–0.25 mm at face framing [hypothesis; [experiment 030](../../../experiments/030-shimmer-grain/README.md#method)]. Real particles can therefore only show as the statistics of a texel: its roughness, its tint and, close up, a texel-sized glint.
+- **The mip chain is the only filter a mod controls.** Nothing in the decal or skin programs turns normal variance into roughness ([Glitter in game §1](../../../knowledge/glitter-in-game.md#1-from-flake-texture-to-screen-pixel)) [source].
+- **Mode 1 gate.** `NormalsBlendingMode` 1 writes a decal normal at weight saturate(50 − 50z), full from about 11.5° of tilt. It lerps the *encoded* normal, so a 5° tilt survives as about 1° ([decal reference §9.2](../shader-decal.md#92-shimmer-reads-as-a-soft-gloss)) [source].
 
-### The design decisions and why
+## The design: shimmer-grain-1
 
-- **Mode 1, not mode 0.** Mode 0 overwrites the skin normal under all covered makeup with the plate's smooth vertex normal, erasing pores and wrinkles. Mode 1 leaves flat texels untouched and composes tilted ones with the skin normal. This follows directly from the decompiled arithmetic.
-- **The green-sign question does not matter here.** Experiment 011 left the tangent green sign untested. The Shimmer bake draws facet azimuths uniformly at random, so flipping green mirrors each facet but leaves the distribution of reflections unchanged. Individual facets may catch the light at a different angle from the preview; the shimmer statistics do not.
-- **Mode 1 fades small tilts.** Alpha rises from 0 at a flat facet to 1 at about 11.5° of tilt (1 − cos θ = 0.02). The classic Shimmer bake tilts facets by up to `tilt × 0.4` rad (15° at the default 0.65), so most default facets are partly faded: on the finish board the mean mode-1 alpha over the fine patch is **0.19** at the base level. This is a real property of the route, and the preview now shows it.
-- **Lower mips fade facets and widen the highlight.** Averaging facet normals shortens them, which raises the reconstructed z and fades them out (mean alpha 0.19 → 0.12 at the 256 level → 0.002 at 32 on the board's fine patch). The roughness mips add back the lost slope variance, α′² = ᾱ² + v with v = E[x² + y²] − |E[x, y]|² (a Toksvig/LEAN-style approximation), so distant shimmer becomes a broader sheen instead of flat Satin (board fine patch: 0.427 → 0.448 against 0.424 without widening). The same specification is restated in the independent verifier.
+`mesh_decal`, entry `@faceted`: a tangent normal map with `NormalAlpha` 1, `UseNormalAlphaTex` 0, **`NormalsBlendingMode` 1**, plus per-texel roughness and metalness. The route and material are unchanged from the facet bake; only the maps differ ([`shimmer-grain.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/shimmer-grain.ts)).
+
+| Part | Value | Why |
+|---|---|---|
+| Surface | Roughness **0.32** and metalness **0.3** on every covered texel | Nothing static varies between texels, so any pattern that shows must move with the light. Metalness tints the reflection with the pigment (F0 = lerp(0.04, albedo, 0.3)), which is the pearly part. Above 0.1 it also skips the skin's subsurface scattering under the makeup, as the game's own gold and silver blush does ([decal reference §3](../shader-decal.md#3-instance-chains-on-the-player)). |
+| Grain share | 0.4 × the layer's density of the texels tilt (default 0.65: 26 %); the rest are flat | Flat texels write nothing in mode 1, so the skin's own normal detail stays between grains. |
+| Grain tilt | Uniform between **12°** and 12° + 18° × tilt (default 12–23.7°), uniform azimuth | Every tilted grain clears the mode-1 gate at full weight, so none is faded into a ripple. Random azimuths make the untested green sign irrelevant to the statistics. |
+| Grain scale | White noise at 4096 cells per unit of head UV. The plate window (2048 × 512, 0.13 × 0.12 mm) holds **one grain per texel** | Close up, a grain is a pixel or two and glints as the light or view moves. At face framing it is sub-pixel and the chain averages it away. There are no cells, discs or lattice. |
+| Coarser maps | A texel coarser than a grain holds its grains' mean tilt and widens its roughness by their variance: r′ = (r⁴ + v)^¼. From 16 grains per texel it writes a flat normal with the full expected variance | Same rule as the export's lower mips. Applies to head-UV diagnostics and the browser preview below 4096. |
+| Mips | Unchanged route rule: the normal's lower levels are plain means, and roughness levels add the lost slope variance (α′² = ᾱ² + v) | Unresolved grains become a broader, brighter lobe instead of vanishing. |
+
+**What stays with the layer:** its density and tilt settings (*Flake density*, *Orientation spread*) and its seed. *Flake fineness* (`cells`) does not apply to game-matched Shimmer. The grain has one true-to-scale size, so the application refuses the setting and the inspector hides it. Layers still in the earlier browser study keep the classic facet preview and do not export.
+
+### Offline result
+
+From [experiment 030](../../../experiments/030-shimmer-grain/README.md), on *Shimmer · strong*'s maps as built and as the grain [offline]:
+
+- **Static pattern.** The facet bake's static contrast was 0.16–0.19. The grain's is 0.
+- **Lattice.** Tilt autocorrelation one old cell pitch away was 0.23–0.41. The grain's is about 0.
+- **Pattern width on screen.** Down from 13–23 pixels at the close-up and 7–9 at face framing, to 1 pixel.
+- **Face framing.** The grain is a smooth sheen (lit contrast 0.06–0.09). Its fine stripe peaks brighter than Satin's and stays brighter 16° off the mirror angle.
+
+### Risks and open questions
+
+- **Metalness 0.3 turns off SSS** under covered makeup. Metallic's "hard, plastic" read in session 3 was traced to the same switch ([decal reference §9.1](../shader-decal.md#91-matte-and-satin-read-glossy)). If the grain build looks hard, the fallback is metalness 0.08 (keeps SSS, loses most of the tint), or a pearl tint through the Fresnel template's one-pigment route ([Colour-shifting](colour-shifting.md)).
+- **One-texel grains under DLSS.** At the eye close-up a grain is about one output pixel, and fewer internal pixels under DLSS. The upscaler and TAA may keep, soften or crawl it. The session should compare DLSS with DLAA.
+- **BC5 at one-texel frequency.** Block compression of per-texel white-noise normals has not been measured on this map. The verifier's decoded-normal tolerance still applies at Build.
+- **Tangent frame.** Grain orientation relies on the plate's tangents, from the head mesh bytes, which is unobserved. Random azimuths make it irrelevant to the statistics.
+- **Normal alpha follows the colour-map alpha** (square-root coverage), so partly covered edges carry slightly more normal than colour.
+
+## Engine routes considered
+
+| Route | Verdict |
+|---|---|
+| **Grain over a uniform pearly surface** (`mesh_decal` mode 1, above) | **Implemented.** Sheen first, sparkle only where the texture can resolve it |
+| Classic facet bake (UV-cell discs with per-facet metalness, retired 28 September) | Rejected. A lattice of millimetre discs painted into metalness: static dots in game |
+| Larger, resolved flakes with nested mips | That is Glitter's design ([Glitter](glitter.md)), deliberately kept distinct |
+| Flat sheen only (no normal map) | Fallback if the grain misbehaves in game: the same surface without its close-up sparkle |
+| Anisotropic or two-lobe sheen | Not expressible: no anisotropy or second lobe on skin in the G-buffer |
+| Pearl hue through `mesh_decal_gradientmap_recolor_blendable` Fresnel | Possible later tint, but it forces the preset through that template's one-pigment rule. Not built |
 
 ## What the preview does
 
-The game-matched model uses the same flake bake but uploads route-filtered mip chains: every level fades facet tilts by the mode-1 alpha and lower levels widen roughness exactly as the export does ([`previewFacetChains`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/route-mip-chains.ts)). Earlier layers keep Three's automatic mipmaps.
+The game-matched model bakes the same grain on the preview's head-UV texture ([`raster-processor.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/raster-processor.ts)). It uploads route-filtered mip chains in which every level fades tilts by the mode-1 weight and lower levels widen roughness as the export does ([`previewFacetChains`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/route-mip-chains.ts)).
 
-## Risks
+The preview texture covers the whole head, so its texel is coarser than a grain below the 4096 quality:
 
-- Facet orientation relies on the plate's tangent frame; tangents come from the head mesh bytes, but this is unobserved.
-- Normal alpha follows the colour-map alpha (square-root coverage), so partly covered edges carry slightly more normal than colour.
-- BC5 compression and mip selection at face distance: the fine pattern has no strong tilts left from the 256 level down, so at face framing Shimmer may look like a slightly broader Satin.
-- The facet bake is a UV-cell lattice; see the Glitter page for its known visual weaknesses.
-- **Facet size is set by the authored cells, and the texture no longer limits it.** The default facets (256 effective cells, radius 0.39 cell) are about **1.4 mm** wide; *Shimmer · strong* makes 2.8 mm and Board 2's coarse stripe about 5.6 mm, all tilted at most 15–23°. That is far coarser than pearl pigment, and it fits session 1's "diffused gloss". Faceted presets now export through the plate-local UV window (2048 × 512, about 0.13 × 0.12 mm per texel instead of 0.56 × 0.40 mm), so a default facet spans about ten texels with a one-texel antialiased edge, and the finest cells the recipe allows (256, facets about 0.7 × 0.5 mm) are resolved instead of smeared ([experiment 019](../../../experiments/019-uv-window/README.md)). Finer, more strongly tilted facets are now a recipe and UI decision; see [Glitter in game](../../../knowledge/glitter-in-game.md#1-from-flake-texture-to-screen-pixel).
+- **4096:** one grain per texel, as exported.
+- **2048:** the exact mean of 2 × 2 grains.
+- **1024 (default) and 512:** the sheen only, with no visible grain.
 
-## Single most informative in-game test
-
-On the finish board, **Board 2**: at a close photo-mode framing, rotate the key light across the left lid (Satin control | fine Shimmer | coarse Shimmer). Shimmer passes if individual points flash and move with the light on both Shimmer stripes while the Satin control stays smooth, and if the skin texture between facets is unchanged. Then pull back to face framing and compare fine Shimmer with the Satin control: a slightly broader, brighter sheen is the intended result; identical to Satin means the facets are too faint (raise the tilt range), and a noisy crawl means the mips need more fading.
+This is the export's own face-framing look at the texture's resolution, not a different model.
