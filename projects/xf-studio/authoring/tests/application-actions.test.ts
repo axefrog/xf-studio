@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { CollectionActions } from "../src/collection-actions";
-import { collectionDraft, editPresets, emptyMemory, type CollectionWorkspace } from "../src/collection-workspace";
+import { collectionDraft, editPresets, emptyMemory, newPresetName, type CollectionWorkspace } from "../src/collection-workspace";
 import { RecipeHistory } from "../src/editor-actions";
 import { recipeActionCapability, type RecipeActionState } from "../src/engines/layered-makeup/recipe-actions";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
@@ -62,6 +62,14 @@ test("layer commands preserve source recipes and history restores a complete edi
   history.restore([source]);
   const view = history.snapshot(); view[0].layers[0].name = "Changed";
   expect(history.undo()!.layers[0].name).toBe(source.layers[0].name);
+});
+
+test("a new preset's default name never repeats another preset's", () => {
+  expect(newPresetName([])).toBe("Preset 1");
+  expect(newPresetName([{ name: "Untitled look" }])).toBe("Preset 2");
+  // "Untitled look" removed after "Preset 2" was added: the next count is taken, so the next free number follows.
+  expect(newPresetName([{ name: "Preset 2" }])).toBe("Preset 3");
+  expect(newPresetName([{ name: "Preset 3" }, { name: "Preset 4" }])).toBe("Preset 5");
 });
 
 test("preset add and copy take their IDs from the host: the pure operation is deterministic (CORE-44)", () => {

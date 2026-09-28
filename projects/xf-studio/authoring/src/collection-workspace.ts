@@ -295,6 +295,17 @@ export const REMOVED_PRESET_LIMIT = 20;
 export type PresetCommand = { kind: "add"; newId?: string } | { kind: "copy"; id: string; newId?: string } | { kind: "remove"; id: string } |
   { kind: "rename"; id: string; name: string } | { kind: "move"; id: string; to: number } | { kind: "restore" };
 /**
+ * A new preset's default name: "Preset N" for the next count, skipping a number another preset already carries, so adding after a
+ * removal never names two presets alike (desktop acceptance, 29 September: two "Preset 2").
+ */
+export function newPresetName(presets: readonly { name: string }[]): string {
+  const taken = new Set(presets.map(preset => preset.name));
+  let n = presets.length + 1;
+  while (taken.has(`Preset ${n}`)) n++;
+  return `Preset ${n}`;
+}
+
+/**
  * Pure collection operations: stable identities, explicit order and recoverable removal. `value`
  * is an in-memory workspace (already parsed), so it is copied, and only what an edit can change is
  * validated again: the collection's identities, names and looks, never the Undo histories (CORE-35).
@@ -310,7 +321,7 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand, 
     if (presets.some(p => p.id === id) || state.removed.some(entry => entry.preset.id === id)) throw Error("That preset ID is already in use.");
     // A copy carries every part of the look; its editor memory starts fresh.
     const preset: Preset = command.kind === "copy" ? { ...structuredClone(presets[index]), id,
-      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : newLook(id, `Preset ${presets.length + 1}`, model);
+      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : newLook(id, newPresetName(presets), model);
     presets.splice(command.kind === "copy" ? index + 1 : presets.length, 0, preset);
     state.selected = preset.id; state.memory[preset.id] = withLiveMemory(undefined, emptyMemory(), model);
   } else if (command.kind === "remove") {

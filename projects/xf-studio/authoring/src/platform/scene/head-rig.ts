@@ -50,6 +50,15 @@ export type CoreEye = { readonly mesh: THREE.Mesh; readonly material: THREE.Mate
 export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody) => Promise<RigMotionAssets>;
 
 /**
+ * The loader's motion with the rig's composed motion beside it, as the same live object: the catalogue (`idles`, a getter whose eyes
+ * section joins once the host has read the faces) and `faceError` (rewritten when the face arrives) must stay live, which a spread copy
+ * would freeze at the moment the head was built (the installed desktop app then never offered the eyes section).
+ */
+export function withRigMotion<M extends RigMotionAssets, R>(motion: M, rig: R): M & { rig: R } {
+  return Object.assign(motion, { rig });
+}
+
+/**
  * The game idle (with the eyeballs given gaze joints when the core eye is rigid) and the game's blink. The idle comes from the host
  * (idle-source.ts): read from the player's game files, its body moves and its face moves as XF Studio's own facial solver solves it on the
  * host; where the face can't be read it holds still (`faceError`, the host's reason). The idle is the feminine V's, so a masculine head
@@ -337,7 +346,7 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
     record: core.record, meshes, head, eyes: finalEyes, surfaces, albedo, roughness,
     /** The default skin the core head shows until (and unless) the V's resolved skin is drawn on it. */
     skin, coreEye,
-    motion: { ...motion, rig: rigMotion },
+    motion: withRigMotion(motion, rigMotion),
     /**
      * The platform's facial pose sink (design §4 `FacialPosePort`): the face skeleton's rest once known, and the held expression's solved
      * pose. Holding or releasing hands the bones over by the motion rules (preview-motion.ts).
