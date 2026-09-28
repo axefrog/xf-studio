@@ -29,6 +29,9 @@ import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 
+/** game.status refusals game.wait waits through: the engine not ticking for a moment while a save loads (0.5.2). */
+const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_not_running", "game_loading"]);
+
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
@@ -654,8 +657,10 @@ export const CATALOGUE: readonly CommandDef[] = [
       let last = "unknown";
       for (;;) {
         const status = await api.callBridge("game.status", {}, cid);
-        if (!status.ok) throw Object.assign(new Error(status.error.message), { plain: status.error });
-        last = String((status.result as { phase?: string }).phase);
+        // While a save loads the engine may not tick for a moment: a step that timed out or found the queue busy is
+        // the loading screen, not a failure (0.5.2), so the wait goes on.
+        if (!status.ok && !WAIT_THROUGH.has(status.error.code)) throw Object.assign(new Error(status.error.message), { plain: status.error });
+        last = status.ok ? String((status.result as { phase?: string }).phase) : "loading";
         if (wanted.includes(last)) return { value: { phase: last, waited_ms: Math.round(performance.now() - started) } };
         if (performance.now() - started >= timeout) {
           throw planError("wait_timeout", `The game didn't reach ${wanted.join(" or ")} within ${Math.round(timeout / 1000)} s; it is in ${last}.`);

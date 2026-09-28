@@ -48,7 +48,49 @@ export type CommandApiOptions = {
   clientTimeoutMs?: number;
   /** photo.open's key sender (tests pass a fake: the real one presses a key in the game window). */
   keySender?: KeySender;
+  /**
+   * The client's own pace (0.5.2, RB-77): at most this many bridge requests per second, in bursts of as many, kept below
+   * the plugin's limit (max_requests_per_second, default 20, burst 40) so framing's reads and writes never meet it. Default 16.
+   */
+  requestsPerSecond?: number;
+  /** How long a request refused rate_limited is retried, with growing waits, before the refusal is passed on (default 4000 ms). */
+  rateLimitPatienceMs?: number;
 };
+
+/**
+ * The client's pace (RB-77): a token bucket shared by every bridge call of one CommandApi. The plugin refuses a request
+ * over its limit before doing anything, so waiting here (or retrying after rate_limited) never repeats a change.
+ */
+export class RequestPacer {
+  private tokens: number;
+  private last = performance.now();
+  constructor(
+    readonly perSecond: number,
+    private readonly now: () => number = () => performance.now(),
+  ) {
+    this.tokens = perSecond;
+    this.last = this.now();
+  }
+  /** Milliseconds to wait before the next request may go (0: now); takes the token. */
+  take(): number {
+    const now = this.now();
+    this.tokens = Math.min(this.perSecond, this.tokens + ((now - this.last) / 1000) * this.perSecond);
+    this.last = now;
+    this.tokens -= 1;
+    return this.tokens >= 0 ? 0 : Math.ceil((-this.tokens / this.perSecond) * 1000);
+  }
+}
+
+/** The waits between retries of a request refused rate_limited: 150 ms doubling to 1 s, until the patience runs out. */
+export function rateLimitWaits(patienceMs: number): number[] {
+  const waits: number[] = [];
+  let total = 0;
+  for (let wait = 150; total + wait <= patienceMs; wait = Math.min(1000, wait * 2)) {
+    waits.push(wait);
+    total += wait;
+  }
+  return waits;
+}
 
 const pipeTransport =
   (timeoutMs: number): TransportFactory =>
@@ -57,6 +99,8 @@ const pipeTransport =
     await client.connect();
     return { call: (method, params, cid, timeoutMs) => client.call(method, params, cid, {}, timeoutMs), close: () => client.close() };
   };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let cidCounter = 0;
 const nextCid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${++cidCounter}`;
@@ -72,6 +116,10 @@ export class CommandApi {
   /** Bridge calls waiting for an answer; the idle timer runs only when this is 0 (RB-62). */
   private inFlight = 0;
   private queue: Promise<unknown> = Promise.resolve();
+  private readonly pacer: RequestPacer;
+  private readonly rateLimitPatienceMs: number;
+  /** Bridge requests refused rate_limited and retried since this API started (tests and logs). */
+  rateLimitRetries = 0;
 
   constructor(private readonly options: CommandApiOptions = {}) {
     this.runtimeDir = options.runtimeDir ?? defaultRuntimeDir();
@@ -79,6 +127,8 @@ export class CommandApi {
     this.auditDir = resolve(options.auditDir ?? join(this.captureRoot, "..", "logs"));
     this.transportFactory = options.transport ?? pipeTransport(options.clientTimeoutMs ?? 8000);
     this.idleCloseMs = options.idleCloseMs ?? 3000;
+    this.pacer = new RequestPacer(Math.max(1, options.requestsPerSecond ?? 16));
+    this.rateLimitPatienceMs = options.rateLimitPatienceMs ?? 4000;
   }
 
   /** The catalogue every frontend derives its tools or commands from. */
@@ -198,11 +248,23 @@ export class CommandApi {
     this.idleTimer = null;
     const connection = this.connection;
     this.inFlight++;
-    let response: BridgeResponse;
+    let response!: BridgeResponse;
     try {
-      response = await connection.transport.call(method, params, cid, timeoutMs);
-    } catch (error) {
-      response = { v: 1, id: 0, cid, ok: false, error: { code: "disconnected", message: (error as Error)?.message ?? String(error) } };
+      // Paced below the plugin's limit, and a rate_limited refusal (sent before the plugin does anything) is retried
+      // with growing waits (RB-77): session 5's back-to-back frames were refused, and so was putting the camera back.
+      const waits = rateLimitWaits(this.rateLimitPatienceMs);
+      for (let attempt = 0; ; attempt++) {
+        const wait = this.pacer.take();
+        if (wait > 0) await sleep(wait);
+        try {
+          response = await connection.transport.call(method, params, cid, timeoutMs);
+        } catch (error) {
+          response = { v: 1, id: 0, cid, ok: false, error: { code: "disconnected", message: (error as Error)?.message ?? String(error) } };
+        }
+        if (response.ok || response.error?.code !== "rate_limited" || attempt >= waits.length) break;
+        this.rateLimitRetries++;
+        await sleep(waits[attempt]!);
+      }
     } finally {
       this.inFlight--;
     }

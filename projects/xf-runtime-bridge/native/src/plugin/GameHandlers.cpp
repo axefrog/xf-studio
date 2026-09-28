@@ -518,9 +518,30 @@ json GameStatus(const MethodContext& aContext)
         out["phase"] = state.gameState.load() == 3 ? "shutting_down" : "starting";
         return out;
     }
+    // While the game's scripts can't be called (a save loading, the game starting), the plugin answers by itself
+    // (RB-76): game.wait polls this through a load, and session 5's crash was this very call made just after the
+    // script layer detached. Checked again on the game thread, right before the call, since the detach can come
+    // while the request waits in the queue.
     const auto cid = aContext.cid;
-    out.update(RunGameTask(
-        state.queue, Timeout(), [cid] { return CallScript("XFBridgeActions", "Status", {}, {}, cid); }, "game.status"));
+    if (!state.scriptLayer.Ready())
+    {
+        out.update(writes::StatusWhileLoading(state.scriptLayer.Phase(), state.scriptLayer.Describe()));
+        return out; // no game-thread step at all: the engine may not tick during a load
+    }
+    auto answer = RunGameTask(
+        state.queue, Timeout(),
+        [cid]() -> json {
+            auto& layer = Get().scriptLayer;
+            if (!layer.Ready())
+            {
+                return writes::StatusWhileLoading(layer.Phase(), layer.Describe());
+            }
+            auto status = CallScript("XFBridgeActions", "Status", {}, {}, cid);
+            status["script_layer"] = layer.Describe();
+            return status;
+        },
+        "game.status", false);
+    out.update(answer);
     return out;
 }
 
@@ -911,7 +932,15 @@ json GameLoadMethod(const MethodContext& aContext)
     auto& queue = Get().queue;
     writes::LoadOps ops;
     ops.latest = [&queue, cid] {
-        return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "LoadLatest", {}, {}, cid); }, "game.load.latest");
+        return RunGameTask(
+            queue, Timeout(),
+            [cid] {
+                auto result = CallScript("XFGame", "LoadLatest", {}, {}, cid);
+                // In the same game-thread step (RB-76): no script call until the loaded session is ready.
+                Get().scriptLayer.OnLoadRequested();
+                return result;
+            },
+            "game.load.latest");
     };
     ops.list = [&queue, cid] {
         return RunGameTask(queue, Timeout(), [cid] { return CallScript("XFGame", "ListSaves", {}, {}, cid); }, "game.load.list");
@@ -924,7 +953,9 @@ json GameLoadMethod(const MethodContext& aContext)
             queue, Timeout(),
             [cid, aName] {
                 RED4ext::CString name(aName.c_str());
-                return CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
+                auto result = CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
+                Get().scriptLayer.OnLoadRequested(); // as for the latest save (RB-76)
+                return result;
             },
             "game.load");
     };

@@ -31,6 +31,7 @@
 #include "core/OptionsExchange.hpp"
 #include "core/Showroom.hpp"
 #include "core/Params.hpp"
+#include "core/ScriptLayer.hpp"
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
 
@@ -344,6 +345,23 @@ int wmain(int argc, wchar_t** argv)
     static Simulated sim;
     sim.codeware = codeware;
     static xfb::writes::RestoreOnce restore;
+    // The script layer's readiness (RB-76), as the plugin keeps it: the simulated session is up from the start;
+    // selftest.script_layer moves it, and the simulated load detaches, attaches and lets the player in. With
+    // detach_before_next_task, the next game-thread task sees the detach first, as session 5's game.status did.
+    static xfb::ScriptLayer simLayer;
+    static std::atomic<bool> detachBeforeNextTask{false};
+    simLayer.OnAttach();
+    simLayer.OnPlayerAttach();
+    const auto applyPendingDetach = [] {
+        if (detachBeforeNextTask.exchange(false))
+        {
+            simLayer.OnDetach();
+        }
+    };
+    xfb::SetGameGate([applyPendingDetach](const std::string& aWhat) {
+        applyPendingDetach();
+        simLayer.Require(aWhat);
+    });
     {
         namespace lp = xfb::livepose;
         for (uint16_t joint = 0; joint < 71; ++joint)
@@ -439,11 +457,29 @@ int wmain(int argc, wchar_t** argv)
                              dispatcher.SetWritesPaused(aContext.params.value("paused", true));
                              return json{{"writes_paused", dispatcher.WritesPaused()}};
                          }});
-    dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
-                         [phase, &config, &dispatcher](const xfb::MethodContext& aContext) {
-                             p::RequireOnly(aContext.params, {});
-                             std::scoped_lock _(sim.mutex);
-                             return json{{"simulated", true},
+    dispatcher.Register({"selftest.script_layer", xfb::Access::Read, xfb::RunOn::BridgeThread,
+                         "Moves the simulated script layer (attach, player_attach, detach, detach_before_next_task, load_requested; self-test only).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto event = aContext.params.value("event", std::string());
+                             if (event == "detach_before_next_task")
+                             {
+                                 detachBeforeNextTask.store(true);
+                             }
+                             else if (event == "load_requested")
+                             {
+                                 simLayer.OnLoadRequested();
+                             }
+                             else if (!simLayer.OnEvent(event))
+                             {
+                                 throw xfb::MethodError("bad_params", "event must be attach, player_attach, detach, detach_before_next_task or load_requested");
+                             }
+                             return simLayer.Describe();
+                         }});
+    // game.status as the plugin answers it (RB-76): from the bridge's side while the scripts can't be called, and
+    // checked again on the game thread right before the (simulated) script call.
+    const auto simStatus = [&config, &dispatcher]() -> json {
+        std::scoped_lock _(sim.mutex);
+        return json{{"simulated", true},
                                          {"allow_writes", config.allowWrites},
                                          {"writes_paused", dispatcher.WritesPaused()},
                                          {"write_classes", xfb::WriteClassList(config)},
@@ -456,7 +492,41 @@ int wmain(int argc, wchar_t** argv)
                                          {"cursor_hidden", sim.cursorHidden},
                                          {"face_index", sim.faceIndex},
                                          {"world_time_seconds", sim.clock},
-                                         {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}}};
+                                         {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}},
+                                         {"script_layer", simLayer.Describe()}};
+    };
+    dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
+                         [&queue, &config, &dispatcher, simStatus, applyPendingDetach](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {});
+                             // What the plugin adds from its own side, loading or not.
+                             const auto loading = [&config, &dispatcher] {
+                                 auto out = w::StatusWhileLoading(simLayer.Phase(), simLayer.Describe());
+                                 out["simulated"] = true;
+                                 out["allow_writes"] = config.allowWrites;
+                                 out["writes_paused"] = dispatcher.WritesPaused();
+                                 out["write_classes"] = xfb::WriteClassList(config);
+                                 return out;
+                             };
+                             if (!simLayer.Ready())
+                             {
+                                 return loading();
+                             }
+                             if (!queue.IsPumping())
+                             {
+                                 return simStatus();
+                             }
+                             return xfb::RunGameTask(
+                                 queue, std::chrono::milliseconds(1000),
+                                 [simStatus, applyPendingDetach, loading]() -> json {
+                                     applyPendingDetach();
+                                     if (!simLayer.Ready())
+                                     {
+                                         xfb::log::Info("selftest.status_while_loading", "the script layer detached while game.status waited");
+                                         return loading();
+                                     }
+                                     return simStatus();
+                                 },
+                                 "game.status", false);
                          }});
     dispatcher.Register({"player.appearance", xfb::Access::Read, xfb::RunOn::GameThread,
                          "Character state (simulated).", [phase](const xfb::MethodContext& aContext) {
@@ -1439,6 +1509,7 @@ int wmain(int argc, wchar_t** argv)
                                          refuse();
                                          sim.phase = "loading";
                                          sim.loadTicks = 4;
+                                         simLayer.OnLoadRequested(); // as the plugin, in the same step (RB-76)
                                          return json{{"requested", true}, {"route", "latest"}};
                                      };
                                      ops.list = [refuse] {
@@ -1468,6 +1539,7 @@ int wmain(int argc, wchar_t** argv)
                                          }
                                          sim.phase = "loading";
                                          sim.loadTicks = 4;
+                                         simLayer.OnLoadRequested();
                                          return json{{"requested", true}, {"route", "name"}, {"name", aName}, {"index", at - sim.saves.begin()}};
                                      };
                                      ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
@@ -1767,8 +1839,19 @@ int wmain(int argc, wchar_t** argv)
                         --item.ticks;
                     }
                 }
+                // The simulated load's script lifecycle (RB-76): the session detaches, the new one attaches on the
+                // next tick, and its player attaches as the load ends.
+                if (sim.loadTicks == 3)
+                {
+                    simLayer.OnDetach();
+                }
+                else if (sim.loadTicks == 2)
+                {
+                    simLayer.OnAttach();
+                }
                 if (sim.loadTicks > 0 && --sim.loadTicks == 0)
                 {
+                    simLayer.OnPlayerAttach();
                     // A loaded save: gameplay again, every bridge lock and change gone.
                     sim.phase = "gameplay";
                     sim.gameSaveLock = false;

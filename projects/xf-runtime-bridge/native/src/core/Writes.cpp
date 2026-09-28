@@ -1313,4 +1313,18 @@ json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
     out["note"] = "the game is loading; wait for game_wait with phase gameplay before the next command";
     return out;
 }
+json StatusWhileLoading(const std::string& aPhase, const json& aLayer)
+{
+    return json{{"phase", aPhase},
+                {"answered_by", "plugin"},
+                {"script_layer", aLayer},
+                {"player_present", false},
+                {"photo_mode_active", false},
+                {"photo_mode_can_open", false},
+                {"note", aPhase == "starting"
+                             ? "the game is starting; the bridge calls into the game once its scripts attach and a player is in"
+                             : "the game is loading; the bridge refuses game calls until the loaded session's player is in "
+                               "(game.wait with phase gameplay)"}};
+}
+
 } // namespace xfb::writes

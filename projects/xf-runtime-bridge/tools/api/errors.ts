@@ -11,7 +11,10 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   unauthorized: "The game bridge refused the connection key. Restart the game so the bridge writes a fresh session file.",
   killed:
     "The game bridge was switched off with its kill switch. In the game, open the Cyber Engine Tweaks overlay and press Reconnect in the XF Runtime Bridge window (test builds), or restart the game.",
-  rate_limited: "Too many requests in a short time. Wait a second and try again.",
+  rate_limited:
+    "The game bridge was sent too many requests in a short time, and it was still refusing after the tools waited a few seconds. Nothing was changed by the refused request. Wait a moment and try again.",
+  game_loading:
+    "The game is loading (or still starting), so the bridge doesn't call into it until the loaded session's player is in; nothing was called or changed. Wait with game_wait for phase gameplay, then try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
     "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom; inventory stays off until the maintainer allows it, and showroom is listed only by the XF test profile's build). Nothing was changed.",

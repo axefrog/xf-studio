@@ -77,6 +77,7 @@ nlohmann::json InfoJson()
         {"allow_creator_leave", state.config.allowCreatorLeave},
         {"allow_live_pose", state.config.allowLivePose},
         {"restore_pending", state.restore.Pending()},
+        {"script_layer", state.scriptLayer.Describe()},
         {"rearm_pending", state.rearmRequested.load()},
         {"last_rearm", [&state] {
              std::scoped_lock _(state.rearmMutex);

@@ -321,6 +321,10 @@ bool WaitTicks(const GameThreadQueue& aQueue, uint64_t aTicks, std::chrono::mill
 
 // The kill switch's restore, at most once per process: only after a write ran, and only once the
 // bridge says it is ready (killed, and the queue closed so no write can follow it).
+// game.status while the game's scripts can't be called (RB-76: a save loading, the game starting): the plugin's own
+// answer, with no game call. aPhase is ScriptLayer::Phase() ("loading" or "starting"), aLayer its Describe().
+json StatusWhileLoading(const std::string& aPhase, const json& aLayer);
+
 class RestoreOnce
 {
 public:
