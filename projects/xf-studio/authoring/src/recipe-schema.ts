@@ -1,7 +1,7 @@
 /**
  * Eye makeup's portable recipe formats and their lineage. The in-memory recipe (`xfs/eye-makeup-part-2`) has no
  * schema of its own; a recipe file, or an `xfs/eye-makeup-part-1` body, is written in the oldest `xfs/recipe-N`
- * that holds every layer's models, so older builds, 0.1.0-alpha.1 included, keep reading what this build writes
+ * that holds every layer's models, so older builds, back to the oldest release, keep reading what this build writes
  * whenever the content allows. No edit ever changes a schema: it is derived when a recipe is written.
  *
  * The layered-makeup engine reads only the current in-memory form; the file lineage (`eye-artistry/recipe-1`,

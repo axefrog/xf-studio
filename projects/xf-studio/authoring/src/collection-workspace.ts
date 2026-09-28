@@ -296,10 +296,11 @@ export type PresetCommand = { kind: "add"; newId?: string } | { kind: "copy"; id
   { kind: "rename"; id: string; name: string } | { kind: "move"; id: string; to: number } | { kind: "restore" };
 /**
  * A new preset's default name: "Preset N" for the next count, skipping a number another preset already carries, so adding after a
- * removal never names two presets alike (desktop acceptance, 29 September: two "Preset 2").
+ * removal never names two presets alike (desktop acceptance, 29 September: two "Preset 2"). `removed` are the presets Restore can
+ * bring back: their names are skipped too, so restoring one never makes two alike either (CORE-124 design review).
  */
-export function newPresetName(presets: readonly { name: string }[]): string {
-  const taken = new Set(presets.map(preset => preset.name));
+export function newPresetName(presets: readonly { name: string }[], removed: readonly { name: string }[] = []): string {
+  const taken = new Set([...presets, ...removed].map(preset => preset.name));
   let n = presets.length + 1;
   while (taken.has(`Preset ${n}`)) n++;
   return `Preset ${n}`;
@@ -321,7 +322,7 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand, 
     if (presets.some(p => p.id === id) || state.removed.some(entry => entry.preset.id === id)) throw Error("That preset ID is already in use.");
     // A copy carries every part of the look; its editor memory starts fresh.
     const preset: Preset = command.kind === "copy" ? { ...structuredClone(presets[index]), id,
-      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : newLook(id, newPresetName(presets), model);
+      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : newLook(id, newPresetName(presets, state.removed.map(entry => entry.preset)), model);
     presets.splice(command.kind === "copy" ? index + 1 : presets.length, 0, preset);
     state.selected = preset.id; state.memory[preset.id] = withLiveMemory(undefined, emptyMemory(), model);
   } else if (command.kind === "remove") {

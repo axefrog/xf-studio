@@ -5,7 +5,7 @@ import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, planCollection } from "./preset-collection";
 import type { Recipe } from "./engines/layered-makeup/recipe";
-import { COLLECTION_1, COLLECTION_2, type Look, type LookCollection } from "./platform/api";
+import { COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction } from "./package-action";
@@ -328,7 +328,7 @@ export class CollectionService {
             const draft = stored
               ? collectionDraft(stored.collection, model, stored.revision)
               : collectionDraft({ schema: COLLECTION_2, id: crypto.randomUUID(), name: "My collection",
-                presets: [{ ...newLook(id, this.legacy.name.trim() || "First look", model),
+                presets: [{ ...newLook(id, this.legacy.name.trim() || "Preset 1", model),
                   parts: { [model.live]: model.parts.envelope(model.live, current.recipe) } }] }, model);
             if (stored) {
               this.remember(stored.collection, stored.revision);
@@ -379,23 +379,21 @@ export class CollectionService {
             message = `Exported the earlier draft “${earlier.name}” with its recipes and stable preset identities. It wasn't saved to your library; your current draft is unchanged.`;
             break;
           }
-          // The draft is saved first only when the library takes it: a collection that needs
-          // `xfs/collection-2` is refused there (CORE-30), and exporting it to a file is exactly how
-          // it is kept, so its draft snapshot is exported unsaved (CORE-38).
+          // The draft is saved first only when the library takes it: a look made with a newer version
+          // of XF Studio is never saved (it is kept exactly as it came), so its draft snapshot is
+          // exported unsaved (CORE-38).
           const plan = request.kind === "exportPlan", draft = this.actions!.snapshot().collection;
-          const storable = this.model.parts.writeMinimal(draft).schema === COLLECTION_1;
+          const storable = !draft.presets.some(look => look.locked);
           const collection = storable ? (await this.save(false)).collection : draft;
           // A collection file is written in the oldest schema that holds it exactly: `xfas/collection-1`
-          // for eye-makeup looks, so 0.1.0-alpha.1 and the build tools read it (feature-module platform §2).
+          // for eye-makeup looks, which every build and the build tools read (feature-module platform §2).
           result = { kind: "export", name: plan ? "xfs.build-plan.json" : "xfs.collection.json",
             json: JSON.stringify(plan ? planCollection(eyeMakeupCollection(collection))
               : this.model.parts.writeMinimal(collection), null, 2) };
           const locked = collection.presets.filter(look => look.locked);
           const kept = storable ? "It was also saved to your library first."
-            : locked.length
-            ? plan ? "It wasn't saved to your library: it has a look made with a newer version of XF Studio. Your draft is kept."
-              : "It wasn't saved to your library: it has a look made with a newer version of XF Studio, which is exported exactly as it came. Your draft is kept."
-            : "It wasn't saved to your library: it has parts the released XF Studio 0.1.0-alpha.1 can't read, and that version opens the same library. Your draft is kept.";
+            : plan ? "It wasn't saved to your library: it has a look made with a newer version of XF Studio. Your draft is kept."
+            : "It wasn't saved to your library: it has a look made with a newer version of XF Studio, which is exported exactly as it came. Your draft is kept.";
           // The plan holds eye makeup only; what it leaves out is listed in the file's `omitted` and named here (PIPE-45).
           const left = plan && locked.length ? ` Not in the plan: ${locked.map(look => `“${look.name}”`).join(", ")}, made with a newer version of XF Studio.` : "";
           message = plan ? `Build plan exported for the offline compiler; this is not an installable mod.${left} ${kept}`

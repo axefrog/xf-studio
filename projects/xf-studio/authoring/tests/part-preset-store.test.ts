@@ -1,6 +1,6 @@
 /**
  * Part presets (research/authoring/editor-invariants.md "Part presets"): a table of their own in the library file, added forwards
- * without touching the released tables, so 0.1.0-alpha.1 still lists the library (CORE-30) and its version check still passes.
+ * without touching the collection and look tables, so even the unpublished 0.1.0-alpha.1 still lists the library and its version check still passes.
  */
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";

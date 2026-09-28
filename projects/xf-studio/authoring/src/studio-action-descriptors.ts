@@ -148,7 +148,7 @@ const request = (scope: ActionScope | readonly ActionScope[], effect: RequestDes
     effect, payload, async: true, cancellable });
 /**
  * The `presets` family (part-presets.ts): a feature's part saved in the library under a name, for favourites and start points. Its rows
- * live in their own table (part-preset-store.ts), which the released 0.1.0-alpha.1 never reads.
+ * live in their own table (part-preset-store.ts), which 0.1.0-alpha.2, the oldest published release, reads too.
  */
 export const PART_PRESET_DESCRIPTORS = {
   "partPreset.list": request("workspace", "read", { feature: target("string") }),

@@ -184,7 +184,7 @@ export function freshWorkspace(recipe: Recipe): WorkspaceState {
       lightingPreset: DEFAULT_LIGHTING_PRESET, creatorLighting: { ...DEFAULT_CREATOR_LIGHTING },
       studioLights: { ...DEFAULT_STUDIO_LIGHTS }, idle: false, idleTime: 0,
       idlePaused: false, idleBody: true, idleFace: true },
-    library: { selected: "", name: "Untitled look" },
+    library: { selected: "", name: "Preset 1" },
     uiPreferences: defaultUIPreferences(),
   };
 }

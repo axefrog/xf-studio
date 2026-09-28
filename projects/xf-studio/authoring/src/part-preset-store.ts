@@ -13,8 +13,9 @@ import { hostFailure } from "./diagnostics/host-log";
  *     part_presets(feature, id, name, revision, schema, body, created_at, updated_at)
  *
  * **Forward-only, beside the released tables.** The table is created when missing (`CREATE TABLE IF NOT EXISTS`) and `user_version`
- * is left as it is, so the collection and look tables, their rows and the library version 0.1.0-alpha.1 checks are untouched: that
- * release lists the library exactly as before and never reads this table (CORE-30 stays intact). Each row's part is stored in its
+ * is left as it is, so the collection and look tables, their rows and the library version are untouched: a build without this table
+ * (0.1.0-alpha.1, never published) lists the library exactly as before and never reads it; 0.1.0-alpha.2, the oldest published
+ * release, has this same table. Each row's part is stored in its
  * feature's current part schema; a row of a schema this build doesn't read (a newer build's) is kept and left out of lists, never
  * rewritten or dropped. Rename and delete take the revision they were shown, so a stale window can't overwrite a newer change.
  */

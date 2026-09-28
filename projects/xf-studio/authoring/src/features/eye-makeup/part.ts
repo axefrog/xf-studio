@@ -7,7 +7,7 @@
  * - Part 1 (`xfs/eye-makeup-part-1`) is a recipe file body with its `xfs/recipe-N` schema. It
  *   reads into part 2 without any appearance change, and `downgrade` writes it back in the
  *   oldest recipe schema that holds every layer's models, so the minimal writers keep producing
- *   `xfas/collection-1` (and `xfs/recipe-N`) that 0.1.0-alpha.1 reads whenever the content allows.
+ *   `xfas/collection-1` (and `xfs/recipe-N`) that every build, back to the oldest release, reads whenever the content allows.
  * - A bare recipe file of any schema lifts into a part-2 recipe, migrating exactly as before.
  */
 import type { EditorCodec, MemoryCodec, PartCodec, PartEnvelope } from "../../platform/api";
