@@ -32,7 +32,7 @@ Open [127.0.0.1:4317](http://127.0.0.1:4317/) while the server runs. The [editor
 
 | Project | Where it stands |
 |---|---|
-| [XF Studio](projects/xf-studio/README.md) | Broad Cyberpunk authoring vision, starting with eye-makeup creation for V. Further character and game areas are future work to define one feature at a time. |
+| [XF Studio](projects/xf-studio/README.md) | Broad Cyberpunk authoring vision, starting with eye-makeup creation for V. Further character and game areas are future work to define one feature at a time; [where it's going](docs/vision.md) describes the direction. |
 | [Photo Mode Tools](projects/xf-photo-mode-tools/README.md) | Independent peer project. Its clean implementation is still at the research stage. |
 
 The repository also keeps an agent-facing [knowledge base](knowledge/README.md) of how the game's resources fit together, [focused experiments](experiments/), [source-grounded research](research/) and [validation notes](docs/validation.md) beside the projects. [Community credits](docs/community-credits.md) record what we learned from other creators and the boundaries on reuse. Contributors can start with the [developer orientation](docs/developer-orientation.md) and [working rules](AGENTS.md).
