@@ -109,7 +109,7 @@ describe("bridge 0.5.2: pacing and rate limits (RB-77)", () => {
       expect(status.ok, JSON.stringify(status)).toBe(true);
     }
     expect(api.rateLimitRetries).toBe(0);
-    expect(performance.now() - started).toBeGreaterThan(1500); // 50 requests at 16 a second, after a burst of 16
+    expect(performance.now() - started).toBeGreaterThan(600); // after a burst of 36, 14 more at 18 a second
     api.close();
   });
 
@@ -144,7 +144,7 @@ describe("bridge 0.5.2: pacing and rate limits (RB-77)", () => {
 
   test("the pacer allows a burst, then spaces requests at its rate", () => {
     let now = 0;
-    const pacer = new RequestPacer(10, () => now);
+    const pacer = new RequestPacer(10, 10, () => now);
     const waits = Array.from({ length: 12 }, () => pacer.take());
     expect(waits.slice(0, 10).every((w) => w === 0)).toBe(true);
     expect(waits[10]).toBe(100);

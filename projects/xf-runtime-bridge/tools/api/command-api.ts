@@ -49,8 +49,9 @@ export type CommandApiOptions = {
   /** photo.open's key sender (tests pass a fake: the real one presses a key in the game window). */
   keySender?: KeySender;
   /**
-   * The client's own pace (0.5.2, RB-77): at most this many bridge requests per second, in bursts of as many, kept below
-   * the plugin's limit (max_requests_per_second, default 20, burst 40) so framing's reads and writes never meet it. Default 16.
+   * The client's own pace (0.5.2, RB-77): at most this many bridge requests per second, in bursts of twice as many, kept
+   * below the plugin's limit (max_requests_per_second, default 20, in bursts of 40) so framing's reads and writes never
+   * meet it. Default 18.
    */
   requestsPerSecond?: number;
   /** How long a request refused rate_limited is retried, with growing waits, before the refusal is passed on (default 4000 ms). */
@@ -66,15 +67,16 @@ export class RequestPacer {
   private last = performance.now();
   constructor(
     readonly perSecond: number,
+    readonly burst = perSecond * 2,
     private readonly now: () => number = () => performance.now(),
   ) {
-    this.tokens = perSecond;
+    this.tokens = burst;
     this.last = this.now();
   }
   /** Milliseconds to wait before the next request may go (0: now); takes the token. */
   take(): number {
     const now = this.now();
-    this.tokens = Math.min(this.perSecond, this.tokens + ((now - this.last) / 1000) * this.perSecond);
+    this.tokens = Math.min(this.burst, this.tokens + ((now - this.last) / 1000) * this.perSecond);
     this.last = now;
     this.tokens -= 1;
     return this.tokens >= 0 ? 0 : Math.ceil((-this.tokens / this.perSecond) * 1000);
@@ -127,7 +129,7 @@ export class CommandApi {
     this.auditDir = resolve(options.auditDir ?? join(this.captureRoot, "..", "logs"));
     this.transportFactory = options.transport ?? pipeTransport(options.clientTimeoutMs ?? 8000);
     this.idleCloseMs = options.idleCloseMs ?? 3000;
-    this.pacer = new RequestPacer(Math.max(1, options.requestsPerSecond ?? 16));
+    this.pacer = new RequestPacer(Math.max(1, options.requestsPerSecond ?? 18));
     this.rateLimitPatienceMs = options.rateLimitPatienceMs ?? 4000;
   }
 
