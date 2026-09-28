@@ -6,7 +6,8 @@
 //
 // Usage: xfb_selftest --runtime-dir <dir> [--seconds N] [--allow-writes] [--write-classes <list>] [--no-pump]
 //                    [--allow-creator-leave] [--allow-live-pose] [--idle-seconds N] [--no-cet]
-//                    [--rearm-after-ms N]
+//                    [--rearm-after-ms N] [--no-codeware]
+// --no-codeware: the showroom.* methods answer as the redscript layer does without Codeware (codeware_missing).
 // --rearm-after-ms re-arms the bridge N ms after a kill switch (once its restore has run), as the in-game
 // panel's Reconnect does (the plugin's HandleRearm), up to three times.
 //        xfb_selftest --unit        (in-process checks only; no pipe)
@@ -28,6 +29,7 @@
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
+#include "core/Showroom.hpp"
 #include "core/Params.hpp"
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
@@ -74,6 +76,7 @@ int wmain(int argc, wchar_t** argv)
     bool cet = true;
     bool allowLivePose = false;
     int rearmAfterMs = -1;
+    bool codeware = true;
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
@@ -112,6 +115,10 @@ int wmain(int argc, wchar_t** argv)
         else if (arg == L"--rearm-after-ms" && i + 1 < argc)
         {
             rearmAfterMs = std::clamp(std::stoi(argv[++i]), 0, 60000);
+        }
+        else if (arg == L"--no-codeware")
+        {
+            codeware = false;
         }
         else if (arg == L"--no-cet")
         {
@@ -281,8 +288,22 @@ int wmain(int argc, wchar_t** argv)
         bool savesReady = false;
         int listTicks = -1;
         int loadTicks = -1;
+        // XF Finish Showroom: the entities the simulated static entity system holds (spawned a couple of ticks after the
+        // request, as Codeware's are), and Codeware's presence.
+        struct ShowroomItem
+        {
+            std::string kind; // "pieces" or "lights"
+            int32_t index = 0;
+            std::string label, templatePath, appearance, entity;
+            double x = 0, y = 0, z = 0, yaw = 0, baseYaw = 0;
+            int ticks = 2;
+        };
+        std::vector<ShowroomItem> showroom;
+        bool codeware = true;
+        uint64_t nextEntity = 1000;
     };
     static Simulated sim;
+    sim.codeware = codeware;
     static xfb::writes::RestoreOnce restore;
     {
         namespace lp = xfb::livepose;
@@ -1373,6 +1394,151 @@ int wmain(int argc, wchar_t** argv)
                                      out["simulated"] = true;
                                      return out;
                                  }));
+    // XF Finish Showroom (bridge 0.5), simulated: V at (100, 200, 10) facing +Y, the photo-mode camera 2 m behind her at
+    // 1.7 m; the same parameter checks and sequences (core/Showroom.cpp) as the plugin.
+    const auto showroomRefusal = [] {
+        if (!sim.codeware)
+        {
+            throw xfb::MethodError("codeware_missing", "simulated: the showroom needs Codeware (its static entity system), which isn't loaded");
+        }
+        if (sim.phase != "gameplay" && sim.phase != "photo_mode")
+        {
+            throw xfb::MethodError("not_in_world", "simulated: the showroom works in normal play and photo mode; the game is in '" + sim.phase + "'");
+        }
+    };
+    const auto showroomStatus = [] {
+        json pieces = json::array(), lights = json::array();
+        int pending = 0;
+        for (const auto& item : sim.showroom)
+        {
+            json entry{{"index", item.index}, {"label", item.label}, {"appearance", item.appearance}, {"entity", item.entity},
+                       {"spawned", item.ticks <= 0}, {"position", {item.x, item.y, item.z}}, {"yaw", item.yaw}, {"base_yaw", item.baseYaw}};
+            pending += item.ticks > 0 ? 1 : 0;
+            (item.kind == "pieces" ? pieces : lights).push_back(entry);
+        }
+        return json{{"simulated", true}, {"codeware", sim.codeware}, {"pieces", pieces}, {"lights", lights}, {"pending", pending}};
+    };
+    const auto showroomOps = [&queue, showroomRefusal, showroomStatus] {
+        xfb::showroom::Ops ops;
+        ops.guard = [] {};
+        ops.spawn = [showroomRefusal](xfb::showroom::Kind aKind, const xfb::showroom::Placement& aItem) {
+            std::scoped_lock _(sim.mutex);
+            showroomRefusal();
+            const double dx = aItem.x - 100.0, dy = aItem.y - 200.0, dz = aItem.z - 10.0;
+            if (std::sqrt(dx * dx + dy * dy + dz * dz) > xfb::showroom::kMaxDistanceFromV)
+            {
+                throw xfb::MethodError("too_far", "simulated: that place is more than 30 m from V");
+            }
+            Simulated::ShowroomItem item;
+            item.kind = xfb::showroom::KindName(aKind);
+            item.index = aItem.index;
+            item.label = aItem.label;
+            item.templatePath = aItem.templatePath;
+            item.appearance = aItem.appearance;
+            item.entity = std::to_string(sim.nextEntity++);
+            item.x = aItem.x;
+            item.y = aItem.y;
+            item.z = aItem.z;
+            item.yaw = item.baseYaw = aItem.yaw;
+            sim.showroom.push_back(item);
+            sim.gameSaveLock = true;
+            return json{{"entity", item.entity}, {"spawning", true}};
+        };
+        ops.clear = [](const std::string& aWhat) {
+            std::scoped_lock _(sim.mutex);
+            int pieces = 0, lights = 0;
+            std::vector<Simulated::ShowroomItem> kept;
+            for (const auto& item : sim.showroom)
+            {
+                if (aWhat == "all" || aWhat == item.kind)
+                {
+                    (item.kind == "pieces" ? pieces : lights) += 1;
+                }
+                else
+                {
+                    kept.push_back(item);
+                }
+            }
+            sim.showroom = kept;
+            return json{{"removed_pieces", pieces}, {"removed_lights", lights}};
+        };
+        ops.turn = [showroomRefusal](int32_t aIndex, double aYaw) {
+            std::scoped_lock _(sim.mutex);
+            showroomRefusal();
+            for (auto& item : sim.showroom)
+            {
+                if (item.kind == "pieces" && item.index == aIndex)
+                {
+                    if (item.ticks > 0)
+                    {
+                        throw xfb::MethodError("not_spawned_yet", "simulated: piece " + std::to_string(aIndex) + " is still spawning");
+                    }
+                    const double previous = item.yaw;
+                    item.yaw = aYaw;
+                    return json{{"index", aIndex}, {"previous_yaw", previous}, {"yaw", aYaw}};
+                }
+            }
+            throw xfb::MethodError("no_such_piece", "simulated: the showroom has no piece " + std::to_string(aIndex));
+        };
+        ops.status = [showroomStatus] {
+            std::scoped_lock _(sim.mutex);
+            return showroomStatus();
+        };
+        ops.settle = [&queue] {
+            if (!w::WaitTicks(queue, 1, std::chrono::milliseconds(1000)))
+            {
+                throw xfb::MethodError("timeout", "simulated: no game ticks");
+            }
+        };
+        return ops;
+    };
+    dispatcher.Register({"showroom.anchor", xfb::Access::Read, xfb::RunOn::GameThread, "Where V and the camera are (simulated).",
+                         [](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {});
+                             std::scoped_lock _(sim.mutex);
+                             json out{{"simulated", true}, {"codeware", sim.codeware}, {"phase", sim.phase},
+                                      {"v", {{"position", {100.0, 200.0, 10.0}}, {"forward", {0.0, 1.0, 0.0}}}}};
+                             if (sim.codeware)
+                             {
+                                 out["codeware_version"] = "1.20.5";
+                             }
+                             if (sim.phase == "photo_mode")
+                             {
+                                 out["camera"] = {{"position", {100.0, 198.0, 11.7}}, {"forward", {0.0, 1.0, 0.0}}};
+                             }
+                             return out;
+                         }});
+    dispatcher.Register({"showroom.state", xfb::Access::Read, xfb::RunOn::GameThread, "The showroom (simulated).",
+                         [showroomStatus](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {});
+                             std::scoped_lock _(sim.mutex);
+                             return showroomStatus();
+                         }});
+    dispatcher.Register(simWrite("showroom.place", xfb::Access::WriteShowroom, xfb::RunOn::BridgeThread, "Spawns showroom heads (simulated).",
+                                 [showroomOps](const xfb::MethodContext& aContext) {
+                                     auto out = xfb::showroom::Place(xfb::showroom::ParsePlace(aContext.params, xfb::showroom::Kind::Piece), showroomOps());
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("showroom.lights", xfb::Access::WriteShowroom, xfb::RunOn::BridgeThread, "Spawns showroom light rigs (simulated).",
+                                 [showroomOps](const xfb::MethodContext& aContext) {
+                                     auto out = xfb::showroom::Place(xfb::showroom::ParsePlace(aContext.params, xfb::showroom::Kind::Rig), showroomOps());
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("showroom.turn", xfb::Access::WriteShowroom, xfb::RunOn::BridgeThread, "Turns showroom heads (simulated).",
+                                 [showroomOps](const xfb::MethodContext& aContext) {
+                                     auto out = xfb::showroom::TurnPieces(xfb::showroom::ParseTurn(aContext.params), showroomOps());
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+    dispatcher.Register(simWrite("showroom.clear", xfb::Access::WriteShowroom, xfb::RunOn::BridgeThread, "Removes the showroom (simulated).",
+                                 [showroomOps](const xfb::MethodContext& aContext) {
+                                     auto out = xfb::showroom::Clear(xfb::showroom::ParseClear(aContext.params), showroomOps());
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
+
     // What the simulated save and inventory state looks like (self-test only).
     dispatcher.Register({"selftest.state", xfb::Access::Read, xfb::RunOn::BridgeThread, "Simulated clothing, saves and lights (self-test only).",
                          [](const xfb::MethodContext&) {
@@ -1409,6 +1575,11 @@ int wmain(int argc, wchar_t** argv)
             sim.gameSaveLock = true;
             sim.unlockTicks = -1;
             out["save_lock_retaken"] = true;
+        }
+        if (!sim.showroom.empty())
+        {
+            out["showroom_cleared"] = sim.showroom.size();
+            sim.showroom.clear();
         }
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
@@ -1508,6 +1679,13 @@ int wmain(int argc, wchar_t** argv)
                     sim.savesReady = true;
                     sim.listTicks = -1;
                 }
+                for (auto& item : sim.showroom)
+                {
+                    if (item.ticks > 0)
+                    {
+                        --item.ticks;
+                    }
+                }
                 if (sim.loadTicks > 0 && --sim.loadTicks == 0)
                 {
                     // A loaded save: gameplay again, every bridge lock and change gone.
@@ -1515,6 +1693,7 @@ int wmain(int argc, wchar_t** argv)
                     sim.gameSaveLock = false;
                     sim.saveLock = false;
                     sim.worn.clear();
+                    sim.showroom.clear(); // static entities don't survive a load
                     sim.loadTicks = -1;
                 }
             }

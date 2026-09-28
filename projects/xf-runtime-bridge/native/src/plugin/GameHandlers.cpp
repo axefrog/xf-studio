@@ -22,6 +22,7 @@
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/Scripting/Natives/ScriptGameInstance.hpp>
 #include <RED4ext/Scripting/Natives/Vector4.hpp>
+#include <RED4ext/Scripting/Natives/Generated/red/ResourceReferenceScriptToken.hpp>
 
 #include <cstdio>
 #include <initializer_list>
@@ -31,6 +32,7 @@
 #include "core/LivePose.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
+#include "core/Showroom.hpp"
 #include "core/Writes.hpp"
 #include "plugin/GameHandlers.hpp"
 #include "plugin/LivePoseMemory.hpp"
@@ -1401,6 +1403,103 @@ json PoseLiveApply(const MethodContext& aContext)
     return live::Apply(request, aContext.cid);
 }
 
+// showroom.* (bridge 0.5): XF Finish Showroom's heads and light rigs, spawned through Codeware's static entity system by the
+// redscript layer (XFRuntimeBridgeShowroom.reds; without Codeware its functions refuse with codeware_missing). Multi-step, so
+// the sequences run on the bridge thread (core/Showroom.cpp) and send each game step through the queue.
+constexpr uint64_t kShowroomSettleTicks = 3;
+
+showroom::Ops ShowroomOpsFor(const std::string& aCid)
+{
+    auto& queue = Get().queue;
+    showroom::Ops ops;
+    ops.guard = [] {
+        if (auto& state = Get(); state.bridge)
+        {
+            state.bridge->GetDispatcher().RequireWritesOpen();
+        }
+    };
+    ops.spawn = [&queue, aCid](showroom::Kind aKind, const showroom::Placement& aItem) {
+        return RunGameTask(
+            queue, Timeout(),
+            [aCid, aKind, aItem] {
+                RED4ext::CString kind(showroom::KindName(aKind));
+                // A ResRef is the path's hash (RaRef<CResource>); redscript has no string-to-ResRef conversion at run time.
+                RED4ext::ResRef path;
+                path.resource = RED4ext::RaRef<RED4ext::CResource>(RED4ext::ResourcePath(aItem.templatePath.c_str()));
+                RED4ext::CString appearance(aItem.appearance.c_str());
+                RED4ext::CString label(aItem.label.c_str());
+                int32_t index = aItem.index;
+                float x = static_cast<float>(aItem.x), y = static_cast<float>(aItem.y), z = static_cast<float>(aItem.z);
+                float yaw = static_cast<float>(aItem.yaw);
+                return CallScript("XFShowroom", "Spawn",
+                                  {"String", "redResourceReferenceScriptToken", "String", "String", "Int32", "Float", "Float", "Float", "Float"},
+                                  {&kind, &path, &appearance, &label, &index, &x, &y, &z, &yaw}, aCid);
+            },
+            "showroom.spawn");
+    };
+    ops.clear = [&queue, aCid](const std::string& aWhat) {
+        return RunGameTask(
+            queue, Timeout(),
+            [aCid, aWhat] {
+                RED4ext::CString what(aWhat.c_str());
+                return CallScript("XFShowroom", "Clear", {"String"}, {&what}, aCid);
+            },
+            "showroom.clear");
+    };
+    ops.turn = [&queue, aCid](int32_t aIndex, double aYaw) {
+        return RunGameTask(
+            queue, Timeout(),
+            [aCid, aIndex, aYaw] {
+                int32_t index = aIndex;
+                float yaw = static_cast<float>(aYaw);
+                return CallScript("XFShowroom", "Turn", {"Int32", "Float"}, {&index, &yaw}, aCid);
+            },
+            "showroom.turn");
+    };
+    ops.status = [&queue, aCid] {
+        return RunGameTask(queue, Timeout(), [aCid] { return CallScript("XFShowroom", "Status", {}, {}, aCid); }, "showroom.status");
+    };
+    ops.settle = [&queue] {
+        if (!writes::WaitTicks(queue, kShowroomSettleTicks, Timeout()))
+        {
+            throw MethodError("timeout", "the game didn't tick while the showroom was spawning");
+        }
+    };
+    return ops;
+}
+
+json ShowroomAnchor(const MethodContext& aContext)
+{
+    params::RequireOnly(aContext.params, {});
+    return CallScript("XFShowroom", "Anchor", {}, {}, aContext.cid);
+}
+
+json ShowroomState(const MethodContext& aContext)
+{
+    params::RequireOnly(aContext.params, {});
+    return CallScript("XFShowroom", "Status", {}, {}, aContext.cid);
+}
+
+json ShowroomPlace(const MethodContext& aContext)
+{
+    return showroom::Place(showroom::ParsePlace(aContext.params, showroom::Kind::Piece), ShowroomOpsFor(aContext.cid));
+}
+
+json ShowroomLights(const MethodContext& aContext)
+{
+    return showroom::Place(showroom::ParsePlace(aContext.params, showroom::Kind::Rig), ShowroomOpsFor(aContext.cid));
+}
+
+json ShowroomTurn(const MethodContext& aContext)
+{
+    return showroom::TurnPieces(showroom::ParseTurn(aContext.params), ShowroomOpsFor(aContext.cid));
+}
+
+json ShowroomClear(const MethodContext& aContext)
+{
+    return showroom::Clear(showroom::ParseClear(aContext.params), ShowroomOpsFor(aContext.cid));
+}
+
 // Wraps a write method: marks that the bridge changed something (so the kill switch restores it)
 // and logs the change with its reversal.
 MethodSpec WriteMethod(std::string aName, Access aAccess, RunOn aRunOn, std::string aSummary,
@@ -1432,6 +1531,17 @@ void RestoreAfterKill()
     }
     const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
     log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
+    // XF Finish Showroom's heads and light rigs go too (bridge 0.5); nothing to do when none were spawned.
+    try
+    {
+        RED4ext::CString all("all");
+        log::Info("bridge.kill_cleared_showroom", SerializeJson(CallScript("XFShowroom", "Clear", {"String"}, {&all}, "kill-restore")),
+                  "kill-restore");
+    }
+    catch (const std::exception& e)
+    {
+        log::Warn("bridge.kill_clear_showroom_failed", std::string("what=") + e.what(), "kill-restore");
+    }
 }
 
 void RetakeOwedSaveLock()
@@ -1563,6 +1673,20 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      "Makes one new manual save; refused while the bridge's save lock is held unless overridden.", &GameSaveMethod));
     aDispatcher.Register(WriteMethod("game.load", Access::WriteSave, RunOn::BridgeThread, "Loads the latest save or one save by name.",
                                      &GameLoadMethod));
+
+    // Bridge 0.5: XF Finish Showroom (the showroom write class, listed only by the test profile's -writes build).
+    aDispatcher.Register({"showroom.anchor", Access::Read, RunOn::GameThread,
+                          "Where V and the camera are and which way they face, and whether Codeware is loaded (for placing the showroom).",
+                          &ShowroomAnchor});
+    aDispatcher.Register({"showroom.state", Access::Read, RunOn::GameThread,
+                          "The XF Finish Showroom heads and light rigs the bridge spawned, where they are and whether they are in.", &ShowroomState});
+    aDispatcher.Register(WriteMethod("showroom.place", Access::WriteShowroom, RunOn::BridgeThread,
+                                     "Spawns XF Finish Showroom heads at the given places (Codeware static entities; nothing persists).", &ShowroomPlace));
+    aDispatcher.Register(WriteMethod("showroom.lights", Access::WriteShowroom, RunOn::BridgeThread,
+                                     "Spawns XF Finish Showroom light rigs at the given places.", &ShowroomLights));
+    aDispatcher.Register(WriteMethod("showroom.turn", Access::WriteShowroom, RunOn::BridgeThread, "Turns showroom heads to the given yaws.", &ShowroomTurn));
+    aDispatcher.Register(WriteMethod("showroom.clear", Access::WriteShowroom, RunOn::BridgeThread,
+                                     "Removes the showroom's heads, light rigs or both.", &ShowroomClear));
 
     // A write-class probe with no game effect: proves the write gate and audit log in game.
     aDispatcher.Register({"diag.write_probe", Access::Write, RunOn::GameThread,

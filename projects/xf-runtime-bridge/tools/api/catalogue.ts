@@ -12,6 +12,7 @@
 //   write-character  changes V's appearance
 //   write-inventory  changes V's clothing and inventory (off in the bridge's config.ini until the maintainer approves it)
 //   write-save       makes a manual save or loads one
+//   write-showroom   spawns, turns and removes XF Finish Showroom's test heads and light rigs (the test profile only)
 //   control          changes only the bridge itself (the kill switch)
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
@@ -26,11 +27,12 @@ import { plainBridgeError } from "./errors.ts";
 import { summarizeSettings, type SettingsGroups } from "./options.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
+import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
-export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "control";
+export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "control";
 
 export const PERMISSIONS: Record<Permission, { label: string; description: string }> = {
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
@@ -56,6 +58,11 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
     label: "Save and load the game",
     description:
       "Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden.",
+  },
+  "write-showroom": {
+    label: "Set up the finish showroom",
+    description:
+      "Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile.",
   },
   control: {
     label: "Stop the bridge",
@@ -1135,6 +1142,91 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj({ paused: bool("true freezes, false unfreezes.") }, ["paused"]),
     undo: "world.pause with paused: false; the kill switch also unfreezes.",
     bridge: { method: "world.pause" },
+  },
+
+  // XF Finish Showroom (bridge 0.5; the showroom write class, test profile only)
+  {
+    name: "showroom.spawn",
+    title: "Set out the finish showroom",
+    description:
+      "Spawns XF Finish Showroom's mannequin heads, one per makeup preset of a showroom build (its folder or manifest.json from tools/build_showroom_package.ts), each on a black pedestal: in an arc about the camera (default; every head faces it) or a row across the view, spacing_m apart, distance_m in front of the camera (in photo mode) or V. Needs Codeware in the game and the showroom's archive staged. Nothing is saved: showroom.clear, the kill switch or loading a save removes them.",
+    permission: "write-showroom",
+    input: obj({
+      manifest: str("The showroom build's folder, or its manifest.json.", { maxLength: 1024 }),
+      manifests: { type: "array", description: "Several showroom builds' folders or manifests, to set out their presets together.", items: str("A showroom build's folder or manifest.json.", { maxLength: 1024 }), minItems: 1, maxItems: 4 },
+      presets: { type: "array", description: "Which presets, by name, preset ID or appearance, in lineup order. Default: all of them (at most 24).", items: str("A preset's name, ID or appearance.", { maxLength: 120 }), minItems: 1, maxItems: 24 },
+      layout: oneOf("arc (default): on a circle about the camera or V, each head facing it. row: a straight line across the view, all facing back along it.", ["arc", "row"]),
+      spacing_m: num("Distance between neighbouring heads, 0.3 to 5 m. Default 0.7.", 0.3, 5),
+      distance_m: num("How far in front of the camera or V, 0.8 to 10 m. Default 2.5.", 0.8, 10),
+      lateral_m: num("Shift the whole lineup to the right as the camera or V sees it (negative: left), -5 to 5 m. With distance_m equal to the camera's distance from V, a head at lateral 0.6 stands beside her on the same arc. Default 0.", -5, 5),
+      anchor: oneOf("camera (default in photo mode) or v (default in normal play).", ["camera", "v"]),
+      replace: bool("Remove the heads set out earlier first (default true)."),
+    }),
+    undo: "showroom.clear with what: pieces (or all); loading a save also removes them.",
+    local: runShowroomSpawn,
+  },
+  {
+    name: "showroom.light",
+    title: "Light the finish showroom",
+    description:
+      "Spawns a light rig built from the game's own character-creator rig (native lumens, falloff, cones and shadows): rig creator (all 15 lights), creator_face (the 13 that reach the head, no shadows) or key (the key light alone). target each (default) gives every head its own rig in its own frame, so each gets the same light; piece lights one head; v lights V the same way, for the fidelity check. Rigs of neighbouring heads also light each other: the answer estimates by how much and warns above 5 %. Rigs stay put when heads turn, so a turn sweeps the highlights.",
+    permission: "write-showroom",
+    input: obj(
+      {
+        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used).", { maxLength: 1024 }),
+        rig: oneOf("creator (default), creator_face or key.", ["creator", "creator_face", "key"]),
+        target: oneOf("each (default): a rig per head; piece: the head given by piece; v: V herself.", ["each", "piece", "v"]),
+        piece: int("The head's index in the lineup (0 is the first), with target piece.", 0, 23),
+        replace: bool("Remove the rigs placed earlier first (default true)."),
+      },
+      ["manifest"],
+    ),
+    undo: "showroom.clear with what: lights.",
+    local: runShowroomLight,
+  },
+  {
+    name: "showroom.rotate",
+    title: "Turn the showroom heads",
+    description:
+      "Turns showroom heads on their pedestals: yaw_deg relative to how they were set out (0 faces the camera or V as at spawn, positive turns them to their left), delta_deg from where they are now, or a turntable sweep from from_deg to to_deg in steps (default -60 to 60 in 7 steps), waiting settle_ms at each and, with capture, taking a screenshot of region (default the whole window) at each step. Light rigs don't turn, so the highlights sweep across each face. After a sweep the heads go back where they were unless return is false.",
+    permission: "write-showroom",
+    input: obj({
+      pieces: { type: "array", description: "Which heads by lineup index (default all).", items: int("A head's index (0 is the first).", 0, 23), minItems: 1, maxItems: 24 },
+      yaw_deg: num("Yaw relative to how the heads were set out, -180 to 180.", -180, 180),
+      delta_deg: num("Turn by this much from where they are now, -180 to 180.", -180, 180),
+      sweep: {
+        ...obj({
+          from_deg: num("First angle, relative to how the heads were set out. Default -60.", -180, 180),
+          to_deg: num("Last angle. Default 60.", -180, 180),
+          steps: int("How many angles, 1 to 36, evenly spaced. Default 7.", 1, 36),
+          settle_ms: int("Wait at each angle before the screenshot, 0 to 5000 ms. Default 400.", 0, 5000),
+          capture: bool("Take a screenshot at each angle (default false)."),
+          region: oneOf("The area each screenshot keeps (as capture_screenshot). Default: the whole window.", Object.keys(NAMED_REGIONS)),
+          name: str("Short label for the screenshots' files.", { pattern: "^[A-Za-z0-9._-]{1,60}$", maxLength: 60 }),
+          return: bool("Turn the heads back where they were afterwards (default true)."),
+        }),
+        description: "A turntable sweep instead of one turn.",
+      },
+    }),
+    undo: "showroom.rotate with yaw_deg 0 faces them as set out; a result's undo turns them back exactly.",
+    local: runShowroomRotate,
+  },
+  {
+    name: "showroom.clear",
+    title: "Clear the finish showroom",
+    description: "Removes the showroom's heads (what: pieces), its light rigs (lights) or both (all, the default). The kill switch and loading a save do the same.",
+    permission: "write-showroom",
+    input: obj({ what: oneOf("all (default), pieces or lights.", ["all", "pieces", "lights"]) }),
+    undo: "showroom.spawn and showroom.light set them out again.",
+    bridge: { method: "showroom.clear" },
+  },
+  {
+    name: "showroom.state",
+    title: "Read the finish showroom",
+    description: "Lists the showroom heads and light rigs the bridge spawned: their preset, place, yaw and whether they are in the world yet, and whether Codeware is loaded.",
+    permission: "read",
+    input: obj({}),
+    bridge: { method: "showroom.state" },
   },
 ];
 

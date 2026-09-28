@@ -1,7 +1,11 @@
 // Type-checks the redscript layer offline with the official redscript-cli (v0.5.31) against a
 // COPY of the game's r6/cache/final.redscripts. Never point --bundle at the live game file.
 //
-//   bun tools/lint-redscript.ts --bundle <copy of final.redscripts> [--cli <redscript-cli.exe>]
+//   bun tools/lint-redscript.ts --bundle <copy of final.redscripts> [--cli <redscript-cli.exe>] [--codeware <Codeware scripts dir>]
+//
+// XFRuntimeBridgeShowroom.reds compiles one of two XFShowroom classes by @if(ModuleExists("Codeware")): without --codeware
+// the lint checks the fallback that refuses with codeware_missing; with Codeware's own script sources (its repository's
+// scripts/ folder at the version the README names) it checks the class that spawns. Run both before packaging.
 //
 // redscript-cli prints "Lint successful" and exits 0 even when it reports errors, so this
 // wrapper fails on any ERROR line instead. Known gap: `cb` wrappers match by bare name, so a
@@ -20,9 +24,14 @@ const option = (name: string) => {
 const cli = option("--cli") ?? process.env.XFB_REDSCRIPT_CLI ?? "D:/Dev/tools/redscript-cli/0.5.31/redscript-cli.exe";
 const bundle = option("--bundle") ?? process.env.XFB_REDSCRIPT_BUNDLE;
 const sources = resolve(import.meta.dir, "..", "redscript");
+const codeware = option("--codeware") ?? process.env.XFB_CODEWARE_SCRIPTS;
 
 if (!existsSync(cli)) {
   console.error(`redscript-cli not found at ${cli} (official release v0.5.31; see docs/toolchain.md)`);
+  process.exit(2);
+}
+if (codeware !== undefined && !existsSync(codeware)) {
+  console.error(`Codeware's script folder not found at ${codeware}`);
   process.exit(2);
 }
 if (!bundle || !existsSync(bundle)) {
@@ -30,7 +39,7 @@ if (!bundle || !existsSync(bundle)) {
   process.exit(2);
 }
 
-const result = spawnSync(cli, ["lint", "-s", sources, "-b", bundle], { encoding: "utf8" });
+const result = spawnSync(cli, ["lint", "-s", sources, ...(codeware ? ["-s", codeware] : []), "-b", bundle], { encoding: "utf8" });
 const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
 process.stdout.write(output);
 const errors = output.split(/\r?\n/).filter((line) => line.includes("ERROR"));
@@ -38,4 +47,4 @@ if (result.status !== 0 || errors.length > 0) {
   console.error(`\nredscript lint FAILED (${errors.length} error line(s), exit ${result.status})`);
   process.exit(1);
 }
-console.log(`\nredscript lint passed: ${join("redscript")} against ${bundle}`);
+console.log(`\nredscript lint passed: ${join("redscript")}${codeware ? ` with Codeware's scripts (${codeware})` : " without Codeware"} against ${bundle}`);

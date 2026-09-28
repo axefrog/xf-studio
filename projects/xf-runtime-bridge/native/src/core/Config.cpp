@@ -140,10 +140,14 @@ Config ParseConfig(const std::string& aText)
                 {
                     config.writeClasses |= kWriteSave;
                 }
+                else if (name == "showroom")
+                {
+                    config.writeClasses |= kWriteShowroom;
+                }
                 else if (!name.empty())
                 {
                     config.warnings.push_back("line " + std::to_string(lineNumber) + ": unknown write class '" +
-                                              name.substr(0, 32) + "' ignored (photo, world, character, inventory, save)");
+                                              name.substr(0, 32) + "' ignored (photo, world, character, inventory, save, showroom)");
                 }
             }
         }
@@ -246,6 +250,10 @@ std::vector<std::string> WriteClassList(const Config& aConfig)
     if (aConfig.writeClasses & kWriteSave)
     {
         out.emplace_back("save");
+    }
+    if (aConfig.writeClasses & kWriteShowroom)
+    {
+        out.emplace_back("showroom");
     }
     return out;
 }

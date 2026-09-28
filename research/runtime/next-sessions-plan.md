@@ -20,6 +20,7 @@ This plan gathers every open in-game ask into sittings of 20–30 minutes, drive
 | [N5](#n5-creator-sweep-a-colour-encoding-and-layered-materials) | Creator sweep A: the remaining colour checks | 20 | Tint encoding on the right tones; ray tracing off; decal order with XF Off | M turns ray tracing off once |
 | [N6](#n6-creator-sweep-b-rows-links-hair-calibration-body-blink) | Creator sweep B: what remains | 25 | Hands on the tone link, lip colour carry-over, brows, bald style, lash frame, teeth, blink | M switches the Character Rendering Editor preset once |
 | [N11](#n11-xf-expressions-set-in-photo-mode-r4r5) | XF Expressions set in photo mode (R4–R5) | 25 | Listed, plays as the preview, Mega Pack faces still work | **Stage** one expression-set build by hand (M, MO2 closed), relaunch; after the preview's switch to the male facial setup (R1) |
+| [N14](#n14-xf-finish-showroom) | XF Finish Showroom: fidelity check, then the lineup | 30 | Does a showroom head show a preset as V does; then Gloss A–D, the Shimmer grain and Glitter side by side under identical light, with turntable sweeps | **Stage** bridge 0.5.0 -writes, XF Finish Showroom (two archives) and an XF Eye Artistry build of session 2's collection from the same commit; Codeware in the profile; relaunch |
 | [N8](#n8-photo-mode-vanilla-finishes-under-a-sweep) | Photo mode: vanilla finishes under a sweep | 25 | Lip finishes, metallic blush, brow gloss, hair ambient | The reference save for 8.4 |
 | [N9](#n9-relaunch-missing-mods-and-mod-over-base) | Relaunch: missing mods and mod-over-base | 20 + 2 launches | Probe missing-mod check, removed-colour fallback, `.hp` and complexion winners | Throwaway saves from N4 and N6; five mods toggled |
 | [N10](#n10-inventory-cyberware-bare-body-clothing) | Inventory: cyberware, bare body, clothing | 30 | Gorilla Arms, holster state, garment hide tags | A save with Gorilla Arms; tagged mod garments |
@@ -30,6 +31,7 @@ This plan gathers every open in-game ask into sittings of 20–30 minutes, drive
 - **N3** decides the Glitter route, the next finish for XF Eye Artistry.
 - **N4** answers the attachment questions for piercings, the next feature.
 - **N7, N5 and N6** finish the preview-parity questions session 4 left open, mostly without player steps once the creator or photo mode is open.
+- **N14** (after N3, on the same staging relaunch if possible) replaces per-finish creator visits with a lineup under one light; its fidelity check decides whether later finish verdicts can come from the showroom.
 - **N11** waits for the preview to solve with the male player setup that R1 found live, so its "plays as the preview" comparison is fair.
 - **N9, N10 and N12** cost the most player time, and N12 also needs a new-game masculine save.
 
@@ -108,6 +110,17 @@ The coordinator stages [experiment 021](../../experiments/021-glitter-board/READ
 | 3.2 | Step 5: DLSS against DLAA | Whether the upscaler eats the finest stripe | 5 | Same framings in both modes | Record where points vanish |
 | 3.3 | Steps 6–8: shine, tilt, accent, clearing | Decal open question 1 (`MaterialModifiersConsts[2].x` on a CCXL component) | 8 | Captures in normal light and in the dark; E → A → Off | Pass: accent points visible in the dark and none left after Off. "Accent absent" is itself the answer |
 | 3.4 | Step 9: Winterkissed Golden Girl | A community reference at the same framings | 2 | Two captures | — |
+
+## N14. XF Finish Showroom
+
+XF Finish Showroom sets mannequin heads wearing the presets side by side in front of the camera, each lit by the creator's own rig or its key light in its own frame, and turns them for highlight sweeps ([pipeline guide](../authoring/studio-to-mod-pipeline.md#xf-finish-showroom-a-test-mod-of-mannequin-heads), [knowledge](../../knowledge/skin-on-spawned-objects.md)). The steps, staging and fallbacks are the test card's [finish showroom checks](runtime-bridge-test-card.md#finish-showroom-checks-bridge-050). M loads the save and gives one verdict; C drives the rest.
+
+| # | Ask | Settles → unblocks | Min | Evidence | Pass / fail |
+|---|---|---|---:|---|---|
+| 14.1 | F1–F4: the head spawns (in normal play, then in photo mode) and stands right | Whether static heads on the player head's rig draw at all; whether spawning works in photo mode | 6 | Captures of the first head; `showroom_state` | Pass: head on its pedestal, facing V or the camera, lashes and eyes present, the preset on its lids |
+| 14.2 | F5–F8: fidelity, the head beside V under the same key and creator rig | Whether showroom verdicts stand in for verdicts on V → the lineup, and later finish work | 10 | The fidelity sheet and sweep | Pass: M judges Gloss A the same on both. Fail: record what differs (sheen, colour, edges, brightness) |
+| 14.3 | L1–L4: the lineup, key-lit sweep, creator-lit close-ups, Glitter burst | Gloss A–D separation, the Shimmer grain, Glitter points, under identical light → the finish backlog | 12 | Lineup sheet, per-preset strips, burst manifest | Record per preset; the Shimmer and Glitter verdicts follow the Shimmer and Glitter rows' criteria |
+| 14.4 | K1–K2: the kill switch and a load leave nothing | The showroom's cleanup promise | 2 | Before and after captures | Pass: nothing remains |
 
 ## N4. XF Piercings Probe
 

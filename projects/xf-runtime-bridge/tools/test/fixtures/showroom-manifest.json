@@ -1,0 +1,1050 @@
+{
+ "schema": "xfs/showroom-package-1",
+ "modName": "XF Finish Showroom",
+ "archive": "xfs_showroom_4426018f6966620881cdcb78569544ab",
+ "collectionId": "0200a5e5-2e55-4c02-9d0b-0000000000d0",
+ "showroomCollectionId": "4426018f-6966-6208-81cd-cb78569544ab",
+ "entity": "axefrog/appearance_studio/collections/4426018f6966620881cdcb78569544ab/showroom/xfs_showroom.ent",
+ "rigEntity": "axefrog/appearance_studio/collections/4426018f6966620881cdcb78569544ab/showroom/xfs_showroom_rig.ent",
+ "look": {
+  "skin": "01_ca_pale",
+  "eyes": "gradient_brown",
+  "head": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\h0_000_pwa_c__basehead.mesh",
+  "eyesMesh": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\he_000_pwa_c__basehead.mesh",
+  "faceRig": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\h0_000_pwa_c__basehead_skeleton.rig"
+ },
+ "headJoint": [
+  0,
+  -0.0403,
+  1.6397
+ ],
+ "pieces": [
+  {
+   "id": "0170d3e0-1f01-4a51-9c3e-000000000005",
+   "name": "Gloss A · as before",
+   "appearance": "xfs_p0170d3e01f014a519c3e000000000005",
+   "route": "flat"
+  },
+  {
+   "id": "0170d3e0-1f01-4a51-9c3e-000000000006",
+   "name": "Gloss B · skin rough",
+   "appearance": "xfs_p0170d3e01f014a519c3e000000000006",
+   "route": "flat"
+  },
+  {
+   "id": "0170d3e0-1f01-4a51-9c3e-000000000007",
+   "name": "Gloss C · all rough",
+   "appearance": "xfs_p0170d3e01f014a519c3e000000000007",
+   "route": "flat"
+  }
+ ],
+ "rigs": {
+  "creator": {
+   "appearance": "xfs_rig_creator",
+   "lights": [
+    {
+     "name": "Main_Face",
+     "position": [
+      -0.304,
+      0.7537,
+      1.0196999999999998
+     ],
+     "axis": [
+      0.364076281972447,
+      -0.6061269969101728,
+      0.7071481630618682
+     ],
+     "orientation": [
+      0.7967412681735017,
+      0,
+      -0.4102034251982385,
+      0.4437752827106458
+     ],
+     "lumen": 40,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 45,
+     "inner": 15,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": true,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Main_Eyes",
+     "position": [
+      -0.779,
+      3.5667,
+      1.7696999999999998
+     ],
+     "axis": [
+      0.15693778649903548,
+      -0.9876084908346946,
+      0
+     ],
+     "orientation": [
+      0,
+      0,
+      -0.9968973093640826,
+      0.07871311569651357
+     ],
+     "lumen": 40,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 30,
+     "inner": 1,
+     "softness": 5,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Main_Top",
+     "position": [
+      -1.577,
+      2.2127,
+      4.019699999999999
+     ],
+     "axis": [
+      0.34802975781649437,
+      -0.5930507080033941,
+      -0.7260620809619969
+     ],
+     "orientation": [
+      -0.8048011894998162,
+      0,
+      -0.3857724709999119,
+      0.4510816400589841
+     ],
+     "lumen": 250,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "inverse-square",
+     "radius": 7.5,
+     "outer": 50,
+     "inner": 25,
+     "softness": 5,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Main_Body",
+     "position": [
+      -0.405,
+      1.6767,
+      0.9696999999999996
+     ],
+     "axis": [
+      0.1450382226081495,
+      -0.9882604409438048,
+      -0.048012653001318455
+     ],
+     "orientation": [
+      -0.3133392603028226,
+      0,
+      -0.9465456821647766,
+      0.07661448641149832
+     ],
+     "lumen": 65,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 60,
+     "inner": 30,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": true,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Main_Feet",
+     "position": [
+      -0.405,
+      1.6767,
+      0.6696999999999997
+     ],
+     "axis": [
+      0.1149713182337048,
+      -0.9447643107030524,
+      -0.306923432154325
+     ],
+     "orientation": [
+      -0.9234325080901449,
+      0,
+      -0.3459112000989142,
+      0.16618617466105218
+     ],
+     "lumen": 35,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 30,
+     "inner": 15,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Fill_Upper",
+     "position": [
+      0.553,
+      0.8957,
+      0.01969999999999983
+     ],
+     "axis": [
+      -0.19599127858215032,
+      -0.316985894441539,
+      0.9279587067563035
+     ],
+     "orientation": [
+      0.7939603540878098,
+      0,
+      0.16768990237199433,
+      0.5843860477280669
+     ],
+     "lumen": 100,
+     "colour": [
+      165,
+      228,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 50,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": true,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Fill_Base",
+     "position": [
+      2.253,
+      1.5367,
+      0.01969999999999983
+     ],
+     "axis": [
+      -0.8384663169443906,
+      -0.5202893613497411,
+      0.16209014718972706
+     ],
+     "orientation": [
+      0.16548245064897973,
+      0,
+      0.8560141582953396,
+      0.48975026220016404
+     ],
+     "lumen": 10,
+     "colour": [
+      165,
+      228,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 7.5,
+     "outer": 40,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Fill_Left",
+     "position": [
+      2.253,
+      1.5367,
+      3.0196999999999994
+     ],
+     "axis": [
+      -0.5930507080033941,
+      -0.34802975781649437,
+      -0.7260620809619969
+     ],
+     "orientation": [
+      -0.6358356457523269,
+      0,
+      0.5193533580318592,
+      0.5709510671605341
+     ],
+     "lumen": 10,
+     "colour": [
+      165,
+      228,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 7.5,
+     "outer": 90,
+     "inner": 30,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Fill_Lower",
+     "position": [
+      0.991,
+      0.2877,
+      0.9497
+     ],
+     "axis": [
+      -0.8147218199896026,
+      -0.5168235348891099,
+      0.2629102314813074
+     ],
+     "orientation": [
+      0.2674481533761041,
+      0,
+      0.8287842015267104,
+      0.4915162586888099
+     ],
+     "lumen": 2.5,
+     "colour": [
+      165,
+      228,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 3,
+     "outer": 45,
+     "inner": 30,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Highlight_Right",
+     "position": [
+      -2.048,
+      0.9666999999999999,
+      2.0197
+     ],
+     "axis": [
+      0.8555953990417603,
+      -0.45278588290410915,
+      -0.250881361167619
+     ],
+     "orientation": [
+      -0.23981412150795423,
+      0,
+      -0.8178521434693576,
+      0.5230746204395177
+     ],
+     "lumen": 50,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 15,
+     "inner": 10,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": true,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Highlight_Body",
+     "position": [
+      -1.794,
+      1.1447,
+      0.01969999999999983
+     ],
+     "axis": [
+      0.8487577142539349,
+      -0.44287357763780116,
+      0.2889175258178883
+     ],
+     "orientation": [
+      0.2737045463602347,
+      0,
+      -0.8040662970928695,
+      0.5277908782662878
+     ],
+     "lumen": 75,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 55,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": true,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Rim_Right",
+     "position": [
+      -2.253,
+      -1.6173,
+      1.5196999999999998
+     ],
+     "axis": [
+      0.7882739728166045,
+      0.5952068703374107,
+      -0.15605423827333795
+     ],
+     "orientation": [
+      -0.0873679337172018,
+      0,
+      -0.44132007544330143,
+      0.8930864656732322
+     ],
+     "lumen": 600,
+     "colour": [
+      191,
+      254,
+      255
+     ],
+     "falloff": "inverse-square",
+     "radius": 5,
+     "outer": 75,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": true,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Rim_Top",
+     "position": [
+      -0.123,
+      -0.7363,
+      3.0196999999999994
+     ],
+     "axis": [
+      0.0869750417440154,
+      0.4928585698827539,
+      -0.8657515649461762
+     ],
+     "orientation": [
+      -0.5010360266553759,
+      0,
+      -0.05033502808200659,
+      0.8639613908858295
+     ],
+     "lumen": 600,
+     "colour": [
+      229,
+      247,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 1.65,
+     "outer": 25,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": true,
+     "contactShadows": true,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Rim_Left_Head",
+     "position": [
+      0.656,
+      -2.0223,
+      0.5196999999999998
+     ],
+     "axis": [
+      -0.5210369949400077,
+      0.5210369949400077,
+      0.6760480011121789
+     ],
+     "orientation": [
+      0.3876079237528804,
+      0,
+      0.29873332585096257,
+      0.8720771166989787
+     ],
+     "lumen": 450,
+     "colour": [
+      255,
+      25,
+      128
+     ],
+     "falloff": "inverse-square",
+     "radius": 5,
+     "outer": 90,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.05,
+     "localShadows": false,
+     "contactShadows": true,
+     "roughnessBias": -8
+    },
+    {
+     "name": "Rim_Left_Body",
+     "position": [
+      0.942,
+      -1.8223,
+      0.7996999999999996
+     ],
+     "axis": [
+      -0.6737800467162608,
+      0.7387588346043275,
+      0.01599477855706257
+     ],
+     "orientation": [
+      0.008577160939322455,
+      0,
+      0.3613129045689584,
+      0.9324051787190822
+     ],
+     "lumen": 450,
+     "colour": [
+      255,
+      25,
+      128
+     ],
+     "falloff": "inverse-square",
+     "radius": 2.25,
+     "outer": 60,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.05,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": -8
+    }
+   ]
+  },
+  "creator_face": {
+   "appearance": "xfs_rig_creator_face",
+   "lights": [
+    {
+     "name": "Main_Face",
+     "position": [
+      -0.304,
+      0.7537,
+      1.0196999999999998
+     ],
+     "axis": [
+      0.364076281972447,
+      -0.6061269969101728,
+      0.7071481630618682
+     ],
+     "orientation": [
+      0.7967412681735017,
+      0,
+      -0.4102034251982385,
+      0.4437752827106458
+     ],
+     "lumen": 40,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 45,
+     "inner": 15,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Main_Eyes",
+     "position": [
+      -0.779,
+      3.5667,
+      1.7696999999999998
+     ],
+     "axis": [
+      0.15693778649903548,
+      -0.9876084908346946,
+      0
+     ],
+     "orientation": [
+      0,
+      0,
+      -0.9968973093640826,
+      0.07871311569651357
+     ],
+     "lumen": 40,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 30,
+     "inner": 1,
+     "softness": 5,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Main_Top",
+     "position": [
+      -1.577,
+      2.2127,
+      4.019699999999999
+     ],
+     "axis": [
+      0.34802975781649437,
+      -0.5930507080033941,
+      -0.7260620809619969
+     ],
+     "orientation": [
+      -0.8048011894998162,
+      0,
+      -0.3857724709999119,
+      0.4510816400589841
+     ],
+     "lumen": 250,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "inverse-square",
+     "radius": 7.5,
+     "outer": 50,
+     "inner": 25,
+     "softness": 5,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Main_Body",
+     "position": [
+      -0.405,
+      1.6767,
+      0.9696999999999996
+     ],
+     "axis": [
+      0.1450382226081495,
+      -0.9882604409438048,
+      -0.048012653001318455
+     ],
+     "orientation": [
+      -0.3133392603028226,
+      0,
+      -0.9465456821647766,
+      0.07661448641149832
+     ],
+     "lumen": 65,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 60,
+     "inner": 30,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Fill_Upper",
+     "position": [
+      0.553,
+      0.8957,
+      0.01969999999999983
+     ],
+     "axis": [
+      -0.19599127858215032,
+      -0.316985894441539,
+      0.9279587067563035
+     ],
+     "orientation": [
+      0.7939603540878098,
+      0,
+      0.16768990237199433,
+      0.5843860477280669
+     ],
+     "lumen": 100,
+     "colour": [
+      165,
+      228,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 50,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Fill_Left",
+     "position": [
+      2.253,
+      1.5367,
+      3.0196999999999994
+     ],
+     "axis": [
+      -0.5930507080033941,
+      -0.34802975781649437,
+      -0.7260620809619969
+     ],
+     "orientation": [
+      -0.6358356457523269,
+      0,
+      0.5193533580318592,
+      0.5709510671605341
+     ],
+     "lumen": 10,
+     "colour": [
+      165,
+      228,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 7.5,
+     "outer": 90,
+     "inner": 30,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Fill_Lower",
+     "position": [
+      0.991,
+      0.2877,
+      0.9497
+     ],
+     "axis": [
+      -0.8147218199896026,
+      -0.5168235348891099,
+      0.2629102314813074
+     ],
+     "orientation": [
+      0.2674481533761041,
+      0,
+      0.8287842015267104,
+      0.4915162586888099
+     ],
+     "lumen": 2.5,
+     "colour": [
+      165,
+      228,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 3,
+     "outer": 45,
+     "inner": 30,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Highlight_Right",
+     "position": [
+      -2.048,
+      0.9666999999999999,
+      2.0197
+     ],
+     "axis": [
+      0.8555953990417603,
+      -0.45278588290410915,
+      -0.250881361167619
+     ],
+     "orientation": [
+      -0.23981412150795423,
+      0,
+      -0.8178521434693576,
+      0.5230746204395177
+     ],
+     "lumen": 50,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 15,
+     "inner": 10,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Highlight_Body",
+     "position": [
+      -1.794,
+      1.1447,
+      0.01969999999999983
+     ],
+     "axis": [
+      0.8487577142539349,
+      -0.44287357763780116,
+      0.2889175258178883
+     ],
+     "orientation": [
+      0.2737045463602347,
+      0,
+      -0.8040662970928695,
+      0.5277908782662878
+     ],
+     "lumen": 75,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 55,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Rim_Right",
+     "position": [
+      -2.253,
+      -1.6173,
+      1.5196999999999998
+     ],
+     "axis": [
+      0.7882739728166045,
+      0.5952068703374107,
+      -0.15605423827333795
+     ],
+     "orientation": [
+      -0.0873679337172018,
+      0,
+      -0.44132007544330143,
+      0.8930864656732322
+     ],
+     "lumen": 600,
+     "colour": [
+      191,
+      254,
+      255
+     ],
+     "falloff": "inverse-square",
+     "radius": 5,
+     "outer": 75,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Rim_Top",
+     "position": [
+      -0.123,
+      -0.7363,
+      3.0196999999999994
+     ],
+     "axis": [
+      0.0869750417440154,
+      0.4928585698827539,
+      -0.8657515649461762
+     ],
+     "orientation": [
+      -0.5010360266553759,
+      0,
+      -0.05033502808200659,
+      0.8639613908858295
+     ],
+     "lumen": 600,
+     "colour": [
+      229,
+      247,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 1.65,
+     "outer": 25,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": 0
+    },
+    {
+     "name": "Rim_Left_Head",
+     "position": [
+      0.656,
+      -2.0223,
+      0.5196999999999998
+     ],
+     "axis": [
+      -0.5210369949400077,
+      0.5210369949400077,
+      0.6760480011121789
+     ],
+     "orientation": [
+      0.3876079237528804,
+      0,
+      0.29873332585096257,
+      0.8720771166989787
+     ],
+     "lumen": 450,
+     "colour": [
+      255,
+      25,
+      128
+     ],
+     "falloff": "inverse-square",
+     "radius": 5,
+     "outer": 90,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.05,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": -8
+    },
+    {
+     "name": "Rim_Left_Body",
+     "position": [
+      0.942,
+      -1.8223,
+      0.7996999999999996
+     ],
+     "axis": [
+      -0.6737800467162608,
+      0.7387588346043275,
+      0.01599477855706257
+     ],
+     "orientation": [
+      0.008577160939322455,
+      0,
+      0.3613129045689584,
+      0.9324051787190822
+     ],
+     "lumen": 450,
+     "colour": [
+      255,
+      25,
+      128
+     ],
+     "falloff": "inverse-square",
+     "radius": 2.25,
+     "outer": 60,
+     "inner": 1,
+     "softness": 2,
+     "sourceRadius": 0.05,
+     "localShadows": false,
+     "contactShadows": false,
+     "roughnessBias": -8
+    }
+   ]
+  },
+  "key": {
+   "appearance": "xfs_rig_key",
+   "lights": [
+    {
+     "name": "Main_Face",
+     "position": [
+      -0.304,
+      0.7537,
+      1.0196999999999998
+     ],
+     "axis": [
+      0.364076281972447,
+      -0.6061269969101728,
+      0.7071481630618682
+     ],
+     "orientation": [
+      0.7967412681735017,
+      0,
+      -0.4102034251982385,
+      0.4437752827106458
+     ],
+     "lumen": 40,
+     "colour": [
+      255,
+      255,
+      255
+     ],
+     "falloff": "linear",
+     "radius": 5,
+     "outer": 45,
+     "inner": 15,
+     "softness": 2,
+     "sourceRadius": 0.1,
+     "localShadows": false,
+     "contactShadows": true,
+     "roughnessBias": 0
+    }
+   ]
+  }
+ },
+ "requirements": {
+  "ArchiveXL": "1.27.3",
+  "game": "2.31",
+  "Codeware": "1.20.4"
+ },
+ "note": "Test fixture: a trimmed XF Finish Showroom manifest (three presets of experiment 020 session-2.collection.json built through tools/build_showroom_package.ts); the rig lights are the creator rig table in the showroom entity frame."
+}

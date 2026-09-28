@@ -43,6 +43,7 @@ enum class Access
     WriteCharacter, // the mirror screen's options
     WriteInventory, // V's clothing and inventory (inventory.*); off unless allow_write_classes lists "inventory"
     WriteSave,      // manual saves and loading (game.save, game.load); off unless the list has "save"
+    WriteShowroom,  // XF Finish Showroom props and light rigs (showroom.*); off unless the list has "showroom"
     Notify,         // shows a message in the bridge's own in-game label (ui.message); not a write, never changes the game
     Control         // changes only the bridge itself (bridge.kill); always allowed, never touches the game
 };
