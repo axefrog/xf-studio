@@ -2,6 +2,16 @@
 
 **Current as of 26 September 2026.** This is the single ranked queue for XF Studio (`projects/xf-studio`) and related research. Each row links to the owner document that holds the detailed requirements and open/done state. Tracks marked *parallel* are independent enough to run as separate subagents on their own `claude/` branches and worktrees; the coordinator reviews, merges and updates shared status.
 
+
+### Queued R&D: in-game overlay and UI (set 29 September 2026)
+
+Two halves, research first:
+
+1. **Our own ImGui host in the bridge's RED4ext plugin** for editing and testing tools: panels always drawn over the game, a hotkey switching an interact mode that captures the mouse for XF controls without hiding them or pausing the game, and pass-through when it's off. This replaces reliance on CET's overlay, whose windows take input only while the overlay is open and blocks the game. Research: hooking frame presentation cooperatively beside CET, ReShade and frame generation; input capture and release; DPI; crash safety.
+2. **The engine's own UI (ink) for player-facing features** that match the game's look and UX: HUD layers, custom widgets and styles, menus with the game's cursor, world-space ink on in-world screens, animation, input registration. Mod survey batch B8 (inventory and menu UI) and the UI parts of other batches feed it ([mod ecosystem](../mod-ecosystem/README.md)).
+
+Infrastructure for the integration, not a 1.0 product feature; it starts when an agent slot frees.
+
 ## Ranked tracks
 
 | Priority | Track | Status | Owner doc |
