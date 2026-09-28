@@ -12,6 +12,18 @@ Two halves, research first:
 
 Infrastructure for the integration, not a 1.0 product feature; the ink half started on 29 September (branch `claude/rnd-ink`). The wider ambition list it serves is the [in-game possibilities register](in-game-possibilities.md).
 
+
+### Banked: Pattern finish, an XF-original makeup finish (29 September 2026; waits until the current product reaches 1.0)
+
+The classic glitter model's macro dot array reads less like glitter than like a graphic look in its own right, and the maintainer wants it kept as its own finish, separate from Glitter, and fully customisable:
+
+- **Shapes:** dots, stars, hearts, logos, several mixed, or custom shapes drawn in a small vector editor.
+- **Layout:** grid, scatter or along the stroke; density, size variation, rotation.
+- **Material per shape:** matte, gloss, metal, holographic or glitter-filled; colour variation between shapes; a separate base material underneath.
+- **Export:** baked into a custom material at build time, like the other finishes.
+
+Working name options: Dot Matrix, Pixel, Polka Chrome, Sequin (the maintainer decides). Until then, the classic dots stay available behind the Studio's research tools.
+
 ## Ranked tracks
 
 | Priority | Track | Status | Owner doc |
