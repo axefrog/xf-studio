@@ -107,8 +107,11 @@ export type EyeMakeupFacade = FeatureFacade<EyeMakeupAction> & {
 export type GenericFeatureFacade = FeatureFacade & { view(): ReadonlyDeep<{ part?: unknown; editor?: unknown }> | undefined;
   controlBegin(id: string): boolean; controlEdit(id: string, action: { kind: string }): StudioDispatchResult;
   controlCommit(id: string): void; controlCancel(id: string): void };
-/** The live facial preview a feature's drawer reads (facial-preview.ts), and its Try again. */
-export type FacialPort = { snapshot(): FacialPreviewSnapshot | undefined; retry(): void };
+/**
+ * The live facial preview a feature's drawer reads (facial-preview.ts), and its Try again. `installed`: the drawer is showing, so the
+ * installed expressions are read (the host reads them only when asked, PREV-179).
+ */
+export type FacialPort = { snapshot(): FacialPreviewSnapshot | undefined; retry(): void; installed?(): void };
 /** Part presets in the library (part-presets.ts): list per feature, and the `presets` family's requests. */
 export type PartPresetPort = { list(feature: string): PartPresetList; sets(feature: string): PartPresetSetList; exports(): SetExportState;
   capability(request: PartPresetRequest): StudioCapability;
@@ -444,7 +447,7 @@ export function createStudioPresentation<Slot>(sources: {
   return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, views, features: () => infos, feature, module: (id: string) => moduleServices.get(id), localSetup: Object.freeze(localSetup),
-    facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry() }),
+    facial: Object.freeze({ snapshot: () => a.facialPreview(), retry: () => a.facialRetry(), installed: () => a.facialInstalled() }),
     // A save without a part saves the feature's live part, serialized with its own codec.
     presets: Object.freeze({ list: (feature: string) => a.presetList(feature), sets: (feature: string) => a.presetSets(feature), exports: () => a.presetExports(),
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),

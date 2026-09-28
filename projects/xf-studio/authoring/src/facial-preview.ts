@@ -32,7 +32,8 @@ export type FacialSolved = { ok: true; frames: number; rate?: number; pose: Solv
   { ok: false; code: "superseded" | "unavailable" | "invalid" | "failed"; message: string };
 export interface FacialDevicePort {
   state(): Promise<FacialHostState>;
-  expressions(): Promise<FacialStartPoints>;
+  /** The installed expressions; asking starts the host's read. `prefetch`: read ahead of the Expressions view, at background priority. */
+  expressions(options?: { prefetch?: boolean }): Promise<FacialStartPoints>;
   solve(request: FacialSolveRequest): Promise<FacialSolved>;
 }
 /** The scene's face driver as the service sees it (head-rig.ts `face`). */
@@ -88,6 +89,10 @@ export class FacialPreview {
   private poll: unknown = null;
   private polls = 0;
   private disposed = false;
+  /** The Expressions view asked for the installed expressions (`installed`); until then the host doesn't read them (PREV-179). */
+  private installedWanted = false;
+  /** The host was asked to read them ahead of the view (`prefetch`), once per page. */
+  private prefetched = false;
   private readonly latencies: { total: number; solver: number }[] = [];
   private readonly listeners = new Set<() => void>();
   constructor(private readonly device: FacialDevicePort, private readonly timer: FacialTimer = TIMER) {}
@@ -125,12 +130,14 @@ export class FacialPreview {
     if (this.disposed) return;
     const rig = this.host?.rig;
     if (rig?.phase === "ready" && rig.joints && !this.rest) { this.rest = { joints: rig.joints.map(joint => ({ ...joint, t: [...joint.t], r: [...joint.r], s: [...joint.s] })) as unknown as RigRest["joints"] }; this.rigSink(); }
-    if (this.host?.expressions.phase === "ready" && this.startPoints.phase !== "ready") {
+    // Asking for the installed expressions is what starts the host reading them, so they are asked for only once the view wants them.
+    const listed = this.host?.expressions.phase === "preparing" || this.host?.expressions.phase === "ready";
+    if (this.installedWanted && listed && this.startPoints.phase !== "ready") {
       try { this.startPoints = await this.device.expressions(); } catch { /* asked again on the next poll */ }
-    } else if (this.host && this.host.expressions.phase !== "preparing" && this.host.expressions.phase !== "ready")
+    } else if (this.host && !listed)
       this.startPoints = { phase: this.host.expressions.phase, ...(this.host.expressions.reason ? { reason: this.host.expressions.reason } : {}), items: [] };
-    const preparing = !this.host || this.host.rig.phase === "preparing" || this.host.solver.phase === "starting" || this.host.expressions.phase === "preparing" ||
-      (this.host.expressions.phase === "ready" && this.startPoints.phase !== "ready");
+    const preparing = !this.host || this.host.rig.phase === "preparing" || this.host.solver.phase === "starting" ||
+      (this.installedWanted && listed && this.startPoints.phase !== "ready");
     if (preparing && !this.disposed) this.poll = this.timer.set(() => void this.refresh(), POLL_MS[Math.min(this.polls++, POLL_MS.length - 1)]!);
     this.notify();
     this.changed();
@@ -286,6 +293,22 @@ export class FacialPreview {
     return this.builtAxes.axes;
   }
   private builtAxes: { source: readonly FacialAxisPair[] | readonly FacialControl[]; axes: readonly FacialAxisControl[] } | undefined;
+  /**
+   * The page is quiet after startup (facial-prefetch.ts): ask the host to read the installed expressions ahead of the Expressions view, at
+   * background priority. Nothing waits on it here; the view's `installed` joins the same read on the host.
+   */
+  prefetch() {
+    if (this.prefetched || this.installedWanted || this.disposed) return;
+    this.prefetched = true;
+    void this.device.expressions({ prefetch: true }).catch(() => { /* The view asks again when it shows. */ });
+  }
+  /** The Expressions view is showing: read the installed expressions (once; the host starts reading them when first asked). */
+  installed() {
+    if (this.installedWanted || this.disposed) return;
+    this.installedWanted = true; this.polls = 0;
+    if (this.poll !== null) { this.timer.clear(this.poll); this.poll = null; }
+    void this.refresh();
+  }
   /** Solve again after a failure (the drawer's Try again). */
   retry() {
     // The host's state is asked for again: a solver that stopped or was stuck is started again there (CORE-101), and the solve follows.

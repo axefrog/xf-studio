@@ -30,25 +30,27 @@ export function setClipOf(clip: AnimClip): SetClip {
 }
 
 /** One clip of a set, by name (null: not in the set, or not readable here). */
-export async function nativeClip(decoder: NativeDecoder, archivePath: string, hash: string, name: string): Promise<SetClip | null> {
+export async function nativeClip(decoder: NativeDecoder, archivePath: string, hash: string, name: string, priority?: "background"): Promise<SetClip | null> {
   if (!decoder.decodeAnim) return null;
-  const outcome = await decoder.decodeAnim({ archivePath, hash, op: "clip", clip: name });
+  const outcome = await decoder.decodeAnim({ archivePath, hash, op: "clip", clip: name, ...(priority ? { priority } : {}) });
   return outcome.ok && outcome.clip ? setClipOf(outcome.clip) : null;
 }
 
 /**
  * The clips of a set the caller wants (by name; the first of a name, as the game looks clips up): null when the set can't be read natively
- * at all. A clip the reader refuses is left out.
+ * at all. A clip the reader refuses is left out. `priority` is asked before each decode (a prefetch lifted to normal priority mid-read).
  */
-export async function nativeSetClips(decoder: NativeDecoder, archivePath: string, hash: string, wanted: ReadonlySet<string>): Promise<Map<string, SetClip> | null> {
+export async function nativeSetClips(decoder: NativeDecoder, archivePath: string, hash: string, wanted: ReadonlySet<string>,
+  priority: () => "background" | undefined = () => undefined): Promise<Map<string, SetClip> | null> {
   if (!decoder.decodeAnim) return null;
-  const index = await decoder.decodeAnim({ archivePath, hash, op: "index" });
+  const first = priority();
+  const index = await decoder.decodeAnim({ archivePath, hash, op: "index", ...(first ? { priority: first } : {}) });
   if (!index.ok || !index.index) return null;
   const out = new Map<string, SetClip>();
   for (const info of index.index.clips) {
     if (!wanted.has(info.name) || out.has(info.name)) continue;
     if (info.buffer !== "compressed" && info.buffer !== "simd") continue;
-    const clip = await nativeClip(decoder, archivePath, hash, info.name);
+    const clip = await nativeClip(decoder, archivePath, hash, info.name, priority());
     if (clip) out.set(info.name, clip);
   }
   return out;

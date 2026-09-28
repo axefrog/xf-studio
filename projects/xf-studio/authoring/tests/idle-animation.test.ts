@@ -293,3 +293,37 @@ test("a bound bone's offset at a motion time is measured without moving anything
   expect(target.position.toArray()).toEqual(pose);
   expect(idle.offsetAt("Nowhere", 0).toArray()).toEqual([0, 0, 0]);
 });
+
+test("a face that arrives after the idle started joins it: the bound bones take their face joints and the pose is the same as with the face from the start (PREV-174)", () => {
+  const make = () => {
+    const body = new THREE.Group(), head = new THREE.Bone(); head.name = "Head"; body.add(head);
+    const facial = new THREE.Group(), faceHead = new THREE.Bone(), lip = new THREE.Bone();
+    faceHead.name = "Head"; lip.name = "lip"; lip.position.x = 1; faceHead.add(lip); facial.add(faceHead);
+    const preview = new THREE.Group(), target = new THREE.Bone(); target.name = "lip"; target.position.x = 1;
+    preview.add(target); preview.updateMatrixWorld(true);
+    const bodyClip = new THREE.AnimationClip("body", 0.4, [new THREE.VectorKeyframeTrack("Head.position", [0, 0.4], [0, 0, 0, 0, 0, 0])]);
+    const faceClip = new THREE.AnimationClip("face", 2, [new THREE.VectorKeyframeTrack("lip.position", [0, 1, 2], [1, 0, 0, 2, 0, 0, 1, 0, 0])]);
+    return { body, facial, target, bodyClip, faceClip };
+  };
+  const early = make(), late = make();
+  const withFace = new IdleAnimation(early.body, early.bodyClip, [early.target], { lip: "Head" }, { source: early.facial, clip: early.faceClip });
+  const joined = new IdleAnimation(late.body, late.bodyClip, [late.target], { lip: "Head" });
+  expect(joined.facial).toBeUndefined();
+  expect(joined.bindings.filter(binding => binding.faceDriver)).toHaveLength(0);
+  let changes = 0;
+  joined.onChange = () => { changes++; };
+  withFace.setEnabled(true); joined.setEnabled(true);
+  withFace.update(0.5); joined.update(0.5);
+  expect(late.target.position.x).toBeCloseTo(1, 6);
+  joined.setFace({ source: late.facial, clip: late.faceClip });
+  expect(changes).toBeGreaterThan(0);
+  expect(joined.facial?.clip).toBe(late.faceClip);
+  expect(joined.bindings.filter(binding => binding.faceDriver)).toHaveLength(1);
+  // Both at the same motion time: the face plays on the idle's own clock.
+  withFace.seek(0.5); joined.seek(0.5);
+  expect(late.target.position.x).toBeCloseTo(early.target.position.x, 6);
+  expect(late.target.position.x).toBeCloseTo(1.5, 6);
+  // A second face doesn't replace the first (another idle's face is setClips').
+  joined.setFace({ source: make().facial, clip: new THREE.AnimationClip("other", 1, []) });
+  expect(joined.facial?.clip).toBe(late.faceClip);
+});

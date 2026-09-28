@@ -4,7 +4,7 @@
  * seats for the blink. Pure: compiled rig, clip tracks and records in, typed arrays and plain records out.
  */
 import { clipValuesAt, type ClipTracks } from "./anim-tracks";
-import { type CompiledFacialRig, composeLocalPose, createFacialPose, solveFace } from "./solver";
+import { type CompiledFacialRig, composeLocalPose, createFacialPose, FacialSetupError, solveFace } from "./solver";
 
 /** A face skeleton at rest in glTF axes: per joint its name, parent index (−1 for a root), local translation, rotation (x, y, z, w) and scale. */
 export type BakedRest = { readonly names: readonly string[]; readonly parents: readonly number[]; readonly local: Float32Array /* 10·J */ };
@@ -19,6 +19,15 @@ export function bakedRest(rig: CompiledFacialRig): BakedRest {
   return { names: rig.jointNames, parents: [...rig.parentIndices], local };
 }
 
+/**
+ * The longest face clip baked: two minutes (the creator's close-up loop is about 22 s), 3,601 frames at the idle's 30 Hz. A baked frame keeps
+ * every joint's transform until the moving joints are known (about 14 KB per frame on the female face), so a clip whose file claims hours
+ * is refused rather than allowed to take gigabytes (PREV-173).
+ */
+export const MAX_BAKE_SECONDS = 120;
+export const MAX_BAKE_FRAMES = MAX_BAKE_SECONDS * 30 + 1;
+const TOO_LONG = "This face clip is longer than XF Studio bakes (two minutes), so the face holds still.";
+
 /** A local transform differs from the rest by more than rounding. */
 const MOVED = 1e-7;
 
@@ -27,6 +36,7 @@ const MOVED = 1e-7;
  * A joint that never leaves its rest is left out, as the bakes left it out; the rest skeleton holds it.
  */
 export function bakeFrames(rig: CompiledFacialRig, frames: readonly Float32Array[], times: readonly number[]): BakedFrames {
+  if (frames.length > MAX_BAKE_FRAMES) throw new FacialSetupError(TOO_LONG);
   const J = rig.jointNames.length, F = frames.length, rest = bakedRest(rig).local;
   const pose = createFacialPose(rig), all = new Float32Array(F * J * 10), moved = new Uint8Array(J);
   const one = new Float32Array(J * 10);
@@ -63,9 +73,11 @@ export function clipFrame(rig: CompiledFacialRig, clip: ClipTracks, time: number
   return into;
 }
 
-/** A clip at `rate` Hz from its start to its end: round(duration × rate) + 1 frames, the idle bake's samples. */
+/** A clip at `rate` Hz from its start to its end: round(duration × rate) + 1 frames, the idle bake's samples; at most `MAX_BAKE_FRAMES`. */
 export function clipTimes(duration: number, rate: number): number[] {
+  if (!(duration >= 0) || !(rate > 0) || !Number.isFinite(duration * rate)) throw new FacialSetupError("This face clip's length couldn't be read.");
   const count = Math.round(duration * rate) + 1;
+  if (count > MAX_BAKE_FRAMES) throw new FacialSetupError(TOO_LONG);
   return Array.from({ length: count }, (_, i) => Math.min(duration, i / rate));
 }
 

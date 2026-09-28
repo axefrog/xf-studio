@@ -4,6 +4,7 @@
  * step, and every unavailable state says why in plain words.
  */
 import { expect, test } from "bun:test";
+import { prefetchWhenQuiet } from "../src/facial-prefetch";
 import { combineFacePoses, FacialPreview, FRAME_MS, SLOW_SOLVE_MS, type FacialDevicePort, type FacialMotion, type FacialSolved, type FacialTimer } from "../src/facial-preview";
 import type { TransitionSetting } from "../src/platform/core/transition-settings";
 import { f32 } from "../src/engines/facial-rig/vector";
@@ -266,4 +267,61 @@ test("the blink clip carries on through a transition instead of restarting at ev
   // The first hold starts the clip; every later one over a changed face carries on.
   expect(h.held[0]!.continues).toBeUndefined();
   expect(h.held.slice(1).every(pose => pose.continues)).toBe(true);
+});
+
+test("the installed expressions are asked for only once the Expressions view shows, then until they are read (PREV-179)", async () => {
+  let now = 0, asked = 0;
+  const timers = new Map<number, { at: number; run: () => void }>();
+  let next = 1;
+  const timer: FacialTimer = { set: (run, ms) => { const id = next++; timers.set(id, { at: now + ms, run }); return id; }, clear: id => timers.delete(id as number), now: () => now };
+  const advance = (ms: number) => { now += ms; for (const [id, entry] of [...timers]) if (entry.at <= now) { timers.delete(id); entry.run(); } };
+  // The host hasn't been asked, so its installed expressions stay "preparing" until the first ask.
+  const device: FacialDevicePort = { state: async () => readyState({ expressions: { phase: asked ? "ready" : "preparing", count: asked ? 1 : 0 } }),
+    expressions: async () => (++asked < 2 ? { phase: "preparing", items: [] } : { phase: "ready", items: [] }), solve: async () => solved(0) };
+  const preview = new FacialPreview(device, timer);
+  preview.start(); await settle();
+  expect(asked).toBe(0);
+  // Nothing to wait for while nobody wants them: the state isn't polled.
+  expect(timers.size).toBe(0);
+  expect(preview.snapshot().startPoints.phase).toBe("preparing");
+  preview.installed(); await settle();
+  expect(asked).toBe(1);
+  expect(timers.size).toBe(1);
+  advance(10_000); await settle();
+  expect(asked).toBe(2);
+  expect(preview.snapshot().startPoints.phase).toBe("ready");
+  expect(timers.size).toBe(0);
+  preview.installed(); await settle();
+  expect(asked).toBe(2);
+  preview.dispose();
+});
+
+test("the installed expressions are read ahead once the page stays quiet; busy again restarts the wait, and the view then joins (PREV-179)", async () => {
+  let now = 0;
+  const timers = new Map<number, { at: number; run: () => void }>();
+  let next = 1;
+  const timer = { set: (run: () => void, ms: number) => { const id = next++; timers.set(id, { at: now + ms, run }); return id; }, clear: (id: unknown) => timers.delete(id as number) };
+  const advance = (ms: number) => { now += ms; for (const [id, entry] of [...timers]) if (entry.at <= now) { timers.delete(id); entry.run(); } };
+  let quiet = false, listener: () => void = () => {};
+  const asks: (boolean | undefined)[] = [];
+  const device: FacialDevicePort = { state: async () => readyState({ expressions: { phase: "preparing", count: 0 } }),
+    expressions: async options => { asks.push(options?.prefetch); return { phase: "preparing", items: [] }; }, solve: async () => solved(0) };
+  const preview = new FacialPreview(device, { ...timer, now: () => now });
+  const release = prefetchWhenQuiet(() => preview.prefetch(), { quiet: () => quiet, subscribe: l => { listener = l; return () => {}; } }, { timer, quietMs: 2_000 });
+  // V still being prepared: nothing.
+  advance(5_000);
+  expect(asks).toEqual([]);
+  quiet = true; listener();
+  advance(1_500);
+  // Busy again before the wait ends (a change on V): the wait starts over.
+  quiet = false; listener(); quiet = true; listener();
+  advance(1_500);
+  expect(asks).toEqual([]);
+  advance(500);
+  expect(asks).toEqual([true]);
+  // Once only, and the view's ask later is an ordinary one that joins the host's read.
+  listener(); advance(5_000);
+  preview.installed(); await settle();
+  expect(asks).toEqual([true, undefined]);
+  release(); preview.dispose();
 });

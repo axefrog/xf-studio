@@ -244,6 +244,20 @@ describe("the facial solver on a synthetic setup", () => {
     unordered.bakedData.Data.Face.AllMainPosesInbetweens = [1, 0.5, 1, 1, 1, 1];
     expect(() => compileFacialRig(RIG, unordered)).toThrow("in order");
   });
+  test("a hostile setup or vector is refused: overlapping pose ranges, infinite values (PREV-172, PREV-177)", () => {
+    // Every pose naming every transform: each range fits alone, but flattened they would ask for poses × transforms entries.
+    const overlapping = setup(), buffer = overlapping.mainPosesData.Data.Face;
+    for (const pose of buffer.Poses as { TransformIdx: number; NumTransforms: number }[]) { pose.TransformIdx = 0; pose.NumTransforms = buffer.Transforms.length; }
+    expect(() => compileFacialRig(RIG, overlapping)).toThrow("use more transforms than it holds");
+    const pose = createFacialPose(compiled), v = compiled.referenceTracks();
+    for (const value of [Infinity, -Infinity]) {
+      v[A] = value;
+      expect(() => solveFace(compiled, v, pose)).toThrow("invalid number");
+    }
+    v[A] = 1e6;
+    solveFace(compiled, v, pose);
+    expect([...pose.rotations, ...pose.translations, ...pose.tracks].every(Number.isFinite)).toBe(true);
+  });
 });
 
 describe("face bakes from the solver", () => {

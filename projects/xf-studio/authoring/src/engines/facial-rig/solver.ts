@@ -358,6 +358,9 @@ function compilePoses(data: Obj, joints: number, what: string): CompiledPoses {
     const isScale = int(pose.IsScale ?? 0, "IsScale") !== 0, scaleFirst = int(pose.ScaleIdx ?? 0, "ScaleIdx");
     if (isScale && scaleFirst + n > scales.length) throw new FacialSetupError(`The facial setup's ${what} run past their scales.`);
     start[i] = total; total += n;
+    // Ranges that overlap could otherwise ask for up to poses × 32,767 flattened transforms from a small file; the game's setups share none,
+    // so the flattened total can never exceed the transforms the file holds.
+    if (total > transforms.length) throw new FacialSetupError(`The facial setup is damaged: its ${what} use more transforms than it holds.`);
     return { first, n, isScale, scaleFirst };
   });
   start[poses.length] = total;
@@ -396,20 +399,23 @@ export function createFacialPose(rig: CompiledFacialRig): FacialPose {
       beta: new Float64Array(beta), gamma: new Float64Array(gamma), input: new Float32Array(s.tracks), touched: new Uint8Array(s.joints) } };
 }
 
-const clamp01 = (x: number) => x < 0 ? 0 : x > 1 ? 1 : x;
+/** clamp01 (§2); a NaN becomes 0 rather than passing through. */
+const clamp01 = (x: number) => x > 0 ? (x < 1 ? x : 1) : 0;
+/** The default solve options, shared so a solve allocates nothing (§8.2). */
+const NO_SOLVE_OPTIONS: FacialSolveOptions = Object.freeze({});
 
 /**
  * Solve one instant (§4). `tracks` holds absolute values for every track of the rig (reference plus clip or control values, §3.3). Writes
- * every value of `out` and returns it. Throws `FacialSetupError` for a vector of the wrong length or holding a NaN; allocates nothing
+ * every value of `out` and returns it. Throws `FacialSetupError` for a vector of the wrong length or holding a NaN or an infinity; allocates nothing
  * unless a trace is asked for.
  */
-export function solveFace(rig: CompiledFacialRig, tracks: Float32Array | Float64Array | readonly number[], out: FacialPose, options: FacialSolveOptions = {}): FacialPose {
+export function solveFace(rig: CompiledFacialRig, tracks: Float32Array | Float64Array | readonly number[], out: FacialPose, options: FacialSolveOptions = NO_SOLVE_OPTIONS): FacialPose {
   const s = rig.solver, T = s.tracks, J = s.joints, compat = rig.compat;
   if (tracks.length !== T) throw new FacialSetupError(`A face pose needs ${T} control values; ${tracks.length} were given.`);
   const I = out.scratch.input, O = out.tracks;
   for (let k = 0; k < T; k++) {
     const v = tracks[k]!;
-    if (v !== v) throw new FacialSetupError("A face pose holds an invalid number.");
+    if (!Number.isFinite(v)) throw new FacialSetupError("A face pose holds an invalid number.");
     I[k] = v;
   }
   O.set(I);
@@ -418,7 +424,8 @@ export function solveFace(rig: CompiledFacialRig, tracks: Float32Array | Float64
   for (let j = 0; j < J; j++) q[j * 4 + 3] = 1;
   if (sc) sc.fill(0);
   const lod = options.lod ?? 0, fade = options.lodFade ?? 0, trace = options.trace;
-  for (const part of s.order) solvePart(s, part, I, O, q, t, sc, touched, out.scratch.beta, out.scratch.gamma, lod, fade, compat, trace);
+  const order = s.order;
+  for (let p = 0; p < order.length; p++) solvePart(s, order[p]!, I, O, q, t, sc, touched, out.scratch.beta, out.scratch.gamma, lod, fade, compat, trace);
   const R = out.rotations, P = out.translations;
   for (let i = 0; i < J * 4; i++) R[i] = q[i]!;
   for (let i = 0; i < J * 3; i++) P[i] = t[i]!;
@@ -600,7 +607,7 @@ function blend(poses: CompiledPoses, weights: Float64Array, q: Float64Array, t: 
 }
 
 /** Solve many instants (`frames`: F × T values, frame-major) into one set of frame-major arrays. */
-export function solveFaceFrames(rig: CompiledFacialRig, frames: Float32Array | Float64Array, out?: FacialFrames, options: Omit<FacialSolveOptions, "trace"> = {}): FacialFrames {
+export function solveFaceFrames(rig: CompiledFacialRig, frames: Float32Array | Float64Array, out?: FacialFrames, options: Omit<FacialSolveOptions, "trace"> = NO_SOLVE_OPTIONS): FacialFrames {
   const T = rig.solver.tracks, J = rig.solver.joints;
   if (frames.length % T !== 0) throw new FacialSetupError(`Face frames need ${T} control values each.`);
   const F = frames.length / T, apply = rig.compat.scalePoses === "apply";

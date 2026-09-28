@@ -447,6 +447,7 @@ XF Studio's solver (`projects/xf-studio/authoring/src/engines/facial-rig/solver.
 5. **Unknown upper/lower parts** (a `Part` above 2, none in the vanilla setups) scale by 1, with a compile warning.
 6. **The §7 alternatives** are compile options (`FacialCompileOptions.compat`) with these meanings where §8.2 named only the switch: `faceEnvelope: "gate"` multiplies every mapped control by clamp01(`faceEnvelope`) at the envelope stage; `lipsMuzzle: "envelope"` also mutes envelope type 1 by 1 − `muzzleLips` (the limits are unchanged); `influencePasses: "second-only-if-lipsync"` runs §4.9 only when a lipsync pose adds a non-zero value to a control of that part; `firstInbetweenSegment: "threshold"` uses w / τ₀; `correctiveFlag: "ignore"` never zeroes a corrective for its flag; `scalePoses: "apply"` returns per-joint scales 1 + Σ w · value per axis (a hypothesis, S1) and `composeLocalPose` multiplies them into the rest scale.
 7. **T1** is a compile warning (`warnings`) when a posed joint has a turned or scaled rest; the composition follows §4.15 either way.
+8. **Hostile input.** Beyond §3.5, compiling refuses pose ranges whose flattened total exceeds the transforms the buffer holds (overlapping ranges would otherwise ask for poses × 32,767 entries from a small file), and `solveFace` refuses an infinite control value as well as a NaN. `clamp01` maps a NaN to 0. The face bakes cap a clip at two minutes (`MAX_BAKE_SECONDS`, 3,601 frames at 30 Hz). None of these changes a result on the game's setups (§10.2 unchanged).
 
 ### 10.2 Parity (28 September 2026)
 

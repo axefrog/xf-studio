@@ -67,6 +67,8 @@ export type MotionPort = {
   available: boolean; error?: string;
   /** Whether the idle moves the face, and the plain reason when it doesn't (absent: it does whenever the idle is available). */
   face?: { available: boolean; error?: string };
+  /** Listen for the idle's face arriving after the scene started (`face` and `idles` change); returns the unsubscribe. */
+  onFaceChange?(listener: () => void): () => void;
   /** The game's blink (game-blink.ts): whether it was prepared on this computer, the plain reason when not, and its repeat. */
   blink: { available: boolean; error?: string; repeatSeconds?: number };
   idle?: { enabled: boolean; time: number; paused: boolean; bodyEnabled: boolean; faceEnabled: boolean; seek(time: number): void };
@@ -104,6 +106,7 @@ export class MotionActions {
     this.blink = initial.blink; this.blinkPlaying = initial.blinkPlaying;
     this.pending = initial.pose ? { ...initial.pose } : null;
     this.clip = this.known(initial.idleClip) ? initial.idleClip! : this.defaultClip();
+    port.onFaceChange?.(() => this.notify());
     if (!port.available && port.error && port.error !== IDLE_MASCULINE)
       pageFailure("preview", "idle_unavailable", IDLE_UNAVAILABLE, Error(port.error), { level: "warn" });
   }

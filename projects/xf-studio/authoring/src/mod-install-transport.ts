@@ -15,7 +15,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import type { LocalSettings } from "./local-settings";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { readConfiguredMo2Instance } from "./install-detection-host";
-import { duplicatedNamespaces, readPackageManifest, type PackageManifestView } from "./platform/export/manifest";
+import { duplicatedNamespaces, isOverlayArchive, readPackageManifest, type PackageManifestView } from "./platform/export/manifest";
 import { EYE_MAKEUP_FEATURE } from "./recipe-schema";
 import { modNameIssue } from "./platform/api";
 
@@ -26,13 +26,13 @@ type FileEntry = { path: string; sha256: string; bytes: number };
 export type ExtraFileKind = "overlay-archive" | "tweakxl";
 /**
  * Where an extra file (a package file after its archive and `.xl`) goes, by its path below the install root: an overlay
- * archive in `archive/pc/mod` beside the main one (the game loads every archive there), or a TweakXL file in the package's
+ * archive named for the product (`isOverlayArchive`) in `archive/pc/mod` beside the main one (the game loads every archive there), or a TweakXL file in the package's
  * own `r6/tweaks/<archive>/` folder (TweakXL reads every `.yaml` below `r6/tweaks`). Null for anything else: the install
  * refuses a file it doesn't know how to place.
  */
 export function extraFileKind(path: unknown, archive: string): ExtraFileKind | null {
   if (typeof path !== "string" || !safeName(archive)) return null;
-  if (/^archive\/pc\/mod\/[0-9a-z_]{1,128}\.archive$/.test(path) && path !== `archive/pc/mod/${archive}.archive`) return "overlay-archive";
+  if (isOverlayArchive(path, archive)) return "overlay-archive";
   const tweaks = `r6/tweaks/${archive}/`;
   if (path.startsWith(tweaks) && /^[a-z0-9_]{1,120}\.yaml$/.test(path.slice(tweaks.length))) return "tweakxl";
   return null;

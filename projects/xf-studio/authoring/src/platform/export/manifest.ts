@@ -65,7 +65,20 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const FEATURE = /^[a-z][a-zA-Z0-9]*(?:-[a-z0-9]+)*$/;
 const fail = (): never => { throw Error("Candidate manifest is not a verified package."); };
 
-const EXTRA_FILE = (archive: string) => new RegExp(`^(?:archive/pc/mod/[0-9a-z_]{1,128}\\.archive|r6/tweaks/${archive}/[a-z0-9_]{1,120}\\.yaml)$`);
+/**
+ * An overlay archive beside a product's main one: `archive/pc/mod/`, an optional load-order digit prefix, the product's own archive name,
+ * `_` and a suffix (an expression set's table overlay is `0<archive>_table`). Carrying the product's name keeps it from colliding with
+ * another mod's archive in the shared `archive/pc/mod` (PIPE-123).
+ */
+export function isOverlayArchive(path: string, archive: string): boolean {
+  if (!/^[0-9a-z_]{1,100}$/.test(archive) || !path.startsWith("archive/pc/mod/") || !path.endsWith(".archive")) return false;
+  const name = path.slice("archive/pc/mod/".length, -".archive".length), digits = /^[0-9]{0,3}/.exec(name)![0].length;
+  return name.startsWith(`${archive}_`, digits) && /^[0-9a-z_]{1,64}$/.test(name.slice(digits + archive.length + 1));
+}
+const EXTRA_FILE = (archive: string) => {
+  const tweak = new RegExp(`^r6/tweaks/${archive}/[a-z0-9_]{1,120}\\.yaml$`);
+  return { test: (path: string) => isOverlayArchive(path, archive) || tweak.test(path) };
+};
 /** The archive and `.xl`, then (version 2 only: `extras`) overlay archives and TweakXL files, sorted, each once. */
 function files(value: unknown, archive: string, extras = false): [ManifestFile, ManifestFile, ...ManifestFile[]] {
   if (!Array.isArray(value) || value.length < 2 || (!extras && value.length !== 2)) return fail();

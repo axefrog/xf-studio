@@ -231,3 +231,21 @@ test("blink commands say plainly why they are off: not prepared, or the idle is 
   restoring.restore();
   expect(restoring.snapshot()).toMatchObject({ blink: 0, blinkPlaying: false });
 });
+
+test("the Motion controls follow the idle's face arriving after the scene started: the face toggle's reason goes and they repaint (PREV-174)", () => {
+  const noop = () => {};
+  let face = { available: false, error: "Reading V's face from your game files… It moves once it's ready." };
+  let changed: (() => void) | undefined;
+  const port: MotionPort = { available: true, blink: { available: true }, get face() { return face; }, onFaceChange: listener => { changed = listener; return noop; },
+    idle: { enabled: true, time: 0, paused: false, bodyEnabled: true, faceEnabled: true, seek: noop },
+    setIdle: noop, setIdlePaused: noop, setIdleContributions: noop, setBlink: noop, animateBlink: noop };
+  const motion = new MotionActions(freshWorkspace().preview, port);
+  let paints = 0;
+  motion.subscribe(() => { paints++; });
+  expect(motion.snapshot()).toMatchObject({ faceAvailable: false, faceError: "Reading V's face from your game files… It moves once it's ready." });
+  face = { available: true, error: undefined as never };
+  changed!();
+  expect(paints).toBe(1);
+  expect(motion.snapshot()).toMatchObject({ faceAvailable: true });
+  expect(motion.snapshot().faceError).toBeUndefined();
+});

@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { createFacialHandler, FacialHost, IN_APP_SOLVER, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
   type FacialSolverProcess, type FacialSolverSpawner } from "../src/facial-host";
 import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG } from "../src/facial-catalogue";
+import { ENVELOPE_NAMES } from "../src/engines/facial-rig/solver";
+import { FACE_MOTION_SCHEMA, type FaceMotionClip } from "../src/platform/api/facial";
 import { depotHash } from "../src/depot-path";
 import type { Installation } from "../src/resolver-host";
 import { cn, cr2w, fixtureInstallation, handle, rh } from "./resolver-fixtures";
@@ -49,11 +51,42 @@ const rig = cr2w({ $type: "appearanceAppearanceResource", appearances: [handle({
     { $type: "entAnimationSetupExtensionComponent", name: cn("PhotomodeAnimations"), animations: { $type: "animAnimSetup", cinematics: [],
       gameplay: [{ $type: "animAnimSetupEntry", animSet: rh(depotHash(SET)), priority: 128, variableNames: [] }] } }] } } })] });
 
+/**
+ * The same face in the shape XF Studio's own solver compiles (13 envelopes first, one pose per control: each moves the jaw a millimetre
+ * more down than the one before) and its blink clip on those tracks.
+ */
+const E13 = ENVELOPE_NAMES.length;
+const SOLVABLE = [...ENVELOPE_NAMES, ...MAIN, "x_AnimOverrideWeight", ...MAIN.map(name => `${name}_lipsync`), "x_wrinkle"];
+const solvableSkeleton = cr2w({ ...(skeleton.Data.RootChunk as object), trackNames: SOLVABLE.map(cn),
+  referenceTracks: SOLVABLE.map((name, i) => [0, 1, 2, 5, 6, 7, 8].includes(i) || name === "x_AnimOverrideWeight" ? 1 : 0) });
+const emptyPart = () => ({ EnvelopesPerTrackMapping: [], GlobalLimits: [], InfluencedPoses: [], InfluenceIndices: [], UpperLowerFace: [], LipsyncPosesSides: [],
+  GlobalCorrectiveEntries: [], InbetweenCorrectiveEntries: [], CorrectiveInfluencedPoses: [], CorrectiveInfluenceIndices: [], AllMainPoses: [],
+  AllMainPosesInbetweens: [], AllMainPosesInbetweenScopeMultipliers: [], Wrinkles: [] });
+const noPoses = { Poses: [], Transforms: [], Scales: [] };
+const solvableSetup = cr2w({ $type: "animFacialSetup", version: 8,
+  info: { tracksMapping: { numEnvelopes: E13, numMainPoses: MAIN.length, numLipsyncOverrides: 1, numWrinkles: 1 } },
+  bakedData: { Data: { LipsyncOverridesIndexMapping: [E13], JointRegions: [255, 0], Eyes: emptyPart(), Tongue: emptyPart(), Face: { ...emptyPart(),
+    EnvelopesPerTrackMapping: MAIN.map((_, i) => ({ Track: E13 + i, Envelope: 0, LevelOfDetail: 0 })),
+    AllMainPoses: MAIN.map((_, i) => ({ Track: E13 + i, NumInbetweens: 1 })), AllMainPosesInbetweens: MAIN.map(() => 1), Wrinkles: [E13 + 2] } } },
+  mainPosesData: { Data: { Eyes: noPoses, Tongue: noPoses, Face: { Poses: MAIN.map((_, i) => ({ TransformIdx: i, NumTransforms: 1, IsScale: 0, ScaleIdx: 0 })),
+    Transforms: MAIN.map((_, i) => ({ Bone: 1, Rotation: { i: 0, j: 0, k: 0, r: 1 }, Translation: { X: 0, Y: 0, Z: -0.001 * (i + 1) } })), Scales: [] } } },
+  correctivePosesData: { Data: { Face: noPoses, Eyes: noPoses, Tongue: noPoses } } });
+const solvableAdditives = animSet([["additive__blink_normal__01", "AdditiveFromRefPose", 0.5,
+  [[0, E13, 0], [0.1, E13, 1], [0.5, E13, 0], [0, E13 + 1, 0], [0.1, E13 + 1, 1], [0.5, E13 + 1, 0]], []]]);
+
 type WorldOptions = { spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?: () => number; jsonBudget?: number;
   /** A mod archive that also provides the animation set, with these faces. */
   setOverride?: object;
   /** Awaited before extraction number `n` (from 1) writes anything; a throw fails that extraction. */
-  gate?: (n: number) => Promise<void> };
+  gate?: (n: number) => Promise<void>;
+  /** The face in the shape XF Studio's solver compiles (`solvableSetup`), with its blink. */
+  solvable?: boolean;
+  /** XF Studio's own solver answers (no fake process). */
+  inApp?: boolean;
+  /** XF Studio's reader reads the face skeleton and setup (their documents are then held until the solver starts). */
+  native?: boolean;
+  /** With `native`: sees each animation request the reader gets (which then refuses it, so WolvenKit reads the set). */
+  decodeAnim?: (request: { op: string; priority?: string }) => void };
 function world(root: string, options: WorldOptions = {}) {
   const fixture = fixtureInstallation([
     { virtualPath: "archive/pc/content/basegame_4_animation.archive", files: { [FACE_SKELETON]: {}, [FACE_SETUP]: {}, [FACIAL_ADDITIVES]: {}, [SET]: {},
@@ -63,8 +96,13 @@ function world(root: string, options: WorldOptions = {}) {
       files: { [EXPRESSION_TABLE]: table([[0, "facial_happy"], [1, "facial_grin"], [2, "facial_missing"]]) } },
     ...(options.setOverride ? [{ virtualPath: "archive/pc/mod/zzz_set.archive", provider: "manual" as const, providerName: "Set update", files: { [SET]: {} } }] : []),
   ]);
-  const documents = new Map<string, unknown>([[depotHash(FACE_SKELETON), skeleton], [depotHash(FACE_SETUP), setup], [depotHash(FACIAL_ADDITIVES), additives],
+  const documents = new Map<string, unknown>([[depotHash(FACE_SKELETON), options.solvable ? solvableSkeleton : skeleton],
+    [depotHash(FACE_SETUP), options.solvable ? solvableSetup : setup], [depotHash(FACIAL_ADDITIVES), options.solvable ? solvableAdditives : additives],
     [depotHash(SET), options.setOverride ?? faces]]);
+  const nativeDecoder = { decode: async (request: { hash: string }) => [depotHash(FACE_SKELETON), depotHash(FACE_SETUP)].includes(request.hash)
+    ? { ok: true, document: documents.get(request.hash) } : { ok: false, kind: "not-indexed", message: "Not in this test." },
+    ...(options.decodeAnim ? { decodeAnim: async (request: { op: string; priority?: string }) => { options.decodeAnim!(request);
+      return { ok: false, kind: "not-indexed", message: "Not in this test." }; } } : {}) };
   let extractions = 0;
   const extract: FacialExtractor = async (_cli, _archive, resources, _dir, take) => {
     extractions++;
@@ -82,8 +120,9 @@ function world(root: string, options: WorldOptions = {}) {
   const cli = join(root, "wk.exe"); writeFileSync(cli, "fake");
   const host = new FacialHost({ cacheRoot: root, resolverCache: join(root, "resolver"),
     settings: () => ({ gameRoot: root, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
-    solver: () => ({ addon: "addon", python: "python", script: "server.py" }),
-    open: () => ({ ...fixture, fetcher: fixture.graph.port }) as unknown as Installation, extract, spawn: options.spawn ?? (() => process),
+    solver: () => options.inApp ? IN_APP_SOLVER : { addon: "addon", python: "python", script: "server.py" },
+    open: () => ({ ...fixture, fetcher: options.native ? { ...fixture.graph.port, nativeDecoder } : fixture.graph.port }) as unknown as Installation, extract,
+    ...(options.inApp && !options.spawn ? {} : { spawn: options.spawn ?? (() => process) }),
     solveTimeoutMs: options.solveTimeoutMs, now: options.now, jsonBudget: options.jsonBudget });
   return { host, solves, extractions: () => extractions };
 }
@@ -107,7 +146,7 @@ test("the face rig, blink and installed expressions come from the winning files;
   try {
     const { host, extractions } = world(root);
     expect(host.state()).toMatchObject({ rig: { phase: "preparing" }, expressions: { phase: "preparing" } });
-    await host.settled(); await Promise.resolve();
+    host.expressions(); await host.settled(); await Promise.resolve();
     const state = host.state();
     expect(state.rig).toMatchObject({ phase: "ready", main: { start: 1, count: MAIN.length } });
     expect(state.rig.controls!.map(control => control.name)).toEqual(MAIN);
@@ -126,7 +165,7 @@ test("the face rig, blink and installed expressions come from the winning files;
     expect(points.missing).toEqual(["facial_missing"]);
     // A second host on the same cache reads everything from it: no extraction.
     const again = world(root);
-    again.host.state(); await again.host.settled();
+    again.host.expressions(); await again.host.settled();
     expect(again.extractions()).toBe(0);
     expect(again.host.expressions().items.length).toBe(2);
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -136,7 +175,7 @@ test("solves run one at a time, newest first: a request still waiting is answere
   const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
   try {
     const { host, solves } = world(root);
-    host.state(); await host.settled(); await Promise.resolve();
+    host.expressions(); await host.settled(); await Promise.resolve();
     const first = host.solve({ controls: { jaw_mid_open: 0.1 } });
     const second = host.solve({ controls: { jaw_mid_open: 0.2 } });
     const third = host.solve({ controls: { jaw_mid_open: 0.3 }, blink: { play: true } });
@@ -198,7 +237,8 @@ function fakeProcess(options: { ready?: boolean; hang?: boolean } = {}) {
   };
   return { process, crash: () => { exited = true; for (const solve of solves.splice(0)) solve.reject(Error("The solver stopped.")); }, disposed: () => disposed };
 }
-const ready = async (host: FacialHost) => { host.state(); await host.settled(); await new Promise(resolve => setTimeout(resolve, 0)); };
+/** The whole preparation: asking for the installed expressions lets it read them after the face (PREV-179). */
+const ready = async (host: FacialHost) => { host.expressions(); await host.settled(); await new Promise(resolve => setTimeout(resolve, 0)); };
 
 test("a solver program that can't be started says plainly that it isn't set up, and the installed expressions still load (CORE-99)", async () => {
   const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
@@ -423,5 +463,107 @@ test("a failed preparation is tried again on a later question, not kept for its 
     now += 1;
     await ready(host);
     expect(host.state().rig.phase).toBe("ready");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// ---- The idle's face and the blink from XF Studio's own solver (review at 0cd96cc: PREV-179..181) ----
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+
+test("the idle's face and the blink read only the face: the installed expressions wait until something asks for them (PREV-179)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const { host, extractions } = world(root, { solvable: true, inApp: true });
+    const source = await host.faceSource();
+    if ("reason" in source) throw Error(source.reason);
+    expect(source.rig.trackNames).toEqual(SOLVABLE);
+    await host.blink();
+    await settle();
+    // The state (the page's facial preview polls it at start) doesn't start the read either.
+    expect(host.state().expressions.phase).toBe("preparing");
+    await settle();
+    expect(host.state().expressions.phase).toBe("preparing");
+    const read = extractions();
+    // The Expressions view asks: read after the face, from the winning table and sets.
+    expect(host.expressions().phase).toBe("preparing");
+    await host.settled();
+    expect(host.expressions()).toMatchObject({ phase: "ready", items: [{ label: "Happy" }, { label: "Grin" }] });
+    expect(extractions()).toBeGreaterThan(read);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the game's blink solved by XF Studio's own solver: the clip at 60 Hz and the closure in 21 steps, through its endpoint (PREV-181)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const { host } = world(root, { solvable: true, inApp: true });
+    const blink = await host.blink();
+    if ("reason" in blink) throw Error(blink.reason);
+    expect(blink.schema).toBe(FACE_MOTION_SCHEMA);
+    expect(blink.clips.map(clip => clip.name)).toEqual(["eye_blink_closure", "additive__blink_normal__01"]);
+    const floats = (text: string) => new Float32Array(Buffer.from(text, "base64").buffer.slice(0));
+    const [closure, clip] = blink.clips as [FaceMotionClip, FaceMotionClip];
+    expect(floats(clip.times)).toHaveLength(31);
+    expect(floats(closure.times)).toHaveLength(21);
+    // Both eyes' controls move the jaw here (1 and 2 mm): closed, it is 3 mm down (glTF y) from its rest.
+    expect(clip.joints).toEqual(["jaw"]);
+    const rest = floats(blink.rest.local), closed = floats(closure.local);
+    expect(closed[20 * 7 + 1]! - rest[1 * 10 + 1]!).toBeCloseTo(-0.003, 6);
+    // Asked again: the same bake, not solved again.
+    expect(await host.blink()).toBe(blink);
+    const handler = createFacialHandler(host);
+    const answer = await handler(new Request("http://127.0.0.1:1/api/facial/blink"));
+    expect(answer.status).toBe(200);
+    expect((await answer.json() as { clips: { name: string }[] }).clips.map(item => item.name)).toEqual(["eye_blink_closure", "additive__blink_normal__01"]);
+    // With the IO Suite oracle the blink is the developer preparation's: the endpoint says so.
+    mkdirSync(join(root, "oracle"));
+    const oracle = world(join(root, "oracle"), { solvable: true });
+    const refused = await createFacialHandler(oracle.host)(new Request("http://127.0.0.1:1/api/facial/blink"));
+    expect(refused.status).toBe(503);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("with XF Studio's own solver the face's documents are let go even when the setup doesn't compile (PREV-180)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const held = (host: FacialHost) => (host as unknown as { current: { rigData?: { documents?: unknown; compiled: unknown } } }).current.rigData;
+    // The toy setup has no poses, so XF Studio's solver can't take it.
+    const failed = world(root, { inApp: true, native: true });
+    await failed.host.faceSource();
+    expect(held(failed.host)).toMatchObject({ compiled: null, documents: undefined });
+    expect(failed.host.state().solver).toMatchObject({ phase: "failed", kind: "in-app" });
+    // The oracle still needs them (it reads the files written from them when it starts).
+    mkdirSync(join(root, "oracle"));
+    const oracle = world(join(root, "oracle"), { native: true });
+    await oracle.host.faceSource();
+    expect(held(oracle.host)?.documents).toBeUndefined();
+    expect(existsSync(join(root, "oracle", "facial", "json"))).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a drawer that opens mid-prefetch joins the read: one read, started at background priority, shown as preparing until it ends", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    let open!: () => void, reached!: () => void;
+    const held = new Promise<void>(resolve => { open = resolve; }), atSet = new Promise<void>(resolve => { reached = resolve; });
+    const priorities: (string | undefined)[] = [];
+    // Extraction 2 is the photo-mode animation set (the face is read natively, the blink by WolvenKit first): it waits, so the drawer opens mid-read.
+    const { host, extractions } = world(root, { native: true, gate: async n => { if (n === 2) { reached(); await held; } },
+      decodeAnim: request => { if (request.op === "index") priorities.push(request.priority); } });
+    await host.faceSource();
+    // The page is quiet: the prefetch starts the read at background priority.
+    expect(host.expressions({ background: true }).phase).toBe("preparing");
+    await atSet;
+    expect(priorities).toEqual(["background"]);
+    // The drawer opens: it joins the same read and shows it as preparing; nothing is read twice.
+    expect(host.expressions()).toMatchObject({ phase: "preparing", items: [] });
+    expect(host.state().expressions.phase).toBe("preparing");
+    open();
+    await host.settled();
+    expect(host.expressions()).toMatchObject({ phase: "ready", items: [{ label: "Happy" }, { label: "Grin" }] });
+    expect(extractions()).toBe(2);
+    // A later prefetch or ask reads nothing more.
+    host.expressions({ background: true }); host.expressions(); await host.settled();
+    expect(extractions()).toBe(2);
+    expect(priorities).toEqual(["background"]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

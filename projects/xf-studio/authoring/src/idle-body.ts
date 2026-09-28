@@ -20,7 +20,8 @@ export type RestJoint = { readonly bone: string; readonly parent: string | null;
  * - `source`: `game`, read from the player's game files by XF Studio itself (both hosts); `prepared`, the developer preparation's files
  *   under `/assets/` (localhost with `XFS_IDLE_SOURCE=prepared`, the Python oracle).
  * - `catalogue`: the idles (idle-catalogue.ts); an entry's `face` is set where XF Studio can solve its face from the game files (`faceReason`
- *   says why not, in plain words, when none can be).
+ *   says why not, in plain words, when none can be). `facePending`: the face is still being read; the state answers without waiting for
+ *   it and the page asks again until it is gone (PREV-174).
  * - `rig`: the body clips' rig and its rest (the skeleton the clips play on), `ancestry`: the face rig's parents (the head's joints follow
  *   their nearest driven ancestor), `face`: the face rig's rest (the eyes' gaze pivots when no face clip is loaded).
  */
@@ -28,7 +29,7 @@ export type IdleState =
   | { readonly schema: typeof IDLE_STATE_SCHEMA; readonly phase: "needs-setup" | "preparing" | "failed"; readonly message: string }
   | { readonly schema: typeof IDLE_STATE_SCHEMA; readonly phase: "ready"; readonly message: ""; readonly source: "game"; readonly catalogue: IdleCatalogue;
       readonly rig: { readonly path: string; readonly joints: readonly RestJoint[] }; readonly ancestry: Readonly<Record<string, string | null>>;
-      readonly face: { readonly path: string; readonly joints: readonly RestJoint[] } | null; readonly faceReason?: string }
+      readonly face: { readonly path: string; readonly joints: readonly RestJoint[] } | null; readonly faceReason?: string; readonly facePending?: true }
   | { readonly schema: typeof IDLE_STATE_SCHEMA; readonly phase: "ready"; readonly message: ""; readonly source: "prepared"; readonly catalogue: IdleCatalogue };
 
 type Json = unknown;

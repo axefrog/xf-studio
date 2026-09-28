@@ -43,6 +43,7 @@ import { STUDIO_COMPOSITION } from "./compose/studio-registry";
 import { STUDIO_VIEW_COMPOSITION } from "./compose/view-panels";
 import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./compose/renderers";
 import { combineFacePoses, FacialPreview } from "./facial-preview";
+import { headQuiet, prefetchWhenQuiet } from "./facial-prefetch";
 import { TransitionSettings } from "./platform/core/transition-settings";
 import { createBrowserFacialDevice } from "./browser-facial-device";
 import { PartPresetService, partPresetTransport, setExportTransport } from "./part-presets";
@@ -145,6 +146,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   let motionActions: MotionActions | undefined;
   /** The loaded head and its connections, released together. */
   let head: AttachedHead | undefined;
+  /** Stops waiting for the page to be quiet before the installed expressions are read ahead (facial-prefetch.ts). */
+  let stopPrefetch: (() => void) | undefined;
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
   let scene: Awaited<ReturnType<ReturnType<typeof createBrowserViewportDevice>["loadHead"]>> | undefined;
   let uvEditor: ReturnType<ReturnType<typeof createBrowserViewportDevice>["mountUV"]> | undefined;
@@ -389,6 +392,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       head = attached;
       ({ scene, savedAppearance, preview: previewActions, motion: motionActions } = attached);
       facial.attachScene(scene.face);
+      stopPrefetch = prefetchWhenQuiet(() => facial.prefetch(), headQuiet({ details: attached.characterDetails, scene }));
       poseStage.attach({ motion: attached.motion, details: attached.characterDetails, context: attached.characterContext });
       status = { ...status, assets: { ...status.assets, loaded: true } };
       viewportDevice.headReady();
@@ -409,6 +413,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   /** Release the loaded head (or a part-attached one) and forget its services. */
   function releaseHead(attached: AttachedHead | undefined) {
     if (head === attached) head = undefined;
+    stopPrefetch?.(); stopPrefetch = undefined;
     facial.attachScene(undefined);
     poseStage.attach(null);
     attached?.dispose();
