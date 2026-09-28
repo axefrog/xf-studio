@@ -24,6 +24,17 @@ The classic glitter model's macro dot array reads less like glitter than like a 
 
 Working name options: Dot Matrix, Pixel, Polka Chrome, Sequin (the maintainer decides). Until then, the classic dots stay available behind the Studio's research tools.
 
+
+### Queued R&D: custom material shaders in REDengine (29 September 2026)
+
+Goal: procedural finishes computed in the game's own material shader, the way the Studio preview's glint models already work (hashed flake cells with per-flake orientation, size and colour; view- and light-dependent sparkle; in-shader filtering so glitter becomes sheen at a distance), blended with skin's decal lighting so the plate still sits naturally on the face. That removes the baked-texture limits: mip blur, texture resolution and the decal mode's ~11.5° normal fade. Routes to research:
+
+1. **Replace the shader of a copied material template** through RED4ext when the GPU pipeline state is created, compiled against the original's exact vertex inputs and constant buffers. Only meshes using our copied template are affected.
+2. **Understand the shader cache format**, so a package can ship compiled shaders the engine loads natively.
+3. **Fallback, today's route:** baked textures on the best existing template (the car-paint metallic flake layer is the lead), in the finishes rework.
+
+If route 1 or 2 works, it opens pearl interference colour, holographic and animated finishes, and custom materials well beyond makeup. Starts after the current session's merges; read-only research first, and anything in the game is done under supervision.
+
 ## Ranked tracks
 
 | Priority | Track | Status | Owner doc |
