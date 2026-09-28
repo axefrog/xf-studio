@@ -372,6 +372,21 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
 
+## Build record (bridge 0.5.0 and XF Finish Showroom, branch build, not staged)
+
+Built 28 September 2026 on `claude/finish-showroom` at `a56457384407`, clean tree (manifest `"commit": "a56457384407872677b999db25108f82860fa944"`, `"source_tree_clean": true`), by `bun tools/package.ts`: version 0.5.0, the showroom commands on top of 0.4.2. On that commit: `xfb_selftest --unit` UNIT OK, self-test 346 of 346, `bun test tools` 195 of 196 (the screen-route capture test needs its synthetic window uncovered on the desktop), typecheck, the Lua lint, and the redscript lint both without Codeware (the fallback class) and with Codeware `v1.20.4`'s scripts (the spawning class) against a copy of the 2.31 bundle.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.5.0-writes.zip` (`write_classes` photo, world, character, save, showroom) | `2e955bac4c712d4debc3556b06c298fc775948891fdfc1ce5a15bfe4395879bb` |
+| `xf-runtime-bridge-0.5.0-diagnostic.zip` | `3c363033ff31aac6e62a83db868513b9e60871eaebc02f443b152babec310961` |
+| `xf-runtime-bridge-0.5.0.zip` (default) | `d909b0ba463faaa6a8eee6e7223ca01e6f469d50f4bba5cc75eb2583d1e7f3f2` |
+| (`XFRuntimeBridge.dll` inside each) | `a9f697d2a4af14aa776ab56be4ea1174daed784676b5349946eb05615832254e` |
+| XF Finish Showroom, session 2's collection: `xfs_showroom_4426018f6966620881cdcb78569544ab.archive` (12 heads) | `a5166b659a7000c2bf295bf452848ef9f2ae0f4603e78b081f8b0e31d818412c` |
+| XF Finish Showroom, the Glitter board: `xfs_showroom_d11f5a7fd3192b9e4f6dd14f343578b8.archive` (6 heads) | `fef65ae8f843f45e9c2eac63ce8d882172c94514d297471d2c5c87712db0fb49` |
+
+The showroom archives were built at `d5c9e34` by `projects/xf-studio/authoring/tools/build_showroom_package.ts --diagnostics` from the reference installation's cached plate, each independently verified, with their `xfs/showroom-package-1` manifests beside them in the Studio's ignored `dist/` ([pipeline guide](../authoring/studio-to-mod-pipeline.md#xf-finish-showroom-a-test-mod-of-mannequin-heads)). XF Eye Artistry for the fidelity check is built at staging time from the same commit. **New in this build, watch in the session:** everything in the [finish showroom checks](#finish-showroom-checks-bridge-050); nothing else changed from 0.4.2.
+
 ## Build record (bridge 0.4.2, branch build, not staged)
 
 Built 28 September 2026 on `claude/bridge-042` at `f03657dd55e0`, clean tree (`XFB_BUILD=f03657dd55e0a9872880f9348f9924a8694d20b6;dirty=0`), by `bun tools/package.ts`: version 0.4.2, session 4's fixes on top of 0.4.1. On that commit: `xfb_selftest --unit` OK (265 checks), self-test 332 of 332, `bun test tools` 181 of 182 (the one failure, the screen-route capture test, needs its synthetic window uncovered on the desktop and passes on its own: 26 of 26 in `capture.test.ts`), typecheck, redscript lint (against a copy of the installed 2.31 `final.redscripts`, SHA-256 `2119046f…ee86`, as for 0.4.1) and Lua lint clean. The packages carry what 0.4.1's did: the default zip keeps the bridge off with every switch off and no presets or panel; the -diagnostic zip adds the presets and the panel, read-only; the -writes zip allows writes with the classes photo, world, character and save, with the creator and the live-pose carrier. **Inventory writes are off** (`"inventory_writes": false`). A rebuild after merging gives new hashes.

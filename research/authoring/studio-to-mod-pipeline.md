@@ -280,12 +280,12 @@ bun tools/build_showroom_package.ts --collection <file> --plate <prepared plate 
 
 **Limits.** Feminine heads only (the plate the host prepares first is hers); the masculine plate and head would follow the same route. The heads show a neutral head, not the player's own face: skin tone and eyes are build options, and face shape, brows, hair and other decals are absent. Everything past the archive is untested in game: that the entity spawns and draws, that `entAnimatedComponent` without a driving animation holds the rig's reference pose, that the rig's spot axes are +Y, and that photo mode's exposure and the world's light leave the comparison usable ([knowledge open questions](../../knowledge/skin-on-spawned-objects.md#open-questions)).
 
-**Builds so far** (28 September 2026, WolvenKit 9.0.1, the reference installation's cached built-in plate; feminine only; private in the worktree's ignored `dist/`):
+**Builds so far** (28 September 2026 at commit `d5c9e34`, WolvenKit 9.0.1, the reference installation's cached built-in plate; feminine only; private in the ignored `dist/`; an archive's hash changes with every rebuild because its index records build times):
 
 | Source collection | Showroom archive | SHA-256 | Pieces | Members |
 |---|---|---|---:|---:|
-| [Session 2's](../../experiments/020-session-2/session-2.collection.json) (`--diagnostics`: Depth A–D, Gloss A–D, Shimmer · strong now compiled as the grain, Metal ramp, Lines) | `xfs_showroom_4426018f6966620881cdcb78569544ab` | `0e82a5d3…` | 12 | 42 |
-| [The Glitter board](../../experiments/021-glitter-board/glitter-board.collection.json) (`--diagnostics`: the six Glitter presets on the diagnostic route, the accent chunk included) | `xfs_showroom_d11f5a7fd3192b9e4f6dd14f343578b8` | `d028b527…` | 6 | 36 |
+| [Session 2's](../../experiments/020-session-2/session-2.collection.json) (`--diagnostics`: Depth A–D, Gloss A–D, Shimmer · strong now compiled as the grain, Metal ramp, Lines) | `xfs_showroom_4426018f6966620881cdcb78569544ab` | `a5166b659a7000c2bf295bf452848ef9f2ae0f4603e78b081f8b0e31d818412c` | 12 | 42 |
+| [The Glitter board](../../experiments/021-glitter-board/glitter-board.collection.json) (`--diagnostics`: the six Glitter presets on the diagnostic route, the accent chunk included) | `xfs_showroom_d11f5a7fd3192b9e4f6dd14f343578b8` | `fef65ae8f843f45e9c2eac63ce8d882172c94514d297471d2c5c87712db0fb49` | 6 | 36 |
 
 ## Where the eye plate comes from
 
