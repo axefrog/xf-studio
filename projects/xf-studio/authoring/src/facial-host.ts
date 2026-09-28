@@ -296,6 +296,11 @@ type Preparation = { key: string; controller: AbortController; promise: Promise<
    * only the face, so they never start that read (PREV-179).
    */
   startPointsWanted: Promise<void>; wantStartPoints?: () => void;
+  /**
+   * The read was asked for as a prefetch (the page quiet after startup): its clips are decoded at background priority, behind anything the
+   * person asks for. A later ask from the Expressions view joins the same read and lifts it to normal priority.
+   */
+  startPointsBackground?: boolean;
   rig: FacialHostState["rig"]; rigData?: Rig; expressions: FacialStartPoints; solver: FacialHostState["solver"]; process?: FacialSolverProcess;
   /** The started solver's readiness, the inert check included: a solve waiting for a restarted solver waits for this. */
   starting?: Promise<void>;
@@ -371,10 +376,14 @@ export class FacialHost {
       expressions: { phase: entry.expressions.phase, ...(entry.expressions.reason ? { reason: entry.expressions.reason } : {}), count: entry.expressions.items.length },
       samples: EXPRESSION_SAMPLES };
   }
-  /** The installed expressions; asking starts reading them (after the face) if nothing asked before. */
-  expressions(): FacialStartPoints {
+  /**
+   * The installed expressions; asking starts reading them (after the face) if nothing asked before. `background`: a prefetch, read at
+   * background priority; an ask without it while that read runs joins it at normal priority (never a second read).
+   */
+  expressions(options: { background?: boolean } = {}): FacialStartPoints {
     const entry = this.ensure();
-    entry.wantStartPoints?.();
+    if (entry.wantStartPoints) { entry.startPointsBackground = !!options.background; entry.wantStartPoints(); }
+    else if (!options.background) entry.startPointsBackground = false;
     return structuredClone(entry.expressions);
   }
   async settled(): Promise<void> { await this.current?.promise; }
@@ -518,7 +527,7 @@ export class FacialHost {
     // The installed expressions, after the face (the editor works without them), and only once something asks for them (PREV-179).
     await new Promise<void>(settle => { if (signal.aborted) return settle(); void entry.startPointsWanted.then(settle); signal.addEventListener("abort", () => settle(), { once: true }); });
     superseded();
-    try { entry.expressions = await this.readStartPoints(installation, cli, tool, vocabulary, signal); }
+    try { entry.expressions = await this.readStartPoints(installation, cli, tool, vocabulary, signal, () => entry.startPointsBackground ? "background" : undefined); }
     catch (error) {
       if (error instanceof Superseded || signal.aborted) throw error;
       hostFailure("facial", "start_points_failed", "The installed expressions couldn't be read.", error, "warn");
@@ -770,7 +779,7 @@ export class FacialHost {
    * archives and is read again when one of them changed (a mod updated in place).
    */
   private async readStartPoints(installation: Installation, cli: string | null, tool: string, vocabulary: FacialVocabulary,
-    signal: AbortSignal): Promise<FacialStartPoints> {
+    signal: AbortSignal, priority: () => "background" | undefined = () => undefined): Promise<FacialStartPoints> {
     const graph = installation.graph;
     const identity = (ref: DepotRef) => { const winner = graph.locate(ref).lookup.winner; return winner ? fingerprint(winner.id) : "-"; };
     const rigRef = refFromPath(PHOTO_MODE_FACE_RIG), tableRef = refFromPath(EXPRESSION_TABLE);
@@ -813,7 +822,7 @@ export class FacialHost {
     for (const set of sets) {
       const archive = graph.locate(set.ref).lookup.winner, path = graph.named(set.ref).path ?? `#${set.ref.hash}`;
       if (!archive) continue;
-      const clips = decoder ? await nativeSetClips(decoder, archive.id, graph.locate(set.ref).entry.hash, wantedClips).catch(() => null) : null;
+      const clips = decoder ? await nativeSetClips(decoder, archive.id, graph.locate(set.ref).entry.hash, wantedClips, priority).catch(() => null) : null;
       if (signal.aborted) throw new Superseded();
       if (clips) nativeSets.set(set, { path, provider: providerLabel(archive), clips }); else leftOver.push(set);
     }
@@ -982,7 +991,8 @@ export function createFacialHandler(host: FacialHost) {
     const url = new URL(request.url), origin = request.headers.get("Origin");
     if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin)) return json({ code: "forbidden", error: "Use the local studio." }, 403);
     if (url.pathname === FACIAL_ENDPOINT && request.method === "GET") { await host.refresh(); return json(host.state()); }
-    if (url.pathname === FACIAL_EXPRESSIONS_ENDPOINT && request.method === "GET") return json(host.expressions());
+    // `?prefetch=1`: the page is quiet after startup and reads them ahead of the Expressions view, at background priority.
+    if (url.pathname === FACIAL_EXPRESSIONS_ENDPOINT && request.method === "GET") return json(host.expressions({ background: url.searchParams.get("prefetch") === "1" }));
     if (url.pathname === FACIAL_BLINK_ENDPOINT && request.method === "GET") {
       const blink = await host.blink();
       return "reason" in blink ? json({ code: "unavailable", error: blink.reason }, 503) : json(blink);

@@ -4,6 +4,7 @@
  * step, and every unavailable state says why in plain words.
  */
 import { expect, test } from "bun:test";
+import { prefetchWhenQuiet } from "../src/facial-prefetch";
 import { combineFacePoses, FacialPreview, FRAME_MS, SLOW_SOLVE_MS, type FacialDevicePort, type FacialMotion, type FacialSolved, type FacialTimer } from "../src/facial-preview";
 import type { TransitionSetting } from "../src/platform/core/transition-settings";
 import { f32 } from "../src/engines/facial-rig/vector";
@@ -293,4 +294,34 @@ test("the installed expressions are asked for only once the Expressions view sho
   preview.installed(); await settle();
   expect(asked).toBe(2);
   preview.dispose();
+});
+
+test("the installed expressions are read ahead once the page stays quiet; busy again restarts the wait, and the view then joins (PREV-179)", async () => {
+  let now = 0;
+  const timers = new Map<number, { at: number; run: () => void }>();
+  let next = 1;
+  const timer = { set: (run: () => void, ms: number) => { const id = next++; timers.set(id, { at: now + ms, run }); return id; }, clear: (id: unknown) => timers.delete(id as number) };
+  const advance = (ms: number) => { now += ms; for (const [id, entry] of [...timers]) if (entry.at <= now) { timers.delete(id); entry.run(); } };
+  let quiet = false, listener: () => void = () => {};
+  const asks: (boolean | undefined)[] = [];
+  const device: FacialDevicePort = { state: async () => readyState({ expressions: { phase: "preparing", count: 0 } }),
+    expressions: async options => { asks.push(options?.prefetch); return { phase: "preparing", items: [] }; }, solve: async () => solved(0) };
+  const preview = new FacialPreview(device, { ...timer, now: () => now });
+  const release = prefetchWhenQuiet(() => preview.prefetch(), { quiet: () => quiet, subscribe: l => { listener = l; return () => {}; } }, { timer, quietMs: 2_000 });
+  // V still being prepared: nothing.
+  advance(5_000);
+  expect(asks).toEqual([]);
+  quiet = true; listener();
+  advance(1_500);
+  // Busy again before the wait ends (a change on V): the wait starts over.
+  quiet = false; listener(); quiet = true; listener();
+  advance(1_500);
+  expect(asks).toEqual([]);
+  advance(500);
+  expect(asks).toEqual([true]);
+  // Once only, and the view's ask later is an ordinary one that joins the host's read.
+  listener(); advance(5_000);
+  preview.installed(); await settle();
+  expect(asks).toEqual([true, undefined]);
+  release(); preview.dispose();
 });

@@ -32,7 +32,8 @@ export type FacialSolved = { ok: true; frames: number; rate?: number; pose: Solv
   { ok: false; code: "superseded" | "unavailable" | "invalid" | "failed"; message: string };
 export interface FacialDevicePort {
   state(): Promise<FacialHostState>;
-  expressions(): Promise<FacialStartPoints>;
+  /** The installed expressions; asking starts the host's read. `prefetch`: read ahead of the Expressions view, at background priority. */
+  expressions(options?: { prefetch?: boolean }): Promise<FacialStartPoints>;
   solve(request: FacialSolveRequest): Promise<FacialSolved>;
 }
 /** The scene's face driver as the service sees it (head-rig.ts `face`). */
@@ -90,6 +91,8 @@ export class FacialPreview {
   private disposed = false;
   /** The Expressions view asked for the installed expressions (`installed`); until then the host doesn't read them (PREV-179). */
   private installedWanted = false;
+  /** The host was asked to read them ahead of the view (`prefetch`), once per page. */
+  private prefetched = false;
   private readonly latencies: { total: number; solver: number }[] = [];
   private readonly listeners = new Set<() => void>();
   constructor(private readonly device: FacialDevicePort, private readonly timer: FacialTimer = TIMER) {}
@@ -290,6 +293,15 @@ export class FacialPreview {
     return this.builtAxes.axes;
   }
   private builtAxes: { source: readonly FacialAxisPair[] | readonly FacialControl[]; axes: readonly FacialAxisControl[] } | undefined;
+  /**
+   * The page is quiet after startup (facial-prefetch.ts): ask the host to read the installed expressions ahead of the Expressions view, at
+   * background priority. Nothing waits on it here; the view's `installed` joins the same read on the host.
+   */
+  prefetch() {
+    if (this.prefetched || this.installedWanted || this.disposed) return;
+    this.prefetched = true;
+    void this.device.expressions({ prefetch: true }).catch(() => { /* The view asks again when it shows. */ });
+  }
   /** The Expressions view is showing: read the installed expressions (once; the host starts reading them when first asked). */
   installed() {
     if (this.installedWanted || this.disposed) return;

@@ -23,7 +23,7 @@ export function createBrowserFacialDevice(fetcher: (url: string, init?: RequestI
   };
   return {
     state: () => get<FacialHostState>(FACIAL_ENDPOINT),
-    expressions: () => get<FacialStartPoints>(FACIAL_EXPRESSIONS_ENDPOINT),
+    expressions: options => get<FacialStartPoints>(options?.prefetch ? `${FACIAL_EXPRESSIONS_ENDPOINT}?prefetch=1` : FACIAL_EXPRESSIONS_ENDPOINT),
     async solve(request: FacialSolveRequest): Promise<FacialSolved> {
       const response = await fetcher(FACIAL_SOLVE_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...request, client }) });
       const answer = await response.json() as FacialSolveAnswer;

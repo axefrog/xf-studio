@@ -84,7 +84,9 @@ type WorldOptions = { spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?
   /** XF Studio's own solver answers (no fake process). */
   inApp?: boolean;
   /** XF Studio's reader reads the face skeleton and setup (their documents are then held until the solver starts). */
-  native?: boolean };
+  native?: boolean;
+  /** With `native`: sees each animation request the reader gets (which then refuses it, so WolvenKit reads the set). */
+  decodeAnim?: (request: { op: string; priority?: string }) => void };
 function world(root: string, options: WorldOptions = {}) {
   const fixture = fixtureInstallation([
     { virtualPath: "archive/pc/content/basegame_4_animation.archive", files: { [FACE_SKELETON]: {}, [FACE_SETUP]: {}, [FACIAL_ADDITIVES]: {}, [SET]: {},
@@ -98,7 +100,9 @@ function world(root: string, options: WorldOptions = {}) {
     [depotHash(FACE_SETUP), options.solvable ? solvableSetup : setup], [depotHash(FACIAL_ADDITIVES), options.solvable ? solvableAdditives : additives],
     [depotHash(SET), options.setOverride ?? faces]]);
   const nativeDecoder = { decode: async (request: { hash: string }) => [depotHash(FACE_SKELETON), depotHash(FACE_SETUP)].includes(request.hash)
-    ? { ok: true, document: documents.get(request.hash) } : { ok: false, kind: "not-indexed", message: "Not in this test." } };
+    ? { ok: true, document: documents.get(request.hash) } : { ok: false, kind: "not-indexed", message: "Not in this test." },
+    ...(options.decodeAnim ? { decodeAnim: async (request: { op: string; priority?: string }) => { options.decodeAnim!(request);
+      return { ok: false, kind: "not-indexed", message: "Not in this test." }; } } : {}) };
   let extractions = 0;
   const extract: FacialExtractor = async (_cli, _archive, resources, _dir, take) => {
     extractions++;
@@ -533,5 +537,33 @@ test("with XF Studio's own solver the face's documents are let go even when the 
     await oracle.host.faceSource();
     expect(held(oracle.host)?.documents).toBeUndefined();
     expect(existsSync(join(root, "oracle", "facial", "json"))).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a drawer that opens mid-prefetch joins the read: one read, started at background priority, shown as preparing until it ends", async () => {
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    let open!: () => void, reached!: () => void;
+    const held = new Promise<void>(resolve => { open = resolve; }), atSet = new Promise<void>(resolve => { reached = resolve; });
+    const priorities: (string | undefined)[] = [];
+    // Extraction 2 is the photo-mode animation set (the face is read natively, the blink by WolvenKit first): it waits, so the drawer opens mid-read.
+    const { host, extractions } = world(root, { native: true, gate: async n => { if (n === 2) { reached(); await held; } },
+      decodeAnim: request => { if (request.op === "index") priorities.push(request.priority); } });
+    await host.faceSource();
+    // The page is quiet: the prefetch starts the read at background priority.
+    expect(host.expressions({ background: true }).phase).toBe("preparing");
+    await atSet;
+    expect(priorities).toEqual(["background"]);
+    // The drawer opens: it joins the same read and shows it as preparing; nothing is read twice.
+    expect(host.expressions()).toMatchObject({ phase: "preparing", items: [] });
+    expect(host.state().expressions.phase).toBe("preparing");
+    open();
+    await host.settled();
+    expect(host.expressions()).toMatchObject({ phase: "ready", items: [{ label: "Happy" }, { label: "Grin" }] });
+    expect(extractions()).toBe(2);
+    // A later prefetch or ask reads nothing more.
+    host.expressions({ background: true }); host.expressions(); await host.settled();
+    expect(extractions()).toBe(2);
+    expect(priorities).toEqual(["background"]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
