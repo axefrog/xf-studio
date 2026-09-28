@@ -12,7 +12,8 @@ Protocol (UTF-8 JSON, one object per line):
   values), one list per frame;
 * answer: ``{"id": int, "ms": solve ms, "q": base64 float32 [frames * n * 4], "t": base64 float32 [frames * n * 3]}``: each
   joint's local rotation (x, y, z, w) and translation delta in REDengine axes, as the solver returns them; or
-  ``{"id": int, "error": text}``.
+  ``{"id": int, "error": text}``. A request with ``"outputs": true`` also gets ``"o"``: base64 float32 [frames * m], the solve's
+  processed track buffer (wrinkle outputs included), for the in-app solver's parity harness (tests/facial-solver-oracle.test.ts).
 
 The host (src/facial-host.ts) owns everything else: which rig and setup, the track values, latest-wins scheduling and axes.
 
@@ -69,15 +70,25 @@ def main():
             if frames.ndim != 2 or frames.shape[1] != len(tracks) or not np.isfinite(frames).all():
                 raise ValueError(f'expected frames of {len(tracks)} finite track values')
             began = time.perf_counter()
+            outputs = request.get('outputs') is True
             quats = np.empty((len(frames), len(names), 4), dtype=np.float32)
             trans = np.empty((len(frames), len(names), 3), dtype=np.float32)
+            processed = np.empty((len(frames), len(tracks)), dtype=np.float32) if outputs else None
             for index, values in enumerate(frames):
-                q, t, _ = solver.solve_runtime(compiled, values, lod=0)
+                q, t, o = solver.solve_runtime(compiled, values, lod=0)
                 quats[index], trans[index] = q, t
+                if outputs:
+                    o = np.asarray(o, dtype=np.float32).reshape(-1)
+                    if o.shape[0] != len(tracks):
+                        raise ValueError(f'the processed tracks hold {o.shape[0]} values, not {len(tracks)}')
+                    processed[index] = o
             elapsed = (time.perf_counter() - began) * 1000
-            send({'id': request_id, 'ms': round(elapsed, 3),
-                  'q': base64.b64encode(quats.astype('<f4').tobytes()).decode('ascii'),
-                  't': base64.b64encode(trans.astype('<f4').tobytes()).decode('ascii')})
+            answer = {'id': request_id, 'ms': round(elapsed, 3),
+                      'q': base64.b64encode(quats.astype('<f4').tobytes()).decode('ascii'),
+                      't': base64.b64encode(trans.astype('<f4').tobytes()).decode('ascii')}
+            if outputs:
+                answer['o'] = base64.b64encode(processed.astype('<f4').tobytes()).decode('ascii')
+            send(answer)
         except Exception as error:
             send({'id': request_id, 'error': f'{type(error).__name__}: {error}'})
     return 0
