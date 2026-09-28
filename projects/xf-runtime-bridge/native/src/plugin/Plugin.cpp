@@ -56,6 +56,32 @@ std::string GameStateName(int aState)
     }
 }
 
+std::string HudFrame()
+{
+    auto& state = Get();
+    inkui::BridgeView view;
+    view.pluginEnabled = state.config.bridgeEnabled;
+    view.allowWrites = state.config.allowWrites;
+    view.scriptReady = state.scriptLayer.Ready();
+    std::vector<inkui::MessageLine> lines;
+    if (state.bridge)
+    {
+        auto& dispatcher = state.bridge->GetDispatcher();
+        view.killed = dispatcher.IsKilled();
+        view.writesPaused = dispatcher.WritesPaused();
+        view.listening = state.bridge->IsListening();
+        view.hasClient = state.bridge->HasClient();
+    }
+    if (!view.killed)
+    {
+        for (auto& [level, text] : state.messages.Lines())
+        {
+            lines.push_back({level, text});
+        }
+    }
+    return inkui::Frame(state.hud.Current(), view, lines);
+}
+
 nlohmann::json InfoJson()
 {
     auto& state = Get();

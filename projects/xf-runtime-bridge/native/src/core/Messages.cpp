@@ -169,6 +169,18 @@ std::string MessageBoard::Snapshot(Clock::time_point aNow)
     return json{{"messages", list}}.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
+std::vector<std::pair<std::string, std::string>> MessageBoard::Lines(Clock::time_point aNow)
+{
+    std::scoped_lock _(m_mutex);
+    DropExpired(aNow);
+    std::vector<std::pair<std::string, std::string>> out;
+    for (const auto& message : m_messages)
+    {
+        out.emplace_back(message.level, message.text);
+    }
+    return out;
+}
+
 size_t MessageBoard::Clear()
 {
     std::scoped_lock _(m_mutex);

@@ -6,9 +6,9 @@
 //
 // Permission classes (data for a future consent screen):
 //   read             looks at the game or its window; changes nothing
-//   notify           shows a short message in the bridge's own in-game label; changes nothing in the game
+//   notify           shows a short message in the bridge's own in-game label or panel, or moves the panel; changes nothing in the game
 //   write-photo      changes photo mode only (camera, lights, expression, its UI); gone when photo mode closes
-//   write-world      changes the world around V (time of day, time flow)
+//   write-world      changes the world around V (time of day, time flow, XF map pins)
 //   write-character  changes V's appearance
 //   write-inventory  changes V's clothing and inventory (off in the bridge's config.ini until the maintainer approves it)
 //   write-save       makes a manual save or loads one
@@ -42,13 +42,17 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
   notify: {
     label: "Show messages in the game",
-    description: "Shows short messages to the player under the bridge's status label in the game. Changes nothing in the game; the messages fade by themselves.",
+    description:
+      "Shows short messages to the player under the bridge's status label in the game, and shows, hides or moves the bridge's own XF panel there. Changes nothing in the game; the messages fade by themselves.",
   },
   "write-photo": {
     label: "Control photo mode",
     description: "Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode.",
   },
-  "write-world": { label: "Change the world", description: "Changes the in-game time of day or stops time. Undo by setting it back." },
+  "write-world": {
+    label: "Change the world",
+    description: "Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins.",
+  },
   "write-character": {
     label: "Change V's appearance",
     description: "Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile).",
@@ -1283,6 +1287,26 @@ export const CATALOGUE: readonly CommandDef[] = [
     undo: "ui.message with clear: true; messages also fade by themselves.",
     bridge: { method: "ui.message" },
   },
+  {
+    name: "ui.hud",
+    title: "Show, hide or move the XF panel in the game",
+    description:
+      "Temporary test feature (bridge 0.5.3). The XF panel is drawn in the game's own HUD (ink, in the game's font and colours; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_right, bottom_left, bottom_right, top_center, center_left, center_right) with x and y (distance from that corner, in units of 1/2160 of the screen's height) places it; scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research: which of these stay visible in photo mode is being checked). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the Cyber Engine Tweaks status label. With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
+    permission: "notify",
+    input: obj({
+      show: bool("true shows the panel, false hides it."),
+      anchor: oneOf("The screen corner or edge the panel sits against. Default top_right.", ["top_left", "top_right", "bottom_left", "bottom_right", "top_center", "center_left", "center_right"]),
+      x: num("Horizontal distance from the anchor's edge, in 1/2160 of the screen's height (-4000 to 4000). Default 72.", -4000, 4000),
+      y: num("Vertical distance from the anchor's edge, in the same units. Default 300.", -4000, 4000),
+      scale: num("Size, 0.5 to 2.5. Default 1.", 0.5, 2.5),
+      layer: oneOf("Where the panel draws: hud (default), notifications or top (research).", ["hud", "notifications", "top"]),
+      nameplates: bool("Show each XF Finish Showroom head's preset name on its pedestal."),
+      cet_label: bool("Show the Cyber Engine Tweaks status label and message lines (top-left)."),
+      reset: bool("Go back to the configured settings (alone)."),
+    }),
+    undo: "the result's undo: ui.hud with the earlier settings.",
+    bridge: { method: "ui.hud" },
+  },
 
   // World
   {
@@ -1310,6 +1334,35 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj({ paused: bool("true freezes, false unfreezes.") }, ["paused"]),
     undo: "world.pause with paused: false; the kill switch also unfreezes.",
     bridge: { method: "world.pause" },
+  },
+  {
+    name: "world.pin",
+    title: "Place an XF map pin",
+    description:
+      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands above its eyes and follows it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and fallback icon it uses: custom (default), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.45 above a head or V). At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
+    permission: "write-world",
+    input: obj(
+      {
+        position: { type: "array", items: num("Metres."), minItems: 3, maxItems: 3, description: "A world point [x, y, z] in metres." },
+        piece: int("A showroom head's index (0 to 23), from showroom_state.", 0, 23),
+        at: oneOf("v: above where V stands now.", ["v"]),
+        label: str("The pin's name, 1 to 48 characters (longer is cut).", { minLength: 1, maxLength: 400 }),
+        variant: oneOf("The game's pin type it borrows its map filter and fallback icon from. Default custom.", ["custom", "apartment", "clothes", "default"]),
+        lift_m: num("Metres above the point (-5 to 5).", -5, 5),
+      },
+      ["label"],
+    ),
+    undo: "world.pin.clear with the result's id; the kill switch and loading a save also remove every XF pin.",
+    bridge: { method: "world.pin" },
+  },
+  {
+    name: "world.pin.clear",
+    title: "Remove XF map pins",
+    description: "Temporary test feature (bridge 0.5.3). Removes one XF map pin by the id world_pin answered, or every XF pin without an id.",
+    permission: "write-world",
+    input: obj({ id: int("The pin's id from world_pin; leave out to remove all.", 1, 1000000) }),
+    undo: "world.pin places a pin again.",
+    bridge: { method: "world.pin.clear" },
   },
 
   // XF Finish Showroom (bridge 0.5; the showroom write class, test profile only)

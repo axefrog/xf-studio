@@ -352,6 +352,14 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     state.pluginDir = win32::ModuleDirectory(reinterpret_cast<const void*>(&Load));
     state.config = LoadConfig(state.pluginDir / L"config.ini");
     log::SetMinLevel(state.config.logLevel);
+    {
+        // The ink HUD panel's starting settings (bridge 0.5.3, temporary test feature; ui.hud changes them).
+        inkui::HudSettings hud;
+        hud.show = state.config.hudPanel;
+        hud.cetLabel = state.config.cetLabel;
+        hud.nameplates = state.config.nameplates;
+        state.hud.SetDefaults(hud);
+    }
 
     state.gameProductVersion = SemVerText(aSdk->runtime);
     win32::FileVersion(win32::ProcessImagePath(), state.gameFileVersion);

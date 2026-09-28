@@ -55,6 +55,8 @@ public:
     Dispatcher& GetDispatcher();
     nlohmann::json Status() const;
     bool IsListening() const;
+    // Whether a client holds the pipe now (the ink HUD panel's status line, bridge 0.5.3).
+    bool HasClient() const;
 
 private:
     void Watch();

@@ -205,6 +205,11 @@ bool Bridge::IsListening() const
     return m_server.IsRunning() && !m_dispatcher.IsKilled();
 }
 
+bool Bridge::HasClient() const
+{
+    return m_server.HasClient();
+}
+
 json Bridge::Status() const
 {
     return json{{"enabled", m_config.bridgeEnabled},

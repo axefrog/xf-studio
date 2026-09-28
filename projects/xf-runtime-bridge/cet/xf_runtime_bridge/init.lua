@@ -45,6 +45,7 @@ local state = {
   sinceOptionsPoll = 0,
   sinceMessagesPoll = 0,
   messages = {},   -- ui.message lines: { {text, level}, ... }, oldest first (XFBridge_Messages)
+  cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame); the ink panel may replace it
   overlayOpen = false,
   cidCounter = 0,
   lastError = nil,
@@ -180,8 +181,13 @@ local function pollMessages()
   local bridge = state.info and state.info.bridge
   if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then
     state.messages = {}
+    state.cetLabel = true -- a stopped bridge always shows its red label (the panel's Reconnect is here)
     return
   end
+  -- Bridge 0.5.3 (temporary test feature): the ink HUD panel's frame says whether this label should show (cet_label). A plugin
+  -- without XFBridge_Hud (older builds) keeps the label.
+  local hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
+  state.cetLabel = not (hudOk and type(frame) == "string" and string.find(frame, "\ncet_label\t0\n", 1, true) ~= nil)
   local ok, text = pcall(function() return Game.XFBridge_Messages() end)
   if not ok or type(text) ~= "string" or text == "" then
     state.messages = {}
@@ -333,7 +339,7 @@ registerForEvent("onDraw", function()
 
   -- Always-visible indicator whenever the bridge is enabled: green while listening read-only,
   -- amber with writes on, red once killed. Never hidden while the bridge can be used.
-  if enabled and not state.overlayOpen then
+  if enabled and state.cetLabel and not state.overlayOpen then
     ImGui.SetNextWindowPos(12, 12, ImGuiCond.Always)
     local flags = bit32.bor(ImGuiWindowFlags.NoDecoration, ImGuiWindowFlags.NoInputs,
       ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoSavedSettings, ImGuiWindowFlags.NoFocusOnAppearing)
@@ -380,7 +386,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.5.2",
+  version = "0.5.3",
   -- For other CET mods: GetMod("xf_runtime_bridge").info()
   info = function() return state.info end,
 }

@@ -33,6 +33,12 @@ struct Config
     uint32_t maxRequestsPerSecond = 20;
     uint32_t idleDisconnectSeconds = 120;
 
+    // [ui] (bridge 0.5.3, temporary test features): the ink HUD panel (Demo A) shown at start, the CET layer's status label and
+    // message lines, and the showroom's pedestal nameplates (Demo B). ui.hud changes each while the game runs.
+    bool hudPanel = true;
+    bool cetLabel = true;
+    bool nameplates = true;
+
     // [log]
     Level logLevel = Level::Debug; // baseline is verbose by design; bounded by RED4ext rotation
 

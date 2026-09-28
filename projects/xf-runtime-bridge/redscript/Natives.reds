@@ -22,3 +22,7 @@ public static native func XFBridge_CreatorRedirect(state: String) -> String
 // calls into our scripts only between a session's player attach and its detach (session 5 crashed on a call made just
 // after a detach, while a save loaded).
 public static native func XFBridge_ScriptLayer(event: String) -> Bool
+// Bridge 0.5.3, temporary test feature: the ink HUD panel's frame (core/InkUi.hpp): its settings, the bridge's state, the
+// script gate and the ui.message lines as tab-separated records. The redscript overlay (XFRuntimeBridgeInk.reds) pulls it;
+// the plugin never calls into scripts for the panel.
+public static native func XFBridge_Hud() -> String

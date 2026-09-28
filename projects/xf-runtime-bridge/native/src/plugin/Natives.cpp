@@ -356,6 +356,21 @@ void ScriptLayerEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool*
     });
 }
 
+// XFBridge_Hud() -> String   (bridge 0.5.3, temporary test feature: the ink HUD panel's frame, core/InkUi.hpp: its settings,
+// the bridge's state, the script gate and the ui.message lines, one tab-separated record per line). Polled by the redscript
+// overlay a few times a second and by the CET layer for its cet_label switch; reads bridge bookkeeping only.
+void Hud(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    aFrame->code++; // skip ParamEnd
+    Guarded("XFBridge_Hud", [&] {
+        const auto text = HudFrame();
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(text.c_str());
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -396,7 +411,8 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_Messages", &Messages, "String", {});
         RegisterGlobal(rtti, "XFBridge_CreatorRedirect", &CreatorRedirectNative, "String", {"state"});
         RegisterGlobal(rtti, "XFBridge_ScriptLayer", &ScriptLayerEvent, "Bool", {"event"});
-        log::Info("rtti.register_types", "phase=post_register natives=12");
+        RegisterGlobal(rtti, "XFBridge_Hud", &Hud, "String", {});
+        log::Info("rtti.register_types", "phase=post_register natives=13");
     }
     catch (const std::exception& e)
     {

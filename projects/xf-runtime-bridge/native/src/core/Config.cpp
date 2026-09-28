@@ -163,6 +163,18 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseU32(value, 5, 3600, config.idleDisconnectSeconds);
         }
+        else if (key == "ui.hud_panel")
+        {
+            ok = ParseBool(value, config.hudPanel);
+        }
+        else if (key == "ui.cet_label")
+        {
+            ok = ParseBool(value, config.cetLabel);
+        }
+        else if (key == "ui.nameplates")
+        {
+            ok = ParseBool(value, config.nameplates);
+        }
         else if (key == "log.level")
         {
             ok = ParseLevel(Lower(value), config.logLevel);
@@ -224,6 +236,9 @@ std::string DescribeConfig(const Config& aConfig)
     text += " bridge.request_timeout_ms=" + std::to_string(aConfig.requestTimeoutMs);
     text += " bridge.max_requests_per_second=" + std::to_string(aConfig.maxRequestsPerSecond);
     text += " bridge.idle_disconnect_seconds=" + std::to_string(aConfig.idleDisconnectSeconds);
+    text += " ui.hud_panel=" + std::string(aConfig.hudPanel ? "true" : "false");
+    text += " ui.cet_label=" + std::string(aConfig.cetLabel ? "true" : "false");
+    text += " ui.nameplates=" + std::string(aConfig.nameplates ? "true" : "false");
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));
     text += " capture.root=" + (aConfig.captureRoot.empty() ? std::string("<default>") : std::string("<custom>"));
     return text;
