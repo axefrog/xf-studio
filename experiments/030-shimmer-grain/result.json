@@ -1,0 +1,401 @@
+{
+  "preset": "Shimmer · strong",
+  "window": {
+    "width": 2048,
+    "height": 512,
+    "texelMm": {
+      "u": 0.13,
+      "v": 0.1184
+    }
+  },
+  "framings": [
+    {
+      "id": "eye-close-up",
+      "mmPerPixel": 0.1
+    },
+    {
+      "id": "face-framing",
+      "mmPerPixel": 0.22
+    }
+  ],
+  "lights": {
+    "A": "8° off the normal (near mirror: the sheen)",
+    "B": "35° off, azimuth 30°",
+    "C": "35° off, azimuth 40°"
+  },
+  "asBuiltEqualsCompiler": false,
+  "variants": {
+    "as-built": {
+      "texture": {
+        "satin": {
+          "texels": 16625,
+          "tiltedShare": 0,
+          "meanTiltDeg": 0,
+          "meanGateOnTilted": 0,
+          "roughness": {
+            "mean": 0.3804,
+            "sd": 0
+          },
+          "metalness": {
+            "mean": 0,
+            "sd": 0
+          },
+          "patchHalfWidthTexels": 0,
+          "patchWidthMm": 0.13
+        },
+        "fine": {
+          "texels": 16625,
+          "tiltedShare": 0.3131,
+          "meanTiltDeg": 9.56,
+          "meanGateOnTilted": 0.641,
+          "roughness": {
+            "mean": 0.4287,
+            "sd": 0.0702
+          },
+          "metalness": {
+            "mean": 0.1107,
+            "sd": 0.156
+          },
+          "patchHalfWidthTexels": 4,
+          "patchWidthMm": 1.17,
+          "latticePitchTexels": {
+            "u": 17,
+            "v": 13
+          },
+          "latticeCorrelation": {
+            "u": 0.279,
+            "v": 0.234
+          }
+        },
+        "strong": {
+          "texels": 16625,
+          "tiltedShare": 0.3924,
+          "meanTiltDeg": 16.42,
+          "meanGateOnTilted": 0.92,
+          "roughness": {
+            "mean": 0.4201,
+            "sd": 0.0741
+          },
+          "metalness": {
+            "mean": 0.1299,
+            "sd": 0.1647
+          },
+          "patchHalfWidthTexels": 7,
+          "patchWidthMm": 1.95,
+          "latticePitchTexels": {
+            "u": 34,
+            "v": 27
+          },
+          "latticeCorrelation": {
+            "u": 0.359,
+            "v": 0.409
+          }
+        }
+      },
+      "eye-close-up": {
+        "lod": -0.24,
+        "stripes": {
+          "satin": {
+            "sheenA": 0.5087,
+            "litB": 0.1233,
+            "staticContrast": 0,
+            "litContrastB": 0,
+            "twinkle10deg": 0,
+            "patternWidthPx": 1
+          },
+          "fine": {
+            "sheenA": 0.3919,
+            "litB": 0.129,
+            "staticContrast": 0.17,
+            "litContrastB": 0.525,
+            "twinkle10deg": 0.049,
+            "patternWidthPx": 13
+          },
+          "strong": {
+            "sheenA": 0.2781,
+            "litB": 0.126,
+            "staticContrast": 0.186,
+            "litContrastB": 0.477,
+            "twinkle10deg": 0.124,
+            "patternWidthPx": 23
+          }
+        },
+        "sheenProfile": {
+          "lightOffNormalDeg": [
+            0,
+            8,
+            16,
+            24,
+            32
+          ],
+          "satin": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ],
+          "fine": [
+            0.4895,
+            0.3919,
+            0.2641,
+            0.2005,
+            0.1524
+          ],
+          "strong": [
+            0.2936,
+            0.2781,
+            0.2292,
+            0.1916,
+            0.1532
+          ]
+        }
+      },
+      "face-framing": {
+        "lod": 0.89,
+        "stripes": {
+          "satin": {
+            "sheenA": 0.5087,
+            "litB": 0.1233,
+            "staticContrast": 0,
+            "litContrastB": 0,
+            "twinkle10deg": 0,
+            "patternWidthPx": 1
+          },
+          "fine": {
+            "sheenA": 0.3934,
+            "litB": 0.1279,
+            "staticContrast": 0.157,
+            "litContrastB": 0.462,
+            "twinkle10deg": 0.039,
+            "patternWidthPx": 7
+          },
+          "strong": {
+            "sheenA": 0.2841,
+            "litB": 0.1265,
+            "staticContrast": 0.178,
+            "litContrastB": 0.443,
+            "twinkle10deg": 0.117,
+            "patternWidthPx": 9
+          }
+        },
+        "sheenProfile": {
+          "lightOffNormalDeg": [
+            0,
+            8,
+            16,
+            24,
+            32
+          ],
+          "satin": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ],
+          "fine": [
+            0.4902,
+            0.3934,
+            0.2658,
+            0.1986,
+            0.1492
+          ],
+          "strong": [
+            0.2999,
+            0.2841,
+            0.2324,
+            0.1907,
+            0.1521
+          ]
+        }
+      }
+    },
+    "grain": {
+      "texture": {
+        "satin": {
+          "texels": 16625,
+          "tiltedShare": 0,
+          "meanTiltDeg": 0,
+          "meanGateOnTilted": 0,
+          "roughness": {
+            "mean": 0.3804,
+            "sd": 0
+          },
+          "metalness": {
+            "mean": 0,
+            "sd": 0
+          },
+          "patchHalfWidthTexels": 0,
+          "patchWidthMm": 0.13
+        },
+        "fine": {
+          "texels": 16625,
+          "tiltedShare": 0.255,
+          "meanTiltDeg": 17.9,
+          "meanGateOnTilted": 1,
+          "roughness": {
+            "mean": 0.3216,
+            "sd": 0
+          },
+          "metalness": {
+            "mean": 0.302,
+            "sd": 0
+          },
+          "patchHalfWidthTexels": 0,
+          "patchWidthMm": 0.13,
+          "latticePitchTexels": {
+            "u": 17,
+            "v": 13
+          },
+          "latticeCorrelation": {
+            "u": -0.012,
+            "v": 0.001
+          }
+        },
+        "strong": {
+          "texels": 16625,
+          "tiltedShare": 0.3181,
+          "meanTiltDeg": 20.96,
+          "meanGateOnTilted": 1,
+          "roughness": {
+            "mean": 0.3216,
+            "sd": 0
+          },
+          "metalness": {
+            "mean": 0.302,
+            "sd": 0
+          },
+          "patchHalfWidthTexels": 0,
+          "patchWidthMm": 0.13,
+          "latticePitchTexels": {
+            "u": 34,
+            "v": 27
+          },
+          "latticeCorrelation": {
+            "u": 0.012,
+            "v": -0.004
+          }
+        }
+      },
+      "eye-close-up": {
+        "lod": -0.24,
+        "stripes": {
+          "satin": {
+            "sheenA": 0.5087,
+            "litB": 0.1233,
+            "staticContrast": 0,
+            "litContrastB": 0,
+            "twinkle10deg": 0,
+            "patternWidthPx": 1
+          },
+          "fine": {
+            "sheenA": 0.8063,
+            "litB": 0.1194,
+            "staticContrast": 0,
+            "litContrastB": 0.717,
+            "twinkle10deg": 0.057,
+            "patternWidthPx": 1
+          },
+          "strong": {
+            "sheenA": 0.7385,
+            "litB": 0.1254,
+            "staticContrast": 0,
+            "litContrastB": 0.969,
+            "twinkle10deg": 0.091,
+            "patternWidthPx": 1
+          }
+        },
+        "sheenProfile": {
+          "lightOffNormalDeg": [
+            0,
+            8,
+            16,
+            24,
+            32
+          ],
+          "satin": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ],
+          "fine": [
+            1.4668,
+            0.8063,
+            0.3545,
+            0.2059,
+            0.137
+          ],
+          "strong": [
+            1.3074,
+            0.7385,
+            0.3395,
+            0.2054,
+            0.1417
+          ]
+        }
+      },
+      "face-framing": {
+        "lod": 0.89,
+        "stripes": {
+          "satin": {
+            "sheenA": 0.5087,
+            "litB": 0.1233,
+            "staticContrast": 0,
+            "litContrastB": 0,
+            "twinkle10deg": 0,
+            "patternWidthPx": 1
+          },
+          "fine": {
+            "sheenA": 0.6269,
+            "litB": 0.1184,
+            "staticContrast": 0,
+            "litContrastB": 0.056,
+            "twinkle10deg": 0.003,
+            "patternWidthPx": 1
+          },
+          "strong": {
+            "sheenA": 0.5199,
+            "litB": 0.1197,
+            "staticContrast": 0,
+            "litContrastB": 0.093,
+            "twinkle10deg": 0.006,
+            "patternWidthPx": 1
+          }
+        },
+        "sheenProfile": {
+          "lightOffNormalDeg": [
+            0,
+            8,
+            16,
+            24,
+            32
+          ],
+          "satin": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ],
+          "fine": [
+            0.9309,
+            0.6269,
+            0.3254,
+            0.1938,
+            0.133
+          ],
+          "strong": [
+            0.7121,
+            0.5199,
+            0.3015,
+            0.1901,
+            0.1338
+          ]
+        }
+      }
+    }
+  }
+}

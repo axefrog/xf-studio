@@ -6,7 +6,7 @@ One page per finish that goes beyond a flat colour. Each records the intended lo
 |---|---|---|---|
 | Matte, Satin, Metallic | Exports (provisional values: roughness 1.0, 0.38 and 0.27, Metallic at metalness 0.65) | Flat `mesh_decal` | [source] route; [runtime] untested |
 | [Glossy / wet look](glossy.md) | **Experimental** export, game-matched model only | Flat `mesh_decal`, one low-roughness lobe | [source]; look [hypothesis] |
-| [Shimmer / pearl](shimmer.md) | **Experimental** export, game-matched model only | `mesh_decal` + facet normals, `NormalsBlendingMode` 1, variance-widened roughness mips | [source]; look [hypothesis] |
+| [Shimmer / pearl](shimmer.md) | **Experimental** export, game-matched model only | `mesh_decal`: a uniform pearly surface (roughness 0.32, metalness 0.3) + a one-texel grain of tilted normals, `NormalsBlendingMode` 1, variance-widened roughness mips ([experiment 030](../../../experiments/030-shimmer-grain/README.md)) | [source]; look [hypothesis]; the facet bake it replaced was a static dot grid in game [runtime] |
 | [Colour-shifting](colour-shifting.md) | **Experimental** export, game-matched model, one pigment per preset | `mesh_decal_gradientmap_recolor_blendable` with an additive Fresnel colour | [source]; colour encoding and look [hypothesis] |
 | [Glitter](glitter.md) | Preview only | Proposed, not built: resolved glint flakes in `mesh_decal` through a plate-local UV window with nested flake mips; emissive accent as fallback | [source] route; mips [offline]; look [hypothesis] |
 
