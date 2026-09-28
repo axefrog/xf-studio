@@ -1,9 +1,10 @@
 import { parseScrollAnchor, type ScrollAnchor, type UIPreferenceAction } from "../ui-preferences";
 
 /**
- * View state (style guide "Remembered view state"): what a person folded or opened, and where each scroll container was, remembered
- * across reloads. Presentation state, never Undo, never part of a saved layout: it is the workspace's (the `expanded` and `scroll` UI
- * preferences, so a verification workspace keeps its own), per panel, whichever layout is showing.
+ * View state (style guide "Remembered view state"): what a person folded or opened, where each scroll container was, and the height
+ * each resizable region was given, remembered across reloads. Presentation state, never Undo, never part of a saved layout: it is the
+ * workspace's (the `expanded`, `scroll` and `sizes` UI preferences, so a verification workspace keeps its own), per panel, whichever
+ * layout is showing.
  *
  * Every foldable control and remembered scroll container has a stable **view key**: a namespace (a panel or feature id), a colon or
  * dot, then its own path (`character:row:head/hair`, `expressions.mouth`, `panel:character`). The library's components read and write
@@ -11,6 +12,7 @@ import { parseScrollAnchor, type ScrollAnchor, type UIPreferenceAction } from ".
  *
  * - `GroupSection` remembers its open state under its `key`; the Character panel's headings, rows and maker groups under `character:…`;
  *   a `TreeView`'s owner keeps its groups with a `RememberedSet`.
+ * - A `SizeBar` remembers the height the person dragged its region to under its `key` (`expressions:start-from`).
  * - A key that isn't shown yet (a mod not loaded) keeps its state until it shows again; the least recently set go first once a namespace
  *   or the whole store is over its bound.
  * - With no stored state a control opens as its own default says.
@@ -26,21 +28,28 @@ export interface ViewStateStore {
   folded(prefix: string): string[];
   anchor(key: string): ScrollAnchor | undefined;
   setAnchor(key: string, anchor: ScrollAnchor | undefined): void;
+  /** The remembered height of a resizable region, in CSS pixels; undefined: none (its default applies). */
+  size(key: string): number | undefined;
+  setSize(key: string, height: number | undefined): void;
 }
 
 /** Session memory only (tests, the style guide, or before the shell binds the workspace's store). */
 export class MemoryViewState implements ViewStateStore {
   private readonly open = new Map<string, boolean>();
   private readonly anchors = new Map<string, ScrollAnchor>();
+  private readonly sizes = new Map<string, number>();
   expanded(key: string) { return this.open.get(key); }
   setExpanded(keys: readonly string[], open: boolean) { for (const key of keys) this.open.set(key, open); }
   folded(prefix: string) { return [...this.open].filter(([key, open]) => !open && key.startsWith(prefix)).map(([key]) => key); }
   anchor(key: string) { return this.anchors.get(key); }
   setAnchor(key: string, anchor: ScrollAnchor | undefined) { if (anchor) this.anchors.set(key, anchor); else this.anchors.delete(key); }
+  size(key: string) { return this.sizes.get(key); }
+  setSize(key: string, height: number | undefined) { if (height === undefined) this.sizes.delete(key); else this.sizes.set(key, Math.round(height)); }
 }
 
 type PreferencePort = {
-  snapshot(): { readonly expanded?: { readonly [key: string]: boolean }; readonly scroll?: { readonly [key: string]: unknown } };
+  snapshot(): { readonly expanded?: { readonly [key: string]: boolean }; readonly scroll?: { readonly [key: string]: unknown };
+    readonly sizes?: { readonly [key: string]: number } };
   capability(action: UIPreferenceAction): { available: boolean };
   dispatch(action: UIPreferenceAction): void;
 };
@@ -55,6 +64,7 @@ export class PreferenceViewState extends MemoryViewState {
     const stored = preferences.snapshot();
     for (const [key, open] of Object.entries(stored.expanded ?? {})) super.setExpanded([key], open);
     for (const [key, anchor] of Object.entries(stored.scroll ?? {})) super.setAnchor(key, parseScrollAnchor(anchor));
+    for (const [key, height] of Object.entries(stored.sizes ?? {})) super.setSize(key, height);
   }
   override setExpanded(keys: readonly string[], open: boolean) {
     const changed = keys.filter(key => this.expanded(key) !== open);
@@ -66,6 +76,12 @@ export class PreferenceViewState extends MemoryViewState {
     if (JSON.stringify(this.anchor(key)) === JSON.stringify(anchor)) return;
     super.setAnchor(key, anchor);
     this.write({ kind: "scroll.set", key, ...(anchor ? { anchor } : {}) });
+  }
+  override setSize(key: string, height: number | undefined) {
+    const next = height === undefined ? undefined : Math.round(height);
+    if (this.size(key) === next) return;
+    super.setSize(key, next);
+    this.write({ kind: "size.set", key, ...(next !== undefined ? { height: next } : {}) });
   }
   private write(action: UIPreferenceAction) {
     try { if (this.preferences.capability(action).available) this.preferences.dispatch(action); } catch { /* View state is best effort. */ }

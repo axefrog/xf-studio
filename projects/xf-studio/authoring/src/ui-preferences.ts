@@ -20,12 +20,14 @@ export type TourRecord = "completed" | "skipped" | "declined";
  * (headings folded, open by default) is read into it. Presentation state, never Undo; per workspace, independent of saved layouts.
  * `scroll`: each remembered scroll container's anchor (scroll-anchor.ts): the element at its top edge and how far it is scrolled past,
  * by the container's view key (e.g. `panel:character`), least recently set first. Presentation state, never Undo.
+ * `sizes`: the height each resizable region (a list, tree or scroll region with a size bar, components/size-bar.ts) was given, in CSS
+ * pixels, by its view key (e.g. `expressions:start-from`), least recently set first; absent: its default. Presentation state, never Undo.
  * `layouts`: the saved layouts (layout-library.ts, view-graph-design.md §4.5); `layout` is the active one's live arrangement. Absent until
  * the person first saves, renames or otherwise changes a layout.
  */
 export type UIPreferences = { schema: "xfs/ui-preferences-1"; theme: ThemePreference; inputHints: boolean; layout?: DockLayout;
   tours?: Record<string, TourRecord>; researchTools?: boolean; modules?: Record<string, boolean>; expanded?: Record<string, boolean>;
-  scroll?: Record<string, ScrollAnchor>; layouts?: LayoutLibrary;
+  scroll?: Record<string, ScrollAnchor>; sizes?: Record<string, number>; layouts?: LayoutLibrary;
   /**
    * The grid size of choice pictures per feature type (choice-previews-design.md §7.1: `s`, `m`, `l`), by the picture kind
    * (choice-preview.ts `PreviewKind`, e.g. `hair`); absent: the type's default. Presentation state, never Undo.
@@ -60,6 +62,8 @@ export type UIPreferenceAction =
   | { kind: "layout.set"; layout?: DockLayout }
   | { kind: "expanded.set"; keys: readonly string[]; expanded: boolean }
   | { kind: "scroll.set"; key: string; anchor?: ScrollAnchor }
+  /** `height` absent: back to the region's default. */
+  | { kind: "size.set"; key: string; height?: number }
   | { kind: "choiceSize.set"; type: string; size: ChoiceSize }
   /** `type` null: the panel-wide default (clearing every type's override). */
   | { kind: "choiceLayout.set"; type: string | null; layout: ChoiceLayout }
@@ -82,6 +86,9 @@ const moduleId = (value: unknown): value is string => typeof value === "string" 
 const MAX_EXPANDED_PER_NAMESPACE = 192;
 const MAX_EXPANDED = 512;
 const MAX_SCROLL = 64;
+const MAX_SIZES = 64;
+/** A remembered region height: whole CSS pixels in a sane range (the region clamps it to what fits). */
+const regionHeight = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 16 && (value as number) <= 8000;
 const MAX_NEAR = 4;
 const MAX_OFFSET = 1_000_000;
 const MAX_CHOICE_TYPES = 32;
@@ -236,6 +243,11 @@ export function parseUIPreferences(value: unknown): UIPreferences {
       const scroll = remember<ScrollAnchor>(undefined, anchors, MAX_SCROLL, MAX_SCROLL);
       if (scroll) result.scroll = scroll;
     }
+    if (candidate.sizes && typeof candidate.sizes === "object" && !Array.isArray(candidate.sizes)) {
+      const heights = Object.entries(candidate.sizes).filter((entry): entry is [string, number] => viewKey(entry[0]) && regionHeight(entry[1]));
+      const sizes = remember<number>(undefined, heights, MAX_SIZES, MAX_SIZES);
+      if (sizes) result.sizes = sizes;
+    }
     if (candidate.choiceSizes && typeof candidate.choiceSizes === "object" && !Array.isArray(candidate.choiceSizes)) {
       const sizes = Object.entries(candidate.choiceSizes).filter(([type, size]) => choiceType(type) && choiceSize(size)).slice(0, MAX_CHOICE_TYPES);
       if (sizes.length) result.choiceSizes = Object.fromEntries(sizes) as Record<string, ChoiceSize>;
@@ -288,6 +300,8 @@ export class UIPreferenceActions {
       return { available: false, reason: "Choose which headings open or fold, and which way." };
     if (action.kind === "scroll.set" && (!viewKey(action.key) || (action.anchor !== undefined && !parseScrollAnchor(action.anchor))))
       return { available: false, reason: "A scroll position needs its place and a bounded position." };
+    if (action.kind === "size.set" && (!viewKey(action.key) || (action.height !== undefined && !regionHeight(action.height))))
+      return { available: false, reason: "A remembered height needs its place and a size in whole pixels." };
     if (action.kind === "choiceSize.set") {
       if (!choiceType(action.type) || !choiceSize(action.size)) return { available: false, reason: "Choose a feature type and Small, Medium or Large." };
       if (!Object.hasOwn(this.value.choiceSizes ?? {}, action.type) && Object.keys(this.value.choiceSizes ?? {}).length >= MAX_CHOICE_TYPES)
@@ -340,6 +354,9 @@ export class UIPreferenceActions {
     } else if (action.kind === "scroll.set") {
       const scroll = remember(this.value.scroll, [[action.key, action.anchor && parseScrollAnchor(action.anchor)]], MAX_SCROLL, MAX_SCROLL);
       if (scroll) this.value.scroll = scroll; else delete this.value.scroll;
+    } else if (action.kind === "size.set") {
+      const sizes = remember(this.value.sizes, [[action.key, action.height]], MAX_SIZES, MAX_SIZES);
+      if (sizes) this.value.sizes = sizes; else delete this.value.sizes;
     }
     else {
       const layout = action.layout === undefined ? undefined : parseDockLayout(action.layout)!;
