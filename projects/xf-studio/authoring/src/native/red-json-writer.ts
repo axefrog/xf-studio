@@ -145,7 +145,23 @@ class JsonWriter {
         CruidDict: parsed.cruidDict, Chunks: this.at("Data", () => this.at("Chunks", () => this.list(parsed.chunks, chunk => this.object(chunk)))) } };
     if (parsed?.kind === "cr2w-list")
       return { ...head, Type: "CR2WList", Data: { Files: this.at("Data", () => this.at("Files", () => this.list(parsed.files, file => this.file(file)))) } };
+    if (parsed?.kind === "data") return { ...head, Type: parsed.type, Data: this.at("Data", () => this.plain(parsed.data)) };
     return { ...head, Bytes: this.options.buffers === "trim" ? { $trimmedBase64Length: base64Length(buffer.memSize) } : Buffer.from(buffer.bytes()).toString("base64") };
+  }
+
+  /** Plain JSON data (a parsed buffer's), counted against the JSON budget and copied so the document owns it. */
+  private plain(value: unknown): unknown {
+    if (Array.isArray(value)) { this.session.jsonNodes(value.length); return value.map(item => this.plain(item)); }
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value);
+      this.session.jsonNodes(entries.length);
+      this.session.enter();
+      const out: Record<string, unknown> = {};
+      for (const [key, item] of entries) out[key] = this.plain(item);
+      this.session.leave();
+      return out;
+    }
+    return value;
   }
 
   private list<T>(items: readonly T[], write: (item: T) => unknown): unknown[] {
