@@ -153,7 +153,7 @@ What this recipe does not yet cover: dialogue with voiced NPCs in the world (sce
 | **Request and response** | Graph sets `…_action_… = 1` and pauses until it is 0; script's listener computes, writes result facts, resets the request; graph branches on the result | [resource] Eviction Notice `glen_delivery.questphase` #105-#106, #113-#115; [source] `ENRentSystemBase.reds:620-660` |
 | **Readiness gate** | Scripts set `…_system_running = 1` at start; the root phase waits for all of them before starting sub-phases | [resource] Eviction Notice `new_game_experience.questphase` #7-#11, #54 |
 | **Debug trace** | Graph writes numbered values to a debug fact; script logs them | [resource] same, #40-#45 |
-| **Quest → entity events** | A quest sends a named `ActionEvent` to an entity; an `@addMethod` handler on the entity's class receives it | [source] Lizzie's Braindances `NPCPuppet.reds:57-106` |
+| **Graph → entity events** | A named `ActionEvent` sent to an entity lands on an `@addMethod` handler of its class; Lizzie's Braindances receives such events on its performers (which of its graphs sends them was not read) | [source] Lizzie's Braindances `NPCPuppet.reds:57-106`; sender [hypothesis] |
 | **Game-state gate** | Script refuses to start story beats before the prologue ends, after the point of no return, as Johnny (`PlayerPuppet.IsReplacer`), in cyberspace or fury, and when `PlayerStateMachine.SceneTier` is above 2 | [source] Dark Future `Services/DFGameStateService.reds` |
 | **Game-time clock** | `TimeSystem.RegisterListener(entity, event, GameTime, repeat)` delivers an event at a game time (vanilla passes `-1` to repeat, `1` for once); `DelaySystem.DelayCallback(cb, seconds, affectedByTimeDilation)` for real-time intervals. Game time runs at `timeSystem.settings.realTimeMultiplier` (8.0) | [source] 2.31 `gameTimePrereq.script:39-43`; Eviction Notice `ENPropertyStateService.reds:158-162`; [resource] `time.tweak:5` |
 
@@ -175,7 +175,7 @@ The installed braindance mod plays ordinary scenes in real places and parametris
 
 1. The player picks a braindance and a cast in a menu; the menu writes **facts** for location, loops, music and each performer slot's character, appearance and flags [source] `MenuUIController.reds:3286-3306`.
 2. **Casting:** six fixed `Character.LizziesBDs_Performer*` records are rewritten with `TweakDBManager.SetFlat` (`entityTemplatePath`, `appearanceName`, `genders`, names, attitude) and `UpdateRecord`, so the scene's spawn-by-record actors become the chosen vanilla NPCs, V's cutscene rig or another mod's character [source] `MenuUIController.reds:3787-3848`.
-3. **Dressing:** quest `ActionEvent`s tell each performer to switch appearance (`ScheduleAppearanceChange`) [source] `NPCPuppet.reds:57-150`; **per-instance parts** are set by editing mesh components in `NPCPuppet.OnRequestComponents` before the entity streams [source] `NPCPuppet.reds:162-276`.
+3. **Dressing:** named `ActionEvent`s (sent, presumably, from its graphs [hypothesis]) tell each performer to switch appearance (`ScheduleAppearanceChange`) [source] `NPCPuppet.reds:57-150`; **per-instance parts** are set by editing mesh components in `NPCPuppet.OnRequestComponents` before the entity streams [source] `NPCPuppet.reds:162-276`.
 4. **Content packs** register extra characters through a `CustomCharacterLoaderEvent` handler [source] `Classes.reds:1081-1130`.
 
 ### 5.3 What player-made or generated braindances would need
