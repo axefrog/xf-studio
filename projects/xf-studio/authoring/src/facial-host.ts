@@ -519,6 +519,8 @@ export class FacialHost {
     const location = this.options.solver();
     if ("missing" in location) { entry.solver = { phase: "missing", reason: location.missing }; return; }
     const rig = entry.rigData!, inProcess = "inProcess" in location;
+    // XF Studio's own solver has its compiled face: the documents (the setup's is large) are needed only by the oracle's files.
+    if (inProcess && rig.compiled) rig.documents = undefined;
     if (inProcess && !rig.compiled && !this.options.spawn) {
       entry.solver = { phase: "failed", kind: "in-app", reason: "XF Studio's facial solver couldn't read V's facial setup, so the live face preview is off. Your expression is still saved with the look." };
       return;
@@ -590,6 +592,8 @@ export class FacialHost {
    * eyes' morph targets. Null, with the reason logged, when the face or the clip can't be read.
    */
   async blink(): Promise<FacialBlinkRecord | { reason: string }> {
+    // With the IO Suite oracle in use the whole face is the oracle's: the page reads the developer's prepared blink instead.
+    if (!("inProcess" in this.options.solver())) return { reason: ORACLE_BLINK };
     const entry = this.ensure();
     await entry.rigReady;
     const rig = entry.rigData;
@@ -879,6 +883,8 @@ export class FacialHost {
   }
 }
 
+/** The blink endpoint's answer while a developer uses the IO Suite oracle (the page then reads the prepared blink asset, if any). */
+const ORACLE_BLINK = "The facial solver oracle is in use, so the blink is the developer preparation's (XFS_PREPARED_MOTION=on serves it).";
 /** The closure slider's steps (21 solved instants from open to the clip's closed frame). */
 export const BLINK_STEPS = 20;
 /** Version of what the face bakes hold (the solver's rules and the record's shape); part of the idle face cache's key. */

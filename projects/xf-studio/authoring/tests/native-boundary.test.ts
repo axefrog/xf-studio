@@ -21,10 +21,12 @@ const HOST_ADAPTERS = ["anim-decode", "archive-reader", "mesh-decode", "native-d
  * the one resource WolvenKit 9.0.1 doesn't serialize, the game's cooked visual-tag preset (clothing-host.ts), and the native-first texture
  * and mesh exporters, which decode the character details' textures and meshes in workers of their own (native-texture-export.ts,
  * native-geometry-export.ts), the pose catalogue host, which asks the route's decoder for animation sets and samples a decoded clip
- * (pose-catalogue-host.ts; the decoding stays in the worker), and the Save Explorer's host sources, which hand the shipped engine type
- * list (`rtti-type-source`, pure data) to the saves endpoint (saves-host-sources.ts).
+ * (pose-catalogue-host.ts; the decoding stays in the worker), the Save Explorer's host sources, which hand the shipped engine type
+ * list (`rtti-type-source`, pure data) to the saves endpoint (saves-host-sources.ts), and the facial host's reading of the face skeleton,
+ * facial setup, clips and morph targets through the route's decoder (facial-native.ts; types only, the decoding stays in the worker).
  */
-const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "idle-host", "native-geometry-export", "native-texture-export", "pose-catalogue-host", "resolver-host", "saves-host-sources"];
+const ALLOWED_IMPORTERS: readonly string[] = ["clothing-host", "facial-native", "idle-host", "native-geometry-export", "native-texture-export", "pose-catalogue-host",
+  "resolver-host", "saves-host-sources"];
 /**
  * Host and page globals (code-scan.ts PAGE_GLOBALS, except that `document` is the red model's own word here, a decoded resource,
  * so only the DOM's members of it count).

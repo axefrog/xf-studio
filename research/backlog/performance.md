@@ -46,6 +46,7 @@
 | Cost | Measured | Candidate |
 |---|---|---|
 | WolvenKit geometry export on a cold V | ~17–27 s | **Done**: native mesh decoding ([native reader](native-archive-reader.md) phase 4); the default V's 18 meshes and morph targets decode in 1.75 s, and a cold preparation took 19.9–20.0 s against 56–63 s with WolvenKit's geometry export the same day |
+| The face's motion (the live expression, the idle's face, the blink) through the external IO Suite solver | A page-to-pose round trip of 5–8 ms, a cold first solve up to 38 ms, and Python on the computer (the desktop had none, so no face motion there) | **Done** (28 September 2026): XF Studio's own solver in the host ([spec §10.3](../animation/facial-solver-spec.md#103-performance-the-maintainers-machine-bun-142)): a solve 0.003–0.09 ms median (every control at 1: 0.032 ms, p99 0.051), compile 2.6 ms, the setup read natively in 40–60 ms; the idle's face (663 frames) solved and packed in about 0.2 s on first use, then cached; a live expression's round trip 4 ms warm (18–25 ms first) on a verification server |
 | Clothing factory `.csv` files on first use | 642 files, ~35 s through WolvenKit | native `C2dArray` decoding (PIPE-105) |
 | Texture decodes on a cold V | 11–16 s for 66 textures | already native; parallel workers or GPU transcoding if it becomes the longest stage |
 | Warm restart | ~5–6 s (open 1.7 s, resolve 1–2 s) | persist the resolved graph and mount plan across restarts; start preparing the V before the page asks |

@@ -4,6 +4,8 @@
 import { describe, expect, test } from "bun:test";
 import { compileFacialRig, composeLocalPose, createFacialPose, ENVELOPE_NAMES, FacialSetupError, type FacialTrace, solveFace, solveFaceFrames,
   WEIGHT_EPSILON } from "../src/engines/facial-rig/solver";
+import { bakeClips, bakedRest, bakeFrames, bindFromRigMatrix, clipFrame, clipTimes, eyeShapeSeats, introFrames } from "../src/engines/facial-rig/bake";
+import { inAppSolver } from "../src/facial-host";
 
 type Q = [number, number, number, number];
 const quat = (axis: [number, number, number], radians: number): Q => {
@@ -243,3 +245,74 @@ describe("the facial solver on a synthetic setup", () => {
     expect(() => compileFacialRig(RIG, unordered)).toThrow("in order");
   });
 });
+
+describe("face bakes from the solver", () => {
+  const clip = (track: number, times: number[], values: number[], duration: number) => ({ duration, tracks: new Map([[track, { times, values }]]) });
+  test("a clip's frames: reference plus its values; moving joints only, local in glTF axes after the rest", () => {
+    const loop = clip(B, [0, 1], [0, 1], 1);
+    expect(clipTimes(1, 4)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    const frame = clipFrame(compiled, loop, 0.5);
+    expect(frame[B]).toBeCloseTo(0.5, 6); expect(frame[track("upperFace")]).toBe(1);
+    const times = clipTimes(1, 4), baked = bakeFrames(compiled, times.map(t => clipFrame(compiled, loop, t)), times);
+    expect(baked.joints).toEqual([1]);
+    const rest = bakedRest(compiled);
+    // The lid (joint 1) rests at (0.01, 0, 0.1) REDengine = (0.01, 0.1, 0) glTF; at b = 1 it moves 1 mm along REDengine X.
+    expect([...rest.local.subarray(10, 13)].map(v => +v.toFixed(6))).toEqual([0.01, 0.1, 0]);
+    const last = baked.local.subarray(4 * 7, 4 * 7 + 7);
+    expect(last[0]).toBeCloseTo(0.011, 7); expect(last[1]).toBeCloseTo(0.1, 7);
+    const shared = bakeClips(compiled, [{ frames: [clipFrame(compiled, loop, 0)], times: [0] }, { frames: [solveFrame({ d: 1 })], times: [0] }]);
+    expect(shared[0]!.joints).toEqual(shared[1]!.joints);
+    expect(shared[0]!.joints).toEqual([2]);
+  });
+  test("a showcase before the loop: blended in, played, blended into the loop restarting underneath, then one wrapped pass of the loop", () => {
+    const loop = clip(B, [0, 2], [0, 1], 2), intro = clip(D, [0, 1], [1, 1], 1);
+    const { frames, times } = introFrames(compiled, intro, loop, { rate: 4, blend: 0.5, loopFrom: 1.5 });
+    expect(times.at(-1)).toBeCloseTo(3.5, 9);
+    const at = (t: number) => frames[Math.round(t * 4)]!;
+    expect(at(0)[D]).toBe(0); expect(at(0.25)[D]).toBeCloseTo(0.5, 6); expect(at(0.5)[D]).toBe(1);
+    // The showcase ends at 1 s: the loop restarts there underneath and the showcase fades out by 1.5 s.
+    expect(at(1.25)[D]).toBeCloseTo(0.5, 6); expect(at(1.25)[B]).toBeCloseTo(0.125 / 2 * 1, 6);
+    expect(at(1.5)[D]).toBe(0); expect(at(1.5)[B]).toBeCloseTo(0.25, 6);
+    expect(at(3)[B]).toBeCloseTo(0, 6);
+  });
+  test("eye-shape seats: listed eye-region joints at their binds; unlisted joints on the eye joint follow it", () => {
+    const names = ["root", "l_J_eye_JNT", "l_J_eye_lid_up_root_1_JNT", "l_J_eye_brows_rowA_0_JNT", "jaw"];
+    const at = (x: number, y: number, z: number) => ({ Rotation: { i: 0, j: 0, k: 0, r: 1 }, Translation: { X: x, Y: y, Z: z, W: 0 }, Scale: { X: 1, Y: 1, Z: 1, W: 0 } });
+    const rig = compileFacialRig({ ...RIG, boneNames: names, boneParentIndexes: [-1, 0, 0, 0, 0],
+      boneTransforms: [at(0, 0, 0), at(0.03, -0.05, 1.7), at(0.03, -0.05, 1.7), at(0.02, -0.06, 1.75), at(0, -0.02, 1.6)] }, setup());
+    // A rig matrix is the inverse of the world bind: a joint at p has W = −p.
+    const moved = (x: number, y: number, z: number) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -x, -y, -z, 1];
+    const seats = eyeShapeSeats(bakedRest(rig), [255, 0, 0, 0, 3],
+      [{ name: "h091", region: "eyes", bones: ["l_J_eye_JNT", "jaw"], matrices: [moved(0.032, -0.05, 1.7), moved(0, -0.02, 1.6)] },
+       { name: "h092", region: "nose", bones: ["l_J_eye_JNT"], matrices: [moved(1, 1, 1)] }],
+      [{ name: "h091", region: "eyes", bones: ["l_J_eye_brows_rowA_0_JNT"], matrices: [moved(0.02, -0.061, 1.75)] }]);
+    expect(Object.keys(seats)).toEqual(["h091"]);
+    expect(Object.keys(seats.h091!).sort()).toEqual(["l_J_eye_JNT", "l_J_eye_brows_rowA_0_JNT", "l_J_eye_lid_up_root_1_JNT"]);
+    // glTF axes: (x, z, −y).
+    expect(seats.h091!.l_J_eye_JNT!.slice(0, 3).map(v => +v.toFixed(6))).toEqual([0.032, 1.7, 0.05]);
+    expect(seats.h091!.l_J_eye_lid_up_root_1_JNT!.slice(0, 3).map(v => +v.toFixed(6))).toEqual([0.032, 1.7, 0.05]);
+    expect(seats.h091!.l_J_eye_brows_rowA_0_JNT!.slice(0, 3).map(v => +v.toFixed(6))).toEqual([0.02, 1.75, 0.061]);
+    // A turned bind decomposes to its rotation: 90° about Z in REDengine is 90° about −Y... in glTF (0, −√½, 0, √½) up to sign.
+    const turned = bindFromRigMatrix([0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    expect(turned[3 * 4 + 3]).toBe(1);
+  });
+  test("the in-app solver speaks the solver protocol", async () => {
+    const solver = inAppSolver(compiled);
+    expect(await solver.ready).toMatchObject({ ok: true });
+    const answer = await solver.solve([solveFrame({ b: 1 }), solveFrame({})]);
+    const q = new Float32Array(Buffer.from(answer.q, "base64").buffer.slice(0));
+    expect(q.length).toBe(2 * 3 * 4);
+    expect(q[4 + 3]).toBeCloseTo(Math.cos(15 * Math.PI / 180), 6);
+    expect(q[12 + 7]).toBe(1);
+    solver.dispose();
+    expect(solver.exited).toBe(true);
+    await expect(solver.solve([solveFrame({})])).rejects.toThrow("stopped");
+    const broken = inAppSolver(() => compileFacialRig(RIG, {}));
+    expect(await broken.ready).toMatchObject({ ok: false });
+  });
+});
+function solveFrame(values: Record<string, number>) {
+  const v = compiled.referenceTracks();
+  for (const [name, x] of Object.entries(values)) v[compiled.trackIndex(name)]! += x;
+  return v;
+}

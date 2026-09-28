@@ -1,6 +1,6 @@
 # Static photo-mode expression editor: design
 
-**Status: phase 1 built (27 September 2026, claude/expressions-p1; [phase 1 status](#phase-1-status)); phases 2–5 are designs.** The two phase-0 bridge commands `face.rig.read` and `photo.expression.index` are built and tested offline (§7) and wait for the next session's [expression checks](../runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2). The maintainer confirmed the interaction (handles plus an all-controls drawer, sculpting later) and static expressions first.
+**Status: phase 1 built (27 September 2026, claude/expressions-p1; [phase 1 status](#phase-1-status)); phase 3 built (claude/expression-export); phase 5 built (28 September 2026, claude/facial-solver; [phase 5 status](#phase-5-status)); phases 2 and 4 are designs.** The two phase-0 bridge commands `face.rig.read` and `photo.expression.index` are built and tested offline (§7) and wait for the next session's [expression checks](../runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2). The maintainer confirmed the interaction (handles plus an all-controls drawer, sculpting later) and static expressions first.
 
 Facts come from the [facial expressions](../../knowledge/facial-expressions.md) and [facial animation](../../knowledge/facial-animation.md) knowledge pages, the [expressions evidence note](expressions-evidence.md), [the game's blink](game-blink.md), [photo mode from script](../../knowledge/photo-mode.md) and [runtime access](../../knowledge/runtime-access.md). Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[source]** engine, framework or tool source or decompiled scripts; **[resource]** extracted game or mod resources; **[wiki]** Modding Docs; **[runtime]** seen in the running game; **[offline]** measured or run here without the game; **[hypothesis]** not established. Anything without a grade is a **design choice**, and says so where it matters.
 
@@ -343,13 +343,23 @@ Built on 27 September 2026 in `claude/expressions-p1`. Nothing here has been com
 - **Links default by pair kind:** mirror pairs start linked, direction pairs (jaw and mouth shifts, gaze, neck turn and tilt, tongue, face gravity) start unlinked, since linking opposite directions cancels or crosses them. The design said "default true" for all.
 - **Eye shapes keep the base seat** (the idle's reading); the blink's per-shape seat is not applied to expressions yet.
 - **The main view shows the look's expression.** The view graph's scene node is where a per-view expression input would go (P3); until then the root feeds the one scene (`STUDIO_FACE_POSES` in `compose/renderers.ts`, combined by `combineFacePoses`).
-- **The solver is found** at `XFS_FACIAL_SOLVER` (localhost), XF Studio's tools folder (`io-suite/<pin>/`, where a consented download will put it) or a checkout beside the repository; Python at `XFS_PYTHON` or `python`. The desktop has no Python yet, so its preview says the solver isn't set up.
+- **The solver** was the pinned IO Suite run by Python until phase 5; XF Studio's own solver in the host replaced it (below), and the IO Suite stays a developer's parity oracle (`XFS_FACIAL_SOLVER_ORACLE=1`, localhost only).
 
 **Measured** (27 September, the maintainer's route, female head's own setup): the setup compiles in about 0.2 s; one solve takes 0.6–0.9 ms in the solver; a round trip from the page to the head's pose takes 5–8 ms median (5.7 ms over a scripted 30-step drag, max 6.3 ms) with a cold first solve up to 38 ms; the blink clip (31 frames) solves in about 11 ms. The host's JSON endpoint alone answers in about 3.5 ms. The design's "under about 30 ms" is met.
 
 **Platform extensions** (recorded in the [boundary assessment](../authoring/ui-architecture-boundary.md#open-work)): the facial pose sink on the scene host (`face`), generic feature form-control transactions, `facial` and `presets` on the presentation port and the feature view context, and sparse live-feature exports.
 
-**Left for later phases:** region handles (phase 2), export (phase 3), in-game proof (phase 4), the in-app solver (phase 5), the male head, eye-shape seats for expressions, a consented solver download for the desktop, and the component-library versions of four drawer pieces (a slider with numeric entry, a left/right pair control, a group expander, a search field).
+**Left for later phases:** region handles (phase 2), export (phase 3), in-game proof (phase 4), the male head, eye-shape seats for expressions, and the component-library versions of four drawer pieces (a slider with numeric entry, a left/right pair control, a group expander, a search field).
+
+## Phase 5 status
+
+Built on 28 September 2026 in `claude/facial-solver`, from the [clean-room specification](facial-solver-spec.md) (its §10 records the decisions and the parity). Nothing here has been compared with the game.
+
+- **Solver** `engines/facial-rig/solver.ts` (MIT, pure): `compileFacialRig`, `createFacialPose`, `solveFace` (no allocation), `solveFaceFrames`, `composeLocalPose`; the §7 alternatives as compile options. It matches the IO Suite on all 2,558 parity cases (3,456 frames) within 1.6 × 10⁻⁶ rad, 1.6 × 10⁻⁸ m and 1.6 × 10⁻⁷ on the processed tracks; a solve takes 0.003–0.09 ms.
+- **Reading** natively: the face skeleton and facial setup (the setup's baked tables and poses, [archive formats §13](../../knowledge/archive-format.md#13-facial-setups-facialsetup)), the blink and idle clips, the start points' animation sets and the morph targets' joint binds, WolvenKit per resource where the reader can't. The live preview needs only the game folder.
+- **The host solves** (`FacialHost`: `inAppSolver` behind the same solver protocol, so the page, the newest-wins scheduling and the inert and opposing-pair checks are unchanged). A live expression's round trip is 4 ms warm (18–25 ms for the first) on a verification server, against 5–8 ms through the IO Suite.
+- **The blink and the idle's face** are baked by the host on demand (`GET /api/facial/blink`, `GET /api/idles?face=<id>`, `xfs/face-motion-1` records), replacing the developer bakes; they equal them within 2 × 10⁻⁴ mm (`tools/facial-bake-oracle.ts`), and rendered side by side the native and IO Suite paths differ by more than 8 of 255 levels on at most 0.06 % of the view's pixels (`tools/facial-solver-look.ts`, private captures).
+- **Desktop.** The desktop app shows the idle's face, the blink and the live expression with no Python.
 
 ## Phase 3 status
 
