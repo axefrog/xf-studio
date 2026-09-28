@@ -244,7 +244,7 @@ By r457 and gh057, per its script headers. [Nexus](https://www.nexusmods.com/cyb
 
 ### Character Customization Anywhere
 
-By keanuWheeze, per the support link on its [Nexus page](https://www.nexusmods.com/cyberpunk2077/mods/3930). Its small Lua script showed how to open the character creator from anywhere, by redirecting the pause menu to the mirror's menu scenario, and led us to how the creator's Confirm and Back buttons finalise or discard a look. That it opens the creator in V's apartment, where the game reports a staged-gameplay scene tier, is why the XF Runtime Bridge accepts that tier when it opens the creator. Studied only.
+By keanuWheeze, per the support link on its [Nexus page](https://www.nexusmods.com/cyberpunk2077/mods/3930). Its small Lua script showed how to open the character creator from anywhere, by opening the pause menu and redirecting it to the mirror's menu scenario, which the XF Runtime Bridge now does the same way in its own script, and led us to how the creator's Confirm and Back buttons finalise or discard a look. That it opens the creator in V's apartment, where the game reports a staged-gameplay scene tier, is why the XF Runtime Bridge accepts that tier when it opens the creator. Studied only.
 
 ### CharLi – Character Lighting Suite for Photomode
 
