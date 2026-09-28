@@ -20,8 +20,10 @@ This page answers: *what can a bridge do by itself in photo mode and the creator
 | Photo Mode Unlocker XL (Nexus 4319), Portrait Enhancer for Photo Mode (8237) | 2.3.1, 2.2 | Photo-mode TweakDB flats: limits, restrictions, camera presets |
 | Photo Mode Pose Selector (32633), Photo Mode Preferences (32736), Customisable Photo Mode UI (32815) | 1.2.0, 0.1.1, 0.2 | Menu attributes, light selection, page sync, photo-mode ink tree |
 | Photomode NPCs Extended (18837), Photomode Facial Expression Mega Pack (7912), Multi Pose Pack Framework (4098) | 1.2, 2.1, 1.0 | Extra photo-mode characters, expressions and pose loading |
+| Hot-Sampled Photomode Renders (IGPT, Nexus 26318; RED4ext plugin `InGamePhotomodeTweaks`) | 0.1.4 | Rendering captures above screen resolution (§12); a string search of its DLL, no source |
+| REDmod TweakDB source `tools/redmod/tweaks/base/gameplay/static_data/photomode.tweak` | 2.31 | Photo-mode camera limits, defaults, effect ranges |
 
-Installed-mod citations give paths inside each mod's folder in the mod manager (for MO2, `mods/<mod name>/`). Nothing was extracted from any archive. Who made each mod and what it taught us is in the [community credits](../docs/community-credits.md).
+Installed-mod citations give paths inside each mod's folder in the mod manager (for MO2, `mods/<mod name>/`). Nothing was extracted from any archive. Who made each mod and what it taught us is in the [community credits](../docs/community-credits.md). The per-mod deep dive of the photo-mode mods (hooks, bugs, conflicts with the bridge) is [survey batch B3](../research/mod-ecosystem/b3-photo-mode.md); §11-§13 distil it.
 
 ## 1. The short answers
 
@@ -34,6 +36,7 @@ Installed-mod citations give paths inside each mod's folder in the mod manager (
 | Can photo-mode lights be switched and moved? | **Switched and shaded, yes:** attribute 44 is on/off (seen in the first session's menu dump; switching it from script is built but untested). **Moved, not through the menu.** Spawned light entities, as CharLi and AMM use, can be placed exactly (§5). | [runtime] menu; [source] |
 | Can the photo-mode mouse cursor be hidden? | **Yes:** make the cursor controller play its `Hide` context, as AMM does (§6). | [source] |
 | Can a scripted creator change update the row's label? | **Yes:** drive the change through the row's own controller, or push the updated option back into it (§7). | [source] |
+| Can a capture be rendered above screen resolution, without the menu? | **The engine has the renderer for it:** its screenshot request takes a resolution preset, a ×1/×2/×4 multiplier, forced LOD0, PNG or EXR and render-debug view modes, and IGPT drives it from a plugin; its output has no UI and no ReShade. Reaching it ourselves needs the engine entry point (§12). | request fields [source]; IGPT's use [source] [resource]; no UI [hypothesis] |
 
 ## 2. Opening photo mode
 
@@ -293,6 +296,58 @@ Photo Mode Ex stores `alternativeControls`, `snapToTerrain` and `depthOfField` p
 
 **Recommendation.** Freeze with individual time dilation, which is scoped to one character, already works in a published mod, and releases by name. Hold an exact direction by restoring look-at part and angles after the pose settles (§9.3). Keep the global option only as a fallback behind a settings guard: read the original value, apply only while photo mode is open, and restore the original on exit, save load, CET reload or shutdown, session end and the kill switch.
 
+## 11. The native photo-mode system: lifecycle, attributes and placement
+
+### 11.1 Lifecycle
+
+| Native step | What is true at that point | Grade |
+|---|---|---|
+| `PhotoModeSystem::Activate` | Characters are being registered; Photo Mode Ex registers its extra NPCs and fetches its per-save state here | [source] Photo Mode Ex `PhotoModeExService.cpp:247-273` |
+| `PhotoModeSystem::Finalize` | Attributes exist: Photo Mode Ex writes its saved rows with `SetAttributeValue(…, apply = false)` | [source] `:276-282` |
+| The menu's `OnShow` | Script mods start here, but the menu is still setting up rows: Photo Mode Preferences waits 3 frames and 0.05 s before its first write | [source] PMP `init.lua:699-705` |
+| `PhotoModeSystem::Deactivate` | Before the stand-ins go | [source] `:285-291` |
+
+A plugin that needs "photo mode is ready" can hook after `Finalize`; none of the three is an entry point that opens photo mode (§2).
+
+### 11.2 Three layers for reading and writing an attribute
+
+| Layer | Read | Write | Grade |
+|---|---|---|---|
+| Menu row (script) | `GetMenuItem(key).GetSliderValue()` / `GetSelectedOptionIndex()` | `GetMenuItem(key).ForceValue(value, true)`; fallback the native event `OnForceAttributeVaulue(key, value, true)` (misspelt in the game) | [source] Photo Mode Pose Selector `init.lua:628-655, 787-811` |
+| Menu controller (native, script-visible) | Observe `OnAttributeUpdated(key, value, doApply)`; each row's range and step from `OnSetupScrollBar`/`OnSetupHueBar` | `OnAttributeUpdated(key, value, doApply)`, which a row calls on every change | [source] 2.31 `photoModeMenuController.script:128`; Photo Mode Ex `scripts/Overrides/PhotoModeMenuListItem.reds` |
+| System (native only) | `GetAttributeValue(system, key, float&)` | `SetAttributeValue(system, key, value, apply)`; the system then runs `ProcessAttribute(key)` | [source] Photo Mode Ex `src/Red/PhotoMode.hpp:112-122` |
+
+- **Exposure (attribute 10) is raw ±2.2, step 0.022; the menu shows −100 to 100.** Every effect row takes its range from a `photo_mode.postFX` flat and its step as range / 100: `brightness_range` 2.2 (exposure), `contrast_range` 0.2, `highlights_range` 0.75, `chromatic_aberration_range` 2.0, `grain_max` 1.0 [resource] `photomode.tweak:180-194`; Photo Mode Preferences' fallback steps agree [source] PMP `init.lua:126-133`. So `raw = shown × range / 100`, and a wider exposure range needs only that flat. The unit (stops?) is not established [hypothesis].
+- **Defaults are flats:** `photo_mode.camera.default_fov` 60, `photo_mode.attributes.dof_aperture_default` 4 and `dof_focus_dist_default` 8; `photo_mode.general.force_lod0_characters_dist` 50 m and `force_lod0_vehicles_dist` 80 m force full detail near the camera [resource] `photomode.tweak:74-75, 113, 165-178`. AMM rewrites the first two in CET's `onTweak`, as TweakDB loads [source] AMM `init.lua:776-822`.
+- **Order and waits.** Set child rows before the switch that enables them (focal distance, aperture, autofocus, then depth of field; the colour-balance values, then colour balance), with 2 frames and 0.03 s between stages; lights as §5.1 [source] PMP `init.lua:699-838`.
+- **Another writer may be running.** Photo Mode Preferences re-applies its saved values after every open (full collision off by default), finishing about 10 frames later when lights are included; a write in that window can be overwritten, so wait or read back [source] PMP `init.lua:137, 640-838`.
+
+### 11.3 How photo mode places a stand-in, and what Photo Mode Ex changes
+
+- **Transforms are written only when flagged.** Each `PhotoModeCharacter` (0x190 bytes) holds its spawn position and orientation, `relativePosition`, relative rotation and offsets, and an `updateTransform` flag that attribute processing sets and `ApplyPuppetTransforms` consumes [source] Photo Mode Ex `src/Red/PhotoMode.hpp:13-77`, `PhotoModeExService.cpp:512-548, 600-720`. So a stand-in moved with `TeleportationFacility.Teleport` stays put until the next menu change for it. **AMM relies on this:** it moves stand-ins by teleport and, after any menu arrow click (`PhotoModeMenuListItem.StartArrowClickedEffect`), watches them for ten ticks and teleports back any the menu moved [source] AMM `init.lua:406-426`, `Modules/tools.lua:776-837, 2243-2262`. Whether the camera, which moves under input every frame, behaves the same is what `photo.camera.place`'s `held` tests [hypothesis]; test it across a menu change too.
+- **Photo Mode Ex changes placement for every tool, whenever it is installed** [source] `PhotoModeExService.cpp:56-65, 406-450, 550-598, 973-975`:
+  - the ground offset is always 0 and position adjustment a plain sum;
+  - V's and NPCs' placement rows are always ±5 m (its clamp `min(max(min, −1), −5)` is −5 whatever the flat says, so Photo Mode Unlocker XL's wider `max_position_adjust` never applies); this is the ±5 m the framer ran into in session 3;
+  - with its default "alternative" control scheme (row 3401, on unless the save turned it off), left/right and forward follow **V's spawn orientation** and the native `SyncRelativePosition` is skipped. That explains session 3's placement axes that stayed fixed in the world while V's rotation changed [runtime] session 3; the explanation [source]. NPCs then spawn at V's spawn transform, ±0.75 m to the side or 0.75 m forward by slot.
+- **The camera's own limits:** `photo_mode.camera` distance ±40 m, pitch −55° to 70°, up/down and left/right 50 m, FOV 5-90° (widened by Photo Mode Unlocker XL and AMM) [resource] `photomode.tweak:81-163`.
+- **The photo-mode system's slots:** edit slot at `+0x36C`, spawn slot `+0x370`, the three spawned NPCs at `+0x1D0`; Photo Mode Pose Selector's native helper reads the first and the third to find the exact NPC stand-in being edited [source] Photo Mode Ex `PhotoMode.hpp:91-98`; [resource] byte search of `PMPSPhotoTargetBridge.dll`. These offsets move with game patches.
+
+## 12. Rendering above screen resolution
+
+- **The engine's screenshot request** (`rendSingleScreenShotData`) carries `mode` (`rendScreenshotMode`: `NORMAL` 1, `HIGH_RESOLUTION` 5, layered variants), `resolution` (`rend::dim::EPreset`), `resolutionMultiplier` (×1, ×2, ×4), `forceLOD0`, `saveFormat` (`SF_PNG` 2, `SF_EXR` 32, both 34) and `emmModes`, an array of `EEnvManagerModifier` view modes that includes surface albedo, world and view normals, roughness, metalness, hair ID, depth and the multilayered masks [source] SDK `ad727771` `rend/SingleScreenShotData.hpp`, `rend/ScreenshotMode.hpp`, `ESaveFormat.hpp`, `EEnvManagerModifier.hpp`. Path tracing has separate ray and bounce counts for screenshots (`PathTracingSettings.rayNumberScreenshot`, `bounceNumberScreenshot`) [source] SDK `PathTracingSettings.hpp`.
+- **IGPT drives it from a plugin** [source] its `Scripts/IGPT.reds`; [resource] its DLL strings: settings that mirror those fields (base resolution 1280×720 to 3840×2160, ×1/×2/×4, "Force LOD0", PNG/EXR); a native `TakeFancyScreenshot(resolution, scale, format)` then `WaitForRender(format)` deferred through a Codeware callback event; a watcher that takes the engine's file (named from `HIGH_RES_EMM_None`) from the temporary folder and renames it `photomode_DDMMYYYY_HHMMSS.png|exr` in the Pictures `Cyberpunk 2077` folder. The render blocks the game: IGPT patches the engine's two-minute watchdog for its duration, renders over about five minutes are lost, and it targets 2.31 with a ray-tracing GPU. It rebinds photo mode's Space (the vanilla `PhotoModeTakeScreenshot_HiRes`, F being the plain screenshot) to itself [resource] its `r6/input/InGamePhotomodeTweaks.xml`; game `inputUserMappings.xml:2092-2103`. Its engine entry point is not visible without disassembly.
+- **Why XF wants it:** the render has no menu, no mouse cursor and no ReShade (its description; the mechanism, that the engine renders the scene itself rather than copying the screen, is [hypothesis]), the three things the bridge's captures now work around (§6, [creator lighting](creator-lighting.md)). If the shipping renderer honours `emmModes`, one request could also return a face's albedo and normals for direct comparison with the Studio [hypothesis]. IGPT has no licence, so any bridge route is written from the SDK types and our own reverse engineering.
+
+## 13. Stand-ins beyond the menu
+
+| Lever | What it does | Grade |
+|---|---|---|
+| A workspot on the stand-in | AMM adopts the stand-in from `SetupInventory` and plays any workspot clip on it: spawn the pose's workspot entity at the stand-in turned 180°, `PlayInDeviceSimple(workspot, stand-in, false, component, n"AMM_WORKSPOT", …)`, `SendJumpToAnimEnt(stand-in, clip, instant)` | [source] AMM `init.lua:392-404`, `Modules/anims.lua:328-376` |
+| Freeze one character | §10.2; the release also runs on that character's category, pose or expression change, on `OnHide` and on CET shutdown | [source] Photo Mode Pose Selector `init.lua:329-409, 2660-2663, 2738-2747` |
+| Show or hide makeup and earrings | `FindComponentByName(name):Toggle(bool)` on the stand-in: `hx_000_pwa__basehead_makeup_lips_01` (the male lips makeup has the generated name `MorphTargetSkinnedMesh1265`), `hx_000_<pwa|pma>__basehead_makeup_eyes_01`, `i1_000_<pwa|pma>__morphs_earring_01`…`04`, and every `*seamfix*` component. An in-game A/B switch for a decal | [source] AMM `Modules/tools.lua:468-530` |
+| NPC look-at and expression rows | NPC look-at mode 58 and body part 78 (V: 15 and 74), NPC expression 56, character selector 68 | [source] Photo Mode Pose Selector `init.lua:1-12` |
+| Keep V's look-at through pose changes | Re-apply the saved body part 3 frames and 0.05 s after a category, pose or character change | [source] Photo Mode Pose Selector `init.lua:2805-2828` |
+
 ## Open questions
 
 1. What does the native `TogglePhotoMode` handler call, and can a plugin call it safely? Does a posted key press (`photo.open` with `route: postmessage`, which never changes focus) reach the game? `SendInput` with focus does [runtime].
@@ -304,6 +359,9 @@ Photo Mode Ex stores `alternativeControls`, `snapToTerrain` and `depthOfField` p
 7. Does the system send `OnOptionUpdated` after an external `ApplyChangeToOption`, for any option type?
 8. Does a vanilla slot load restore look-at (74–77), expression and V's placement, or does the pose's own setup reset them? Does it find a moved pose by the stored clip name? Do 2.3x light slots keep light positions? What do the second `PhotoMode_Settings` array and `PhotoMode_OutfitWeather` hold? (The [snapshot design's session](../research/runtime/photo-snapshots-design.md#7-first-game-session-test-plan) answers these.)
 9. Is `LookAt/MaxIterationsCount` a float with default 3, and does 0.9 hold every character's look-at, NPCs and scenes included? Does following the world's time dilation freeze the stand-in's look-at without side effects on its pose changes?
+10. Does a teleported photo-mode camera survive a menu change (a camera row or preset), as teleported stand-ins survive until their own row changes (§11.3)?
+11. Which engine function takes a `rendSingleScreenShotData` request, can the bridge plugin call it on the main thread without IGPT's watchdog patch at ×1 or ×2, and does the shipping renderer honour `emmModes` other than `EMM_None` (§12)?
+12. What unit is the exposure attribute's raw value (a stop per unit?), and does widening `photo_mode.postFX.brightness_range` widen the row?
 
 ## Related pages
 
