@@ -52,14 +52,54 @@ json HudResult(json aScript);
 // undo when nothing changed or the earlier state is unknown.
 json PauseResult(json aScript);
 
-// world.time.set: the script's answer with its undo. Outside photo mode {before_total_seconds, ...}: the
-// undo restores that exact time (total_seconds). In photo mode (route "photo_time", 0.4.2) the clock is
-// photo mode's own time-of-day slider, {before_minutes, before_known, ...}: the undo sets the earlier time
-// again in hours and minutes (to the minute), or there is none when the earlier value is unknown.
+// world.time.set on the world's clock: the script's {before_total_seconds, ...} with an undo that restores
+// that exact time (total_seconds, target world).
 json TimeResult(json aScript);
+
+// world.time.set's route (0.5.1; RB-67, RB-70). In photo mode (phase photo_mode) the time is photo mode's own
+// time-of-day slider (attribute 70): refused with target world (the world's clock is set outside photo
+// mode), with total_seconds, and unless the photo write class is allowed (write_class_disabled: a photo-mode
+// setting, whatever class the method is registered under). Outside photo mode target photo is a no-op
+// (PhotoClosed: photo mode's time of day went with it, and its undo must never reach the world's clock, which
+// can trigger timed quest events); otherwise the world's clock.
+enum class TimeRoute
+{
+    World,
+    Photo,
+    PhotoClosed,
+};
+TimeRoute ChooseTimeRoute(const params::TimeRequest& aRequest, const std::string& aPhase, bool aPhotoClassAllowed);
+
+// The PhotoClosed answer: nothing changed, no undo.
+json PhotoClosedTimeResult(const std::string& aPhase);
+
+// Photo mode's time-of-day slider, as XFWorld.PhotoTimeSlider describes attribute 70: {seen, kind, label,
+// label_key, min, max}. PlanPhotoTime checks it is a time of day (a slider whose label or label key names a
+// time, RB-70, over a day's range: 0-24 hours or 0-1440 minutes) and converts the request into its unit.
+struct PhotoTimePlan
+{
+    double value = 0;          // what to set, in the slider's unit
+    double minutesPerUnit = 1; // 1 (minutes) or 60 (hours)
+    std::string label;
+};
+PhotoTimePlan PlanPhotoTime(const json& aSlider, const params::TimeRequest& aRequest);
+
+// The answer after XFPhoto.SetAttribute ({before, before_known, after, label}): minutes before and after,
+// and an undo in hours and minutes with target photo, or none when the earlier value is unknown.
+json PhotoTimeResult(const json& aSet, const PhotoTimePlan& aPlan);
 
 // photo.expression.set: the attribute result with an undo to the earlier expression, if known.
 json ExpressionResult(json aScript);
+
+// photo.expression.index's list check (0.5.1, RB-72). aList is XFPhoto.FaceIndexEntries' answer, {seen,
+// entries: [{data, table_index, table_index_by: "label" | "position", table_index_verified}]}: each
+// expression option's face table index, found by the option's name among the face records (verified) or,
+// when no single record matches, taken from the record at the option's list position (unverified: session 4
+// found position isn't the table index with an expression pack installed). Returns how the index stands:
+// "unlisted" (the caller passed unlisted; nothing checked), "label" (a verified index), or "position" (only an
+// unverified one matches, and the caller passed force). Throws unavailable (the list wasn't seen),
+// unverified_index (position only, without force) or bad_params (no option has that table index).
+std::string CheckFaceIndex(const params::ExpressionIndexRequest& aRequest, const json& aList);
 
 // photo.expression.index: the script's {target, index, menu_value, menu_value_known}. The face index
 // bypasses the menu, so the undo selects the menu's own expression again (photo.expression.set with
@@ -212,9 +252,10 @@ struct CreatorOpenOps
     // Game thread: the game's phase now (game.status's phase).
     std::function<std::string()> phase;
     // Game thread: withdraws a request that didn't open the screen in time. Answers
-    // {withdrawn: true} when the request was still waiting (nothing can open now), {taken: true} when
-    // the menu had already picked it up (the screen may still be opening), or {} when the game
-    // couldn't say (the cancel itself failed).
+    // {withdrawn: true} when the request was still waiting (the screen can't open now; with
+    // pause_menu_may_open: true, its pause-menu event was raised, so the pause menu may open as usual),
+    // {taken: true} when the menu had already picked it up (the screen may still be opening), or {} when
+    // the game couldn't say (the cancel itself failed).
     std::function<json()> cancel;
     std::function<void(std::chrono::milliseconds)> sleep;
 };
@@ -226,12 +267,33 @@ struct CreatorOpenOps
 //  - Anything that throws once open() has started (open itself, a phase poll) withdraws the request
 //    before the error goes back (RB-43), and says whether the withdrawal worked.
 //  - On a timeout the request is withdrawn. Only when the withdrawal says the request was still
-//    waiting is the answer creator_open_timeout ("nothing opened"). When the menu had already taken
+//    waiting is the answer creator_open_timeout (the screen won't open). When the menu had already taken
 //    it, the phase is polled a little longer (kCreatorLateOpen) and a late screen counts as opened;
 //    otherwise, or when the game couldn't say, the answer is creator_open_uncertain, which tells the
 //    caller to check the phase and use cc.back (RB-42).
+//  - A request withdrawn while still waiting had its pause-menu event raised in the same step, so the
+//    withdrawal answers pause_menu_may_open and the error says the pause menu may open as usual (RB-69).
 inline constexpr int32_t kCreatorLateOpenMs = 2000;
 json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOps& aOps);
+
+// cc.open's pause-menu redirect (the script's MenuScenario_PauseMenu.OnEnterScenario wrap asks through the
+// native XFBridge_CreatorRedirect; RB-69, RB-75). aState is {pending, age_s, prev, refused, withdrawn_age_s}:
+// whether a bridge request waits, its age in seconds of engine time, the scenario the pause menu came from,
+// whether the moment no longer allows it, and seconds since a waiting request was withdrawn (-1 none).
+// The answer:
+//  - "redirect": a request at most kCreatorRedirectWindowS old, the pause menu entered from normal play
+//    (kCreatorRedirectFrom) and the moment still right: switch to the mirror's scenario.
+//  - "foreign": a request waits, but the pause menu came from another scenario (the credits picker, the debug
+//    hub): the pause menu opens as usual and the request keeps waiting.
+//  - "expired": older than the window, negative (an engine-time reset) or not a number: taken, pause menu.
+//  - "refused": fresh but the moment passed (combat, a scene, a vehicle, not V): taken, pause menu.
+//  - "withdrawn": no request, but one withdrawn within the window after its event was raised, from normal
+//    play: the pause menu opens as usual, logged.
+//  - "none": the pause menu opens as usual.
+// Anything the script doesn't recognise (an empty answer when the native fails) also opens the pause menu.
+inline constexpr double kCreatorRedirectWindowS = 3.0;
+inline constexpr const char* kCreatorRedirectFrom = "MenuScenario_Idle";
+std::string CreatorRedirect(const json& aState);
 
 // What PoseSet needs from the game. Each step throws MethodError to refuse.
 struct PoseSetOps

@@ -659,7 +659,7 @@ FaceRigRequest ParseFaceRig(const json& aParams)
 
 ExpressionIndexRequest ParseExpressionIndex(const json& aParams)
 {
-    RequireOnly(aParams, {"index", "target", "unlisted"});
+    RequireOnly(aParams, {"index", "target", "unlisted", "force"});
     ExpressionIndexRequest request;
     const auto index = Integer(aParams, "index", 0, 100000);
     if (!index)
@@ -677,6 +677,7 @@ ExpressionIndexRequest ParseExpressionIndex(const json& aParams)
                                        "(session 4); leave target out");
     }
     request.unlisted = Boolean(aParams, "unlisted").value_or(false);
+    request.force = Boolean(aParams, "force").value_or(false);
     return request;
 }
 
@@ -910,11 +911,19 @@ PhotoStateRequest ParsePhotoState(const json& aParams)
 
 CharacterRequest ParseCharacterApply(const json& aParams)
 {
-    RequireOnly(aParams, {"option", "index", "value"});
+    RequireOnly(aParams, {"option", "index", "value", "expect_option", "expect_value"});
     CharacterRequest request;
     const auto option = Text(aParams, "option", 128);
     const auto index = Integer(aParams, "index", 0, 100000);
     const auto value = Text(aParams, "value", 128);
+    const auto expectOption = Text(aParams, "expect_option", 128);
+    const auto expectValue = Text(aParams, "expect_value", 256);
+    if ((expectOption || expectValue) && !index)
+    {
+        Bad("'expect_option' and 'expect_value' go with 'index' (the row and value read before applying it)");
+    }
+    request.expectOption = expectOption.value_or("");
+    request.expectValue = expectValue.value_or("");
     if (!option || (!index && !value))
     {
         Bad("'option' (the option's name, on-screen label or slot) and 'index' (0 = first value) or 'value' (the "
@@ -935,9 +944,14 @@ const char* CreatorModeName(CreatorMode aMode)
     return aMode == CreatorMode::Ripperdoc ? "ripperdoc" : "mirror";
 }
 
+const char* CreatorEditModeName(CreatorEditMode aEditMode)
+{
+    return aEditMode == CreatorEditMode::NewGame ? "new_game" : "edit_tag";
+}
+
 CreatorOpenRequest ParseCreatorOpen(const json& aParams)
 {
-    RequireOnly(aParams, {"mode", "timeout_ms"});
+    RequireOnly(aParams, {"mode", "edit_mode", "timeout_ms"});
     CreatorOpenRequest request;
     const auto mode = Text(aParams, "mode", 16).value_or("mirror");
     if (mode == "ripperdoc")
@@ -949,8 +963,27 @@ CreatorOpenRequest ParseCreatorOpen(const json& aParams)
         Bad("'mode' must be \"mirror\" (hair, make-up, eye colour, piercings and XF rows) or \"ripperdoc\" (also the face "
             "shape, skin and cyberware rows)");
     }
+    const auto editMode = Text(aParams, "edit_mode", 16).value_or("edit_tag");
+    if (editMode == "new_game")
+    {
+        request.editMode = CreatorEditMode::NewGame;
+        if (request.mode == CreatorMode::Ripperdoc)
+        {
+            Bad("edit_mode \"new_game\" already allows every row, so leave mode out (or give \"mirror\")");
+        }
+    }
+    else if (editMode != "edit_tag")
+    {
+        Bad("'edit_mode' must be \"edit_tag\" (the mode's own tag, HairDresser or Ripperdoc, which freezes the world) or "
+            "\"new_game\" (the NewGame tag, as Character Customization Anywhere's F12 ran in session 4)");
+    }
     request.timeoutMs = static_cast<int32_t>(Integer(aParams, "timeout_ms", 500, 15000).value_or(5000));
     return request;
+}
+
+int32_t CreatorEditTagCode(const CreatorOpenRequest& aRequest)
+{
+    return aRequest.editMode == CreatorEditMode::NewGame ? 0 : static_cast<int32_t>(aRequest.mode);
 }
 
 std::vector<std::pair<std::string, std::string>> CreatorPages()
@@ -1132,8 +1165,17 @@ AppearanceRequest ParseAppearance(const json& aParams)
 
 TimeRequest ParseTime(const json& aParams)
 {
-    RequireOnly(aParams, {"hours", "minutes", "seconds", "total_seconds"});
+    RequireOnly(aParams, {"hours", "minutes", "seconds", "total_seconds", "target"});
     TimeRequest request;
+    request.target = Text(aParams, "target", 8).value_or("");
+    if (!request.target.empty() && request.target != "world" && request.target != "photo")
+    {
+        Bad("'target' must be \"world\" (the world's clock) or \"photo\" (photo mode's own time of day)");
+    }
+    if (request.target == "photo" && aParams.contains("total_seconds"))
+    {
+        Bad("photo mode's time of day takes hours and minutes; total_seconds (an exact time with its day) is the world's clock");
+    }
     const auto total = Integer(aParams, "total_seconds", 0, 2147483647LL);
     const auto hours = Integer(aParams, "hours", 0, 23);
     if (total && (hours || aParams.contains("minutes") || aParams.contains("seconds")))

@@ -57,6 +57,41 @@ public:
 
 std::atomic<bool> gStop{false};
 
+// The simulated creator option's value names (player.appearance and cc.apply agree on them): internal names
+// xfs_value_00..12, except "hairstyle", which carries session 4's kind of names (CCXL hair).
+const char* const kSimHair[13] = {"01", "02", "LONG PAK - #011", "MEDIUM PAK - #007", "Grace - Side Swept Bob - V4",
+                                  "Kala - Messy Pixie", "lLrn - Viessa Bun", "VALBY CURTAIN BOB", "VIV LOOSE WAVES",
+                                  "Nola - hair \"Elise\"", "Nola - hair \"Vivian\"", "Corvette - Bun", "gardenia hair"};
+
+std::string SimValueName(const std::string& aOption, int32_t aIndex)
+{
+    if (aOption == "hairstyle")
+    {
+        return kSimHair[aIndex];
+    }
+    char name[16];
+    std::snprintf(name, sizeof(name), "xfs_value_%02d", aIndex);
+    return name;
+}
+
+// The simulated expression list (key 28), as XFPhoto.DescribeItem gives it with options: option data is the
+// list position; table_index is the face record's faceId. Like session 4's install with an expression pack,
+// the entries from 50 on are offset by 4; the last three were matched only by list position (their names
+// match no face record, or several), so their table index is unverified (RB-72).
+json SimExpressionList()
+{
+    json list = json::array();
+    for (int32_t i = 0; i < 60; ++i)
+    {
+        const std::string text = i == 0 ? "Neutral" : i == 1 ? "Charm" : i == 56 ? "Static: Sleeping" : i == 52 ? "Static: Skeptical" :
+                                 i == 55 ? "Static: Shock" : "Face " + std::to_string(i);
+        const bool byLabel = i < 57;
+        list.push_back({{"data", i}, {"text", text}, {"table_index", i < 50 ? i : i + 4}, {"table_index_by", byLabel ? "label" : "position"},
+                        {"table_index_verified", byLabel}});
+    }
+    return list;
+}
+
 BOOL WINAPI OnConsoleCtrl(DWORD)
 {
     gStop.store(true);
@@ -255,6 +290,10 @@ int wmain(int argc, wchar_t** argv)
         bool creatorOpens = true;   // selftest.phase {creator_opens: false} simulates a request the menu never picks up
         int creatorOpenTicks = -1;  // >= 0: the simulated menu opens the screen after this many more ticks
         std::string creatorMode;
+        std::string creatorEditTag; // the edit tag the simulated screen opened with (HairDresser, Ripperdoc or NewGame)
+        std::string creatorRow;     // selftest.phase {creator_row}: the option row cc.apply's option now resolves to (RB-71)
+        bool photoTimeHours = false;              // selftest.phase {photo_time_hours: true}: attribute 70 runs 0-24 hours
+        std::string photoTimeLabel = "TIME OF DAY"; // selftest.phase {photo_time_label}: attribute 70's label (RB-70)
         int creatorChanges = 0; // change events on the simulated appearance screen since it opened (cc.confirm, RB-51)
         bool saveLock = false;
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
@@ -376,13 +415,21 @@ int wmain(int argc, wchar_t** argv)
     dispatcher.Register({"selftest.phase", xfb::Access::Read, xfb::RunOn::BridgeThread,
                          "Sets the simulated game phase (self-test only).", [](const xfb::MethodContext& aContext) {
                              std::scoped_lock _(sim.mutex);
-                             sim.phase = aContext.params.value("phase", std::string("gameplay"));
+                             const auto next = aContext.params.value("phase", std::string("gameplay"));
+                             if (next == "photo_mode" && sim.phase != "photo_mode")
+                             {
+                                 sim.attributes.clear(); // photo mode opens with its defaults, as photo.enter's
+                             }
+                             sim.phase = next;
                              if (sim.phase == "character_menu")
                              {
                                  sim.creatorChanges = 0; // a freshly opened simulated screen
                              }
                              sim.creatorOpens = aContext.params.value("creator_opens", true);
                              sim.player = aContext.params.value("player", std::string("v"));
+                             sim.creatorRow = aContext.params.value("creator_row", std::string());
+                             sim.photoTimeHours = aContext.params.value("photo_time_hours", false);
+                             sim.photoTimeLabel = aContext.params.value("photo_time_label", std::string("TIME OF DAY"));
                              return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}, {"player", sim.player}};
                          }});
     // The in-game panel's write switch, which the self-test can't press: pauses or resumes writes.
@@ -408,6 +455,7 @@ int wmain(int argc, wchar_t** argv)
                                          {"ui_hidden", sim.hudHidden},
                                          {"cursor_hidden", sim.cursorHidden},
                                          {"face_index", sim.faceIndex},
+                                         {"world_time_seconds", sim.clock},
                                          {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}}};
                          }});
     dispatcher.Register({"player.appearance", xfb::Access::Read, xfb::RunOn::GameThread,
@@ -420,22 +468,22 @@ int wmain(int argc, wchar_t** argv)
                                  if (!request.option.empty())
                                  {
                                      // One option's values, as XFCharacter.Describe gives them: internal names and
-                                     // on-screen labels. "hairstyle" carries session 4's kind of names (CCXL hair).
-                                     static const char* kHair[13] = {"01", "02", "LONG PAK - #011", "MEDIUM PAK - #007", "Grace - Side Swept Bob - V4",
-                                                                     "Kala - Messy Pixie", "lLrn - Viessa Bun", "VALBY CURTAIN BOB", "VIV LOOSE WAVES",
-                                                                     "Nola - hair \"Elise\"", "Nola - hair \"Vivian\"", "Corvette - Bun", "gardenia hair"};
+                                     // on-screen labels (SimValueName). A slot names the row in use (creator_row, RB-71).
                                      json values = json::array();
                                      json labels = json::array();
                                      for (int32_t i = 0; i < 13; ++i)
                                      {
-                                         char name[16];
-                                         std::snprintf(name, sizeof(name), "xfs_value_%02d", i);
                                          char position[4];
                                          std::snprintf(position, sizeof(position), "%02d", i + 1);
-                                         values.push_back(request.option == "hairstyle" ? kHair[i] : name);
+                                         values.push_back(SimValueName(request.option, i));
                                          labels.push_back(request.option == "hairstyle" ? "" : position);
                                      }
-                                     out["option"] = {{"name", request.option}, {"label", request.option}, {"kind", "appearance"}, {"index", 0},
+                                     std::string row;
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         row = sim.creatorRow.empty() ? request.option : sim.creatorRow;
+                                     }
+                                     out["option"] = {{"name", row}, {"label", request.option}, {"kind", "appearance"}, {"index", 0},
                                                       {"count", 13}, {"values", values}, {"labels", labels}};
                                  }
                              }
@@ -459,20 +507,25 @@ int wmain(int argc, wchar_t** argv)
                              if (request.menu || request.options)
                              {
                                  out["menu"] = json::array({{{"key", 1}, {"label", "Field of view"}, {"kind", "slider"}, {"min", 5}, {"max", 90}}});
+                                 {
+                                     // Roll, look-at and the camera preset with their simulated values, so tests can see
+                                     // photo.frame put them back (RB-68).
+                                     std::scoped_lock _(sim.mutex);
+                                     const auto value = [](int32_t aKey) {
+                                         const auto it = sim.attributes.find(aKey);
+                                         return it == sim.attributes.end() ? 0.0 : static_cast<double>(it->second);
+                                     };
+                                     out["menu"].push_back({{"key", 2}, {"label", "Roll"}, {"kind", "slider"}, {"min", -180}, {"max", 180}, {"value", value(2)}});
+                                     out["menu"].push_back({{"key", 15}, {"label", "Look at camera"}, {"kind", "options"}, {"value", value(15)}});
+                                     out["menu"].push_back({{"key", 23}, {"label", "Camera preset"}, {"kind", "options"}, {"value", value(23)}});
+                                 }
                                  // The expression list (key 28) as XFPhoto.DescribeItem gives it with options (0.4.2):
                                  // option data is the list position; table_index is the face record's faceId. Like
                                  // session 4's install with an expression pack, the entries from 50 on are offset by 4.
                                  json expression{{"key", 28}, {"label", "FACIAL EXPRESSION"}, {"kind", "options"}, {"option_count", 60}, {"start", 0}};
                                  if (request.options)
                                  {
-                                     json list = json::array();
-                                     for (int32_t i = 0; i < 60; ++i)
-                                     {
-                                         const std::string text = i == 0 ? "Neutral" : i == 1 ? "Charm" : i == 56 ? "Static: Sleeping" : i == 52 ? "Static: Skeptical" :
-                                                                  i == 55 ? "Static: Shock" : "Face " + std::to_string(i);
-                                         list.push_back({{"data", i}, {"text", text}, {"table_index", i < 50 ? i : i + 4}, {"table_index_by", "label"}});
-                                     }
-                                     expression["options"] = list;
+                                     expression["options"] = SimExpressionList();
                                  }
                                  std::scoped_lock _(sim.mutex);
                                  const auto it = sim.attributes.find(p::key::kExpression);
@@ -723,22 +776,20 @@ int wmain(int argc, wchar_t** argv)
                                  [requirePhase](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseExpressionIndex(aContext.params);
                                      requirePhase("photo_mode", "not_in_photo_mode");
+                                     // The plugin's check against the list's table indices (core/Writes.cpp, RB-72).
+                                     const auto standing = w::CheckFaceIndex(request, json{{"seen", true}, {"entries", SimExpressionList()}});
                                      std::scoped_lock _(sim.mutex);
-                                     // The simulated expression list offers 0-14, like vanilla photo mode.
-                                     if (!request.unlisted && request.index > 14)
-                                     {
-                                         throw xfb::MethodError("bad_params", "simulated: index " + std::to_string(request.index) +
-                                                                                  " is not one of the photo-mode expression values");
-                                     }
                                      const auto menu = sim.attributes.find(p::key::kExpression);
                                      const bool known = menu != sim.attributes.end();
                                      sim.faceIndex = request.index;
-                                     return w::ExpressionIndexResult(json{{"simulated", true},
-                                                                          {"target", p::FaceTargetName(request.target)},
-                                                                          {"index", request.index},
-                                                                          {"unlisted", request.unlisted},
-                                                                          {"menu_value", known ? menu->second : -1.0f},
-                                                                          {"menu_value_known", known}});
+                                     auto out = w::ExpressionIndexResult(json{{"simulated", true},
+                                                                              {"target", p::FaceTargetName(request.target)},
+                                                                              {"index", request.index},
+                                                                              {"unlisted", request.unlisted},
+                                                                              {"menu_value", known ? menu->second : -1.0f},
+                                                                              {"menu_value_known", known}});
+                                     out["index_by"] = standing;
+                                     return out;
                                  }));
     dispatcher.Register(simWrite("cc.apply", xfb::Access::WriteCharacter, xfb::RunOn::GameThread, "Character option (simulated).",
                                  [requirePhase](const xfb::MethodContext& aContext) {
@@ -772,6 +823,22 @@ int wmain(int argc, wchar_t** argv)
                                      if (index >= 13)
                                      {
                                          throw xfb::MethodError("bad_params", "simulated: option has values 0 to 12");
+                                     }
+                                     // RB-71: the row and value the caller read must still be the ones at this index.
+                                     std::string row;
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         row = sim.creatorRow.empty() ? request.option : sim.creatorRow;
+                                     }
+                                     if (!request.expectOption.empty() && request.expectOption != row)
+                                     {
+                                         throw xfb::MethodError("stale_match", "simulated: '" + request.option + "' is now the row '" + row + "', not '" +
+                                                                                   request.expectOption + "'");
+                                     }
+                                     if (!request.expectValue.empty() && request.expectValue != SimValueName(request.option, index))
+                                     {
+                                         throw xfb::MethodError("stale_match", "simulated: value " + std::to_string(index) + " is now '" +
+                                                                                   SimValueName(request.option, index) + "', not '" + request.expectValue + "'");
                                      }
                                      if (index != 0)
                                      {
@@ -847,7 +914,9 @@ int wmain(int argc, wchar_t** argv)
                                          }
                                          sim.creatorMode = p::CreatorModeName(request.mode);
                                          sim.creatorOpenTicks = sim.creatorOpens ? 2 : std::numeric_limits<int>::max(); // never picked up: pending until withdrawn
-                                         return json{{"requested", true}, {"edit_mode", request.mode == p::CreatorMode::Ripperdoc ? "Ripperdoc" : "HairDresser"},
+                                         const auto tag = p::CreatorEditTagCode(request);
+                                         sim.creatorEditTag = tag == 0 ? "NewGame" : tag == 2 ? "Ripperdoc" : "HairDresser";
+                                         return json{{"requested", true}, {"edit_mode", sim.creatorEditTag},
                                                      {"saving_locked", true}, {"route", "pause_menu"}};
                                      };
                                      // Through the game-thread queue, as in the plugin: after the kill switch closes it, a poll
@@ -871,7 +940,10 @@ int wmain(int argc, wchar_t** argv)
                                                      std::scoped_lock _(sim.mutex);
                                                      const bool waiting = sim.creatorOpenTicks >= 0;
                                                      sim.creatorOpenTicks = -1;
-                                                     return json{{"withdrawn", true}, {"taken", false}, {"outcome", waiting ? "withdrawn" : "none"}};
+                                                     // A request still waiting had its pause-menu event raised: the pause
+                                                     // menu may still open, as usual (RB-69).
+                                                     return json{{"withdrawn", true}, {"taken", false}, {"outcome", waiting ? "withdrawn" : "none"},
+                                                                 {"pause_menu_may_open", waiting}};
                                                  },
                                                  "cc.open.cancel");
                                          }
@@ -1117,24 +1189,33 @@ int wmain(int argc, wchar_t** argv)
                                                  {"undo", {{"method", "pose.live.apply"}, {"params", {{"restore", true}}}}}};
                                  }));
     dispatcher.Register(simWrite("world.time.set", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "Clock (simulated).",
-                                 [requirePhase](const xfb::MethodContext& aContext) {
+                                 [requirePhase, &config](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseTime(aContext.params);
                                      std::scoped_lock _(sim.mutex);
-                                     // In photo mode: photo mode's own time-of-day slider (attribute 70, minutes), as
-                                     // XFWorld.SetTime does since 0.4.2.
-                                     if (sim.phase == "photo_mode")
+                                     // The plugin's route (core/Writes.cpp ChooseTimeRoute, 0.5.1): photo mode's own time of
+                                     // day in photo mode (the photo class needed), a no-op for a photo-mode time outside it.
+                                     const auto route = w::ChooseTimeRoute(request, sim.phase, (config.writeClasses & xfb::kWritePhoto) != 0);
+                                     if (route == w::TimeRoute::PhotoClosed)
                                      {
-                                         if (request.totalSeconds >= 0)
-                                         {
-                                             throw xfb::MethodError("bad_params", "simulated: in photo mode the time is set in hours and minutes");
-                                         }
+                                         auto out = w::PhotoClosedTimeResult(sim.phase);
+                                         out["simulated"] = true;
+                                         return out;
+                                     }
+                                     if (route == w::TimeRoute::Photo)
+                                     {
+                                         // Attribute 70 as XFWorld.PhotoTimeSlider describes it: 0-1440 minutes (or 0-24 hours).
+                                         const double max = sim.photoTimeHours ? 24.0 : 1440.0;
+                                         const auto plan = w::PlanPhotoTime(json{{"seen", true}, {"kind", "slider"}, {"label", sim.photoTimeLabel},
+                                                                                 {"label_key", ""}, {"min", 0}, {"max", max}},
+                                                                            request);
                                          const auto it = sim.attributes.find(70);
-                                         const double before = it == sim.attributes.end() ? 720.0 : static_cast<double>(it->second);
-                                         const double after = request.hours * 60 + request.minutes + request.seconds / 60.0;
-                                         sim.attributes[70] = static_cast<float>(after);
-                                         return w::TimeResult(json{{"simulated", true}, {"phase", sim.phase}, {"route", "photo_time"}, {"key", 70},
-                                                                   {"unit", "minutes"}, {"before_minutes", before}, {"before_known", true},
-                                                                   {"after_minutes", after}});
+                                         const double before = it == sim.attributes.end() ? 720.0 / plan.minutesPerUnit : static_cast<double>(it->second);
+                                         sim.attributes[70] = static_cast<float>(plan.value);
+                                         auto out = w::PhotoTimeResult(json{{"label", sim.photoTimeLabel}, {"before", before}, {"before_known", true},
+                                                                            {"after", static_cast<double>(sim.attributes[70])}},
+                                                                       plan);
+                                         out["simulated"] = true;
+                                         return out;
                                      }
                                      // Normal play, or with the appearance screen open (as XFWorld.SetTime).
                                      if (sim.phase != "gameplay" && sim.phase != "character_menu")

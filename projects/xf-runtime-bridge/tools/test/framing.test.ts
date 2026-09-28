@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
-import { chooseHorizontal, defaultLens, frame, frameByCapture, FramingError, FRAMINGS, LENSES, readingProblem, sameWorld, screenSpace, SETTLE, settledReading, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
+import { chooseHorizontal, defaultLens, frame, frameByCapture, FramingError, FRAMINGS, LENSES, readingProblem, sameWorld, screenSpace, SETTLE, settledReading, yawSliderValue, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
 import { resolveRegion } from "../capture/regions.ts";
 import { captureBurst } from "../capture/capture.ts";
 import type { Pixels } from "../capture/win32.ts";
@@ -376,6 +376,130 @@ describe("photo.frame after session 4: lenses, no drift, bounds", () => {
       expect(Math.abs(diff)).toBeLessThan(3);
     }
     await expect(frame(laggingAdapter(new NearWorld()), { target: "face", yaw_offset: 200 })).rejects.toThrow("-180 to 180");
+  });
+});
+
+/** V's up/down placement moves nothing on screen: framing stops with no_response after its lens seed and probes. */
+class NoUpDownWorld extends NearWorld {
+  constructor() {
+    super();
+    this.axes = { ...this.axes, ud: { x: 0, y: 0, z: 0 } };
+  }
+}
+
+/**
+ * The rotation slider in its own units (session 4: about 1.25 units per degree), with a configurable range.
+ * Facing the camera needs theta = 0 (V faces the camera at theta 180, so yaw_offset 180 needs about 160 degrees
+ * of turn, 200 units); a range of ±180 units covers only ±144 degrees.
+ */
+class UnitsWorld extends NearWorld {
+  constructor(readonly yawRange: [number, number]) {
+    super();
+  }
+  override head() {
+    const theta = (200 + this.yaw / 1.25) * DEG;
+    const f = { x: Math.sin(theta), y: Math.cos(theta) };
+    const a = this.axes;
+    return {
+      x: this.origin.x + a.lr.x * this.lr + a.nf.x * this.nf + a.ud.x * this.ud + f.x * 0.03,
+      y: this.origin.y + a.lr.y * this.lr + a.nf.y * this.nf + a.ud.y * this.ud + f.y * 0.03,
+      z: this.origin.z + a.lr.z * this.lr + a.nf.z * this.nf + a.ud.z * this.ud,
+      f,
+    };
+  }
+  override reading(offset: { up: number; forward: number; right: number }): SubjectReading {
+    const r = super.reading(offset);
+    r.pose = { ...r.pose, yaw: { value: this.yaw, min: this.yawRange[0], max: this.yawRange[1] } };
+    return r;
+  }
+}
+
+const facingOf = (world: GameLikeWorld, yawOffset: number) => {
+  const reading = world.reading({ up: 0, forward: 0, right: 0 });
+  const toCamera = { x: -reading.head.x, y: -reading.head.y };
+  const f = reading.subject_forward;
+  const angle = (Math.atan2(f.x * toCamera.y - f.y * toCamera.x, f.x * toCamera.x + f.y * toCamera.y) * 180) / Math.PI;
+  return ((((angle - yawOffset + 180) % 360) + 360) % 360) - 180;
+};
+
+describe("photo.frame after deep review 5 (0.5.1)", () => {
+  test("RB-68: a no_response after the lens seed puts back the field of view, V's placement and rotation, with the undo", async () => {
+    const world = new NoUpDownWorld();
+    world.yaw = 12;
+    const before = { fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud, nf: world.nf };
+    const error = await frame(laggingAdapter(world), { target: "face" }).then(
+      () => null,
+      (e) => e as FramingError,
+    );
+    expect(error?.code).toBe("no_response");
+    expect(error?.message).toContain("put back");
+    expect(error?.restore?.restored).toBe(true);
+    expect(error?.restore?.undo?.params).toMatchObject({ fov: before.fov, subject: { near_far: before.nf, yaw: before.yaw } });
+    expect(error?.steps.some((s) => s.kind === "lens-seed")).toBe(true);
+    expect({ fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud, nf: world.nf }).toEqual(before);
+  });
+
+  test("RB-68: a value whose earlier state the game didn't report is named, never claimed as put back", async () => {
+    const world = new NoUpDownWorld();
+    const adapter = laggingAdapter(world);
+    const set = adapter.setCamera;
+    adapter.setCamera = async (values) => (await set(values)).map((a) => (a.name === "subject.yaw" ? { ...a, before_known: false } : a));
+    const error = await frame(adapter, { target: "face" }).then(
+      () => null,
+      (e) => e as FramingError,
+    );
+    expect(error?.code).toBe("no_response");
+    expect(error?.restore?.unknown).toEqual(["subject.yaw"]);
+    expect(error?.message).toContain("subject.yaw was changed without a known earlier value");
+    expect((error?.restore?.undo?.params.subject as Record<string, number>).yaw).toBeUndefined();
+  });
+
+  test("RB-68: framing_bound names what it put back from the tracker, and a failed put-back gives the undo", async () => {
+    const world = new GameLikeWorld();
+    const adapter = laggingAdapter(world);
+    const set = adapter.setCamera;
+    let calls = 0;
+    adapter.setCamera = async (values) => {
+      calls++;
+      // The put-back (the call after the bound was found) fails; every earlier change works.
+      if (Object.keys(values).length > 1 && values.subject?.near_far !== undefined && values.fov !== undefined && calls > 5) throw new Error("the game refused");
+      return set(values);
+    };
+    const error = await frame(adapter, { target: "face" }).then(
+      () => null,
+      (e) => e as FramingError,
+    );
+    expect(error?.code).toBe("framing_bound");
+    expect(error?.restore?.restored).toBe(false);
+    expect(error?.message).toContain("the undo is");
+  });
+
+  test("RB-74: the rotation slider's own units wrap by a full turn in those units, so yaw_offset 180 is reached when the range allows", async () => {
+    const world = new UnitsWorld([-300, 300]);
+    const r = await frame(laggingAdapter(world), { target: "face", yaw_offset: 180 });
+    expect(r.converged, JSON.stringify(r.notes)).toBe(true);
+    expect(Math.abs(r.residual.facing_deg!)).toBeLessThanOrEqual(3);
+    expect(Math.abs(facingOf(world, 180))).toBeLessThan(3);
+  });
+
+  test("RB-74: a facing the slider's range can't reach isn't reported as converged", async () => {
+    const world = new UnitsWorld([-180, 180]);
+    const r = await frame(laggingAdapter(world), { target: "face", yaw_offset: 180 });
+    expect(r.converged).toBe(false);
+    expect(Math.abs(r.residual.facing_deg!)).toBeGreaterThan(3);
+    expect(r.notes.join(" ")).toContain("can't turn V");
+    // The nearest end of the range, not a wrap by 360 units to the far side.
+    expect(Math.abs(Math.abs(world.yaw) - 180)).toBeLessThan(0.2);
+  });
+
+  test("RB-74: yawSliderValue wraps by the slider's period and falls back to the nearer end around the circle", () => {
+    expect(yawSliderValue(200, 450, [-300, 300])).toEqual({ value: 200, reached: true });
+    expect(yawSliderValue(-260, 450, [-300, 300])).toEqual({ value: -260, reached: true });
+    expect(yawSliderValue(400, 450, [-300, 300])).toEqual({ value: -50, reached: true });
+    expect(yawSliderValue(200, 450, [-180, 180])).toEqual({ value: 180, reached: false });
+    expect(yawSliderValue(-200, 450, [-180, 180])).toEqual({ value: -180, reached: false });
+    expect(yawSliderValue(-230, 450, [-180, 180])).toEqual({ value: 180, reached: false }); // -230 is 220 around the circle, 40 from 180
+    expect(yawSliderValue(190, 360, [-180, 180])).toEqual({ value: -170, reached: true });
   });
 });
 

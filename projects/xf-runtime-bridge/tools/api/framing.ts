@@ -144,6 +144,13 @@ export type FrameOptions = {
 
 export type CameraApplied = { name: string; before?: number; after?: number; before_known?: boolean };
 
+/**
+ * What a failed frame put back (0.5.1, RB-68): the undo it applied (null when nothing had changed), whether
+ * that worked, the values it couldn't put back because the game never reported their earlier value, and a
+ * sentence for the message.
+ */
+export type RestoreReport = { undo: FrameResult["undo"]; restored: boolean; unknown: string[]; note: string };
+
 /** What the framing loop needs from the game; the command API or a test fake provides it. */
 export interface FramingAdapter {
   subject(offset: Offset): Promise<SubjectReading>;
@@ -167,7 +174,8 @@ export type FrameResult = {
   /** Projection route: the horizontal placement axis used, or vertical-only when neither moved V across the screen. */
   axis?: HorizontalAxis | "vertical-only";
   chosen: { fov: number; subject: { yaw: number; left_right: number; near_far?: number; up_down: number } };
-  residual: { x: number; y: number; size: number };
+  /** Centring error (window heights), size ratio and, when V was turned, degrees from the requested facing. */
+  residual: { x: number; y: number; size: number; facing_deg?: number };
   converged: boolean;
   steps: FrameStep[];
   subject?: { source: string; slot: string; approximate: boolean };
@@ -186,6 +194,8 @@ export class FramingError extends Error {
     readonly code: string,
     /** The steps taken before the failure, recorded with the refusal for diagnosis. */
     readonly steps: FrameStep[] = [],
+    /** What was put back after the failure (every failure after the first change, RB-68). */
+    readonly restore?: RestoreReport,
   ) {
     super(message);
   }
@@ -264,6 +274,86 @@ const wrap180 = (deg: number) => ((((deg + 180) % 360) + 360) % 360) - 180;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const round = (v: number, digits = 3) => Number(v.toFixed(digits));
 
+/**
+ * The rotation slider's value for a wanted value (0.5.1, RB-74). The slider's units need not be degrees
+ * (session 4: about 1.25 units per degree), so a full turn is `period` units (360 over the measured degrees
+ * per unit), not 360. Returns the equivalent of `wanted` (wanted plus whole turns) inside the slider's range
+ * nearest to it; when no equivalent lies inside (the range covers less than a full turn), the end of the
+ * range nearest to it around the circle, with reached false.
+ */
+export function yawSliderValue(wanted: number, period: number, range: [number, number]): { value: number; reached: boolean } {
+  const [lo, hi] = range;
+  if (!(period > 0) || !Number.isFinite(wanted)) return { value: clamp(wanted, lo, hi), reached: wanted >= lo && wanted <= hi };
+  let best: number | null = null;
+  for (let k = Math.floor((lo - wanted) / period); k <= Math.ceil((hi - wanted) / period); k++) {
+    const v = wanted + k * period;
+    if (v >= lo - 1e-9 && v <= hi + 1e-9 && (best === null || Math.abs(v - wanted) < Math.abs(best - wanted))) best = v;
+  }
+  if (best !== null) return { value: clamp(best, lo, hi), reached: true };
+  const around = (v: number) => {
+    const d = (((v - wanted) % period) + period) % period;
+    return Math.min(d, period - d);
+  };
+  return { value: around(lo) <= around(hi) ? lo : hi, reached: false };
+}
+
+/** How close (degrees) V must face the requested direction for a frame to count as converged (RB-74). */
+export const FACING_TOLERANCE_DEG = 3;
+
+class UndoTracker {
+  private readonly before = new Map<string, number>();
+  private readonly unknownNames = new Set<string>();
+  note(applied: CameraApplied[]) {
+    for (const item of applied) {
+      if (this.before.has(item.name)) continue;
+      if (item.before_known !== false && typeof item.before === "number") this.before.set(item.name, item.before);
+      else this.unknownNames.add(item.name);
+    }
+  }
+  /** Values changed whose earlier value the game didn't report: never claimed as put back. */
+  unknown(): string[] {
+    return [...this.unknownNames].filter((name) => !this.before.has(name));
+  }
+  undo(): FrameResult["undo"] {
+    if (!this.before.size) return null;
+    const params: Record<string, unknown> = {};
+    for (const [name, value] of this.before) {
+      if (name.startsWith("subject.")) ((params.subject ??= {}) as Record<string, number>)[name.slice(8)] = value;
+      else params[name] = value;
+    }
+    return { method: "photo.camera.set", params };
+  }
+}
+
+/** Puts back everything a failed frame changed that has a known earlier value, and says what it did (RB-68). */
+async function restoreAfterFailure(adapter: FramingAdapter, undo: UndoTracker): Promise<RestoreReport> {
+  const back = undo.undo();
+  const unknown = undo.unknown();
+  const unknownNote = unknown.length ? ` ${unknown.join(", ")} ${unknown.length === 1 ? "was" : "were"} changed without a known earlier value, so ${unknown.length === 1 ? "it stays" : "they stay"} as framing left ${unknown.length === 1 ? "it" : "them"}.` : "";
+  if (!back) return { undo: null, restored: true, unknown, note: `Nothing with a known earlier value had changed.${unknownNote}` };
+  try {
+    await adapter.setCamera(back.params as Parameters<FramingAdapter["setCamera"]>[0]);
+    const names = Object.keys(back.params).map((k) => (k === "subject" ? Object.keys(back.params.subject as object).map((s) => `subject.${s}`).join(", ") : k));
+    return { undo: back, restored: true, unknown, note: `What framing changed was put back as it was (${names.join(", ")}).${unknownNote}` };
+  } catch (error) {
+    return { undo: back, restored: false, unknown, note: `Putting the camera back failed (${(error as Error).message}); the undo is ${JSON.stringify(back.params)}.${unknownNote}` };
+  }
+}
+
+/** Runs a framing route and, on any failure after a change, puts back what it changed and says so (RB-68). */
+async function withRestore<T>(adapter: FramingAdapter, undo: UndoTracker, steps: FrameStep[], run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof FramingError && error.restore) throw error;
+    const report = await restoreAfterFailure(adapter, undo);
+    const plain = (error as { plain?: { code?: string; detail?: string } }).plain;
+    const code = error instanceof FramingError ? error.code : (plain?.code ?? "failed");
+    const failedSteps = error instanceof FramingError && error.steps.length ? error.steps : steps;
+    throw new FramingError(`${(error as Error).message} ${report.note}`, code, failedSteps, report);
+  }
+}
+
 // --- the projection route ------------------------------------------------------------------------
 
 type Pose = { fov: number; yaw: number; lr: number; nf: number; ud: number };
@@ -280,24 +370,6 @@ function poseOf(reading: SubjectReading): { pose: Pose; ranges: Ranges; hasNearF
     ranges: { fov: range(p.fov, 1, 120), yaw: range(p.yaw, -180, 180), lr: range(p.left_right, -5, 5), nf: range(p.near_far, -5, 5), ud: range(p.up_down, -5, 5) },
     hasNearFar: Boolean(p.near_far && Number.isFinite(p.near_far.value)),
   };
-}
-
-class UndoTracker {
-  private readonly before = new Map<string, number>();
-  note(applied: CameraApplied[]) {
-    for (const item of applied) {
-      if (!this.before.has(item.name) && item.before_known !== false && typeof item.before === "number") this.before.set(item.name, item.before);
-    }
-  }
-  undo(): FrameResult["undo"] {
-    if (!this.before.size) return null;
-    const params: Record<string, unknown> = {};
-    for (const [name, value] of this.before) {
-      if (name.startsWith("subject.")) ((params.subject ??= {}) as Record<string, number>)[name.slice(8)] = value;
-      else params[name] = value;
-    }
-    return { method: "photo.camera.set", params };
-  }
 }
 
 function resolve(options: FrameOptions) {
@@ -388,6 +460,20 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
   const steps: FrameStep[] = [];
   const notes: string[] = [];
   const undo = new UndoTracker();
+  // Any failure after the first change puts back everything with a known earlier value (RB-68).
+  return withRestore(adapter, undo, steps, () => projectionLoop(adapter, options, first, { offset, span, position, lens, maxSteps, tolerance }, steps, notes, undo));
+}
+
+async function projectionLoop(
+  adapter: FramingAdapter,
+  options: FrameOptions,
+  first: SubjectReading | undefined,
+  resolved: ReturnType<typeof resolve>,
+  steps: FrameStep[],
+  notes: string[],
+  undo: UndoTracker,
+): Promise<FrameResult> {
+  const { offset, span, position, lens, maxSteps, tolerance } = resolved;
   let reading = first ?? (await adapter.subject(offset));
   const problem = readingProblem(reading);
   if (problem) throw new FramingError(`Framing by projection isn't possible: ${problem}.`, "no_projection", steps);
@@ -401,12 +487,21 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
   const nfBounds: [number, number] = spec.near_far ? intersect(spec.near_far, ranges.nf) : intersect([pose.nf - KEEP_NEAR_FAR_TRAVEL, pose.nf + KEEP_NEAR_FAR_TRAVEL], ranges.nf);
   const fovBounds: [number, number] = spec.fov ? intersect(spec.fov[options.target], ranges.fov) : ranges.fov;
   const boundsHit = new Map<"near_far" | "fov", string>();
+  // Degrees V turns per unit of the rotation slider, measured by the yaw probe (1 until then; session 4 found
+  // about 0.8, i.e. 1.25 units per degree), and whether a wanted facing lay outside the slider's range (RB-74).
+  let turnPerUnit = 1;
+  let yawUnreached = false;
 
   const set = async (values: Partial<Pose>, kind: string) => {
     const payload: { fov?: number; subject?: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } } = {};
     if (values.fov !== undefined) payload.fov = round(clamp(values.fov, ...ranges.fov), 2);
     const subject: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } = {};
-    if (values.yaw !== undefined) subject.yaw = round(clamp(wrap180(values.yaw), ...ranges.yaw), 1);
+    if (values.yaw !== undefined) {
+      // Wrapped by a full turn in the slider's own units, not by 360 (RB-74).
+      const yaw = yawSliderValue(values.yaw, 360 / Math.abs(turnPerUnit), ranges.yaw);
+      if (!yaw.reached) yawUnreached = true;
+      subject.yaw = round(yaw.value, 1);
+    }
     if (values.lr !== undefined) subject.left_right = round(clamp(values.lr, ...ranges.lr), 3);
     if (values.nf !== undefined) {
       subject.near_far = round(clamp(values.nf, ...nfBounds), 3);
@@ -456,7 +551,6 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     const toCamera = { x: reading.camera.position.x - reading.head.x, y: reading.camera.position.y - reading.head.y, z: 0 };
     return wrap180(horizontalAngle(reading.subject_forward, toCamera) - (options.yaw_offset ?? 0));
   };
-  let turnPerUnit = 1;
   const turn = async (tries: number) => {
     for (let i = 0; i < tries; i++) {
       const error = facingError();
@@ -466,7 +560,8 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
   };
   if (faceCamera) {
     const before = { forward: reading.subject_forward };
-    const probe = 10;
+    // Towards the middle of the slider's range, so the probe itself never wraps.
+    const probe = pose.yaw + 10 <= ranges.yaw[1] ? 10 : -10;
     await set({ yaw: pose.yaw + probe }, "yaw-probe");
     const turned = horizontalAngle(before.forward, reading.subject_forward); // degrees V turned for +10 on the slider
     turnPerUnit = Math.abs(turned) > 1 ? turned / probe : 1;
@@ -583,28 +678,29 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
   }
   if (boundsHit.size) {
     // A frame outside its lens's bounds is refused, not reported as converged (session 4's camera ended
-    // behind a wall while answering converged), and everything goes back as it was before the call.
-    const back = undo.undo();
-    let restored = "nothing had changed";
-    if (back) {
-      try {
-        await adapter.setCamera(back.params as Parameters<FramingAdapter["setCamera"]>[0]);
-        restored = "the camera and V's placement were put back as they were";
-      } catch (error) {
-        restored = `putting the camera back failed (${(error as Error).message}); the undo is ${JSON.stringify(back.params)}`;
-      }
-    }
+    // behind a wall while answering converged), and everything with a known earlier value goes back.
+    const report = await restoreAfterFailure(adapter, undo);
     const why = [...boundsHit.values()].join("; ");
     throw new FramingError(
-      `Framing ${options.target} stopped at the ${lens} lens's limit: ${why}. ${restored[0].toUpperCase()}${restored.slice(1)}. V may need open space in front of the camera, or another lens (lens: keep starts from the current camera).`,
+      `Framing ${options.target} stopped at the ${lens} lens's limit: ${why}. ${report.note} V may need open space in front of the camera, or another lens (lens: keep starts from the current camera).`,
       "framing_bound",
       steps,
+      report,
     );
   }
   if (unsettled) notes.push(`${unsettled} reading${unsettled === 1 ? "" : "s"} didn't settle within ${SETTLE.maxReads} reads (V or the camera still moving); the result may be slightly off.`);
   const size = (m.scale * span) / 0.1;
-  const residual = { x: round(want.x - m.x, 4), y: round(want.y - m.y, 4), size: round(size, 3) };
-  const converged = Math.hypot(residual.x, residual.y) <= tolerance && Math.abs(size - 1) <= 0.05;
+  // How far V faces from the requested direction counts too (RB-74): a facing the slider can't reach isn't converged.
+  const facing = faceCamera ? facingError() : 0;
+  const residual = { x: round(want.x - m.x, 4), y: round(want.y - m.y, 4), size: round(size, 3), ...(faceCamera ? { facing_deg: round(facing, 1) } : {}) };
+  const converged = Math.hypot(residual.x, residual.y) <= tolerance && Math.abs(size - 1) <= 0.05 && Math.abs(facing) <= FACING_TOLERANCE_DEG;
+  if (faceCamera && Math.abs(facing) > FACING_TOLERANCE_DEG) {
+    notes.push(
+      yawUnreached
+        ? `V's rotation slider (${ranges.yaw[0]} to ${ranges.yaw[1]}, about ${round(Math.abs(turnPerUnit), 2)} degrees per unit) can't turn V to the requested facing; V faces ${round(Math.abs(facing), 1)} degrees from it.`
+        : `V faces ${round(Math.abs(facing), 1)} degrees from the requested direction.`,
+    );
+  }
   if (!axis && Math.abs(residual.x) > tolerance) notes.push(`V is ${round(Math.abs(residual.x), 3)} window heights off centre sideways, which the vertical-only route can't correct.`);
   if (!converged) notes.push("The framing didn't fully converge within the step budget; see steps and residual.");
   return {
@@ -750,83 +846,86 @@ export async function frameByCapture(adapter: FramingAdapter, options: FrameOpti
   const steps: FrameStep[] = [];
   const notes: string[] = ["Framed from window captures (coarse): the target is estimated from V's head outline with fixed proportions."];
   const undo = new UndoTracker();
-  const ranges: Ranges = { fov: [1, 120], yaw: [-180, 180], lr: [-5, 5], nf: [-5, 5], ud: [-5, 5], ...(start.ranges ?? {}) };
-  const pose = { fov: start.fov, lr: start.lr, ud: start.ud, yaw: start.yaw };
-  const setPose = async (values: Partial<typeof pose>) => {
-    const payload: { fov?: number; subject?: { left_right?: number; up_down?: number } } = {};
-    if (values.fov !== undefined) payload.fov = round(clamp(values.fov, ...ranges.fov), 2);
-    if (values.lr !== undefined || values.ud !== undefined) {
-      payload.subject = {};
-      if (values.lr !== undefined) payload.subject.left_right = round(clamp(values.lr, ...ranges.lr), 3);
-      if (values.ud !== undefined) payload.subject.up_down = round(clamp(values.ud, ...ranges.ud), 3);
+  // Any failure after the first nudge puts back what the route changed (RB-68).
+  return withRestore(adapter, undo, steps, async () => {
+    const ranges: Ranges = { fov: [1, 120], yaw: [-180, 180], lr: [-5, 5], nf: [-5, 5], ud: [-5, 5], ...(start.ranges ?? {}) };
+    const pose = { fov: start.fov, lr: start.lr, ud: start.ud, yaw: start.yaw };
+    const setPose = async (values: Partial<typeof pose>) => {
+      const payload: { fov?: number; subject?: { left_right?: number; up_down?: number } } = {};
+      if (values.fov !== undefined) payload.fov = round(clamp(values.fov, ...ranges.fov), 2);
+      if (values.lr !== undefined || values.ud !== undefined) {
+        payload.subject = {};
+        if (values.lr !== undefined) payload.subject.left_right = round(clamp(values.lr, ...ranges.lr), 3);
+        if (values.ud !== undefined) payload.subject.up_down = round(clamp(values.ud, ...ranges.ud), 3);
+      }
+      undo.note(await adapter.setCamera(payload));
+      if (payload.fov !== undefined) pose.fov = payload.fov;
+      if (payload.subject?.left_right !== undefined) pose.lr = payload.subject.left_right;
+      if (payload.subject?.up_down !== undefined) pose.ud = payload.subject.up_down;
+    };
+    const grab = async () => {
+      const p = await adapter.grab!();
+      const size = fitSize(p.width, p.height, { maxWidth: 480 });
+      const small = size.factor === 1 ? p : downscaleArea(p, size.width, size.height);
+      return { w: small.width, h: small.height, l: luma(small) };
+    };
+    const proportions = CAPTURE_PROPORTIONS[options.target];
+    let result: { x: number; y: number; size: number } = { x: NaN, y: NaN, size: NaN };
+    const rounds = Math.max(1, Math.min(3, Math.floor(maxSteps / 2)));
+    for (let round_ = 0; round_ < rounds; round_++) {
+      // Expected shift for the nudge: about 4% of the width at the first-session gain (+1 left/right
+      // moved V about 290 px of 3840 at FOV 35), scaled with the field of view.
+      const gain0 = 0.0755 * (Math.tan(17.5 * DEG) / Math.tan((pose.fov * DEG) / 2));
+      const nudge = clamp(0.04 / gain0, 0.005, 1);
+      const a = await grab();
+      await setPose({ lr: pose.lr + nudge });
+      const b = await grab();
+      await setPose({ lr: pose.lr - nudge });
+      const c = await grab();
+      const maxShift = Math.round(a.w / 4);
+      const rough = findHead(a.l, b.l, c.l, a.w, a.h, 0);
+      if (!rough) throw new FramingError("V didn't show up as moving in the captures (is the photo-mode menu hidden, and V in view?).", "not_found");
+      const sx = estimateShift(a.l, b.l, a.w, a.h, "x", rough.band, maxShift);
+      const head = findHead(a.l, b.l, c.l, a.w, a.h, sx) ?? rough;
+      await setPose({ ud: pose.ud + nudge });
+      const d = await grab();
+      await setPose({ ud: pose.ud - nudge });
+      const colBand: [number, number] = [Math.max(0, Math.round(head.centreX - head.headWidth / 2)), Math.min(a.w - 1, Math.round(head.centreX + head.headWidth / 2))];
+      const sy = estimateShift(a.l, d.l, a.w, a.h, "y", colBand, Math.round(a.h / 4));
+      if (Math.abs(sx) < 1 || Math.abs(sy) < 1) throw new FramingError("Nudging V didn't move V measurably in the captures, so framing stopped.", "no_response");
+      const gx = sx / nudge; // pixels per unit
+      const gy = sy / nudge;
+      const targetX = head.centreX;
+      const targetY = head.top + proportions.below_top * head.headWidth;
+      const wantX = position.x * a.w;
+      const wantY = position.y * a.h;
+      const sizeNow = (head.headWidth * proportions.head_widths_per_span) / a.h;
+      result = { x: round((wantX - targetX) / a.h, 4), y: round((wantY - targetY) / a.h, 4), size: round(sizeNow, 3) };
+      steps.push({ kind: "measure", values: { fov: pose.fov, left_right: pose.lr, up_down: pose.ud, head_top: head.top, head_width: head.headWidth, gain_x: round(gx, 2), gain_y: round(gy, 2) }, error: { x: result.x, y: result.y }, size: result.size, ...(head.cutTop ? { note: "the head touches the top edge" } : {}) });
+      await setPose({ lr: pose.lr + (wantX - targetX) / gx, ud: pose.ud + (wantY - targetY) / gy });
+      steps.push({ kind: "centre", values: { left_right: pose.lr, up_down: pose.ud } });
+      if (Math.abs(sizeNow - 1) > 0.05) {
+        const next = (2 * Math.atan(Math.tan((pose.fov * DEG) / 2) * sizeNow)) / DEG;
+        await setPose({ fov: next });
+        steps.push({ kind: "zoom", values: { fov: pose.fov } });
+      } else if (Math.hypot(result.x, result.y) < 0.02) {
+        break;
+      }
     }
-    undo.note(await adapter.setCamera(payload));
-    if (payload.fov !== undefined) pose.fov = payload.fov;
-    if (payload.subject?.left_right !== undefined) pose.lr = payload.subject.left_right;
-    if (payload.subject?.up_down !== undefined) pose.ud = payload.subject.up_down;
-  };
-  const grab = async () => {
-    const p = await adapter.grab!();
-    const size = fitSize(p.width, p.height, { maxWidth: 480 });
-    const small = size.factor === 1 ? p : downscaleArea(p, size.width, size.height);
-    return { w: small.width, h: small.height, l: luma(small) };
-  };
-  const proportions = CAPTURE_PROPORTIONS[options.target];
-  let result: { x: number; y: number; size: number } = { x: NaN, y: NaN, size: NaN };
-  const rounds = Math.max(1, Math.min(3, Math.floor(maxSteps / 2)));
-  for (let round_ = 0; round_ < rounds; round_++) {
-    // Expected shift for the nudge: about 4% of the width at the first-session gain (+1 left/right
-    // moved V about 290 px of 3840 at FOV 35), scaled with the field of view.
-    const gain0 = 0.0755 * (Math.tan(17.5 * DEG) / Math.tan((pose.fov * DEG) / 2));
-    const nudge = clamp(0.04 / gain0, 0.005, 1);
-    const a = await grab();
-    await setPose({ lr: pose.lr + nudge });
-    const b = await grab();
-    await setPose({ lr: pose.lr - nudge });
-    const c = await grab();
-    const maxShift = Math.round(a.w / 4);
-    const rough = findHead(a.l, b.l, c.l, a.w, a.h, 0);
-    if (!rough) throw new FramingError("V didn't show up as moving in the captures (is the photo-mode menu hidden, and V in view?).", "not_found");
-    const sx = estimateShift(a.l, b.l, a.w, a.h, "x", rough.band, maxShift);
-    const head = findHead(a.l, b.l, c.l, a.w, a.h, sx) ?? rough;
-    await setPose({ ud: pose.ud + nudge });
-    const d = await grab();
-    await setPose({ ud: pose.ud - nudge });
-    const colBand: [number, number] = [Math.max(0, Math.round(head.centreX - head.headWidth / 2)), Math.min(a.w - 1, Math.round(head.centreX + head.headWidth / 2))];
-    const sy = estimateShift(a.l, d.l, a.w, a.h, "y", colBand, Math.round(a.h / 4));
-    if (Math.abs(sx) < 1 || Math.abs(sy) < 1) throw new FramingError("Nudging V didn't move V measurably in the captures, so framing stopped.", "no_response");
-    const gx = sx / nudge; // pixels per unit
-    const gy = sy / nudge;
-    const targetX = head.centreX;
-    const targetY = head.top + proportions.below_top * head.headWidth;
-    const wantX = position.x * a.w;
-    const wantY = position.y * a.h;
-    const sizeNow = (head.headWidth * proportions.head_widths_per_span) / a.h;
-    result = { x: round((wantX - targetX) / a.h, 4), y: round((wantY - targetY) / a.h, 4), size: round(sizeNow, 3) };
-    steps.push({ kind: "measure", values: { fov: pose.fov, left_right: pose.lr, up_down: pose.ud, head_top: head.top, head_width: head.headWidth, gain_x: round(gx, 2), gain_y: round(gy, 2) }, error: { x: result.x, y: result.y }, size: result.size, ...(head.cutTop ? { note: "the head touches the top edge" } : {}) });
-    await setPose({ lr: pose.lr + (wantX - targetX) / gx, ud: pose.ud + (wantY - targetY) / gy });
-    steps.push({ kind: "centre", values: { left_right: pose.lr, up_down: pose.ud } });
-    if (Math.abs(sizeNow - 1) > 0.05) {
-      const next = (2 * Math.atan(Math.tan((pose.fov * DEG) / 2) * sizeNow)) / DEG;
-      await setPose({ fov: next });
-      steps.push({ kind: "zoom", values: { fov: pose.fov } });
-    } else if (Math.hypot(result.x, result.y) < 0.02) {
-      break;
-    }
-  }
-  return {
-    method: "capture",
-    target: options.target,
-    span_m: span,
-    offset,
-    position,
-    chosen: { fov: pose.fov, subject: { yaw: pose.yaw, left_right: pose.lr, up_down: pose.ud } },
-    residual: result,
-    converged: false,
-    steps,
-    notes,
-    undo: undo.undo(),
-  };
+    return {
+      method: "capture",
+      target: options.target,
+      span_m: span,
+      offset,
+      position,
+      chosen: { fov: pose.fov, subject: { yaw: pose.yaw, left_right: pose.lr, up_down: pose.ud } },
+      residual: result,
+      converged: false,
+      steps,
+      notes,
+      undo: undo.undo(),
+    };
+  });
 }
 
 /** photo.frame: the projection route when photo.subject works (method auto or project), else the capture route. */
