@@ -253,6 +253,80 @@ test("tree view: groups toggle, rows activate on one click, disabled rows don't,
   expect(activated.at(-1)).toBe("b1");
 });
 
+test("size bar: drag, keys, Home/End, double-click and Delete; bounded by the minimum and what the region holds; kept per view key", async () => {
+  const { SizeBar } = await lib();
+  const { viewState } = await import("../src/studio-ui/view-state");
+  const target = document.createElement("div") as unknown as HTMLElement;
+  const heard: [number | undefined, boolean][] = [];
+  const bar = new SizeBar({ label: "Notes", target, key: "test:notes", minHeight: 60, defaultHeight: 120, maxHeight: () => 300, onResize: (height, final) => heard.push([height, final]) });
+  const el = bar.element as unknown as LightElement & { setPointerCapture?: (id: number) => void };
+  el.setPointerCapture = () => {};
+  const height = () => (target.style as unknown as { height: string }).height;
+  const region = bar.region as unknown as LightElement;
+  expect([region.children[0] === (target as unknown), region.children[1] === el]).toEqual([true, true]);
+  expect([height(), el.getAttribute("role"), el.getAttribute("aria-orientation"), el.getAttribute("aria-label"), el.getAttribute("tabindex"),
+    el.getAttribute("aria-valuenow"), el.getAttribute("aria-valuemin"), el.getAttribute("aria-valuetext")])
+    .toEqual(["120px", "separator", "horizontal", "Resize Notes", "0", "120", "60", "120 pixels tall, default"]);
+  // Keys: Down enlarges by a row, Up shrinks, End goes to what the region holds, Home to the minimum; each is kept.
+  key(bar.element, "ArrowDown"); expect([height(), viewState().size("test:notes")]).toEqual(["148px", 148]);
+  key(bar.element, "ArrowUp"); expect(height()).toBe("120px");
+  key(bar.element, "End"); expect(height()).toBe("300px");
+  key(bar.element, "Home"); expect(height()).toBe("60px");
+  // Delete goes back to the default and forgets the chosen height.
+  key(bar.element, "Delete"); expect([height(), viewState().size("test:notes"), bar.chosen]).toEqual(["120px", undefined, undefined]);
+  // A drag: down enlarges and up shrinks from where it started; a shrink keeps its lost height as a reserve under the bar until release.
+  const pointer = (type: string, clientY: number, pointerId = 1) => el.dispatchEvent(lightEvent(type, { button: 0, pointerId, clientY }));
+  const margin = () => (bar.element.style as unknown as { marginBottom: string }).marginBottom;
+  pointer("pointerdown", 100); pointer("pointermove", 150);
+  expect([height(), el.classList.contains("dragging"), viewState().size("test:notes")]).toEqual(["170px", true, undefined]);
+  pointer("pointermove", 60);
+  expect([height(), margin()]).toEqual(["80px", "40px"]);
+  pointer("pointermove", 1000); expect(height()).toBe("300px");
+  pointer("pointermove", 90); pointer("pointerup", 90);
+  expect([height(), margin(), el.classList.contains("dragging"), viewState().size("test:notes")]).toEqual(["110px", "", false, 110]);
+  // Escape during a drag goes back to where it started, and keeps nothing new.
+  pointer("pointerdown", 100); pointer("pointermove", 200);
+  (document as unknown as { dispatchEvent(e: unknown): void }).dispatchEvent(lightEvent("keydown", { key: "Escape" }));
+  expect([height(), viewState().size("test:notes")]).toEqual(["110px", 110]);
+  pointer("pointermove", 300); expect(height()).toBe("110px");
+  // A lost capture ends the drag where it is; a press and release that moved nothing chooses nothing.
+  pointer("pointerdown", 100); pointer("pointermove", 128); pointer("lostpointercapture", 128);
+  expect(viewState().size("test:notes")).toBe(138);
+  pointer("pointermove", 400); expect(height()).toBe("138px");
+  // Double-click: back to the default.
+  pointer("pointerdown", 50); pointer("pointerup", 50); pointer("pointerdown", 50); pointer("pointerup", 50);
+  expect(viewState().size("test:notes")).toBe(138);
+  fire(bar.element, "dblclick");
+  expect([height(), viewState().size("test:notes")]).toEqual(["120px", undefined]);
+  expect(heard.at(-1)).toEqual([undefined, true]);
+  // A new bar under the same key starts at the kept height.
+  key(bar.element, "ArrowDown");
+  expect(new SizeBar({ label: "Notes", target: document.createElement("div") as unknown as HTMLElement, key: "test:notes", minHeight: 60, defaultHeight: 120 }).height).toBe(148);
+});
+
+test("tree view with a size bar: six rows by default, the chosen height replaces maxRows, never past its rows or under the floor", async () => {
+  const { TreeView, TREE_ROW_HEIGHT } = await lib();
+  const tree = new TreeView({ label: "Start from", maxRows: 6, minRows: 3, remember: false, sizeBar: { key: "test:start" }, onActivate: () => {}, onToggle: () => {} });
+  const rows = (n: number) => [{ id: "g", label: "Natural", rows: Array.from({ length: n }, (_, i) => ({ id: `r${i}`, label: `Row ${i}` })) }];
+  const height = () => (tree.element.style as unknown as { height: string }).height;
+  tree.update({ groups: rows(30), expanded: new Set(["g"]) });
+  expect(height()).toBe(`${6 * TREE_ROW_HEIGHT + 2}px`);
+  const region = tree.sizeBar!.region as unknown as LightElement;
+  expect([region.children[0] === (tree.element as unknown), tree.sizeBar!.element.getAttribute("aria-label")]).toEqual([true, "Resize Start from"]);
+  key(tree.sizeBar!.element, "ArrowDown"); key(tree.sizeBar!.element, "ArrowDown");
+  expect(height()).toBe(`${8 * TREE_ROW_HEIGHT + 2}px`);
+  // Fewer rows: it fits them (never under the floor); more again: back to the chosen height.
+  tree.update({ groups: rows(2), expanded: new Set(["g"]) });
+  expect(height()).toBe(`${3 * TREE_ROW_HEIGHT + 2}px`);
+  tree.update({ groups: rows(30), expanded: new Set(["g"]) });
+  expect(height()).toBe(`${8 * TREE_ROW_HEIGHT + 2}px`);
+  // End: all its rows (the group and 30 rows), no more.
+  key(tree.sizeBar!.element, "End");
+  expect(height()).toBe(`${31 * TREE_ROW_HEIGHT + 2}px`);
+  key(tree.sizeBar!.element, "Home");
+  expect(height()).toBe(`${3 * TREE_ROW_HEIGHT + 2}px`);
+});
+
 test("tree view: a right-click, Shift+F10 or the Menu key on an item asks the owner for its context menu; focus by any route moves the tab stop", async () => {
   const { TreeView } = await lib();
   const menus: string[] = [];

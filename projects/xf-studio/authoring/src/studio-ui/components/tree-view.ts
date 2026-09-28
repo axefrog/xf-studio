@@ -2,6 +2,7 @@ import { keyBinding } from "../../input-bindings";
 import { h, setAttr, setText } from "../dom";
 import { icon } from "../icons";
 import { ScrollMemory, type RestoreResult } from "../scroll-anchor";
+import { SizeBar } from "./size-bar";
 import type { ScrollAnchor } from "../../ui-preferences";
 
 /**
@@ -28,6 +29,10 @@ import type { ScrollAnchor } from "../../ui-preferences";
  *   that many rows, then the tree scrolls; `minRows` (default 1) keeps a floor so a search that shrinks the list doesn't pull what
  *   follows up and down as the person types. An empty tree is as tall as its message (at least the floor). Opening or closing a group
  *   changes the height, which the person asked for.
+ * - **Size bar** (`sizeBar`, components/size-bar.ts): a bar under the frame the person drags to make the tree taller or shorter. With
+ *   `maxRows`, the chosen height replaces `maxRows` as the most the frame fits to (it still fits fewer rows, never under the floor, and
+ *   never grows past its rows); the default is `maxRows` rows. The height is remembered under the bar's view key. The owner places
+ *   `tree.sizeBar.region` (the frame with the bar under it) instead of `tree.element`.
  * - **Identity:** a group and a row are told apart by their kind, so a row may share its ID with a group; within a kind, IDs are
  *   unique (a row listed in several groups, such as Favourites and its category, carries its group in its ID).
  * - **Focus** stays in the tree when the focused item leaves it (a row unstarred out of Favourites, a search that no longer matches):
@@ -69,6 +74,8 @@ export type TreeViewOptions = {
   minRows?: number;
   /** The view key its scroll position is remembered under (default `tree:<label>`); false: not remembered. */
   remember?: string | false;
+  /** A size bar under the frame, its height remembered under this view key (e.g. `expressions:start-from`). */
+  sizeBar?: { key: string };
 };
 export const TREE_ROW_HEIGHT = 28;
 const OVERSCAN = 8;
@@ -94,6 +101,8 @@ export class TreeView {
   private frame = 0;
   private readonly resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => { this.paint(); this.memory?.contentChanged(); }) : undefined;
   private readonly memory?: ScrollMemory;
+  /** The bar under the frame that resizes it (`sizeBar`); the owner places its `region` (the frame and the bar) instead of `element`. */
+  readonly sizeBar?: SizeBar;
   constructor(private readonly options: TreeViewOptions) {
     this.spacer = h("div", { class: "tree-spacer" });
     this.tree = h("div", { class: "tree-scroll", role: "tree", "aria-label": options.label }, this.spacer);
@@ -119,6 +128,14 @@ export class TreeView {
       this.focusIdent(item.ident);
       options.onMenu!(item.ref, { x: event.clientX, y: event.clientY });
     });
+    if (options.sizeBar) {
+      const floor = () => (options.minRows ?? 1) * TREE_ROW_HEIGHT + 2;
+      this.sizeBar = new SizeBar({ label: options.label, target: this.element, key: options.sizeBar.key, step: TREE_ROW_HEIGHT,
+        minHeight: floor, defaultHeight: () => (options.maxRows ?? 8) * TREE_ROW_HEIGHT + 2,
+        // It never grows past its rows (an empty tree: its message, at least the floor).
+        maxHeight: () => Math.max(floor(), this.flat.length * TREE_ROW_HEIGHT + 2),
+        apply: () => this.fit() });
+    }
   }
   /** Show `groups` with `expanded` open; `current` marks the current row; `loading` shows the status line without moving anything. */
   update(state: { groups: readonly TreeGroupData[]; expanded: ReadonlySet<string>; current?: string; loading?: boolean | string }) {
@@ -143,20 +160,26 @@ export class TreeView {
       refocus = hadFocus;
     }
     this.spacer.style.height = `${this.flat.length * TREE_ROW_HEIGHT}px`;
-    if (this.options.maxRows) {
-      // The frame fits its content: as tall as its items up to maxRows (then the tree scrolls), never under the floor; empty, as tall
-      // as its message (at least the floor). The frame's 1 px border on each side is outside the rows.
-      const floor = (this.options.minRows ?? 1) * TREE_ROW_HEIGHT + 2;
-      this.element.style.minHeight = `${floor}px`;
-      this.element.style.height = this.flat.length
-        ? `${Math.max(this.options.minRows ?? 1, Math.min(this.options.maxRows, this.flat.length)) * TREE_ROW_HEIGHT + 2}px` : "";
-    }
+    if (this.sizeBar) this.sizeBar.refresh();
+    this.fit();
     this.empty.hidden = this.flat.length > 0;
     setText(this.status, typeof state.loading === "string" ? state.loading : state.loading ? "Loading…" : "");
     this.status.hidden = !state.loading;
     if (refocus && this.focusId) this.focusIdent(this.focusId);
     else this.paint();
     this.memory?.contentChanged();
+  }
+  /**
+   * The frame's height. With `maxRows` or a size bar the frame fits its content: as tall as its items up to maxRows (or the height
+   * chosen with the size bar), then the tree scrolls; never under the floor; empty, as tall as its message (at least the floor). The
+   * frame's 1 px border on each side is outside the rows. Otherwise the owner sizes it.
+   */
+  private fit() {
+    if (!this.options.maxRows && !this.sizeBar) return;
+    const floor = (this.options.minRows ?? 1) * TREE_ROW_HEIGHT + 2, content = this.flat.length * TREE_ROW_HEIGHT + 2;
+    const most = this.sizeBar ? this.sizeBar.height : this.options.maxRows! * TREE_ROW_HEIGHT + 2;
+    this.element.style.minHeight = `${floor}px`;
+    this.element.style.height = this.flat.length ? `${Math.max(floor, Math.min(most, content))}px` : "";
   }
   /**
    * Scroll so the item (the row with that ID, else the group; `kind` picks one) sits at the top, `offset` px of it scrolled past the

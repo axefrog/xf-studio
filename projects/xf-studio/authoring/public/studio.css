@@ -386,9 +386,14 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* The resize bar under the dial: drag down to enlarge, up to shrink. */
 .dial-grip { display: flex; justify-content: center; align-items: center; height: 12px; margin: 0 auto; width: min(var(--dial-size, 280px), 100%); cursor: ns-resize;
   touch-action: none; border-radius: var(--bevel-sm); }
-.dial-grip::before { content: ""; width: 36px; height: 3px; border-radius: 2px; background: var(--line-strong); transition: background .12s, width .12s; }
-.dial-grip:hover::before, .dial-grip.dragging::before { background: var(--signal); width: 48px; }
-.dial-grip:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.dial-grip::before, .size-bar::before { content: ""; width: 36px; height: 3px; border-radius: 2px; background: var(--line-strong); transition: background .12s, width .12s; }
+.dial-grip:hover::before, .dial-grip.dragging::before, .size-bar:hover::before, .size-bar.dragging::before { background: var(--signal); width: 48px; }
+.dial-grip:focus-visible, .size-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* Size bar (components/size-bar.ts): the same bar under a list, tree or scroll region, full width and right under it (the region
+   holds the two with no gap); drag down to enlarge, up to shrink. Only the grip line changes on hover, so nothing moves. */
+.size-region { display: flex; flex-direction: column; min-width: 0; }
+.size-bar { flex: none; display: flex; justify-content: center; align-items: center; height: 12px; cursor: ns-resize; touch-action: none;
+  border-radius: var(--bevel-sm); user-select: none; }
 /* Scrub slider (components/scrub-slider.ts): rests at the middle, fills from the centre mark to the thumb while it previews, springs back. */
 .scrub-slider { gap: 0; }
 .scrub-line { display: flex; align-items: center; gap: var(--sp-2); min-height: 24px; min-width: 0; }

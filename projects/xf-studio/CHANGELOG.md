@@ -12,6 +12,7 @@ When a change lands, add a line to **Unreleased**. When a version is tagged, ren
 
 ### New and improved
 
+- **A taller Start from list.** The Expression panel's Start from list has a bar under it: drag it down to see more expressions at once, or up for a compact list. Double-click the bar to go back to six rows. The height you choose is remembered after a reload. It works from the keyboard too: Tab to the bar, then use the arrow keys, Home or End. Checked by component tests and by headless-browser captures that measure nothing above the list moves.
 - **XF Eye Artistry for a masculine V too.** Build now makes your mod for both a feminine and a masculine V: the masculine character creator gets its own XF row (between Teeth and Eye makeup) with the same looks, on an eye-makeup area cut from the male head in your own game the same way as the female one, and the same textures, so the mod grows by only four small files. The first Build prepares his eye area once (about half a minute). If his head can't be used (for example a head mod XF Eye Artistry doesn't support yet), the mod is still built, for a feminine V only: the result says whom the mod is for, and why and what to do when that's a feminine V only. Checked by Build's own verifier on a real build (her files are exactly the same as before); not yet seen in game.
 
 ### Fixes and under the hood

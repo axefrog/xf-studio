@@ -6,8 +6,8 @@
  * - **Layout** follows the design review's target (research/authoring/ui-visual-qa-checklist.md): the panel's padding and rhythm, two
  *   sections (Start from, Face), one readout per value, the whole-face commands in the Face heading, and status text only when there is
  *   something to act on.
- * - **Start from** is a searchable tree that fits its rows (up to six, then it scrolls), grouped by source: your saved expressions, the
- *   built-in natural samples ("Natural", from `data/expression-samples`), the game's own and each mod's. One click (or Enter) starts from a row; the row
+ * - **Start from** is a searchable tree that fits its rows (up to six, then it scrolls; the size bar under it sets that height, remembered
+ *   across reloads), grouped by source: your saved expressions, the built-in natural samples ("Natural", from `data/expression-samples`), the game's own and each mod's. One click (or Enter) starts from a row; the row
  *   the expression started from is marked current. A saved expression's Rename and Delete are in its context menu (right-click,
  *   Shift+F10, its More button), and F2 and Delete work on a focused row; Rename edits in place (a value popover) and Delete asks first
  *   (a confirm popover), since the library can't undo it.
@@ -176,7 +176,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   let startQuery = "";
   const startSearch = new SearchField({ label: "Find an expression to start from", placeholder: "Find an expression", onFilter: query => { startQuery = query.toLowerCase(); paintStart(); },
     onArrowDown: () => tree.focus() });
-  const tree: TreeView = new TreeView({ label: "Start from", emptyText: "No expression matches.", maxRows: 6, minRows: 3,
+  const tree: TreeView = new TreeView({ label: "Start from", emptyText: "No expression matches.", maxRows: 6, minRows: 3, sizeBar: { key: "expressions:start-from" },
     onActivate: key => begin(key),
     onToggle: (group, open) => { openStartGroups.set(group, open); paintStart(); },
     onKey: (event, item) => {
@@ -258,7 +258,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     statusLine,
     h("section", { class: "section", "aria-label": "Start from", "data-view-key": "expressions.start-from" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Start from" }), h("span", { class: "block-actions" }, save)),
-      startSearch.element, tree.element, presetsNote),
+      startSearch.element, tree.sizeBar!.region, presetsNote),
     h("section", { class: "section", "aria-label": "Transitions", "data-view-key": "expressions.transitions" },
       h("div", { class: "section-head" }, h("h3", { class: "section-title", text: "Transitions" })),
       animate.element, duration.element, curve.element),
