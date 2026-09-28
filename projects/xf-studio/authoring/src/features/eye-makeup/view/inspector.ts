@@ -210,7 +210,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         model.setHelp(catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
       }
       if (!classicSection.hidden) {
-        const flakesTitle = glitter ? "Classic reflective flakes" : "Shimmer flakes";
+        const flakesTitle = glitter ? "Classic reflective flakes" : "Shimmer sparkles";
         setText(classicSection.querySelector(".section-title")!, flakesTitle);
         setAttr(classicSection.querySelector(".help-tip")!, "aria-label", `About ${flakesTitle}`);
         // Shimmer is an experimental export; classic Glitter is preview only, so its tip doesn't call it experimental.
