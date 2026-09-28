@@ -4,6 +4,7 @@ import { createCharacterRenderer } from "../src/platform/scene/character-rendere
 import type { HeadRig } from "../src/platform/scene/head-rig";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "../src/character-detail-loader";
 import type { CharacterSlot, SupersededPart } from "../src/platform/api/scene";
+import { setBodyCastersOnly } from "../src/platform/scene/shadow-casters";
 
 // The platform's character renderer, driven as the scene host drives it (PREV-98): which of the V's parts show, how the skin goes on
 // the head in both placements, what the scene port's character view and skin notices say, and what a feature superseding a whole slot
@@ -188,3 +189,25 @@ test("a V's own eyeball replaces the core eye while it is drawn, and the core ey
   expect(rig.eyes.visible).toBe(true);
   expect(character.eyeAppearance().source).toBe("core");
 });
+
+test("hair strands draw nothing into a body-only shadow map and cast as before into every other (hair through the face, PREV-167)", () => {
+  const { character } = setup();
+  const strand = skinned(quad(0.07), "strands"), body = skinned(quad(0.05), "body");
+  Object.assign(strand.material as THREE.MeshStandardMaterial, { alphaToCoverage: true, alphaMap: new THREE.Texture() });
+  character.setCharacterDetails(v("a", [component("hair", "hair", [strand]), component("body", "body", [body])]));
+  expect([strand.castShadow, body.castShadow]).toEqual([true, true]);
+  const depth = strand.customDepthMaterial!, renderer = {} as THREE.WebGLRenderer, geometry = strand.geometry;
+  const draw = (mesh: THREE.Mesh, material: THREE.Material, bodyOnly: boolean) => {
+    const shadowCamera = new THREE.PerspectiveCamera();
+    if (bodyOnly) setBodyCastersOnly({ camera: shadowCamera } as THREE.LightShadow, true);
+    mesh.onBeforeShadow(renderer, mesh, new THREE.PerspectiveCamera(), shadowCamera, geometry, material, null as never);
+    const during = [material.depthWrite, material.colorWrite];
+    mesh.onAfterShadow(renderer, mesh, new THREE.PerspectiveCamera(), shadowCamera, geometry, material, null as never);
+    return { during, after: [material.depthWrite, material.colorWrite] };
+  };
+  expect(draw(strand, depth, true)).toEqual({ during: [false, false], after: [true, true] });
+  expect(draw(strand, depth, false)).toEqual({ during: [true, true], after: [true, true] });
+  // The body's own shapes draw into both kinds of map.
+  expect(draw(body, body.customDepthMaterial!, true)).toEqual({ during: [true, true], after: [true, true] });
+});
+

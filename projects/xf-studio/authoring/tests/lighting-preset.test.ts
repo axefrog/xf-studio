@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { creatorShadowCasters, DEFAULT_CREATOR_LIGHTING, readCreatorLighting, storedCreatorLighting } from "../src/creator-lighting";
-import { createLightingSetupStage } from "../src/lighting-setup-stage";
+import { createLightingSetupStage, shadowState } from "../src/lighting-setup-stage";
+import { bodyCastersOnly } from "../src/platform/scene/shadow-casters";
 import { studioStageSetup, type LightingSource } from "../src/lighting-setups";
 import { DEFAULT_STUDIO_STAGE } from "../src/studio-lighting";
 import type { StudioEnvironment } from "../src/studio-environment";
@@ -430,4 +431,29 @@ test("a chosen calibration equal to the token's reads back as chosen, and every 
   expect(node.creatorLighting).toEqual({ intensity: "isotropic", cone: "full", exposure: 0.46 });
   const read = parseWorkspace(JSON.parse(JSON.stringify(serializeWorkspace({ ...fresh, views: stored }, STUDIO_DOCUMENTS))), STUDIO_DOCUMENTS);
   expect(createStudioViewGraph(read.preview, read.views).state(v2, "lights")).toMatchObject({ setup: "creator", creatorLighting: DEFAULT_CREATOR_LIGHTING });
+});
+
+test("contact-only creator lights keep hair out of their stand-in shadow maps; shadow-mapped lights keep every caster (hair through the face, PREV-167)", () => {
+  // The low rear rims the game shadows only by the character contact march printed the hair behind the ear across the cheek, jaw and
+  // neck through their stand-in maps.
+  const scene = new THREE.Scene(), shadowMap = { enabled: false, type: 0, autoUpdate: true, needsUpdate: false };
+  const renderer = { render: () => {}, setRenderTarget: () => {}, getRenderTarget: () => null, shadowMap,
+    getDrawingBufferSize: (v: THREE.Vector2) => v.set(8, 8) } as unknown as THREE.WebGLRenderer;
+  const stage = createLightingSetupStage({ scene, renderer, loadLut: () => new Promise(() => {}), createEnvironment: room() });
+  stage.setSource(GAME);
+  const byName = new Map(stage.rig.objects.map(light => [light.name.replace("xfs-light-", ""), light]));
+  const casting = [...byName].filter(([, light]) => light.castShadow);
+  const bodyOnly = casting.filter(([, light]) => bodyCastersOnly(light.shadow)).map(([name]) => name).sort();
+  // Main_Face, Rim_Right and Rim_Left_Head: contactShadows only in the rig; Rim_Top, Fill_Upper and Highlight_Right are shadow-mapped.
+  expect(bodyOnly).toEqual(["Main_Face", "Rim_Left_Head", "Rim_Right"]);
+  expect(casting.filter(([, light]) => !bodyCastersOnly(light.shadow)).map(([name]) => name).sort()).toEqual(["Fill_Upper", "Highlight_Right", "Rim_Top"]);
+  // The choice is part of the maps' fingerprint, so flipping it draws them again.
+  const before = shadowState(scene);
+  const rim = byName.get("Rim_Right")!;
+  rim.shadow.camera.userData.xfsBodyCastersOnly = false;
+  expect(shadowState(scene)).not.toBe(before);
+  // A studio setup has no game flags: every map holds every caster.
+  stage.setSource(SOFT);
+  expect(stage.rig.objects.filter(light => light.castShadow).every(light => !bodyCastersOnly(light.shadow))).toBe(true);
+  stage.dispose();
 });

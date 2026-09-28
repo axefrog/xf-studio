@@ -114,6 +114,8 @@ In order:
 
    **Animated preset changes** (requested 28 September 2026; in progress): an option to ease between expression presets over 0–3 s instead of cutting, to judge how natural a transition looks. Poses follow. Its easings are the shared catalogue the timeline editor will use.
 
+   **Facial correctives tuning and XF Natural Face Overrides** (banked 28 September 2026; waits for the current product to be finished and polished): smiles bunch the cheek into a lump beside the nose in the preview and in game, because the game's own `lips_[lr]_corner_up` pose lifts the fold line about four times as far as the cheek beside it. A data-only patch of the facial setup, previewed beside the vanilla setup, and later shipped either as per-expression compensation in XF's own clips or as an optional XF-branded setup override the Studio offers to install; the routes, constraints, conflicts, risks and a test plan are in the [design note](../animation/facial-correctives-tuning.md). Polish on the existing drawer banked with it: show a control's effective weight when an influence cuts it (a nasolabial deepener at 100 % solves at 26 % under a smile).
+
    **Timeline animation editor** (R&D requested 28 September 2026; not started): author animated expressions, poses and idles on a timeline. The requested features:
    - keyframes, with tweakable easing between them;
    - several tracks, with each animatable element in only one track at a time;
