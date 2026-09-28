@@ -33,6 +33,8 @@ Goal: procedural finishes computed in the game's own material shader, the way th
 2. **Understand the shader cache format**, so a package can ship compiled shaders the engine loads natively.
 3. **Fallback, today's route:** baked textures on the best existing template (the car-paint metallic flake layer is the lead), in the finishes rework.
 
+**Plan (the ArchiveXL playbook applied to shaders):** ArchiveXL already detours the engine's resource loader to add and patch resources as they load, so hooking the load or build path is proven practice. Steps: (a) trace a material template's shader from the shader cache (hash lookup) to GPU pipeline creation, using our disassembly tooling and ArchiveXL's hooking technique as reference; (b) detour that step, substituting bytecode only for our copied template's hash, with everything else passed through; (c) prove it trivially with a red-tint copy of the plate shader; (d) compile the real shader with the DirectX compiler against the original's exact inputs, read from its own bytecode. Safety: pattern-located hooks rather than fixed addresses, refusing to swap on any mismatch so the plate falls back to its normal material, and supervised tests only. This comes before the car-paint experiment in the research order.
+
 If route 1 or 2 works, it opens pearl interference colour, holographic and animated finishes, and custom materials well beyond makeup. Starts after the current session's merges; read-only research first, and anything in the game is done under supervision.
 
 ## Ranked tracks
