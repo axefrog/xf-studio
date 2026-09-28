@@ -372,6 +372,19 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
 
+## Build record (bridge 0.5.1, branch build, not staged)
+
+Built 29 September 2026 on `claude/cleanup-review5-bridge` at `d15b4fdbeeb1`, clean tree (manifest `"commit": "d15b4fdbeeb19de4c62937ff4c92fb6cc84f941b"`, `"source_tree_clean": true`), by `bun tools/package.ts`: version 0.5.1, deep review 5's bridge fixes (RB-66..75) on top of 0.5.0. On that commit: `xfb_selftest --unit` UNIT OK (306 checks), self-test 373 of 373, `bun test tools` 209 of 210 (the screen-route capture test needs its synthetic window uncovered on the desktop), typecheck, the Lua lint, and the redscript lint both without Codeware and with Codeware `v1.20.4`'s scripts (`613a1cb8`) against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…ee86`). The packages carry what 0.5.0's did (the -writes zip lists photo, world, character, save and showroom; **inventory writes are off**, `"inventory_writes": false`). The plugin registers one more native, `XFBridge_CreatorRedirect` (eleven). A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.5.1-writes.zip` | `66567cd6c5e120082dc29f23a6d950b400c6ad69d9a52414addd4c90054aa2c2` |
+| `xf-runtime-bridge-0.5.1-diagnostic.zip` | `fc997c91f96a7cff6b0dd1b22344a243c33364e76706ba67a650269c3143f632` |
+| `xf-runtime-bridge-0.5.1.zip` (default) | `d67525d820cb21246bd6a783009cbfbda60cfe07c4ec2505e9a0d0a7ad981d6e` |
+| (`XFRuntimeBridge.dll` inside each) | `7e7a9d5408b1ed3e88a479d075996d8d82ab6bd4a1c50925b451c99c240a9583` |
+
+**New in this build, watch in the session:** the plugin log's `cc.open_redirect decision=` line at every pause menu the bridge's request touches, and `rtti.register_types … natives=11` at load; `cc_open` answers the `edit_mode` it opened with (S11-S12); `world_time_set` in photo mode answers an undo with `target: "photo"`, and `game_status` reports `world_time_seconds` (S9); `photo_frame` refusals carry `undo` and `restored` in their detail (S6) and `residual.facing_deg` (S4, S7); `photo_state`'s expressions carry `table_index_verified` (S10); `cc_apply` can answer `stale_match` (S15). The [session-5 checks](#session-5-checks-bridge-051) cover each fix.
+
 ## Build record (bridge 0.5.0 and XF Finish Showroom, branch build, not staged)
 
 Built 28 September 2026 on `claude/finish-showroom` at `a56457384407`, clean tree (manifest `"commit": "a56457384407872677b999db25108f82860fa944"`, `"source_tree_clean": true`), by `bun tools/package.ts`: version 0.5.0, the showroom commands on top of 0.4.2. On that commit: `xfb_selftest --unit` UNIT OK, self-test 346 of 346, `bun test tools` 195 of 196 (the screen-route capture test needs its synthetic window uncovered on the desktop), typecheck, the Lua lint, and the redscript lint both without Codeware (the fallback class) and with Codeware `v1.20.4`'s scripts (the spawning class) against a copy of the 2.31 bundle.
