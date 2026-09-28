@@ -89,7 +89,7 @@ Test route B's joint-offset question first (one probe clip, no risk to anyone's 
 
 Batch into prepared sessions through the runtime bridge; record the game, ArchiveXL, TweakXL versions and the installed face mods.
 
-1. **R1:** which setup the face rig uses live. **Answered for the female V in photo mode (session 4): the male player setup** ([facial expressions §1](../../knowledge/facial-expressions.md#which-facial-setup-v-actually-uses)); a route A override therefore patches the male player setup for photo mode. Still to read: the male V, and the creator and gameplay faces.
+1. **R1:** which setup the face rig uses live. **Answered for the female V in photo mode (session 4): the male player setup** ([facial expressions §1](../../knowledge/facial-expressions.md#which-facial-setup-v-actually-uses)); a route A override therefore patches the male player setup for photo mode, and the preview solves with it since 29 September. With it the smile's fold closes about 9 points less at weights 0.5–0.7 than with the female head's setup this note measured (38–46 % against 47–56 %) ([experiment 031](../../experiments/031-photo-mode-facial-setup/README.md)). Still to read: the male V, and the creator and gameplay faces.
 2. **Probe clip** (route B): one XF expression with a joint offset on `r_J_eye_check_rowD_0`; photo mode close-up against the same expression without it.
 3. **Photo mode**: the 12 vanilla expressions, five Mega Pack faces and the XF set, each with and without the override, fixed camera, look-at off; plus the cheek check smiles (first run in session 4: [N13 results](../../experiments/029-session-4/README.md#34-n13-cheek-check)).
 4. **Creator**: the close-up idle and the eyes-section showcase, blink closure on four eye shapes.

@@ -56,7 +56,7 @@ Not used by the solve: `levelOfDetailStartIndices`, `aPoseLS`/`aPoseMS`, `refere
 
 ### 3.2 The facial setup (`.facialsetup`)
 
-The setup that turns controls into poses (`animFacialSetup`, `version` 8 on the 2.31 game). V's face rig entity names the male player setup, and the Studio currently uses the female head's own; which one the engine uses is open ([facial animation §3](../../knowledge/facial-animation.md#3-which-facial-setup-v-uses)). Both have the same structure. Everything the solve needs is in **`bakedData`** plus the two pose buffers; a setup without `bakedData` cannot be solved (refuse it in plain words) [reference].
+The setup that turns controls into poses (`animFacialSetup`, `version` 8 on the 2.31 game). V's face rig entity names the male player setup, photo mode solves the female V with it [runtime], and the Studio solves with it too (design D1; [facial animation §3](../../knowledge/facial-animation.md#3-which-facial-setup-v-uses)). Both have the same structure. Everything the solve needs is in **`bakedData`** plus the two pose buffers; a setup without `bakedData` cannot be solved (refuse it in plain words) [reference].
 
 **Root fields.**
 
@@ -339,7 +339,7 @@ The IO Suite is a careful community reading, and its idle and blink look right i
 | Q1 | Rotations blend by sequential nlerp with post-multiplication, in pose order | The engine may blend in another order or form (for example a weighted sum of deltas normalised once) | Only visible in strong combinations; compare the cheek-stack and vanilla expressions in game |
 | T1 | Delta applied after the rest, translation in the joint's rest frame | Moot for the female head rig (identity rest rotations and unit scales on every posed joint); matters only for a rig that breaks that | Check any new rig's posed joints at compile time and warn |
 | W1 | Wrinkle weight 1 − (1 − w)² of the processed control weight | The curve and the source (processed weight rather than raw) are the IO Suite's reading | The skin shader's wrinkle inputs, read through the bridge |
-| V1 | Solved with the female head's own setup | The face rig entity names the male player setup ([facial animation §3](../../knowledge/facial-animation.md#3-which-facial-setup-v-uses)) | Runtime check R1 on the [test card](../runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2) |
+| V1 | ~~Solved with the female head's own setup~~ Resolved: the Studio solves with the setup the face rig names (the male player setup), which R1 found live in photo mode | [facial animation §3](../../knowledge/facial-animation.md#3-which-facial-setup-v-uses) | Creator and gameplay faces still to read |
 
 Fields nobody reads (`Flag1`–`Flag3` of poses, `JointRegion` and `Unknown` of transforms, `IsCachable`, the `Unknown` of main poses and upper/lower entries) may carry engine behaviour the IO Suite does not model [hypothesis].
 
