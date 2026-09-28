@@ -373,6 +373,16 @@ Goal: run the [finish board](../../experiments/016-finish-board/README.md) check
 | 8. Compare | Store frames with the manifest, board id, camera and time; compare against the Studio preview render and previous runs | M | Studio-side comparison tool |
 | 9. Restore and exit | Unset dilation and pause, reset weather, restore camera and HUD; `ExitGame()` only if launching was approved | S | — |
 
+## 8a. Control layers: deliberation, behaviours and small models (direction, 29 September 2026)
+
+An AI agent works in turns of seconds; the game runs at frame rate. The bridge closes that gap in three layers:
+
+1. **Deliberation (the agent):** goals, choices, reading reports, reacting to surprises. It works through commands and reports, never frame by frame.
+2. **Behaviours (in the plugin, every tick):** small, parameterised routines the agent starts with a goal, parameters, limits and a stop condition, which then run on their own and stream events back. Examples: follow a path and stop when blocked; orbit the camera; keep a subject framed; capture when a condition holds; drive an actor's routine. Every behaviour obeys the safety model (§4): the kill switch stops it, the load gate pauses it, and it holds nothing when it ends.
+3. **Small learned models, only where rules fail:** fast, local and narrow, added when a friction point shows discrete logic isn't enough. Candidates: capture quality (blinks, motion blur, clipped highlights), photo-to-expression fitting over the facial rig's controls, audio-to-lip-sync, shot scoring for directed photography.
+
+The same behaviour layer serves actors and other live things in the game that shouldn't depend on an agent's conversation: NPC routines, companions, directed characters. It pairs with **introspection** (a filterable scene report and pre-capture checks, [AGENTS.md](../../AGENTS.md)): reports tell the agent what is happening, and behaviours act on it at game speed. Player control ([design](player-control-design.md)) is the first consumer.
+
 ## 9. Maintainer decisions
 
 1. **Bridge default:** the shipped mod keeps `enabled = false`; the diagnostic build turns it on read-only. Recommended: keep it off by default for everyone and let XF Studio switch it on only in its own dedicated profile.
