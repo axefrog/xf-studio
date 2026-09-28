@@ -1,6 +1,6 @@
 # Character-customisation file chain
 
-**Maturity: Draft.** Consolidated and cross-checked for vanilla 2.31 female and male resources, ArchiveXL 1.27.3 source, one decoded 2.31 save and the implemented resolver's run on the reference installation. Not yet runtime-tested in the areas marked **[hypothesis]**. Evidence grades follow the [knowledge rules](README.md): **[source]** engine/framework/tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established.
+**Maturity: Draft.** Consolidated and cross-checked for vanilla 2.31 female and male resources, ArchiveXL 1.27.3 source, one decoded 2.31 save and the implemented resolver's run on the reference installation. Not yet runtime-tested in the areas marked **[hypothesis]**; the creator checks run in session 4 are in [in-game results](#in-game-results-session-4). Evidence grades follow the [knowledge rules](README.md): **[source]** engine/framework/tool source, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established.
 
 This page answers four questions for XF Studio agents:
 
@@ -144,7 +144,7 @@ EP1 anomaly [resource]: in `female_cco_ep1`, eye-makeup styles 21–36 carry the
 
 Consequence for the Studio: choosing a skin tone is one control, but the renderer must apply that index to **every** linked option that is active, including tattoos and face cyberware whose colour follows skin tone.
 
-**Switcher link members** [hypothesis]: `hairstyle` and `hairstyle_cyberware` are both link controllers of `hairstyle`, but list their styles in different orders (they differ at 20 positions on the reference installation). The Studio's character context carries a switcher member's choice as the choice that **activates the same options**, not the same position, and leaves a member without such a choice at its own (CORE-61). Whether the creator does the same is test ask 11.
+**Switcher link members**: `hairstyle` and `hairstyle_cyberware` are both link controllers of `hairstyle`, but list their styles in different orders (they differ at 20 positions on the reference installation) [resource]. The Studio's character context carries a switcher member's choice as the choice that **activates the same options**, not the same position, and leaves a member without such a choice at its own (CORE-61). In game, a face cyberware that swaps the row keeps the same hair, at the same position for style 5 [runtime] ([session 4](#in-game-results-session-4)); a style at one of the 20 differing positions would separate the two rules.
 
 **How the Studio stores and applies links** (character context, `src/character-context.ts`): only the choice a person set is stored, one per link family (the latest wins); every other member, controllers and followers, is derived when the V is prepared (CORE-50, CORE-51). Resetting a member resets the family to the V's own. A portable preset therefore holds one hair colour, not every hairstyle's colour.
 
@@ -484,21 +484,33 @@ From the legacy xf-omega eye-makeup generator (female only, reference only) and 
 14. Does the native `GetUnitedOptions` sort by option `index` alone, and what makes an option `isEditable`? The Studio leaves out hidden options and link followers; `holstered_data` (feminine arms, no label) is neither and still gets a row.
 15. Which TweakDB blob does the game load with Phantom Liberty (`tweakdb_ep1.bin` is assumed), and does the text lookup pick `maleVariant` for a masculine V?
 
+## In-game results (session 4)
+
+From the creator on 28 September 2026 (game 2.31, the test profile, feminine V; [experiment 029](../experiments/029-session-4/README.md#37-n6-creator-sweep-b-discarded-with-back)) [runtime]:
+
+- **Visible choice counts match the resources, not the wiki.** With Off counted: eye makeup 37, lip styles 38 per finish, cheeks 25, face cyberware 17, facial tattoos 16, piercings 15, teeth 5. That is the resources' 36/38/24/16/15 plus Off. The wiki cheat sheet's 20/20/14/8/11 is outdated. With the installed packs: eyebrows 70, hairstyles 283 (285 cyberware variants), eye colours 254. Cheek choice 1 is a freckle pattern, not a blush.
+- **Link propagation.** With `skin_color` 3, switching `skin_type` 1 → 5 keeps tone 3, and the body keeps its colour within 3 % (upper chest; the creator's swatch is identical). The creator's framing doesn't show the hands, so they are unchecked.
+- **Lip finish tree.** `makeupLips_type` is 0 Off, 1 Default, 2 Glossy, 3 Matte. **The style position carries across finishes**: style 8 stayed at 8 through Default → Glossy → Matte → Off → Glossy, each finish's own style row taking the position. Colour carry-over is untested: the colour row can't be set from the lips page (the bridge answered that `makeupLips_08` "can't be changed on this screen").
+- **Linked hairstyle.** Hairstyle 5 (label 06); face cyberware 1 switches the row to `hairstyle_cyberware` at the **same index 5** (label 06), and the hair looks the same. Cyberware 2–4 don't switch the row. So the Studio's rule holds for this style. Whether position 5 is one of the 20 where the two lists differ wasn't checked, so the test doesn't yet tell "same options" from "same position" (§2, switcher link members).
+- **Hairstyle switcher order.** The row's index follows the option list's order, installed packs included: 90 Grace Bob V4, 96 Kala Messy Pixie, 100 Viessa Bun, 217 Valby Curtain Bob, 220 Viv Loose Waves; the reference V's 142 is "LONG PAK - #011" (`lm097_hair`).
+- **Piercing colour order** (the same for each style): 0 silver, 1 gold, 2 pearl, 3 copper, 4 red, 5 pink, 6 black, 7 blue, 8 mixed, 9 mixed 2, 10 neon teal, 11 pink metallic, 12 rainbow, 13 rose gold, 14 steel, 15 wood.
+- **Teeth** choices 0–4: base, silver, gold, copper (labelled "cooper") and pink.
+
 ## In-game test asks
 
-Each is a small check for one prepared session; record game, ArchiveXL, TweakXL and Codeware versions and whether Phantom Liberty is installed.
+Each is a small check for one prepared session; record game, ArchiveXL, TweakXL and Codeware versions and whether Phantom Liberty is installed. Asks 1, 2, 9 and 11 ran in session 4 (above); what remains of them is noted in each.
 
-1. **Link propagation.** In the creator, pick skin tone 3, then switch skin type 1 → 5 and toggle face tattoo 6. Do skin type, tattoo, neck and hands all keep tone 3? Screenshot face and hands.
-2. **Lip finish tree.** Choose lipstick style 8 colour 6, then switch finish regular → glossy → matte → none → glossy. Does the style and colour survive the finish switch and return after "none"?
+1. **Link propagation (hands still open).** In the creator, pick skin tone 3, then switch skin type 1 → 5 and toggle face tattoo 6. Do skin type, tattoo, neck and hands all keep tone 3? Session 4 confirmed the body; the hands need a framing that shows them.
+2. **Lip finish tree (colour still open).** Choose lipstick style 8 colour 6, then switch finish regular → glossy → matte → none → glossy. Session 4 showed that the style position carries; set the colour on the finish's own colour row to test whether it carries too.
 3. **Save representation.** Save once with a vanilla-only look (no CCXL), change only eye makeup colour at a mirror, save again. Hand both saves over for diffing: we expect exactly the `face` and `character_customization` entries to change.
 4. **Mirror reconstruction.** Load a save, open the mirror and confirm every slider shows the saved choice (not index 0). This tests whether option state is rebuilt from the save.
 5. **Missing-mod behaviour.** With a throwaway save using one CCXL eye colour, disable that mod, load, note what the eyes show, open the mirror, then re-enable and load the *original* save. (Do not overwrite the original.)
 6. **Photo mode.** In photo mode, check that makeup, piercings and brows match TPP. This tests the `TPP_photomode` versus `face` group split.
 7. **PRC as vanilla option 12.** With the PRC framework and its two enabled item packs, choose Piercings 12 silver, then gold. Expected: the vanilla style-12 piece plus the nose stud and both nose rings appear together and all change colour together (the stud's small second part stays silver). Then move the nose slider: the rings should follow. This confirms archive precedence, the zero-chunk placeholders and the shared `meshAppearance` in one look.
 8. **EP1 eye-makeup colour carry-over.** Choose eye makeup style 5 with colour teal, then switch to style 25. Does teal carry over? The EP1 CCO gives styles 21–36 a different link key, so we expect it may not.
-9. **Visible choice counts.** Count the choices the creator actually shows for eye makeup, lip style (each finish), cheek makeup, face cyberware and facial tattoos. The 2.31 resources list 36, 38, 24, 16 and 15; the wiki cheat sheet lists 20, 20, 14, 8 and 11.
+9. ~~**Visible choice counts.**~~ **Answered in session 4:** the creator shows the resources' counts plus Off (above).
 10. **Creator rows.** On the body page of a new game, list every row in order (feminine and masculine), and note whether any unlabelled row appears. The Studio's catalogue expects the options' `index` order and no rows for link followers.
-11. **Linked hairstyle switchers.** In the creator, pick hairstyle 5 without face cyberware, then choose a face cyberware that swaps the hairstyle row to the cyberware variant. Is it still the same hair (the Studio expects the style that turns on the same hair option), or the style at the same position? Screenshot both.
+11. **Linked hairstyle switchers (one style checked).** In the creator, pick hairstyle 5 without face cyberware, then choose a face cyberware that swaps the hairstyle row to the cyberware variant. Is it still the same hair (the Studio expects the style that turns on the same hair option), or the style at the same position? Screenshot both. Session 4 checked style 5 (same hair, same position); repeat with a style at a position where the two lists differ.
 12. **Makeup Off on a legacy build.** On the reference character (wearing an older XF Eye Artistry build), set each of its layer rows and the vanilla lipstick and blush rows to Off at a mirror. Does nothing of them remain drawn? The Studio's **Hide my V's own makeup** does exactly this.
 13. **Multi-part hair.** With the Multicolored Hair Core and an MCH hairstyle, set the vanilla hairstyle to 51 and give two parts different colours. Are both drawn with their own colour, and does the MultiColor Hair Off row show a colour grid? Then put on a beanie and note what hair shows under it ([hair colour study checklist items 6, 14 and 15](../research/hair/hair-colour-authoring-feasibility.md#6-in-game-checklist)).
 
