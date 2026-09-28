@@ -64,3 +64,7 @@ Nothing here is scheduled; it ranks below V's appearance and body work, and each
 | 4 | **Prop-based location authoring** exporting sectors and `.xl` (W4) | The community's World Builder workflow is in game only; an offline editor with the same output would be new | High | Collision authoring; navigation cannot be authored |
 | 5 | **Removal authoring with re-matching** | Players' removals break on game updates; storing type, name, resource and transform lets the Studio re-find nodes and rewrite `expectedNodes` | Medium | Matching rules when a sector is re-cooked |
 | 6 | **Bridge-driven location captures** (W5) | Teleport and stream a place, capture reference images for the viewer's fidelity | Low to medium once the bridge has writes | Streaming waits; quest triggers at the destination |
+
+## Sources to study when this research resumes
+
+- **Dark Future - Urban Survival Gameplay** and **Eviction Notice - Story-Driven Rent System** (both installed in the reference MO2 setup) are well-regarded examples of deep gameplay integration: new systems, UI, quests or messages and persistent state layered onto the vanilla game. Study how they hook the game (redscript, CET, TweakXL, quest and journal additions, save state) as models for the quest and living-world directions ([vision](../../docs/vision.md)). Credit them in the community credits once something is learned from them.
