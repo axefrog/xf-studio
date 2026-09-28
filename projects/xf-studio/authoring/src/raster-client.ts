@@ -1,5 +1,7 @@
 import type { Layer } from "./engines/layered-makeup/recipe";
 import type { RasterRequest, RasterResponse } from "./engines/layered-makeup/raster-processor";
+import { isGrainOptics, previewGrainGrid } from "./engines/layered-makeup/shimmer-grain";
+import { mipDimensions } from "./engines/layered-makeup/flat-mip-chain";
 import {isIrregular} from "./engines/layered-makeup/finish";
 import {isDirectGlint} from "./engines/layered-makeup/direct-glint-settings";
 import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "./engines/layered-makeup/makeup-dependencies";
@@ -23,7 +25,18 @@ function validResult(data: Completed, request: RasterRequest): boolean {
   const irregular = request.layer.enabled && request.layer.finish === "glitter" && isIrregular(settings);
   if (expectsOptics && !data.optics) return false;
   if (!irregular && expectsOptics !== !!data.optics) return false;
-  if (data.optics && (data.optics.size !== request.size ||
+  // Game-matched Shimmer's grain comes as its complete chains over the region's optics window; other optics at the mask's size.
+  const grain = request.layer.finish === "shimmer" && !!request.layer.optics;
+  if (data.optics && grain !== isGrainOptics(data.optics)) return false;
+  if (isGrainOptics(data.optics)) {
+    let grid: ReturnType<typeof previewGrainGrid>;
+    try { grid = previewGrainGrid(request.region.opticsWindow); } catch { return false; }
+    const levels = mipDimensions(grid.width, grid.height), o = data.optics;
+    const chain = (maps: unknown) => Array.isArray(maps) && maps.length === levels.length &&
+      maps.every((level, k) => level instanceof Uint8Array && level.length === levels[k].width * levels[k].height * 4);
+    if (o.width !== grid.width || o.height !== grid.height || JSON.stringify(o.window) !== JSON.stringify(grid.window) ||
+      !chain(o.normal) || !chain(o.surface)) return false;
+  } else if (data.optics && (data.optics.size !== request.size ||
     !(data.optics.normal instanceof Uint8Array) || data.optics.normal.length !== length ||
     !(data.optics.surface instanceof Uint8Array) || data.optics.surface.length !== length)) return false;
   if (irregular) {

@@ -11,6 +11,7 @@ import { StudioApplication, type StudioAction } from "../src/studio-application"
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
+import { finenessState } from "../src/features/eye-makeup/view/actions";
 import { readRecipe as parseRecipe } from "../src/recipe-schema";
 
 // Finish, game-optics and Glitter-model actions through the application (CORE-16/17/18/21).
@@ -212,4 +213,11 @@ test("game-matched Shimmer takes flake density and spread but refuses fineness; 
   delete earlier.layers[0].optics;
   const g = fixture(earlier);
   g.ok({ kind: "glitter.setClassic", layerId: g.layer(0).id, key: "cells", value: 64 });
+  // The inspector hides Fineness only where it does not apply, and disables it for any other refusal (CORE-121, CORE-122).
+  expect(finenessState(f.app.capability(cells))).toEqual({ hidden: true, disabled: false });
+  expect(finenessState(g.app.capability({ kind: "glitter.setClassic", layerId: g.layer(0).id, key: "cells", value: 96 }))).toEqual({ hidden: false, disabled: false });
+  expect(finenessState(f.app.capability({ ...cells, layerId: f.layer(1).id }))).toEqual({ hidden: false, disabled: false });
+  expect(finenessState({ available: false, code: "busy", reason: "The preview is saving." })).toEqual({ hidden: false, disabled: true, reason: "The preview is saving." });
+  expect(finenessState({ available: false, code: "incompatible_mode", reason: "Select a classic flake model first.",
+    issue: { code: "mode", field: "model", message: "Select a classic flake model first." } })).toMatchObject({ hidden: false, disabled: true });
 });

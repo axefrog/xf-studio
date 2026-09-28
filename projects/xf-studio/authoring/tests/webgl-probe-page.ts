@@ -24,6 +24,7 @@ import { flatSurface } from "../src/engines/layered-makeup/finish-export";
 import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-stack";
 import { accumulateComposite, EMPTY_COMPOSITE, plateSurface, type PlateComposite, type PlateTexel } from "../src/engines/layered-makeup/render/plate-blend";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
+import { previewFacetChains } from "../src/engines/layered-makeup/route-mip-chains";
 import { createSkinMaterial, patchSkinLight, skinLightUniforms, skinParameters } from "../src/skin-material";
 import { stageBackdropPixels } from "../src/stage-backdrop";
 import { createStudioEnvironment } from "../src/studio-environment";
@@ -343,7 +344,10 @@ try {
     for (const skinLight of [skin, null]) {
       lit.stack.setSkinLight(skinLight);
       lit.stack.setUnderlaySource(lit.underlay);
-      const shimmerOptics = { size: 4, normal: new Uint8Array(64).fill(128), surface: new Uint8Array(64).fill(200) };
+      // Game-matched Shimmer's maps: the grain's route chains over a window of head UV (here the whole atlas at 4 texels).
+      const grain = previewFacetChains(new Uint8Array(32).fill(128), new Uint8Array(32).fill(200), 4);
+      const shimmerOptics = { window: { u0: 0, u1: 1, v0: 0, v1: 1 }, width: 4, height: 4,
+        normal: grain.normal as Uint8Array<ArrayBuffer>[], surface: grain.surface as Uint8Array<ArrayBuffer>[] };
       const shift = { model: "game-matched-1" as const, shift: { color: "#3fd4c2", strength: 0.8 } };
       lit.stack.setCanvases([mask(153), mask(128)]);
       lit.stack.updateLayer(0, layer({ color: "#6d4a7e", alpha: 153 }, 0));

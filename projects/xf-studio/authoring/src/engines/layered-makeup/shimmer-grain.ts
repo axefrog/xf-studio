@@ -17,11 +17,18 @@
 //   the light or view moves; from face framing they are sub-pixel, the mip chain averages them away and their
 //   slope variance widens the roughness (route-mip-chains.ts), so the far look is a broader, brighter sheen.
 //
-// A map whose texels are coarser than a grain cell (a head-UV atlas, the browser preview below 4096) holds the mean
-// of its cells: the mean tilt, and roughness widened by the variance of the cells inside the texel, the same
-// α'² = α² + v rule as the export's lower mips. From 16 cells per texel the mean tilt is only a few degrees, below the
-// gate, so the texel is written flat with the full expected variance.
-import type { LegacyFlakes } from "./finish";
+// A map whose texels are coarser than a grain cell (a head-UV atlas diagnostic) holds the mean of its cells: the
+// mean tilt, and roughness widened by the variance of the cells inside the texel, the same α'² = α² + v rule as
+// the export's lower mips. From 16 cells per texel the mean tilt is only a few degrees, below the gate, so the
+// texel is written flat with the full expected variance. The browser preview never takes that path: it bakes the
+// grain one cell per texel over the region's optics window (`previewGrainGrid`).
+//
+// Determinism. The bytes are a pure function of the settings and the grid on every platform: the hash is 32-bit
+// integer arithmetic, and the only real-valued operations on the byte path are +, −, ×, ÷ and square roots, which
+// IEEE 754 rounds exactly (ECMAScript fixes them to double precision, with no fused multiply-add). Sines and
+// cosines are polynomials evaluated with those operations (`sinRad`, `turn`), not `Math.sin`/`Math.cos`/`Math.pow`,
+// whose last bit the language leaves to each engine and platform (PREV-186).
+import type { FlakeMaps, LegacyFlakes } from "./finish";
 import { HEAD_UV_WINDOW, type UvWindow } from "./plate-uv-window";
 
 export const SHIMMER_GRAIN = Object.freeze({
@@ -40,15 +47,63 @@ export const SHIMMER_GRAIN = Object.freeze({
   metalness: .3,
   /** From this many cells per texel the mean tilt is written flat (see the header). */
   analyticCells: 16,
+  /** Largest preview grain grid (texels): the bound `assessPreviewQuality` counts and `previewGrainGrid` enforces. */
+  previewMaxTexels: 2048 * 1024,
 });
 
 const clip01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const toByte = (v: number) => Math.round(clip01(v) * 255);
 const radians = (deg: number) => deg * Math.PI / 180;
+/** x^¼ through two correctly rounded square roots (never `Math.pow`). */
+const quarterPower = (x: number) => Math.sqrt(Math.sqrt(x));
 
+// Taylor coefficients to x¹⁷ / x¹⁶: on [0, π/4] the first omitted term is below 1e-19, far under one unit in the last place.
+const SIN = [1, -1 / 6, 1 / 120, -1 / 5040, 1 / 362880, -1 / 39916800, 1 / 6227020800, -1 / 1307674368000, 1 / 355687428096000];
+const COS = [1, -1 / 2, 1 / 24, -1 / 720, 1 / 40320, -1 / 3628800, 1 / 479001600, -1 / 87178291200, 1 / 20922789888000];
+function poly(c: readonly number[], x2: number) {
+  let s = c[c.length - 1];
+  for (let i = c.length - 2; i >= 0; i--) s = s * x2 + c[i];
+  return s;
+}
+const sinSmall = (x: number) => x * poly(SIN, x * x), cosSmall = (x: number) => poly(COS, x * x);
+/** sin x for x in [0, π/2], with IEEE arithmetic only. */
+export function sinRad(x: number): number {
+  if (!(x >= 0 && x <= Math.PI / 2 + 1e-12)) throw RangeError("sinRad takes [0, π/2].");
+  return x <= Math.PI / 4 ? sinSmall(x) : cosSmall(Math.PI / 2 - x);
+}
+/** (cos 2πt, sin 2πt) for t in [0, 1) into out[k], out[k + 1], with IEEE arithmetic only; quarter-turn reduction is exact for t = k/2³². */
+function turnInto(t: number, out: Float64Array, k: number) {
+  const q = Math.floor(t * 4), f = t - q / 4; // f in [0, ¼), exact
+  let c: number, s: number;
+  if (f <= 1 / 8) { const a = 2 * Math.PI * f; c = cosSmall(a); s = sinSmall(a); }
+  else { const a = 2 * Math.PI * (1 / 4 - f); c = sinSmall(a); s = cosSmall(a); }
+  if (q === 0) { out[k] = c; out[k + 1] = s; } else if (q === 1) { out[k] = -s; out[k + 1] = c; }
+  else if (q === 2) { out[k] = -c; out[k + 1] = -s; } else { out[k] = s; out[k + 1] = -c; }
+}
+/** (cos 2πt, sin 2πt) for t in [0, 1), with IEEE arithmetic only. */
+export function turn(t: number): [number, number] {
+  const out = new Float64Array(2);
+  turnInto(t, out, 0);
+  return [out[0], out[1]];
+}
+
+/** murmur3's 32-bit finaliser. */
+function fmix(h: number) {
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  return (h ^ (h >>> 16)) | 0;
+}
+/** The seed every layer has today; the key below keeps its stream (and so every Shimmer map built so far) unchanged. */
+const ANCHOR_SEED = 2077, ANCHOR = fmix(ANCHOR_SEED);
+/**
+ * The hash key of one draw of `seed` (PREV-185). A plain `seed + salt` made seed s + 1's first draw seed s's second, so
+ * neighbouring seeds shared one stream shifted by a draw. The seed is now avalanched first; the anchor term cancels for
+ * the default seed, whose key stays `seed + salt`.
+ */
+const drawKey = (seed: number, salt: number) => Math.imul((fmix(seed) ^ ANCHOR) ^ (seed + salt), 0x9e3779b1);
 /** Integer hash of one grain cell and draw to [0, 1); decorrelated along rows, columns and diagonals. */
-function draw(x: number, y: number, seed: number, salt: number) {
-  let h = Math.imul(x, 0x27d4eb2d) ^ Math.imul(y ^ 0x5bd1e995, 0x165667b1) ^ Math.imul(seed + salt, 0x9e3779b1);
+function hash(x: number, y: number, key: number) {
+  let h = Math.imul(x, 0x27d4eb2d) ^ Math.imul(y ^ 0x5bd1e995, 0x165667b1) ^ key;
   h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d);
   h ^= h >>> 12; h = Math.imul(h, 0x297a2d39);
   h ^= h >>> 15;
@@ -63,17 +118,25 @@ export function grainSettings(p: Pick<LegacyFlakes, "density" | "tilt">) {
 
 /** Expected slope variance E[x² + y²] of one grain cell: share × E[sin²θ] for θ uniform on [low, high]. */
 export function grainVariance(p: Pick<LegacyFlakes, "density" | "tilt">): number {
-  const { share, low, high } = grainSettings(p);
-  const meanSin2 = high - low < 1e-9 ? Math.sin(low) ** 2 : .5 - (Math.sin(2 * high) - Math.sin(2 * low)) / (4 * (high - low));
+  const { share, low, high } = grainSettings(p), s = sinRad(low);
+  const meanSin2 = high - low < 1e-9 ? s * s : .5 - (sinRad(2 * high) - sinRad(2 * low)) / (4 * (high - low));
   return share * meanSin2;
 }
 
+type Keys = { share: number; tilt: number; azimuth: number };
+const keysOf = (seed: number): Keys => ({ share: drawKey(seed, 1), tilt: drawKey(seed, 2), azimuth: drawKey(seed, 3) });
+/** Tangent X, Y of grain cell (x, y) into `out` (flat: 0, 0). No allocation: the bake's inner loop. */
+function grainInto(x: number, y: number, keys: Keys, settings: ReturnType<typeof grainSettings>, out: Float64Array) {
+  if (hash(x, y, keys.share) >= settings.share) { out[0] = 0; out[1] = 0; return; }
+  const s = sinRad(settings.low + (settings.high - settings.low) * hash(x, y, keys.tilt));
+  turnInto(hash(x, y, keys.azimuth), out, 0);
+  out[0] *= s; out[1] *= s;
+}
 /** Tangent X, Y of grain cell (x, y); [0, 0] for a flat cell. */
 export function grainAt(x: number, y: number, p: LegacyFlakes, settings = grainSettings(p)): [number, number] {
-  if (draw(x, y, p.seed, 1) >= settings.share) return [0, 0];
-  const tilt = settings.low + (settings.high - settings.low) * draw(x, y, p.seed, 2), azimuth = 2 * Math.PI * draw(x, y, p.seed, 3);
-  const s = Math.sin(tilt);
-  return [s * Math.cos(azimuth), s * Math.sin(azimuth)];
+  const out = new Float64Array(2);
+  grainInto(x, y, keysOf(p.seed), settings, out);
+  return [out[0], out[1]];
 }
 
 function validSettings(p: LegacyFlakes | undefined): p is LegacyFlakes {
@@ -81,17 +144,44 @@ function validSettings(p: LegacyFlakes | undefined): p is LegacyFlakes {
     Number.isInteger(p.seed) && p.seed >= 0 && p.seed <= 2147483647;
 }
 
-/** Grain cells per texel along each axis of a width × height map over `area`. */
+/** Grain cells per texel along each axis of a width × height map over `area` (the nearest whole number, at least 1). */
 export function grainCellsPerTexel(width: number, height: number, area: UvWindow = HEAD_UV_WINDOW) {
   return { u: Math.max(1, Math.round(SHIMMER_GRAIN.cellsPerUv * (area.u1 - area.u0) / width)),
     v: Math.max(1, Math.round(SHIMMER_GRAIN.cellsPerUv * (area.v1 - area.v0) / height)) };
 }
+/** Grain cells per unit of head UV actually laid on a width × height map over `area` (its texel pitch times the cells per texel). */
+export function grainPitch(width: number, height: number, area: UvWindow = HEAD_UV_WINDOW) {
+  const cells = grainCellsPerTexel(width, height, area);
+  return { u: cells.u * width / (area.u1 - area.u0), v: cells.v * height / (area.v1 - area.v0) };
+}
+
+/**
+ * The preview's grain grid over a region's optics window: one cell per texel at the true 4096 cells per unit of head UV,
+ * the window's edges on the cell grid, each side a power of two (so the route's mip chain halves exactly). Refused when
+ * the window is not such a rectangle or its grid exceeds `SHIMMER_GRAIN.previewMaxTexels`.
+ */
+export function previewGrainGrid(area: UvWindow): { width: number; height: number; window: UvWindow } {
+  const n = SHIMMER_GRAIN.cellsPerUv, cells = (a: number) => a * n;
+  const width = cells(area.u1 - area.u0), height = cells(area.v1 - area.v0);
+  const pow2 = (k: number) => Number.isInteger(k) && k >= 1 && !(k & (k - 1));
+  if (![area.u0, area.u1, area.v0, area.v1].every(e => Number.isInteger(cells(e)) && e >= 0 && e <= 1) || !pow2(width) || !pow2(height) ||
+      width * height > SHIMMER_GRAIN.previewMaxTexels)
+    throw Error("The preview optics rectangle must sit on the grain grid with power-of-two sides within the preview limit.");
+  return { width, height, window: area };
+}
+
+/**
+ * Game-matched Shimmer's preview maps: its grain over the region's optics window, one cell per texel whatever the preview
+ * size (`previewGrainGrid`), as the route's complete RGBA mip chains (route-mip-chains.ts), built in the raster worker.
+ */
+export type GrainOptics = { window: UvWindow; width: number; height: number; normal: Uint8Array<ArrayBuffer>[]; surface: Uint8Array<ArrayBuffer>[] };
+export const isGrainOptics = (optics: FlakeMaps | GrainOptics | undefined): optics is GrainOptics => !!optics && "window" in optics;
 
 export type ShimmerGrainMaps = {
   width: number; height: number;
-  /** RGBA: tangent X, Y, reconstructed Z (UNORM), 255. */
+  /** Two bytes per texel: tangent X, Y (UNORM), as the export stores them. */
   normal: Uint8Array<ArrayBuffer>;
-  /** RGBA: tilted share of the texel's cells, roughness, metalness, 255 (the preview's packed surface). */
+  /** Two bytes per texel: roughness, metalness. */
   surface: Uint8Array<ArrayBuffer>;
 };
 
@@ -103,32 +193,37 @@ export type ShimmerGrainMaps = {
 export function createShimmerGrainJob(p: LegacyFlakes, width: number, height = width, area: UvWindow = HEAD_UV_WINDOW) {
   if (!validSettings(p) || !Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 4096 || height > 4096)
     throw Error("Invalid Shimmer grain settings.");
-  p = { ...p };
-  const settings = grainSettings(p), cells = grainCellsPerTexel(width, height, area), n = cells.u * cells.v;
-  const analytic = n >= SHIMMER_GRAIN.analyticCells, alpha2 = SHIMMER_GRAIN.roughness ** 4;
-  const metal = toByte(SHIMMER_GRAIN.metalness), full = toByte(Math.pow(alpha2 + grainVariance(p), .25)), share = toByte(settings.share);
-  const normal = new Uint8Array(width * height * 4), surface = new Uint8Array(width * height * 4);
+  const settings = grainSettings(p), keys = keysOf(p.seed), cells = grainCellsPerTexel(width, height, area), n = cells.u * cells.v;
+  const analytic = n >= SHIMMER_GRAIN.analyticCells, r2 = SHIMMER_GRAIN.roughness * SHIMMER_GRAIN.roughness, alpha2 = r2 * r2;
+  const metal = toByte(SHIMMER_GRAIN.metalness), rough = toByte(quarterPower(alpha2)), full = toByte(quarterPower(alpha2 + grainVariance(p)));
+  const normal = new Uint8Array(width * height * 2), surface = new Uint8Array(width * height * 2), g = new Float64Array(2);
+  const texels = width * height;
   let texel = 0, done = false;
   return { width, height, normal, surface, get done() { return done; },
     advance(maxWork: number) {
       if (!(maxWork > 0) || (!Number.isInteger(maxWork) && maxWork !== Infinity)) throw Error("Invalid grain slice size.");
       let work = 0;
       while (!done && work < maxWork) {
-        const x = texel % width, y = (texel - x) / width, o = texel * 4;
+        const x = texel % width, y = (texel - x) / width, o = texel * 2;
         if (analytic) {
-          normal.set([128, 128, 255, 255], o); surface.set([share, full, metal, 255], o); work++;
+          normal[o] = normal[o + 1] = 128; surface[o] = full; surface[o + 1] = metal; work++;
+        } else if (n === 1) {
+          // One cell per texel (the export window, the preview): the grain itself on the uniform surface.
+          grainInto(x, y, keys, settings, g);
+          normal[o] = toByte(g[0] * .5 + .5); normal[o + 1] = toByte(g[1] * .5 + .5); surface[o] = rough; surface[o + 1] = metal; work++;
         } else {
-          let sx = 0, sy = 0, s2 = 0, tilted = 0;
+          let sx = 0, sy = 0, s2 = 0;
           for (let j = 0; j < cells.v; j++) for (let i = 0; i < cells.u; i++) {
-            const [gx, gy] = grainAt(x * cells.u + i, y * cells.v + j, p, settings);
-            if (gx || gy) { sx += gx; sy += gy; s2 += gx * gx + gy * gy; tilted++; }
+            grainInto(x * cells.u + i, y * cells.v + j, keys, settings, g);
+            const gx = g[0], gy = g[1];
+            if (gx || gy) { sx += gx; sy += gy; s2 += gx * gx + gy * gy; }
           }
           work += n;
           const mx = sx / n, my = sy / n, inner = Math.max(0, s2 / n - mx * mx - my * my);
-          normal.set([toByte(mx * .5 + .5), toByte(my * .5 + .5), toByte(Math.sqrt(Math.max(0, 1 - mx * mx - my * my)) * .5 + .5), 255], o);
-          surface.set([toByte(tilted / n), toByte(Math.pow(alpha2 + inner, .25)), metal, 255], o);
+          normal[o] = toByte(mx * .5 + .5); normal[o + 1] = toByte(my * .5 + .5);
+          surface[o] = toByte(quarterPower(alpha2 + inner)); surface[o + 1] = metal;
         }
-        if (++texel === width * height) done = true;
+        if (++texel === texels) done = true;
       }
       return done;
     },

@@ -1,0 +1,105 @@
+{
+  "experiment": "030-shimmer-grain",
+  "check": "PIPE-125: grain normals through WolvenKit's BC5 import",
+  "tool": {
+    "cli": "WolvenKit.CLI 9.0.1",
+    "command": "import <folder> -o <folder>",
+    "settings": {
+      "IsGamma": false,
+      "TextureGroup": "TEXG_Generic_Normal",
+      "RawFormat": "TRF_TrueColor",
+      "Compression": "TCM_Normalmap",
+      "GenerateMipMaps": false,
+      "IsStreamable": true,
+      "PremultiplyAlpha": false
+    }
+  },
+  "preset": "Shimmer · strong (experiment 017)",
+  "map": {
+    "width": 2048,
+    "height": 512,
+    "window": {
+      "u0": 0.2658809538810484,
+      "u1": 0.7338749054939516,
+      "v0": 0.17637191280241934,
+      "v1": 0.3260694934475806
+    },
+    "format": "bc5",
+    "mips": 12
+  },
+  "stripes": [
+    {
+      "stripe": "fine",
+      "texels": 16625,
+      "tiltedGrains": 4239,
+      "normalError": {
+        "n": 16625,
+        "mean": 0.01266,
+        "p95": 0.03922,
+        "p99": 0.05022,
+        "max": 0.07764
+      },
+      "angleDegrees": {
+        "n": 16625,
+        "mean": 0.73679,
+        "p95": 2.32636,
+        "p99": 2.96122,
+        "max": 4.61865
+      },
+      "tiltedFullWeight": 0.9755,
+      "tiltedBelowHalfWeight": 0,
+      "tiltedWeight": {
+        "n": 4239,
+        "mean": 0.99761,
+        "p95": 1,
+        "p99": 1,
+        "max": 1
+      },
+      "flatGrainsAboveTenthWeight": 0,
+      "flatWeight": {
+        "n": 12386,
+        "mean": 0.00166,
+        "p95": 0.00384,
+        "p99": 0.00692,
+        "max": 0.01307
+      }
+    },
+    {
+      "stripe": "strong",
+      "texels": 16625,
+      "tiltedGrains": 5417,
+      "normalError": {
+        "n": 16625,
+        "mean": 0.01743,
+        "p95": 0.0496,
+        "p99": 0.06126,
+        "max": 0.07882
+      },
+      "angleDegrees": {
+        "n": 16625,
+        "mean": 1.02364,
+        "p95": 2.93542,
+        "p99": 3.67724,
+        "max": 4.8618
+      },
+      "tiltedFullWeight": 0.9791,
+      "tiltedBelowHalfWeight": 0.0002,
+      "tiltedWeight": {
+        "n": 5417,
+        "mean": 0.99746,
+        "p95": 1,
+        "p99": 1,
+        "max": 1
+      },
+      "flatGrainsAboveTenthWeight": 0,
+      "flatWeight": {
+        "n": 11208,
+        "mean": 0.00266,
+        "p95": 0.01,
+        "p99": 0.01923,
+        "max": 0.05001
+      }
+    }
+  ],
+  "limits": "Level 0 only (grains are one texel; lower levels are box means). Decoded with the Studio's BC5 reader (bcn.ts), not the GPU's; a flat grain in a block of tilted ones can pick up a small tilt, reported as the share of flat grains whose mode-1 weight exceeds 0.1 (the flat byte itself decodes to 0.0008)."
+}

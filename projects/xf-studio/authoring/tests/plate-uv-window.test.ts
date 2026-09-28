@@ -92,10 +92,16 @@ test("Shimmer's grain sits one grain per plate-window texel, and a window compil
     if (a[t * 4 + 3] !== 255) continue;
     full++;
     // A fully covered texel is the grain itself: its tilt, and the one uniform surface.
-    expect([compiled.maps.normal![t * 2], compiled.maps.normal![t * 2 + 1]]).toEqual([grain.normal[t * 4], grain.normal[t * 4 + 1]]);
-    expect([compiled.maps.roughness![t], compiled.maps.metalness![t]]).toEqual([grain.surface[t * 4 + 1], grain.surface[t * 4 + 2]]);
+    expect([compiled.maps.normal![t * 2], compiled.maps.normal![t * 2 + 1]]).toEqual([grain.normal[t * 2], grain.normal[t * 2 + 1]]);
+    expect([compiled.maps.roughness![t], compiled.maps.metalness![t]]).toEqual([grain.surface[t * 2], grain.surface[t * 2 + 1]]);
   }
   expect(full).toBeGreaterThan(1000);
+  // The manifest states the grain's real pitch on this window, and that BC5 lowers a few grains (PIPE-124, PIPE-125).
+  const note = (compiled.metadata as { limitations: string[] }).limitations.find(line => line.startsWith("Experimental Shimmer"))!;
+  expect(note).toContain("one grain per texel (4376 × 3420 grains per unit of head UV)");
+  expect(note).toContain("BC5 compression lowers a few");
+  // A window that would put several grains in a texel is refused, not exported faint (PIPE-124).
+  expect(() => compilePreset(shimmer, { kind: "window", width: 1024, height: 256, window })).toThrow("one grain per texel");
 });
 
 test("window compiles: each route's grid, head-UV Fresnel, and coverage that matches the head raster", () => {

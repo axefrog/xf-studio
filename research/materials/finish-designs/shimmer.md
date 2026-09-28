@@ -23,10 +23,10 @@ A fine reflective sheen: many tiny particles that sparkle individually when the 
 | Grain share | 0.4 × the layer's density of the texels tilt (default 0.65: 26 %); the rest are flat | Flat texels write nothing in mode 1, so the skin's own normal detail stays between grains. |
 | Grain tilt | Uniform between **12°** and 12° + 18° × tilt (default 12–23.7°), uniform azimuth | Every tilted grain clears the mode-1 gate at full weight, so none is faded into a ripple. Random azimuths make the untested green sign irrelevant to the statistics. |
 | Grain scale | White noise at 4096 cells per unit of head UV. The plate window (2048 × 512, 0.13 × 0.12 mm) holds **one grain per texel** | Close up, a grain is a pixel or two and glints as the light or view moves. At face framing it is sub-pixel and the chain averages it away. There are no cells, discs or lattice. |
-| Coarser maps | A texel coarser than a grain holds its grains' mean tilt and widens its roughness by their variance: r′ = (r⁴ + v)^¼. From 16 grains per texel it writes a flat normal with the full expected variance | Same rule as the export's lower mips. Applies to head-UV diagnostics and the browser preview below 4096. |
+| Coarser maps | A texel coarser than a grain holds its grains' mean tilt and widens its roughness by their variance: r′ = (r⁴ + v)^¼. From 16 grains per texel it writes a flat normal with the full expected variance | Same rule as the export's lower mips. Applies to head-UV diagnostics (the browser preview bakes one grain per texel, below). |
 | Mips | Unchanged route rule: the normal's lower levels are plain means, and roughness levels add the lost slope variance (α′² = ᾱ² + v) | Unresolved grains become a broader, brighter lobe instead of vanishing. |
 
-**What stays with the layer:** its density and tilt settings (*Flake density*, *Orientation spread*) and its seed. *Flake fineness* (`cells`) does not apply to game-matched Shimmer. The grain has one true-to-scale size, so the application refuses the setting and the inspector hides it. Layers still in the earlier browser study keep the classic facet preview and do not export.
+**What stays with the layer:** its density and tilt settings (*Flake density*, *Orientation spread*) and its seed. *Flake fineness* (`cells`) does not apply to game-matched Shimmer. The grain has one true-to-scale size, so the application refuses the setting and the inspector hides it (only for that refusal; any other would disable it). A value stored earlier stays on the layer, since it applies again if the layer becomes Glitter, but it is not part of the grain's identity or the preview's. Layers still in the earlier browser study keep the classic facet preview and do not export.
 
 ### Offline result
 
@@ -35,13 +35,13 @@ From [experiment 030](../../../experiments/030-shimmer-grain/README.md), on *Shi
 - **Static pattern.** The facet bake's static contrast was 0.16–0.19. The grain's is 0.
 - **Lattice.** Tilt autocorrelation one old cell pitch away was 0.23–0.41. The grain's is about 0.
 - **Pattern width on screen.** Down from 13–23 pixels at the close-up and 7–9 at face framing, to 1 pixel.
-- **Face framing.** The grain is a smooth sheen (lit contrast 0.06–0.09). Its fine stripe peaks brighter than Satin's and stays brighter 16° off the mirror angle.
+- **Face framing.** The grain is a smooth sheen (lit contrast 0.06–0.10). Its fine stripe peaks brighter than Satin's and stays brighter 16° off the mirror angle.
 
 ### Risks and open questions
 
 - **Metalness 0.3 turns off SSS** under covered makeup. Metallic's "hard, plastic" read in session 3 was traced to the same switch ([decal reference §9.1](../shader-decal.md#91-matte-and-satin-read-glossy)). If the grain build looks hard, the fallback is metalness 0.08 (keeps SSS, loses most of the tint), or a pearl tint through the Fresnel template's one-pigment route ([Colour-shifting](colour-shifting.md)).
 - **One-texel grains under DLSS.** At the eye close-up a grain is about one output pixel, and fewer internal pixels under DLSS. The upscaler and TAA may keep, soften or crawl it. The session should compare DLSS with DLAA.
-- **BC5 at one-texel frequency.** Block compression of per-texel white-noise normals has not been measured on this map. The verifier's decoded-normal tolerance still applies at Build.
+- **BC5 at one-texel frequency.** Measured offline through WolvenKit 9.0.1's own import ([experiment 030](../../../experiments/030-shimmer-grain/README.md#through-wolvenkits-bc5-offline)): about 2 % of tilted grains fall below the fade's full weight (one in 5,400 below half), with a mean angle error of 0.7–1.0°; flat grains stay flat. The manifest says so. How the game's sampler decodes it is unobserved.
 - **Tangent frame.** Grain orientation relies on the plate's tangents, from the head mesh bytes, which is unobserved. Random azimuths make it irrelevant to the statistics.
 - **Normal alpha follows the colour-map alpha** (square-root coverage), so partly covered edges carry slightly more normal than colour.
 
@@ -58,12 +58,12 @@ From [experiment 030](../../../experiments/030-shimmer-grain/README.md), on *Shi
 
 ## What the preview does
 
-The game-matched model bakes the same grain on the preview's head-UV texture ([`raster-processor.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/raster-processor.ts)). It uploads route-filtered mip chains in which every level fades tilts by the mode-1 weight and lower levels widen roughness as the export does ([`previewFacetChains`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/route-mip-chains.ts)).
+The game-matched model bakes the export's grain at its true scale at **every** preview quality: one grain per texel, 4096 per unit of head UV, over the region's optics rectangle (eye makeup's: u 0.25–0.75, v 0.125–0.375, a 2048 × 1024 map around the plate). The raster worker bakes it and builds the route's mip chains off the main thread: every level fades tilts by the mode-1 weight, and lower levels widen roughness as the export does ([`raster-processor.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/raster-processor.ts), [`createPreviewFacetChainJob`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/route-mip-chains.ts)). The layer's material and the plate composite read the maps through the rectangle's UV transform. With a grain merged, the composite runs at the grain's density on the grain's own grid, so each grain is one composite texel, as in the export.
 
-The preview texture covers the whole head, so its texel is coarser than a grain below the 4096 quality:
+So close-up sparkles show at 512, 1024 (the default), 2048 and 4096 alike; the preview quality sets only the masks' resolution. Neither the grain nor its identity depends on the quality or on *Flake fineness*: changing either does not bake it again. The grain costs a fixed ≈ 22 MB of maps and ≈ 60 MB of composite, which the quality assessment counts; the bake takes about 0.25 s in the worker (measured in Bun: 165 ms grain plus 78 ms chains, 62 MB peak). Before 28 September the preview baked the grain on its head-UV mask texture instead, so only 4096 showed grains, and 4096 needed about 0.8 GB of chain planes on the main thread (code-health PREV-182, PREV-183).
 
-- **4096:** one grain per texel, as exported.
-- **2048:** the exact mean of 2 × 2 grains.
-- **1024 (default) and 512:** the sheen only, with no visible grain.
+The preview's grain field is the same design and statistics as the export's but not the same texels: the export draws its grains per texel of its own plate window, whose pitch is 4376 × 3420 per unit of head UV on the built-in plate.
 
-This is the export's own face-framing look at the texture's resolution, not a different model.
+## Determinism
+
+The grain's bytes are the same on every platform: an integer hash, and only +, −, ×, ÷ and square roots on the byte path (sines and cosines are polynomials, never `Math.sin`, `Math.cos` or `Math.pow`). The seed is mixed before use, so neighbouring seeds draw unrelated grains; the default seed 2077 kept its bytes through that change, and a test pins them (code-health PREV-185, PREV-186).

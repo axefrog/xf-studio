@@ -30,6 +30,7 @@ const blankTexture = (rgba: number[]) => {
   return texture;
 };
 /** Nothing (all zero), the neutral surface map (all one) and a flat normal. Shared, never disposed. */
+const IDENTITY = new THREE.Matrix3();
 const NOTHING = blankTexture([0, 0, 0, 0]), NEUTRAL_MAP = blankTexture([255, 255, 255, 255]), FLAT_NORMAL = blankTexture([128, 128, 255, 255]);
 
 const PASS_VERTEX = /* glsl */`
@@ -53,6 +54,7 @@ uniform sampler2D uMask;
 uniform sampler2D uRoughnessMap;
 uniform sampler2D uMetalnessMap;
 uniform sampler2D uNormalMap;
+uniform mat3 uMapTransform;
 uniform vec3 uColour;
 uniform vec3 uSurface;
 varying vec2 vUv;
@@ -74,9 +76,11 @@ void main() {
 	vec4 mask = textureLod( uMask, vUv, 0.0 );
 	float a = clamp( mask.a, 0.0, 1.0 );
 	vec3 colour = max( uColour * mask.rgb, vec3( 0.0 ) );
-	float roughness = clamp( uSurface.x * textureLod( uRoughnessMap, vUv, 0.0 ).g, 0.0, 1.0 );
-	float metalness = clamp( uSurface.y * textureLod( uMetalnessMap, vUv, 0.0 ).b, 0.0, 1.0 );
-	vec2 facet = uSurface.z > 0.5 ? xfsUnfade( clamp( textureLod( uNormalMap, vUv, 0.0 ).xy * 2.0 - 1.0, -1.0, 1.0 ) ) : vec2( 0.0 );
+	// The optical maps' own UV: head UV, or a window of it (Shimmer's grain), by the maps' texture transform.
+	vec2 mapUv = ( uMapTransform * vec3( vUv, 1.0 ) ).xy;
+	float roughness = clamp( uSurface.x * textureLod( uRoughnessMap, mapUv, 0.0 ).g, 0.0, 1.0 );
+	float metalness = clamp( uSurface.y * textureLod( uMetalnessMap, mapUv, 0.0 ).b, 0.0, 1.0 );
+	vec2 facet = uSurface.z > 0.5 ? xfsUnfade( clamp( textureLod( uNormalMap, mapUv, 0.0 ).xy * 2.0 - 1.0, -1.0, 1.0 ) ) : vec2( 0.0 );
 	oColour = vec4( a * sqrt( colour ), a );
 	oSurface = vec4( a * roughness, a * metalness, 0.0, a );
 	oNormal = vec4( a * ( facet * 0.5 + 0.5 ), 0.0, a );
@@ -148,6 +152,7 @@ export function createPlateComposite(window: BlendWindow, options: { precision?:
     uniforms: { uWindow: { value: new THREE.Vector4(window.u0, window.v0, window.u1 - window.u0, window.v1 - window.v0) },
       uMask: { value: NOTHING as THREE.Texture }, uRoughnessMap: { value: NEUTRAL_MAP as THREE.Texture },
       uMetalnessMap: { value: NEUTRAL_MAP as THREE.Texture }, uNormalMap: { value: FLAT_NORMAL as THREE.Texture },
+      uMapTransform: { value: new THREE.Matrix3() },
       uColour: { value: new THREE.Color() }, uSurface: { value: new THREE.Vector3() } } });
   const resolvePass = new THREE.ShaderMaterial({ ...shared, vertexShader: TEXEL_VERTEX, fragmentShader: RESOLVE_FRAGMENT, blending: THREE.NoBlending,
     uniforms: { uColour: { value: null }, uSurface: { value: null }, uNormal: { value: null } } });
@@ -205,7 +210,8 @@ export function createPlateComposite(window: BlendWindow, options: { precision?:
     get size() { return targets ? { width: targets.merged.width, height: targets.merged.height, levels: targets.levels } : null; },
     /** Draws since creation: one per layer, one resolve and one per roughness level per update. */
     get stats() { return { ...stats }; },
-    /** Redraw the composite from `layers` in stack order; `maskSize` is the masks' side. Returns the textures the plate samples. */
+    /** Redraw the composite from `layers` in stack order; `maskSize` is the texel density (per unit of UV) to composite at: the masks'
+     * side, or a grain's pitch when a layer's optical maps are finer. Returns the textures the plate samples. */
     update(renderer: THREE.WebGLRenderer, layers: readonly CompositeLayer[], maskSize: number, anisotropy = 1): CompositeTextures {
       const into = ensure(renderer, compositeTargetSize(maskSize, window, renderer.capabilities.maxTextureSize), anisotropy);
       const previousTarget = renderer.getRenderTarget(), autoClear = renderer.autoClear;
@@ -223,6 +229,9 @@ export function createPlateComposite(window: BlendWindow, options: { precision?:
           u.uRoughnessMap!.value = layer.roughnessMap ?? NEUTRAL_MAP;
           u.uMetalnessMap!.value = layer.metalnessMap ?? NEUTRAL_MAP;
           u.uNormalMap!.value = layer.normalMap ?? FLAT_NORMAL;
+          // A layer's normal and surface maps share one grid (head UV, or the grain's window).
+          const maps = layer.normalMap ?? layer.roughnessMap;
+          (u.uMapTransform!.value as THREE.Matrix3).copy(maps ? maps.matrix : IDENTITY);
           (u.uColour!.value as THREE.Color).copy(layer.color);
           (u.uSurface!.value as THREE.Vector3).set(layer.roughness, layer.metalness, layer.normalMap ? 1 : 0);
           renderer.render(scene, camera);

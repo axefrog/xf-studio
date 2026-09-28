@@ -9,6 +9,9 @@ import { accumulateComposite, compositeTargetSize, createPlateLightMaterial, EMP
 import { mergeFlatSample, type MergedSample } from "../src/engines/layered-makeup/preset-compiler";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
 import { previewFacetChains } from "../src/engines/layered-makeup/route-mip-chains";
+import { mipDimensions } from "../src/engines/layered-makeup/flat-mip-chain";
+import { type GrainOptics } from "../src/engines/layered-makeup/shimmer-grain";
+import { defaultFlakes } from "../src/engines/layered-makeup/finish";
 import { skinParameters } from "../src/skin-material";
 import { initialRecipe } from "./fixtures/eye-region";
 import { createMakeupStack } from "./fixtures/eye-region";
@@ -103,9 +106,9 @@ describe("the plate's arithmetic", () => {
   test("the composite undoes the mode-1 fade the preview's facet maps carry, so the plate fades the merged normal once", () => {
     // One texel per facet, through the preview chain's own level-0 encoding.
     const facets = [[0.3, 0.1], [0.15, -0.05], [-0.12, 0.09], [0.07, 0.04], [0, 0], [0.25, 0]];
-    const size = 4, normal = new Uint8Array(size * size * 4).fill(128), surface = new Uint8Array(size * size * 4).fill(255);
+    const size = 4, normal = new Uint8Array(size * size * 2).fill(128), surface = new Uint8Array(size * size * 2).fill(255);
     const toByte = (v: number) => Math.floor(Math.min(1, Math.max(0, v * 0.5 + 0.5)) * 255 + 0.5);
-    facets.forEach(([x, y], i) => { normal[i * 4] = toByte(x!); normal[i * 4 + 1] = toByte(y!); });
+    facets.forEach(([x, y], i) => { normal[i * 2] = toByte(x!); normal[i * 2 + 1] = toByte(y!); });
     const level0 = previewFacetChains(normal, surface, size).normal[0]!;
     facets.forEach(([x, y], i) => {
       const [ux, uy] = unfadeFacet(level0[i * 4]! / 255 * 2 - 1, level0[i * 4 + 1]! / 255 * 2 - 1);
@@ -205,6 +208,12 @@ function plateAnchor() {
 const underlay = (): PlateUnderlay => ({ colour: new THREE.BufferAttribute(new Float32Array(9).fill(0.4), 3),
   roughness: new THREE.BufferAttribute(new Float32Array(3).fill(0.6), 1), metalness: new THREE.BufferAttribute(new Float32Array(3), 1) });
 const optics = (size: number) => ({ size, normal: new Uint8Array(size * size * 4), surface: new Uint8Array(size * size * 4) });
+/** Game-matched Shimmer's grain maps over a small window: complete RGBA chains (the stack checks shape, not content). */
+const GRAIN_WINDOW = { u0: 0.25, u1: 0.25 + 64 / 4096, v0: 0.5, v1: 0.5 + 32 / 4096 };
+const grainOptics = (): GrainOptics => {
+  const levels = mipDimensions(64, 32), chain = () => levels.map(({ width, height }) => new Uint8Array(width * height * 4));
+  return { window: GRAIN_WINDOW, width: 64, height: 32, normal: chain(), surface: chain() };
+};
 const GAME = { model: "game-matched-1" } as const;
 
 describe("the makeup stack's plate", () => {
@@ -278,10 +287,27 @@ describe("the makeup stack's plate", () => {
     const base = initialRecipe().layers[0]!;
     stack.setCanvases([{ width: 32, height: 32 } as HTMLCanvasElement]);
     stack.setUnderlaySource(underlay);
-    stack.updateLayer(0, { ...base, finish: "shimmer", optics: GAME }, optics(32));
+    const shimmer: Layer = { ...base, finish: "shimmer", optics: GAME };
+    // Grain maps are its only maps; the classic flake maps are refused.
+    expect(() => stack.updateLayer(0, shimmer, optics(32))).toThrow("grain");
+    stack.updateLayer(0, shimmer, grainOptics());
     stack.prepareBlend(renderer);
     expect(stack.blendDiagnostics().plate).toMatchObject({ drawn: true, route: "faceted", slots: [0] });
-    expect(stack.materials[0]!.normalMap).not.toBeNull();
+    const normal = stack.materials[0]!.normalMap!;
+    expect(normal).not.toBeNull();
+    // The grain's window of head UV: its maps sample (u − u0) / (u1 − u0), so a texel of the window is a texel of the grain.
+    const at = (u: number, v: number) => new THREE.Vector3(u, v, 1).applyMatrix3(normal.matrix);
+    expect(at(GRAIN_WINDOW.u0, GRAIN_WINDOW.v0).x).toBeCloseTo(0, 12); expect(at(GRAIN_WINDOW.u1, GRAIN_WINDOW.v1).y).toBeCloseTo(1, 12);
+    expect(stack.materials[0]!.roughnessMap!.matrix.equals(normal.matrix)).toBe(true);
+    // One composite texel per grain (4096 per unit on the grain grid), whatever the 32-texel masks: the window (0.248–0.752 ×
+    // 0.498–0.627, snapped out to the grid) is 2066 × 530 grains.
+    expect(stack.blendDiagnostics().plate.composite).toEqual({ width: 2066, height: 530 });
+    const w = stack.blendDiagnostics().window;
+    for (const edge of [w.u0, w.u1, w.v0, w.v1]) expect(Number.isInteger(edge * 4096)).toBe(true);
+    // Another preview size or a changed fineness keeps the same grain (CORE-120); switching the model does not (CORE-122).
+    expect(stack.needsOptics(0, shimmer, 64)).toBe(false);
+    expect(stack.needsOptics(0, { ...shimmer, flakes: { ...defaultFlakes(), cells: 200 } }, 32)).toBe(false);
+    expect(stack.needsOptics(0, { ...shimmer, optics: undefined }, 32)).toBe(true);
     stack.updateLayer(0, { ...base, finish: "shimmer" }, optics(32));
     stack.prepareBlend(renderer);
     expect(stack.blendDiagnostics().plate.drawn).toBe(false);
@@ -325,7 +351,7 @@ describe("the makeup stack's plate", () => {
       const layers = names.map((name, i): Layer => ({ ...base, id: `${name}-${i}`, ...kinds[name] }));
       stack.setCanvases(layers.map(() => ({ width: 32, height: 32 }) as HTMLCanvasElement));
       stack.setUnderlaySource(underlay);
-      layers.forEach((layer, i) => stack.updateLayer(i, layer, textured.has(names[i]!) ? optics(32) : undefined));
+      layers.forEach((layer, i) => stack.updateLayer(i, layer, !textured.has(names[i]!) ? undefined : names[i] === "shimmer" ? grainOptics() : optics(32)));
       stack.prepareBlend(renderer);
       const plan = planPresetExport({ layers }), slots = plan.included.map(layer => layers.indexOf(layer));
       const { plate, layers: drawn } = stack.blendDiagnostics();

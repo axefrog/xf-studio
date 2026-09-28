@@ -255,8 +255,8 @@
         },
         "strong": {
           "texels": 16625,
-          "tiltedShare": 0.3181,
-          "meanTiltDeg": 20.96,
+          "tiltedShare": 0.3258,
+          "meanTiltDeg": 20.91,
           "meanGateOnTilted": 1,
           "roughness": {
             "mean": 0.3216,
@@ -273,7 +273,7 @@
             "v": 27
           },
           "latticeCorrelation": {
-            "u": 0.012,
+            "u": -0.003,
             "v": -0.004
           }
         }
@@ -298,11 +298,11 @@
             "patternWidthPx": 1
           },
           "strong": {
-            "sheenA": 0.7385,
-            "litB": 0.1254,
+            "sheenA": 0.7347,
+            "litB": 0.1287,
             "staticContrast": 0,
-            "litContrastB": 0.969,
-            "twinkle10deg": 0.091,
+            "litContrastB": 0.992,
+            "twinkle10deg": 0.097,
             "patternWidthPx": 1
           }
         },
@@ -329,11 +329,11 @@
             0.137
           ],
           "strong": [
-            1.3074,
-            0.7385,
-            0.3395,
-            0.2054,
-            0.1417
+            1.2924,
+            0.7347,
+            0.3421,
+            0.2094,
+            0.1449
           ]
         }
       },
@@ -357,10 +357,10 @@
             "patternWidthPx": 1
           },
           "strong": {
-            "sheenA": 0.5199,
-            "litB": 0.1197,
+            "sheenA": 0.519,
+            "litB": 0.1204,
             "staticContrast": 0,
-            "litContrastB": 0.093,
+            "litContrastB": 0.101,
             "twinkle10deg": 0.006,
             "patternWidthPx": 1
           }
@@ -388,11 +388,11 @@
             0.133
           ],
           "strong": [
-            0.7121,
-            0.5199,
-            0.3015,
-            0.1901,
-            0.1338
+            0.7052,
+            0.519,
+            0.3025,
+            0.1909,
+            0.1344
           ]
         }
       }

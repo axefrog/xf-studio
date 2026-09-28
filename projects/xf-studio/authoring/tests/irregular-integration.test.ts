@@ -1,6 +1,6 @@
 import {expect,test} from "bun:test";
 import * as THREE from "three";
-import {defaultFlakes} from "../src/engines/layered-makeup/finish";
+import {defaultFlakes,type FlakeMaps} from "../src/engines/layered-makeup/finish";
 import {defaultIrregularFlakes,defaultStudioIrregularFlakes} from "../src/engines/layered-makeup/flake-field";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
 import {assessPreviewQuality} from "../src/preview-quality";
@@ -60,7 +60,7 @@ test("combined worker publishes exact shape alpha and independent pale flakes, t
   let coloured=0;
   for(let i=0;i<first.data.length;i+=4){
     expect(first.albedo!.data[i+3]).toBe(first.data[i+3]);
-    if(first.optics!.surface[i]>0 && first.albedo!.data[i]>first.albedo!.data[i+2])coloured++;
+    if((first.optics as FlakeMaps).surface[i]>0 && first.albedo!.data[i]>first.albedo!.data[i+2])coloured++;
   }
   expect(coloured).toBeGreaterThan(0);
   layer.color="#110033";layer.flakes.color="#ffffff";
@@ -86,7 +86,7 @@ test("fine studio default reports bounded-region and resolved-coverage counts",a
   expect(result.glitterStats!.coveredPixels).toBeGreaterThan(result.glitterStats!.quarterCoveragePixels);
   let painted=0,coverage=0;
   for(let i=0;i<result.data.length;i+=4)if(result.data[i+3]){
-    painted++;coverage+=result.optics!.surface[i]!/255;
+    painted++;coverage+=(result.optics as FlakeMaps).surface[i]!/255;
   }
   expect(painted).toBeGreaterThan(1000);
   expect(coverage/painted).toBeGreaterThan(.06);

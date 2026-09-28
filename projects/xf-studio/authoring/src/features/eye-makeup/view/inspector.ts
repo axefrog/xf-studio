@@ -14,7 +14,7 @@ import { ChoiceList, propertyList, setHelp } from "../../../studio-ui/components
 import { icon } from "../../../studio-ui/icons";
 import type { Frame } from "../../../studio-ui/runtime";
 import type { PanelController } from "../../../studio-ui/panels/collection";
-import { addLayer, addLayerCapability, catalogues, type EyeMakeupViewContext } from "./actions";
+import { addLayer, addLayerCapability, catalogues, finenessState, type EyeMakeupViewContext } from "./actions";
 import { EYE_MAKEUP_PANEL_META } from "./contribution";
 
 type RLayer = ReadonlyDeep<Layer>;
@@ -219,9 +219,11 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
           : ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."]);
         // A layer without stored flakes shows the classic model's defaults from the catalogue (UI-93).
         const legacy = flakes && !("model" in flakes) ? flakes as ReadonlyDeep<LegacyFlakes> : glitterModel.defaults as { cells: number; density: number; tilt: number };
-        classic.cells.update(legacy.cells); classic.density.update(legacy.density); classic.tilt.update(legacy.tilt);
-        // Fineness shows only where it applies: game-matched Shimmer's grain has one size (the application refuses it).
-        classic.cells.element.hidden = !ctx.facade.capability({ kind: "glitter.setClassic", layerId: layer.id, key: "cells", value: legacy.cells }).available;
+        // Fineness shows only where it applies: game-matched Shimmer's grain has one size (the application refuses it as a mode);
+        // any other refusal disables it with its reason (CORE-121).
+        const fineness = finenessState(ctx.facade.capability({ kind: "glitter.setClassic", layerId: layer.id, key: "cells", value: legacy.cells }));
+        classic.cells.update(legacy.cells, { disabled: fineness.disabled, reason: fineness.reason }); classic.density.update(legacy.density); classic.tilt.update(legacy.tilt);
+        classic.cells.element.hidden = fineness.hidden;
       }
       if (!irregularSection.hidden && flakes && "model" in flakes && flakes.model === "irregular-planar-1") {
         const f = flakes as ReadonlyDeep<IrregularFlakes>, target = { kind: "layer" as const, id: layer.id };

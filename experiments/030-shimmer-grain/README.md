@@ -48,7 +48,7 @@ Why the exported Shimmer is a regular grid of large dots, from [result.json](res
    - A facet's centre moves at most ±15 % of a cell.
    - Every facet has the same radius, 0.39 cell.
    - With density 0.8, most cells are filled, so the facets read as rows and columns.
-   - Measured on the window maps, the tilt autocorrelation one cell pitch away is **0.36 (across) and 0.41 (down)** on the strong stripe, and 0.28 and 0.23 on the fine one. The grain's is **0.01 and −0.004**.
+   - Measured on the window maps, the tilt autocorrelation one cell pitch away is **0.36 (across) and 0.41 (down)** on the strong stripe, and 0.28 and 0.23 on the fine one. The grain's is **−0.003 and −0.004**.
 2. **The dots are millimetres wide.**
    - A strong-stripe cell is 1/128 of head UV, about 4.4 × 3.2 mm on the lid, so each facet is about **3.5 × 2.5 mm**. That is roughly 16 × 11 pixels at face framing and 35 × 25 at an eye close-up.
    - Board 2's fine stripe is half that.
@@ -72,30 +72,47 @@ The texture crops (`generated/as-built-texture.png`: tilt above, metalness below
 
 | Measure (stripe interior) | As built: fine | As built: strong | Grain: fine | Grain: strong |
 |---|---:|---:|---:|---:|
-| Tilted share | 0.31 | 0.39 | 0.26 | 0.32 |
+| Tilted share | 0.31 | 0.39 | 0.26 | 0.33 |
 | Mean mode-1 weight on tilted texels | 0.64 | 0.92 | **1.00** | **1.00** |
 | Metalness spread (SD) | 0.16 | 0.16 | **0** | **0** |
 | Correlated patch width | 1.17 mm | 1.95 mm | **0.13 mm** (one texel) | **0.13 mm** |
-| Tilt autocorrelation at the old cell pitch (across, down) | 0.28, 0.23 | 0.36, 0.41 | −0.01, 0.00 | 0.01, −0.00 |
+| Tilt autocorrelation at the old cell pitch (across, down) | 0.28, 0.23 | 0.36, 0.41 | −0.01, 0.00 | −0.00, −0.00 |
 
 | Render (stripe interior) | Framing | As built: fine | As built: strong | Grain: fine | Grain: strong | Satin |
 |---|---|---:|---:|---:|---:|---:|
 | Static contrast | close-up | 0.17 | 0.19 | **0** | **0** | 0 |
 | Pattern width (px) | close-up | 13 | 23 | **1** | **1** | — |
-| Lit contrast, oblique light | close-up | 0.53 | 0.43 | 0.72 | 0.97 | 0 |
-| Twinkle for a 10° light move | close-up | 0.05 | 0.12 | 0.06 | 0.09 | 0 |
+| Lit contrast, oblique light | close-up | 0.53 | 0.43 | 0.72 | 0.99 | 0 |
+| Twinkle for a 10° light move | close-up | 0.05 | 0.12 | 0.06 | 0.10 | 0 |
 | Static contrast | face framing | 0.16 | 0.18 | **0** | **0** | 0 |
 | Pattern width (px) | face framing | 7 | 9 | **1** | **1** | — |
-| Lit contrast, oblique light | face framing | 0.46 | 0.44 | **0.06** | **0.09** | 0 |
+| Lit contrast, oblique light | face framing | 0.46 | 0.44 | **0.06** | **0.10** | 0 |
 | Sheen, light 0° / 8° / 16° off normal | face framing | 0.49 / 0.39 / 0.27 | 0.30 / 0.28 / 0.23 | **0.93 / 0.63 / 0.33** | 0.71 / 0.52 / 0.30 | 0.72 / 0.51 / 0.28 |
 
 How to read it:
 
-- **No dots, no grid.** The grain has no static pattern at either framing. At the close-up its pattern is one pixel wide: a fine sparkle that is strong under an oblique light and changes when the light moves. At face framing the chain has averaged it away (lit contrast 0.06–0.09), leaving a smooth sheen.
+- **No dots, no grid.** The grain has no static pattern at either framing. At the close-up its pattern is one pixel wide: a fine sparkle that is strong under an oblique light and changes when the light moves. At face framing the chain has averaged it away (lit contrast 0.06–0.10), leaving a smooth sheen.
 - **Distinct from Satin.** At face framing the fine grain's highlight is brighter at the mirror angle than Satin's (0.93 against 0.72) and holds more of its brightness at 16° (0.33 against 0.28). That is the soft, luminous lobe the finish is meant to have. Its reflection is also tinted by the pigment (metalness 0.3), which luminance does not show. The strong stripe's larger slope variance makes its lobe broader and dimmer at the peak.
 - **Distinct from Glitter.** Glitter's design needs flakes of two or more texels and pixels, with nested mips that keep them visible ([Glitter in game](../../knowledge/glitter-in-game.md)). Shimmer's grains are one texel and deliberately vanish into the sheen by face framing.
 
-**Limits.** This is a flat patch under one directional light with a frontal view. It leaves out lid curvature, SSS, TAA or DLSS, bloom, environment and ray-traced reflections, and BC5 or BC4 compression. The trilinear LOD is isotropic and ignores anisotropic filtering. The framings are estimates. These are forecasts to make the in-game check informative, not proof of how the game renders.
+**Limits.** This is a flat patch under one directional light with a frontal view. It leaves out lid curvature, SSS, TAA or DLSS, bloom, environment and ray-traced reflections, and BC4 compression (BC5 is measured below). The trilinear LOD is isotropic and ignores anisotropic filtering. The framings are estimates. These are forecasts to make the in-game check informative, not proof of how the game renders.
+
+**Seeds.** The strong stripe's seed is 2078, next to the default 2077. Its grain was re-drawn on 28 September, when the grain hash began mixing the seed before use (code-health PREV-185): under the old key, seed 2078's tilts were seed 2077's azimuths. The figures above are from the re-drawn grain; they moved by at most 0.03. The default seed's bytes did not change.
+
+## Through WolvenKit's BC5 [offline]
+
+Build compresses the normal map to BC5 (`TCM_Normalmap`), and the claim that every tilted grain clears the mode-1 fade held only for the bytes before compression (code-health PIPE-125). [`bc5-roundtrip.ts`](bc5-roundtrip.ts) runs *Shimmer · strong*'s normal chain, as Build writes it, through WolvenKit 9.0.1's own folder import with Build's settings. It then decodes the .xbm with the Studio's BC5 reader and compares it with the supplied bytes over each stripe's fully covered interior ([bc5-result.json](bc5-result.json)):
+
+| Stripe interior | Tilted grains | Keep full weight | Below half weight | Mean weight | Normal error (mean, p95) | Angle error (mean, p95) | Flat grains above 0.1 weight |
+|---|---:|---:|---:|---:|---|---|---:|
+| Fine | 4239 | 97.6 % | 0 | 0.998 | 0.013, 0.039 | 0.74°, 2.3° | 0 |
+| Strong | 5417 | 97.9 % | 0.02 % (1) | 0.997 | 0.017, 0.050 | 1.0°, 2.9° | 0 |
+
+So BC5 lowers about 2 % of grains below full weight, almost all of them only slightly, and it puts no visible tilt on flat grains. The manifest says so. This is WolvenKit's encoder decoded by the Studio's reader, not the GPU's sampler, and level 0 only (grains are one texel; lower levels are box means).
+
+```powershell
+bun experiments/030-shimmer-grain/bc5-roundtrip.ts PATH_TO_WOLVENKIT_CLI PATH_TO_GAME   # bc5-result.json; the game folder only for its Oodle library
+```
 
 ## Files
 
@@ -103,4 +120,5 @@ How to read it:
 |---|---|
 | [`diagnose.ts`](diagnose.ts) | The measurement and render script |
 | [`result.json`](result.json) | Its output (asset-free) |
+| [`bc5-roundtrip.ts`](bc5-roundtrip.ts), [`bc5-result.json`](bc5-result.json) | The grain through WolvenKit's BC5 import, and its output (asset-free) |
 | `generated/` (ignored) | Texture crops (tilt ×4 above, metalness below; 2 px per texel) and renders per variant, framing and light (A near mirror, B and C oblique 10° apart, ambient) |

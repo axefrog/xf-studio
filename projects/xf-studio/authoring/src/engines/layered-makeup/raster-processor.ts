@@ -1,6 +1,8 @@
 import { createRasterJob, type Layer } from "./recipe";
 import { createFlakeJob, defaultFlakes, isIrregular, type FlakeMaps } from "./finish";
-import { createShimmerGrainJob } from "./shimmer-grain";
+import { createShimmerGrainJob, previewGrainGrid, type GrainOptics } from "./shimmer-grain";
+export { isGrainOptics, type GrainOptics } from "./shimmer-grain";
+import { createPreviewFacetChainJob } from "./route-mip-chains";
 import { createFlakeCatalogueJob, createRegionFlakeCatalogueJob, createFlakeBakeJob, createFlakeColourJob,
   FLAKE_LIMITS } from "./flake-field";
 import { maskAlphaKey, studioIrregularOpticalKey, irregularAlbedoKey } from "./makeup-dependencies";
@@ -13,7 +15,7 @@ export type GlitterStats={generated:number;regionRetained:number;maskCentres:num
   paintedPixels:number;coveredPixels:number;quarterCoveragePixels:number;halfCoveragePixels:number};
 export type RasterResponse = { i: number; version: number } & (
   { cancelled: true; error?: string } | { cancelled?: false; size: number; data: Uint8ClampedArray<ArrayBuffer>;
-    optics?: FlakeMaps; albedo?: {key:string; data:Uint8Array<ArrayBuffer>}; glitterStats?:GlitterStats; ms: number }
+    optics?: FlakeMaps | GrainOptics; albedo?: {key:string; data:Uint8Array<ArrayBuffer>}; glitterStats?:GlitterStats; ms: number }
 );
 
 const CACHE_CAP = 64 * 1024 * 1024;
@@ -61,7 +63,7 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
           await drain(job,16);
           data = job.data;
         }
-        let optics: FlakeMaps | undefined, albedo: {key:string;data:Uint8Array<ArrayBuffer>} | undefined,
+        let optics: FlakeMaps | GrainOptics | undefined, albedo: {key:string;data:Uint8Array<ArrayBuffer>} | undefined,
           glitterStats:GlitterStats|undefined;
         if (!token.cancelled && irregular) {
           const settings=candidate as import("./flake-field").IrregularFlakes;
@@ -174,10 +176,19 @@ export function createRasterProcessor(post: (result: RasterResponse) => void,
           await pause();
           if (!token.cancelled) {
             const flakes = isIrregular(layer.flakes) || isDirectGlint(layer.flakes) ? defaultFlakes() : layer.flakes ?? defaultFlakes();
-            // Game-matched Shimmer previews the export's grain; the earlier Shimmer study and classic Glitter keep the flake bake.
-            const optical = layer.finish === "shimmer" && layer.optics ? createShimmerGrainJob(flakes,size) : createFlakeJob(size,layer.finish,flakes);
-            await drain(optical,256);
-            if (!token.cancelled) optics = {size,normal: optical.normal,surface: optical.surface};
+            if (layer.finish === "shimmer" && layer.optics) {
+              // Game-matched Shimmer previews the export's grain at its true scale, whatever the preview size, with the route's chains.
+              const grid = previewGrainGrid(region.opticsWindow), grain = createShimmerGrainJob(flakes, grid.width, grid.height, grid.window);
+              await drain(grain, 4096);
+              const chain = token.cancelled ? undefined : createPreviewFacetChainJob(grain.normal, grain.surface, grid.width, grid.height);
+              if (chain) await drain(chain, 4096);
+              if (chain && !token.cancelled) optics = { window: grid.window, width: grid.width, height: grid.height, normal: chain.normal, surface: chain.surface };
+            } else {
+              // The earlier Shimmer study and classic Glitter keep the flake bake.
+              const optical = createFlakeJob(size,layer.finish,flakes);
+              await drain(optical,256);
+              if (!token.cancelled) optics = {size,normal: optical.normal,surface: optical.surface};
+            }
           }
         }
         if (token.cancelled) post({ i: token.i, version: token.version, cancelled: true });
