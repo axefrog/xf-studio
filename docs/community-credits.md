@@ -359,6 +359,10 @@ Nola Dreamer's hair Sofie, per its title, one of the creator's "Physics enabled"
 
 Sun Moon And Stars Tattoo, Serpentine Heart and its Remix, Graceful Tattoo, Brooke Candy Inspired Tattoo Overlay, Floral Themed Tattoo Overlay, Deej's Mandala Geometry (by Deej per its title, with a KSUV conversion its description credits to MeltingAngels) and Bedellia's Bad Girl and Geometric overlays (by Bedellia per their titles). Together they showed that overlay tattoo mods each replace the texture framework's one overlay file, sometimes with the skin's roughness map for glossy ink, which is why they cannot be combined without merging images. Studied only; most of their authors are still being confirmed.
 
+### Ultra+
+
+[Ultra+](https://www.nexusmods.com/cyberpunk2077/mods/10490), by the Ultra Team per its licence, with its source at [sammilucia/cyberpunk-ultra-plus](https://github.com/sammilucia/cyberpunk-ultra-plus) per its own metadata. Its configuration showed which engine settings shape V's skin beyond the graphics menu: it sets the subsurface-scattering quality per quality tier and the skin's subsurface specular tint and ambient factors per rendering mode, and it exposes the character subsurface translucency toggle. Knowing this explained an inconclusive in-game skin comparison and made these settings part of every capture record. Studied only; nothing is copied (its licence is proprietary).
+
 ### Urmland Street Arcade
 
 [Urmland Street Arcade](https://www.nexusmods.com/cyberpunk2077/mods/23908). Its world resources showed how a small location is added with ArchiveXL: the base game's own arcade, pachinko and vending devices placed in a new streaming block, a devices patch, and a few base-game nodes removed where it stands. Studied only; its author is still being confirmed.
