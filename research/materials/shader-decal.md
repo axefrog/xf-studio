@@ -365,7 +365,15 @@ Decisions on defaults are the maintainer's; each item names what it depends on.
 
 ## 13. In-game test asks (batch into the prepared session)
 
-The decal asks are already on the [session 2 test card](../../experiments/020-session-2/README.md#test-card) (the presets of [experiment 017](../../experiments/017-plate-depth/README.md#in-game-test-card)); this study sharpens how to read them:
+The decal asks are already on the [session 2 test card](../../experiments/020-session-2/README.md#test-card) (the presets of [experiment 017](../../experiments/017-plate-depth/README.md#in-game-test-card)); this study sharpens how to read them.
+
+**Session 4's verdicts** (28 September, a neutral photo-mode light at azimuth 25°, elevation 20°, 1 m; [experiment 029](../../experiments/029-session-4/README.md#32-finish-sweep-gloss-ad-shimmer-metal-plan-15)) [runtime]:
+- **Gloss C (all rough) is clearly the flattest, so the written roughness is what shows** (§9.1's roughness attribution holds). A, B and D look wet, A the most.
+- **The stripes of A and D don't separate at face framing**, so which of D's values reads as four distinct finishes isn't settled there. Only an eye framing that resolves the stripes can judge it.
+- **Shimmer · strong** reads as a regular grid of dots far too large: randomised, much finer facets, or a sheen-first design (§10 rank 3's tilt floor alone won't fix the scale).
+- **The Metal ramp's stripes** are its own step pattern.
+
+How to read each step:
 
 - **Gloss (step 5).** If *Gloss A*'s Matte reads no glossier than *Gloss C*, the Matte report was the breakup; if *Gloss D* separates Matte, Satin and Glossy but all still look "coated", §9.1 item 3 (uniform surface) is the next lever, not further roughness.
 - **Metal ramp (step 7).** A hard-looking, "plastic" skin under the Metallic stripe in *Gloss A* and *D* alike is the SSS switch at blended metalness 0.1, not a roughness problem; on the ramp it should begin where the blend crosses 0.1 (between the 0.098 and 0.149 steps).

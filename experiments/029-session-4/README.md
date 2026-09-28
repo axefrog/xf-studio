@@ -111,7 +111,7 @@ The maintainer's reading of the frames: the expressions "look better in the stud
 | # | Result | Grade |
 |---|---|---|
 | 5.1 Parity E0–E2 | — | Not run |
-| 5.2 Tint encoding | Skin type 1 with tones 1 (**warm ivory**), 5 (**senna amber**) and 2 (**limestone**); type 3 with tone 5; type 5 with tone 2 (`n5-5.2-*`). Every apply went through, with no busy lock. The step's premise differs from the plan's (which assumed pale and plain senna); §4.2 fits the actual tones. **The darkening points to sRGB-decoded `TintColor`** | Inconclusive leaning sRGB (provisional) |
+| 5.2 Tint encoding | Skin type 1 with tones 1 (**warm ivory**), 5 (**senna amber**) and 2 (**limestone**); type 3 with tone 5; type 5 with tone 2 (`n5-5.2-*`). Every apply went through, with no busy lock. The plan's tone numbers were the creator's one-based labels (1 pale, 5 senna, 2 warm ivory), but they were applied as `cc_apply` indices, which count from 0, so the frames show other tones than the plan's pass marks assume. §4.2 fits the tones actually shown. **The darkening points to sRGB-decoded `TintColor`** | Inconclusive leaning sRGB (provisional) |
 | 5.5 Piercings and the heart eye | Style 9 black, style 1 silver and gold (head page), eye colour 24 (`n5-5.5-*`). **Gold shows gold** (the ring's bright pixels average (210, 195, 182)); **black plastic keeps its colour** and a narrow highlight; **the heart sits upright**. The silver highlight's colour and the metal body are in §4.1 | Pass for colour mask and heart; key-light colour neutral (§4.1); metal body Fail (not near black) |
 | 5.6 Decal order | Eye makeup 5, cheeks 10, facial tattoo 2 then 8, brows 1 (`n5-5.6-order-*`). What the frames show is in §4.4 | Inconclusive (XF Metal on V; brow tails under hair) |
 | 5.7 Strength anchors | Blush 5 against 1; tattoos 9 and 2 on tone 1, default colours (`n5-5.7-*`). **Cheek choice 1 is a freckle pattern, not a blush**, so the blush pair doesn't compare strengths. Tattoo 2 reads slightly stronger than tattoo 9 (§4.4); no dark-tone frame | Inconclusive (blush); Pass for relative tattoo strength |
@@ -138,9 +138,9 @@ Rows recorded on the way [runtime]:
 
 Method for every figure: [`analyse_captures.py`](analyse_captures.py) on the full-resolution captures, run under the memory guard (peak 0.9 GB). Pixels are the game's 8-bit SDR output after tone mapping, grading and Ultra+'s CAS sharpening. "Linear" means only the sRGB transfer undone, not the grade (the parity design's LUT inversion isn't built), so ratios are display-derived. The idle moves V by a few pixels between frames, so the boxes sit in smooth regions away from edges.
 
-### 4.1 N5.5: the silver highlight and the metal body (`n5-5.5-p1-silver`)
+### 4.1 N5.5: the silver highlight and the metal body
 
-The nose ring (box 2050,1028, 40 × 85) separated from skin by its chroma (skin is warm, R − B about 20–30; metal pixels have R − B < 5). Metal pixels bucketed by luminance:
+Frame `n5-5.5-p1-silver`. The nose ring (box 2050,1028, 40 × 85) separated from skin by its chroma (skin is warm, R − B about 20–30; metal pixels have R − B < 5). Metal pixels bucketed by luminance:
 
 | Luminance | Pixels | Mean RGB | B/R | G/R |
 |---|---:|---|---:|---:|
@@ -155,9 +155,9 @@ The nose ring (box 2050,1028, 40 × 85) separated from skin by its chroma (skin 
 - **The metal body between highlights isn't near black**: its darkest pixels are about 58, and the dark inner arc averages (88, 94, 95), against the pass mark of under 10/255. So something lights the metal between the highlights: ambient, environment reflections, or the ray-traced reflections that Ultra+'s RT mode runs. Step 5.9 (ray tracing off, with Ultra+ off) separates them before `a` is fitted ([creator lighting §11](../../knowledge/creator-lighting.md#11-an-environment-for-the-creator-preset-recommended)).
 - Gold for comparison: bright ring pixels (luminance over 150) average (209.8, 194.7, 182.2), B/R 0.87.
 
-### 4.2 N5.2: tone strength and `TintColor` encoding (`n5-5.2-type1-tone1/5/2`)
+### 4.2 N5.2: tone strength and TintColor encoding
 
-The frames are warm ivory (tone 1: `TintColor` 255,245,181, `TintScale` −0.15, an overlay), senna amber (tone 5: 199,116,112, 0.52, a multiply) and limestone (tone 2: 131,149,83, 0.38) on skin type 1 ([head CC rendering §2](../../knowledge/head-cc-rendering.md#2-skin-type-tone-and-the-complexion-texture-set)). The plan's pass marks (a fifth or two fifths) were written for plain senna against pale, so the test uses the shader's own arithmetic instead. It predicts each tone's albedo multiplier under both encodings at tint-mask weight `m`, with albedo under 0.5 so the overlay is `a(1 + w(2T − 1))`, and fits `m` per region.
+Frames `n5-5.2-type1-tone1`, `-tone5` and `-tone2`. They are warm ivory (tone 1: `TintColor` 255,245,181, `TintScale` −0.15, an overlay), senna amber (tone 5: 199,116,112, 0.52, a multiply) and limestone (tone 2: 131,149,83, 0.38) on skin type 1 ([head CC rendering §2](../../knowledge/head-cc-rendering.md#2-skin-type-tone-and-the-complexion-texture-set)). The plan's pass marks (a fifth or two fifths) were written for plain senna against pale, so the test uses the shader's own arithmetic instead. It predicts each tone's albedo multiplier under both encodings at tint-mask weight `m`, with albedo under 0.5 so the overlay is `a(1 + w(2T − 1))`, and fits `m` per region.
 
 Predicted at full mask weight (m = 1):
 
@@ -184,7 +184,9 @@ Amber darkens this skin by 32–44 % in luminance: nearer the "two fifths" readi
 
 **Limits.** The ratios are display-referred: the grade's curve and Ultra+'s RT skin tuning and CAS sit between the albedo and the pixel, and the complexion replacer's albedo and the mask values per region are unknown. So this **supports sRGB decoding [offline, provisional]** and doesn't settle [materials open question 11](../../knowledge/materials-and-shaders.md#7-open-questions). The confirming frame is the same five tones with Ultra+ off, beside the Studio's render of the same tones under both decodings. Warm ivory against pale (the plan's "warmer and a little brighter") wasn't taken.
 
-### 4.3 N6.2: tone 3 on the body across skin types (`n6-link-type1-body`, `n6-link-type5-body`)
+### 4.3 N6.2: tone 3 on the body across skin types
+
+Frames `n6-link-type1-body` and `n6-link-type5-body`.
 
 | Region | Type 1 | Type 5 | Ratio (R, G, B) |
 |---|---|---|---|
@@ -253,7 +255,8 @@ Tattoo 2 reads slightly stronger than tattoo 9, as the ask expects. Ink colour a
 8. **Light placed at the camera doesn't light the face** (P7); placement about V does (P6).
 9. **The `eyes` region sits the eyes at its bottom edge** at the eyes framing (`e7-*`, `e7b-*`, `s4-*-eyes`): the framing target and the crop disagree by roughly the brow-to-eye height.
 10. **`photo.expression.set` takes the menu's value, not the faceId.** The session card listed faceIds (217–219), which it refused; say which in the card, or accept a faceId and map it through the menu data.
-11. **Session tooling:** the capture helper asked for an unknown region for `e5-light-on`, which was lost. The first SSS High run started inside an open photo-mode session: each run of a comparison must start from gameplay.
+11. **Creator labels against indices.** N5.2's tone numbers were one-based creator labels but went to `cc_apply` as zero-based indices. The plan's index convention covers piercings and eye shapes; it needs a line for skin tones, and the card should give the value (`03_ca_senna`) rather than a number.
+12. **Session tooling:** the capture helper asked for an unknown region for `e5-light-on`, which was lost. The first SSS High run started inside an open photo-mode session: each run of a comparison must start from gameplay.
 
 ## 6. What this settles and where it went
 

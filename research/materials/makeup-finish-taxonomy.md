@@ -6,7 +6,7 @@ The project requires familiar categories rather than arbitrary legacy labels. Cu
 |---|---|---|---|
 | Matte | Low shine, soft colour | Flat decal, roughness 1.0 (provisional; 0.88 until 27 September, [decal reference §10](shader-decal.md#10-recommended-changes-ranked)) | Same values |
 | Satin | Gentle sheen without distinct sparkle | Flat decal, roughness 0.38; internal `regular` | Same values |
-| Shimmer / pearl | Fine reflective sheen that sparkles close up | **Experimental**: facet normal map composed with the skin normal, variance-widened roughness mips ([design](finish-designs/shimmer.md)); in game a static dot field, no sparkle yet (route reworked) | Game-matched model follows the route; earlier layers keep the fine-facet study |
+| Shimmer / pearl | Fine reflective sheen that sparkles close up | **Experimental**: facet normal map composed with the skin normal, variance-widened roughness mips ([design](finish-designs/shimmer.md)); in game a regular grid of dots, far too large, no sparkle (route reworked) | Game-matched model follows the route; earlier layers keep the fine-facet study |
 | Metallic / foil | Strong continuous reflective finish | Flat decal, roughness 0.27, metalness 0.65; never an alias for shimmer | Same values |
 | Glitter | Individually visible reflective flecks | **None**: preview only; resolved glint-flake route proposed ([design](finish-designs/glitter.md)) | Opt-in glitter studies (recipes 7–10) |
 | Glossy / wet look | Smooth wet-looking reflection over colour | **Experimental**: one low-roughness dielectric lobe (0.12), no clear coat ([design](finish-designs/glossy.md)) | Game-matched model: the same single lobe; earlier layers keep the clear-coat study |
@@ -29,7 +29,7 @@ Existing recipes remain supported, including the `satin` alias for `regular`. Me
 - Matte and Satin first read too glossy. Matte's roughness has since gone to 1.0, which hasn't been seen yet.
 - Under the creator's soft light the flat finishes (Matte, Satin, Glossy, Metallic) barely separate, so their defaults wait for a controlled-light verdict.
 - Metallic's ramp shows no angular highlights.
-- Shimmer shows a static field of dots rather than sparkle, so it stays experimental ([finishes backlog](../backlog/glitter-material.md#open)).
+- Shimmer shows a static field of dots rather than sparkle; under a controlled light (session 4) the dots read as a regular grid, far too large. It stays experimental, and its rework needs randomised, much finer facets or a sheen-first design ([finishes backlog](../backlog/glitter-material.md#open)).
 
 Glitter has not been in game.
 
