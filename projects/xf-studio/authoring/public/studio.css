@@ -390,9 +390,10 @@ span.category { border-color: transparent; background: transparent; padding-left
 .dial-grip:hover::before, .dial-grip.dragging::before, .size-bar:hover::before, .size-bar.dragging::before { background: var(--signal); width: 48px; }
 .dial-grip:focus-visible, .size-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* Size bar (components/size-bar.ts): the same bar under a list, tree or scroll region, full width and right under it (the region
-   holds the two with no gap); drag down to enlarge, up to shrink. Only the grip line changes on hover, so nothing moves. */
+   holds the two, the bar 1 px below the frame so its focus ring reads as its own); drag down to enlarge, up to shrink. Only the grip
+   line changes on hover, so nothing moves. */
 .size-region { display: flex; flex-direction: column; min-width: 0; }
-.size-bar { flex: none; display: flex; justify-content: center; align-items: center; height: 12px; cursor: ns-resize; touch-action: none;
+.size-bar { flex: none; display: flex; justify-content: center; align-items: center; height: 12px; margin-top: 1px; cursor: ns-resize; touch-action: none;
   border-radius: var(--bevel-sm); user-select: none; }
 /* Scrub slider (components/scrub-slider.ts): rests at the middle, fills from the centre mark to the thumb while it previews, springs back. */
 .scrub-slider { gap: 0; }
@@ -1481,4 +1482,4 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 /* Poses panel (features/poses/view): the library's tree view, given a height in the panel. */
 .poses-panel { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
 .poses-panel .poses-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
-.poses-panel .poses-tree { height: 62vh; }
+/* The tree's height is its size bar's (20 rows by default). */

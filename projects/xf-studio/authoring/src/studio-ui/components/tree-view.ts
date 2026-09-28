@@ -2,7 +2,7 @@ import { keyBinding } from "../../input-bindings";
 import { h, setAttr, setText } from "../dom";
 import { icon } from "../icons";
 import { ScrollMemory, type RestoreResult } from "../scroll-anchor";
-import { SizeBar } from "./size-bar";
+import { rowWords, SizeBar } from "./size-bar";
 import type { ScrollAnchor } from "../../ui-preferences";
 
 /**
@@ -29,9 +29,10 @@ import type { ScrollAnchor } from "../../ui-preferences";
  *   that many rows, then the tree scrolls; `minRows` (default 1) keeps a floor so a search that shrinks the list doesn't pull what
  *   follows up and down as the person types. An empty tree is as tall as its message (at least the floor). Opening or closing a group
  *   changes the height, which the person asked for.
- * - **Size bar** (`sizeBar`, components/size-bar.ts): a bar under the frame the person drags to make the tree taller or shorter. With
- *   `maxRows`, the chosen height replaces `maxRows` as the most the frame fits to (it still fits fewer rows, never under the floor, and
- *   never grows past its rows); the default is `maxRows` rows. The height is remembered under the bar's view key. The owner places
+ * - **Size bar** (`sizeBar`, components/size-bar.ts): a bar under the frame the person drags to make the tree taller or shorter, in
+ *   whole rows (a drag snaps to them; the bar's value says rows). With `maxRows`, the chosen height replaces `maxRows` as the most the
+ *   frame fits to (it still fits fewer rows, never under the floor, and never shows more than its rows, which never lowers the chosen
+ *   height); the default is `maxRows` rows. Without it the frame is the chosen height, `defaultRows` rows by default. The height is remembered under the bar's view key. The owner places
  *   `tree.sizeBar.region` (the frame with the bar under it) instead of `tree.element`.
  * - **Identity:** a group and a row are told apart by their kind, so a row may share its ID with a group; within a kind, IDs are
  *   unique (a row listed in several groups, such as Favourites and its category, carries its group in its ID).
@@ -74,10 +75,15 @@ export type TreeViewOptions = {
   minRows?: number;
   /** The view key its scroll position is remembered under (default `tree:<label>`); false: not remembered. */
   remember?: string | false;
-  /** A size bar under the frame, its height remembered under this view key (e.g. `expressions:start-from`). */
-  sizeBar?: { key: string };
+  /**
+   * A size bar under the frame, its height remembered under this view key (e.g. `expressions:start-from`). Without `maxRows` the frame
+   * is the chosen height, `defaultRows` rows by default (8).
+   */
+  sizeBar?: { key: string; defaultRows?: number };
 };
 export const TREE_ROW_HEIGHT = 28;
+/** A tree frame's height in rows, to the nearest half row, for its size bar's value text ("6 rows, default", "7 and a half rows"). */
+export const treeHeightWords = (height: number, isDefault = false) => rowWords(height, TREE_ROW_HEIGHT, isDefault);
 const OVERSCAN = 8;
 type Flat = { ref: TreeItemRef; group: TreeGroupData; row?: TreeRowData; level: 1 | 2; setsize: number; posinset: number; ident: string; key: string };
 /** An item's identity: its kind and ID (a group and a row may share an ID). */
@@ -131,9 +137,11 @@ export class TreeView {
     if (options.sizeBar) {
       const floor = () => (options.minRows ?? 1) * TREE_ROW_HEIGHT + 2;
       this.sizeBar = new SizeBar({ label: options.label, target: this.element, key: options.sizeBar.key, step: TREE_ROW_HEIGHT,
-        minHeight: floor, defaultHeight: () => (options.maxRows ?? 8) * TREE_ROW_HEIGHT + 2,
-        // It never grows past its rows (an empty tree: its message, at least the floor).
-        maxHeight: () => Math.max(floor(), this.flat.length * TREE_ROW_HEIGHT + 2),
+        snap: { step: TREE_ROW_HEIGHT, offset: 2 }, valueText: treeHeightWords,
+        minHeight: floor, defaultHeight: () => (options.maxRows ?? options.sizeBar!.defaultRows ?? 8) * TREE_ROW_HEIGHT + 2,
+        // Fitting its rows (`maxRows`), it never shows more than its rows (an empty tree: its message, at least the floor); that caps
+        // only what shows, never the chosen height. Otherwise the frame is the chosen height.
+        ...(options.maxRows ? { maxHeight: () => Math.max(floor(), this.flat.length * TREE_ROW_HEIGHT + 2) } : {}),
         apply: () => this.fit() });
     }
   }
@@ -170,15 +178,17 @@ export class TreeView {
     this.memory?.contentChanged();
   }
   /**
-   * The frame's height. With `maxRows` or a size bar the frame fits its content: as tall as its items up to maxRows (or the height
-   * chosen with the size bar), then the tree scrolls; never under the floor; empty, as tall as its message (at least the floor). The
-   * frame's 1 px border on each side is outside the rows. Otherwise the owner sizes it.
+   * The frame's height. With `maxRows` the frame fits its content: as tall as its items up to maxRows (or the height chosen with the
+   * size bar), then the tree scrolls; never under the floor; empty, as tall as its message (at least the floor). With a size bar alone
+   * it is the chosen height. The frame's 1 px border on each side is outside the rows. Otherwise the owner sizes it.
    */
   private fit() {
     if (!this.options.maxRows && !this.sizeBar) return;
     const floor = (this.options.minRows ?? 1) * TREE_ROW_HEIGHT + 2, content = this.flat.length * TREE_ROW_HEIGHT + 2;
-    const most = this.sizeBar ? this.sizeBar.height : this.options.maxRows! * TREE_ROW_HEIGHT + 2;
     this.element.style.minHeight = `${floor}px`;
+    // A size bar without maxRows: the frame is the chosen height (the Poses tree), whatever it holds.
+    if (!this.options.maxRows) { this.element.style.height = `${this.sizeBar!.height}px`; return; }
+    const most = this.sizeBar ? this.sizeBar.height : this.options.maxRows * TREE_ROW_HEIGHT + 2;
     this.element.style.height = this.flat.length ? `${Math.max(floor, Math.min(most, content))}px` : "";
   }
   /**

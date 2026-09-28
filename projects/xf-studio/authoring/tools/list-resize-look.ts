@@ -3,7 +3,8 @@
  * profile and its own authoring server (own port, own data folder; never 4317 or the person's draft). The Expression drawer's Start
  * from list floats beside the Camera & light panel's direction dial (the resize-bar pattern it follows) at a narrow (300 px) and a wide
  * (480 px) width in both themes: before (the bar hidden, as on main), at its default height, the bar hovered, the bar keyboard-focused
- * (reached with Tab) and enlarged by a real pointer drag; then the style guide's specimen at both widths. It also measures that
+ * (reached with Tab) and enlarged by a real pointer drag (7 rows and a bit, snapped to 7); the height after a reload; the Poses tree and
+ * the Save Explorer's node tree, at their defaults and shrunk by a real drag; then the style guide's specimen at both widths. It also measures that
  * hovering moves nothing and that a drag moves nothing above the list (`run.json`). The 3D view is masked (MASK_VIEWPORTS); the Start
  * from tree lists installed mods' expression names, so keep outputs in an ignored folder.
  *
@@ -102,7 +103,7 @@ try {
       // Blurred, and the list back at its top (Tab left focus on the group opened above, scrolled into view).
       await page.evaluate(`(() => { document.activeElement?.blur(); const list = document.querySelector(".expr-drawer .tree-scroll"); if (list) list.scrollTop = 0; })()`);
       const headBefore = await rect(HEAD), treeBefore = await rect(TREE), nextBefore = await rect(NEXT);
-      const from: [number, number] = [bar.x + bar.width / 2, bar.y + bar.height / 2], to: [number, number] = [from[0], from[1] + 196];
+      const from: [number, number] = [bar.x + bar.width / 2, bar.y + bar.height / 2], to: [number, number] = [from[0], from[1] + 203];
       let headDuring: Box | null = null;
       await page.drag(from, to, { steps: 12, hold: async (_x, _y, i) => { if (i === 6) headDuring = await rect(HEAD); } });
       await page.mouse("mouseMoved", 5, 950, { button: "none", buttons: 0 });
@@ -110,10 +111,77 @@ try {
       measures[`${tag}-drag`] = { headShiftDuring: headDuring && headBefore ? (headDuring as Box).y - headBefore.y : null, headShift: headAfter && headBefore ? headAfter.y - headBefore.y : null,
         treeTopShift: treeAfter && treeBefore ? treeAfter.y - treeBefore.y : null, treeGrowth: treeAfter && treeBefore ? treeAfter.height - treeBefore.height : null,
         nextShift: nextAfter && nextBefore ? nextAfter.y - nextBefore.y : null,
-        remembered: await page.evaluate(`window.xfStudioShell.runtime.preferences?.snapshot?.().sizes ?? null`).catch(() => null) };
+        remembered: await page.evaluate(`window.xfStudioShell.preferences().sizes ?? null`).catch(() => null), valueText: await page.evaluate(`${BAR}?.getAttribute("aria-valuetext")`) };
       await shot("4-enlarged");
     }
   }
+  // After a reload: the enlarged height comes back (the workspace's `sizes` preference), light at 480 px.
+  const keptBefore = await page.evaluate(`window.xfStudioShell.preferences().sizes ?? null`);
+  const heightBefore = (await rect(TREE))?.height ?? null;
+  await page.send("Page.reload", {});
+  await page.waitFor("document.querySelector('.dock-group') && !!window.xfStudioShell && !!window.xfStudioPresentation", 120000);
+  await page.evaluate(MASK_VIEWPORTS);
+  await theme("light");
+  await page.evaluate(`window.xfStudioShell.dock.reveal("expressions.controls")`);
+  await page.waitFor(`document.querySelectorAll(".expr-drawer .tree-row").length > 0`, 300000).catch(() => {});
+  await page.evaluate(`window.xfStudioShell.dock.moveTo("expressions.controls", { kind: "float", x: 940, y: 30, w: 480, h: 900 }, "")`);
+  await page.wait(900);
+  await page.evaluate(`(() => { document.querySelector(".expr-drawer")?.scrollIntoView({ block: "start" }); const list = document.querySelector(".expr-drawer .tree-scroll"); if (list) list.scrollTop = 0; })()`);
+  await page.wait(400);
+  await page.screenshot(resolve(out, "light-480-5-after-reload.png"), { x: 930, y: 20, width: 500, height: 920 });
+  shots.push("light-480-5-after-reload");
+  measures.reload = { keptBefore, keptAfter: await page.evaluate(`window.xfStudioShell.preferences().sizes ?? null`), heightBefore, heightAfter: (await rect(TREE))?.height ?? null,
+    valueText: await page.evaluate(`${BAR}?.getAttribute("aria-valuetext")`) };
+  log(`after reload: ${JSON.stringify(measures.reload)}`);
+  await page.evaluate(`window.xfStudioShell.dock.moveTo("expressions.controls", { kind: "float", x: 60, y: 30, w: 300, h: 300 }, "")`).catch(() => undefined);
+
+  /** Captures of one panel's list with its bar, for each theme and width: the default, and shrunk by a real drag of `rows`. */
+  const panelPass = async (name: string, panel: string, content: string, bar: string, list: string, rowPx: number, rows: number) => {
+    for (const scheme of ["dark", "light"] as const) {
+      await theme(scheme);
+      for (const width of [300, 480]) {
+        const tag = `${scheme}-${width}`, x = 1420 - width;
+        await page.evaluate(`window.xfStudioShell.dock.moveTo(${JSON.stringify(panel)}, { kind: "float", x: ${x}, y: 30, w: ${width}, h: 900 }, "")`);
+        await page.wait(900);
+        await page.evaluate(`(() => { const b = ${bar}; b?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); document.querySelector(${JSON.stringify(content)})?.scrollIntoView({ block: "start" }); })()`);
+        await page.mouse("mouseMoved", 5, 950, { button: "none", buttons: 0 });
+        await page.wait(500);
+        const clip = { x: x - 10, y: 20, width: width + 20, height: 920 };
+        await page.screenshot(resolve(out, `${tag}-${name}-1-default.png`), clip); shots.push(`${tag}-${name}-1-default`);
+        const b = await rect(bar), before = await rect(list);
+        if (!b || !before) { log(`${name}: no bar`); continue; }
+        const from: [number, number] = [b.x + b.width / 2, b.y + b.height / 2];
+        await page.drag(from, [from[0], from[1] - rows * rowPx - 6], { steps: 10 });
+        await page.mouse("mouseMoved", from[0], from[1] - rows * rowPx, { button: "none", buttons: 0 });
+        await page.wait(400);
+        await page.screenshot(resolve(out, `${tag}-${name}-2-shrunk-hover.png`), clip); shots.push(`${tag}-${name}-2-shrunk-hover`);
+        const after = await rect(list);
+        measures[`${tag}-${name}`] = { topShift: after!.y - before.y, heightChange: after!.height - before.height,
+          valueText: await page.evaluate(`${bar}?.getAttribute("aria-valuetext")`) };
+        await page.mouse("mouseMoved", 5, 950, { button: "none", buttons: 0 });
+        log(`${tag} ${name}: ${JSON.stringify(measures[`${tag}-${name}`])}`);
+      }
+    }
+    await page.evaluate(`(() => { const b = ${bar}; b?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); })()`);
+    await page.evaluate(`window.xfStudioShell.dock.moveTo(${JSON.stringify(panel)}, { kind: "float", x: 60, y: 30, w: 300, h: 300 }, "")`).catch(() => undefined);
+  };
+  // The Poses tree: 20 rows by default; shrunk by 8.
+  await page.evaluate(`window.xfStudioShell.runtime.modules.set("poses", true)`);
+  await page.wait(800);
+  await page.evaluate(`window.xfStudioShell.dock.reveal("poses.library")`);
+  if (await page.waitFor(`document.querySelectorAll(".poses-panel .tree-item").length > 0`, 240000).then(() => true, () => false))
+    await panelPass("poses", "poses.library", ".poses-panel", `document.querySelector(".poses-panel .size-bar")`, `document.querySelector(".poses-panel .tree-view")`, 28, 8);
+  else log("poses: the catalogue didn't load");
+  // The Save Explorer's node tree: 60 % of the window by default; shrunk by 8 rows.
+  await page.evaluate(`window.xfStudioShell.runtime.modules.set("save-explorer", true)`);
+  await page.wait(800);
+  await page.evaluate(`window.xfStudioShell.dock.reveal("save-explorer.explorer")`);
+  if (await page.waitFor(`document.querySelectorAll("button.save-row").length > 0`, 60000).then(() => true, () => false)) {
+    await page.evaluate(`document.querySelector("button.save-row").click()`);
+    if (await page.waitFor(`document.querySelectorAll("li.save-tree-row").length > 0`, 120000).then(() => true, () => false))
+      await panelPass("saves", "save-explorer.explorer", ".save-explorer", `document.querySelector(".save-tree-pane .size-bar")`, `document.querySelector(".save-tree")`, 26, 8);
+    else log("saves: the save didn't open");
+  } else log("saves: no saves listed");
   // The style guide's specimen, at both widths and in both themes.
   await page.send("Page.navigate", { url: `http://127.0.0.1:${port}/style-guide.html` });
   await page.waitFor(`!!document.querySelector("#lib-size-bar .size-bar")`, 60000);

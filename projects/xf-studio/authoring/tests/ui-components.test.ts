@@ -327,6 +327,84 @@ test("tree view with a size bar: six rows by default, the chosen height replaces
   expect(height()).toBe(`${3 * TREE_ROW_HEIGHT + 2}px`);
 });
 
+test("size bar on a short list: Down and End with no kept height keep the default; a grow never lowers a kept height (review fix 1)", async () => {
+  const { TreeView, TREE_ROW_HEIGHT } = await lib();
+  const { viewState } = await import("../src/studio-ui/view-state");
+  const rowsHeight = (n: number) => n * TREE_ROW_HEIGHT + 2;
+  const rows = (n: number) => [{ id: "g", label: "Natural", rows: Array.from({ length: n - 1 }, (_, i) => ({ id: `r${i}`, label: `Row ${i}` })) }];
+  const height = (tree: InstanceType<typeof TreeView>) => (tree.element.style as unknown as { height: string }).height;
+  // A two-row list (the group and one row), nothing kept: Down and End change nothing and keep nothing.
+  const short = new TreeView({ label: "Start from", maxRows: 6, minRows: 1, remember: false, sizeBar: { key: "test:short" }, onActivate: () => {}, onToggle: () => {} });
+  short.update({ groups: rows(2), expanded: new Set(["g"]) });
+  expect(height(short)).toBe(`${rowsHeight(2)}px`);
+  key(short.sizeBar!.element, "ArrowDown"); key(short.sizeBar!.element, "End");
+  expect([height(short), short.sizeBar!.chosen, viewState().size("test:short")]).toEqual([`${rowsHeight(2)}px`, undefined, undefined]);
+  expect(short.sizeBar!.element.getAttribute("aria-valuetext")).toBe("2 rows, default");
+  // All its rows back: the six-row default.
+  short.update({ groups: rows(30), expanded: new Set(["g"]) });
+  expect(height(short)).toBe(`${rowsHeight(6)}px`);
+  // A kept 12-row height; a search shows 4 rows; Down there keeps 12, and all the rows back show 12 again.
+  viewState().setSize("test:kept", rowsHeight(12));
+  const kept = new TreeView({ label: "Start from", maxRows: 6, minRows: 3, remember: false, sizeBar: { key: "test:kept" }, onActivate: () => {}, onToggle: () => {} });
+  kept.update({ groups: rows(4), expanded: new Set(["g"]) });
+  expect(height(kept)).toBe(`${rowsHeight(4)}px`);
+  key(kept.sizeBar!.element, "ArrowDown"); key(kept.sizeBar!.element, "End");
+  expect([kept.sizeBar!.chosen, viewState().size("test:kept")]).toEqual([rowsHeight(12), rowsHeight(12)]);
+  kept.update({ groups: rows(30), expanded: new Set(["g"]) });
+  expect([height(kept), kept.sizeBar!.element.getAttribute("aria-valuetext")]).toEqual([`${rowsHeight(12)}px`, "12 rows"]);
+  // A shrink starts from what shows: Up on the 4-row search result keeps 3 rows.
+  kept.update({ groups: rows(4), expanded: new Set(["g"]) });
+  key(kept.sizeBar!.element, "ArrowUp");
+  expect(viewState().size("test:kept")).toBe(rowsHeight(3));
+});
+
+test("size bar: a tree's drags snap to whole rows and its value says rows; chooseHeight and snapHeight", async () => {
+  const { TreeView, TREE_ROW_HEIGHT, chooseHeight, snapHeight, rowWords, treeHeightWords } = await lib();
+  expect([snapHeight(170 + 40, { step: 28, offset: 2 }), snapHeight(170 + 10, { step: 28, offset: 2 }), snapHeight(99, undefined)]).toEqual([198, 170, 99]);
+  const bounds = { min: 86, holds: 114, panel: 800 };
+  // A grow capped by what the list holds keeps what was chosen; a shrink starts from what shows.
+  expect([chooseHeight(142, { chosen: 338, shown: 114 }, bounds), chooseHeight(86, { chosen: 338, shown: 114 }, bounds), chooseHeight(900, { chosen: 170, shown: 170 }, { ...bounds, holds: 1000 })])
+    .toEqual([338, 86, 800]);
+  expect([rowWords(170, 28, true), rowWords(212, 28), rowWords(30, 28), treeHeightWords(16)]).toEqual(["6 rows, default", "7 and a half rows", "1 row", "half a row"]);
+  // The Poses tree: no maxRows, its frame is the chosen height (20 rows by default) whatever it holds.
+  const tree = new TreeView({ label: "Poses", minRows: 4, remember: false, sizeBar: { key: "test:poses", defaultRows: 20 }, onActivate: () => {}, onToggle: () => {} });
+  const el = tree.sizeBar!.element as unknown as LightElement & { setPointerCapture?: (id: number) => void };
+  el.setPointerCapture = () => {};
+  const height = () => (tree.element.style as unknown as { height: string }).height;
+  tree.update({ groups: [{ id: "g", label: "Idle", rows: [{ id: "a", label: "A" }] }], expanded: new Set(["g"]) });
+  expect(height()).toBe(`${20 * TREE_ROW_HEIGHT + 2}px`);
+  const pointer = (type: string, clientY: number) => el.dispatchEvent(lightEvent(type, { button: 0, pointerId: 1, clientY }));
+  pointer("pointerdown", 100); pointer("pointermove", 140); pointer("pointerup", 140);
+  expect([height(), el.getAttribute("aria-valuetext")]).toEqual([`${21 * TREE_ROW_HEIGHT + 2}px`, "21 rows"]);
+  pointer("pointerdown", 100); pointer("pointermove", 60); pointer("pointerup", 60);
+  expect(height()).toBe(`${20 * TREE_ROW_HEIGHT + 2}px`);
+});
+
+test("size bar with fit: the region fits its content up to the height, and a grow its content caps changes nothing", async () => {
+  const { SizeBar } = await lib();
+  const target = document.createElement("ul") as unknown as HTMLElement & { scrollHeight: number };
+  target.scrollHeight = 130;
+  const bar = new SizeBar({ label: "Nodes", target, key: "test:fit", fit: true, minHeight: 106, defaultHeight: 400, step: 26 });
+  const style = target.style as unknown as { maxHeight: string; height?: string };
+  expect([style.maxHeight, style.height, bar.height]).toEqual(["400px", undefined, 130]);
+  key(bar.element, "ArrowDown");
+  expect([bar.chosen, style.maxHeight]).toEqual([undefined, "400px"]);
+  target.scrollHeight = 2000;
+  key(bar.element, "ArrowDown");
+  expect([bar.chosen, style.maxHeight]).toEqual([426, "426px"]);
+});
+
+test("direction dial: its resize bar shares the Size bar's tooltip, and a double-click returns to the default size", async () => {
+  const { DirectionDial, DIAL_DEFAULT_SIZE, SIZE_BAR_TITLE } = await lib();
+  const kept: number[] = [];
+  const dial = new DirectionDial({ label: "Direction", transaction: log().t, onResize: (size, final) => { if (final) kept.push(size); } });
+  dial.layout(600);
+  dial.setSize(400);
+  expect(dial.grip.getAttribute("title")).toBe(SIZE_BAR_TITLE);
+  fire(dial.grip, "dblclick");
+  expect([dial.shownSize, kept]).toEqual([DIAL_DEFAULT_SIZE, [DIAL_DEFAULT_SIZE]]);
+});
+
 test("tree view: a right-click, Shift+F10 or the Menu key on an item asks the owner for its context menu; focus by any route moves the tab stop", async () => {
   const { TreeView } = await lib();
   const menus: string[] = [];

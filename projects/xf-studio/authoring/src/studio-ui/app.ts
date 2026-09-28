@@ -306,7 +306,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     else view.openReference();
   });
   header.bindPalette(() => openPalette(commands));
-  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, layouts,
+  if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, layouts, preferences: () => port.preferences.snapshot(),
     guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port)) } } });
   return { dock, runtime: rt };
 }
