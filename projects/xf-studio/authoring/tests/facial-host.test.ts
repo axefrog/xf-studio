@@ -8,9 +8,9 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFacialHandler, FacialHost, IN_APP_SOLVER, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
+import { createFacialHandler, facialSetupSource, FacialHost, IN_APP_SOLVER, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
   type FacialSolverProcess, type FacialSolverSpawner } from "../src/facial-host";
-import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG } from "../src/facial-catalogue";
+import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readFaceRigSetup } from "../src/facial-catalogue";
 import { ENVELOPE_NAMES } from "../src/engines/facial-rig/solver";
 import { FACE_MOTION_SCHEMA, type FaceMotionClip } from "../src/platform/api/facial";
 import { depotHash } from "../src/depot-path";
@@ -46,10 +46,16 @@ const additives = animSet([["additive__blink_normal__01", "AdditiveFromRefPose",
 const faces = animSet([["facial_happy", "AdditiveFromRefPose", 0.033, [], [[3, 0.5], [4, 0.45]]], ["facial_grin", "AdditiveFromRefPose", 0.033, [], [[5, 0.3]]]]);
 const table = (rows: [number, string][]) => cr2w({ $type: "C2dArray", compiledHeaders: ["Index", "AnimationName", "streamingContext", "FallbackAnimationName"],
   compiledData: rows.map(([index, name]) => [String(index), name, "photomode", name]) });
-const rig = cr2w({ $type: "appearanceAppearanceResource", appearances: [handle({ $type: "appearanceAppearanceDefinition", name: cn("h0_000_pwa__basehead__face_rig"),
-  compiledData: { BufferId: "0", Flags: 0, Data: { Version: 4, Sections: 7, CruidIndex: -1, CruidDict: {}, Chunks: [
+/** The male player setup the base game's face rigs name (design D1), and another gender's skeleton beside it. */
+const MALE_SETUP = "base\\characters\\head\\pma\\h0_001_ma_c__player\\h0_001_ma_c__player_rigsetup.facialsetup";
+const MALE_SKELETON = "base\\characters\\head\\player_base_heads\\player_man_average\\h0_000_pma_c__basehead\\h0_000_pma_c__basehead_skeleton.rig";
+const faceRigComponent = (skeletonPath: string, setupPath: string) => ({ $type: "entAnimatedComponent", name: cn("face_rig"),
+  rig: rh(depotHash(skeletonPath)), facialSetup: rh(depotHash(setupPath)) });
+const rigApp = (faceRigs: object[] = []) => cr2w({ $type: "appearanceAppearanceResource", appearances: [handle({ $type: "appearanceAppearanceDefinition", name: cn("h0_000_pwa__basehead__face_rig"),
+  compiledData: { BufferId: "0", Flags: 0, Data: { Version: 4, Sections: 7, CruidIndex: -1, CruidDict: {}, Chunks: [...faceRigs,
     { $type: "entAnimationSetupExtensionComponent", name: cn("PhotomodeAnimations"), animations: { $type: "animAnimSetup", cinematics: [],
       gameplay: [{ $type: "animAnimSetupEntry", animSet: rh(depotHash(SET)), priority: 128, variableNames: [] }] } }] } } })] });
+const rig = rigApp();
 
 /**
  * The same face in the shape XF Studio's own solver compiles (13 envelopes first, one pose per control: each moves the jaw a millimetre
@@ -86,18 +92,24 @@ type WorldOptions = { spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?
   /** XF Studio's reader reads the face skeleton and setup (their documents are then held until the solver starts). */
   native?: boolean;
   /** With `native`: sees each animation request the reader gets (which then refuses it, so WolvenKit reads the set). */
-  decodeAnim?: (request: { op: string; priority?: string }) => void };
+  decodeAnim?: (request: { op: string; priority?: string }) => void;
+  /** The photo-mode face rig names the male player setup for the female skeleton, as the base game's does. */
+  maleFaceRig?: boolean;
+  /** Which setup the host is asked to solve with. */
+  setupSource?: "face-rig" | "female-head" };
 function world(root: string, options: WorldOptions = {}) {
   const fixture = fixtureInstallation([
     { virtualPath: "archive/pc/content/basegame_4_animation.archive", files: { [FACE_SKELETON]: {}, [FACE_SETUP]: {}, [FACIAL_ADDITIVES]: {}, [SET]: {},
-      [EXPRESSION_TABLE]: table([[0, "facial_happy"]]), [PHOTO_MODE_FACE_RIG]: rig } },
+      [EXPRESSION_TABLE]: table([[0, "facial_happy"]]), [MALE_SETUP]: {},
+      [PHOTO_MODE_FACE_RIG]: options.maleFaceRig ? rigApp([faceRigComponent(MALE_SKELETON, FACE_SETUP), faceRigComponent(FACE_SKELETON, MALE_SETUP)]) : rig } },
     // An expression mod's table wins the path (precedence), with an extra row.
     { virtualPath: "archive/pc/mod/zz_faces.archive", provider: "manual", providerName: "Some expression pack",
       files: { [EXPRESSION_TABLE]: table([[0, "facial_happy"], [1, "facial_grin"], [2, "facial_missing"]]) } },
     ...(options.setOverride ? [{ virtualPath: "archive/pc/mod/zzz_set.archive", provider: "manual" as const, providerName: "Set update", files: { [SET]: {} } }] : []),
   ]);
   const documents = new Map<string, unknown>([[depotHash(FACE_SKELETON), options.solvable ? solvableSkeleton : skeleton],
-    [depotHash(FACE_SETUP), options.solvable ? solvableSetup : setup], [depotHash(FACIAL_ADDITIVES), options.solvable ? solvableAdditives : additives],
+    [depotHash(FACE_SETUP), options.solvable ? solvableSetup : setup], [depotHash(MALE_SETUP), options.solvable ? solvableSetup : setup],
+    [depotHash(FACIAL_ADDITIVES), options.solvable ? solvableAdditives : additives],
     [depotHash(SET), options.setOverride ?? faces]]);
   const nativeDecoder = { decode: async (request: { hash: string }) => [depotHash(FACE_SKELETON), depotHash(FACE_SETUP)].includes(request.hash)
     ? { ok: true, document: documents.get(request.hash) } : { ok: false, kind: "not-indexed", message: "Not in this test." },
@@ -123,7 +135,7 @@ function world(root: string, options: WorldOptions = {}) {
     solver: () => options.inApp ? IN_APP_SOLVER : { addon: "addon", python: "python", script: "server.py" },
     open: () => ({ ...fixture, fetcher: options.native ? { ...fixture.graph.port, nativeDecoder } : fixture.graph.port }) as unknown as Installation, extract,
     ...(options.inApp && !options.spawn ? {} : { spawn: options.spawn ?? (() => process) }),
-    solveTimeoutMs: options.solveTimeoutMs, now: options.now, jsonBudget: options.jsonBudget });
+    solveTimeoutMs: options.solveTimeoutMs, now: options.now, jsonBudget: options.jsonBudget, setupSource: options.setupSource ?? "face-rig" });
   return { host, solves, extractions: () => extractions };
 }
 const zeros = (n: number) => btoa(String.fromCharCode(...new Uint8Array(n * 4)));
@@ -140,6 +152,36 @@ function toyFace(frames: readonly Float32Array[]) {
   const b64 = (a: Float32Array) => Buffer.from(a.buffer).toString("base64");
   return { q: b64(q), t: b64(t), ms: 1 };
 }
+
+test("the face is solved with the facial setup V's face rig names for its skeleton (design D1), the female head's own on request", async () => {
+  for (const [source, expected] of [["face-rig", "h0_001_ma_c__player_rigsetup.facialsetup"], ["female-head", "h0_000_pwa_c__basehead_rigsetup.facialsetup"]] as const) {
+    const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+    try {
+      const { host } = world(root, { maleFaceRig: true, setupSource: source });
+      host.expressions(); await host.settled(); await Promise.resolve();
+      expect(host.state().rig).toMatchObject({ phase: "ready", setup: expected, skeleton: "h0_000_pwa_c__basehead_skeleton.rig" });
+      expect(host.expressions().phase).toBe("ready");
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+  // A face rig that names no setup for this skeleton leaves the female head's own.
+  const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));
+  try {
+    const { host } = world(root, { setupSource: "face-rig" });
+    host.expressions(); await host.settled(); await Promise.resolve();
+    expect(host.state().rig).toMatchObject({ phase: "ready", setup: "h0_000_pwa_c__basehead_rigsetup.facialsetup" });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("readFaceRigSetup: the face_rig for the given skeleton, a later patch winning; the environment picks the comparison setup", () => {
+  const base = rigApp([faceRigComponent(MALE_SKELETON, FACE_SETUP), faceRigComponent(FACE_SKELETON, MALE_SETUP)]);
+  expect(readFaceRigSetup([base])?.hash).toBe(depotHash(MALE_SETUP));
+  expect(readFaceRigSetup([base], MALE_SKELETON)?.hash).toBe(depotHash(FACE_SETUP));
+  const XF_SETUP = "base\\animations\\xfs\\facial\\xfs_player_rigsetup.facialsetup";
+  expect(readFaceRigSetup([base, rigApp([faceRigComponent(FACE_SKELETON, XF_SETUP)])])?.hash).toBe(depotHash(XF_SETUP));
+  expect(readFaceRigSetup([rig])).toBeNull();
+  expect(facialSetupSource({})).toBe("face-rig");
+  expect(facialSetupSource({ XFS_FACIAL_SETUP: "female-head" })).toBe("female-head");
+});
 
 test("the face rig, blink and installed expressions come from the winning files; the table's winner is followed", async () => {
   const root = mkdtempSync(join(tmpdir(), "xfs-facial-"));

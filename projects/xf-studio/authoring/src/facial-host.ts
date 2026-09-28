@@ -30,7 +30,7 @@ import { compileFacialRig, createFacialPose, solveFace, type CompiledFacialRig }
 import { morphBinds, nativeClip, nativeDocument, nativeSetClips } from "./facial-native";
 import { EXPRESSION_SAMPLES } from "./expression-samples";
 import { BLINK_CLIP, EXPRESSION_TABLE, EYE_MORPHS, FACE_MORPHS, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readAnimSet, readBlink,
-  eyeTracks, readFaceRig, readFaceRigSets, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "./facial-catalogue";
+  eyeTracks, faceSetupPath, readFaceRig, readFaceRigSets, readFaceRigSetup, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "./facial-catalogue";
 import { findRelations } from "./engines/facial-rig/relations";
 import { posedLocals, worldPositions, type Vec3 } from "./engines/facial-rig/pose";
 import { clipValuesAt, type ClipTracks } from "./engines/facial-rig/anim-tracks";
@@ -244,6 +244,16 @@ export const extractFacialJson: FacialExtractor = async (cli, archive, resources
   } finally { rmSync(dir, { recursive: true, force: true }); }
 };
 
+/**
+ * Which facial setup the face is solved with (design D1). `face-rig` (the default): the one V's photo-mode face rig names for the face
+ * skeleton, read from the winning `.app` and its ArchiveXL patches (the male player setup in the base game, which session 4 read live in photo
+ * mode [runtime]). `female-head`: the female head's own setup beside its skeleton, what the preview used before; kept for comparisons
+ * (`XFS_FACIAL_SETUP=female-head` on localhost; the desktop passes no environment).
+ */
+export type FacialSetupSource = "face-rig" | "female-head";
+export const facialSetupSource = (env: Readonly<Record<string, string | undefined>> = process.env): FacialSetupSource =>
+  env.XFS_FACIAL_SETUP === "female-head" ? "female-head" : "face-rig";
+
 export type FacialHostOptions = {
   /** Host-owned private preview cache; the facial data lives in `facial/`. */
   cacheRoot: string;
@@ -257,6 +267,8 @@ export type FacialHostOptions = {
   solveTimeoutMs?: number;
   /** Most bytes the cached JSON of the face and its animation sets may take (`FACIAL_JSON_BUDGET`). */
   jsonBudget?: number;
+  /** Which facial setup to solve with (`facialSetupSource()` from the environment when unset). */
+  setupSource?: FacialSetupSource;
   /** Test seams. */
   open?: (options: InstallationOptions) => Installation;
   extract?: FacialExtractor;
@@ -265,6 +277,8 @@ export type FacialHostOptions = {
 };
 
 type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTracks; closedTime: number } | null;
+  /** The facial setup solved with, and where the choice came from (`face-rig`, or `female-head` when asked for or when the rig names none). */
+  setup: { ref: DepotRef; path: string; source: FacialSetupSource };
   /** The JSON files the oracle solver reads (written from the documents when it is asked for; WolvenKit's cache files otherwise). */
   rigJson: string; setupJson: string;
   /** The documents while the oracle may still need them written out (dropped once written or compiled). */
@@ -466,8 +480,10 @@ export class FacialHost {
     superseded();
     entry.installation = installation;
     const graph = installation.graph, decoder = installation.fetcher.nativeDecoder;
-    // The face: skeleton and facial setup, natively first; the game's blink clip likewise.
-    const [skeletonRef, setupRef, additivesRef] = [FACE_SKELETON, FACE_SETUP, FACIAL_ADDITIVES].map(refFromPath) as [DepotRef, DepotRef, DepotRef];
+    // The face: skeleton and the facial setup V's face rig names (design D1), natively first; the game's blink clip likewise.
+    const setup = await this.faceSetup(installation);
+    superseded();
+    const [skeletonRef, additivesRef] = [FACE_SKELETON, FACIAL_ADDITIVES].map(refFromPath) as [DepotRef, DepotRef], setupRef = setup.ref;
     const documents = new Map<string, unknown>(), identity: string[] = [];
     for (const ref of [skeletonRef, setupRef]) {
       const located = graph.locate(ref), archive = located.lookup.winner;
@@ -494,7 +510,7 @@ export class FacialHost {
     }
     const skeletonDocument = documents.get(skeletonRef.hash), setupDocument = documents.get(setupRef.hash);
     if (!skeletonDocument || !setupDocument) throw Error("The face skeleton or facial setup is missing from the game files.");
-    const { vocabulary, rest } = readFaceRig(skeletonDocument, setupDocument);
+    const { vocabulary, rest } = readFaceRig(skeletonDocument, setupDocument, setup.path);
     const wrinkleSources = wrinkleSourceTracks(setupDocument), eyes = eyeTracks(setupDocument);
     let compiled: CompiledFacialRig | null = null, compileError: string | undefined;
     try { compiled = compileFacialRig(skeletonDocument, setupDocument); }
@@ -518,7 +534,7 @@ export class FacialHost {
     } catch (error) { hostFailure("facial", "blink_unreadable", `The game's blink (${BLINK_CLIP}) couldn't be read; expressions show without it.`, error, "warn"); }
     superseded();
     const baked = (setupDocument as { Data?: { RootChunk?: { bakedData?: { Data?: { JointRegions?: unknown } } } } }).Data?.RootChunk?.bakedData?.Data?.JointRegions;
-    entry.rigData = { vocabulary, rest, blink, rigJson, setupJson, wrinkleSources, eyeTracks: eyes, compiled, ...(compileError ? { compileError } : {}),
+    entry.rigData = { vocabulary, rest, blink, setup, rigJson, setupJson, wrinkleSources, eyeTracks: eyes, compiled, ...(compileError ? { compileError } : {}),
       regions: Array.isArray(baked) ? baked.map(Number) : [], identity: identity.join("\n"),
       ...(rigJson && setupJson ? {} : { documents: { skeleton: skeletonDocument, setup: setupDocument } }) };
     entry.rig = { phase: "ready" };
@@ -527,7 +543,7 @@ export class FacialHost {
     // The installed expressions, after the face (the editor works without them), and only once something asks for them (PREV-179).
     await new Promise<void>(settle => { if (signal.aborted) return settle(); void entry.startPointsWanted.then(settle); signal.addEventListener("abort", () => settle(), { once: true }); });
     superseded();
-    try { entry.expressions = await this.readStartPoints(installation, cli, tool, vocabulary, signal, () => entry.startPointsBackground ? "background" : undefined); }
+    try { entry.expressions = await this.readStartPoints(installation, cli, tool, vocabulary, signal, () => entry.startPointsBackground ? "background" : undefined, setup.ref); }
     catch (error) {
       if (error instanceof Superseded || signal.aborted) throw error;
       hostFailure("facial", "start_points_failed", "The installed expressions couldn't be read.", error, "warn");
@@ -536,7 +552,33 @@ export class FacialHost {
     // The face's own files stay; the animation sets beyond the budget go, least recently used first.
     this.keepJsonWithinBudget(new Set([entry.rigData.rigJson, entry.rigData.setupJson].filter(Boolean)));
     hostTrace().event("facial", "prepared", { controls: vocabulary.controls.length, joints: rest.joints.length, startPoints: entry.expressions.items.length,
-      solver: entry.solver.phase });
+      solver: entry.solver.phase, setup: setup.path, setupSource: setup.source });
+  }
+
+  /**
+   * The facial setup to solve with (design D1): the one V's photo-mode face rig names for the face skeleton, from the winning `.app` and
+   * its ArchiveXL patches; the female head's own when asked for, or when the rig can't be read or names no setup the installation has.
+   */
+  private async faceSetup(installation: Installation): Promise<Rig["setup"]> {
+    const fallback: Rig["setup"] = { ref: refFromPath(FACE_SETUP), path: FACE_SETUP, source: "female-head" };
+    if ((this.options.setupSource ?? facialSetupSource()) === "female-head") return fallback;
+    try {
+      const graph = installation.graph, rigRef = refFromPath(PHOTO_MODE_FACE_RIG);
+      const document = async (ref: DepotRef) => {
+        const located = graph.locate(ref), winner = located.lookup.winner;
+        return winner ? (await installation.fetcher.fetch(winner, located.entry, "app"))?.document ?? null : null;
+      };
+      const apps: unknown[] = [];
+      const rig = await document(rigRef);
+      if (rig) apps.push(rig);
+      for (const patch of graph.patchesFor(rigRef.hash)) { const source = await document(refFromHash(patch.source, patch.sourcePath)); if (source) apps.push(source); }
+      const named = apps.length ? readFaceRigSetup(apps, FACE_SKELETON) : null;
+      if (named && graph.locate(named).lookup.winner) return { ref: named, path: faceSetupPath(graph.named(named)), source: "face-rig" };
+      hostFailure("facial", "face_rig_setup_missing", "V's face rig names no facial setup this game has; the female head's own is used.", null, "warn");
+    } catch (error) {
+      hostFailure("facial", "face_rig_unreadable", "V's face rig couldn't be read; the female head's own facial setup is used.", error, "warn");
+    }
+    return fallback;
   }
 
   /** Start (or start again) the solver for a preparation. A program that can't be started at all is "not set up" (CORE-99). */
@@ -779,11 +821,11 @@ export class FacialHost {
    * archives and is read again when one of them changed (a mod updated in place).
    */
   private async readStartPoints(installation: Installation, cli: string | null, tool: string, vocabulary: FacialVocabulary,
-    signal: AbortSignal, priority: () => "background" | undefined = () => undefined): Promise<FacialStartPoints> {
+    signal: AbortSignal, priority: () => "background" | undefined = () => undefined, setupRef: DepotRef = refFromPath(FACE_SETUP)): Promise<FacialStartPoints> {
     const graph = installation.graph;
     const identity = (ref: DepotRef) => { const winner = graph.locate(ref).lookup.winner; return winner ? fingerprint(winner.id) : "-"; };
     const rigRef = refFromPath(PHOTO_MODE_FACE_RIG), tableRef = refFromPath(EXPRESSION_TABLE);
-    const sources = [FACE_SKELETON, FACE_SETUP, EXPRESSION_TABLE, PHOTO_MODE_FACE_RIG].map(path => identity(refFromPath(path)))
+    const sources = [refFromPath(FACE_SKELETON), setupRef, refFromPath(EXPRESSION_TABLE), refFromPath(PHOTO_MODE_FACE_RIG)].map(identity)
       .concat(graph.patchesFor(rigRef.hash).map(patch => identity(refFromHash(patch.source, patch.sourcePath))));
     const cache = join(this.root, "start-points", `${createHash("sha256").update(`${START_POINT_VERSION}|${tool}|${sources.join("\n")}`).digest("hex")}.json`);
     if (existsSync(cache)) {
