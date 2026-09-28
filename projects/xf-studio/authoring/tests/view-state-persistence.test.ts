@@ -366,3 +366,38 @@ describe("remembered folds", () => {
       .toEqual({ "panel:a": { key: "x", offset: 3, near: [{ key: "w", offset: 0 }], top: 20 } });
   });
 });
+
+describe("remembered region heights", () => {
+  test("a size bar's height survives a reload of the workspace's preferences, and Delete forgets it", async () => {
+    const { bindViewState, PreferenceViewState } = await viewState();
+    const { SizeBar } = await import("../src/studio-ui/components/size-bar");
+    const first = new UIPreferenceActions();
+    bindViewState(new PreferenceViewState(first));
+    const make = () => { const target = document.createElement("div") as unknown as HTMLElement;
+      return { target, bar: new SizeBar({ label: "Start from", target, key: "expressions:start-from", minHeight: 58, defaultHeight: 170, maxHeight: () => 600 }) }; };
+    const one = make();
+    (one.bar.element as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: "ArrowDown" }));
+    expect(first.snapshot().sizes).toEqual({ "expressions:start-from": 198 });
+    // A reload: the stored workspace JSON is parsed back, and a new bar starts at the kept height.
+    const reloaded = new UIPreferenceActions(parseUIPreferences(JSON.parse(JSON.stringify(first.snapshot()))));
+    bindViewState(new PreferenceViewState(reloaded));
+    const two = make();
+    expect([two.bar.height, (two.target.style as unknown as { height: string }).height]).toEqual([198, "198px"]);
+    (two.bar.element as unknown as LightElement).dispatchEvent(lightEvent("keydown", { key: "Delete" }));
+    expect([two.bar.height, reloaded.snapshot().sizes]).toEqual([170, undefined]);
+  });
+
+  test("region heights are bounded and validated in the preferences", () => {
+    const preferences = new UIPreferenceActions();
+    expect(preferences.capability({ kind: "size.set", key: "expressions:start-from", height: 12.5 }).available).toBe(false);
+    expect(preferences.capability({ kind: "size.set", key: "no namespace", height: 200 }).available).toBe(false);
+    expect(preferences.capability({ kind: "size.set", key: "expressions:start-from", height: 9000 }).available).toBe(false);
+    for (let i = 0; i < 70; i++) preferences.dispatch({ kind: "size.set", key: `list:l${i}`, height: 100 + i });
+    const stored = Object.keys(preferences.snapshot().sizes!);
+    expect([stored.length, stored[0]]).toEqual([64, "list:l6"]);
+    preferences.dispatch({ kind: "size.set", key: "list:l69" });
+    expect(preferences.snapshot().sizes!["list:l69"]).toBeUndefined();
+    expect(parseUIPreferences({ schema: "xfs/ui-preferences-1", theme: "system", inputHints: true,
+      sizes: { "expressions:start-from": 240, "list:b": 3.5, "list:c": "tall", bad: 200 } }).sizes).toEqual({ "expressions:start-from": 240 });
+  });
+});

@@ -2,7 +2,7 @@
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, type LightListItem, type TabItem } from "../components";
+  sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
 
@@ -208,6 +208,24 @@ const MOUNTS: Record<string, Mount> = {
     paint();
     const search = new SearchField({ label: "Search sample poses", placeholder: "Search poses (Down moves into the list)", onFilter: () => {}, onArrowDown: () => tree.focus() });
     return h("div", { style: "max-width:420px" }, stack({ gap: "normal" }, search.element, tree.element)); },
+  "lib-size-bar": () => {
+    // The Start from pattern: a tree that fits six rows by default; drag the bar (or focus it and press Down) to show more.
+    const expanded = new Set(["saved", "natural"]);
+    const groups = [
+      { id: "saved", label: "Saved", rows: ["Smirk", "Wince", "Deadpan"].map(label => ({ id: `s-${label}`, label })) },
+      { id: "natural", label: "Natural", secondary: "built in", rows: ["Content", "Curious", "Doubtful", "Pleased", "Sad", "Surprised", "Tired", "Wary"].map(label => ({ id: `n-${label}`, label })) },
+      { id: "game", label: "Cyberpunk 2077", rows: Array.from({ length: 24 }, (_, i) => ({ id: `g-${i}`, label: `Photo mode ${i + 1}` })) }];
+    let current = "n-Content";
+    const tree: TreeView = new TreeView({ label: "Start from (sample)", maxRows: 6, minRows: 3, sizeBar: { key: "style-guide:start-from" }, remember: false,
+      onActivate: id => { current = id; paint(); }, onToggle: (id, open) => { if (open) expanded.add(id); else expanded.delete(id); paint(); } });
+    const paint = () => tree.update({ groups, expanded, current });
+    paint();
+    // Generic: any scroll region, here a plain list of notes.
+    const notes = h("div", { tabindex: "0", role: "region", "aria-label": "Sample notes",
+      style: "overflow:auto;border:1px solid var(--line);background:var(--bg-panel);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm);line-height:22px" },
+      ...Array.from({ length: 16 }, (_, i) => h("div", { text: `Note ${i + 1}: a line of text in a scrolling region.` })));
+    const bar = new SizeBar({ label: "Sample notes", target: notes, minHeight: 60, defaultHeight: 120, maxHeight: () => 16 * 22 + 10 });
+    return h("div", { style: "max-width:420px" }, stack({ gap: "normal" }, tree.sizeBar!.region, bar.region)); },
   "lib-choice-list": () => {
     const body: ChoiceList<string> = new ChoiceList<string>({ label: "Body", reserveNote: true, onSelect: value => body.update(value, undefined, { note: value === "still" ? "" : "Loading that idle; the previous one plays until it's ready." }),
       options: [["still", "Still"], ["closeup", "Creator close-up"], ["eyes", "Creator close-up eyes section"], ["full", "Creator full body"], ["inventory", "Inventory"],

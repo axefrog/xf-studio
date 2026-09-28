@@ -42,6 +42,8 @@ export function posesPanel(ctx: Ctx): PanelController {
   let query = "", treeKey = "", stateKey = "", lastTree: PoseTree | null = null;
   const tree = new TreeView({
     label: "Poses by category",
+    // The person sets its height with the bar under it (about today's fixed 62 % of the window by default), kept across reloads.
+    sizeBar: { key: "poses:tree", defaultRows: 20 }, minRows: 4,
     emptyText: "No poses match. Try other words, or clear the search.",
     onToggle: (group, open) => { void ctx.dispatch({ kind: "pose.openGroup", group, open }, { quiet: true }); },
     onActivate: key => { void ctx.dispatch({ kind: "pose.select", id: poseOf(key) }); },
@@ -70,9 +72,10 @@ export function posesPanel(ctx: Ctx): PanelController {
   // One status line under the buttons: the count, or while there is one, the passing state (a pose loading, why none can play).
   const count = h("p", { class: "note muted poses-count", role: "status" });
   tree.element.classList.add("poses-tree");
+  const treeRegion = tree.sizeBar!.region;
   const limits = note("Props, weapons and vehicles aren't drawn, so V poses empty-handed. Clothes don't yet make room for the body in strong poses.");
   const element = h("div", { class: "panel-content poses-panel" }, search.element, h("div", { class: "poses-actions" }, still, idle, frame), count, outfit, state,
-    tree.element, limits);
+    treeRegion, limits);
 
   /** The tree's groups as the library draws them. */
   const groupsOf = (poseTree: PoseTree): TreeGroupData[] => {

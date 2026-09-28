@@ -2,6 +2,7 @@ import { h, setAttr, uid } from "../dom";
 import { NoteLine, type Transaction } from "../controls";
 import { helpTip, type HelpText } from "../help-tip";
 import { ReadoutField } from "./readout-field";
+import { SIZE_BAR_TITLE } from "./size-bar";
 
 /**
  * Direction dial (style guide "Direction dial", feature-specific: lighting setups): where a light sits around V, seen from above, as one
@@ -23,7 +24,7 @@ import { ReadoutField } from "./readout-field";
  * - **Keyboard** (one tab stop, the dial): Left and Right turn the light by 5° (Page Up and Page Down by 15°), Up and Down raise and
  *   lower it by 5°; Alt with Left or Right turns it to the next 15° step; Home brings it to the front at its height. Enter types the angle exactly.
  * - **Resize.** The bar under the dial resizes it (drag down to enlarge, up to shrink; Up and Down arrows on the focused bar, Home and
- *   End for the smallest and largest). The size is clamped between `DIAL_MIN_SIZE` and what the control's width can hold, and drawn
+ *   End for the smallest and largest; a double-click goes back to the default size). The size is clamped between `DIAL_MIN_SIZE` and what the control's width can hold, and drawn
  *   smaller when the panel narrows (`fitDialSize`); the owner keeps the chosen size (`onResize`).
  * - **Readouts:** the label line carries the angle and the height, each the one readout of its value and typed into in place (checklist
  *   C1). The dial's value text says both in words ("330°, from the front, V's left, 20° up").
@@ -172,7 +173,7 @@ export class DirectionDial {
       "aria-valuemax": "359", "aria-orientation": "horizontal" });
     this.dial.append(this.art);
     this.grip = h("div", { class: "dial-grip", role: "separator", tabindex: "0", "aria-orientation": "horizontal", "aria-label": `Resize ${options.label}`,
-      title: "Drag down to enlarge, up to shrink", "aria-valuemin": String(DIAL_MIN_SIZE) });
+      title: SIZE_BAR_TITLE, "aria-valuemin": String(DIAL_MIN_SIZE) });
     const readout = (label: string, set: (value: number) => Direction) => new ReadoutField({ label, returnFocus: () => this.dial,
       parse: text => { const n = Number(text.replace(/[°\s+]/g, "").replace("−", "-")); return Number.isFinite(n) ? n : undefined; },
       onCommit: value => this.step(set(value)) });
@@ -189,6 +190,7 @@ export class DirectionDial {
     this.dial.addEventListener("blur", () => this.endBurst());
     this.grip.addEventListener("pointerdown", event => this.resizeDrag(event));
     this.grip.addEventListener("keydown", event => this.resizeKey(event));
+    this.grip.addEventListener("dblclick", event => { event.preventDefault(); this.resizeTo(DIAL_DEFAULT_SIZE, true); });
     // The control's width is what the drawing may take: narrowing the panel draws it smaller, widening brings the chosen size back.
     if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => this.layout(this.element.clientWidth)).observe(this.element);
     this.applySize();

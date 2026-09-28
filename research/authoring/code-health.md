@@ -80,6 +80,9 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-154 | Low | Components (DirectionDial) | The dial's resize bar shares only CSS with the Size bar; its drag and key handling are separate code with no Delete or Escape revert. Move it onto the Size bar component | Open, UI track |
+| UI-155 | Low | Save Explorer | The node tree's default height (60% of the window) isn't snapped to whole rows, so it can end partway through a row | Open |
+| UI-156 | Low | Poses | The pose tree keeps its full 20-row frame when a search leaves only a few rows (as the old fixed 62vh did); consider fitting the rows up to the chosen height | Open |
 | UI-152 | Low | Components (tooltip) | A disabled button's reason tooltip can run past the window's right edge at 300 px (seen on the Expression sets' Add to my mod manager, dark theme); keep the library tooltip inside the window | Open, UI track |
 | UI-153 | Low | Mod install (copy) | The disabled Add's tooltip leaves the mod name unquoted, where the rest of the install copy quotes it | Open |
 | PIPE-122 | Low | Masculine export | A damaged masculine plate value still reaches `planPlate`'s `refuse("invalid_collection")`, blocking the feminine Check and Build (`features/eye-makeup/export/index.ts:71-76`) [plausible]. Treat it as unavailable with a warning. | Open |
