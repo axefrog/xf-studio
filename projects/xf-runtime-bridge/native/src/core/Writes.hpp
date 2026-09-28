@@ -52,6 +52,12 @@ json HudResult(json aScript);
 // undo when nothing changed or the earlier state is unknown.
 json PauseResult(json aScript);
 
+// world.time.set: the script's answer with its undo. Outside photo mode {before_total_seconds, ...}: the
+// undo restores that exact time (total_seconds). In photo mode (route "photo_time", 0.4.2) the clock is
+// photo mode's own time-of-day slider, {before_minutes, before_known, ...}: the undo sets the earlier time
+// again in hours and minutes (to the minute), or there is none when the earlier value is unknown.
+json TimeResult(json aScript);
+
 // photo.expression.set: the attribute result with an undo to the earlier expression, if known.
 json ExpressionResult(json aScript);
 

@@ -47,7 +47,7 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   save_lock_not_held:
     "The appearance screen wasn't opened because the game hasn't confirmed the bridge's save lock yet. Saving stays locked until a save is loaded. Try again in a moment.",
   creator_open_timeout:
-    "The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and nothing opened. Saving stays locked until a save is loaded. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere).",
+    "The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and nothing opened (if the pause menu opened instead, close it with Esc). Saving stays locked until a save is loaded. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere).",
   creator_open_uncertain:
     "The game took the request to open the appearance screen but it hadn't opened by the end of the wait, so it may still open. Check game_status: if the phase is character_menu, use cc_back to close it. Saving stays locked until a save is loaded.",
   not_v:
@@ -63,7 +63,9 @@ const BRIDGE_MESSAGES: Record<string, string> = {
     "The XF live carrier isn't the selected photo-mode pose, so nothing was written. Select it with photo_pose_set (record xfs_live_carrier), then try again.",
   layout_unrecognised:
     "The clip's keys aren't laid out the way the bridge expects on this game version, so it stopped without writing anything. Keep the answer (its detail lists every mismatch) and stop the live-pose steps.",
-  not_in_gameplay: "This needs V in the world (or, for the clock, the appearance screen): load a save and close any other menus first.",
+  not_in_gameplay: "This needs V in the world (or, for the clock, the appearance screen or photo mode): load a save and close any other menus first.",
+  no_effect:
+    "That would change nothing in the game, so it wasn't sent: V's photo-mode face animation runs on the stand-in (target puppet, the default), not on the head item. Leave target out.",
   not_in_character_menu:
     "Character options can only be changed while the appearance screen (a mirror, or the ripperdoc's appearance menu) is open. Open it in the game first.",
   bridge_save_lock:

@@ -209,6 +209,27 @@ json PauseResult(json aScript)
     return aScript;
 }
 
+json TimeResult(json aScript)
+{
+    if (aScript.value("route", std::string()) == "photo_time")
+    {
+        const auto before = aScript.find("before_minutes");
+        if (!aScript.value("before_known", false) || before == aScript.end() || !before->is_number() ||
+            before->get<double>() < 0.0)
+        {
+            aScript["undo"] = nullptr;
+            aScript["undo_note"] = "photo mode's earlier time of day wasn't known; leaving photo mode puts the time back";
+            return aScript;
+        }
+        const auto minutes = static_cast<int32_t>(std::lround(before->get<double>())) % 1440;
+        aScript["undo"] = {{"method", "world.time.set"}, {"params", {{"hours", minutes / 60}, {"minutes", minutes % 60}}}};
+        aScript["undo_note"] = "sets photo mode's time of day back (to the minute); leaving photo mode also puts it back";
+        return aScript;
+    }
+    aScript["undo"] = {{"method", "world.time.set"}, {"params", {{"total_seconds", aScript.value("before_total_seconds", 0)}}}};
+    return aScript;
+}
+
 json ExpressionResult(json aScript)
 {
     aScript["name"] = "faceId";

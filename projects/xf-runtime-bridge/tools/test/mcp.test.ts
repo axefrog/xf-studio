@@ -190,7 +190,7 @@ describe("MCP server against a bridge with writes allowed", () => {
 
     // Each undo restores what the call changed (RB-18): the camera values the preset changed, the
     // light's values and the menu's light selection (light 1 was selected when photo mode opened).
-    expect(json(presetResult).result.undo.params).toEqual({ fov: 0, subject: { up_down: 0, yaw: 0 } });
+    expect(json(presetResult).result.undo.params).toEqual({ fov: 35, subject: { up_down: 0, yaw: 0 } });
     result = await call(mcp, "photo_camera_set", { reset: true });
     const resetUndo = json(result).result.undo;
     expect(resetUndo).toMatchObject({ method: "photo.camera.set", params: { fov: 15, subject: { yaw: 180 } } });
@@ -229,9 +229,13 @@ describe("MCP server against a bridge with writes allowed", () => {
     result = await call(mcp, "photo_expression_index", { index: 60 });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("bad_params");
+    // 0.4.2: the head item has no face rig (session 4), so target head is refused in plain words.
     result = await call(mcp, "photo_expression_index", { index: 3, target: "head" });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("no_effect");
+    result = await call(mcp, "photo_expression_index", { index: 3 });
     expect(result.isError, text(result)).toBeFalsy();
-    expect(json(result).result).toMatchObject({ target: "head", index: 3, menu_value_known: true });
+    expect(json(result).result).toMatchObject({ target: "puppet", index: 3, menu_value_known: true });
     expect(json(result).result.undo).toEqual({ method: "photo.expression.set", params: { faceId: 9 } });
     result = await call(mcp, "photo_expression_index", { index: 60, unlisted: true });
     expect(result.isError, text(result)).toBeFalsy();
@@ -349,7 +353,7 @@ describe("MCP server with the creator gate open (batch 3: cc.open, cc.page, cc.a
     let result = await call(mcp, "cc_open", { mode: "ripperdoc" });
     expect(result.isError).toBeFalsy();
     const opened = json(result).result;
-    expect(opened).toMatchObject({ changed: true, opened: true, mode: "ripperdoc", edit_mode: "Ripperdoc", saving_locked: true, route: "menu_event" });
+    expect(opened).toMatchObject({ changed: true, opened: true, mode: "ripperdoc", edit_mode: "Ripperdoc", saving_locked: true, route: "pause_menu" });
     expect(opened.undo).toEqual({ method: "cc.back", params: {} });
     expect(json(await call(mcp, "game_status")).result.phase).toBe("character_menu");
     result = await call(mcp, "cc_open");
@@ -360,7 +364,7 @@ describe("MCP server with the creator gate open (batch 3: cc.open, cc.page, cc.a
     const before = host.log.filter((l) => l.includes("evt=bridge.request")).length;
     let result = await call(mcp, "cc_apply", { option: "XF", index: 1, value: "02" });
     expect(result.isError).toBe(true);
-    expect(text(result)).toContain("not both");
+    expect(text(result)).toContain("one of index, value or label");
     result = await call(mcp, "cc_apply", { option: "XF" });
     expect(result.isError).toBe(true);
     expect(host.log.filter((l) => l.includes("evt=bridge.request")).length).toBe(before);

@@ -331,7 +331,9 @@ int wmain(int argc, wchar_t** argv)
         {
             throw xfb::MethodError("unavailable", "photo-mode setting 45 is not in the menu right now");
         }
-        const float before = sim.attributes[aKey];
+        // Photo mode opens at a field of view of 35 in the simulation (photo.subject's default).
+        const auto known = sim.attributes.find(aKey);
+        const float before = known != sim.attributes.end() ? known->second : aKey == xfb::params::key::kFov ? 35.0f : 0.0f;
         sim.attributes[aKey] = aValue;
         sim.gameSaveLock = true;
         if (aKey == xfb::params::key::kLightState && aValue > 0.5f && before < 0.5f)
@@ -394,6 +396,33 @@ int wmain(int argc, wchar_t** argv)
                              if (phase() == "character_menu")
                              {
                                  out["options"] = json::array({{{"name", "xfs_selector"}, {"label", "XF"}, {"index", 0}, {"count", 13}}});
+                                 if (!request.option.empty())
+                                 {
+                                     // One option's values, as XFCharacter.Describe gives them: internal names and
+                                     // on-screen labels. "hairstyle" carries session 4's kind of names (CCXL hair).
+                                     static const char* kHair[13] = {"01", "02", "LONG PAK - #011", "MEDIUM PAK - #007", "Grace - Side Swept Bob - V4",
+                                                                     "Kala - Messy Pixie", "lLrn - Viessa Bun", "VALBY CURTAIN BOB", "VIV LOOSE WAVES",
+                                                                     "Nola - hair \"Elise\"", "Nola - hair \"Vivian\"", "Corvette - Bun", "gardenia hair"};
+                                     json values = json::array();
+                                     json labels = json::array();
+                                     for (int32_t i = 0; i < 13; ++i)
+                                     {
+                                         char name[16];
+                                         std::snprintf(name, sizeof(name), "xfs_value_%02d", i);
+                                         char position[4];
+                                         std::snprintf(position, sizeof(position), "%02d", i + 1);
+                                         values.push_back(request.option == "hairstyle" ? kHair[i] : name);
+                                         labels.push_back(request.option == "hairstyle" ? "" : position);
+                                     }
+                                     out["option"] = {{"name", request.option}, {"label", request.option}, {"kind", "appearance"}, {"index", 0},
+                                                      {"count", 13}, {"values", values}, {"labels", labels}};
+                                 }
+                             }
+                             else
+                             {
+                                 // As XFCharacter.Appearance outside the creator (0.4.2): only the flags are live.
+                                 out["last_creator_reading"] = nullptr;
+                                 out["note"] = "outside the appearance screen only the finalized look's flags are live; open it (cc.open) for every option";
                              }
                              out["checks"] = json::array();
                              for (const auto& check : request.checks)
@@ -406,9 +435,28 @@ int wmain(int argc, wchar_t** argv)
                          [phase](const xfb::MethodContext& aContext) {
                              const auto request = p::ParsePhotoState(aContext.params);
                              json out{{"simulated", true}, {"active", phase() == "photo_mode"}, {"can_open", phase() == "gameplay"}};
-                             if (request.menu)
+                             if (request.menu || request.options)
                              {
                                  out["menu"] = json::array({{{"key", 1}, {"label", "Field of view"}, {"kind", "slider"}, {"min", 5}, {"max", 90}}});
+                                 // The expression list (key 28) as XFPhoto.DescribeItem gives it with options (0.4.2):
+                                 // option data is the list position; table_index is the face record's faceId. Like
+                                 // session 4's install with an expression pack, the entries from 50 on are offset by 4.
+                                 json expression{{"key", 28}, {"label", "FACIAL EXPRESSION"}, {"kind", "options"}, {"option_count", 60}, {"start", 0}};
+                                 if (request.options)
+                                 {
+                                     json list = json::array();
+                                     for (int32_t i = 0; i < 60; ++i)
+                                     {
+                                         const std::string text = i == 0 ? "Neutral" : i == 1 ? "Charm" : i == 56 ? "Static: Sleeping" : i == 52 ? "Static: Skeptical" :
+                                                                  i == 55 ? "Static: Shock" : "Face " + std::to_string(i);
+                                         list.push_back({{"data", i}, {"text", text}, {"table_index", i < 50 ? i : i + 4}, {"table_index_by", "label"}});
+                                     }
+                                     expression["options"] = list;
+                                 }
+                                 std::scoped_lock _(sim.mutex);
+                                 const auto it = sim.attributes.find(p::key::kExpression);
+                                 expression["value"] = it == sim.attributes.end() ? 0.0 : static_cast<double>(it->second);
+                                 out["menu"].push_back(expression);
                              }
                              return out;
                          }});
@@ -562,7 +610,9 @@ int wmain(int argc, wchar_t** argv)
                              const double fy = std::cos(theta);
                              const double rx = fy;
                              const double ry = -fx;
-                             const double root[3] = {0.4 + 0.95 * lr - 0.05 * ud, 6.0 + nf + 0.1 * lr, ud};
+                             // As in the game (session 4): V about 1 m in front of the camera at close/far 0, and
+                             // close/far moving V along the view (positive: closer).
+                             const double root[3] = {0.04 + 0.95 * lr - 0.05 * ud, 1.0 - nf + 0.05 * lr, ud};
                              const double head[3] = {root[0] + fx * 0.03, root[1] + fy * 0.03, root[2] + 1.62};
                              const double target[3] = {head[0] + fx * request.forward + rx * request.right,
                                                        head[1] + fy * request.forward + ry * request.right, head[2] + request.up};
@@ -596,7 +646,14 @@ int wmain(int argc, wchar_t** argv)
                                            {"head", project(head[0], head[1], head[2])},
                                            {"center", project(cam[0], cam[1] + 5.0, cam[2])},
                                            {"up", project(target[0], target[1], target[2] + 0.1)},
-                                           {"right", project(target[0] + 0.1, target[1], target[2])}}}};
+                                           {"right", project(target[0] + 0.1, target[1], target[2])}}},
+                                         // The menu's values, as XFPhoto.Subject reports them (keys 1, 7, 8, 9, 37).
+                                         {"pose",
+                                          {{"fov", {{"value", fov}, {"min", 1}, {"max", 120}}},
+                                           {"yaw", {{"value", attr(p::key::kSubjectYaw, 0.0)}, {"min", -180}, {"max", 180}}},
+                                           {"left_right", {{"value", lr}, {"min", -5}, {"max", 5}}},
+                                           {"near_far", {{"value", nf}, {"min", -5}, {"max", 5}}},
+                                           {"up_down", {{"value", ud}, {"min", -5}, {"max", 5}}}}}};
                          }});
     dispatcher.Register(simWrite("photo.expression.set", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Expression (simulated).",
                                  [requirePhase, simulatedSet](const xfb::MethodContext& aContext) {
@@ -770,7 +827,7 @@ int wmain(int argc, wchar_t** argv)
                                          sim.creatorMode = p::CreatorModeName(request.mode);
                                          sim.creatorOpenTicks = sim.creatorOpens ? 2 : std::numeric_limits<int>::max(); // never picked up: pending until withdrawn
                                          return json{{"requested", true}, {"edit_mode", request.mode == p::CreatorMode::Ripperdoc ? "Ripperdoc" : "HairDresser"},
-                                                     {"saving_locked", true}, {"route", "menu_event"}};
+                                                     {"saving_locked", true}, {"route", "pause_menu"}};
                                      };
                                      // Through the game-thread queue, as in the plugin: after the kill switch closes it, a poll
                                      // or the withdrawal fails at once instead of waiting out the timeout.
@@ -1042,6 +1099,22 @@ int wmain(int argc, wchar_t** argv)
                                  [requirePhase](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseTime(aContext.params);
                                      std::scoped_lock _(sim.mutex);
+                                     // In photo mode: photo mode's own time-of-day slider (attribute 70, minutes), as
+                                     // XFWorld.SetTime does since 0.4.2.
+                                     if (sim.phase == "photo_mode")
+                                     {
+                                         if (request.totalSeconds >= 0)
+                                         {
+                                             throw xfb::MethodError("bad_params", "simulated: in photo mode the time is set in hours and minutes");
+                                         }
+                                         const auto it = sim.attributes.find(70);
+                                         const double before = it == sim.attributes.end() ? 720.0 : static_cast<double>(it->second);
+                                         const double after = request.hours * 60 + request.minutes + request.seconds / 60.0;
+                                         sim.attributes[70] = static_cast<float>(after);
+                                         return w::TimeResult(json{{"simulated", true}, {"phase", sim.phase}, {"route", "photo_time"}, {"key", 70},
+                                                                   {"unit", "minutes"}, {"before_minutes", before}, {"before_known", true},
+                                                                   {"after_minutes", after}});
+                                     }
                                      // Normal play, or with the appearance screen open (as XFWorld.SetTime).
                                      if (sim.phase != "gameplay" && sim.phase != "character_menu")
                                      {
@@ -1050,8 +1123,7 @@ int wmain(int argc, wchar_t** argv)
                                      const auto before = sim.clock;
                                      sim.clock = request.totalSeconds >= 0 ? request.totalSeconds
                                                                            : request.hours * 3600 + request.minutes * 60 + request.seconds;
-                                     return json{{"simulated", true}, {"phase", sim.phase}, {"before_total_seconds", before}, {"after_total_seconds", sim.clock},
-                                                 {"undo", {{"method", "world.time.set"}, {"params", {{"total_seconds", before}}}}}};
+                                     return w::TimeResult(json{{"simulated", true}, {"phase", sim.phase}, {"before_total_seconds", before}, {"after_total_seconds", sim.clock}});
                                  }));
     dispatcher.Register(simWrite("world.pause", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "World freeze (simulated).",
                                  [requirePhase](const xfb::MethodContext& aContext) {

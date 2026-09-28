@@ -1311,10 +1311,8 @@ json WorldTimeSet(const MethodContext& aContext)
     int32_t minutes = request.minutes;
     int32_t seconds = request.seconds;
     int32_t total = request.totalSeconds;
-    auto result = CallScript("XFWorld", "SetTime", {"Int32", "Int32", "Int32", "Int32"}, {&hours, &minutes, &seconds, &total},
-                             aContext.cid);
-    result["undo"] = {{"method", "world.time.set"}, {"params", {{"total_seconds", result.value("before_total_seconds", 0)}}}};
-    return result;
+    return writes::TimeResult(CallScript("XFWorld", "SetTime", {"Int32", "Int32", "Int32", "Int32"},
+                                         {&hours, &minutes, &seconds, &total}, aContext.cid));
 }
 
 json WorldPause(const MethodContext& aContext)
@@ -1549,7 +1547,8 @@ void RegisterMethods(Dispatcher& aDispatcher)
                                      "allow_live_pose.",
                                      &PoseLiveApply));
     aDispatcher.Register(WriteMethod("world.time.set", Access::WriteWorld, RunOn::GameThread,
-                                     "Sets the in-game clock (normal play, or with the appearance screen open).", &WorldTimeSet));
+                                     "Sets the in-game clock (normal play, the appearance screen, or photo mode's own time of day).",
+                                     &WorldTimeSet));
     aDispatcher.Register(WriteMethod("world.pause", Access::WriteWorld, RunOn::GameThread, "Freezes or unfreezes the world (gameplay only).", &WorldPause));
 
     // Bridge 0.4: a message line under the in-game label, V's clothing, manual saves and loading.

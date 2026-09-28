@@ -145,7 +145,8 @@ struct FaceRigRequest
 std::vector<std::string> DefaultFaceComponents();
 FaceRigRequest ParseFaceRig(const json& aParams);
 
-// photo.expression.index: {index: 0-100000, target: "puppet" (default) | "head", unlisted}. Without
+// photo.expression.index: {index: 0-100000, target: "puppet" (default), unlisted}. target "head" is
+// refused (no_effect): session 4 found the face rig on the stand-in, none on the head item. Without
 // unlisted = true the redscript layer refuses an index the photo-mode expression list doesn't offer.
 struct ExpressionIndexRequest
 {

@@ -30,6 +30,18 @@
 //
 // Both routes record every step, and the result carries the chosen values and an undo that puts the
 // camera and V's placement back as they were before the call.
+//
+// Lenses (0.4.2, after session 4). The distance from the camera to V comes from V's close/far placement,
+// which framing otherwise leaves alone, and the field of view follows from it: close means a wide lens.
+// Session 4 found two problems with starting from wherever the camera was: every frame left its
+// close/far probe in place (framing centred with left/right, so the +0.05 probe was never taken back),
+// so repeated frames walked V towards the camera (field of view 22 to 92 degrees) and then, once close/far
+// became the sideways axis, to the far end of its range (-4.7, field of view 3, the camera behind a wall)
+// while still answering converged. And a face framed from the default distance converged at about 66
+// degrees from about 35 cm, a selfie lens that distorts the face. So each frame now starts from a known
+// pose for its lens (LENSES: field of view, close/far, left/right and up/down reset), puts back the probe
+// of the axis it doesn't use, and keeps close/far and the field of view inside the lens's bounds for the
+// target: a frame that would need to leave them is refused (framing_bound) and everything is put back.
 
 import type { Pixels } from "../capture/win32.ts";
 import { downscaleArea, fitSize } from "../capture/image.ts";
@@ -68,6 +80,48 @@ export const FRAMINGS = {
 } as const satisfies Record<string, { description: string; offset: Offset; span_m: number; xf_preset: number }>;
 export type FramingName = keyof typeof FRAMINGS;
 
+/**
+ * Lenses: where each frame starts (its seed: field of view and V's close/far; left/right and up/down go
+ * back to 0) and the bounds it must stay within. In the game, V's close/far placement sets the distance:
+ * about 1 m minus close/far (session 4: close/far -1.2 framed the face at about 9 degrees, about 2.2 m;
+ * 0.75 at about 66 degrees, about 35 cm) [runtime, 28 September 2026]. portrait is the long lens (the
+ * default for face and eyes): seeded at field of view 22 and close/far -1.2, it converged to about 9
+ * degrees for the face and 5 for the eyes in session 4, a flattering portrait perspective. wide is the
+ * behaviour face framing had before (seeded at 60 and 0.7, converging at about 66 degrees for the face).
+ * keep starts from the current pose (the default for head-and-shoulders, full-body and after a camera
+ * preset): close/far may move at most 1 either way. fov bounds are degrees per target.
+ */
+export const LENSES = {
+  portrait: {
+    description: "A long lens from about 2 m: natural facial proportions (the default for face and eyes).",
+    seed: { fov: 22, near_far: -1.2 },
+    near_far: [-2.2, -0.2] as [number, number],
+    fov: { eyes: [2, 12], face: [4, 18], "head-and-shoulders": [8, 35], "full-body": [18, 75] } as Record<FramingName, [number, number]>,
+  },
+  wide: {
+    description: "A wide lens from about 30 cm (the old face framing): exaggerated perspective, for comparison.",
+    seed: { fov: 60, near_far: 0.7 },
+    near_far: [0.2, 0.95] as [number, number],
+    fov: { eyes: [15, 90], face: [35, 100], "head-and-shoulders": [60, 120], "full-body": [90, 120] } as Record<FramingName, [number, number]>,
+  },
+  keep: {
+    description: "Start from the current camera and placement (the default for head-and-shoulders, full-body and after a camera preset).",
+    seed: null,
+    near_far: null,
+    fov: null,
+  },
+} as const;
+export type LensName = keyof typeof LENSES;
+
+/** The lens a frame uses when none is asked for: portrait for face and eyes, unless a camera preset was just selected (it sets the distance). */
+export function defaultLens(target: FramingName, cameraPresetSelected = false): LensName {
+  if (cameraPresetSelected) return "keep";
+  return target === "face" || target === "eyes" ? "portrait" : "keep";
+}
+
+/** How far close/far may move from where a keep-lens frame started. */
+export const KEEP_NEAR_FAR_TRAVEL = 1;
+
 export type FrameOptions = {
   target: FramingName;
   span_m?: number;
@@ -76,8 +130,12 @@ export type FrameOptions = {
   position?: { x?: number; y?: number };
   /** Turn V to face the camera first (default true). */
   face_camera?: boolean;
-  /** Degrees V turns away from facing the camera, counter-clockwise seen from above (light sweeps). */
+  /** Degrees V turns away from facing the camera, counter-clockwise seen from above (light sweeps), -180 to 180. */
   yaw_offset?: number;
+  /** Where each frame starts and the bounds it keeps (LENSES); default defaultLens(target). */
+  lens?: LensName;
+  /** A camera preset was selected just before (the command sets this): the default lens is then keep. */
+  camera_preset_selected?: boolean;
   method?: "auto" | "project" | "capture";
   max_steps?: number;
   /** Allowed centring error, as a fraction of the window height (default 0.01). */
@@ -113,6 +171,11 @@ export type FrameResult = {
   converged: boolean;
   steps: FrameStep[];
   subject?: { source: string; slot: string; approximate: boolean };
+  /** The lens used and its bounds (projection route). */
+  lens?: LensName;
+  bounds?: { near_far?: [number, number]; fov?: [number, number] };
+  /** Metres from the camera to the target at the end (projection route). */
+  distance_m?: number;
   notes: string[];
   undo: { method: "photo.camera.set"; params: Record<string, unknown> } | null;
 };
@@ -243,8 +306,13 @@ function resolve(options: FrameOptions) {
   const offset: Offset = { ...base.offset, ...(options.offset ?? {}) } as Offset;
   const span = options.span_m ?? base.span_m;
   const position = { x: options.position?.x ?? 0.5, y: options.position?.y ?? 0.5 };
-  return { offset, span, position, maxSteps: options.max_steps ?? 6, tolerance: options.tolerance ?? 0.01 };
+  const lens: LensName = options.lens ?? defaultLens(options.target, options.camera_preset_selected === true);
+  if (!LENSES[lens]) throw new FramingError(`There is no lens called "${lens}" (portrait, wide or keep).`, "bad_input");
+  if (options.yaw_offset !== undefined && !(Math.abs(options.yaw_offset) <= 180)) throw new FramingError("yaw_offset takes -180 to 180 degrees.", "bad_input");
+  return { offset, span, position, lens, maxSteps: options.max_steps ?? 6, tolerance: options.tolerance ?? 0.01 };
 }
+
+const intersect = (a: [number, number], b: [number, number]): [number, number] => [Math.max(a[0], b[0]), Math.min(a[1], b[1])];
 
 // --- reading after a change ----------------------------------------------------------------------
 //
@@ -316,7 +384,7 @@ export function chooseHorizontal(responses: Partial<Record<HorizontalAxis, V2>>,
 }
 
 export async function frameByProjection(adapter: FramingAdapter, options: FrameOptions, first?: SubjectReading): Promise<FrameResult> {
-  const { offset, span, position, maxSteps, tolerance } = resolve(options);
+  const { offset, span, position, lens, maxSteps, tolerance } = resolve(options);
   const steps: FrameStep[] = [];
   const notes: string[] = [];
   const undo = new UndoTracker();
@@ -328,6 +396,11 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
   const aspect = reading.camera.aspect > 0 ? reading.camera.aspect : 16 / 9;
   const want = { x: (position.x - 0.5) * aspect, y: position.y - 0.5 };
   let unsettled = 0;
+  // The lens's bounds, inside the menu's own ranges. Leaving them is refused at the end (framing_bound).
+  const spec = LENSES[lens];
+  const nfBounds: [number, number] = spec.near_far ? intersect(spec.near_far, ranges.nf) : intersect([pose.nf - KEEP_NEAR_FAR_TRAVEL, pose.nf + KEEP_NEAR_FAR_TRAVEL], ranges.nf);
+  const fovBounds: [number, number] = spec.fov ? intersect(spec.fov[options.target], ranges.fov) : ranges.fov;
+  const boundsHit = new Map<"near_far" | "fov", string>();
 
   const set = async (values: Partial<Pose>, kind: string) => {
     const payload: { fov?: number; subject?: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } } = {};
@@ -335,7 +408,12 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     const subject: { yaw?: number; left_right?: number; near_far?: number; up_down?: number } = {};
     if (values.yaw !== undefined) subject.yaw = round(clamp(wrap180(values.yaw), ...ranges.yaw), 1);
     if (values.lr !== undefined) subject.left_right = round(clamp(values.lr, ...ranges.lr), 3);
-    if (values.nf !== undefined) subject.near_far = round(clamp(values.nf, ...ranges.nf), 3);
+    if (values.nf !== undefined) {
+      subject.near_far = round(clamp(values.nf, ...nfBounds), 3);
+      if (hasNearFar && round(values.nf, 3) !== subject.near_far && !boundsHit.has("near_far")) {
+        boundsHit.set("near_far", `V's close/far would have to go to ${round(values.nf, 2)}, outside the ${lens} lens's ${round(nfBounds[0], 2)} to ${round(nfBounds[1], 2)}`);
+      }
+    }
     if (values.ud !== undefined) subject.up_down = round(clamp(values.ud, ...ranges.ud), 3);
     if (Object.keys(subject).length) payload.subject = subject;
     undo.note(await adapter.setCamera(payload));
@@ -344,10 +422,8 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     if (subject.left_right !== undefined) pose.lr = subject.left_right;
     if (subject.near_far !== undefined) pose.nf = subject.near_far;
     if (subject.up_down !== undefined) pose.ud = subject.up_down;
-    const clipped =
-      (values.lr !== undefined && subject.left_right !== round(values.lr, 3)) ||
-      (values.nf !== undefined && subject.near_far !== round(values.nf, 3)) ||
-      (values.ud !== undefined && subject.up_down !== round(values.ud, 3));
+    // (close/far is kept inside the lens's bounds, which lie inside the menu's range: see boundsHit.)
+    const clipped = (values.lr !== undefined && subject.left_right !== round(values.lr, 3)) || (values.ud !== undefined && subject.up_down !== round(values.ud, 3));
     if (clipped && !notes.some((n) => n.startsWith("V reached the end"))) {
       notes.push("V reached the end of the pose tab's placement range; the camera may need to start closer to V (an XF camera preset).");
     }
@@ -364,12 +440,21 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     return m;
   };
 
-  // 1. Turn V to face the camera (plus yaw_offset). A probe first tells which way, and how far, V
-  // turns per unit of the rotation slider.
+  // 0. The lens's known starting pose (session 4's drift fix): field of view and close/far from the lens,
+  // left/right and up/down back to 0, so a frame never builds on the one before.
+  if (spec.seed) {
+    const seed: Partial<Pose> = { fov: spec.seed.fov, lr: 0, ud: 0 };
+    if (hasNearFar) seed.nf = spec.seed.near_far;
+    else notes.push(`The menu reports no close/far value, so the ${lens} lens's distance couldn't be set; only its field of view was.`);
+    await set(seed, "lens-seed");
+  }
+
+  // 1. Turn V to face the camera (plus yaw_offset, -180 to 180: 180 shows the back of V's head). A probe
+  // first tells which way, and how far, V turns per unit of the rotation slider.
   const faceCamera = options.face_camera !== false;
   const facingError = () => {
     const toCamera = { x: reading.camera.position.x - reading.head.x, y: reading.camera.position.y - reading.head.y, z: 0 };
-    return horizontalAngle(reading.subject_forward, toCamera) - (options.yaw_offset ?? 0);
+    return wrap180(horizontalAngle(reading.subject_forward, toCamera) - (options.yaw_offset ?? 0));
   };
   let turnPerUnit = 1;
   const turn = async (tries: number) => {
@@ -402,6 +487,7 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     return { x: (m.x - from.x) / probe, y: (m.y - from.y) / probe };
   };
   const horizontal: Partial<Record<HorizontalAxis, V2>> = {};
+  const beforeProbes = { lr: pose.lr, nf: pose.nf };
   horizontal.left_right = await response("lr", "probe-left-right");
   if (hasNearFar) horizontal.near_far = await response("nf", "probe-near-far");
   const upDown = await response("ud", "probe-up-down");
@@ -411,6 +497,12 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
   const choice = chooseHorizontal(horizontal, upDown);
   const axis = choice.axis;
   const hKey: "lr" | "nf" = axis === "near_far" ? "nf" : "lr";
+  // Put back the probe of every horizontal axis the centring won't use (session 4: the close/far probe
+  // stayed, so each frame moved V one probe closer to the camera).
+  const revert: Partial<Pose> = {};
+  if (hasNearFar && axis !== "near_far" && pose.nf !== beforeProbes.nf) revert.nf = beforeProbes.nf;
+  if (axis !== "left_right" && pose.lr !== beforeProbes.lr) revert.lr = beforeProbes.lr;
+  if (Object.keys(revert).length) m = await set(revert, "probe-revert");
   if (!axis) {
     notes.push("Neither left/right nor close/far moves V across the screen (V's placement axes may point along the view), so V was only centred vertically and sized.");
   } else if (axis === "near_far") {
@@ -470,8 +562,11 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     if (Math.abs(size - 1) <= 0.03) break;
     const current = Math.tan((pose.fov * DEG) / 2);
     const next = (2 * Math.atan(current * size)) / DEG;
-    const clamped = clamp(next, ...ranges.fov);
-    if (clamped !== next) notes.push(`The field of view needed (${round(next, 2)}) is outside photo mode's range; the framing is as close as photo mode allows.`);
+    const clamped = clamp(next, ...fovBounds);
+    if (clamped !== next) {
+      if (spec.fov) boundsHit.set("fov", `the field of view needed (${round(next, 2)} degrees) is outside the ${lens} lens's ${fovBounds[0]} to ${fovBounds[1]} for ${options.target}`);
+      else notes.push(`The field of view needed (${round(next, 2)}) is outside photo mode's range; the framing is as close as photo mode allows.`);
+    }
     m = await set({ fov: clamped }, "zoom");
     const ratio = Math.tan((pose.fov * DEG) / 2) > 0 ? current / Math.tan((pose.fov * DEG) / 2) : 1;
     J = J.map((row) => row.map((v) => v * ratio));
@@ -485,6 +580,26 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     m = measure(reading);
     budget = Math.max(budget, 2);
     await centre("centre-after-yaw");
+  }
+  if (boundsHit.size) {
+    // A frame outside its lens's bounds is refused, not reported as converged (session 4's camera ended
+    // behind a wall while answering converged), and everything goes back as it was before the call.
+    const back = undo.undo();
+    let restored = "nothing had changed";
+    if (back) {
+      try {
+        await adapter.setCamera(back.params as Parameters<FramingAdapter["setCamera"]>[0]);
+        restored = "the camera and V's placement were put back as they were";
+      } catch (error) {
+        restored = `putting the camera back failed (${(error as Error).message}); the undo is ${JSON.stringify(back.params)}`;
+      }
+    }
+    const why = [...boundsHit.values()].join("; ");
+    throw new FramingError(
+      `Framing ${options.target} stopped at the ${lens} lens's limit: ${why}. ${restored[0].toUpperCase()}${restored.slice(1)}. V may need open space in front of the camera, or another lens (lens: keep starts from the current camera).`,
+      "framing_bound",
+      steps,
+    );
   }
   if (unsettled) notes.push(`${unsettled} reading${unsettled === 1 ? "" : "s"} didn't settle within ${SETTLE.maxReads} reads (V or the camera still moving); the result may be slightly off.`);
   const size = (m.scale * span) / 0.1;
@@ -504,6 +619,9 @@ export async function frameByProjection(adapter: FramingAdapter, options: FrameO
     converged,
     steps,
     subject: { source: reading.subject, slot: reading.slot, approximate: reading.approximate },
+    lens,
+    bounds: { ...(hasNearFar ? { near_far: nfBounds } : {}), fov: fovBounds },
+    distance_m: round(Math.hypot(reading.target.x - reading.camera.position.x, reading.target.y - reading.camera.position.y, reading.target.z - reading.camera.position.z), 3),
     notes,
     undo: undo.undo(),
   };
@@ -733,6 +851,8 @@ export async function frame(adapter: FramingAdapter, options: FrameOptions): Pro
   const start = fromReading ? { ...fromReading.pose, ranges: fromReading.ranges } : menu!;
   const result = await frameByCapture(adapter, options, start);
   if (options.face_camera !== false || options.yaw_offset) result.notes.push("The capture route can't turn V to face the camera; V's rotation was left as it was (set subject.yaw with photo_camera_set if needed).");
+  const lens = options.lens ?? defaultLens(options.target, options.camera_preset_selected === true);
+  if (lens !== "keep") result.notes.push(`The capture route starts from the current camera; the ${lens} lens wasn't applied (set fov and subject.near_far with photo_camera_set first, e.g. ${JSON.stringify(LENSES[lens].seed)}).`);
   if (why) result.notes.unshift(`The projection route wasn't available (${why}), so the capture route was used.`);
   return result;
 }
