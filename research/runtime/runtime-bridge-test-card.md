@@ -8,6 +8,7 @@
 |---|---|---|
 | [Before the session](#before-the-session-coordinator) | offline | The coordinator restages the `XF Runtime Bridge` entry from a new build |
 | [Finish showroom checks](#finish-showroom-checks-bridge-050) | 30-35 min | Only with the 0.5.0 -writes build, Codeware and XF Finish Showroom staged, and an XF Eye Artistry build of the same collection and commit; a dim interior at night with 4 m clear in front of V |
+| [Session 7 checks](#session-7-checks-bridge-053) | about 20 min | Only with the 0.5.3 -writes build, Codeware and XF Finish Showroom staged; V on foot in the street; the game window in front |
 | [Session 6 checks](#session-6-checks-bridge-052) | 30-40 min | Only with the 0.5.2 -writes build with the inventory class (`--allow-inventory`), Codeware and a rebuilt XF Finish Showroom staged, and Character Customization Anywhere **disabled** in the test profile; V in the street, on foot; the game window in front |
 | [Session 5 checks](#session-5-checks-bridge-051) | 25-30 min | Only with the 0.5.1 build staged; V in her apartment, on foot, then in the street; the game window in front |
 | [Session 4 preflight](#session-4-preflight-bridge-041) | 20-30 min | Only with the 0.4.1 build staged; V in her apartment, on foot; the maintainer's answer on inventory writes |
@@ -110,6 +111,23 @@ Only with the 0.5.0 -writes build and XF Finish Showroom staged ([pipeline guide
 | K2 | C, M | `showroom_spawn {manifest: "<s2>", presets: ["Gloss A · as before"]}`, then M loads the save (or `game_load {latest: true, discard_unsaved: true}`); after the load, `showroom_state` | Nothing in the world after the load; `showroom_state` has no pieces | A head survives the load: record it (static entities should not persist) |
 
 Evidence: every answer's JSON (spawn plans, spill estimates, sweep frames), the captures (F3–F7 as a fidelity sheet, L1–L3 as a lineup sheet and per-preset strips, L4's burst manifest), the plugin log's `showroom` lines, the Codeware version, and the three archives' SHA-256.
+
+## Session 7 checks (bridge 0.5.3)
+
+Only with the 0.5.3 -writes build, Codeware and XF Finish Showroom staged. Proves the three ink demos, **temporary test features** ([route map](in-game-ui-design.md), [ink knowledge](../../knowledge/ink-ui.md)); every row also answers an open question there. Captures of the whole window (`capture_screenshot`), the plugin log before any relaunch. C is the coordinator, M the maintainer.
+
+**Restage first** (coordinator, MO2 closed): **replace** the `XF Runtime Bridge` entry's files with `xf-runtime-bridge-0.5.3-writes.zip` (manifest `"version": "0.5.3"`; with `--allow-inventory` if session 6's wardrobe rows are repeated). Its `config.ini` has a new `[ui]` section (`hud_panel`, `cet_label`, `nameplates`, all `true`). About 20 minutes, after the session-6 rows.
+
+| # | Who | Do | Expect | If not |
+|---|---|---|---|---|
+| U1 | M, C | M loads a save, V on foot in the street. C: `layers_status` (raw `call layers.status`), `ui_hud {}`, capture; `ui_message {text: "XF panel check", level: "ask", seconds: 60}`, capture | The plugin log has `overlay attached layer=hud size=…` (the `ink` layer announced); `panel_attached: true`. Top right: a dark panel with a red edge, "XF RUNTIME BRIDGE" in the HUD's red, a yellow status ("… changes allowed"), the ask line in yellow, in the game's font; M: does it read like the game's HUD? | No panel: record `layers_status` and the log's `ink` lines (Codeware missing, root never found) |
+| U2 | C, M | `ui_hud {anchor: "bottom_left", x: 60, y: 200, scale: 1.3}`, capture; `ui_hud {cet_label: false}` (the CET label goes); the undo of each; `ui_hud {show: false}`, then `{show: true}` | The panel moves to bottom left at 1.3× within a second and keeps its shape on the 3840×1600 screen (not squashed); the undo puts it back; the CET label hides and returns | Wrong size or stretched: the HUD root isn't in screen pixels; record the capture and `size=` from U1 |
+| U3 | C, M | Photo mode (`photo_open`), capture; `ui_hud {layer: "top"}`, capture; `ui_hud {layer: "notifications"}`, capture; open the pause menu (M), capture; `ui_hud {reset: true}` | On `hud` the panel hides in photo mode and menus (the game hides its HUD). Record for `top` and `notifications`: shown in photo mode? in the pause menu? | The panel never returns after a layer change: record the log's `ink overlay mounted` lines |
+| U4 | C | Tick while hidden: `ui_message {text: "while hidden", seconds: 20}` during photo mode on `hud`, close photo mode | The line is there at once when the HUD returns (the tick ran or restarted) | Only after a few seconds: the tick stopped while hidden; note the delay |
+| U5 | C, M | Nameplates: `showroom_spawn {manifest, presets: [three]}`; capture from V's eye (normal play); walk around them (M), then turn the camera fast | Each pedestal shows its number and preset name on its front, smaller further away, gone past 15 m; they follow the pedestals with no more than a slight lag | Labels in the wrong place (mirrored, offset): ProjectPoint's space was misread; record the capture and `photo_subject`'s `screen` values |
+| U6 | C | `ui_hud {nameplates: false}`, then true; `showroom_clear` | The labels hide and return; clearing the showroom removes them | — |
+| U7 | C, M | Pins: `world_pin {position: <a point 30 m ahead from game_status/showroom_anchor>, label: "XF test pin"}`; `world_pin {piece: 0, label: "Gloss A", variant: "clothes"}`; `world_pin {at: "v", label: "V was here"}`; capture the world; M opens the map, hovers each pin, captures; M looks at the minimap | In the world: a cyan XF diamond with its label over each point, through walls; the head's pin follows `showroom_rotate`. On the map: the badges and labels at the right places, the tooltip titled with the label and the "test pin" line; on the minimap the badge without a label. Record which views show the vanilla variant icon instead | No badge anywhere: the variant's controller isn't one of the four wrapped; record which views show a plain pin |
+| U8 | C | `world_pin_clear {id: 1}`; `game_load {latest: true, discard_unsaved: true}`, `game_wait`; M checks the map; `world_pin {at: "v", label: "kill"}`, `bridge_kill`, M presses Reconnect | The pin goes; after the load no XF pin anywhere; the kill line has `bridge.kill_cleared_pins` with `removed` [n] and the pin disappears | A pin survives the load: record it (runtime pins persist; `world.pin` must then clear at detach) |
 
 ## Session 6 checks (bridge 0.5.2)
 
@@ -392,6 +410,20 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 | `r6/logs/redscript_rCURRENT.log` | Both `.reds` files from `red4ext/plugins/XFRuntimeBridge/Scripts`; `Compilation complete` | The plugin's script path under MO2 |
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
+
+## Build record (bridge 0.5.3, branch build, not staged)
+
+Built 29 September 2026 on `claude/rnd-ink` at `ed485a06330a`, clean tree (manifest `"commit": "ed485a06330af009cf474189f6289002f6efef2e"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed): version 0.5.3, the ink demos (temporary test features) on top of 0.5.2. On that commit: `xfb_selftest --unit` UNIT OK, self-test 417 of 417, `bun test tools` 233 of 234 (the screen-route capture test needs its synthetic window uncovered on the desktop, and test windows stay off-screen), typecheck, the Lua lint, and the redscript lint both without Codeware and with Codeware `v1.20.4`'s scripts (`613a1cb8`) against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…`). The plugin registers thirteen natives (`XFBridge_Hud` is new) and ships two more script files (`XFRuntimeBridgeInk.reds`, `XFRuntimeBridgePins.reds`); `config.ini` has a new `[ui]` section. A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.5.3-writes.zip` (with inventory) | `fdcad6f67ce42e43a43bdb2d1b08da83d34b38961cd199da22df3b4f05ad5539` |
+| `xf-runtime-bridge-0.5.3-writes-no-inventory.zip` | `c2e0bb8e6352cb7f52498e18a39a9c914c3c85a78c8870d0e27fab9966cec709` |
+| `xf-runtime-bridge-0.5.3-diagnostic.zip` | `0a9f62f134655a8911f52c7340e722ce74b23a9d22200be3d189f0a4e3edb598` |
+| `xf-runtime-bridge-0.5.3.zip` (default) | `999ea8c53c62a9013e5c0cfe2e5d4f6a0a1122e336fb2aed0860d82be10e716f` |
+| (`XFRuntimeBridge.dll` inside each) | `bab47fdc157d64003a814c243b8401340743fcfbe53a4efbd8d871b23f781837` |
+
+**Watch in the session:** `rtti.register_types … natives=13` at load; the `ink` layer's `overlay attached layer=… size=…` announcement and `ink overlay mounted` line after the player attaches (U1); `panel_attached` in `ui_hud`'s answers; `world.pin placed` lines and `bridge.kill_cleared_pins` in the kill switch's restore (U8). The [session-7 checks](#session-7-checks-bridge-053) cover each.
 
 ## Build record (bridge 0.5.2, branch build, not staged)
 

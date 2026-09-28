@@ -28,6 +28,7 @@
 #include "core/Layers.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
+#include "core/InkUi.hpp"
 #include "core/Messages.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Showroom.hpp"
@@ -368,6 +369,16 @@ int wmain(int argc, wchar_t** argv)
             int ticks = 2;
         };
         std::vector<ShowroomItem> showroom;
+        // XF map pins (bridge 0.5.3, temporary test feature): what the simulated mappin system holds for the bridge.
+        struct Pin
+        {
+            int32_t id = 0;
+            std::string label, variant, target;
+            int32_t piece = -1;
+            double x = 0, y = 0, z = 0;
+        };
+        std::vector<Pin> pins;
+        int32_t nextPin = 1;
         bool codeware = true;
         uint64_t nextEntity = 1000;
     };
@@ -1396,6 +1407,132 @@ int wmain(int argc, wchar_t** argv)
                              const auto text = messages.Snapshot();
                              return text.empty() ? json{{"messages", json::array()}} : json::parse(text);
                          }});
+    // Bridge 0.5.3, TEMPORARY TEST FEATURES (the ink UI demos): ui.hud with the plugin's own panel settings, selftest.hud
+    // for the frame XFBridge_Hud would answer (what the redscript overlay draws), and world.pin / world.pin.clear against a
+    // simulated mappin system, with the same parameter checks (core/InkUi.cpp).
+    static xfb::inkui::HudPanel hud;
+    hud.SetDefaults({});
+    dispatcher.Register({"ui.hud", xfb::Access::Notify, xfb::RunOn::BridgeThread, "Ink HUD panel settings (simulated overlay).",
+                         [](const xfb::MethodContext& aContext) {
+                             auto out = hud.Configure(aContext.params);
+                             out["simulated"] = true;
+                             out["panel_attached"] = true;
+                             return out;
+                         }});
+    dispatcher.Register({"selftest.hud", xfb::Access::Read, xfb::RunOn::BridgeThread, "The frame the ink HUD panel would draw (self-test only).",
+                         [&bridge, &config](const xfb::MethodContext&) {
+                             xfb::inkui::BridgeView view;
+                             view.pluginEnabled = config.bridgeEnabled;
+                             view.allowWrites = config.allowWrites;
+                             view.killed = bridge.GetDispatcher().IsKilled();
+                             view.writesPaused = bridge.GetDispatcher().WritesPaused();
+                             view.listening = bridge.IsListening();
+                             view.hasClient = bridge.HasClient();
+                             view.scriptReady = simLayer.Ready();
+                             std::vector<xfb::inkui::MessageLine> lines;
+                             for (auto& [level, text] : messages.Lines())
+                             {
+                                 lines.push_back({level, text});
+                             }
+                             const auto frame = xfb::inkui::Frame(hud.Current(), view, lines);
+                             auto out = xfb::inkui::ParseFrame(frame);
+                             out["frame"] = frame;
+                             return out;
+                         }});
+    const auto pinsJson = [] {
+        json list = json::array();
+        for (const auto& pin : sim.pins)
+        {
+            list.push_back({{"id", pin.id}, {"label", pin.label}, {"variant", pin.variant}, {"target", pin.target},
+                            {"piece", pin.piece}, {"position", {pin.x, pin.y, pin.z}}});
+        }
+        return list;
+    };
+    dispatcher.Register(simWrite("world.pin", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "Places an XF map pin (simulated).",
+                                 [pinsJson](const xfb::MethodContext& aContext) {
+                                     const auto request = xfb::inkui::ParsePin(aContext.params);
+                                     std::scoped_lock _(sim.mutex);
+                                     if (sim.phase != "gameplay" && sim.phase != "photo_mode")
+                                     {
+                                         throw xfb::MethodError("not_in_world", "simulated: map pins need V in the world; the game is in '" + sim.phase + "'");
+                                     }
+                                     if (sim.pins.size() >= xfb::inkui::kMaxPins)
+                                     {
+                                         throw xfb::MethodError("too_many_pins", "simulated: the bridge already shows 8 XF pins; remove one with world.pin.clear");
+                                     }
+                                     Simulated::Pin pin;
+                                     pin.label = request.label;
+                                     pin.variant = request.variant;
+                                     pin.target = xfb::inkui::TargetName(request.target);
+                                     if (request.target == xfb::inkui::PinRequest::Target::Piece)
+                                     {
+                                         const Simulated::ShowroomItem* found = nullptr;
+                                         for (const auto& item : sim.showroom)
+                                         {
+                                             if (item.kind == "pieces" && item.index == request.piece)
+                                             {
+                                                 found = &item;
+                                             }
+                                         }
+                                         if (!found)
+                                         {
+                                             throw xfb::MethodError("no_such_piece", "simulated: the showroom has no piece " + std::to_string(request.piece));
+                                         }
+                                         if (found->ticks > 0)
+                                         {
+                                             throw xfb::MethodError("not_spawned_yet", "simulated: that head isn't in the world yet");
+                                         }
+                                         pin.piece = request.piece;
+                                         pin.x = found->x;
+                                         pin.y = found->y;
+                                         pin.z = found->z + 1.73 + request.lift; // the head's eyes, as XFInkPins.Place
+                                     }
+                                     else if (request.target == xfb::inkui::PinRequest::Target::V)
+                                     {
+                                         pin.x = 100.0;
+                                         pin.y = 200.0;
+                                         pin.z = 10.0 + 1.8 + request.lift;
+                                     }
+                                     else
+                                     {
+                                         pin.x = request.x;
+                                         pin.y = request.y;
+                                         pin.z = request.z + request.lift;
+                                     }
+                                     pin.id = sim.nextPin++;
+                                     sim.pins.push_back(pin);
+                                     sim.gameSaveLock = true;
+                                     return json{{"simulated", true}, {"id", pin.id}, {"label", pin.label}, {"variant", pin.variant},
+                                                 {"target", pin.target}, {"bound", pin.piece >= 0 ? "object" : "position"},
+                                                 {"position", {pin.x, pin.y, pin.z}}, {"pins", pinsJson()},
+                                                 {"undo", {{"method", "world.pin.clear"}, {"params", {{"id", pin.id}}}}},
+                                                 {"temporary_test_feature", true}};
+                                 }));
+    dispatcher.Register(simWrite("world.pin.clear", xfb::Access::WriteWorld, xfb::RunOn::GameThread, "Removes XF map pins (simulated).",
+                                 [pinsJson](const xfb::MethodContext& aContext) {
+                                     const auto id = xfb::inkui::ParsePinClear(aContext.params);
+                                     std::scoped_lock _(sim.mutex);
+                                     json removed = json::array();
+                                     std::vector<Simulated::Pin> kept;
+                                     for (const auto& pin : sim.pins)
+                                     {
+                                         if (id < 0 || pin.id == id)
+                                         {
+                                             removed.push_back(pin.id);
+                                         }
+                                         else
+                                         {
+                                             kept.push_back(pin);
+                                         }
+                                     }
+                                     if (id >= 0 && removed.empty())
+                                     {
+                                         throw xfb::MethodError("no_such_pin", "simulated: no XF pin has id " + std::to_string(id));
+                                     }
+                                     sim.pins = kept;
+                                     return json{{"simulated", true}, {"removed", removed}, {"pins", pinsJson()}, {"undo", nullptr},
+                                                 {"undo_note", "a removed pin can be placed again with world.pin"}};
+                                 }));
     // V's clothing: items named *Helmet*, *Hat* or *Cap* go in Head, *Glasses* or *Mask* in Face, anything
     // else in OuterChest; Items.Missing_01 doesn't exist.
     const auto slotOf = [](const std::string& aItem) -> std::string {
@@ -1931,9 +2068,14 @@ int wmain(int argc, wchar_t** argv)
                              {
                                  lights[std::to_string(light)] = {at[0], at[1], at[2]};
                              }
+                             json pins = json::array();
+                             for (const auto& pin : sim.pins)
+                             {
+                                 pins.push_back({{"id", pin.id}, {"label", pin.label}});
+                             }
                              return json{{"worn", sim.worn}, {"inventory", sim.inventory}, {"added", sim.added}, {"saves", sim.saves},
                                          {"save_lock", sim.gameSaveLock || sim.saveLock}, {"save_state", sim.saveState}, {"phase", sim.phase},
-                                         {"lights", lights}};
+                                         {"lights", lights}, {"pins", pins}};
                          }});
 
     // The kill switch's restore, simulated like XFBridgeActions.RestoreAfterKill: unfreeze and
@@ -1963,6 +2105,11 @@ int wmain(int argc, wchar_t** argv)
         {
             out["showroom_cleared"] = sim.showroom.size();
             sim.showroom.clear();
+        }
+        if (!sim.pins.empty())
+        {
+            out["pins_cleared"] = sim.pins.size();
+            sim.pins.clear();
         }
         // The wardrobe before the bridge's first change this session (0.5.2), as XFWardrobe.RestoreAfterKill.
         if (sim.wardrobeSnapshot.is_object())
@@ -2100,6 +2247,7 @@ int wmain(int argc, wchar_t** argv)
                     sim.saveLock = false;
                     sim.worn.clear();
                     sim.showroom.clear(); // static entities don't survive a load
+                    sim.pins.clear();     // nor the bridge's runtime mappins (a new session's mappin system)
                     sim.loadTicks = -1;
                 }
             }

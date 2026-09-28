@@ -22,6 +22,7 @@
 #include "core/Config.hpp"
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
+#include "core/InkUi.hpp"
 #include "core/LivePose.hpp"
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
@@ -2578,6 +2579,99 @@ void WardrobeTests()
               camera.attributes[1].key == 11 && p::CameraParamName(10) == "exposure");
 }
 
+// Bridge 0.5.3, TEMPORARY TEST FEATURES (core/InkUi.hpp): the ink HUD panel's settings and frame, and world.pin's checks.
+void InkUiTests()
+{
+    namespace k = xfb::inkui;
+    k::HudPanel panel;
+    k::HudSettings defaults;
+    defaults.show = false; // [ui] hud_panel = false
+    panel.SetDefaults(defaults);
+    Check("ui.hud starts from [ui] in config.ini", !panel.Current().show && panel.Current().cetLabel && panel.Current().nameplates);
+    const auto read = panel.Configure(json::object());
+    Check("ui.hud with no values only reads (changed false, no undo)", read["changed"] == false && read["undo"].is_null());
+    const auto moved = panel.Configure(json{{"show", true}, {"anchor", "bottom_left"}, {"x", 40}, {"y", -20.5}, {"scale", 1.5}});
+    Check("ui.hud shows and moves the panel; its undo puts back the earlier settings",
+          moved["changed"] == true && moved["settings"]["anchor"] == "bottom_left" && moved["settings"]["y"] == -20.5 &&
+              moved["undo"]["method"] == "ui.hud" && moved["undo"]["params"]["show"] == false && moved["undo"]["params"]["anchor"] == "top_right");
+    panel.Configure(moved["undo"]["params"]);
+    Check("ui.hud's undo, replayed, restores exactly the earlier settings", k::ToJson(panel.Current()) == k::ToJson(defaults));
+    Check("ui.hud refuses an unknown anchor, layer, scale out of range, a non-boolean, an unknown key",
+          ParamsCode([&] { panel.Configure(json{{"anchor", "middle"}}); }) == "bad_params" &&
+              ParamsCode([&] { panel.Configure(json{{"layer", "menu"}}); }) == "bad_params" &&
+              ParamsCode([&] { panel.Configure(json{{"scale", 9}}); }) == "bad_params" &&
+              ParamsCode([&] { panel.Configure(json{{"show", "yes"}}); }) == "bad_params" &&
+              ParamsCode([&] { panel.Configure(json{{"colour", "red"}}); }) == "bad_params");
+    panel.Configure(json{{"show", true}, {"cet_label", false}});
+    Check("ui.hud reset goes back to the configured panel, and can't be combined with values",
+          panel.Configure(json{{"reset", true}})["settings"] == k::ToJson(defaults) &&
+              ParamsCode([&] { panel.Configure(json{{"reset", true}, {"x", 3}}); }) == "bad_params");
+
+    k::BridgeView view;
+    view.pluginEnabled = true;
+    view.listening = true;
+    view.allowWrites = true;
+    view.hasClient = true;
+    view.scriptReady = true;
+    Check("the status line: changes allowed (write), paused, read-only (ok), killed, off",
+          k::Summarize(view).tone == "write" && [&] {
+              auto paused = view;
+              paused.writesPaused = true;
+              auto read = view;
+              read.allowWrites = false;
+              auto killed = view;
+              killed.killed = true;
+              auto off = view;
+              off.pluginEnabled = false;
+              return k::Summarize(paused).tone == "paused" && k::Summarize(read).tone == "ok" && k::Summarize(killed).tone == "killed" &&
+                     k::Summarize(off).tone == "off";
+          }());
+    k::HudSettings shown;
+    const std::vector<k::MessageLine> lines{{"ask", "Press\tthe photo-mode key\nnow"}, {"done", "Captured"}};
+    const auto frame = k::Frame(shown, view, lines);
+    const auto parsed = k::ParseFrame(frame);
+    Check("the frame starts with its version and carries settings, gate, tone and message lines",
+          frame.rfind("xfhud\t1\n", 0) == 0 && parsed["version"] == 1 && parsed["show"] == true && parsed["anchor"] == "top_right" &&
+              parsed["x"] == 72.0 && parsed["live"] == true && parsed["tone"] == "write" && parsed["messages"].size() == 2 &&
+              parsed["messages"][0]["level"] == "ask");
+    Check("message text never breaks the frame (tabs and newlines become spaces)",
+          parsed["messages"][0]["text"] == "Press the photo-mode key now");
+    auto killed = view;
+    killed.killed = true;
+    const auto killedFrame = k::ParseFrame(k::Frame(shown, killed, lines));
+    Check("a killed bridge's frame shows its state and no messages", killedFrame["tone"] == "killed" && killedFrame["messages"].empty());
+    auto disabled = view;
+    disabled.pluginEnabled = false;
+    const auto offFrame = k::ParseFrame(k::Frame(shown, disabled, {}));
+    Check("with the bridge switched off the panel and nameplates are hidden", offFrame["show"] == false && offFrame["nameplates"] == false);
+    auto loading = view;
+    loading.scriptReady = false;
+    Check("while the script gate is closed the frame says live 0 (the overlay skips world queries)",
+          k::ParseFrame(k::Frame(shown, loading, {}))["live"] == false);
+
+    const auto atPoint = k::ParsePin(json{{"position", {-1200.5, 300.0, 12.0}}, {"label", "  XF   test\npin  "}});
+    Check("world.pin at a world point: label cleaned to one line, variant custom, no lift",
+          atPoint.target == k::PinRequest::Target::Position && atPoint.label == "XF test pin" && atPoint.variant == "custom" &&
+              atPoint.lift == 0.0 && atPoint.x == -1200.5);
+    const auto onPiece = k::ParsePin(json{{"piece", 3}, {"label", "Gloss A"}, {"variant", "clothes"}});
+    Check("world.pin on a showroom head: 0.45 m above its eyes by default", onPiece.target == k::PinRequest::Target::Piece && onPiece.piece == 3 &&
+                                                                           onPiece.lift == 0.45 && onPiece.variant == "clothes");
+    Check("world.pin above V", k::ParsePin(json{{"at", "v"}, {"label", "V"}, {"lift_m", 1.0}}).lift == 1.0);
+    const std::string longLabel(80, 'x');
+    Check("world.pin cuts a long label to 48 characters", k::ParsePin(json{{"at", "v"}, {"label", longLabel}}).label.size() == 48);
+    Check("world.pin refuses no target, two targets, a bad position, a piece out of range, an empty label, an unknown variant",
+          ParamsCode([&] { k::ParsePin(json{{"label", "x"}}); }) == "bad_params" &&
+              ParamsCode([&] { k::ParsePin(json{{"at", "v"}, {"piece", 1}, {"label", "x"}}); }) == "bad_params" &&
+              ParamsCode([&] { k::ParsePin(json{{"position", {1, 2}}, {"label", "x"}}); }) == "bad_params" &&
+              ParamsCode([&] { k::ParsePin(json{{"position", {1, 2, 99999}}, {"label", "x"}}); }) == "bad_params" &&
+              ParamsCode([&] { k::ParsePin(json{{"piece", 24}, {"label", "x"}}); }) == "bad_params" &&
+              ParamsCode([&] { k::ParsePin(json{{"at", "v"}, {"label", " \t "}}); }) == "bad_params" &&
+              ParamsCode([&] { k::ParsePin(json{{"at", "v"}, {"label", "x"}, {"variant", "fast_travel"}}); }) == "bad_params");
+    Check("world.pin.clear: no id clears all, an id one; a bad id is refused",
+          k::ParsePinClear(json::object()) == -1 && k::ParsePinClear(json{{"id", 4}}) == 4 &&
+              ParamsCode([&] { k::ParsePinClear(json{{"id", 0}}); }) == "bad_params");
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -2603,6 +2697,7 @@ int RunUnitTests()
     ShowroomTests();
     ScriptLayerTests();
     WardrobeTests();
+    InkUiTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

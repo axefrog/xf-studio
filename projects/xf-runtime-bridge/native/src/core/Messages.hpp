@@ -14,6 +14,8 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -47,6 +49,8 @@ public:
     // The messages still showing, oldest first: {"messages":[{id, text, level, remaining_ms}]}, or an
     // empty string when there are none (what XFBridge_Messages answers).
     std::string Snapshot(Clock::time_point aNow = Clock::now());
+    // The messages still showing, oldest first, as (level, text): what the ink HUD panel draws (bridge 0.5.3, XFBridge_Hud).
+    std::vector<std::pair<std::string, std::string>> Lines(Clock::time_point aNow = Clock::now());
     // Removes every message; returns how many were showing.
     size_t Clear();
     size_t Active(Clock::time_point aNow = Clock::now());

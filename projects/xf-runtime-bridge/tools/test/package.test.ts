@@ -39,7 +39,11 @@ describe("packages", () => {
     expect(config).toMatch(/^allow_writes = false$/m);
     expect(config).toMatch(/^allow_creator_leave = false$/m);
     expect(config).toMatch(/^allow_live_pose = false$/m);
-    expect(config).not.toMatch(/= true$/m);
+    // Every permission switch is off. [ui] (0.5.3) holds display switches only (the ink panel, the CET label, nameplates),
+    // which draw nothing while the bridge is off; they are checked separately.
+    const [permissions, display = ""] = config.split(/^\[ui\]\s*$/m);
+    expect(permissions).not.toMatch(/= true$/m);
+    expect(display.split(/^\[log\]/m)[0]).toMatch(/^hud_panel = true\s*$/m);
     expect(manifest).toMatchObject({
       variant: "default",
       bridge_enabled: false,

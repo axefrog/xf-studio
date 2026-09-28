@@ -29,6 +29,7 @@
 #include <thread>
 #include <vector>
 
+#include "core/InkUi.hpp"
 #include "core/LivePose.hpp"
 #include "core/OptionsExchange.hpp"
 #include "core/Params.hpp"
@@ -792,6 +793,48 @@ json UiMessage(const MethodContext& aContext)
     {
         out["note"] = "the bridge's CET layer hasn't announced itself, so nothing may be drawn (is Cyber Engine Tweaks loaded?)";
     }
+    return out;
+}
+
+// ui.hud (bridge 0.5.3, TEMPORARY TEST FEATURE, Demo A): shows, hides or moves the ink HUD panel, switches the showroom's
+// nameplates (Demo B) and the CET label. Notify class, bridge thread: it only changes the settings the redscript overlay pulls
+// through XFBridge_Hud, so it never calls into scripts (RB-76 needs no gate here).
+json UiHud(const MethodContext& aContext)
+{
+    auto out = Get().hud.Configure(aContext.params);
+    const bool drawn = Get().layers.Has("ink");
+    out["panel_attached"] = drawn;
+    if (!drawn)
+    {
+        out["note"] = "the ink panel hasn't announced itself yet: it needs Codeware and attaches once V is in the world (the CET label still shows)";
+    }
+    return out;
+}
+
+// world.pin / world.pin.clear (bridge 0.5.3, TEMPORARY TEST FEATURE, Demo C): an XF map pin through the game's mappin
+// system (XFRuntimeBridgePins.reds, vanilla APIs). Game thread, so the dispatcher's game gate (RB-76) runs first.
+json WorldPin(const MethodContext& aContext)
+{
+    const auto request = inkui::ParsePin(aContext.params);
+    RED4ext::CString target(inkui::TargetName(request.target));
+    float x = static_cast<float>(request.x), y = static_cast<float>(request.y), z = static_cast<float>(request.z);
+    int32_t piece = request.piece;
+    RED4ext::CString label(request.label.c_str());
+    RED4ext::CString variant(request.variant.c_str());
+    float lift = static_cast<float>(request.lift);
+    auto out = CallScript("XFInkPins", "Place", {"String", "Float", "Float", "Float", "Int32", "String", "String", "Float"},
+                          {&target, &x, &y, &z, &piece, &label, &variant, &lift}, aContext.cid);
+    out["undo"] = {{"method", "world.pin.clear"}, {"params", {{"id", out.value("id", 0)}}}};
+    out["temporary_test_feature"] = true;
+    return out;
+}
+
+json WorldPinClear(const MethodContext& aContext)
+{
+    int32_t id = static_cast<int32_t>(inkui::ParsePinClear(aContext.params));
+    auto out = CallScript("XFInkPins", "Clear", {"Int32"}, {&id}, aContext.cid);
+    out["undo"] = nullptr;
+    out["undo_note"] = "a removed pin can be placed again with world.pin";
     return out;
 }
 
@@ -1683,6 +1726,16 @@ void RestoreAfterKill()
     {
         log::Warn("bridge.kill_clear_showroom_failed", std::string("what=") + e.what(), "kill-restore");
     }
+    // XF map pins (bridge 0.5.3, temporary test feature): nothing to do when none were placed.
+    try
+    {
+        int32_t all = -1;
+        log::Info("bridge.kill_cleared_pins", SerializeJson(CallScript("XFInkPins", "Clear", {"Int32"}, {&all}, "kill-restore")), "kill-restore");
+    }
+    catch (const std::exception& e)
+    {
+        log::Warn("bridge.kill_clear_pins_failed", std::string("what=") + e.what(), "kill-restore");
+    }
 }
 
 void RetakeOwedSaveLock()
@@ -1808,6 +1861,14 @@ void RegisterMethods(Dispatcher& aDispatcher)
     // Bridge 0.4: a message line under the in-game label, V's clothing, manual saves and loading.
     aDispatcher.Register({"ui.message", Access::Notify, RunOn::BridgeThread,
                           "Shows a short message under the bridge's in-game label (CET layer); clear removes them.", &UiMessage});
+    // Bridge 0.5.3, TEMPORARY TEST FEATURES (the ink UI demos, core/InkUi.hpp): the HUD panel and nameplates (notify), map pins
+    // (world class).
+    aDispatcher.Register({"ui.hud", Access::Notify, RunOn::BridgeThread,
+                          "Shows, hides or moves the ink HUD panel; switches the showroom's nameplates and the CET label (test feature).", &UiHud});
+    aDispatcher.Register(WriteMethod("world.pin", Access::WriteWorld, RunOn::GameThread,
+                                     "Places an XF map pin with a label at a world point, above a showroom head or V (test feature).", &WorldPin));
+    aDispatcher.Register(WriteMethod("world.pin.clear", Access::WriteWorld, RunOn::GameThread,
+                                     "Removes one XF map pin or all of them (test feature).", &WorldPinClear));
     aDispatcher.Register(WriteMethod("inventory.equip", Access::WriteInventory, RunOn::BridgeThread,
                                      "Equips a clothing item (adding it to V's inventory only if asked); off unless the inventory class is allowed.",
                                      &InventoryEquipMethod));

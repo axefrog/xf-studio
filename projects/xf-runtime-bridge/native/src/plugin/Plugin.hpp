@@ -14,6 +14,7 @@
 #include "core/Bridge.hpp"
 #include "core/Config.hpp"
 #include "core/GameThreadQueue.hpp"
+#include "core/InkUi.hpp"
 #include "core/Layers.hpp"
 #include "core/Log.hpp"
 #include "core/Messages.hpp"
@@ -79,6 +80,10 @@ struct State
     // (XFBridge_Messages). Cleared by the kill switch; a killed bridge shows none.
     MessageBoard messages;
 
+    // Bridge 0.5.3, temporary test feature: the ink HUD panel's settings (ui.hud), read with the bridge's state and the
+    // message lines by the redscript layer through XFBridge_Hud (core/InkUi.hpp). Defaults from [ui] in config.ini.
+    inkui::HudPanel hud;
+
     // Reconnect after the kill switch (the CET panel's button, XFBridge_Rearm): requested from script,
     // carried out by the next Running ticks once the old listener has stopped and the kill switch's
     // restore has run (Main.cpp). The outcome is reported through XFBridge_Info (last_rearm).
@@ -91,4 +96,6 @@ struct State
 State& Get();
 std::string GameStateName(int aState);
 nlohmann::json InfoJson();
+// XFBridge_Hud's answer: the panel's settings, the bridge's state and the message lines as a text frame (core/InkUi.hpp).
+std::string HudFrame();
 } // namespace xfb::plugin
