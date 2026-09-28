@@ -10,7 +10,7 @@ Two halves, research first:
 1. **Our own ImGui host in the bridge's RED4ext plugin** for editing and testing tools: panels always drawn over the game, a hotkey switching an interact mode that captures the mouse for XF controls without hiding them or pausing the game, and pass-through when it's off. This replaces reliance on CET's overlay, whose windows take input only while the overlay is open and blocks the game. Research: hooking frame presentation cooperatively beside CET, ReShade and frame generation; input capture and release; DPI; crash safety.
 2. **The engine's own UI (ink) for player-facing features** that match the game's look and UX: HUD layers, custom widgets and styles, menus with the game's cursor, world-space ink on in-world screens, animation, input registration. Mod survey batch B8 (inventory and menu UI) and the UI parts of other batches feed it ([mod ecosystem](../mod-ecosystem/README.md)).
 
-Infrastructure for the integration, not a 1.0 product feature; it starts when an agent slot frees.
+Infrastructure for the integration, not a 1.0 product feature; the ink half started on 29 September (branch `claude/rnd-ink`). The wider ambition list it serves is the [in-game possibilities register](in-game-possibilities.md).
 
 ## Ranked tracks
 
