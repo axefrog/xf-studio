@@ -3,7 +3,7 @@
  * None claims equivalence to the browser's separately lit transparent layers.
  */
 import { canonicalFinish, defaultFlakes, type LegacyFlakes } from "./finish";
-import { bakeShimmerGrain, SHIMMER_GRAIN } from "./shimmer-grain";
+import { bakeShimmerGrain, grainCellsPerTexel, grainPitch, SHIMMER_GRAIN } from "./shimmer-grain";
 import {
   flatSurface, fresnelMaterial, planPresetExport, ROUTE_ADAPTER,
   type ExportRoute, type TextureChannel,
@@ -87,9 +87,14 @@ function layerOptics(layer: Layer, t: Target) {
   const finish = canonicalFinish(layer.finish);
   if (finish === "shimmer") {
     const flakes = (layer.flakes && !("model" in layer.flakes) ? layer.flakes : defaultFlakes()) as LegacyFlakes;
+    // A window compile lays one grain per texel (PIPE-124): a window whose texels hold several grains would average them into
+    // ripples below the mode-1 fade, so it is refused rather than exported faint.
+    const cells = grainCellsPerTexel(t.width, t.height, t.window);
+    if (!t.head && (cells.u !== 1 || cells.v !== 1))
+      throw Error(`Shimmer's grain needs one grain per texel; this ${t.width} × ${t.height} window holds ${cells.u} × ${cells.v}.`);
     const grain = bakeShimmerGrain(flakes, t.width, t.height, t.window);
-    return { roughness: (p: number) => grain.surface[p * 4 + 1] / 255, metalness: (p: number) => grain.surface[p * 4 + 2] / 255,
-      normal: (p: number): [number, number] => [unorm(grain.normal[p * 4]), unorm(grain.normal[p * 4 + 1])] };
+    return { roughness: (p: number) => grain.surface[p * 2] / 255, metalness: (p: number) => grain.surface[p * 2 + 1] / 255,
+      normal: (p: number): [number, number] => [unorm(grain.normal[p * 2]), unorm(grain.normal[p * 2 + 1])] };
   }
   const surface = flatSurface(finish);
   if (!surface) throw new UnsupportedMaterialError([{ id: layer.id, finish }]);
@@ -145,6 +150,15 @@ function strictPlan(recipe: Recipe) {
 
 /** Grid fields of a compiled map set: head keeps its historical `size`; a window records its rectangle. */
 const grid = (t: Target) => ({ width: t.width, height: t.height, ...(t.head ? { size: t.width } : { window: t.window }) });
+/** The manifest's account of Shimmer's grain on this map: its real pitch (PIPE-124) and what BC5 does to it (PIPE-125). */
+function shimmerNote(t: Target) {
+  const cells = grainCellsPerTexel(t.width, t.height, t.window), pitch = grainPitch(t.width, t.height, t.window);
+  const grid = cells.u === 1 && cells.v === 1 ? "one grain per texel" : `the mean of ${cells.u} × ${cells.v} grains per texel`;
+  return `Experimental Shimmer (${SHIMMER_GRAIN.model}): a uniform surface (roughness ${SHIMMER_GRAIN.roughness}, metalness ${SHIMMER_GRAIN.metalness}) ` +
+    `with a fine grain of tilted normals, ${grid} (${Math.round(pitch.u)} × ${Math.round(pitch.v)} grains per unit of head UV). ` +
+    `As compiled, every tilted grain (${SHIMMER_GRAIN.tiltFloorDeg} degrees or more) clears NormalsBlendingMode 1's fade; ` +
+    "BC5 compression lowers a few (WolvenKit 9.0.1, measured offline: about 2 % below full weight).";
+}
 const spaceNote = (t: Target) => t.head ? [] : [
   "Plate-local UV window: the texture covers only the plate's UV rectangle; the material's UVScale/UVOffset map the plate's stored UVs onto it."];
 
@@ -191,7 +205,7 @@ export function compileFacetedPreset(value: unknown, region: CompileRegion, spac
       normalEncoding: "tangent X, Y as UNORM; flat outside coverage; BC5 via TCM_Normalmap",
       material: { ...FLAT_MATERIAL, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1 },
       limitations: [
-        `Experimental Shimmer (${SHIMMER_GRAIN.model}): a uniform surface (roughness ${SHIMMER_GRAIN.roughness}, metalness ${SHIMMER_GRAIN.metalness}) with a fine grain of tilted normals, ${SHIMMER_GRAIN.cellsPerUv} cells per unit of head UV; every tilted grain (${SHIMMER_GRAIN.tiltFloorDeg} degrees or more) clears NormalsBlendingMode 1's fade.`,
+        shimmerNote(t),
         "Normal alpha follows the colour-map alpha (sqrt coverage).",
         "Grain tilt direction follows the texture's green axis, whose on-plate sign is untested; random grain azimuths make the statistics sign-independent.",
         ...spaceNote(t),

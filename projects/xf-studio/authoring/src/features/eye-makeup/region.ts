@@ -95,6 +95,11 @@ export const EYE_MAKEUP_REGION: LayeredMakeupRegion = Object.freeze({
   skin: Object.freeze({ mmPerUv: Object.freeze({ u: 569, v: 405 }), texelMm: 0.13 }),
   fineGlitter: Object.freeze({ id: "eye-region-global-ids-1", regions: EYE_FINE_GLITTER_REGIONS }),
   /**
+   * Shimmer's preview grain: 2048 × 1024 grain cells (half by a quarter of the head atlas at 4096 per unit), around the eye
+   * plate's UV rectangle (u 0.266–0.734, v 0.176–0.326 on the built-in plate, experiment 019) with margin on every side.
+   */
+  opticsWindow: Object.freeze({ u0: .25, u1: .75, v0: .125, v1: .375 }),
+  /**
    * `mesh_decal` transforms every texture UV by UVScale/UVOffset, so the flat and faceted routes spend their texels
    * on the plate-local window (plate-uv-window.ts): 2048 × 512, about 4.3 × 3.3 times the head atlas's linear density
    * on the plate (0.13 × 0.12 mm per texel against 0.56 × 0.40 mm). The diagnostic Glitter route's window is

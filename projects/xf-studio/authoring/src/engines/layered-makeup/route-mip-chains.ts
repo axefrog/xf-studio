@@ -27,8 +27,6 @@ const clip01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const toByte = (v: number) => Math.floor(clip01(v) * 255 + .5);
 const unorm = (b: number) => b / 255 * 2 - 1;
 
-/** Plain 2x2 BOX mean of `planes` interleaved float channels of a square level. */
-const halvePlanes = (level: Float64Array<ArrayBufferLike>, side: number, planes: number) => reducePlanes(level, side, side, planes);
 
 export interface FacetedMipChain {
   readonly diffuse: readonly Uint8Array[];
@@ -115,36 +113,86 @@ export function normalRgba(xy: Uint8Array): Uint8Array {
  * Browser preview of one game-matched Shimmer layer, following the faceted export route:
  * every level fades facet tilts as NormalsBlendingMode 1 does (alpha = saturate(50 - 50z), applied
  * here as a scale on X/Y against the flat plate normal), and lower levels widen roughness by the
- * unresolved facet variance exactly as the export chain does. `normal` is RGBA (X, Y, Z, 255);
- * `surface` is the preview's packed RGBA (R facet coverage, G roughness, B metalness).
+ * unresolved facet variance exactly as the export chain does. Inputs are the export's two channels:
+ * `normal` X, Y and `surface` roughness, metalness per texel of a width × height power-of-two map.
+ * Output levels are the RGBA the preview uploads: normal (X, Y, Z, 255) and surface (0, roughness,
+ * metalness, 255).
+ *
+ * A cooperative job (the raster worker drains it in slices, off the main thread): level 0 is encoded
+ * from the bytes, level 1 is reduced straight from the bytes, and only the lower levels hold float
+ * planes (x, y, x²+y², roughness, metalness), so a 2048 × 1024 grain peaks near 20 MB of planes.
+ * Each advance unit is one texel written or reduced.
  */
-export function previewFacetChains(normal: Uint8Array, surface: Uint8Array, size: number): { normal: Uint8Array[]; surface: Uint8Array[] } {
-  mipLevelCount(size);
-  const texels = size * size;
-  if (normal.length !== texels * 4 || surface.length !== texels * 4) throw new RangeError("Preview facet maps do not match size");
-  // Planes: x, y, x²+y², coverage, roughness, metalness.
-  let planes: Float64Array<ArrayBufferLike> = new Float64Array(texels * 6), side = size;
-  for (let i = 0; i < texels; i++) {
-    const x = unorm(normal[i * 4]), y = unorm(normal[i * 4 + 1]);
-    planes.set([x, y, x * x + y * y, surface[i * 4] / 255, surface[i * 4 + 1] / 255, surface[i * 4 + 2] / 255], i * 6);
-  }
-  const encode = (level: Float64Array<ArrayBufferLike>, n: number, widen: boolean) => {
-    const nb = new Uint8Array(n * 4), sb = new Uint8Array(n * 4);
-    for (let i = 0; i < n; i++) {
-      const o = i * 6, x = level[o], y = level[o + 1];
-      const fade = clip01(50 - 50 * Math.sqrt(Math.max(0, 1 - x * x - y * y))), fx = x * fade, fy = y * fade;
-      nb.set([toByte(fx * .5 + .5), toByte(fy * .5 + .5), toByte(Math.sqrt(Math.max(0, 1 - fx * fx - fy * fy)) * .5 + .5), 255], i * 4);
-      const r = level[o + 4], variance = widen ? Math.max(0, level[o + 2] - (x * x + y * y)) : 0;
-      sb.set([toByte(level[o + 3]), toByte(Math.pow((r * r) * (r * r) + variance, .25)), toByte(level[o + 5]), 255], i * 4);
-    }
-    return { nb, sb };
+export function createPreviewFacetChainJob(normal: Uint8Array, surface: Uint8Array, width: number, height = width) {
+  const dims = mipDimensions(width, height), texels = width * height;
+  if (normal.length !== texels * 2 || surface.length !== texels * 2) throw new RangeError("Preview facet maps do not match size");
+  const normals: Uint8Array<ArrayBuffer>[] = [], surfaces: Uint8Array<ArrayBuffer>[] = [];
+  let level = 0, cursor = 0, done = false;
+  let planes: Float64Array<ArrayBufferLike> | undefined;
+  let nb = new Uint8Array(texels * 4), sb = new Uint8Array(texels * 4);
+  /** One texel of a level: its mean X, Y, the mean of x²+y², roughness and metalness. */
+  const encode = (i: number, x: number, y: number, m2: number, r: number, metal: number, widen: boolean) => {
+    const fade = clip01(50 - 50 * Math.sqrt(Math.max(0, 1 - x * x - y * y))), fx = x * fade, fy = y * fade, o = i * 4;
+    nb[o] = toByte(fx * .5 + .5); nb[o + 1] = toByte(fy * .5 + .5); nb[o + 2] = toByte(Math.sqrt(Math.max(0, 1 - fx * fx - fy * fy)) * .5 + .5); nb[o + 3] = 255;
+    const variance = widen ? Math.max(0, m2 - (x * x + y * y)) : 0;
+    sb[o + 1] = toByte(Math.sqrt(Math.sqrt((r * r) * (r * r) + variance))); sb[o + 2] = toByte(metal); sb[o + 3] = 255;
   };
-  const first = encode(planes, texels, false), normals = [first.nb], surfaces = [first.sb];
-  while (side > 1) {
-    planes = halvePlanes(planes, side, 6);
-    side /= 2;
-    const next = encode(planes, side * side, true);
-    normals.push(next.nb); surfaces.push(next.sb);
-  }
-  return { normal: normals, surface: surfaces };
+  const finishLevel = () => {
+    normals.push(nb); surfaces.push(sb); level++; cursor = 0;
+    if (level === dims.length) { done = true; planes = undefined; return; }
+    const n = dims[level].width * dims[level].height;
+    nb = new Uint8Array(n * 4); sb = new Uint8Array(n * 4);
+    if (level === 1) planes = new Float64Array(n * 5);
+    else planes = reducePlanes(planes!, dims[level - 1].width, dims[level - 1].height, 5);
+  };
+  return {
+    get done() { return done; },
+    get normal() { return normals; },
+    get surface() { return surfaces; },
+    advance(maxWork: number) {
+      if (!(maxWork > 0)) throw Error("Invalid chain slice size.");
+      let work = 0;
+      while (!done && work < maxWork) {
+        const { width: w, height: h } = dims[level], n = w * h;
+        const end = Math.min(n, cursor + Math.max(1, Math.min(maxWork - work, n)));
+        if (level === 0) {
+          for (let i = cursor; i < end; i++) {
+            const x = unorm(normal[i * 2]), y = unorm(normal[i * 2 + 1]);
+            encode(i, x, y, 0, surface[i * 2] / 255, surface[i * 2 + 1] / 255, false);
+          }
+        } else if (level === 1) {
+          // The plain box mean of the decoded base texels, in the flat chain's float order ((a + b) + c) + d.
+          const pw = dims[0].width, square = pw > 1 && dims[0].height > 1, p = planes!;
+          let sx = 0, sy = 0, sm = 0, sr = 0, sl = 0;
+          const add = (t: number) => {
+            const x = unorm(normal[t * 2]), y = unorm(normal[t * 2 + 1]);
+            sx += x; sy += y; sm += x * x + y * y; sr += surface[t * 2] / 255; sl += surface[t * 2 + 1] / 255;
+          };
+          for (let i = cursor; i < end; i++) {
+            sx = sy = sm = sr = sl = 0;
+            if (square) {
+              const row = (i / w) | 0, t = 2 * row * pw + 2 * (i - row * w);
+              add(t); add(t + 1); add(t + pw); add(t + pw + 1);
+            } else { add(2 * i); add(2 * i + 1); }
+            const k = square ? 4 : 2, o = i * 5;
+            p[o] = sx / k; p[o + 1] = sy / k; p[o + 2] = sm / k; p[o + 3] = sr / k; p[o + 4] = sl / k;
+            encode(i, p[o], p[o + 1], p[o + 2], p[o + 3], p[o + 4], true);
+          }
+        } else {
+          const p = planes!;
+          for (let i = cursor; i < end; i++) { const o = i * 5; encode(i, p[o], p[o + 1], p[o + 2], p[o + 3], p[o + 4], true); }
+        }
+        work += end - cursor; cursor = end;
+        if (cursor === n) finishLevel();
+      }
+      return done;
+    },
+  };
+}
+
+/** Synchronous preview chains (tests and small maps); the worker drains `createPreviewFacetChainJob`. */
+export function previewFacetChains(normal: Uint8Array, surface: Uint8Array, width: number, height = width): { normal: Uint8Array[]; surface: Uint8Array[] } {
+  const job = createPreviewFacetChainJob(normal, surface, width, height);
+  job.advance(Infinity);
+  return { normal: job.normal, surface: job.surface };
 }

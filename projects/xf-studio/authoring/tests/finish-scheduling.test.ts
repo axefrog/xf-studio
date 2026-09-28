@@ -1,9 +1,10 @@
 import {expect,test} from "bun:test";
 import {createHash} from "node:crypto";
-import {bakeFlakes,createFlakeJob,defaultFlakes,type Flakes} from "../src/engines/layered-makeup/finish";
-import {bakeShimmerGrain} from "../src/engines/layered-makeup/shimmer-grain";
+import {bakeFlakes,createFlakeJob,defaultFlakes,type Flakes,type FlakeMaps} from "../src/engines/layered-makeup/finish";
+import {bakeShimmerGrain,isGrainOptics,previewGrainGrid,type GrainOptics} from "../src/engines/layered-makeup/shimmer-grain";
+import {previewFacetChains} from "../src/engines/layered-makeup/route-mip-chains";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
-import { initialRecipe, raster, EYE_RASTER_REGION } from "./fixtures/eye-region";
+import { initialRecipe, raster, EYE_RASTER_REGION, previewOpticalKey } from "./fixtures/eye-region";
 
 // Captured from the unmodified synchronous baker before this scheduling change.
 const frozen: {size:number;finish:"shimmer"|"glitter";p:Flakes;sha256:string}[] = [
@@ -69,7 +70,7 @@ test("complete optical bundles use immutable requested settings and matching res
   while(!done){resumes.shift()?.();await Promise.resolve();}
   await pending;expect(responses.length).toBe(1);
   const result=responses[0];expect(result.cancelled).not.toBe(true);
-  if(!result.cancelled){expect(result.size).toBe(33);expect(result.data).toEqual(raster(original,33));expect(result.optics?.size).toBe(33);expect(digest(result.optics!)).toBe(digest(bakeFlakes(33,"shimmer",original.flakes!)));}
+  if(!result.cancelled){expect(result.size).toBe(33);expect(result.data).toEqual(raster(original,33));expect((result.optics as FlakeMaps)?.size).toBe(33);expect(digest(result.optics as FlakeMaps)).toBe(digest(bakeFlakes(33,"shimmer",original.flakes!)));}
 });
 
 test("nonoptical, disabled and opt-out requests avoid the optical phase",async()=>{
@@ -87,5 +88,17 @@ test("game-matched Shimmer previews the export's grain; the earlier study keeps 
   const processor=createRasterProcessor(r=>{result=r;},async()=>{},()=>0);
   await processor.start({ region: EYE_RASTER_REGION,i:0,version:1,layer,size:64,bakeOptics:true});
   expect(result?.cancelled).not.toBe(true);
-  if(result&&!result.cancelled){const grain=bakeShimmerGrain(defaultFlakes(),64);expect(result.optics?.normal).toEqual(grain.normal);expect(result.optics?.surface).toEqual(grain.surface);}
+  if(result&&!result.cancelled){
+    // The grain at its true scale over the region's optics window, whatever the mask size, as the route's complete chains.
+    const grid=previewGrainGrid(EYE_RASTER_REGION.opticsWindow),grain=bakeShimmerGrain(defaultFlakes(),grid.width,grid.height,grid.window);
+    const chains=previewFacetChains(grain.normal,grain.surface,grid.width,grid.height),optics=result.optics as GrainOptics;
+    expect(isGrainOptics(result.optics)).toBe(true);
+    expect([optics.width,optics.height,optics.window]).toEqual([grid.width,grid.height,grid.window]);
+    expect(optics.normal).toEqual(chains.normal as Uint8Array<ArrayBuffer>[]);expect(optics.surface).toEqual(chains.surface as Uint8Array<ArrayBuffer>[]);
+    expect(optics.normal.length).toBe(12);expect(optics.normal[0].length).toBe(2048*1024*4);
+  }
+  // A different preview size reuses the same grain: its identity has no size, and no cells (CORE-120).
+  const other={...layer,flakes:{...defaultFlakes(),cells:200}};
+  expect(previewOpticalKey(other,2048)).toBe(previewOpticalKey(layer,512));
+  expect(previewOpticalKey({...layer,flakes:{...defaultFlakes(),seed:5}},512)).not.toBe(previewOpticalKey(layer,512));
 });

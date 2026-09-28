@@ -39,6 +39,27 @@ test("memory assessment counts enabled allocations, shared optical maps, exact m
   expect(recipe).toEqual(before);
 });
 
+test("game-matched Shimmer's grain is counted at its own fixed size, with its composite and worker peak (PREV-183)",()=>{
+  const recipe=initialRecipe();recipe.layers[0].finish="shimmer";recipe.layers[0].optics={model:"game-matched-1"};
+  const grainBase=2048*1024*4;let grainChain=0;
+  for(let w=2048,h=1024;;w=Math.max(1,w/2),h=Math.max(1,h/2)){grainChain+=w*h*4;if(w===1&&h===1)break;}
+  const composite=Math.round(2048*1024*2*(10+11*4/3));
+  const bySize=PREVIEW_TEXTURE_SIZES.map(size=>{
+    const base=4*size**2,gpu=Array.from({length:Math.log2(size)+1},(_,i)=>4*(size/2**i)**2).reduce((a,b)=>a+b,0);
+    const q=assessPreviewQuality(recipe,size,8192,Number.MAX_SAFE_INTEGER);
+    expect(q.grainLayers).toBe(1);expect(q.opticalLayers).toBe(1);expect(q.generatedMaps).toBe(3);
+    expect(q.cpuBytes).toBe(base+2*grainChain);expect(q.gpuBytes).toBe(gpu+2*grainChain+composite);
+    expect(q.stagingBytes).toBe(base+gpu+4*grainChain);
+    expect(q.workerBytes).toBe(base+2*grainChain+14*grainBase/4);
+    return q;
+  });
+  // What the grain adds does not grow with the preview size: 4096 costs more than 512 only by its larger mask, as a plain layer does.
+  const plain=initialRecipe(),at=(r:typeof recipe,size:number)=>assessPreviewQuality(r,size,8192,Number.MAX_SAFE_INTEGER).estimatedBytes;
+  expect(bySize[3]!.estimatedBytes-bySize[0]!.estimatedBytes).toBe(at(plain,4096)-at(plain,512));
+  // One game-matched Shimmer layer fits the default budget at every size, 4096 included (it used to need 805 MB of worker planes).
+  for(const size of PREVIEW_TEXTURE_SIZES)expect(assessPreviewQuality(recipe,size,8192).accepted).toBe(true);
+});
+
 test("hardware and memory limits reject explicitly without downgrading the requested size",()=>{
   const recipe=initialRecipe();
   const unsupported=assessPreviewQuality(recipe,4096,2048);

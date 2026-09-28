@@ -42,6 +42,12 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     expect(facet.earlierLevel0).toBeGreaterThan(facet.exportLevel0 + 0.05);
   });
 
+  test("game-matched Shimmer's grain over a window of head UV reaches the composite texel for texel, unfaded (PREV-182)", () => {
+    expect(probe.windowed.texels).toBe(256);
+    // Each grain lands on its own composite texel at the export's normal bytes (a half-float tie can round one byte away).
+    expect(probe.windowed.normalMaxError).toBeLessThanOrEqual(1.2);
+  });
+
   test("the 8-bit chain stays within a few byte steps of the export's", () => {
     const byte = probe.chains.find(chain => chain.precision === "8-bit")!;
     const [level0, level2] = byte.levels;

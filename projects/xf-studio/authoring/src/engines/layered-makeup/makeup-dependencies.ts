@@ -117,11 +117,18 @@ export function irregularAlbedoKey(optics: OpticalKey, alpha: AlphaKey, baseColo
   return key("albedo", [version(compositionVersion), optics, alpha, colour(baseColour), colour(flakeColour)]);
 }
 
-/** Browser preview optical-map identity for one layer at one preview tier (pure; shared by device and measurement services). */
+/**
+ * Browser preview optical-map identity for one layer at one preview tier (pure; shared by the device, the stack and the
+ * measurement services). Game-matched Shimmer bakes its grain, not the classic flakes: its identity is only what the grain
+ * reads (amount, angle and seed). Flake fineness (`cells`) does not apply to it (the application refuses the setting; a value
+ * stored before stays with the layer for Glitter, CORE-120), and neither does the preview size, since the grain is baked at
+ * its true scale over the region's optics rectangle at every size.
+ */
 export function previewOpticalKey(layer: ReadonlyDeep<Layer>, size: number, fine: FineGlitterScope) {
-  return isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? studioIrregularOpticalKey(layer.flakes, size, fine)
-    // Game-matched Shimmer bakes its grain, not the classic flakes.
-    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size,
-      ...(canonicalFinish(layer.finish) === "shimmer" && layer.optics ? [SHIMMER_GRAIN.model] : [])]);
+  if (isIrregular(layer.flakes) && layer.finish === "glitter") return studioIrregularOpticalKey(layer.flakes, size, fine);
+  if (canonicalFinish(layer.finish) === "shimmer" && layer.optics) {
+    const f = layer.flakes && !("model" in layer.flakes) ? layer.flakes as ReadonlyDeep<LegacyFlakes> : defaultFlakes();
+    return JSON.stringify(["shimmer", SHIMMER_GRAIN.model, f.density, f.tilt, f.seed]);
+  }
+  return JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size]);
 }

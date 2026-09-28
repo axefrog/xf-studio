@@ -18,7 +18,7 @@ import { type PlateUnderlay } from "../src/engines/layered-makeup/render/makeup-
 import { FULL_WINDOW } from "../src/engines/layered-makeup/render/plate-blend";
 import { createPlateComposite, type CompositeTextures } from "../src/engines/layered-makeup/render/plate-composite";
 import { type Layer } from "../src/engines/layered-makeup/recipe";
-import { facetedMipChain } from "../src/engines/layered-makeup/route-mip-chains";
+import { facetedMipChain, previewFacetChains } from "../src/engines/layered-makeup/route-mip-chains";
 import { createStudioEnvironment, ROOM_ENVIRONMENT_SH } from "../src/studio-environment";
 import { createLayeredMaterial, layerBakeParameters, layeredContextRestored } from "../src/layered-material";
 import type { RenderLayer } from "../src/render-detail";
@@ -33,6 +33,8 @@ export type PlateCompositeProbe = {
   chains: { precision: "half-float" | "8-bit"; levels: ChainComparison[] }[];
   /** The finding's case at one facet texel: Shimmer 50 % over Glossy 50 %. */
   facet: { exportLevel0: number; previewLevel0: number; exportLevel2: number; previewLevel2: number; earlierLevel0: number };
+  /** Game-matched Shimmer's grain over a window of head UV, read by the composite through the maps' transform (PREV-182). */
+  windowed: { normalMaxError: number; texels: number };
   mips: { layers: number; perUpdate: number; draws: { layerDraws: number; resolves: number; levelDraws: number } };
   environment: { shMaxError: number; probe: number[]; pmrem: number[] };
   restore: { before: { plate: number[]; skin: number[] }; unhooked: { plate: number[]; skin: number[] }; hooked: { plate: number[]; skin: number[] } };
@@ -40,7 +42,7 @@ export type PlateCompositeProbe = {
   layered: { before: number[]; unhooked: number[]; hooked: number[]; states: string[] };
 };
 const probe: PlateCompositeProbe = { ok: false, errors: [], renderer: "", halfFloat: false, chains: [],
-  facet: { exportLevel0: 0, previewLevel0: 0, exportLevel2: 0, previewLevel2: 0, earlierLevel0: 0 }, mips: { layers: 0, perUpdate: 0, draws: { layerDraws: 0, resolves: 0, levelDraws: 0 } },
+  facet: { exportLevel0: 0, previewLevel0: 0, exportLevel2: 0, previewLevel2: 0, earlierLevel0: 0 }, windowed: { normalMaxError: Infinity, texels: 0 }, mips: { layers: 0, perUpdate: 0, draws: { layerDraws: 0, resolves: 0, levelDraws: 0 } },
   environment: { shMaxError: 0, probe: [], pmrem: [] },
   restore: { before: { plate: [], skin: [] }, unhooked: { plate: [], skin: [] }, hooked: { plate: [], skin: [] } },
   layered: { before: [], unhooked: [], hooked: [], states: [] } };
@@ -116,7 +118,12 @@ try {
   const stack = plateIn(scene);
   stack.setCanvases([maskCanvas(glossyAlpha), maskCanvas((x, y) => shimmerAlpha[y * SIZE + x]!)]);
   stack.updateLayer(0, { ...base, id: "glossy", finish: "glossy", optics: GAME });
-  stack.updateLayer(1, { ...base, id: "shimmer", finish: "shimmer", optics: GAME }, { size: SIZE, normal, surface });
+  // Game-matched Shimmer's maps come as the grain's route chains over a window of head UV: here the whole atlas at SIZE.
+  const xy = new Uint8Array(texels * 2), rm = new Uint8Array(texels * 2);
+  for (let p = 0; p < texels; p++) { xy[p * 2] = normal[p * 4]!; xy[p * 2 + 1] = normal[p * 4 + 1]!; rm[p * 2] = surface[p * 4 + 1]!; rm[p * 2 + 1] = surface[p * 4 + 2]!; }
+  const chains = previewFacetChains(xy, rm, SIZE);
+  stack.updateLayer(1, { ...base, id: "shimmer", finish: "shimmer", optics: GAME }, { window: { u0: 0, u1: 1, v0: 0, v1: 1 }, width: SIZE, height: SIZE,
+    normal: chains.normal as Uint8Array<ArrayBuffer>[], surface: chains.surface as Uint8Array<ArrayBuffer>[] });
   stack.prepareBlend(renderer);
   if (stack.blendDiagnostics().plate.route !== "faceted") throw Error("The probe's stack is not the faceted route.");
   check("the stack's composite");
@@ -174,6 +181,33 @@ try {
     }
     composite.dispose();
     check(`the ${precision} chain`);
+  }
+
+  // 1b. A grain over the middle half of head UV (game-matched Shimmer's maps: one grain per texel of a window), fully covered and
+  //     alone: the composite, at twice the grain's texel count over the whole atlas, puts each grain on one of its texels, unfaded,
+  //     as the export's normal bytes.
+  {
+    const G = SIZE, area = { u0: 0.25, u1: 0.75, v0: 0.25, v1: 0.75 }, xy = new Uint8Array(G * G * 2), rm = new Uint8Array(G * G * 2);
+    for (let p = 0; p < G * G; p++) {
+      const tilt = 0.3 + 0.3 * next(), azimuth = 2 * Math.PI * next();
+      xy[p * 2] = byte(tilt * Math.cos(azimuth) * .5 + .5); xy[p * 2 + 1] = byte(tilt * Math.sin(azimuth) * .5 + .5);
+      rm[p * 2] = byte(0.32); rm[p * 2 + 1] = byte(0.3);
+    }
+    const grain = previewFacetChains(xy, rm, G), windowed = plateIn(new THREE.Scene());
+    windowed.setCanvases([maskCanvas(() => 255)]);
+    windowed.updateLayer(0, { ...base, id: "grain", finish: "shimmer", optics: GAME }, { window: area, width: G, height: G,
+      normal: grain.normal as Uint8Array<ArrayBuffer>[], surface: grain.surface as Uint8Array<ArrayBuffer>[] });
+    const composite = createPlateComposite(FULL_WINDOW), side = 2 * G;
+    const textures = composite.update(renderer, windowed.materials.slice(), side);
+    const scale = composite.halfFloat ? 255 : 1, merged = readTextureLevel(renderer, textures.normal, { width: side, height: side }, 0, composite.halfFloat).data;
+    let worst = 0;
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      const at = ((y + G / 2) * side + x + G / 2) * 4;
+      for (let k = 0; k < 2; k++) worst = Math.max(worst, Math.abs(merged[at + k]! * scale - xy[(y * G + x) * 2 + k]!));
+    }
+    probe.windowed = { normalMaxError: worst, texels: G * G };
+    composite.dispose(); windowed.setCanvases([]);
+    check("the windowed grain");
   }
 
   // 2. Mip generations per update with twelve layers: once the masks are uploaded, only the merged target's three.

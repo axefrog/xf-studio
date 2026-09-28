@@ -15,6 +15,17 @@ export const addLayer = (): EyeMakeupAction => ({ kind: "layer.edit", command: {
 /** Layer creation; refused (with a reason) while no preset owns the editor. */
 export const addLayerCapability = (ctx: EyeMakeupViewContext) => ctx.facade.capability(addLayer());
 
+/**
+ * How the classic Flake fineness control shows for its capability on a layer (CORE-121). It is hidden only where the setting does
+ * not apply: the application refuses it as a mode of the layer on that field (game-matched Shimmer's grain has one size). Any
+ * other refusal, such as a temporary one, disables it with its reason, as every control does.
+ */
+export function finenessState(capability: ReturnType<EyeMakeupViewContext["facade"]["capability"]>): { hidden: boolean; disabled: boolean; reason?: string } {
+  if (capability.available) return { hidden: false, disabled: false };
+  const notApplicable = capability.issue?.code === "mode" && capability.issue.field === "cells";
+  return notApplicable ? { hidden: true, disabled: false } : { hidden: false, disabled: true, reason: capability.reason };
+}
+
 type Catalogues = {
   readonly finishes: ReturnType<EyeMakeupFacade["finishCatalogue"]>;
   readonly glitterModels: ReturnType<EyeMakeupFacade["glitterModelCatalogue"]>;

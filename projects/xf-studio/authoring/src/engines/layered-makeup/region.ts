@@ -9,6 +9,7 @@ import type { FlakeRegion } from "./flake-field";
 import type { LayerModelRegistry } from "./layer-models";
 import type { Layer, Recipe } from "./recipe";
 import type { SkinScale } from "./mottle";
+import type { UvWindow } from "./plate-uv-window";
 export type { SkinScale } from "./mottle";
 
 /**
@@ -54,6 +55,12 @@ export interface LayeredMakeupRegion {
   /** Millimetres on the skin per unit UV and the export texel size: mottle's grain is set in skin millimetres. */
   readonly skin: SkinScale;
   readonly fineGlitter: FineGlitterScope;
+  /**
+   * The head-UV rectangle over which the browser preview bakes true-to-scale optical detail: game-matched Shimmer's grain,
+   * one cell per texel (shimmer-grain.ts `previewGrainGrid`: edges on the grain grid, power-of-two sides). It must cover
+   * the surface's UVs; outside it the preview has no grain.
+   */
+  readonly opticsWindow: UvWindow;
   readonly textures: RegionTextures;
   readonly wording: RegionWording;
   /** First-run content: a new look's part. */
@@ -63,9 +70,9 @@ export interface LayeredMakeupRegion {
 }
 
 /** The plain-data part of a region a raster worker needs: it crosses a worker boundary with each request. */
-export type RasterRegion = Readonly<{ mirror: Mirror; skin: SkinScale; fineGlitter: FineGlitterScope; wording: Pick<RegionWording, "area"> }>;
-export const rasterRegion = (region: Pick<LayeredMakeupRegion, "mirror" | "skin" | "fineGlitter" | "wording">): RasterRegion =>
-  ({ mirror: region.mirror, skin: region.skin, fineGlitter: region.fineGlitter, wording: { area: region.wording.area } });
+export type RasterRegion = Readonly<{ mirror: Mirror; skin: SkinScale; fineGlitter: FineGlitterScope; opticsWindow: UvWindow; wording: Pick<RegionWording, "area"> }>;
+export const rasterRegion = (region: Pick<LayeredMakeupRegion, "mirror" | "skin" | "fineGlitter" | "opticsWindow" | "wording">): RasterRegion =>
+  ({ mirror: region.mirror, skin: region.skin, fineGlitter: region.fineGlitter, opticsWindow: region.opticsWindow, wording: { area: region.wording.area } });
 
 /** Where a symmetric layer's sample at (u, v) is mirrored to. */
 export function mirrored(mirror: Mirror): (u: number, v: number) => [number, number] {

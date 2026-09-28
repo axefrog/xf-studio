@@ -1,15 +1,16 @@
 import * as THREE from "three";
 import { extendSkin } from "../../../skin";
 import { canonicalFinish, defaultFlakes, isIrregular } from "../finish";
-import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey} from "../makeup-dependencies";
+import {maskAlphaKey,studioIrregularOpticalKey,irregularAlbedoKey,previewOpticalKey} from "../makeup-dependencies";
 import type { Layer } from "../recipe";
 import type { FineGlitterScope } from "../region";
 import {installProceduralGlintStudy} from "./direct-glint";
 import {isDirectGlint} from "../direct-glint-settings";
 import {flatSurface,FRESNEL_SURFACE,layerExport,planPresetExport} from "../finish-export";
 import {installFresnelTint} from "./fresnel-tint";
-import {previewFacetChains} from "../route-mip-chains";
-import { SHIMMER_GRAIN } from "../shimmer-grain";
+import { isGrainOptics, SHIMMER_GRAIN, type GrainOptics } from "../shimmer-grain";
+import { mipDimensions } from "../flat-mip-chain";
+import type { UvWindow } from "../plate-uv-window";
 import {createPlateLightMaterial,plateBlendWindow} from "./plate-blend";
 import {createPlateComposite} from "./plate-composite";
 import { renderBand, RENDER_ORDER, type FeatureRenderer, type SkinLight } from "../../../platform/api/scene";
@@ -17,7 +18,8 @@ import { MAX_LAYERS } from "../recipe";
 /** Base under the earlier Glossy preview's separate clear coat (preview only; the game-matched Glossy uses the export surface). */
 const EARLIER_GLOSSY_BASE = { roughness: .16, metalness: 0 } as const;
 
-export type BakedOptics = { size: number; normal: Uint8Array<ArrayBuffer>; surface: Uint8Array<ArrayBuffer> };
+/** A layer's generated optical maps: at the mask's size (classic flakes), or game-matched Shimmer's grain chains over its window. */
+export type BakedOptics = { size: number; normal: Uint8Array<ArrayBuffer>; surface: Uint8Array<ArrayBuffer> } | GrainOptics;
 export type BakedAlbedo = {key:string; data:Uint8Array<ArrayBuffer>};
 /** The skin under each plate vertex (head-skin-placement.ts `surfaceUnderlay`): linear colour, roughness and metalness. */
 export type PlateUnderlay = { colour: THREE.BufferAttribute; roughness: THREE.BufferAttribute; metalness: THREE.BufferAttribute };
@@ -38,6 +40,12 @@ export type MakeupStackPlacement = {
   /** Slot `i`'s draw order (the feature's `RenderBand.order`; default: the feature-plate range from 10, one slot per layer). */
   renderOrder?(slot: number): number;
 };
+
+/** `window` widened to the nearest edges of a grid of `n` cells per unit of UV (the whole atlas stays whole). */
+export function snapWindow<W extends { u0: number; v0: number; u1: number; v1: number }>(window: W, n: number): W {
+  const lo = (x: number) => Math.max(0, Math.floor(x * n) / n), hi = (x: number) => Math.min(1, Math.ceil(x * n) / n);
+  return { ...window, u0: lo(window.u0), v0: lo(window.v0), u1: hi(window.u1), v1: hi(window.v1) };
+}
 
 /** The attributes the stack adds to its geometry (the skin under the plate); everything else on it is the anchor's (PREV-100). */
 export const STACK_ATTRIBUTES = ["xfsUnderlay", "xfsUnderRoughness", "xfsUnderMetalness"] as const;
@@ -70,14 +78,17 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   const attach = placement.attach ?? ((mesh: THREE.SkinnedMesh) => { anchor.parent!.add(mesh); });
   const renderOrder = placement.renderOrder ?? renderBand(RENDER_ORDER.featurePlates, MAX_LAYERS).order;
   const plates: THREE.SkinnedMesh[] = [], materials: THREE.MeshPhysicalMaterial[] = [], textures: THREE.CanvasTexture[] = [];
-  const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string }>();
+  const flakes = new Map<THREE.Material, { key: string; normal: THREE.DataTexture; surface: THREE.DataTexture; albedo?: THREE.DataTexture; albedoKey?:string;
+    /** Game-matched Shimmer's grain: its maps cover this window of head UV, one grain per texel. */
+    window?: UvWindow }>();
   const direct=new Map<THREE.Material,ReturnType<typeof installProceduralGlintStudy>>();
   const tints=new Map<THREE.Material,ReturnType<typeof installFresnelTint>>();
   // The exported plate as the game draws it (plate-blend.ts): the layers the export carries merge into one composite, and one
   // plate lights the blended surface once, with the skin's light. Each slot's own material stays the layer's source (and draws the
   // layer itself when the export leaves it out, or when the skin under the plate is unknown).
   const applied=new Map<THREE.Material,Layer>();
-  const composite=createPlateComposite(plateBlendWindow(anchor.geometry.getAttribute("uv")?.array));
+  // On the grain grid, so a composite at the grain's density reads each grain texel at its centre (never a blend of four).
+  const composite=createPlateComposite(snapWindow(plateBlendWindow(anchor.geometry.getAttribute("uv")?.array), SHIMMER_GRAIN.cellsPerUv));
   let underlay: PlateUnderlay | null = null, underlaySource: (() => PlateUnderlay | null) | null = null, underlayStale = false;
   let blendDirty = true;
   let merged: { slots: number[]; route: string | null } = { slots: [], route: null };
@@ -98,11 +109,8 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   let wireframe = false;
   const textured = (layer: Layer) => ["shimmer", "glitter"].includes(canonicalFinish(layer.finish)) &&
     !isDirectGlint(layer.flakes);
-  const keyFor = (layer: Layer, size: number) => isIrregular(layer.flakes) && layer.finish === "glitter"
-    ? studioIrregularOpticalKey(layer.flakes,size,fineGlitter)
-    // Game-matched Shimmer bakes the export's grain (shimmer-grain.ts) and uploads route-filtered mip chains.
-    : JSON.stringify([canonicalFinish(layer.finish), layer.flakes ?? defaultFlakes(), size, ...(layer.optics ? [layer.optics.model] : []),
-      ...(canonicalFinish(layer.finish) === "shimmer" && layer.optics ? [SHIMMER_GRAIN.model] : [])]);
+  // Game-matched Shimmer bakes the export's grain (shimmer-grain.ts) and uploads route-filtered mip chains.
+  const keyFor = (layer: Layer, size: number) => previewOpticalKey(layer, size, fineGlitter);
   const albedoKeyFor = (layer:Layer,size:number) => isIrregular(layer.flakes) && layer.finish === "glitter"
     ? irregularAlbedoKey(studioIrregularOpticalKey(layer.flakes,size,fineGlitter),maskAlphaKey(layer,size),layer.color,layer.flakes.color)
     : undefined;
@@ -211,20 +219,39 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
       // A new layer stays hidden; an existing one retains its last complete look.
       // Main publishes a new mask and its matching optics together in one turn.
       if (!optics) return;
-      if (optics.size !== size || optics.normal.length !== size * size * 4 || optics.surface.length !== size * size * 4)
-        throw new Error("Optical maps must match the completed preview mask size.");
-      // Game-matched Shimmer: the export route's mode-1 facet fade and variance-widened roughness mips.
-      const chains = layer.optics ? previewFacetChains(optics.normal, optics.surface, size) : undefined;
-      const map = (data: Uint8Array<ArrayBuffer>, levels?: Uint8Array[]) => {
-        const texture = new THREE.DataTexture(levels ? levels[0] as Uint8Array<ArrayBuffer> : data, size, size);
-        texture.flipY = false; texture.generateMipmaps = !levels;
-        if (levels) texture.mipmaps = levels.map((level, k) => ({ data: level, width: size >> k || 1, height: size >> k || 1 })) as unknown as typeof texture.mipmaps;
-        texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter;
-        texture.anisotropy = anisotropy; texture.needsUpdate = true;
-        return texture;
-      };
-      const next: {key:string;normal:THREE.DataTexture;surface:THREE.DataTexture;albedo?:THREE.DataTexture;albedoKey?:string} =
-        { key, normal: map(optics.normal, chains?.normal), surface: map(optics.surface, chains?.surface) };
+      const grain = canonicalFinish(layer.finish) === "shimmer" && !!layer.optics;
+      if (grain !== isGrainOptics(optics)) throw new Error("Game-matched Shimmer takes its grain maps; other layers their flake maps.");
+      let next: {key:string;normal:THREE.DataTexture;surface:THREE.DataTexture;albedo?:THREE.DataTexture;albedoKey?:string;window?:UvWindow};
+      if (isGrainOptics(optics)) {
+        // The grain's own grid over its window: the export route's mode-1 facet fade and variance-widened roughness mips.
+        const levels = mipDimensions(optics.width, optics.height);
+        const fits = (chain: Uint8Array[]) => chain.length === levels.length && chain.every((level, k) => level.length === levels[k].width * levels[k].height * 4);
+        if (!fits(optics.normal) || !fits(optics.surface)) throw new Error("Grain maps must be complete chains over their window.");
+        const map = (chain: Uint8Array<ArrayBuffer>[]) => {
+          const texture = new THREE.DataTexture(chain[0], optics.width, optics.height);
+          texture.flipY = false; texture.generateMipmaps = false;
+          texture.mipmaps = chain.map((data, k) => ({ data, ...levels[k] })) as unknown as typeof texture.mipmaps;
+          texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter;
+          // Head UV to the window's texture UV: the layer's own material reads it through Three's map transform, the composite
+          // through the same matrix (plate-composite.ts).
+          const w = optics.window, su = 1 / (w.u1 - w.u0), sv = 1 / (w.v1 - w.v0);
+          texture.repeat.set(su, sv); texture.offset.set(-w.u0 * su, -w.v0 * sv); texture.updateMatrix();
+          texture.anisotropy = anisotropy; texture.needsUpdate = true;
+          return texture;
+        };
+        next = { key, normal: map(optics.normal), surface: map(optics.surface), window: { ...optics.window } };
+      } else {
+        if (optics.size !== size || optics.normal.length !== size * size * 4 || optics.surface.length !== size * size * 4)
+          throw new Error("Optical maps must match the completed preview mask size.");
+        const map = (data: Uint8Array<ArrayBuffer>) => {
+          const texture = new THREE.DataTexture(data, size, size);
+          texture.flipY = false; texture.generateMipmaps = true;
+          texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter;
+          texture.anisotropy = anisotropy; texture.needsUpdate = true;
+          return texture;
+        };
+        next = { key, normal: map(optics.normal), surface: map(optics.surface) };
+      }
       clearFlakes(material); flakes.set(material, next);
     } else if (!useMaps) clearFlakes(material);
     if(directSettings){
@@ -320,7 +347,12 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     merged = { slots, route: slots.length ? plan.route : null };
     if (!slots.length) { plate.visible = false; plateLight.handle.setComposite(null, composite.window); composite.release(); return; }
     const maskSize = Math.max(1, ...slots.map(i => (materials[i]!.map?.image as { width?: number } | undefined)?.width ?? 1));
-    plateLight.handle.setComposite(composite.update(renderer, slots.map(i => materials[i]!), maskSize, anisotropy), composite.window);
+    // With Shimmer's grain merged, the composite holds one texel per grain (the export's own pitch), whatever the masks' size, within
+    // the grain's texel budget (the eye plate's rectangle takes about 1.2 M of its 2 M texels; a far larger surface gets a coarser composite).
+    const grain = slots.some(i => !!flakes.get(materials[i]!)?.window), w = composite.window;
+    const fit = Math.floor(Math.sqrt(SHIMMER_GRAIN.previewMaxTexels / ((w.u1 - w.u0) * (w.v1 - w.v0))));
+    const density = Math.max(maskSize, grain ? Math.min(SHIMMER_GRAIN.cellsPerUv, fit) : 0);
+    plateLight.handle.setComposite(composite.update(renderer, slots.map(i => materials[i]!), density, anisotropy), composite.window);
     plateLight.handle.setFresnel(plan.route === "fresnel" ? plan.included[0]?.optics?.shift ?? null : null);
     plate.renderOrder = renderOrder(slots[0]!);
     plate.visible = true;
