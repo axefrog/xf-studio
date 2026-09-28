@@ -51,6 +51,33 @@
 30. An in-game note hotkey that timestamps observations and captures into the session log.
 31. An XF mod manager built for scripted and AI use ([vision](../../docs/vision.md#two-kinds-of-mod)).
 
+## What the game could be for the player
+
+The entries above lean towards tools. These are the player's side: what the game itself could offer, with the Studio as the workshop behind it.
+
+### A city you live in
+
+32. NPCs with daily routines (home, work, a bar at night), shops that open and close, regulars who recognise V.
+33. Enterable buildings with things to do: bars with pool, darts and arcades; clubs where V can dance; diners where V eats and drinks, animated.
+34. Apartments as homes: furniture and decor placement, rent and eviction consequences, visitors, a partner who is actually there.
+35. City events: blackouts, acid rain, Badlands sandstorms, street festivals, gang turf that shifts over time.
+36. In-world media that reacts to V: news, TV and radio segments about V's jobs; ads and graffiti that change.
+
+### A life, not just missions
+
+37. Jobs and careers: taxi and delivery runs, bartending shifts, netrunning contracts, fixer gigs generated to fit V's reputation.
+38. Relationships that continue: dates, texts, companions who ride along and comment, romance past the credits.
+39. Owning things: a bar or garage V runs, property, income, a crew.
+40. Survival and the body: needs, per-limb injuries with trauma and ripperdoc recovery, cyberware with real trade-offs.
+41. Style that matters: dress codes, NPCs reacting to V's look, clubs that turn V away.
+
+### Play as more
+
+42. Side stories starring other characters, the way the flashback sequences swap the player.
+43. Braindance creation: record V's own play as a braindance, edit it and watch it back.
+44. Photography as a career: shots for news outlets or fixers, with photo mode as a job skill.
+45. Deeper netrunning and hacking; vehicle life (tuning, races, garages).
+
 ## How entries move
 
 An entry becomes an experiment when a session can bundle a small demo, and becomes a product feature only after discussion and after the current product reaches 1.0. Record each demo's result here with a link to its experiment.
