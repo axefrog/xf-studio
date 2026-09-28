@@ -668,6 +668,14 @@ ExpressionIndexRequest ParseExpressionIndex(const json& aParams)
     }
     request.index = static_cast<int32_t>(*index);
     request.target = ParseFaceTarget(aParams, FaceTarget::Puppet);
+    if (request.target == FaceTarget::Head)
+    {
+        // Session 4 (28 September 2026, question R1/R2): the face rig lives on V's photo-mode stand-in, and
+        // the head item has none, so an index applied to the head changed nothing (0.4.2).
+        throw MethodError("no_effect", "a face index on V's photo-mode head item has no effect: the face rig is on V's "
+                                       "photo-mode stand-in (target puppet, the default), and the head item carries none "
+                                       "(session 4); leave target out");
+    }
     request.unlisted = Boolean(aParams, "unlisted").value_or(false);
     return request;
 }

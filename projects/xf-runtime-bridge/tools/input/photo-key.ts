@@ -9,9 +9,14 @@
 //
 // Routes:
 //   sendinput    SendInput with the key's scan code (what a keyboard produces; games reading raw
-//                input see it). Needs the game window in front: the window is brought forward once
-//                (SetForegroundWindow) and the send is refused unless it really is the foreground
-//                window, so the key can never land in another program.
+//                input see it). Needs the game window in front. Since 0.4.2 the sender no longer
+//                brings it forward by default (focus "require"): in session 4 (28 September 2026)
+//                SetForegroundWindow pulled the game in front while the maintainer was typing
+//                elsewhere, and the typing went into the game. It sends only when the game window is
+//                already the foreground window and otherwise refuses (not_foreground) without touching
+//                any window; focus "bring_to_front" keeps the old behaviour (bring it forward once).
+//                Either way the send is refused unless the game really is the foreground window, so
+//                the key can never land in another program.
 //   postmessage  WM_KEYDOWN / WM_KEYUP posted to the game window only (works even when it isn't in
 //                front, if the game reads window messages). For research; whether the game reacts is
 //                unverified.
@@ -171,7 +176,21 @@ export function isGameImage(image: string | null): boolean {
 
 export type KeySendResult = { route: KeyRoute; focused_by_bridge: boolean; scan_code: number; extended: boolean };
 
+/** Whether photo.open may bring the game window forward (bring_to_front) or only sends while it is already in front (require, the default). */
+export type FocusPolicy = "require" | "bring_to_front";
+
+/**
+ * What the sendinput route does about focus: send (the game is in front), bring (bring_to_front: bring it
+ * forward once, then check again), or refuse (require, and another window is in front: nothing is touched).
+ */
+export function focusPlan(gameInFront: boolean, policy: FocusPolicy): "send" | "bring" | "refuse" {
+  if (gameInFront) return "send";
+  return policy === "bring_to_front" ? "bring" : "refuse";
+}
+
 export type KeySendOptions = {
+  /** sendinput only: require (default) or bring_to_front; see focusPlan. */
+  focus?: FocusPolicy;
   /**
    * Runs right before the key goes, after the window was brought to the front (RB-37): the caller
    * re-checks the game (still in the world, photo mode still allowed) and throws to stop the send.
@@ -207,7 +226,14 @@ export const sendKeyToWindow: KeySender = async (target, vk, route, options = {}
     return { route, focused_by_bridge: false, scan_code: scan, extended };
   }
   let focused = false;
-  if ((u.GetForegroundWindow() as bigint) !== target.hwnd) {
+  const plan = focusPlan((u.GetForegroundWindow() as bigint) === target.hwnd, options.focus ?? "require");
+  if (plan === "refuse") {
+    throw new KeySendError(
+      "The game window isn't in front, so the photo mode key wasn't sent and no window was touched (bringing the game forward by itself caught the player's typing in session 4). Click into the game and try again, or ask the player to press the photo mode key.",
+      "not_foreground",
+    );
+  }
+  if (plan === "bring") {
     u.SetForegroundWindow(target.hwnd);
     focused = true;
     await sleep(250);

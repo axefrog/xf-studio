@@ -853,8 +853,20 @@ void FaceTests()
     const auto index = p::ParseExpressionIndex(json::parse(R"({"index":60})"));
     Check("photo.expression.index defaults to the stand-in and listed indices",
           index.index == 60 && index.target == p::FaceTarget::Puppet && !index.unlisted);
-    Check("photo.expression.index takes head and unlisted",
-          p::ParseExpressionIndex(json::parse(R"({"index":56,"target":"head","unlisted":true})")).unlisted);
+    Check("photo.expression.index takes unlisted",
+          p::ParseExpressionIndex(json::parse(R"({"index":56,"target":"puppet","unlisted":true})")).unlisted);
+    Check("0.4.2: photo.expression.index refuses the head item in plain words (no face rig there, session 4)",
+          ParamsCode([] { p::ParseExpressionIndex(json::parse(R"({"index":60,"target":"head"})")); }) == "no_effect");
+
+    const auto clock = w::TimeResult(json{{"before_total_seconds", 7200}, {"after_total_seconds", 0}});
+    Check("world.time.set outside photo mode undoes to the exact earlier time",
+          clock["undo"] == json{{"method", "world.time.set"}, {"params", {{"total_seconds", 7200}}}}, clock.dump());
+    const auto photoTime = w::TimeResult(json{{"route", "photo_time"}, {"before_minutes", 243.592}, {"before_known", true}, {"after_minutes", 120}});
+    Check("0.4.2: world.time.set in photo mode undoes to photo mode's earlier time of day, to the minute",
+          photoTime["undo"] == json{{"method", "world.time.set"}, {"params", {{"hours", 4}, {"minutes", 4}}}}, photoTime.dump());
+    const auto photoUnknown = w::TimeResult(json{{"route", "photo_time"}, {"before_minutes", -1.0}, {"before_known", false}});
+    Check("0.4.2: no undo when photo mode's earlier time of day is unknown, with a note",
+          photoUnknown["undo"].is_null() && photoUnknown.contains("undo_note"), photoUnknown.dump());
     Check("photo.expression.index needs a whole index from 0 to 100000",
           ParamsCode([] { p::ParseExpressionIndex(json::object()); }) == "bad_params" &&
               ParamsCode([] { p::ParseExpressionIndex(json::parse(R"({"index":-1})")); }) == "bad_params" &&
@@ -929,7 +941,7 @@ void CreatorAndOptionsTests()
         ops.settle = [&] { calls.push_back("settle"); };
         ops.open = [&] {
             calls.push_back("open");
-            return json{{"requested", true}, {"edit_mode", "HairDresser"}, {"saving_locked", true}, {"route", "menu_event"}};
+            return json{{"requested", true}, {"edit_mode", "HairDresser"}, {"saving_locked", true}, {"route", "pause_menu"}};
         };
         ops.phase = [&] { return ++polls >= 3 ? std::string("character_menu") : std::string("gameplay"); };
         ops.cancel = [&] {
@@ -1066,7 +1078,7 @@ void Batch4Tests()
         ops.settle = [&] { calls.push_back("settle"); };
         ops.open = [&] {
             calls.push_back("open");
-            return json{{"requested", true}, {"edit_mode", "HairDresser"}, {"saving_locked", true}, {"route", "menu_event"}};
+            return json{{"requested", true}, {"edit_mode", "HairDresser"}, {"saving_locked", true}, {"route", "pause_menu"}};
         };
         ops.phase = [&] { return phase(); };
         ops.cancel = [&]() -> json {

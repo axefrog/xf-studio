@@ -19,12 +19,13 @@
 import { captureBurst, captureWindow, CaptureError, grabForAnalysis, recrop, type CaptureRecord } from "../capture/capture.ts";
 import { NAMED_REGIONS, type RegionSpec } from "../capture/regions.ts";
 import type { CommandApi, ImageRef } from "./command-api.ts";
-import { frame, FramingError, FRAMINGS, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
+import { frame, FramingError, FRAMINGS, LENSES, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
 import { CAMERA_PRESETS, expandCamera } from "./presets.ts";
-import { KeySendError, readPhotoModeBinding, virtualKey, type KeyRoute } from "../input/photo-key.ts";
+import { KeySendError, readPhotoModeBinding, virtualKey, type FocusPolicy, type KeyRoute } from "../input/photo-key.ts";
 import { plainBridgeError } from "./errors.ts";
 import { summarizeSettings, type SettingsGroups } from "./options.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
+import { isMatch, matchLabel } from "./labels.ts";
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
@@ -213,6 +214,7 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   const target = context.api.keyTarget();
   if (!target) throw planError("no_window", "The game has no visible window to send the key to.");
   const route = ((input.route as string | undefined) ?? "sendinput") as KeyRoute;
+  const focus = ((input.focus as string | undefined) ?? "require") as FocusPolicy;
   // Checked again at the last moment, after the window came forward (RB-37): if the game left normal
   // play or stopped allowing photo mode meanwhile, the key isn't sent.
   const beforeSend = async () => {
@@ -223,7 +225,7 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   };
   let sent;
   try {
-    sent = await context.api.keySender()(target, vk, route, { beforeSend });
+    sent = await context.api.keySender()(target, vk, route, { beforeSend, focus });
   } catch (error) {
     if (error instanceof KeySendError) throw planError(error.code, error.message);
     throw error;
@@ -235,7 +237,18 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
     const now = await bridgeCall(context, "game.status", {});
     if (String(now.phase) === "photo_mode") {
       return {
-        value: { changed: true, key: binding.name, key_source: binding.source, ...sent, waited_ms: Math.round(performance.now() - started), undo: { method: "photo.exit", params: {} } },
+        value: {
+          changed: true,
+          key: binding.name,
+          key_source: binding.source,
+          ...sent,
+          ...(route === "sendinput" ? { focus } : {}),
+          ...(sent.focused_by_bridge
+            ? { warning: "The bridge brought the game window to the front (focus: bring_to_front); anything the player was typing elsewhere at that moment went to the game." }
+            : {}),
+          waited_ms: Math.round(performance.now() - started),
+          undo: { method: "photo.exit", params: {} },
+        },
       };
     }
     if (performance.now() - started >= timeout) {
@@ -329,6 +342,8 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       ...(input.position !== undefined ? { position: input.position as FrameOptions["position"] } : {}),
       ...(input.face_camera !== undefined ? { face_camera: input.face_camera as boolean } : {}),
       ...(input.yaw_offset !== undefined ? { yaw_offset: input.yaw_offset as number } : {}),
+      ...(input.lens !== undefined ? { lens: input.lens as FrameOptions["lens"] } : {}),
+      ...(preset !== undefined ? { camera_preset_selected: true } : {}),
       ...(input.method !== undefined ? { method: input.method as FrameOptions["method"] } : {}),
       ...(input.max_steps !== undefined ? { max_steps: input.max_steps as number } : {}),
       ...(input.tolerance !== undefined ? { tolerance: input.tolerance as number } : {}),
@@ -392,11 +407,65 @@ export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOC
 /** game.load: the list wait + 3 steps (list, a status overshoot, load). */
 export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + 3 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 
-/** cc.apply: exactly one of index and value (the schema can't say "one of", so the tools check it too). */
+/** cc.apply: exactly one of index, value and label (the schema can't say "one of", so the tools check it too). */
 function characterApplyParams(input: Record<string, unknown>): Record<string, unknown> {
-  const given = ["index", "value"].filter((key) => input[key] !== undefined);
-  if (given.length !== 1) throw planError("bad_input", given.length ? "Give index or value, not both." : "Give index (counting from 0) or value (the value's name or on-screen label).");
+  const given = ["index", "value", "label"].filter((key) => input[key] !== undefined);
+  if (given.length !== 1)
+    throw planError("bad_input", given.length ? "Give one of index, value or label." : "Give index (counting from 0), value (the value's name or on-screen label) or label (the name the creator shows, loosely matched).");
   return input;
+}
+
+const listText = (items: { index: number; text: string }[]) => items.map((c) => `${c.index} ${c.text}`).join(", ");
+
+/**
+ * cc.apply with label (0.4.2): reads the option's values (player.appearance with option), finds the one whose
+ * name or on-screen label matches (labels.ts), and applies it by index; the answer names the index chosen.
+ */
+async function runCharacterApply(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const params = characterApplyParams(input);
+  if (params.label === undefined) return { value: await bridgeCall(context, "cc.apply", params) };
+  const option = String(params.option);
+  const read = await bridgeCall(context, "player.appearance", { option });
+  const described = read.option as { name?: string; values?: string[]; labels?: string[] } | undefined;
+  if (!described || !Array.isArray(described.values)) {
+    throw planError("not_in_character_menu", "The appearance screen isn't open, so the option's values can't be read. Open it (cc_open), then try again.");
+  }
+  const candidates = described.values.map((value, index) => ({ index, texts: [described.labels?.[index] ?? "", value] }));
+  const wanted = String(params.label);
+  const match = matchLabel(candidates, wanted);
+  if (!isMatch(match)) {
+    if (match.ambiguous) throw planError("bad_input", `More than one value of ${option} matches "${wanted}": ${listText(match.candidates)}. Give more of the name, or its index.`);
+    const some = candidates.slice(0, 8).map((c) => ({ index: c.index, text: c.texts.find(Boolean) ?? "" }));
+    throw planError("bad_input", `No value of ${option} is called "${wanted}" (${candidates.length} values; the first: ${listText(some)}). player_appearance with option lists them all.`);
+  }
+  const applied = await bridgeCall(context, "cc.apply", { option, index: match.index });
+  return { value: { ...applied, index: match.index, label: match.text, label_matched_by: match.matched_by } };
+}
+
+/**
+ * photo.expression.set (0.4.2): by faceId (the menu's value for the option, which is its position in the
+ * list, not the face table index) or by label (the name the expression list shows, matched as cc.apply's
+ * label is). The answer names the menu value and, where photo.state reports it, the face table index.
+ */
+async function runExpressionSet(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const given = ["faceId", "label"].filter((key) => input[key] !== undefined);
+  if (given.length !== 1) throw planError("bad_input", given.length ? "Give faceId or label, not both." : "Give faceId (the menu's value, from photo_state options) or label (the expression's name).");
+  if (input.faceId !== undefined) return { value: await bridgeCall(context, "photo.expression.set", { faceId: input.faceId }) };
+  const state = await bridgeCall(context, "photo.state", { options: true });
+  const menu = (state.menu as { key: number; options?: { data: number; text: string; table_index?: number }[] }[] | undefined) ?? [];
+  const options = menu.find((item) => item.key === 28)?.options;
+  if (!options?.length) throw planError("unavailable", "Photo mode's expression list hasn't been seen yet. Open the V tab's expressions once (or reopen photo mode), then try again.");
+  const wanted = String(input.label);
+  const match = matchLabel(options.map((o, index) => ({ index, texts: [o.text] })), wanted);
+  if (!isMatch(match)) {
+    if (match.ambiguous) throw planError("bad_input", `More than one expression matches "${wanted}": ${match.candidates.map((c) => c.text).join(", ")}. Give more of the name.`);
+    throw planError("bad_input", `No expression is called "${wanted}" in photo mode's list (${options.length} expressions; photo_state with options lists them).`);
+  }
+  const chosen = options[match.index];
+  const applied = await bridgeCall(context, "photo.expression.set", { faceId: chosen.data });
+  return {
+    value: { ...applied, label: chosen.text, label_matched_by: match.matched_by, menu_value: chosen.data, ...(chosen.table_index !== undefined ? { table_index: chosen.table_index } : {}) },
+  };
 }
 
 /** game.options.read: the bridge's raw answer plus a plain summary of the settings a capture depends on. */
@@ -562,7 +631,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "player.appearance",
     title: "V's appearance settings",
     description:
-      "Reads V's character-creator state: body and voice, life path and hair-length tags. While the appearance screen (a mirror) is open it also lists every option with its current value; give option to see one option's full list of values. check asks whether V's finalized look has particular options (group and option names).",
+      "Reads V's character-creator state: body and voice, life path and hair-length tags. While the appearance screen (a mirror) is open it also lists every option with its current value; give option to see one option's full list of values. Outside the screen the game's option list isn't live, so only those flags are: the answer adds last_creator_reading, the last full list read on the screen this game session with its age in seconds (not live: a Back after it discarded its changes), when there is one. check asks whether V's finalized look has particular options (group and option names).",
     permission: "read",
     input: obj({
       option: str("One option's internal name or on-screen label (appearance screen only).", { maxLength: 128 }),
@@ -608,7 +677,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.state",
     title: "Photo mode state",
     description:
-      "Whether photo mode is open or allowed, and (with menu) every photo-mode menu item the game set up: its number, label, range or options and current value. options adds each option list (for example every expression with its value).",
+      "Whether photo mode is open or allowed, and (with menu) every photo-mode menu item the game set up: its number, label, range or options and current value. options adds each option list (for example every expression with its menu value, data, and its face table index, table_index, with table_index_by saying whether it was matched by the expression's name or, less surely, by its position).",
     permission: "read",
     input: obj({ menu: bool("Include the menu items."), options: bool("Include every option list (implies menu).") }),
     bridge: { method: "photo.state" },
@@ -619,10 +688,11 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.open",
     title: "Open photo mode",
     description:
-      "Opens photo mode by pressing the player's own photo mode key in the game window (read from the game's key bindings, N by default): the only key the XF tools ever send, and only to the game window. It checks first that V is in the world and the game allows photo mode, brings the game window to the front if needed and refuses if it can't, then waits until photo mode is open.",
+      "Opens photo mode by pressing the player's own photo mode key in the game window (read from the game's key bindings, N by default): the only key the XF tools ever send, and only to the game window. It checks first that V is in the world and the game allows photo mode, and by default sends only while the game window is already in front: otherwise it refuses (not_foreground) without touching any window, since bringing the game forward catches whatever the player is typing elsewhere. focus: bring_to_front brings it forward first (the old behaviour). Then it waits until photo mode is open. The game has no in-engine way to open the full photo mode that is known to be safe (see the knowledge base), so the key stays the route.",
     permission: "write-photo",
     input: obj({
-      route: oneOf("sendinput (default: a key press, the game window must be in front) or postmessage (research: posted to the game window only).", ["sendinput", "postmessage"]),
+      route: oneOf("sendinput (default: a key press, the game window must be in front) or postmessage (research: posted to the game window only, never changes focus; whether the game reacts is untested).", ["sendinput", "postmessage"]),
+      focus: oneOf("sendinput only: require (default: send only while the game window is already in front, else refuse and touch nothing) or bring_to_front (bring the game window forward first; anything the player is typing elsewhere goes to the game).", ["require", "bring_to_front"]),
       timeout_ms: int("How long to wait for photo mode after the key, in milliseconds (default 5000).", 500, 30000),
     }),
     undo: "photo.exit.",
@@ -707,7 +777,7 @@ export const CATALOGUE: readonly CommandDef[] = [
           description: "Where to put the light: camera (where the camera is now), or about V's head (azimuth, elevation, distance, aimed at V), or a world position (world).",
           ...obj({
             camera: bool("true: switch the light off and on again so photo mode puts it where the camera is now."),
-            azimuth: num("Degrees around V from V's facing, counter-clockwise seen from above (90 = V's left). Default 0 (in front).", -180, 180),
+            azimuth: num("Degrees around V's head measured from the way V's photo-mode stand-in faces (not from the camera), counter-clockwise seen from above: 0 in front of V's face, 90 V's left, -90 V's right, 180 straight behind the head (the head then blocks the light from the camera's side). After photo_frame, the camera sits at azimuth yaw_offset (0 when V faces it), so a light at azimuth yaw_offset comes from the camera's side and one at yaw_offset plus or minus 180 from straight behind V. Default 0.", -180, 180),
             elevation: num("Degrees above V's head level. Default 15.", -80, 80),
             distance: num("Metres from V's head. Default 1.2.", 0.2, 10),
             world: { type: "array", description: "A world position [x, y, z] in metres (the undo's form).", items: num("A coordinate.", -100000, 100000), minItems: 3, maxItems: 3 },
@@ -733,22 +803,25 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.expression.set",
     title: "Set V's photo-mode expression",
     description:
-      "Sets V's facial expression in photo mode by its value (faceId), exactly as the photo-mode expression list does. photo_state with options lists every expression and its value; a value not in the list is refused.",
+      "Sets V's facial expression in photo mode exactly as the photo-mode expression list does: by label (the expression's name as the list shows it, for example Static: Sleeping; case and punctuation don't matter) or by faceId, the menu's value for it. The menu's value is the expression's position in the list, which differs from the face table index the face animation uses when an expression pack is installed (session 4: Static: Sleeping was menu value 56, table index 60); photo_state with options lists both for every expression. A value not in the list is refused.",
     permission: "write-photo",
-    input: obj({ faceId: int("The expression's value.", 0, 100000) }, ["faceId"]),
+    input: obj({
+      faceId: int("The expression's menu value (its data in photo_state options; not the table index).", 0, 100000),
+      label: str("The expression's name as the list shows it, instead of faceId.", { minLength: 1, maxLength: 128 }),
+    }),
     undo: "the result's undo parameters restore the previous expression.",
-    bridge: { method: "photo.expression.set" },
+    local: runExpressionSet,
   },
   {
     name: "photo.expression.index",
     title: "Apply a photo-mode face index (research)",
     description:
-      "Research tool for the expression editor: applies a photo-mode face index to V directly, the way photo mode feeds its face animation, without going through the expression list (target: puppet, V's photo-mode stand-in, the default; or head, its head item). Whether the face changed shows only in a screenshot. By default only an index the expression list offers is accepted; unlisted: true allows any (sparse-index checks). Photo mode only, in the XF test profile.",
+      "Research tool for the expression editor: applies a photo-mode face table index (photo_state options' table_index, not the menu value) to V directly, the way photo mode feeds its face animation, without going through the expression list. It acts on V's photo-mode stand-in, where session 4 found the face rig; target head (the head item) is refused, since it has no face rig and the index changed nothing there. Whether the face changed shows only in a screenshot. By default only an index the expression list offers is accepted; unlisted: true allows any (sparse-index checks). Photo mode only, in the XF test profile.",
     permission: "write-photo",
     input: obj(
       {
         index: int("The face index to apply.", 0, 100000),
-        target: oneOf("Which entity gets it: puppet (V's photo-mode stand-in, default) or head (its head item).", ["puppet", "head"]),
+        target: oneOf("puppet (V's photo-mode stand-in, the default and the only one with a face rig). head is refused (no_effect): the head item has no face rig.", ["puppet", "head"]),
         unlisted: bool("Allow an index the photo-mode expression list doesn't offer. Default false."),
       },
       ["index"],
@@ -858,7 +931,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       FRAMINGS,
     )
       .map(([name, f]) => `${name}: ${f.description}`)
-      .join("; ")}) at the centre of the window (or at position) and sets the field of view so span_m metres fill the window height. It measures where V is through the game's camera (or, if that isn't available, from window captures, more roughly) and corrects in a few steps. The result records the chosen values and an undo.`,
+      .join("; ")}) at the centre of the window (or at position) and sets the field of view so span_m metres fill the window height. Each frame starts from its lens's known pose (face and eyes: a portrait lens from about 2 m, so repeated frames never drift) and stays within the lens's limits, or is refused with everything put back. It measures where V is through the game's camera (or, if that isn't available, from window captures, more roughly) and corrects in a few steps. The result records the lens, the camera's distance, the chosen values and an undo.`,
     permission: "write-photo",
     input: obj({
       target: oneOf("What to frame. Default face.", Object.keys(FRAMINGS)),
@@ -875,7 +948,13 @@ export const CATALOGUE: readonly CommandDef[] = [
       camera_preset: int("First select this photo-mode camera preset (0-9), then fine-tune.", 0, 9),
       keep_roll: bool("Keep the camera preset's own roll. Default false: the camera is levelled (roll 0) after selecting a preset."),
       face_camera: bool("Turn V to face the camera first. Default true."),
-      yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps.", -90, 90),
+      yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps and profile checks: 90 shows V's right side, 180 the back of V's head. Photo Mode Ex keeps V's rotation within -180 to 180.", -180, 180),
+      lens: oneOf(
+        `Where the frame starts and the limits it keeps: ${Object.entries(LENSES)
+          .map(([name, lens]) => `${name}: ${lens.description}`)
+          .join("; ")}. Default: portrait for face and eyes, keep for the others and after a camera preset. A frame that would need to leave its lens's limits is refused (framing_bound) with the camera put back.`,
+        Object.keys(LENSES),
+      ),
       look_at: oneOf("V's look-at before framing: keep (default), off (V's head follows the body, for light sweeps) or camera.", ["keep", "off", "camera"]),
       method: oneOf("auto (default: the game's camera, else window captures), project (the game's camera only) or capture (window captures only).", ["auto", "project", "capture"]),
       max_steps: int("Most correction steps (default 6).", 1, 12),
@@ -903,18 +982,19 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "cc.apply",
     title: "Change one appearance option",
     description:
-      "While the appearance screen is open (at a mirror or ripperdoc), sets one character-creator option to a value, exactly as clicking it does. option is the option's internal name, its on-screen label (for example XF) or its slot (for example piercings_color, the colour row of whichever piercing style is chosen). Give index (counting from 0) or value: a value's internal name or on-screen label, where 5 and 05 are the same position; a word such as gold also finds the one value whose name contains it. It never confirms: the player keeps the look by confirming, or backs out to discard every change. Refused anywhere else.",
+      "While the appearance screen is open (at a mirror or ripperdoc), sets one character-creator option to a value, exactly as clicking it does. option is the option's internal name, its on-screen label (for example XF) or its slot (for example piercings_color or makeupLips_color, the colour row of whichever style is chosen: a colour row named by its own name, such as makeupLips_08, belongs to one style and is refused unless that style is chosen). Give index (counting from 0), value (a value's internal name or on-screen label, where 5 and 05 are the same position; a word such as gold also finds the one value whose name contains it) or label (the name the creator shows, matched loosely: case, spaces and punctuation don't matter, and every word given must appear, so Grace Bob V4 finds Grace - Side Swept Bob - V4); the answer gives the index chosen. It never confirms: the player keeps the look by confirming, or backs out to discard every change. Refused anywhere else.",
     permission: "write-character",
     input: obj(
       {
         option: str("The option's internal name, on-screen label or slot.", { maxLength: 128 }),
         index: int("The value, counting from 0.", 0, 100000),
         value: str("The value's internal name or on-screen label, instead of index.", { maxLength: 128 }),
+        label: str("The value's name as the creator shows it, matched loosely (see above), instead of index.", { minLength: 1, maxLength: 128 }),
       },
       ["option"],
     ),
     undo: "cc.apply with the previous index (in the result's undo), or Back in the appearance screen, which discards every change made there.",
-    bridge: { method: "cc.apply", params: characterApplyParams },
+    local: runCharacterApply,
   },
   {
     name: "cc.page",
@@ -1035,7 +1115,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "world.time.set",
     title: "Set the time of day",
     description:
-      "Sets the in-game clock (hours, minutes, seconds) while V is in the world or the appearance screen is open (to compare the screen's light at different times of day without leaving it), or restores an exact earlier time with total_seconds. Changing the clock can trigger timed events in quests, so use a disposable save.",
+      "Sets the in-game clock (hours, minutes, seconds) while V is in the world or the appearance screen is open (to compare the screen's light at different times of day without leaving it), or restores an exact earlier time with total_seconds. In photo mode it sets photo mode's own time of day instead (the Environment tab's slider, hours and minutes only), which photo mode puts back when it closes. Changing the world clock can trigger timed events in quests, so use a disposable save.",
     permission: "write-world",
     input: obj({
       hours: int("Hour, 0 to 23.", 0, 23),

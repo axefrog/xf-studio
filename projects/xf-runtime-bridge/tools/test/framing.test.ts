@@ -5,11 +5,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
-import { chooseHorizontal, frame, frameByCapture, FRAMINGS, readingProblem, sameWorld, screenSpace, SETTLE, settledReading, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
+import { chooseHorizontal, defaultLens, frame, frameByCapture, FramingError, FRAMINGS, LENSES, readingProblem, sameWorld, screenSpace, SETTLE, settledReading, type FramingAdapter, type SubjectReading } from "../api/framing.ts";
 import { resolveRegion } from "../capture/regions.ts";
 import { captureBurst } from "../capture/capture.ts";
 import type { Pixels } from "../capture/win32.ts";
-import { INPUT_SIZE, isExtendedKey, isGameImage, keyboardInput, keyMessageParam, KeySendError, readPhotoModeBinding, scanCodeFor, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
+import { focusPlan, INPUT_SIZE, isExtendedKey, isGameImage, keyboardInput, keyMessageParam, KeySendError, readPhotoModeBinding, scanCodeFor, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
 import { runScript, SCRIPT_SCHEMA, type SessionScript } from "../session.ts";
 import { openSyntheticWindow, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
@@ -184,7 +184,7 @@ describe("photo.frame after session 3", () => {
   test("a read straight after a change is stale in the game; framing waits for the world to take each change", async () => {
     const world = new GameLikeWorld();
     const adapter = laggingAdapter(world);
-    const result = await frame(adapter, { target: "face" });
+    const result = await frame(adapter, { lens: "keep", target: "face" });
     expect(result.method).toBe("project");
     expect(result.converged, JSON.stringify(result.notes)).toBe(true);
     expect(result.axis).toBe("left_right");
@@ -200,7 +200,7 @@ describe("photo.frame after session 3", () => {
     const saved = SETTLE.maxReads;
     SETTLE.maxReads = 1;
     try {
-      const outcome = await frame(laggingAdapter(world), { target: "face" }).then(
+      const outcome = await frame(laggingAdapter(world), { lens: "keep", target: "face" }).then(
         (r) => (r.converged ? "converged" : "not converged"),
         (e) => (e as { code?: string }).code,
       );
@@ -231,7 +231,7 @@ describe("photo.frame after session 3", () => {
     const world = new GameLikeWorld();
     world.axes = { lr: { x: 0.02, y: 1, z: 0 }, nf: { x: 1, y: -0.05, z: 0 }, ud: { x: 0, y: 0, z: 1 } };
     world.nf = 0.25; // V starts off to the side
-    const result = await frame(laggingAdapter(world), { target: "face" });
+    const result = await frame(laggingAdapter(world), { lens: "keep", target: "face" });
     expect(result.axis).toBe("near_far");
     expect(result.converged, JSON.stringify(result.notes)).toBe(true);
     expect(result.notes.join(" ")).toContain("close/far");
@@ -242,7 +242,7 @@ describe("photo.frame after session 3", () => {
     const world = new GameLikeWorld();
     world.axes = { lr: { x: 0, y: 1, z: 0 }, nf: { x: 0, y: -1, z: 0 }, ud: { x: 0, y: 0, z: 1 } };
     world.origin = { x: 0, y: 8, z: 1.5 }; // straight ahead: moving along the view moves V across nothing
-    const result = await frame(laggingAdapter(world), { target: "eyes" });
+    const result = await frame(laggingAdapter(world), { lens: "keep", target: "eyes" });
     expect(result.axis).toBe("vertical-only");
     expect(Math.abs(result.residual.y)).toBeLessThanOrEqual(0.01);
     expect(Math.abs(result.residual.size - 1)).toBeLessThan(0.05);
@@ -265,9 +265,117 @@ describe("photo.frame after session 3", () => {
       const r = base(offset);
       return { ...r, screen: { target: roll(r.screen.target), head: roll(r.screen.head), center: roll(r.screen.center), up: roll(r.screen.up), right: roll(r.screen.right) } };
     };
-    const result = await frame(laggingAdapter(world), { target: "face" });
+    const result = await frame(laggingAdapter(world), { lens: "keep", target: "face" });
     expect(result.method).toBe("project");
     expect(Math.hypot(result.residual.x, result.residual.y)).toBeLessThan(0.05);
+  });
+});
+
+/**
+ * The game as session 4 (28 September 2026) measured it: V stands about 1 m in front of the camera at
+ * close/far 0, and close/far moves V along the view (positive: closer), so the camera's distance is about
+ * 1 m minus close/far.
+ */
+class NearWorld extends GameLikeWorld {
+  constructor() {
+    super();
+    this.origin = { x: -0.04, y: 1.0, z: 1.52 };
+    this.axes = { lr: { x: 1, y: 0.05, z: 0 }, nf: { x: 0.02, y: -1, z: 0 }, ud: { x: 0.03, y: 0, z: 1 } };
+    this.fov = 35;
+  }
+}
+
+describe("photo.frame after session 4: lenses, no drift, bounds", () => {
+  test("repeated yaw frames don't drift: every frame starts from its lens's known pose (the face defaults to portrait)", async () => {
+    const world = new NearWorld();
+    const results = [];
+    for (let round = 0; round < 4; round++) {
+      for (const yaw_offset of [35, 55, 0]) results.push(await frame(laggingAdapter(world), { target: "face", yaw_offset }));
+    }
+    for (const r of results) {
+      expect(r.converged, JSON.stringify(r.notes)).toBe(true);
+      expect(r.lens).toBe("portrait");
+      // Session 4 walked close/far from 0.1 to 0.9 and the field of view from 22 to 92 over the same sequence.
+      expect(Math.abs(r.chosen.subject.near_far! - results[0].chosen.subject.near_far!)).toBeLessThan(0.02);
+      expect(Math.abs(r.chosen.fov - results[0].chosen.fov)).toBeLessThan(1);
+    }
+    expect(results[0].chosen.fov).toBeGreaterThan(4);
+    expect(results[0].chosen.fov).toBeLessThan(18);
+    expect(results[0].distance_m!).toBeGreaterThan(1.8);
+  });
+
+  test("keep starts from the current pose but puts the unused axis's probe back, so it doesn't drift either", async () => {
+    const world = new NearWorld();
+    world.nf = 0.1;
+    for (let i = 0; i < 12; i++) {
+      const r = await frame(laggingAdapter(world), { target: "face", lens: "keep", yaw_offset: [35, 55, 0][i % 3] });
+      expect(r.axis).toBe("left_right");
+      expect(r.steps.some((s) => s.kind === "probe-revert")).toBe(true);
+    }
+    // 0.4.1 left the +0.05 close/far probe in place every time: 12 frames would have ended at 0.7.
+    expect(Math.abs(world.nf - 0.1)).toBeLessThan(0.01);
+  });
+
+  test("portrait frames the face from about 2 m at about 9 degrees; wide from about 30 cm at about 66 (the old behaviour)", async () => {
+    const portrait = await frame(laggingAdapter(new NearWorld()), { target: "face" });
+    expect(portrait.chosen.fov).toBeGreaterThan(7);
+    expect(portrait.chosen.fov).toBeLessThan(12);
+    expect(portrait.bounds).toEqual({ near_far: [-2.2, -0.2], fov: [4, 18] });
+    const wide = await frame(laggingAdapter(new NearWorld()), { target: "face", lens: "wide" });
+    expect(wide.lens).toBe("wide");
+    expect(wide.converged, JSON.stringify(wide.notes)).toBe(true);
+    expect(wide.chosen.fov).toBeGreaterThan(50);
+    expect(wide.distance_m!).toBeLessThan(0.45);
+    const eyes = await frame(laggingAdapter(new NearWorld()), { target: "eyes" });
+    expect(eyes.lens).toBe("portrait");
+    expect(eyes.chosen.fov).toBeGreaterThan(2);
+    expect(eyes.chosen.fov).toBeLessThan(12);
+  });
+
+  test("the default lens: portrait for face and eyes, keep for the others and after a camera preset", () => {
+    expect(defaultLens("face")).toBe("portrait");
+    expect(defaultLens("eyes")).toBe("portrait");
+    expect(defaultLens("head-and-shoulders")).toBe("keep");
+    expect(defaultLens("full-body")).toBe("keep");
+    expect(defaultLens("face", true)).toBe("keep");
+    expect(LENSES.portrait.seed).toEqual({ fov: 22, near_far: -1.2 });
+  });
+
+  test("a frame that would leave its lens's bounds is refused (framing_bound) and everything is put back", async () => {
+    // V 8 m away: the portrait lens would need about 2 degrees for the face (session 4's far end: 3 degrees behind a wall).
+    const world = new GameLikeWorld();
+    const before = { fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud, nf: world.nf };
+    const error = await frame(laggingAdapter(world), { target: "face" }).then(
+      () => null,
+      (e) => e as FramingError,
+    );
+    expect(error?.code).toBe("framing_bound");
+    expect(error?.message).toContain("portrait lens");
+    expect(error?.message).toContain("put back");
+    expect(error?.steps.length).toBeGreaterThan(3);
+    expect({ fov: world.fov, yaw: world.yaw, lr: world.lr, ud: world.ud, nf: world.nf }).toEqual(before);
+  });
+
+  test("keep bounds close/far to 1 either way of where it started", async () => {
+    const world = new NearWorld();
+    const r = await frame(laggingAdapter(world), { target: "full-body" });
+    expect(r.lens).toBe("keep");
+    expect(r.bounds?.near_far).toEqual([-1, 1]);
+  });
+
+  test("yaw_offset reaches 180 (the back of the head, for the ear check) and -150", async () => {
+    for (const yaw_offset of [180, -150, 120]) {
+      const world = new NearWorld();
+      const r = await frame(laggingAdapter(world), { target: "face", yaw_offset });
+      expect(r.converged, `${yaw_offset}: ${JSON.stringify(r.notes)}`).toBe(true);
+      const reading = world.reading({ up: 0, forward: 0, right: 0 });
+      const toCamera = { x: -reading.head.x, y: -reading.head.y };
+      const f = reading.subject_forward;
+      const angle = (Math.atan2(f.x * toCamera.y - f.y * toCamera.x, f.x * toCamera.x + f.y * toCamera.y) * 180) / Math.PI;
+      const diff = ((((angle - yaw_offset + 180) % 360) + 360) % 360) - 180;
+      expect(Math.abs(diff)).toBeLessThan(3);
+    }
+    await expect(frame(laggingAdapter(new NearWorld()), { target: "face", yaw_offset: 200 })).rejects.toThrow("-180 to 180");
   });
 });
 
@@ -288,7 +396,7 @@ describe("photo.frame", () => {
 
   test("the projection route faces the camera, centres the face and sizes it in a few steps", async () => {
     const world = new World();
-    const result = await frame(adapterFor(world), { target: "face" });
+    const result = await frame(adapterFor(world), { lens: "keep", target: "face" });
     expect(result.method).toBe("project");
     expect(result.converged).toBe(true);
     expect(Math.hypot(result.residual.x, result.residual.y)).toBeLessThanOrEqual(0.01);
@@ -306,7 +414,7 @@ describe("photo.frame", () => {
   test("B8: the full-body framing centres V's middle and fits 2 m into the window height, from XF preset 6", async () => {
     expect(FRAMINGS["full-body"]).toMatchObject({ span_m: 2.0, xf_preset: 6 });
     const world = new World();
-    const result = await frame(adapterFor(world), { target: "full-body" });
+    const result = await frame(adapterFor(world), { lens: "keep", target: "full-body" });
     expect(result.converged).toBe(true);
     expect(Math.abs(result.residual.size - 1)).toBeLessThan(0.05);
     expect(result.offset.up).toBeCloseTo(-0.8, 5);
@@ -316,7 +424,7 @@ describe("photo.frame", () => {
 
   test("the projection route honours position, span and yaw_offset", async () => {
     const world = new World();
-    const result = await frame(adapterFor(world), { target: "eyes", position: { x: 0.4, y: 0.45 }, span_m: 0.3, yaw_offset: 20 });
+    const result = await frame(adapterFor(world), { lens: "keep", target: "eyes", position: { x: 0.4, y: 0.45 }, span_m: 0.3, yaw_offset: 20 });
     expect(result.converged).toBe(true);
     const r = world.reading(result.offset);
     const p = r.screen.target;
@@ -331,7 +439,7 @@ describe("photo.frame", () => {
   test("without photo.subject, the capture route finds the head in captures and brings it near the target", async () => {
     const world = new World();
     world.lr = 0.3;
-    const result = await frame(adapterFor(world, false), { target: "face", max_steps: 6 });
+    const result = await frame(adapterFor(world, false), { lens: "keep", target: "face", max_steps: 6 });
     expect(result.method).toBe("capture");
     expect(result.notes.join(" ")).toContain("projection route wasn't available");
     // Coarse: check where the head centre landed, in window fractions.
@@ -414,6 +522,13 @@ describe("photo.open's key", () => {
     expect(view.getUint32(0, true)).toBe(1); // INPUT_KEYBOARD
     expect(view.getUint16(10, true)).toBe(0x31);
     expect(view.getUint32(12, true)).toBe(0x0008 | 0x0002); // scan code, key up
+  });
+
+  test("0.4.2: the focus rule sends when the game is in front, brings it forward only when asked, else refuses", () => {
+    expect(focusPlan(true, "require")).toBe("send");
+    expect(focusPlan(true, "bring_to_front")).toBe("send");
+    expect(focusPlan(false, "require")).toBe("refuse");
+    expect(focusPlan(false, "bring_to_front")).toBe("bring");
   });
 
   test("tests can't press keys: the real sender refuses while XFB_NO_INPUT is set", async () => {
@@ -529,6 +644,41 @@ describe("photo.open and the session runner, against the self-test host", () => 
     expect(!outcome.ok && outcome.error.code).toBe("photo_not_allowed");
     expect(sent).toEqual([]);
     await api.callBridge("selftest.phase", { phase: "gameplay" }, "t-recheck");
+    api.close();
+  }, 20000);
+
+  test("0.4.2: photo.open sends only while the game is in front unless asked to bring it forward, and says when it did", async () => {
+    const seen: (string | undefined)[] = [];
+    let api: CommandApi;
+    let inFront = false;
+    api = new CommandApi({
+      runtimeDir: host.dir,
+      captureRoot: join(tempDir("xfb-open-focus-"), "captures"),
+      captureTarget: { hwnd: synthetic.hwnd },
+      idleCloseMs: 300,
+      // A fake sender that applies the real focus rule to a pretend foreground window.
+      keySender: async (_target, _vk, route, options) => {
+        seen.push(options?.focus);
+        const plan = focusPlan(inFront, options?.focus ?? "require");
+        if (plan === "refuse") throw new KeySendError("not in front", "not_foreground");
+        await options?.beforeSend?.();
+        await api.callBridge("selftest.phase", { phase: "photo_mode" }, "t-focus");
+        return { route, focused_by_bridge: plan === "bring", scan_code: 0x31, extended: false };
+      },
+    });
+    await api.callBridge("selftest.phase", { phase: "gameplay" }, "t-focus");
+    let outcome = await api.run("photo.open", {});
+    expect(!outcome.ok && outcome.error.code).toBe("not_foreground");
+    expect(seen).toEqual(["require"]);
+    outcome = await api.run("photo.open", { focus: "bring_to_front" });
+    expect(outcome.ok, JSON.stringify(outcome)).toBe(true);
+    if (outcome.ok) expect(outcome.result).toMatchObject({ changed: true, focus: "bring_to_front", focused_by_bridge: true, warning: expect.stringContaining("typing") });
+    await api.run("photo.exit", {});
+    inFront = true;
+    outcome = await api.run("photo.open", {});
+    expect(outcome.ok && (outcome.result as { focus: string; warning?: string })).toMatchObject({ focus: "require" });
+    expect(outcome.ok && (outcome.result as { warning?: string }).warning).toBeUndefined();
+    await api.run("photo.exit", {});
     api.close();
   }, 20000);
 
