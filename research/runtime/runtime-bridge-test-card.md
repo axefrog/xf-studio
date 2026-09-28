@@ -411,6 +411,20 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
 
+## Build record (bridge 0.5.3, branch build, not staged)
+
+Built 29 September 2026 on `claude/rnd-ink` at `ed485a06330a`, clean tree (manifest `"commit": "ed485a06330af009cf474189f6289002f6efef2e"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed): version 0.5.3, the ink demos (temporary test features) on top of 0.5.2. On that commit: `xfb_selftest --unit` UNIT OK, self-test 417 of 417, `bun test tools` 233 of 234 (the screen-route capture test needs its synthetic window uncovered on the desktop, and test windows stay off-screen), typecheck, the Lua lint, and the redscript lint both without Codeware and with Codeware `v1.20.4`'s scripts (`613a1cb8`) against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…`). The plugin registers thirteen natives (`XFBridge_Hud` is new) and ships two more script files (`XFRuntimeBridgeInk.reds`, `XFRuntimeBridgePins.reds`); `config.ini` has a new `[ui]` section. A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.5.3-writes.zip` (with inventory) | `fdcad6f67ce42e43a43bdb2d1b08da83d34b38961cd199da22df3b4f05ad5539` |
+| `xf-runtime-bridge-0.5.3-writes-no-inventory.zip` | `c2e0bb8e6352cb7f52498e18a39a9c914c3c85a78c8870d0e27fab9966cec709` |
+| `xf-runtime-bridge-0.5.3-diagnostic.zip` | `0a9f62f134655a8911f52c7340e722ce74b23a9d22200be3d189f0a4e3edb598` |
+| `xf-runtime-bridge-0.5.3.zip` (default) | `999ea8c53c62a9013e5c0cfe2e5d4f6a0a1122e336fb2aed0860d82be10e716f` |
+| (`XFRuntimeBridge.dll` inside each) | `bab47fdc157d64003a814c243b8401340743fcfbe53a4efbd8d871b23f781837` |
+
+**Watch in the session:** `rtti.register_types … natives=13` at load; the `ink` layer's `overlay attached layer=… size=…` announcement and `ink overlay mounted` line after the player attaches (U1); `panel_attached` in `ui_hud`'s answers; `world.pin placed` lines and `bridge.kill_cleared_pins` in the kill switch's restore (U8). The [session-7 checks](#session-7-checks-bridge-053) cover each.
+
 ## Build record (bridge 0.5.2, branch build, not staged)
 
 Built 29 September 2026 on `claude/bridge-052` at `7b9c8647894f`, clean tree (manifest `"commit": "7b9c8647894f1fe66896bd84c5716f10c8b71d34"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the second run rewrote the default and diagnostic zips with new timestamps; the hashes below are the files left in `dist/`): version 0.5.2, session 5's fixes and requests on top of 0.5.1. On that commit: `xfb_selftest --unit` UNIT OK (332 checks), self-test 399 of 399, `bun test tools` 223 of 224 (the screen-route capture test needs its synthetic window uncovered on the desktop), typecheck, the Lua lint, and the redscript lint both without Codeware and with Codeware `v1.20.4`'s scripts (`613a1cb8`) against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…`); the showroom build's own tests (`projects/xf-studio/authoring/tests/showroom.test.ts`) 9 of 9. The plugin registers twelve natives (`XFBridge_ScriptLayer` is new) and ships a sixth script file (`XFRuntimeBridgeWardrobe.reds`). **The wardrobe needs the inventory class**, so session 6 stages the `--allow-inventory` -writes zip (`"inventory_writes": true`, `allow_write_classes = photo, world, character, inventory, save, showroom`); the -writes zip without it is kept beside it. XF Finish Showroom must be rebuilt from this commit for its seated column. A rebuild after merging gives new hashes.
