@@ -222,7 +222,7 @@ Irreversible actions (`act-player`) also take the bridge's save lock first, like
 | P3 | C, M | `player.look {yaw: +45, pitch: -20, mode: "instant"}`; then `{at: {entity: <look-at object>}, mode: "smooth", duration_s: 2}`; during a third smooth look M moves the mouse | The view jumps, then glides over 2 s and reports the reached angles within 2 degrees; M's mouse breaks the third look | Angles off: record the answer and a capture |
 | P4 | C | `player.move {direction: {yaw: 0}, distance_m: 3, route: "glide"}`; then `player.stop` mid-way in a second one | V glides 3 m and stops; `animated: false`; the stop ends the second glide at once | Record the stop reason |
 | P5 | C | `player.action crouch`, then `stand`; `weapon.draw`, then `weapon.holster` | V crouches and stands; draws her last weapon and holsters it | Record |
-| P6 | C | `player.action menu.open {inventory}`, then `menu.close`; the same with `wardrobe` near nothing | The inventory opens and closes; the wardrobe opens away from a wardrobe | Record which step |
+| P6 | C | `player.action menu.open {inventory}`, then `menu.close`; then `menu.open {wardrobe}` with no wardrobe nearby | The inventory opens and closes; the wardrobe screen opens without a wardrobe device | Record which step |
 | P7 | C, M | M stands V in front of the apartment door or a light switch. `player.interact.list`; `player.interact.select {index: 0, route: "event"}` | The list shows the prompt's labels with `Choice1`; the device reacts (door opens, light toggles) | Nothing happens: record; the input route is the answer |
 | P8 | C, M | During a 10 s glide, M presses the kill hotkey | The glide stops, no effect is left (V moves again with WASD), the first-person camera is active | Stop the session; record |
 
