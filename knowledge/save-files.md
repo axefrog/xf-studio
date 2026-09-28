@@ -87,9 +87,11 @@ A hash becomes a name by hashing candidate names (the vanilla RTTI, the installe
 |---|---|---|
 | redscript `persistent` fields of a `ScriptableSystem` (EquipmentEx's `OutfitSystem.m_state` → `OutfitState` → outfits and parts) | `ScriptableSystemsContainer`, as ordinary objects (the `m_` prefix dropped), described by the save's type database | [source] [offline] |
 | `persistent` fields of game objects' persistent states | `PersistencySystem2` | [source] |
+| `@addField` `persistent` fields a mod adds to a vanilla persistent state (Eviction Notice's three fields on `ApartmentScreenControllerPS`) | `PersistencySystem2`, with that device's state | [source] ([quests and story §6.1](quests-and-story.md#61-where-long-lived-state-lives)) |
+| Quest facts a mod sets (every quest mod's flags and counters) | `questSystem` → `FactsDB`, keyed by the FNV-1a 32-bit hash of the name | [source] ([quests and story §2.4](quests-and-story.md#24-facts)) |
 | Codeware dynamic entities with `persistState` or `persistSpawn` | `PersistencySystem2`, as `App.DynamicEntitySystemPS` | [source: Codeware `DynamicEntitySystem.cpp`] |
 | Codeware `ScriptableService` persistent fields | **Not the save:** `red4ext/plugins/Codeware/Persistent/ScriptableServiceContainer.dat`, shared by all playthroughs | [source: `ScriptableServiceContainer.cpp`; wiki `Home.md`] |
-| CET Lua mods | **Not the save:** each mod's `db.sqlite3` and files | [source: CET `LuaSandbox.cpp`] |
+| CET Lua mods | **Not the save:** each mod's `db.sqlite3` and files. psiberx's CET Kit `GameSession` joins a per-save Lua file to its save through a session-key fact (`_psxgs_session_key`), as Stock Market and News System does | [source: CET `LuaSandbox.cpp`; Stock Market `modules/external/GameSession.lua`] |
 | TweakXL and ArchiveXL additions | Not the save; the save references their records (TweakDBIDs) and resources (hashes) | [source] |
 
 So a save's mod data can be read with **no per-mod schema**: the package names every class and field, and the save's type database settles which types are enums. Readable labels for hashes and enum members can come from the user's installed `r6/cache/final.redscripts`, which holds every compiled script class, field (with its `persistent` flag) and enum, vanilla and modded [source: redscript `crates/io`]. What happens to a removed mod's data on the next save is untested [hypothesis].

@@ -26,7 +26,7 @@ Developer of Cyberpunk 2077. The game's own resources, shaders, rigs, animation 
 
 ### ArchiveXL
 
-By psiberx and contributors. [GitHub](https://github.com/psiberx/cp2077-archive-xl). ArchiveXL's source taught us how character-creator options are registered, how appearance templates are cloned and how dynamic material paths expand. That understanding is the foundation of XF Studio's single-selector preset export, which avoids generating a separate material for every combination, and its archive-group, `.xl` discovery, scope, fix, patch, copy/link and dynamic-mesh rules are what XF Studio's character resolver replicates to interpret installed mods the way the game does. Its player-eye fix, which copies the eye morph resource without its base texture, showed us that a morph resource can override a material's normal map. Its localization extension showed how mods' texts join the game's, which XF Studio follows to label mod-added character-creator options. Its animation extension, which merges animation sets into a named component of an entity or scope, and its photo-mode scopes informed the expression export (whose resource patch adds its own animation component, because ArchiveXL merges a patch's components by name and id) and are the basis of XF Studio's pose catalogue, which finds the pose sets mods append to the photo-mode puppet the way it does. Its garment extension taught us how worn items pick their look (dynamic appearance names, conditions, and path substitution with body, feet, arm and sleeve states; its arm state, read from the drawn weapon's cyberware type, pointed us to the TweakDB records that choose V's arm-cyberware holster state), how visual tags hide other items and mask parts of the body, and that it sets garment offsets aside unless an outfit mod turns them on; its chunk-mask rules and factory index are what XF Studio's clothing render replicates to show a save's clothes and what they hide. Its component-prefix rule, by which `hide_Head` hides the head's decals with the head, set how XF Eye Artistry names its makeup component. Its ink-spawner and journal extensions showed how a mod attaches its own script controller to a spawned widget and merges new web pages, contacts and messages into the game's journal. Its world-streaming extension taught us how location mods stay additive: extra streaming blocks appended to the world, vanilla nodes hidden or moved in memory as each sector loads behind node-count and type checks, device and persistent-state patches, and quest phases injected into the game's quests. It is an intended runtime dependency; no ArchiveXL code is included in XF Studio.
+By psiberx and contributors. [GitHub](https://github.com/psiberx/cp2077-archive-xl). ArchiveXL's source taught us how character-creator options are registered, how appearance templates are cloned and how dynamic material paths expand. That understanding is the foundation of XF Studio's single-selector preset export, which avoids generating a separate material for every combination, and its archive-group, `.xl` discovery, scope, fix, patch, copy/link and dynamic-mesh rules are what XF Studio's character resolver replicates to interpret installed mods the way the game does. Its player-eye fix, which copies the eye morph resource without its base texture, showed us that a morph resource can override a material's normal map. Its localization extension showed how mods' texts join the game's, which XF Studio follows to label mod-added character-creator options. Its animation extension, which merges animation sets into a named component of an entity or scope, and its photo-mode scopes informed the expression export (whose resource patch adds its own animation component, because ArchiveXL merges a patch's components by name and id) and are the basis of XF Studio's pose catalogue, which finds the pose sets mods append to the photo-mode puppet the way it does. Its garment extension taught us how worn items pick their look (dynamic appearance names, conditions, and path substitution with body, feet, arm and sleeve states; its arm state, read from the drawn weapon's cyberware type, pointed us to the TweakDB records that choose V's arm-cyberware holster state), how visual tags hide other items and mask parts of the body, and that it sets garment offsets aside unless an outfit mod turns them on; its chunk-mask rules and factory index are what XF Studio's clothing render replicates to show a save's clothes and what they hide. Its component-prefix rule, by which `hide_Head` hides the head's decals with the head, set how XF Eye Artistry names its makeup component. Its ink-spawner and journal extensions showed how a mod attaches its own script controller to a spawned widget and merges new web pages, contacts and messages into the game's journal. Its world-streaming extension taught us how location mods stay additive: extra streaming blocks appended to the world, vanilla nodes hidden or moved in memory as each sector loads behind node-count and type checks, device and persistent-state patches, and quest phases injected into the game's quests, each started once per save through a fact that records it ran; its journal extension also showed how quest map pins find markers in a mod's own sectors and how the journal is rebuilt on a hot reload. It is an intended runtime dependency; no ArchiveXL code is included in XF Studio.
 
 ### Audioware
 
@@ -254,6 +254,10 @@ By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com
 
 [LUT Switcher 2](https://www.nexusmods.com/cyberpunk2077/mods/16310) and [ENV Tuner](https://www.nexusmods.com/cyberpunk2077/mods/23079) (per its script namespace). Studying LUT Switcher's installed package showed that runtime LUT mods apply grading as player effects that can switch off in menus, which the character-creator capture protocol now controls for. ENV Tuner showed that the environment's exposure curves can be rewritten in memory as their resources load and restored afterwards, the technique the lighting mirror's research exposure pin would use. Private local reference only.
 
+### Dark Future
+
+By DarkFortuneTeller. [GitHub](https://github.com/DarkFortuneTeller/DarkFuture), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/16300). Its source showed how a large persistent gameplay system is structured to stay robust: one lifecycle shared by every system, a start-up ordered after the HUD is ready, a check that holds story beats back during cinematics, as Johnny and after the point of no return, a small save footprint, and quest phases driven from script by a single fact that selects which scene to play. Its phone therapist showed how much story a branching text conversation can carry. Studied only; its CC BY-SA 4.0 licence would bind any reuse, and none is.
+
 ### dragonzkiller
 
 [Hot-Sampled Photomode Renders (IGPT)](https://www.nexusmods.com/cyberpunk2077/mods/26318), named as author in the plugin's own RED4ext information. It showed that the engine's own screenshot renderer can produce photo-mode captures above screen resolution, at full detail and in EXR, without the photo-mode menu, and that such a render blocks the game long enough to trip the engine's watchdog. That is the basis of the capture route researched for XF Studio's in-game tests. Studied only.
@@ -265,6 +269,10 @@ By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com
 ### Even More Brows for Cyberpunk
 
 [Even More Brows for Cyberpunk - CCXL](https://www.nexusmods.com/cyberpunk2077/mods/26230). Its 16 styles ship complete brow geometry of their own inside ArchiveXL's brow scope, which confirmed that a brow style can join the base game's brow row with every hair colour without copying the base game's files. Studied only; its author is still being confirmed.
+
+### Eviction Notice
+
+[Nexus](https://www.nexusmods.com/cyberpunk2077/mods/23187) (author still being confirmed). Its quest data is the most complete mod-made quest we have studied: a journal quest with objectives and map pins on markers it places in its own sectors, trigger areas, pickup scenes, item rewards and landlords who text V, with quest graphs that ask the mod's scripts for answers through request and response facts. It also showed how a script can lock or unlock a door that is nowhere near V through the door's persistent state, and how fixed text messages can show live amounts. Studied only.
 
 ### FreeFly (Noclip)
 
@@ -315,6 +323,10 @@ Published with a support link to cyberdrake on its [Nexus page](https://www.nexu
 
 An inventory-worn earring mod that provided a packaging precedent for our jewellery construction-set design. Its [Small Fancy Hoop Earrings with Physics](https://www.nexusmods.com/cyberpunk2077/mods/7020) showed how a worn item makes earrings swing: a small dangle rig and simulation of its own, driven by V's skeleton, with the mesh itself left bound to that skeleton. Studied only; its individual authorship is still being confirmed.
 
+### Lizzie's Braindances
+
+By ArmanIII, per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/11077). It showed how braindances can be staged as ordinary scenes and cast at run time: its menu rewrites a few character records before a scene plays so that any chosen character, or V, performs it, switches their outfits through quest events, and lets other mods register more characters. Studied only.
+
 ### Lime Makeup Atelier and Anrui's Netrunner Emporium
 
 [Lime Makeup Atelier](https://www.nexusmods.com/cyberpunk2077/mods/18322) sells worn makeup items through a Virtual Atelier in-game shop, a distribution route for makeup that is not part of the character creator. With [Anrui's Netrunner Emporium](https://www.nexusmods.com/cyberpunk2077/mods/12328) it showed that a store mod needs only one registration call listing its items, and an icon. Studied only; their authors are still being confirmed.
@@ -338,6 +350,10 @@ An inventory-worn earring mod that provided a packaging precedent for our jewell
 ### Native Interactions Framework
 
 By keanuWheeze, per its script header. [GitHub](https://github.com/justarandomguyintheinternet/nativeInteractions), [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/21422). Its editor camera, which pulls the first-person camera behind V and widens its limits, and its usable spots built as scene interactions showed which interactions only input can choose. Studied only; its licence asks for credit or permission before code is reused, and none is.
+
+### NightlyNow Core
+
+By NightlyNow. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/28966). Its phone framework, whose header credits the original concept to r457 and gh057 with fixes by DigitalVixen, showed how a mod adds a phone contact and a whole text conversation with replies and typing dots without any journal entries, and how interaction prompts can appear where there is no device. Studied only.
 
 ### Nola Dreamer
 
@@ -367,6 +383,10 @@ Nola Dreamer's hair Sofie, per its title, one of the creator's "Physics enabled"
 
 [Sandevistan CCXL Tattoo](https://www.nexusmods.com/cyberpunk2077/mods/20345) and [Photon Spine Cyberware](https://www.nexusmods.com/cyberpunk2077/mods/26973), by SEDTH per their file names. Sandevistan showed a tattoo added as its own character-creator row, with a head and a body decal fitted to each supported body and one choice per body, writing colour, relief, roughness and metalness; Photon Spine showed an overlay tattoo that also ships a glow mask and overlay normals. Studied only.
 
+### Stock Market and News System
+
+By keanuWheeze, per its script header. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/6319). Its Lua showed how news can be generated from what V does and from vanilla quests finishing, delivered as phone messages from a contact that exists only in the phone's lists, and how a CET mod ties its own per-save data file to a save. Studied only; its terms ask for credit or permission before code is reused, and none is.
+
 ### Street Sense
 
 [Street Sense](https://www.nexusmods.com/cyberpunk2077/mods/28989), part of the DigitalVixen mod suite per its Nexus description. Its clothing-driven crowd reactions (revealing, positive, intimidating, fear and annoyed outfits, each with a distance, chance, voice trigger and facial reaction) are a worked example of the rule-based assessment layer we plan, and its note that ArchiveXL dynamic items can lose TweakXL tags explained why it keeps a list of mod items. Studied only.
@@ -385,11 +405,11 @@ Sun Moon And Stars Tattoo, Serpentine Heart and its Remix, Graceful Tattoo, Broo
 
 ### Virtual Atelier, Virtual Atelier Delivery and Virtual Car Dealer
 
-By DJ_Kovrik (djkovrik), whose [GPL-3.0 repository](https://github.com/djkovrik/CP77Mods) publishes their source. [Virtual Atelier](https://www.nexusmods.com/cyberpunk2077/mods/2987) showed how other mods plug stores into one framework through a registration event, how it reuses the base game's vendor screen, and how a new tab joins a computer's menu (a technique its code credits to NexusGuy999). Virtual Atelier Delivery showed how a mod sends phone messages by rewriting pre-authored journal messages from script, spawns its own devices with new interactions, and adds billboards through TweakXL records; Virtual Car Dealer showed a browser page with its own controller and prices set when the tweak database loads. Studied only.
+By DJ_Kovrik (djkovrik), whose [GPL-3.0 repository](https://github.com/djkovrik/CP77Mods) publishes their source. [Virtual Atelier](https://www.nexusmods.com/cyberpunk2077/mods/2987) showed how other mods plug stores into one framework through a registration event, how it reuses the base game's vendor screen, and how a new tab joins a computer's menu (a technique its code credits to NexusGuy999). Virtual Atelier Delivery showed how a mod sends phone messages by rewriting pre-authored journal messages from script, spawns its own devices with new interactions, and adds billboards through TweakXL records; Virtual Car Dealer showed a browser page with its own controller and prices set when the tweak database loads. Virtual Atelier Delivery also showed a delivery clock kept in game time that pauses during braindances, while V is Johnny and in the time-skip menu, and map pins that come with a spawned drop-point device. Studied only.
 
 ### Voiced quest mods
 
-[I Really Want To Stay At Your House - Judy](https://www.nexusmods.com/cyberpunk2077/mods/8753), [Lizzie's Braindances](https://www.nexusmods.com/cyberpunk2077/mods/11077) and [Roller Coaster Enhanced](https://www.nexusmods.com/cyberpunk2077/mods/14617) (authors not yet checked). Their packages showed how voiced quest mods give their scenes lip sync today: per-language lip-sync maps registered with ArchiveXL that point at the game's existing clips, with no generated animation. Studied only.
+[I Really Want To Stay At Your House - Judy](https://www.nexusmods.com/cyberpunk2077/mods/8753), [Lizzie's Braindances](https://www.nexusmods.com/cyberpunk2077/mods/11077) (by ArmanIII, per its script headers) and [Roller Coaster Enhanced](https://www.nexusmods.com/cyberpunk2077/mods/14617) (authors of the other two not yet checked). Their packages showed how voiced quest mods give their scenes lip sync today: per-language lip-sync maps registered with ArchiveXL that point at the game's existing clips, with no generated animation. Studied only.
 
 ### Watson Tattoo Shops
 

@@ -38,7 +38,7 @@
 
 ## Quests and systems
 
-23. A micro-quest authored in a visual editor and hot-tested through the bridge: a phone message, a map pin, an objective, a reward.
+23. A micro-quest authored in a visual editor and hot-tested through the bridge: a phone message, a map pin, an objective, a reward. The parts and a minimal recipe, taken from the installed quest mods, are in [quests and story §3](../../knowledge/quests-and-story.md#3-a-minimal-quest-recipe).
 24. Dialogue choices with our own lines (text first; voices later, only from consenting performers).
 25. A per-limb damage system as a real gameplay mechanic.
 26. Persistent world state of our own, saved with the game.
@@ -80,7 +80,7 @@ The entries above lean towards tools. These are the player's side: what the game
     - **Investigation gigs**: generated detective work across the visual, thermal and audio layers, with clues that lead to real places in the city.
     - **Recording V's own play** (entry 28) as a braindance to scrub, re-frame with photo-mode camera control and share.
     - **An underground scene**: black-market braindances, braindance clubs, addiction as a survival-style risk.
-    - Prior art in the installed-mod survey: Lizzie's Braindances (rank 13; quest phases and journal around braindance content).
+    - Prior art in the installed-mod survey: Lizzie's Braindances stages braindances as ordinary scenes and casts them at run time by rewriting character records; the vanilla braindance is a scene played in braindance mode with clue nodes on its timeline. What player-made and generated braindances would need is in [quests and story §5](../../knowledge/quests-and-story.md#5-braindances).
 44. Photography as a career: shots for news outlets or fixers, with photo mode as a job skill.
 45. Deeper netrunning and hacking; vehicle life (tuning, races, garages).
 
