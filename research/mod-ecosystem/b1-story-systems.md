@@ -230,7 +230,7 @@ Two practical notes: a hot reload under MO2 moves the archive into the virtual `
 
 **State and persistence.** psiberx's CET `GameSession.Persist`: a session key stored as a fact in the save (`_psxgs_session_key`) links the save to a Lua file of market data under the mod's `data/persistent/` folder [source] `modules/external/GameSession.lua:60-300, 400-460`.
 
-**UI technique.** A browser site and computer tab built with ink from Lua (`inkHelper.lua`, a graph widget); phone messages without journal entries: a synthetic `ContactData` (hash 999999999999999999, `MessengerContactType.SingleThread`) appended to the contact list, `JournalPhoneMessage.new({id = …})` objects created in Lua purely to feed the list controller, the renderer overridden to draw each item's text, and a HUD notification pushed with `JournalNotificationQueue.AddNewNotificationData` [source] `newsManager.lua:154-290`.
+**UI technique.** A computer tab and browser site built with ink from Lua: its address loads the vanilla home page so the browser holds a valid page widget, then, after `OnPageSpawned`, the page's children are removed and the mod's own widgets (`inkHelper.lua`, a price graph) are built in their place [source] `modules/ui/browser.lua:69-102`; phone messages without journal entries: a synthetic `ContactData` (hash 999999999999999999, `MessengerContactType.SingleThread`) appended to the contact list, `JournalPhoneMessage.new({id = …})` objects created in Lua purely to feed the list controller, the renderer overridden to draw each item's text, and a HUD notification pushed with `JournalNotificationQueue.AddNewNotificationData` [source] `newsManager.lua:154-290`.
 
 **Undocumented engine knowledge.** Quest completion is observable at `JournalNotificationQueue.OnJournalUpdate` (entry class `gameJournalQuest`, state `Succeeded`); NCPD scanner jobs at `OnNCPDJobDoneEvent` (XP awarded) [source] `questManager.lua:24-48`. CET can instantiate `importonly` journal classes that redscript cannot `new`.
 
@@ -238,7 +238,7 @@ Two practical notes: a hot reload under MO2 moves the archive into the virtual `
 
 **Bugs, fragility and conflicts.**
 - "Reload all mods" in CET loses the session's data; the mod shows an error popup saying so [source] `init.lua:67-80`.
-- Overrides of browser, computer and messenger functions shared with Virtual Atelier, Virtual Car Dealer, Browser Extension and NightlyNow Core ([triage](README.md#cet-override-overlaps)); each override calls the original, so they chain, but the contact list order and the renderer's text depend on load order [source].
+- Overrides of browser, computer and messenger functions shared with Virtual Atelier, Virtual Car Dealer, Browser Extension and NightlyNow Core ([triage](README.md#cet-override-overlaps)); each override passes everything but its own address or contact to the original, so they chain, but the contact list order and the renderer's text depend on load order [source] `modules/ui/browser.lua:24-102`.
 - Market time runs on CET's `onUpdate` wall clock, paused in menus, not on game time; a time skip is detected separately [source] `init.lua:96-102`.
 
 **Performance.** `onUpdate` every frame (a Cron update and trigger polling); observers on hot functions such as `NPCPuppet.OnPotentialDeath` [source].
