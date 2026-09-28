@@ -224,18 +224,25 @@ describe("MCP server against a bridge with writes allowed", () => {
     result = await call(mcp, "photo_expression_set", { faceId: 9 });
     expect(json(result).result.after).toBe(9);
 
-    // The expression design's R1/R2 commands: a face index straight to the face animation (only listed
-    // indices unless unlisted), undone by selecting the menu's own expression again; and the face rig read.
-    result = await call(mcp, "photo_expression_index", { index: 60 });
+    // The expression design's R1/R2 commands: a face index straight to the face animation (only the list's
+    // table indices unless unlisted, and only verified ones unless force, RB-72), undone by selecting the
+    // menu's own expression again; and the face rig read.
+    result = await call(mcp, "photo_expression_index", { index: 200 });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("bad_params");
+    result = await call(mcp, "photo_expression_index", { index: 62 });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("unverified_index");
+    result = await call(mcp, "photo_expression_index", { index: 62, force: true });
+    expect(result.isError, text(result)).toBeFalsy();
+    expect(json(result).result.index_by).toBe("position");
     // 0.4.2: the head item has no face rig (session 4), so target head is refused in plain words.
     result = await call(mcp, "photo_expression_index", { index: 3, target: "head" });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("no_effect");
     result = await call(mcp, "photo_expression_index", { index: 3 });
     expect(result.isError, text(result)).toBeFalsy();
-    expect(json(result).result).toMatchObject({ target: "puppet", index: 3, menu_value_known: true });
+    expect(json(result).result).toMatchObject({ target: "puppet", index: 3, menu_value_known: true, index_by: "label" });
     expect(json(result).result.undo).toEqual({ method: "photo.expression.set", params: { faceId: 9 } });
     result = await call(mcp, "photo_expression_index", { index: 60, unlisted: true });
     expect(result.isError, text(result)).toBeFalsy();
@@ -286,7 +293,7 @@ describe("MCP server against a bridge with writes allowed", () => {
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("creator_leave_disabled");
     result = await call(mcp, "world_time_set", { hours: 20, minutes: 30 });
-    expect(json(result).result.undo).toEqual({ method: "world.time.set", params: { total_seconds: 12 * 3600 } });
+    expect(json(result).result.undo).toEqual({ method: "world.time.set", params: { total_seconds: 12 * 3600, target: "world" } });
     result = await call(mcp, "world_time_set", { total_seconds: 12 * 3600 });
     expect(json(result).result.after_total_seconds).toBe(12 * 3600);
     result = await call(mcp, "world_pause", { paused: true });

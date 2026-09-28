@@ -13,6 +13,7 @@
 
 #include <RED4ext/RED4ext.hpp>
 
+#include "core/Writes.hpp"
 #include "plugin/Natives.hpp"
 #include "plugin/Plugin.hpp"
 
@@ -307,6 +308,28 @@ void Messages(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CStr
     });
 }
 
+// XFBridge_CreatorRedirect(state: String) -> String   (the pause menu's scenario wrap, cc.open's redirect:
+// {pending, age_s, prev, refused, withdrawn_age_s} in, "redirect", "foreign", "expired", "refused",
+// "withdrawn" or "none" out; core/Writes.cpp CreatorRedirect, unit-tested; RB-69, RB-75). Only called while a
+// request waits or was just withdrawn. Anything unexpected answers "" and the pause menu opens as usual.
+void CreatorRedirectNative(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    RED4ext::CString state;
+    RED4ext::GetParameter(aFrame, &state);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_CreatorRedirect", [&] {
+        const auto text = ToStd(state);
+        const auto parsed = json::parse(text, nullptr, false);
+        const auto decision = parsed.is_object() ? writes::CreatorRedirect(parsed) : std::string();
+        log::Info("cc.open_redirect", "decision=" + (decision.empty() ? std::string("unreadable") : decision) + " state=" + text);
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(decision.c_str());
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -345,7 +368,8 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_Rearm", &Rearm, "String", {"reason"});
         RegisterGlobal(rtti, "XFBridge_PauseWrites", &PauseWrites, "String", {"paused"}, "Bool");
         RegisterGlobal(rtti, "XFBridge_Messages", &Messages, "String", {});
-        log::Info("rtti.register_types", "phase=post_register natives=10");
+        RegisterGlobal(rtti, "XFBridge_CreatorRedirect", &CreatorRedirectNative, "String", {"state"});
+        log::Info("rtti.register_types", "phase=post_register natives=11");
     }
     catch (const std::exception& e)
     {

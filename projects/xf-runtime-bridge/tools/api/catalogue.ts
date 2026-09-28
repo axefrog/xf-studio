@@ -370,9 +370,35 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
     if (rollBefore !== undefined && Math.abs(rollBefore) > 0.5) result.notes.unshift(`The camera preset rolled the camera ${Math.round(rollBefore)} degrees; it was levelled (keep_roll keeps it).`);
     return { value: preset !== undefined ? { ...result, camera_preset: preset } : result };
   } catch (error) {
-    if (error instanceof FramingError) {
-      // The steps taken so far go with the refusal (and into the command log), for diagnosis.
-      throw Object.assign(new Error(error.message), { plain: { code: error.code, message: error.message, ...(error.steps.length ? { detail: JSON.stringify({ steps: error.steps }) } : {}) } });
+    // Every failure path puts back what this call changed (RB-68): the framing loop has already put back the
+    // field of view and V's placement; the camera preset, roll and look-at set here go back now, in one call
+    // with the loop's own undo (the preset first, as photo.camera.set applies it), like the success undo.
+    const framing = error instanceof FramingError ? error : null;
+    const frameUndo = framing?.restore?.undo?.params ?? {};
+    const own = {
+      ...(presetBefore !== undefined ? { camera_preset: presetBefore } : {}),
+      ...(rollBefore !== undefined ? { roll: rollBefore } : {}),
+      ...(lookAtBefore !== undefined ? { look_at: lookAtBefore } : {}),
+    };
+    let restoreNote = "";
+    let restored = framing?.restore?.restored ?? true;
+    const undo = Object.keys(own).length ? { method: "photo.camera.set", params: { ...own, ...frameUndo } } : (framing?.restore?.undo ?? null);
+    if (Object.keys(own).length) {
+      try {
+        await bridgeCall(context, "photo.camera.set", undo!.params);
+        restoreNote = ` The ${Object.keys(own).map((k) => k.replace("_", " ")).join(", ")} set before framing ${Object.keys(own).length === 1 ? "was" : "were"} put back too.`;
+      } catch (restoreError) {
+        restored = false;
+        restoreNote = ` Putting the ${Object.keys(own).map((k) => k.replace("_", " ")).join(", ")} back failed (${(restoreError as Error).message}); the undo is ${JSON.stringify(undo!.params)}.`;
+      }
+    }
+    if (framing || restoreNote) {
+      // The steps taken so far, the undo and what was put back go with the refusal (and into the command log).
+      const plain = (error as { plain?: { code?: string } }).plain;
+      const code = framing ? framing.code : (plain?.code ?? "failed");
+      const message = `${(error as Error).message}${restoreNote}`;
+      const detail = { ...(framing?.steps.length ? { steps: framing.steps } : {}), undo, restored, ...(framing?.restore?.unknown.length ? { not_restored: framing.restore.unknown } : {}) };
+      throw Object.assign(new Error(message), { plain: { code, message, detail: JSON.stringify(detail) } });
     }
     throw error;
   } finally {
@@ -445,7 +471,13 @@ async function runCharacterApply(input: Record<string, unknown>, context: Comman
     const some = candidates.slice(0, 8).map((c) => ({ index: c.index, text: c.texts.find(Boolean) ?? "" }));
     throw planError("bad_input", `No value of ${option} is called "${wanted}" (${candidates.length} values; the first: ${listText(some)}). player_appearance with option lists them all.`);
   }
-  const applied = await bridgeCall(context, "cc.apply", { option, index: match.index });
+  // The row and the value read above go with the index, so the bridge refuses (stale_match) if the slot's row
+  // in use or the value at that index changed in between, instead of landing in another row's list (RB-71).
+  const expected = {
+    ...(typeof described.name === "string" && described.name ? { expect_option: described.name } : {}),
+    ...(typeof described.values[match.index] === "string" && described.values[match.index] ? { expect_value: described.values[match.index] } : {}),
+  };
+  const applied = await bridgeCall(context, "cc.apply", { option, index: match.index, ...expected });
   return { value: { ...applied, index: match.index, label: match.text, label_matched_by: match.matched_by } };
 }
 
@@ -823,13 +855,14 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "photo.expression.index",
     title: "Apply a photo-mode face index (research)",
     description:
-      "Research tool for the expression editor: applies a photo-mode face table index (photo_state options' table_index, not the menu value) to V directly, the way photo mode feeds its face animation, without going through the expression list. It acts on V's photo-mode stand-in, where session 4 found the face rig; target head (the head item) is refused, since it has no face rig and the index changed nothing there. Whether the face changed shows only in a screenshot. By default only an index the expression list offers is accepted; unlisted: true allows any (sparse-index checks). Photo mode only, in the XF test profile.",
+      "Research tool for the expression editor: applies a photo-mode face table index (photo_state options' table_index, not the menu value) to V directly, the way photo mode feeds its face animation, without going through the expression list. It acts on V's photo-mode stand-in, where session 4 found the face rig; target head (the head item) is refused, since it has no face rig and the index changed nothing there. Whether the face changed shows only in a screenshot. By default only a table index of the expression list is accepted, and only one photo_state found by the expression's name (table_index_verified); one known only by list position (table_index_by position, which session 4 showed isn't the table index with an expression pack) is refused (unverified_index) unless force: true. unlisted: true allows any index (sparse-index checks). The answer's index_by says how the index was checked. Photo mode only, in the XF test profile.",
     permission: "write-photo",
     input: obj(
       {
         index: int("The face index to apply.", 0, 100000),
         target: oneOf("puppet (V's photo-mode stand-in, the default and the only one with a face rig). head is refused (no_effect): the head item has no face rig.", ["puppet", "head"]),
         unlisted: bool("Allow an index the photo-mode expression list doesn't offer. Default false."),
+        force: bool("Allow an index the list offers only by list position (unverified). Default false."),
       },
       ["index"],
     ),
@@ -938,7 +971,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       FRAMINGS,
     )
       .map(([name, f]) => `${name}: ${f.description}`)
-      .join("; ")}) at the centre of the window (or at position) and sets the field of view so span_m metres fill the window height. Each frame starts from its lens's known pose (face and eyes: a portrait lens from about 2 m, so repeated frames never drift) and stays within the lens's limits, or is refused with everything put back. It measures where V is through the game's camera (or, if that isn't available, from window captures, more roughly) and corrects in a few steps. The result records the lens, the camera's distance, the chosen values and an undo.`,
+      .join("; ")}) at the centre of the window (or at position) and sets the field of view so span_m metres fill the window height. Each frame starts from its lens's known pose (face and eyes: a portrait lens from about 2 m, so repeated frames never drift) and stays within the lens's limits, or is refused. Any refusal or failure part-way puts back everything it changed whose earlier value the game reported (the field of view, V's placement, and the camera preset, roll and look-at it set), names anything it couldn't, and carries the undo in its detail. It measures where V is through the game's camera (or, if that isn't available, from window captures, more roughly) and corrects in a few steps; converged also needs V to face the requested direction within 3 degrees (residual.facing_deg). The result records the lens, the camera's distance, the chosen values and an undo.`,
     permission: "write-photo",
     input: obj({
       target: oneOf("What to frame. Default face.", Object.keys(FRAMINGS)),
@@ -976,10 +1009,14 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "cc.open",
     title: "Open the appearance screen",
     description:
-      "Opens the appearance screen (the mirror's character creator) from normal play, the way a mirror does, and waits until it is open. mode mirror (the default) allows the rows a mirror allows (hair, make-up, eye colour, piercings and the XF rows); ripperdoc also allows the face-shape, skin and cyberware rows. Refused in combat, a scene, a vehicle or a menu, when the player isn't V (a Johnny section), and until the game has registered the bridge's own save lock (it locks saving itself, until a save is loaded). If the wait runs out after the game took the request, the answer says the screen may still open (check game_status). Only in the XF test profile.",
+      "Opens the appearance screen (the mirror's character creator) from normal play, the way a mirror does, and waits until it is open. mode mirror (the default) allows the rows a mirror allows (hair, make-up, eye colour, piercings and the XF rows); ripperdoc also allows the face-shape, skin and cyberware rows. edit_mode new_game opens it in the new-game edit mode instead, as Character Customization Anywhere's F12 did in session 4: every row can change, the world isn't frozen, and Confirm still keeps the look; which edit mode avoids the stuck, half-open creator is a session 5 question. If the wait runs out, the request is withdrawn and the pause menu may open instead (Esc closes it). Refused in combat, a scene, a vehicle or a menu, when the player isn't V (a Johnny section), and until the game has registered the bridge's own save lock (it locks saving itself, until a save is loaded). If the wait runs out after the game took the request, the answer says the screen may still open (check game_status). Only in the XF test profile.",
     permission: "write-character",
     input: obj({
       mode: oneOf("Which rows can be changed: mirror (default) or ripperdoc (adds the eye shape, nose, skin and cyberware rows).", ["mirror", "ripperdoc"]),
+      edit_mode: oneOf(
+        "The creator's edit mode: edit_tag (default: the mode's own tag, HairDresser or Ripperdoc, which freezes the world while the screen is open) or new_game (the NewGame tag Character Customization Anywhere's F12 ran with in session 4: every row editable, no freeze; not with mode ripperdoc).",
+        ["edit_tag", "new_game"],
+      ),
       timeout_ms: int("How long to wait for the screen, in milliseconds (default 5000).", 500, 15000),
     }),
     undo: "cc.back (or Back in the appearance screen) discards every change made there and closes it.",
@@ -997,6 +1034,8 @@ export const CATALOGUE: readonly CommandDef[] = [
         index: int("The value, counting from 0.", 0, 100000),
         value: str("The value's internal name or on-screen label, instead of index.", { maxLength: 128 }),
         label: str("The value's name as the creator shows it, matched loosely (see above), instead of index.", { minLength: 1, maxLength: 128 }),
+        expect_option: str("With index: the option row read before (player_appearance's option name); refused (stale_match) if option now resolves to another row. label does this itself.", { minLength: 1, maxLength: 128 }),
+        expect_value: str("With index: the value's internal name read before at that index; refused (stale_match) if it has another name now. label does this itself.", { minLength: 1, maxLength: 256 }),
       },
       ["option"],
     ),
@@ -1122,15 +1161,16 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "world.time.set",
     title: "Set the time of day",
     description:
-      "Sets the in-game clock (hours, minutes, seconds) while V is in the world or the appearance screen is open (to compare the screen's light at different times of day without leaving it), or restores an exact earlier time with total_seconds. In photo mode it sets photo mode's own time of day instead (the Environment tab's slider, hours and minutes only), which photo mode puts back when it closes. Changing the world clock can trigger timed events in quests, so use a disposable save.",
+      "Sets the in-game clock (hours, minutes, seconds) while V is in the world or the appearance screen is open (to compare the screen's light at different times of day without leaving it), or restores an exact earlier time with total_seconds. In photo mode it sets photo mode's own time of day instead (the Environment tab's slider, hours and minutes only; a photo-mode setting, so the photo write class must be allowed too). Whether the world's clock is as before once photo mode closes is not established yet (game_status's world_time_seconds shows it). target photo or world names the clock: a photo-mode undo carries target photo, so replayed after photo mode closes it changes nothing rather than the world's clock. Changing the world clock can trigger timed events in quests, so use a disposable save.",
     permission: "write-world",
     input: obj({
       hours: int("Hour, 0 to 23.", 0, 23),
       minutes: int("Minute, 0 to 59.", 0, 59),
       seconds: int("Second, 0 to 59.", 0, 59),
-      total_seconds: int("An exact earlier time from a previous result's undo.", 0, 2147483647),
+      total_seconds: int("An exact earlier time from a previous result's undo (the world's clock only).", 0, 2147483647),
+      target: oneOf("Which clock: world (refused in photo mode) or photo (photo mode's own time of day; outside photo mode nothing changes). Default: photo in photo mode, else world.", ["world", "photo"]),
     }),
-    undo: "world.time.set with total_seconds from the result's undo.",
+    undo: "the result's undo: the world's clock with total_seconds (target world), or photo mode's time of day in hours and minutes (target photo), which changes nothing once photo mode has closed.",
     bridge: { method: "world.time.set" },
   },
   {

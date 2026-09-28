@@ -860,14 +860,96 @@ void FaceTests()
           ParamsCode([] { p::ParseExpressionIndex(json::parse(R"({"index":60,"target":"head"})")); }) == "no_effect");
 
     const auto clock = w::TimeResult(json{{"before_total_seconds", 7200}, {"after_total_seconds", 0}});
-    Check("world.time.set outside photo mode undoes to the exact earlier time",
-          clock["undo"] == json{{"method", "world.time.set"}, {"params", {{"total_seconds", 7200}}}}, clock.dump());
-    const auto photoTime = w::TimeResult(json{{"route", "photo_time"}, {"before_minutes", 243.592}, {"before_known", true}, {"after_minutes", 120}});
-    Check("0.4.2: world.time.set in photo mode undoes to photo mode's earlier time of day, to the minute",
-          photoTime["undo"] == json{{"method", "world.time.set"}, {"params", {{"hours", 4}, {"minutes", 4}}}}, photoTime.dump());
-    const auto photoUnknown = w::TimeResult(json{{"route", "photo_time"}, {"before_minutes", -1.0}, {"before_known", false}});
-    Check("0.4.2: no undo when photo mode's earlier time of day is unknown, with a note",
-          photoUnknown["undo"].is_null() && photoUnknown.contains("undo_note"), photoUnknown.dump());
+    Check("world.time.set outside photo mode undoes to the exact earlier time, on the world's clock",
+          clock["undo"] == json{{"method", "world.time.set"}, {"params", {{"total_seconds", 7200}, {"target", "world"}}}}, clock.dump());
+
+    // 0.5.1 (RB-67, RB-70, RB-75): which clock, photo mode's slider in minutes or hours, and the undo's target.
+    const auto time = [](const char* aText) { return p::ParseTime(json::parse(aText)); };
+    Check("world.time.set takes target world or photo, and photo only with hours and minutes",
+          time(R"({"hours":2,"target":"photo"})").target == "photo" && time(R"({"total_seconds":5,"target":"world"})").target == "world" &&
+              ParamsCode([] { p::ParseTime(json::parse(R"({"hours":2,"target":"moon"})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseTime(json::parse(R"({"total_seconds":5,"target":"photo"})")); }) == "bad_params");
+    Check("RB-67: in photo mode the time is photo mode's own; outside it the world's clock",
+          w::ChooseTimeRoute(time(R"({"hours":2})"), "photo_mode", true) == w::TimeRoute::Photo &&
+              w::ChooseTimeRoute(time(R"({"hours":2})"), "gameplay", true) == w::TimeRoute::World &&
+              w::ChooseTimeRoute(time(R"({"hours":2})"), "character_menu", true) == w::TimeRoute::World);
+    Check("RB-67: a photo-mode time (the undo's target photo) replayed after photo mode closes changes nothing",
+          w::ChooseTimeRoute(time(R"({"hours":2,"target":"photo"})"), "gameplay", true) == w::TimeRoute::PhotoClosed &&
+              w::ChooseTimeRoute(time(R"({"hours":2,"target":"photo"})"), "character_menu", false) == w::TimeRoute::PhotoClosed);
+    const auto closed = w::PhotoClosedTimeResult("gameplay");
+    Check("RB-67: the no-op says nothing changed and has no undo",
+          closed["changed"] == false && closed["undo"].is_null() && closed["note"].get<std::string>().find("world's clock was not touched") != std::string::npos,
+          closed.dump());
+    Check("RB-67: target world and total_seconds are refused in photo mode",
+          ParamsCode([&] { w::ChooseTimeRoute(time(R"({"hours":2,"target":"world"})"), "photo_mode", true); }) == "not_in_gameplay" &&
+              ParamsCode([&] { w::ChooseTimeRoute(time(R"({"total_seconds":7200})"), "photo_mode", true); }) == "bad_params");
+    Check("RB-70: photo mode's time of day needs the photo write class, whatever the method's own class",
+          ParamsCode([&] { w::ChooseTimeRoute(time(R"({"hours":2})"), "photo_mode", false); }) == "write_class_disabled" &&
+              w::ChooseTimeRoute(time(R"({"hours":2})"), "gameplay", false) == w::TimeRoute::World);
+    const json minutesSlider{{"seen", true}, {"kind", "slider"}, {"label", "TIME OF DAY"}, {"label_key", ""}, {"min", 0}, {"max", 1440}};
+    const auto inMinutes = w::PlanPhotoTime(minutesSlider, time(R"({"hours":2,"minutes":30})"));
+    Check("the time-of-day slider in minutes (0-1440, the first session's dump) takes 150 for 02:30",
+          inMinutes.value == 150.0 && inMinutes.minutesPerUnit == 1.0);
+    json hoursSlider = minutesSlider;
+    hoursSlider["max"] = 24;
+    const auto inHours = w::PlanPhotoTime(hoursSlider, time(R"({"hours":2,"minutes":30})"));
+    Check("RB-75: a time-of-day slider in hours (0-24) takes 2.5 for 02:30",
+          inHours.value == 2.5 && inHours.minutesPerUnit == 60.0);
+    const auto hoursResult = w::PhotoTimeResult(json{{"label", "TIME OF DAY"}, {"before", 4.06}, {"before_known", true}, {"after", 2.5}}, inHours);
+    Check("RB-75: the hours slider's answer is in minutes, and its undo in hours and minutes with target photo",
+          hoursResult["before_minutes"].get<double>() > 243.5 && hoursResult["after_minutes"] == 150.0 && hoursResult["unit"] == "hours" &&
+              hoursResult["undo"] == json{{"method", "world.time.set"}, {"params", {{"hours", 4}, {"minutes", 4}, {"target", "photo"}}}},
+          hoursResult.dump());
+    const auto minutesResult = w::PhotoTimeResult(json{{"before", 243.592}, {"before_known", true}, {"after", 150}}, inMinutes);
+    Check("world.time.set in photo mode undoes to photo mode's earlier time of day, to the minute, with target photo",
+          minutesResult["undo"] == json{{"method", "world.time.set"}, {"params", {{"hours", 4}, {"minutes", 4}, {"target", "photo"}}}},
+          minutesResult.dump());
+    const auto photoUnknown = w::PhotoTimeResult(json{{"before", -1.0}, {"before_known", false}, {"after", 150}}, inMinutes);
+    Check("no undo when photo mode's earlier time of day is unknown, with a note",
+          photoUnknown["undo"].is_null() && photoUnknown.contains("undo_note") && photoUnknown["before_minutes"].is_null(), photoUnknown.dump());
+    Check("RB-70: attribute 70 is taken only as a slider named for the time over a day's range",
+          [&] {
+              json speed = minutesSlider;
+              speed["label"] = "GAME SPEED";
+              json keyed = minutesSlider;
+              keyed["label"] = "HEURE";
+              keyed["label_key"] = "UI-PhotoMode-TimeOfDay";
+              json options = minutesSlider;
+              options["kind"] = "options";
+              json wide = minutesSlider;
+              wide["max"] = 5000;
+              const auto request = p::ParseTime(json::parse(R"({"hours":2})"));
+              return ParamsCode([&] { w::PlanPhotoTime(speed, request); }) == "unavailable" &&
+                     ParamsCode([&] { w::PlanPhotoTime(keyed, request); }) == "ok" &&
+                     ParamsCode([&] { w::PlanPhotoTime(options, request); }) == "unavailable" &&
+                     ParamsCode([&] { w::PlanPhotoTime(wide, request); }) == "unavailable" &&
+                     ParamsCode([&] { w::PlanPhotoTime(json{{"seen", false}}, request); }) == "unavailable";
+          }());
+
+    // 0.5.1 (RB-72): photo.expression.index against the list's table indices.
+    const json faceList{{"seen", true},
+                        {"entries",
+                         {{{"data", 0}, {"table_index", 0}, {"table_index_by", "label"}, {"table_index_verified", true}},
+                          {{"data", 56}, {"table_index", 60}, {"table_index_by", "label"}, {"table_index_verified", true}},
+                          {{"data", 57}, {"table_index", 61}, {"table_index_by", "position"}, {"table_index_verified", false}}}}};
+    const auto faceIndex = [](const char* aText) { return p::ParseExpressionIndex(json::parse(aText)); };
+    Check("RB-72: a table index found by the expression's name is accepted (index_by label)",
+          w::CheckFaceIndex(faceIndex(R"({"index":60})"), faceList) == "label");
+    Check("RB-72: an index known only by list position is refused unless force",
+          ParamsCode([&] { w::CheckFaceIndex(faceIndex(R"({"index":61})"), faceList); }) == "unverified_index" &&
+              w::CheckFaceIndex(faceIndex(R"({"index":61,"force":true})"), faceList) == "position");
+    Check("RB-72: an index the list doesn't have is refused unless unlisted, and the menu value is not a table index",
+          ParamsCode([&] { w::CheckFaceIndex(faceIndex(R"({"index":56})"), faceList); }) == "bad_params" &&
+              w::CheckFaceIndex(faceIndex(R"({"index":56,"unlisted":true})"), json::object()) == "unlisted");
+    Check("RB-72: a list not seen yet is unavailable",
+          ParamsCode([&] { w::CheckFaceIndex(faceIndex(R"({"index":60})"), json{{"seen", false}}); }) == "unavailable");
+
+    // 0.5.1 (RB-71): cc.apply by index with the row and value read before.
+    const auto expected = p::ParseCharacterApply(json::parse(R"({"option":"makeupLips_color","index":6,"expect_option":"makeupLips_09","expect_value":"lips_09_06"})"));
+    Check("RB-71: cc.apply carries the row and value read before applying by index",
+          expected.expectOption == "makeupLips_09" && expected.expectValue == "lips_09_06" && expected.index == 6);
+    Check("RB-71: expect_option and expect_value go only with index",
+          ParamsCode([] { p::ParseCharacterApply(json::parse(R"({"option":"XF","value":"01","expect_value":"x"})")); }) == "bad_params");
     Check("photo.expression.index needs a whole index from 0 to 100000",
           ParamsCode([] { p::ParseExpressionIndex(json::object()); }) == "bad_params" &&
               ParamsCode([] { p::ParseExpressionIndex(json::parse(R"({"index":-1})")); }) == "bad_params" &&
@@ -904,7 +986,17 @@ void CreatorAndOptionsTests()
     Check("cc.open takes the ripperdoc mode (edit tag 2)",
           static_cast<int32_t>(p::ParseCreatorOpen(json::parse(R"({"mode":"ripperdoc"})")).mode) == 2 &&
               static_cast<int32_t>(p::CreatorMode::Mirror) == 1);
-    Check("cc.open refuses the new-game mode and waits outside 0.5-15 s",
+    Check("0.5.1 (RB-66): cc.open's edit mode defaults to the mode's own tag (HairDresser 1, Ripperdoc 2)",
+          open.editMode == p::CreatorEditMode::EditTag && p::CreatorEditTagCode(open) == 1 &&
+              p::CreatorEditTagCode(p::ParseCreatorOpen(json::parse(R"({"mode":"ripperdoc"})"))) == 2);
+    Check("0.5.1 (RB-66): edit_mode new_game opens with the NewGame tag (0), as CCA's F12 ran in session 4",
+          p::CreatorEditTagCode(p::ParseCreatorOpen(json::parse(R"({"edit_mode":"new_game"})"))) == 0 &&
+              p::CreatorEditTagCode(p::ParseCreatorOpen(json::parse(R"({"edit_mode":"new_game","mode":"mirror"})"))) == 0 &&
+              std::string(p::CreatorEditModeName(p::CreatorEditMode::NewGame)) == "new_game");
+    Check("0.5.1 (RB-66): edit_mode refuses other values and new_game with ripperdoc (it already allows every row)",
+          ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"edit_mode":"hairdresser"})")); }) == "bad_params" &&
+              ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"edit_mode":"new_game","mode":"ripperdoc"})")); }) == "bad_params");
+    Check("cc.open refuses the new-game mode as a mode (it is an edit_mode) and waits outside 0.5-15 s",
           ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"mode":"new_game"})")); }) == "bad_params" &&
               ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"timeout_ms":100})")); }) == "bad_params" &&
               ParamsCode([] { p::ParseCreatorOpen(json::parse(R"({"timeout_ms":20000})")); }) == "bad_params");
@@ -980,6 +1072,52 @@ void CreatorAndOptionsTests()
         ops.prepare = [&]() -> json { throw xfb::MethodError("not_safe_now", "V is in combat"); };
         Check("a refused moment stops cc.open before the save lock settles or anything is asked",
               ParamsCode([&] { w::CreatorOpen(p::ParseCreatorOpen(json::object()), ops); }) == "not_safe_now" && calls.empty());
+
+        // RB-69: a request withdrawn while still waiting had its pause-menu event raised; the timeout says the
+        // pause menu may open as usual.
+        ops.prepare = [&] { return json{{"save_lock_requested", true}}; };
+        ops.phase = [&] { return std::string("gameplay"); };
+        ops.cancel = [&] { return json{{"withdrawn", true}, {"taken", false}, {"outcome", "withdrawn"}, {"pause_menu_may_open", true}}; };
+        std::string message;
+        try
+        {
+            w::CreatorOpen(p::ParseCreatorOpen(json::parse(R"({"timeout_ms":500})")), ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + ": " + e.what();
+        }
+        Check("0.5.1 (RB-69): a timed-out request withdrawn after its pause-menu event says the pause menu may open",
+              message.rfind("creator_open_timeout", 0) == 0 && message.find("pause menu may open as usual") != std::string::npos &&
+                  message.find("nothing opened") == std::string::npos,
+              message);
+    }
+
+    // RB-69, RB-75: the pause menu's redirect decision, every way through.
+    {
+        const auto decide = [](bool aPending, double aAge, const char* aPrev, bool aRefused, double aWithdrawn) {
+            return w::CreatorRedirect(
+                json{{"pending", aPending}, {"age_s", aAge}, {"prev", aPrev}, {"refused", aRefused}, {"withdrawn_age_s", aWithdrawn}});
+        };
+        Check("the redirect: a fresh request from normal play switches to the mirror's scenario",
+              decide(true, 0.2, "MenuScenario_Idle", false, -1) == "redirect" && decide(true, 3.0, "MenuScenario_Idle", false, -1) == "redirect");
+        Check("the redirect: no request (the player's own Esc) opens the pause menu",
+              decide(false, 0.0, "MenuScenario_Idle", false, -1) == "none" && w::CreatorRedirect(json::object()) == "none");
+        Check("the redirect: an expired request (over 3 s, a negative age after an engine-time reset, or no age) opens the pause menu",
+              decide(true, 3.01, "MenuScenario_Idle", false, -1) == "expired" && decide(true, -5.0, "MenuScenario_Idle", false, -1) == "expired" &&
+                  w::CreatorRedirect(json{{"pending", true}, {"prev", "MenuScenario_Idle"}}) == "expired" &&
+                  w::CreatorRedirect(json{{"pending", true}, {"age_s", "1"}, {"prev", "MenuScenario_Idle"}}) == "expired");
+        Check("the redirect: a fresh request whose moment passed (refused) opens the pause menu",
+              decide(true, 0.5, "MenuScenario_Idle", true, -1) == "refused");
+        Check("0.5.1 (RB-69): the pause menu from another scenario (credits picker, debug hub) isn't redirected and the request waits",
+              decide(true, 0.5, "MenuScenario_CreditsPickerPause", false, -1) == "foreign" && decide(true, 0.5, "", false, -1) == "foreign" &&
+                  w::CreatorRedirect(json{{"pending", true}, {"age_s", 0.5}}) == "foreign");
+        Check("0.5.1 (RB-69): a request withdrawn after its event lets the pause menu open (logged), only within the window",
+              decide(false, 0.0, "MenuScenario_Idle", false, 1.0) == "withdrawn" && decide(false, 0.0, "MenuScenario_Idle", false, 4.0) == "none" &&
+                  decide(false, 0.0, "MenuScenario_CreditsPickerPause", false, 1.0) == "none");
+        Check("the redirect: wrong types never redirect",
+              w::CreatorRedirect(json{{"pending", "yes"}, {"age_s", 0.1}, {"prev", "MenuScenario_Idle"}}) == "none" &&
+                  w::CreatorRedirect(json{{"pending", true}, {"age_s", 0.1}, {"prev", 7}}) == "foreign");
     }
 
     // game.options.read parameters.
@@ -1134,8 +1272,8 @@ void Batch4Tests()
         // Still waiting: withdrawn, nothing opened.
         cancelAnswer = {{"withdrawn", true}, {"taken", false}};
         const auto timedOut = run(R"({"timeout_ms":500})", &message);
-        Check("a request still waiting is withdrawn: creator_open_timeout, nothing opened, saving stays locked",
-              timedOut == "creator_open_timeout" && message.find("nothing opened") != std::string::npos &&
+        Check("a request still waiting is withdrawn: creator_open_timeout, nothing will open, saving stays locked",
+              timedOut == "creator_open_timeout" && message.find("nothing will open") != std::string::npos &&
                   message.find("saving stays locked") != std::string::npos,
               message);
 

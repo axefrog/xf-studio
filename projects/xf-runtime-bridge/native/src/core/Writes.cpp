@@ -211,23 +211,130 @@ json PauseResult(json aScript)
 
 json TimeResult(json aScript)
 {
-    if (aScript.value("route", std::string()) == "photo_time")
-    {
-        const auto before = aScript.find("before_minutes");
-        if (!aScript.value("before_known", false) || before == aScript.end() || !before->is_number() ||
-            before->get<double>() < 0.0)
-        {
-            aScript["undo"] = nullptr;
-            aScript["undo_note"] = "photo mode's earlier time of day wasn't known; leaving photo mode puts the time back";
-            return aScript;
-        }
-        const auto minutes = static_cast<int32_t>(std::lround(before->get<double>())) % 1440;
-        aScript["undo"] = {{"method", "world.time.set"}, {"params", {{"hours", minutes / 60}, {"minutes", minutes % 60}}}};
-        aScript["undo_note"] = "sets photo mode's time of day back (to the minute); leaving photo mode also puts it back";
-        return aScript;
-    }
-    aScript["undo"] = {{"method", "world.time.set"}, {"params", {{"total_seconds", aScript.value("before_total_seconds", 0)}}}};
+    aScript["route"] = "world_clock";
+    aScript["undo"] = {{"method", "world.time.set"},
+                       {"params", {{"total_seconds", aScript.value("before_total_seconds", 0)}, {"target", "world"}}}};
     return aScript;
+}
+
+TimeRoute ChooseTimeRoute(const params::TimeRequest& aRequest, const std::string& aPhase, bool aPhotoClassAllowed)
+{
+    if (aPhase == "photo_mode")
+    {
+        if (aRequest.target == "world")
+        {
+            throw MethodError("not_in_gameplay", "photo mode is open and keeps its own time of day; the world's clock is set in "
+                                                 "normal play or with the appearance screen open (photo_exit first)");
+        }
+        if (aRequest.totalSeconds >= 0)
+        {
+            throw MethodError("bad_params", "in photo mode the time is photo mode's own time-of-day slider, set with hours and "
+                                            "minutes; total_seconds (an exact time with its day) applies only outside photo mode");
+        }
+        if (!aPhotoClassAllowed)
+        {
+            throw MethodError("write_class_disabled", "in photo mode the time is photo mode's own time-of-day slider, a photo-mode "
+                                                      "setting, and the photo write class isn't in allow_write_classes");
+        }
+        return TimeRoute::Photo;
+    }
+    return aRequest.target == "photo" ? TimeRoute::PhotoClosed : TimeRoute::World;
+}
+
+json PhotoClosedTimeResult(const std::string& aPhase)
+{
+    return json{{"phase", aPhase},
+                {"route", "photo_time"},
+                {"changed", false},
+                {"note", "photo mode is closed, so there is no photo-mode time of day to set; the world's clock was not "
+                         "touched (a photo-mode undo never reaches it)"},
+                {"undo", nullptr},
+                {"undo_note", "nothing changed"}};
+}
+
+namespace
+{
+std::string Lower(std::string aText)
+{
+    std::transform(aText.begin(), aText.end(), aText.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return aText;
+}
+} // namespace
+
+PhotoTimePlan PlanPhotoTime(const json& aSlider, const params::TimeRequest& aRequest)
+{
+    const auto text = [&](const char* aKey) {
+        const auto it = aSlider.find(aKey);
+        return it != aSlider.end() && it->is_string() ? it->get<std::string>() : std::string();
+    };
+    const auto number = [&](const char* aKey) {
+        const auto it = aSlider.find(aKey);
+        return it != aSlider.end() && it->is_number() ? it->get<double>() : -1.0;
+    };
+    const auto seenIt = aSlider.find("seen");
+    if (seenIt == aSlider.end() || !seenIt->is_boolean() || !seenIt->get<bool>())
+    {
+        throw MethodError("unavailable", "photo mode's time-of-day slider (attribute 70) hasn't been seen in the menu; open the "
+                                         "Environment tab once (or reopen photo mode), then try again");
+    }
+    PhotoTimePlan plan;
+    plan.label = text("label");
+    const double min = number("min");
+    const double max = number("max");
+    // The key can shift with the game version or mods that add rows: only a slider named for the time (its
+    // label, TIME OF DAY in English, or its localisation key) over a day's range is taken (RB-70).
+    const bool named = Lower(plan.label).find("time") != std::string::npos || Lower(text("label_key")).find("time") != std::string::npos;
+    if (text("kind") != "slider" || !named || min < 0.0 || max < 23.0 || max > 1441.0)
+    {
+        throw MethodError("unavailable", "photo mode's attribute 70 isn't the time-of-day slider the bridge expects (it is '" +
+                                             plan.label + "', a " + text("kind") + " from " + std::to_string(min) + " to " +
+                                             std::to_string(max) + "), so the time wasn't set");
+    }
+    plan.minutesPerUnit = max <= 24.5 ? 60.0 : 1.0;
+    const double wanted = aRequest.hours * 60.0 + aRequest.minutes + aRequest.seconds / 60.0;
+    plan.value = wanted / plan.minutesPerUnit;
+    if (plan.value < min || plan.value > max)
+    {
+        throw MethodError("bad_params", "photo mode's time of day runs from " + std::to_string(min) + " to " + std::to_string(max) +
+                                            (plan.minutesPerUnit == 60.0 ? " hours" : " minutes"));
+    }
+    return plan;
+}
+
+json PhotoTimeResult(const json& aSet, const PhotoTimePlan& aPlan)
+{
+    const auto number = [&](const char* aKey) {
+        const auto it = aSet.find(aKey);
+        return it != aSet.end() && it->is_number() ? it->get<double>() : -1.0;
+    };
+    const double before = number("before");
+    const double after = number("after");
+    const auto knownIt = aSet.find("before_known");
+    const bool beforeKnown = knownIt != aSet.end() && knownIt->is_boolean() && knownIt->get<bool>() && before >= 0.0;
+    const auto labelIt = aSet.find("label");
+    json out{{"phase", "photo_mode"},
+             {"route", "photo_time"},
+             {"key", 70},
+             {"label", labelIt != aSet.end() && labelIt->is_string() ? labelIt->get<std::string>() : aPlan.label},
+             {"unit", aPlan.minutesPerUnit == 60.0 ? "hours" : "minutes"},
+             {"before_minutes", beforeKnown ? json(before * aPlan.minutesPerUnit) : json(nullptr)},
+             {"before_known", beforeKnown},
+             {"after_minutes", after >= 0.0 ? json(after * aPlan.minutesPerUnit) : json(nullptr)},
+             {"changed", true},
+             {"note", "photo mode's own time of day; whether the world's clock is as before once photo mode closes is not "
+                      "established yet"}};
+    if (!beforeKnown)
+    {
+        out["undo"] = nullptr;
+        out["undo_note"] = "photo mode's earlier time of day wasn't known, so there is no undo; set it again with world.time.set "
+                           "(target photo) or leave photo mode";
+        return out;
+    }
+    const auto minutes = static_cast<int32_t>(std::lround(before * aPlan.minutesPerUnit)) % 1440;
+    out["undo"] = {{"method", "world.time.set"}, {"params", {{"hours", minutes / 60}, {"minutes", minutes % 60}, {"target", "photo"}}}};
+    out["undo_note"] = "sets photo mode's time of day back (to the minute); once photo mode has closed this undo changes nothing "
+                       "(target photo never reaches the world's clock)";
+    return out;
 }
 
 json ExpressionResult(json aScript)
@@ -238,6 +345,59 @@ json ExpressionResult(json aScript)
     aScript.erase("name");
     AttachUndo(aScript, "photo.expression.set", undo, unknown, "");
     return aScript;
+}
+
+std::string CheckFaceIndex(const params::ExpressionIndexRequest& aRequest, const json& aList)
+{
+    if (aRequest.unlisted)
+    {
+        return "unlisted";
+    }
+    const auto seen = aList.find("seen");
+    const auto entries = aList.find("entries");
+    if (seen == aList.end() || !seen->is_boolean() || !seen->get<bool>() || entries == aList.end() || !entries->is_array())
+    {
+        throw MethodError("unavailable", "the photo-mode expression list hasn't been seen yet; close and reopen photo mode, or pass unlisted");
+    }
+    bool verified = false;
+    bool byPosition = false;
+    for (const auto& entry : *entries)
+    {
+        const auto index = entry.find("table_index");
+        if (!entry.is_object() || index == entry.end() || !index->is_number_integer() || index->get<int64_t>() != aRequest.index)
+        {
+            continue;
+        }
+        const auto flag = entry.find("table_index_verified");
+        const auto by = entry.find("table_index_by");
+        // Verified only when the script says so and the index came from the name (older scripts send no flag).
+        const bool byLabel = by != entry.end() && by->is_string() && by->get<std::string>() == "label";
+        if (byLabel && (flag == entry.end() || (flag->is_boolean() && flag->get<bool>())))
+        {
+            verified = true;
+        }
+        else
+        {
+            byPosition = true;
+        }
+    }
+    if (verified)
+    {
+        return "label";
+    }
+    if (byPosition)
+    {
+        if (aRequest.force)
+        {
+            return "position";
+        }
+        throw MethodError("unverified_index", "face table index " + std::to_string(aRequest.index) +
+                                                  " matches an expression only by its list position, which session 4 showed isn't the "
+                                                  "table index when an expression pack is installed; pass force: true to apply it anyway");
+    }
+    throw MethodError("bad_params", "face table index " + std::to_string(aRequest.index) +
+                                        " is not one of the photo-mode expression list's table indices (photo.state with options lists "
+                                        "them as table_index); pass unlisted to apply it anyway");
 }
 
 json ExpressionIndexResult(json aScript)
@@ -493,11 +653,21 @@ json WithdrawCreatorOpen(const CreatorOpenOps& aOps)
     }
 }
 
+// A request withdrawn while still waiting had its pause-menu event raised already (RB-69).
+bool PauseMenuMayOpen(const json& aWithdrawal)
+{
+    const auto it = aWithdrawal.find("pause_menu_may_open");
+    return it != aWithdrawal.end() && it->is_boolean() && it->get<bool>();
+}
+
 std::string WithdrawnText(const json& aWithdrawal)
 {
     if (aWithdrawal.value("withdrawn", false))
     {
-        return "the request was withdrawn, so nothing will open";
+        return PauseMenuMayOpen(aWithdrawal)
+                   ? "the request was withdrawn, so the appearance screen won't open, but the pause menu may open as usual "
+                     "(its event was already raised; Esc closes it)"
+                   : "the request was withdrawn, so nothing will open";
     }
     if (aWithdrawal.value("taken", false))
     {
@@ -596,9 +766,8 @@ json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOp
     {
         throw MethodError("creator_open_timeout",
                           "asked the game to open the appearance screen, but it wasn't open after " +
-                              std::to_string(aRequest.timeoutMs) +
-                              " ms; the request was withdrawn and nothing opened (a menu or the pause screen may have been "
-                              "open); " + kSaveLockNote);
+                              std::to_string(aRequest.timeoutMs) + " ms (a menu or the pause screen may have been open); " +
+                              WithdrawnText(withdrawal) + "; " + kSaveLockNote);
     }
     int32_t late = 0;
     if (withdrawal.value("taken", false))
@@ -623,6 +792,41 @@ json CreatorOpen(const params::CreatorOpenRequest& aRequest, const CreatorOpenOp
     throw MethodError("creator_open_uncertain", "asked the game to open the appearance screen, but it wasn't open after " +
                                                     std::to_string(waited + late) + " ms; " + WithdrawnText(withdrawal) +
                                                     "; " + kSaveLockNote);
+}
+
+std::string CreatorRedirect(const json& aState)
+{
+    const auto number = [&](const char* aKey) {
+        const auto it = aState.find(aKey);
+        return it != aState.end() && it->is_number() ? it->get<double>() : -1.0;
+    };
+    const auto flag = [&](const char* aKey) {
+        const auto it = aState.find(aKey);
+        return it != aState.end() && it->is_boolean() && it->get<bool>();
+    };
+    const auto prevIt = aState.find("prev");
+    const std::string prev = prevIt != aState.end() && prevIt->is_string() ? prevIt->get<std::string>() : std::string();
+    const bool fromGameplay = prev == kCreatorRedirectFrom;
+    if (flag("pending"))
+    {
+        if (!fromGameplay)
+        {
+            return "foreign";
+        }
+        // Negative (an engine-time reset), NaN (not a number) or older than the window: expired.
+        const double age = number("age_s");
+        if (!(age >= 0.0 && age <= kCreatorRedirectWindowS))
+        {
+            return "expired";
+        }
+        return flag("refused") ? "refused" : "redirect";
+    }
+    const double withdrawn = number("withdrawn_age_s");
+    if (fromGameplay && withdrawn >= 0.0 && withdrawn <= kCreatorRedirectWindowS)
+    {
+        return "withdrawn";
+    }
+    return "none";
 }
 
 json PoseSet(const PoseSetOps& aOps)

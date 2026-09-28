@@ -50,6 +50,8 @@ public abstract class XFJson {
 public class XFPhotoItem {
   public let key: Uint32;
   public let label: String;
+  // The label as the menu set it up, before localisation (world.time.set checks attribute 70 by it; RB-70).
+  public let labelKey: String;
   public let page: Uint32;
   public let kind: String; // "item" until set up, then "slider", "hue" or "options"
   public let minValue: Float;
@@ -78,6 +80,10 @@ public class XFBridgeRegistry extends ScriptableSystem {
   private let m_ccOpenMode: Int32;
   private let m_ccOpenAt: Float;
   private let m_ccOpenCid: String;
+  // A request withdrawn while still waiting (a timeout or the kill switch): its pause-menu event was already
+  // raised, so the pause menu may still open, as usual (RB-69). Engine time of the withdrawal (0: none).
+  private let m_ccOpenWithdrawnAt: Float;
+  private let m_ccOpenWithdrawnCid: String;
   // player.appearance's last full reading in the creator (0.4.2) and its engine time.
   private let m_lastCreatorReading: String;
   private let m_lastCreatorReadingAt: Float;
@@ -268,6 +274,20 @@ public class XFBridgeRegistry extends ScriptableSystem {
     return StrLen(this.m_lastCreatorReading) > 0;
   }
 
+  public func ClearLastCreatorReading() -> Void {
+    this.m_lastCreatorReading = "";
+    this.m_lastCreatorReadingAt = 0.0;
+  }
+
+  // The player attaches when a game session starts and after every save load (0.5.1, RB-73): the last
+  // creator reading belonged to the V before it, and its engine time may have been reset, so it goes.
+  private func OnPlayerAttach(request: ref<PlayerAttachRequest>) -> Void {
+    if this.HasLastCreatorReading() {
+      XFBridgeLog.Info("rs-player", "player attached (a save loaded or the game started): the last creator reading was cleared");
+    }
+    this.ClearLastCreatorReading();
+  }
+
   public func LastCreatorReading() -> String {
     return this.m_lastCreatorReading;
   }
@@ -276,30 +296,9 @@ public class XFBridgeRegistry extends ScriptableSystem {
     return this.m_lastCreatorReadingAt;
   }
 
-  // Whether a cc.open request waits for the pause menu (taken or expired by TakeCreatorOpen).
+  // Whether a cc.open request waits for the pause menu (taken, expired or refused by TakeCreatorOpenAs).
   public func CreatorOpenPending() -> Bool {
     return this.m_ccOpenRequested;
-  }
-
-  // The requested edit mode, once, or -1 when there is no fresh request.
-  public func TakeCreatorOpen(now: Float) -> Int32 {
-    if !this.m_ccOpenRequested {
-      return -1;
-    }
-    this.m_ccOpenRequested = false;
-    this.m_ccOpenOutcomeCid = this.m_ccOpenCid;
-    if now - this.m_ccOpenAt > 3.0 || now < this.m_ccOpenAt {
-      this.m_ccOpenOutcome = "expired";
-      XFBridgeLog.Warn(this.m_ccOpenCid, "cc.open request expired before the menu picked it up; nothing opened");
-      return -1;
-    }
-    this.m_ccOpenOutcome = "taken";
-    return this.m_ccOpenMode;
-  }
-
-  // The menu's answer to the request it took: "switched" (the screen is opening) or "refused".
-  public func NoteCreatorOpenOutcome(outcome: String) -> Void {
-    this.m_ccOpenOutcome = outcome;
   }
 
   // The outcome of cid's request once the menu took it, or "" if it never did.
@@ -317,7 +316,49 @@ public class XFBridgeRegistry extends ScriptableSystem {
   public func CancelCreatorOpen() -> Bool {
     let was = this.m_ccOpenRequested;
     this.m_ccOpenRequested = false;
+    if was {
+      // The request is made in the same step that raises the pause menu's event (XFCharacter.Open), so a
+      // request still waiting had its event raised: the pause menu may still open, as usual (RB-69).
+      let game = GetGameInstance();
+      if GameInstance.IsValid(game) {
+        this.m_ccOpenWithdrawnAt = EngineTime.ToFloat(GameInstance.GetEngineTime(game));
+        this.m_ccOpenWithdrawnCid = this.m_ccOpenCid;
+      }
+    }
     return was;
+  }
+
+  // Seconds since a waiting request was withdrawn, or -1 when none was (or the engine time went back).
+  public func CreatorOpenWithdrawnAge(now: Float) -> Float {
+    if this.m_ccOpenWithdrawnAt <= 0.0 || now < this.m_ccOpenWithdrawnAt {
+      return -1.0;
+    }
+    return now - this.m_ccOpenWithdrawnAt;
+  }
+
+  public func ClearCreatorOpenWithdrawn() -> Void {
+    this.m_ccOpenWithdrawnAt = 0.0;
+  }
+
+  public func CreatorOpenWithdrawnCid() -> String {
+    return this.m_ccOpenWithdrawnCid;
+  }
+
+  // The pending request's age in seconds of engine time (negative after an engine-time reset).
+  public func CreatorOpenAge(now: Float) -> Float {
+    return now - this.m_ccOpenAt;
+  }
+
+  // Takes the pending request with the pause menu's decision (XFBridge_CreatorRedirect): "switched" returns
+  // the edit tag; "expired" or "refused" returns -1. The outcome is kept for CancelOpen (RB-42).
+  public func TakeCreatorOpenAs(outcome: String) -> Int32 {
+    this.m_ccOpenRequested = false;
+    this.m_ccOpenOutcomeCid = this.m_ccOpenCid;
+    this.m_ccOpenOutcome = outcome;
+    if Equals(outcome, "switched") {
+      return this.m_ccOpenMode;
+    }
+    return -1;
   }
 
   // The appearance screen's changes ------------------------------------------------------------
@@ -535,6 +576,7 @@ protected cb func OnAddMenuItem(labelText: String, attributeKey: Uint32, page: U
   let registry = XFBridgeRegistry.Get();
   if IsDefined(registry) {
     let item = registry.Item(attributeKey);
+    item.labelKey = labelText;
     item.label = GetLocalizedText(labelText);
     item.page = page;
   }
@@ -830,39 +872,74 @@ public func XFBridgeCameraTo(slot: CName) -> Void {
 // instead of opening the pause menu. The bridge does the same: XFCharacter.Open raises OnOpenPauseMenu
 // through the menu-event blackboard (the controller's OnTriggerMenuEvent makes the same
 // SpawnMenuInstanceEvent call, inGameMenuGameController.script:294), and the wrap below redirects the pause
-// menu's scenario only for a fresh bridge request (three seconds), passing the creator's data with the
-// edit tag, so the vanilla mirror scenario marks it an edit of V's look (inGameScenarios.script:217-247).
-// Without a request, or when the moment passed, the pause menu opens as usual. Our own code.
+// menu's scenario only for a fresh bridge request, passing the creator's data with the edit tag (NewGame,
+// HairDresser or Ripperdoc: cc.open's edit_mode and mode, RB-66), so the vanilla mirror scenario marks it an
+// edit of V's look (inGameScenarios.script:217-247).
+//
+// What the wrap does is decided by the plugin (XFBridge_CreatorRedirect, core/Writes.cpp CreatorRedirect,
+// unit-tested; RB-69, RB-75), from the request's age, the scenario the pause menu came from and whether the
+// moment still allows it: only a request under three seconds old, with the pause menu entered from normal
+// play (MenuScenario_Idle; the credits picker and the debug hub also enter it), is redirected. Without a
+// request, when it expired or the moment passed, or when the plugin gives no answer, the pause menu opens as
+// usual; so does the pause menu of a request withdrawn after its event was raised (the withdrawal says so).
+// Our own code.
 @wrapMethod(MenuScenario_PauseMenu)
 protected cb func OnEnterScenario(prevScenario: CName, userData: ref<IScriptable>) -> Bool {
   let registry = XFBridgeRegistry.Get();
-  if !IsDefined(registry) || !registry.CreatorOpenPending() {
+  if !IsDefined(registry) {
     return wrappedMethod(prevScenario, userData);
   }
   let game = GetGameInstance();
-  let mode = registry.TakeCreatorOpen(EngineTime.ToFloat(GameInstance.GetEngineTime(game)));
-  if mode < 0 {
+  let now = EngineTime.ToFloat(GameInstance.GetEngineTime(game));
+  let pending = registry.CreatorOpenPending();
+  let withdrawnAge = registry.CreatorOpenWithdrawnAge(now);
+  if !pending && withdrawnAge < 0.0 {
     return wrappedMethod(prevScenario, userData);
   }
+  // The moment is checked again only for a request that could be redirected. The game is then in a menu, so
+  // the phase and photo mode's permission (both checked a moment before, in normal play) are skipped.
+  let refusal = "";
+  if pending {
+    refusal = XFCharacter.OpenRefusalAt(true);
+  }
+  let state = "{\"pending\":" + XFJson.Flag(pending) + ",\"age_s\":" + XFJson.Num(registry.CreatorOpenAge(now)) + ",\"prev\":" + XFJson.Name(prevScenario) + ",\"refused\":" + XFJson.Flag(StrLen(refusal) > 0) + ",\"withdrawn_age_s\":" + XFJson.Num(withdrawnAge) + "}";
+  let decision = XFBridge_CreatorRedirect(state);
   let cid = registry.CreatorOpenCid();
-  // The pause menu is opening, so the game is no longer in normal play: check what can change in a moment
-  // (combat, a scene, a vehicle, the player) but not the phase or photo mode's permission.
-  let refusal = XFCharacter.OpenRefusalAt(true);
-  if StrLen(refusal) > 0 {
-    registry.NoteCreatorOpenOutcome("refused");
-    XFBridgeLog.Warn(cid, "cc.open: the moment passed before the pause menu opened; the pause menu opens as usual instead: " + refusal);
-    return wrappedMethod(prevScenario, userData);
+  if Equals(decision, "redirect") {
+    let mode = registry.TakeCreatorOpenAs("switched");
+    let data = new MorphMenuUserData();
+    if mode == 2 {
+      data.m_editMode = gameuiCharacterCustomizationEditTag.Ripperdoc;
+    } else {
+      if mode == 0 {
+        data.m_editMode = gameuiCharacterCustomizationEditTag.NewGame;
+      } else {
+        data.m_editMode = gameuiCharacterCustomizationEditTag.HairDresser;
+      }
+    }
+    this.SwitchToScenario(n"MenuScenario_CharacterCustomizationMirror", data);
+    XFBridgeLog.Info(cid, "cc.open: the pause menu's scenario switched to MenuScenario_CharacterCustomizationMirror (edit mode " + XFCharacter.ModeName(mode) + ", Character Customization Anywhere's route); undo: cc.back");
+    return true;
   }
-  registry.NoteCreatorOpenOutcome("switched");
-  let data = new MorphMenuUserData();
-  if mode == 2 {
-    data.m_editMode = gameuiCharacterCustomizationEditTag.Ripperdoc;
+  if Equals(decision, "expired") {
+    registry.TakeCreatorOpenAs("expired");
+    XFBridgeLog.Warn(cid, "cc.open request expired before the pause menu opened; the pause menu opens as usual instead");
   } else {
-    data.m_editMode = gameuiCharacterCustomizationEditTag.HairDresser;
+    if Equals(decision, "refused") {
+      registry.TakeCreatorOpenAs("refused");
+      XFBridgeLog.Warn(cid, "cc.open: the moment passed before the pause menu opened; the pause menu opens as usual instead: " + refusal);
+    } else {
+      if Equals(decision, "withdrawn") {
+        registry.ClearCreatorOpenWithdrawn();
+        XFBridgeLog.Info(registry.CreatorOpenWithdrawnCid(), "cc.open: the pause menu opened for a request that was already withdrawn; it opens as usual (Esc closes it)");
+      } else {
+        if Equals(decision, "foreign") {
+          XFBridgeLog.Info(cid, "cc.open: the pause menu opened from " + NameToString(prevScenario) + ", not from normal play; it opens as usual and the request keeps waiting");
+        }
+      }
+    }
   }
-  this.SwitchToScenario(n"MenuScenario_CharacterCustomizationMirror", data);
-  XFBridgeLog.Info(cid, "cc.open: the pause menu's scenario switched to MenuScenario_CharacterCustomizationMirror (edit mode " + XFCharacter.ModeName(mode) + ", Character Customization Anywhere's route); undo: cc.back");
-  return true;
+  return wrappedMethod(prevScenario, userData);
 }
 
 @wrapMethod(characterCreationBodyMorphMenu)
@@ -956,6 +1033,9 @@ public abstract class XFBridgeActions {
       out += ",\"photo_mode_can_open\":" + XFJson.Flag(photo.CanPhotoModeBeEnabled());
       let time = GameInstance.GetTimeSystem(game);
       out += ",\"clock_paused\":" + XFJson.Flag(time.IsPausedState());
+      // The world's clock (0.5.1): session 5 compares it before photo mode and after it closes (does photo
+      // mode's own time of day give the world's clock back? RB-67).
+      out += ",\"world_time_seconds\":" + IntToString(GameTime.GetSeconds(time.GetGameTime()));
       let locks: array<gameSaveLock>;
       out += ",\"saving_locked\":" + XFJson.Flag(GameInstance.IsSavingLocked(game, locks));
       let registry = XFBridgeRegistry.Get();
@@ -1035,7 +1115,8 @@ public abstract class XFBridgeActions {
       out += ",\"cursor_shown\":true";
     }
     if registry.CancelCreatorOpen() {
-      out += ",\"creator_open_withdrawn\":true";
+      // Its pause-menu event was raised already: the appearance screen won't open, but the pause menu may (RB-69).
+      out += ",\"creator_open_withdrawn\":true,\"pause_menu_may_open\":true";
     }
     // A game.save with override_lock that the kill switch cut off: its lock goes back on now, not only
     // when (if) the save finishes (RB-52).
@@ -1160,7 +1241,8 @@ public abstract class XFPhoto {
   // faceId (session 4, R2: menu 56 "Static: Sleeping" was table index 60 with the Mega Pack installed).
   // The records are photo_mode.character.faceAnimations (PhotoModeFace records: displayName, faceId;
   // knowledge/facial-expressions.md). Matched by the option's text against each record's display name when
-  // exactly one matches ("label"), else by position in that list ("position", a hypothesis); "" if neither.
+  // exactly one matches ("label", verified), else by position in that list ("position": unverified, since
+  // session 4 showed position isn't the table index with an expression pack installed; RB-72); "" if neither.
   public static func FaceTableIndex(text: String, data: Int32) -> String {
     let records = TweakDBInterface.GetForeignKeyArray(t"photo_mode.character.faceAnimations");
     let found = -1;
@@ -1175,15 +1257,42 @@ public abstract class XFPhoto {
       i += 1;
     }
     if matches == 1 {
-      return ",\"table_index\":" + IntToString(found) + ",\"table_index_by\":\"label\"";
+      return ",\"table_index\":" + IntToString(found) + ",\"table_index_by\":\"label\",\"table_index_verified\":true";
     }
     if data >= 0 && data < ArraySize(records) {
       let byPosition = TweakDBInterface.GetPhotoModeFaceRecord(records[data]);
       if IsDefined(byPosition) {
-        return ",\"table_index\":" + IntToString(byPosition.FaceId()) + ",\"table_index_by\":\"position\"";
+        return ",\"table_index\":" + IntToString(byPosition.FaceId()) + ",\"table_index_by\":\"position\",\"table_index_verified\":false";
       }
     }
     return "";
+  }
+
+  // photo.expression.index's list (0.5.1, RB-72): every expression option's face table index, for the plugin's
+  // check (core/Writes.cpp CheckFaceIndex). Read-only.
+  public static func FaceIndexEntries(cid: String) -> String {
+    let registry = XFBridgeRegistry.Get();
+    let item: ref<XFPhotoItem>;
+    if IsDefined(registry) {
+      item = registry.FindItem(28u);
+    }
+    if !IsDefined(item) || !Equals(item.kind, "options") {
+      return "{\"ok\":true,\"seen\":false}";
+    }
+    let out = "{\"ok\":true,\"seen\":true,\"entries\":[";
+    let i = 0;
+    while i < ArraySize(item.optionData) {
+      if i > 0 {
+        out += ",";
+      }
+      let text = "";
+      if i < ArraySize(item.optionTexts) {
+        text = item.optionTexts[i];
+      }
+      out += "{\"data\":" + IntToString(item.optionData[i]) + XFPhoto.FaceTableIndex(text, item.optionData[i]) + "}";
+      i += 1;
+    }
+    return out + "]}";
   }
 
   // Read-only: photo-mode flags and, with includeMenu, every captured menu item with its range,
@@ -1654,8 +1763,9 @@ public abstract class XFFace {
   }
 
   // Applies a photo-mode face index directly: the input the photo-mode face graph reads, then the
-  // event that makes it switch (1 s cross-fade). Unless unlisted, only an index the photo-mode
-  // expression list offers. Reports the menu's expression, which the undo selects again.
+  // event that makes it switch (1 s cross-fade). The plugin has already checked the index against the
+  // expression list's face table indices (FaceIndexEntries, core/Writes.cpp CheckFaceIndex; RB-72) unless
+  // unlisted. Reports the menu's expression, which the undo selects again.
   public static func ApplyIndex(cid: String, target: Int32, index: Int32, unlisted: Bool) -> String {
     if !XFPhoto.Active() {
       return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
@@ -1667,14 +1777,6 @@ public abstract class XFFace {
       item = registry.FindItem(28u);
     }
     let menuKnown = IsDefined(controller) && IsDefined(item) && XFPhoto.HasValue(controller, item);
-    if !unlisted {
-      if !IsDefined(item) || !Equals(item.kind, "options") {
-        return XFJson.Fail("unavailable", "the photo-mode expression list hasn't been seen yet; close and reopen photo mode, or pass unlisted");
-      }
-      if !ArrayContains(item.optionData, index) {
-        return XFJson.Fail("bad_params", "index " + IntToString(index) + " is not one of the photo-mode expression values (" + IntToString(ArraySize(item.optionData)) + " of them; see photo.state with options); pass unlisted to apply it anyway");
-      }
-    }
     let obj = XFFace.Target(target);
     if !IsDefined(obj) {
       return XFJson.Fail("unavailable", "V's photo-mode " + XFFace.TargetName(target) + " hasn't been seen yet; close and reopen photo mode");
@@ -2004,6 +2106,10 @@ public abstract class XFCharacter {
       // Outside the creator the game rebuilds its option list only when the screen opens, so only the
       // finalized look's flags above are live. The last full reading made in the creator this game session is
       // returned as it was then, with its age; a Back after it discarded any change it shows.
+      // An engine time before the reading's means the clock was reset (another session): the reading is dropped (RB-73).
+      if IsDefined(registry) && registry.HasLastCreatorReading() && now < registry.LastCreatorReadingAt() {
+        registry.ClearLastCreatorReading();
+      }
       if IsDefined(registry) && registry.HasLastCreatorReading() {
         out += ",\"last_creator_reading\":{\"age_seconds\":" + XFJson.Num(now - registry.LastCreatorReadingAt()) + ",\"note\":\"read while the appearance screen was open; not live: the screen's Back discards changes made after it, Confirm keeps them\",\"options\":" + registry.LastCreatorReading() + "}";
       } else {
@@ -2149,9 +2255,13 @@ public abstract class XFCharacter {
     return false;
   }
 
+  // The edit tag's name: 0 NewGame (cc.open edit_mode new_game), 1 HairDresser, 2 Ripperdoc.
   public static func ModeName(mode: Int32) -> String {
     if mode == 2 {
       return "Ripperdoc";
+    }
+    if mode == 0 {
+      return "NewGame";
     }
     return "HairDresser";
   }
@@ -2230,7 +2340,7 @@ public abstract class XFCharacter {
     if XFBridgeActions.CharacterMenuOpen() {
       return "{\"ok\":true,\"already_open\":true}";
     }
-    if mode != 1 && mode != 2 {
+    if mode != 0 && mode != 1 && mode != 2 {
       return XFJson.Fail("bad_params", "unknown edit mode " + IntToString(mode));
     }
     let refusal = XFCharacter.OpenRefusal();
@@ -2296,9 +2406,11 @@ public abstract class XFCharacter {
       outcome = "withdrawn";
     }
     let nothingOpens = cancelled || Equals(outcome, "refused") || Equals(outcome, "expired");
-    let taken = Equals(outcome, "switched") || Equals(outcome, "taken");
+    let taken = Equals(outcome, "switched");
+    // A request still waiting had its pause-menu event raised in the same step: the appearance screen won't
+    // open, but the pause menu may still open, as usual (RB-69). A refused or expired one let it open already.
     XFBridgeLog.Info(cid, "cc.open request withdrawn=" + XFJson.Flag(cancelled) + " outcome=" + outcome);
-    return "{\"ok\":true,\"withdrawn\":" + XFJson.Flag(nothingOpens) + ",\"taken\":" + XFJson.Flag(taken && !nothingOpens) + ",\"outcome\":" + XFJson.Str(outcome) + "}";
+    return "{\"ok\":true,\"withdrawn\":" + XFJson.Flag(nothingOpens) + ",\"taken\":" + XFJson.Flag(taken && !nothingOpens) + ",\"outcome\":" + XFJson.Str(outcome) + ",\"pause_menu_may_open\":" + XFJson.Flag(nothingOpens) + "}";
   }
 
   // cc.page: the preview camera to a region (slot "" = the menu's starting view).
@@ -2324,7 +2436,9 @@ public abstract class XFCharacter {
   // Sets one option on the open appearance screen, exactly as the menu's own controls do
   // (ApplyChangeToOption; characterCreationBodyMorphMenu.script:481, 814, 828). Never confirms:
   // the change stays a preview until the player confirms or backs out of the screen.
-  public static func Apply(cid: String, option: String, index: Int32, value: String) -> String {
+  // expectOption, expectValue (0.5.1, RB-71): the row and the value's internal name the caller read before
+  // choosing index ("" for none); the change is refused (stale_match) when either differs now.
+  public static func Apply(cid: String, option: String, index: Int32, value: String, expectOption: String, expectValue: String) -> String {
     let game = GetGameInstance();
     if !XFBridgeActions.CharacterMenuOpen() {
       return XFJson.Fail("not_in_character_menu", "the appearance screen (mirror or ripperdoc) is not open");
@@ -2370,6 +2484,14 @@ public abstract class XFCharacter {
     }
     if index < 0 || index >= count {
       return XFJson.Fail("bad_params", "option '" + option + "' has values 0 to " + IntToString(count - 1) + ", not " + IntToString(index));
+    }
+    // cc.apply by label reads the values, then applies by index: a slot's row in use (makeupLips_color) can
+    // change in between, and the index would land in another row's list (RB-71).
+    if StrLen(expectOption) > 0 && NotEquals(NameToString(match.info.name), expectOption) {
+      return XFJson.Fail("stale_match", "option '" + option + "' is now the row '" + NameToString(match.info.name) + "', not '" + expectOption + "' as read a moment ago; nothing was applied: read it again");
+    }
+    if StrLen(expectValue) > 0 && NotEquals(XFCharacter.ValueLabel(match, index), expectValue) {
+      return XFJson.Fail("stale_match", "value " + IntToString(index) + " of '" + NameToString(match.info.name) + "' is now '" + XFCharacter.ValueLabel(match, index) + "', not '" + expectValue + "' as read a moment ago; nothing was applied: read it again");
     }
     let before = Cast<Int32>(match.currIndex);
     // The value already shown: applying it would change nothing, and through the row it would leave the
@@ -2633,12 +2755,13 @@ public abstract class XFWorld {
   // (SetGameTimeBySeconds) when totalSeconds >= 0. In normal play, and with the appearance screen
   // open (edit mode): the game's own time-skip menu sets the clock while its full-screen menu is open
   // (timeSkipPopup.script:274), and the appearance screen only freezes the world with time dilation.
-  // In photo mode (0.4.2; session 4 needed 02:00 there): photo mode's own time-of-day slider, see PhotoTime.
-  // Not in any other menu.
+  // Not in photo mode: there the plugin sets photo mode's own time-of-day slider instead (0.4.2; since 0.5.1
+  // the plugin chooses the route, core/Writes.cpp ChooseTimeRoute, and describes the slider with
+  // PhotoTimeSlider below). Not in any other menu.
   public static func SetTime(cid: String, hours: Int32, minutes: Int32, seconds: Int32, totalSeconds: Int32) -> String {
     let phase = XFBridgeActions.Phase();
     if Equals(phase, "photo_mode") {
-      return XFWorld.PhotoTime(cid, hours, minutes, seconds, totalSeconds);
+      return XFJson.Fail("not_in_gameplay", "photo mode is open and keeps its own time of day; the world's clock is set in normal play or with the appearance screen open");
     }
     if NotEquals(phase, "gameplay") && NotEquals(phase, "character_menu") {
       return XFJson.Fail("not_in_gameplay", "the clock can be set in normal play, with the appearance screen open or in photo mode; the game is in '" + phase + "'");
@@ -2657,43 +2780,24 @@ public abstract class XFWorld {
   }
 
   // world.time.set in photo mode: photo mode keeps its own time of day (the Environment tab's TIME OF DAY
-  // slider, attribute 70, 0-1440 minutes in the first session's menu dump) and restores the world's when it
-  // closes, so the bridge sets that slider through the menu (XFPhoto.SetAttribute, checked against the
-  // range the menu set up), the same as the player's own slider, rather than the world clock underneath
-  // it. Hours and minutes only: total_seconds (a time with its day) belongs to the world clock.
-  public static func PhotoTime(cid: String, hours: Int32, minutes: Int32, seconds: Int32, totalSeconds: Int32) -> String {
-    if totalSeconds >= 0 {
-      return XFJson.Fail("bad_params", "in photo mode the time is photo mode's own time-of-day slider, set with hours and minutes; total_seconds (an exact time with its day) applies only outside photo mode");
-    }
+  // slider, attribute 70, 0-1440 minutes in the first session's menu dump). The plugin plans the change from
+  // this description (core/Writes.cpp PlanPhotoTime: a slider named for the time over a day's range, in hours
+  // or minutes; RB-70) and sets it through the menu (XFPhoto.SetAttribute), the same as the player's slider,
+  // rather than the world clock underneath it. Read-only.
+  public static func PhotoTimeSlider(cid: String) -> String {
     let controller = XFPhoto.Controller();
     let registry = XFBridgeRegistry.Get();
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
     if !IsDefined(controller) || !IsDefined(registry) {
       return XFJson.Fail("unavailable", "the photo-mode menu has not been seen yet; close and reopen photo mode");
     }
     let item = registry.FindItem(70u);
-    // The key can shift with the game version or mods that add rows: only a slider over a day's range is taken.
-    if !IsDefined(item) || !Equals(item.kind, "slider") || item.maxValue < 23.0 || item.maxValue > 1441.0 {
-      return XFJson.Fail("unavailable", "photo mode's time-of-day slider (attribute 70) isn't in the menu as expected, so the time wasn't set");
+    if !IsDefined(item) {
+      return "{\"ok\":true,\"seen\":false}";
     }
-    let inHours = item.maxValue <= 24.5;
-    let wanted = Cast<Float>(hours * 60 + minutes) + Cast<Float>(seconds) / 60.0;
-    let value = wanted;
-    if inHours {
-      value = wanted / 60.0;
-    }
-    let beforeKnown = XFPhoto.HasValue(controller, item);
-    let before = XFPhoto.CurrentValue(controller, item);
-    let set = XFPhoto.SetAttribute(cid, 70, value);
-    if StrFindFirst(set, "\"ok\":true") < 0 {
-      return set;
-    }
-    let after = XFPhoto.CurrentValue(controller, item);
-    let scale = 1.0;
-    if inHours {
-      scale = 60.0;
-    }
-    XFBridgeLog.Info(cid, "photo-mode time of day " + FloatToString(before * scale) + " -> " + FloatToString(after * scale) + " minutes (attribute 70); undo: world.time.set with the earlier hours and minutes, or leave photo mode");
-    return "{\"ok\":true,\"phase\":\"photo_mode\",\"route\":\"photo_time\",\"key\":70,\"label\":" + XFJson.Str(item.label) + ",\"unit\":\"minutes\",\"before_minutes\":" + XFJson.Num(before * scale) + ",\"before_known\":" + XFJson.Flag(beforeKnown) + ",\"after_minutes\":" + XFJson.Num(after * scale) + ",\"note\":\"photo mode's own time of day; the world's clock comes back when photo mode closes\"}";
+    return "{\"ok\":true,\"seen\":true,\"key\":70,\"kind\":" + XFJson.Str(item.kind) + ",\"label\":" + XFJson.Str(item.label) + ",\"label_key\":" + XFJson.Str(item.labelKey) + ",\"min\":" + XFJson.Num(item.minValue) + ",\"max\":" + XFJson.Num(item.maxValue) + ",\"step\":" + XFJson.Num(item.step) + "}";
   }
 
   // Freezes the world the way the appearance screen does (time dilation 0 on the world and on V,

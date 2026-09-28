@@ -145,14 +145,17 @@ struct FaceRigRequest
 std::vector<std::string> DefaultFaceComponents();
 FaceRigRequest ParseFaceRig(const json& aParams);
 
-// photo.expression.index: {index: 0-100000, target: "puppet" (default), unlisted}. target "head" is
+// photo.expression.index: {index: 0-100000, target: "puppet" (default), unlisted, force}. target "head" is
 // refused (no_effect): session 4 found the face rig on the stand-in, none on the head item. Without
-// unlisted = true the redscript layer refuses an index the photo-mode expression list doesn't offer.
+// unlisted = true the plugin refuses an index that isn't one of the expression list's face table indices,
+// and (0.5.1, RB-72) one known only by list position (unverified) unless force = true
+// (writes::CheckFaceIndex).
 struct ExpressionIndexRequest
 {
     int32_t index = 0;
     FaceTarget target = FaceTarget::Puppet;
     bool unlisted = false;
+    bool force = false;
 };
 ExpressionIndexRequest ParseExpressionIndex(const json& aParams);
 
@@ -205,31 +208,51 @@ PhotoStateRequest ParsePhotoState(const json& aParams);
 
 // cc.apply: {option, index} or {option, value}. option is the option's internal name, its on-screen
 // label or its UI slot (the one active option in that slot, e.g. piercings_color); value is a value's
-// internal name or on-screen label (index is then -1). The redscript layer resolves both.
+// internal name or on-screen label (index is then -1). The redscript layer resolves both. With index,
+// expect_option and expect_value (0.5.1, RB-71) are the row and the value's internal name the caller read
+// (cc.apply by label reads them first): the script refuses (stale_match) when the option now resolves to
+// another row or the value at that index has another name, so an index never lands in another row's list.
 struct CharacterRequest
 {
     std::string option;
     int32_t index = 0;
     std::string value;
+    std::string expectOption;
+    std::string expectValue;
 };
 CharacterRequest ParseCharacterApply(const json& aParams);
 
-// cc.open: {mode: "mirror" (default) | "ripperdoc", timeout_ms: 500-15000 (default 5000)}. The mode
-// is the edit tag the appearance screen opens with (gameuiCharacterCustomizationEditTag HairDresser or
-// Ripperdoc), which decides which rows can be changed: the vanilla eye shape, nose and skin rows carry
-// NewGame and Ripperdoc only. Refused, like cc.confirm and cc.back, unless allow_creator_leave = true.
+// cc.open: {mode: "mirror" (default) | "ripperdoc", edit_mode: "edit_tag" (default) | "new_game",
+// timeout_ms: 500-15000 (default 5000)}. With edit_mode edit_tag the appearance screen opens with the
+// mode's edit tag (gameuiCharacterCustomizationEditTag HairDresser or Ripperdoc), which decides which rows
+// can be changed (the vanilla eye shape, nose and skin rows carry NewGame and Ripperdoc only) and freezes
+// the world while the screen is open. With edit_mode new_game (0.5.1, RB-66) it opens with the NewGame tag,
+// as Character Customization Anywhere's F12 actually ran in session 4 (its field writes never reach the
+// game on 2.31): every row is editable, the world isn't frozen, and the voice switcher shows; mode is then
+// only "mirror" (ripperdoc would add nothing). Which of the two avoids session 4's stuck, half-open creator
+// is session 5's question. Refused, like cc.confirm and cc.back, unless allow_creator_leave = true.
 enum class CreatorMode : int32_t
 {
     Mirror = 1,    // gameuiCharacterCustomizationEditTag.HairDresser
     Ripperdoc = 2, // gameuiCharacterCustomizationEditTag.Ripperdoc
 };
+enum class CreatorEditMode : int32_t
+{
+    EditTag = 0, // the mode's tag: HairDresser (mirror) or Ripperdoc
+    NewGame = 1, // gameuiCharacterCustomizationEditTag.NewGame
+};
 const char* CreatorModeName(CreatorMode aMode);
+const char* CreatorEditModeName(CreatorEditMode aEditMode);
 struct CreatorOpenRequest
 {
     CreatorMode mode = CreatorMode::Mirror;
+    CreatorEditMode editMode = CreatorEditMode::EditTag;
     int32_t timeoutMs = 5000;
 };
 CreatorOpenRequest ParseCreatorOpen(const json& aParams);
+// The edit tag the script layer opens the screen with: 0 NewGame, 1 HairDresser, 2 Ripperdoc (the
+// gameuiCharacterCustomizationEditTag values).
+int32_t CreatorEditTagCode(const CreatorOpenRequest& aRequest);
 
 // cc.page: {page}: points the open appearance screen's preview camera at one body region, as hovering
 // a row does (the menu's own RequestCameraChange). page is a name from CreatorPages; slot is the
@@ -311,13 +334,17 @@ struct AppearanceRequest
 };
 AppearanceRequest ParseAppearance(const json& aParams);
 
-// world.time.set: {hours, minutes, seconds} or {total_seconds}.
+// world.time.set: {hours, minutes, seconds} or {total_seconds}, and target "world" | "photo" (0.5.1, RB-67):
+// which clock. Without a target the phase decides (photo mode's own time of day in photo mode, the world's
+// clock otherwise); the photo-mode undo names target "photo", so it can never reach the world's clock after
+// photo mode closes (writes::ChooseTimeRoute). target photo takes hours and minutes only.
 struct TimeRequest
 {
     int32_t hours = 0;
     int32_t minutes = 0;
     int32_t seconds = 0;
     int32_t totalSeconds = -1; // >= 0: restore this exact time instead
+    std::string target;        // "", "world" or "photo"
 };
 TimeRequest ParseTime(const json& aParams);
 

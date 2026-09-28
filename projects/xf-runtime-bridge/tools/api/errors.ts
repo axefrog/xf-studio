@@ -47,7 +47,7 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   save_lock_not_held:
     "The appearance screen wasn't opened because the game hasn't confirmed the bridge's save lock yet. Saving stays locked until a save is loaded. Try again in a moment.",
   creator_open_timeout:
-    "The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and nothing opened (if the pause menu opened instead, close it with Esc). Saving stays locked until a save is loaded. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere).",
+    "The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and the appearance screen won't open (the pause menu may open instead: close it with Esc). Saving stays locked until a save is loaded. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere).",
   creator_open_uncertain:
     "The game took the request to open the appearance screen but it hadn't opened by the end of the wait, so it may still open. Check game_status: if the phase is character_menu, use cc_back to close it. Saving stays locked until a save is loaded.",
   not_v:
@@ -66,6 +66,10 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   not_in_gameplay: "This needs V in the world (or, for the clock, the appearance screen or photo mode): load a save and close any other menus first.",
   no_effect:
     "That would change nothing in the game, so it wasn't sent: V's photo-mode face animation runs on the stand-in (target puppet, the default), not on the head item. Leave target out.",
+  unverified_index:
+    "That face table index matches an expression only by its place in the list, which isn't reliable with an expression pack installed, so nothing was applied. Use an index photo_state found by name (table_index_verified), or pass force: true to apply it anyway.",
+  stale_match:
+    "The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh.",
   not_in_character_menu:
     "Character options can only be changed while the appearance screen (a mirror, or the ripperdoc's appearance menu) is open. Open it in the game first.",
   bridge_save_lock:

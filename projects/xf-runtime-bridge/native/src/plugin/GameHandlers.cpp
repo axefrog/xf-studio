@@ -1132,14 +1132,21 @@ json FaceRigRead(const MethodContext& aContext)
     return out;
 }
 
+// photo.expression.index: the plugin checks the index against the expression list's face table indices
+// (writes::CheckFaceIndex; RB-72: one known only by list position needs force), then the script applies it,
+// both in the same game-thread step.
 json PhotoExpressionIndex(const MethodContext& aContext)
 {
     const auto request = params::ParseExpressionIndex(aContext.params);
+    const auto standing = writes::CheckFaceIndex(
+        request, request.unlisted ? json::object() : CallScript("XFPhoto", "FaceIndexEntries", {}, {}, aContext.cid));
     int32_t target = static_cast<int32_t>(request.target);
     int32_t index = request.index;
     bool unlisted = request.unlisted;
-    return writes::ExpressionIndexResult(
+    auto out = writes::ExpressionIndexResult(
         CallScript("XFFace", "ApplyIndex", {"Int32", "Int32", "Bool"}, {&target, &index, &unlisted}, aContext.cid));
+    out["index_by"] = standing;
+    return out;
 }
 
 json CharacterApply(const MethodContext& aContext)
@@ -1148,7 +1155,10 @@ json CharacterApply(const MethodContext& aContext)
     RED4ext::CString option(request.option.c_str());
     int32_t index = request.index;
     RED4ext::CString value(request.value.c_str());
-    auto result = CallScript("XFCharacter", "Apply", {"String", "Int32", "String"}, {&option, &index, &value}, aContext.cid);
+    RED4ext::CString expectOption(request.expectOption.c_str());
+    RED4ext::CString expectValue(request.expectValue.c_str());
+    auto result = CallScript("XFCharacter", "Apply", {"String", "Int32", "String", "String", "String"},
+                             {&option, &index, &value, &expectOption, &expectValue}, aContext.cid);
     result["undo"] = {{"method", "cc.apply"},
                       {"params", {{"option", result.value("option", request.option)}, {"index", result.value("before", 0)}}},
                       {"note", "or press Back in the appearance screen and confirm, which discards every change made there"}};
@@ -1186,7 +1196,8 @@ json CreatorOpenMethod(const MethodContext& aContext)
     const auto request = params::ParseCreatorOpen(aContext.params);
     params::CreatorLeaveAllowed(Get().config.allowCreatorLeave);
     const auto cid = aContext.cid;
-    const int32_t mode = static_cast<int32_t>(request.mode);
+    // The edit tag the screen opens with: 0 NewGame (edit_mode new_game, RB-66), 1 HairDresser, 2 Ripperdoc.
+    const int32_t mode = params::CreatorEditTagCode(request);
     auto& queue = Get().queue;
     writes::CreatorOpenOps ops;
     ops.prepare = [&queue, cid, mode] {
@@ -1306,9 +1317,29 @@ json CreatorBack(const MethodContext& aContext)
     return CreatorLeave(aContext, false);
 }
 
+// world.time.set (0.5.1): the phase and the request choose the clock (writes::ChooseTimeRoute; RB-67, RB-70), in
+// the same game-thread step as the change. Photo mode's own time of day (attribute 70) is planned and answered
+// by core/Writes.cpp from the slider's description, and set through the menu like any photo attribute.
 json WorldTimeSet(const MethodContext& aContext)
 {
     const auto request = params::ParseTime(aContext.params);
+    const auto phase = CallScript("XFBridgeActions", "Status", {}, {}, aContext.cid).value("phase", std::string());
+    const bool photoAllowed = (Get().config.writeClasses & kWritePhoto) != 0;
+    const auto route = writes::ChooseTimeRoute(request, phase, photoAllowed);
+    if (route == writes::TimeRoute::PhotoClosed)
+    {
+        log::Info("world.time_photo_closed", "a photo-mode time with photo mode closed; nothing changed (phase=" + phase + ")", aContext.cid);
+        return writes::PhotoClosedTimeResult(phase);
+    }
+    if (route == writes::TimeRoute::Photo)
+    {
+        const auto plan = writes::PlanPhotoTime(CallScript("XFWorld", "PhotoTimeSlider", {}, {}, aContext.cid), request);
+        auto out = writes::PhotoTimeResult(SetPhotoAttribute(70, static_cast<float>(plan.value), aContext.cid), plan);
+        log::Info("world.time_photo", "photo-mode time of day " + out["before_minutes"].dump() + " -> " + out["after_minutes"].dump() +
+                                          " minutes (attribute 70); undo=" + out["undo"].dump(),
+                  aContext.cid);
+        return out;
+    }
     int32_t hours = request.hours;
     int32_t minutes = request.minutes;
     int32_t seconds = request.seconds;
