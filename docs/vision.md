@@ -41,7 +41,7 @@ The idea registers hold the detail: [bringing V and the world to life](../resear
 
 Most of what XF Studio makes stays **compatible**: additive mods that sit beside the rest of a player's setup, built with ArchiveXL, TweakXL and the engine's own rules. That remains the default.
 
-Some directions above may grow into an **overhaul**: large, interlocking changes that can't promise compatibility with every other mod. That is a legitimate kind of project, and one people can contribute to. If it happens, it will be opt-in, clearly labelled, and set up in its own isolated installation, possibly managed by an optional XF mod manager that exists to reduce development friction. Nobody will be required to use it. Existing mod setups, whichever manager they use, are never modified or reshaped.
+Some directions above may grow into an **overhaul**: large, interlocking changes that can't promise compatibility with every other mod. That is a legitimate kind of project, and one people can contribute to. If it happens, it will be opt-in, clearly labelled, and set up in its own isolated installation, possibly managed by an optional XF mod manager that exists to reduce development friction. Nobody will be required to use it. Unlike existing managers, which were designed around a person clicking through a window, an XF manager would be built from the start for scripted and AI-assisted use: every action available through a documented programmatic interface, with machine-readable state and results, so tools and agents can install, test and roll back setups reliably. Existing mod setups, whichever manager they use, are never modified or reshaped.
 
 ## Limits we accept
 
