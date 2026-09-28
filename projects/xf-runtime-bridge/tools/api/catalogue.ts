@@ -28,6 +28,7 @@ import { summarizeSettings, type SettingsGroups } from "./options.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
+import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
 
 /** game.status refusals game.wait waits through: the engine not ticking for a moment while a save loads (0.5.2). */
 const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_not_running", "game_loading"]);
@@ -407,6 +408,56 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
   } finally {
     if (hudUndo) await bridgeCall(context, "photo.hud.hide", hudUndo).catch(() => undefined);
   }
+}
+
+/**
+ * The camera position and look-at point photo.camera.place asks for (0.5.2): a world point, V's head, or a showroom
+ * head's eyes as the target; the camera at a world position, or distance_m from the target at azimuth_deg (from the
+ * way the target faces, counter-clockwise seen from above, as photo.light.set's azimuth) and elevation_deg. Pure.
+ */
+export function cameraPlacement(
+  target: ShowroomVec3,
+  facing: ShowroomVec3,
+  input: { position?: number[]; distance_m?: number; azimuth_deg?: number; elevation_deg?: number },
+): { position: ShowroomVec3; look_at: ShowroomVec3 } {
+  if (input.position) return { position: input.position as ShowroomVec3, look_at: target };
+  const d = input.distance_m ?? 1.5, az = ((input.azimuth_deg ?? 0) * Math.PI) / 180, el = ((input.elevation_deg ?? 0) * Math.PI) / 180;
+  const n = Math.hypot(facing[0], facing[1]) || 1;
+  const fx = facing[0] / n, fy = facing[1] / n;
+  const dx = fx * Math.cos(az) - fy * Math.sin(az), dy = fx * Math.sin(az) + fy * Math.cos(az);
+  const round = (v: number) => Math.round(v * 1e4) / 1e4;
+  return {
+    position: [round(target[0] + d * Math.cos(el) * dx), round(target[1] + d * Math.cos(el) * dy), round(target[2] + d * Math.sin(el))],
+    look_at: target.map(round) as ShowroomVec3,
+  };
+}
+
+/** photo.camera.place: resolves the target (a point, V's head, or a showroom head's eyes), then asks the bridge to move the camera. */
+async function runCameraPlace(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const given = ["look_at", "target", "piece"].filter((key) => input[key] !== undefined);
+  if (given.length !== 1) throw planError("bad_input", "Give one target: look_at (a world point), target: v (V's head) or piece (a showroom head's index).");
+  if (input.position !== undefined && (input.distance_m !== undefined || input.azimuth_deg !== undefined || input.elevation_deg !== undefined))
+    throw planError("bad_input", "Give position, or distance_m with azimuth_deg and elevation_deg, not both.");
+  let target: ShowroomVec3;
+  let facing: ShowroomVec3 = [0, 1, 0];
+  if (input.look_at !== undefined) {
+    target = input.look_at as ShowroomVec3;
+  } else if (input.target === "v") {
+    const subject = await bridgeCall(context, "photo.subject", { up: 0.075, forward: 0.09, right: 0 });
+    const t = subject.target as { x: number; y: number; z: number };
+    const f = subject.subject_forward as { x: number; y: number; z: number };
+    target = [t.x, t.y, t.z];
+    facing = [f.x, f.y, 0];
+  } else {
+    const state = await bridgeCall(context, "showroom.state", {});
+    const piece = ((state.pieces as { index: number; position: ShowroomVec3; yaw: number }[] | undefined) ?? []).find((p) => p.index === input.piece);
+    if (!piece) throw planError("no_such_piece", `The showroom has no head ${String(input.piece)}; showroom_state lists them.`);
+    target = toWorld(piece.position, piece.yaw, eyesOf([0, -0.0403, 1.6397]));
+    facing = facingOf(piece.yaw);
+  }
+  const placement = cameraPlacement(target, facing, input as { position?: number[]; distance_m?: number; azimuth_deg?: number; elevation_deg?: number });
+  const placed = await bridgeCall(context, "photo.camera.place", placement);
+  return { value: { ...placement, ...placed } };
 }
 
 /** photo.light.set: place {camera: true} goes to the bridge as "camera" (the schema has no string-or-object). */
@@ -802,6 +853,24 @@ export const CATALOGUE: readonly CommandDef[] = [
     bridge: { method: "photo.camera.set", params: expandCamera },
   },
   {
+    name: "photo.camera.place",
+    title: "Place the photo-mode camera (research)",
+    description:
+      "Research (0.5.2): moves photo mode's own camera to a place and aims it, instead of moving V in front of it (photo mode's menu only moves V: up_down, near_far and left_right). Target: look_at (a world point), target v (V's eyes) or piece (a showroom head's eyes, for framing the finish showroom). Where: position (a world point), or distance_m from the target (default 1.5) at azimuth_deg (from the way the target faces, counter-clockwise seen from above: 0 in front, 90 its left) and elevation_deg. The camera's entity is moved with the teleportation facility, then the active camera is read a few frames later: held says whether photo mode kept it there (session 6's question; if not, photo mode places its camera itself and nothing is left to undo). Within 30 m of V, in photo mode only.",
+    permission: "write-photo",
+    input: obj({
+      look_at: { type: "array", description: "A world point to aim at, [x, y, z] metres.", items: num("A coordinate.", -100000, 100000), minItems: 3, maxItems: 3 },
+      target: oneOf("v: aim at V's eyes.", ["v"]),
+      piece: int("Aim at this showroom head's eyes (its lineup index).", 0, 23),
+      position: { type: "array", description: "Where the camera goes, [x, y, z] world metres (instead of distance_m).", items: num("A coordinate.", -100000, 100000), minItems: 3, maxItems: 3 },
+      distance_m: num("Metres from the target, 0.2 to 10. Default 1.5.", 0.2, 10),
+      azimuth_deg: num("Degrees around the target from the way it faces, counter-clockwise seen from above (0 in front). Default 0.", -180, 180),
+      elevation_deg: num("Degrees above the target's level (negative: below). Default 0.", -60, 60),
+    }),
+    undo: "the result's undo puts the camera back where it was, looking the same way; closing photo mode resets the camera anyway.",
+    local: runCameraPlace,
+  },
+  {
     name: "photo.light.set",
     title: "Adjust a photo-mode light",
     description:
@@ -1120,14 +1189,17 @@ export const CATALOGUE: readonly CommandDef[] = [
             slots: {
               type: "array",
               description: "What each area showed.",
-              items: obj(
+              items: {
+                description: "One area as the snapshot had it.",
+                ...obj(
                 {
                   area: oneOf("The clothing area.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"]),
                   item: str("The outfit's item in the area (empty: none).", { maxLength: 128 }),
                   hidden: bool("Whether the area was hidden."),
                 },
                 ["area"],
-              ),
+                ),
+              },
               maxItems: 6,
             },
           },

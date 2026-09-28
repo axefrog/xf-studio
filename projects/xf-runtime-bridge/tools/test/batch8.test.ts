@@ -234,3 +234,44 @@ describe("bridge 0.5.2: the wardrobe (outfits decide what each clothing area sho
     await locked.stop();
   });
 });
+
+describe("bridge 0.5.2: placing the photo-mode camera (research)", () => {
+  let host: Host;
+  let api: CommandApi;
+  beforeAll(async () => {
+    host = await startSelftestHost(["--allow-writes"], 60);
+    api = apiFor(host);
+  });
+  afterAll(async () => {
+    api?.close();
+    await host?.stop();
+  });
+
+  test("the camera goes distance_m from V's eyes at the azimuth, aimed at them; held says whether photo mode kept it", async () => {
+    await phase(api, "photo_mode");
+    const moved = await api.run("photo.camera.place", { target: "v", distance_m: 2, azimuth_deg: 0 });
+    expect(moved.ok, JSON.stringify(moved)).toBe(true);
+    if (moved.ok) {
+      const r = moved.result as { position: number[]; look_at: number[]; held: boolean; undo: unknown; note?: string };
+      expect(Math.hypot(r.position[0]! - r.look_at[0]!, r.position[1]! - r.look_at[1]!, r.position[2]! - r.look_at[2]!)).toBeCloseTo(2, 3);
+      expect(r.held).toBe(false); // the simulated photo mode places its camera itself unless camera_holds
+      expect(r.note).toMatch(/didn't keep/);
+    }
+    await api.callBridge("selftest.phase", { phase: "photo_mode", camera_holds: true }, "t-phase");
+    const held = await api.run("photo.camera.place", { look_at: [0, 3, 1.6], position: [0.5, 1, 1.7] });
+    expect(held.ok && (held.result as { held: boolean }).held).toBe(true);
+    if (held.ok) expect((held.result as { undo: { params: { position: number[] } } }).undo.params.position).toEqual([0, 0, 1.6]);
+  });
+
+  test("refusals: two targets, position with distance, the camera on its target, outside photo mode", async () => {
+    const two = await api.run("photo.camera.place", { target: "v", piece: 0 });
+    expect(!two.ok && two.error.code).toBe("bad_input");
+    const both = await api.run("photo.camera.place", { target: "v", position: [0, 0, 0], distance_m: 1 });
+    expect(!both.ok && both.error.code).toBe("bad_input");
+    const same = await api.run("photo.camera.place", { look_at: [1, 1, 1], position: [1, 1, 1.01] });
+    expect(!same.ok && same.error.code).toBe("bad_params");
+    await phase(api, "gameplay");
+    const out = await api.run("photo.camera.place", { look_at: [0, 3, 1.6], position: [0, 0, 1.6] });
+    expect(!out.ok && out.error.code).toBe("not_in_photo_mode");
+  });
+});

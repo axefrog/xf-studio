@@ -287,6 +287,38 @@ InventoryUnequipRequest ParseInventoryUnequip(const json& aParams)
     return request;
 }
 
+CameraPlaceRequest ParseCameraPlace(const json& aParams)
+{
+    RequireOnly(aParams, {"position", "look_at"});
+    const auto point = [&](const char* aKey) {
+        const auto it = aParams.find(aKey);
+        if (it == aParams.end() || !it->is_array() || it->size() != 3)
+        {
+            Bad(std::string("'") + aKey + "' must be [x, y, z] in world metres");
+        }
+        std::array<double, 3> out{};
+        for (size_t i = 0; i < 3; ++i)
+        {
+            if (!(*it)[i].is_number() || !std::isfinite((*it)[i].get<double>()) || std::abs((*it)[i].get<double>()) > 100000.0)
+            {
+                Bad(std::string("'") + aKey + "' must hold three finite numbers");
+            }
+            out[i] = (*it)[i].get<double>();
+        }
+        return out;
+    };
+    CameraPlaceRequest request;
+    request.position = point("position");
+    request.lookAt = point("look_at");
+    const double dx = request.lookAt[0] - request.position[0], dy = request.lookAt[1] - request.position[1],
+                 dz = request.lookAt[2] - request.position[2];
+    if (std::sqrt(dx * dx + dy * dy + dz * dz) < 0.05)
+    {
+        Bad("the camera and the point it looks at must be at least 5 cm apart");
+    }
+    return request;
+}
+
 const std::vector<std::string>& WardrobeAreas()
 {
     static const std::vector<std::string> areas{"Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"};

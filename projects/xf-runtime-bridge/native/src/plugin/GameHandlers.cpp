@@ -870,6 +870,29 @@ json InventoryUnequipMethod(const MethodContext& aContext)
 
 std::function<void()> WritesGuard();
 
+// photo.camera.place (0.5.2, research): moves photo mode's camera entity, then reads the active camera a few frames later
+// to see whether photo mode kept it there (writes::CameraPlaceResult).
+json PhotoCameraPlace(const MethodContext& aContext)
+{
+    const auto request = params::ParseCameraPlace(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    auto step = RunGameTask(
+        queue, Timeout(),
+        [cid, request] {
+            float x = static_cast<float>(request.position[0]), y = static_cast<float>(request.position[1]), z = static_cast<float>(request.position[2]);
+            float tx = static_cast<float>(request.lookAt[0]), ty = static_cast<float>(request.lookAt[1]), tz = static_cast<float>(request.lookAt[2]);
+            return CallScript("XFPhoto", "PlaceCamera", {"Float", "Float", "Float", "Float", "Float", "Float"}, {&x, &y, &z, &tx, &ty, &tz}, cid);
+        },
+        "photo.camera.place");
+    if (!writes::WaitTicks(queue, 4, Timeout()))
+    {
+        throw MethodError("timeout", "the game didn't tick after the camera moved; photo.subject shows where it is");
+    }
+    const auto reading = RunGameTask(queue, Timeout(), [cid] { return CallScript("XFPhoto", "CameraReading", {}, {}, cid); }, "photo.camera.read");
+    return writes::CameraPlaceResult(request, step, reading);
+}
+
 // wardrobe.state (0.5.2): the active outfit and what each clothing area shows.
 json WardrobeState(const MethodContext& aContext)
 {
@@ -1744,6 +1767,9 @@ void RegisterMethods(Dispatcher& aDispatcher)
     aDispatcher.Register(WriteMethod("photo.camera.set", Access::WritePhoto, RunOn::GameThread,
                                      "Photo-mode camera and subject settings (FOV, roll, focus, DOF, V's placement), or reset.",
                                      &PhotoCameraSet));
+    aDispatcher.Register(WriteMethod("photo.camera.place", Access::WritePhoto, RunOn::BridgeThread,
+                                     "Research: moves photo mode's camera entity to a position aimed at a point, and reads whether it held.",
+                                     &PhotoCameraPlace));
     aDispatcher.Register(WriteMethod("photo.light.set", Access::WritePhoto, RunOn::BridgeThread, "Selects a photo-mode light and sets its values.",
                                      &PhotoLightSet));
     aDispatcher.Register(WriteMethod("photo.hud.hide", Access::WritePhoto, RunOn::GameThread, "Hides or shows the photo-mode interface and its mouse cursor.", &PhotoHudHide));

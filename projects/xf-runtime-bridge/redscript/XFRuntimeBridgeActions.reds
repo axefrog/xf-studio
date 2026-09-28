@@ -686,6 +686,22 @@ public func XFBridgeLightEntity(index: Int32) -> ref<Entity> {
   return projection.GetEntity();
 }
 
+// The photo-mode camera's entity (0.5.2, research): the native menu tells the light indicator which camera is active
+// (PhotomodeCameraSwitchedEvent -> OnSetActiveCamera keeps it in m_currentCamera; photoModeLightIndicatorController
+// .script:47-49), a gamePhotoModeCameraObject, a game object (RED4ext.SDK game/PhotoModeCameraObject.hpp). Null when the
+// indicator hasn't been told one.
+@addMethod(gameuiPhotoModeMenuController)
+public func XFBridgeCameraEntity() -> ref<Entity> {
+  if !inkWidgetRef.IsValid(this.m_lightIndicator) {
+    return null;
+  }
+  let indicator = inkWidgetRef.GetController(this.m_lightIndicator) as PhotomodeLightIndicatorController;
+  if !IsDefined(indicator) {
+    return null;
+  }
+  return indicator.m_currentCamera;
+}
+
 // The light the menu's light indicator follows (0-2), or -1 when it shows none (the light tab isn't
 // active or the light is off; PhotomodeSetActiveLightEvent.GetIndex).
 @addMethod(gameuiPhotoModeMenuController)
@@ -1576,6 +1592,66 @@ public abstract class XFPhoto {
     }
     why = "";
     return entity as GameObject;
+  }
+
+  // photo.camera.place (0.5.2, research: whether photo mode keeps a camera moved this way is session 6's question). Moves
+  // the photo-mode camera's entity to a world position, aimed at a world point, through the teleportation facility, as
+  // PlaceLight moves a light; only within 30 m of V's stand-in. Answers the camera as it was (the undo) and where the
+  // entity is now; the plugin reads the active camera a few frames later to see whether photo mode kept it (held).
+  public static func PlaceCamera(cid: String, x: Float, y: Float, z: Float, tx: Float, ty: Float, tz: Float) -> String {
+    if !XFPhoto.Active() {
+      return XFJson.Fail("not_in_photo_mode", "photo mode is not open");
+    }
+    let controller = XFPhoto.Controller();
+    if !IsDefined(controller) {
+      return XFJson.Fail("unavailable", "photo mode's menu isn't available");
+    }
+    let entity = controller.XFBridgeCameraEntity();
+    if !IsDefined(entity) {
+      return XFJson.Fail("unavailable", "photo mode hasn't named its camera entity yet (the light indicator has none); move the camera once, or reopen photo mode");
+    }
+    if !entity.IsA(n"gamePhotoModeCameraObject") {
+      return XFJson.Fail("unavailable", "the light indicator's camera is a " + NameToString(entity.GetClassName()) + ", not photo mode's camera, so nothing was moved");
+    }
+    let camera = entity as GameObject;
+    let head: Vector4;
+    let facing: Vector4;
+    if !XFPhoto.HeadAndFacing(head, facing) {
+      return XFJson.Fail("unavailable", "V's photo-mode stand-in hasn't been seen yet; close and reopen photo mode");
+    }
+    let target = new Vector4(x, y, z, 1.0);
+    let away = new Vector4(target.X - head.X, target.Y - head.Y, target.Z - head.Z, 0.0);
+    if SqrtF(away.X * away.X + away.Y * away.Y + away.Z * away.Z) > 30.0 {
+      return XFJson.Fail("too_far", "that place is more than 30 m from V");
+    }
+    let aim = new Vector4(tx - x, ty - y, tz - z, 0.0);
+    let length = SqrtF(aim.X * aim.X + aim.Y * aim.Y + aim.Z * aim.Z);
+    if length < 0.05 {
+      return XFJson.Fail("bad_params", "the camera and the point it looks at are less than 5 cm apart");
+    }
+    let angles = Quaternion.ToEulerAngles(Quaternion.BuildFromDirectionVector(new Vector4(aim.X / length, aim.Y / length, aim.Z / length, 0.0), new Vector4(0.0, 0.0, 1.0, 0.0)));
+    let system = GameInstance.GetCameraSystem(GetGameInstance());
+    let before: Transform;
+    let hadBefore = system.GetActiveCameraWorldTransform(before);
+    let beforeForward = system.GetActiveCameraForward();
+    XFBridgeActions.EnsureSaveLock(cid);
+    GameInstance.GetTeleportationFacility(GetGameInstance()).Teleport(camera, target, angles);
+    XFBridgeLog.Info(cid, "photo camera moved to " + XFPhoto.Vec(target) + " aimed at (" + FloatToString(tx) + ", " + FloatToString(ty) + ", " + FloatToString(tz) + "); undo: place it back");
+    let out = "{\"ok\":true,\"entity\":" + XFJson.Str(NameToString(entity.GetClassName())) + ",\"asked\":" + XFPhoto.Vec(target);
+    if hadBefore {
+      out += ",\"before\":{\"position\":" + XFPhoto.Vec(before.position) + ",\"forward\":" + XFPhoto.Vec(beforeForward) + "}";
+    }
+    return out + "}";
+  }
+
+  // The active camera now (photo.camera.place's read-back).
+  public static func CameraReading(cid: String) -> String {
+    let system = GameInstance.GetCameraSystem(GetGameInstance());
+    let now: Transform;
+    if !system.GetActiveCameraWorldTransform(now) {
+      return XFJson.Fail("unavailable", "the camera system reported no active camera");
+    }
+    return "{\"ok\":true,\"position\":" + XFPhoto.Vec(now.position) + ",\"forward\":" + XFPhoto.Vec(system.GetActiveCameraForward()) + ",\"fov\":" + XFJson.Num(system.GetActiveCameraFOV()) + "}";
   }
 
   // Where V's head is (the stand-in's Head slot) and which way V faces, for placing lights about V.

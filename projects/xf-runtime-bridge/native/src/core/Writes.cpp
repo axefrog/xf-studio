@@ -1332,6 +1332,40 @@ json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
     out["note"] = "the game is loading; wait for game_wait with phase gameplay before the next command";
     return out;
 }
+json CameraPlaceResult(const params::CameraPlaceRequest& aRequest, json aStep, const json& aReading)
+{
+    const auto at = [](const json& aVec, const char* aAxis) { return aVec.is_object() ? aVec.value(aAxis, 0.0) : 0.0; };
+    const auto position = aReading.value("position", json());
+    const double dx = at(position, "x") - aRequest.position[0], dy = at(position, "y") - aRequest.position[1],
+                 dz = at(position, "z") - aRequest.position[2];
+    const double off = std::sqrt(dx * dx + dy * dy + dz * dz);
+    const bool held = position.is_object() && off <= 0.05;
+    json out{{"placed", true}, {"held", held}, {"off_m", std::round(off * 1000.0) / 1000.0}, {"camera_now", aReading},
+             {"asked", aStep.value("asked", json())}, {"entity", aStep.value("entity", std::string())}};
+    if (!held)
+    {
+        out["note"] = "photo mode didn't keep the camera where it was put (it places its camera itself), so nothing is left to undo; "
+                      "frame with photo.frame or a camera preset instead";
+    }
+    const auto before = aStep.value("before", json());
+    if (before.is_object() && before.value("position", json()).is_object() && before.value("forward", json()).is_object())
+    {
+        const auto p = before.value("position", json());
+        const auto f = before.value("forward", json());
+        out["undo"] = {{"method", "photo.camera.place"},
+                       {"params",
+                        {{"position", {at(p, "x"), at(p, "y"), at(p, "z")}},
+                         {"look_at", {at(p, "x") + at(f, "x"), at(p, "y") + at(f, "y"), at(p, "z") + at(f, "z")}}}}};
+        out["undo_note"] = "puts the camera back where it was, looking the same way (roll is photo mode's own); closing photo mode resets it";
+    }
+    else
+    {
+        out["undo"] = nullptr;
+        out["undo_note"] = "the camera's earlier place wasn't reported; closing photo mode resets it";
+    }
+    return out;
+}
+
 bool WardrobeShows(const params::WardrobeEquipRequest& aRequest, const json& aState)
 {
     const auto set = aState.value("set", -1);

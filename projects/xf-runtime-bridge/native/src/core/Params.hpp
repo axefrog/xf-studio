@@ -386,6 +386,14 @@ struct InventoryUnequipRequest
 };
 InventoryUnequipRequest ParseInventoryUnequip(const json& aParams);
 
+// photo.camera.place (0.5.2, research): {position: [x, y, z], look_at: [x, y, z]} in world metres, at least 5 cm apart.
+struct CameraPlaceRequest
+{
+    std::array<double, 3> position{};
+    std::array<double, 3> lookAt{};
+};
+CameraPlaceRequest ParseCameraPlace(const json& aParams);
+
 // wardrobe.equip (0.5.2): exactly one of
 //   {set: 1-7}                                   apply that wardrobe outfit
 //   {clear: true}                                take the active outfit off (V shows what is equipped)

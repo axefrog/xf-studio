@@ -15,6 +15,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <atomic>
 #include <chrono>
@@ -312,6 +313,8 @@ int wmain(int argc, wchar_t** argv)
         std::map<int32_t, float> attributes; // photo-mode attribute values; 0 when photo mode opened
         std::string player = "v";            // selftest.phase {player: "johnny"}: a stand-in, not V
         bool faceTableReadable = true;       // selftest.phase {face_table_readable: false}: session 5's unread face table
+        bool cameraHolds = false;            // selftest.phase {camera_holds: true}: photo mode keeps a moved camera (0.5.2)
+        std::array<double, 3> cameraAt{0.0, 0.0, 1.6};
         // The wardrobe (0.5.2): the active outfit (0 none), what each area shows of it, the stored outfits, the items the
         // wardrobe knows, and the snapshot the kill switch restores (the wardrobe before the bridge's first change).
         struct WardrobeArea
@@ -475,6 +478,8 @@ int wmain(int argc, wchar_t** argv)
                              sim.photoTimeHours = aContext.params.value("photo_time_hours", false);
                              sim.photoTimeLabel = aContext.params.value("photo_time_label", std::string("TIME OF DAY"));
                              sim.faceTableReadable = aContext.params.value("face_table_readable", true);
+                             sim.cameraHolds = aContext.params.value("camera_holds", false);
+                             sim.cameraAt = {0.0, 0.0, 1.6};
                              return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}, {"player", sim.player}};
                          }});
     // The in-game panel's write switch, which the self-test can't press: pauses or resumes writes.
@@ -762,6 +767,39 @@ int wmain(int argc, wchar_t** argv)
     // along +Y, and V's head placed by the pose tab's offsets (keys 8, 9, 37) and rotation (key 7)
     // through a slightly skewed mapping, projected with a vertical field of view (key 1, 35 until
     // set) at aspect 2.4. Enough to drive tools/api/framing.ts end to end offline.
+    // photo.camera.place (0.5.2), simulated: the camera entity moves, and photo mode keeps it there only with camera_holds.
+    dispatcher.Register(simWrite("photo.camera.place", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "Camera placement (simulated).",
+                                 [&queue](const xfb::MethodContext& aContext) {
+                                     const auto request = p::ParseCameraPlace(aContext.params);
+                                     const auto vec = [](const std::array<double, 3>& aV) { return json{{"x", aV[0]}, {"y", aV[1]}, {"z", aV[2]}}; };
+                                     const auto step = xfb::RunGameTask(
+                                         queue, std::chrono::milliseconds(1000),
+                                         [&request, vec] {
+                                             std::scoped_lock _(sim.mutex);
+                                             if (sim.phase != "photo_mode")
+                                             {
+                                                 throw xfb::MethodError("not_in_photo_mode", "simulated: photo mode is not open");
+                                             }
+                                             const auto before = sim.cameraAt;
+                                             if (sim.cameraHolds)
+                                             {
+                                                 sim.cameraAt = request.position;
+                                             }
+                                             sim.gameSaveLock = true;
+                                             return json{{"entity", "gamePhotoModeCameraObject"}, {"asked", vec(request.position)},
+                                                         {"before", {{"position", vec(before)}, {"forward", {{"x", 0.0}, {"y", 1.0}, {"z", 0.0}}}}}};
+                                         },
+                                         "photo.camera.place");
+                                     w::WaitTicks(queue, 2, std::chrono::milliseconds(1000));
+                                     json reading;
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         reading = json{{"position", vec(sim.cameraAt)}, {"forward", {{"x", 0.0}, {"y", 1.0}, {"z", 0.0}}}, {"fov", 35.0}};
+                                     }
+                                     auto out = w::CameraPlaceResult(request, step, reading);
+                                     out["simulated"] = true;
+                                     return out;
+                                 }));
     dispatcher.Register({"photo.subject", xfb::Access::Read, xfb::RunOn::GameThread, "V's head and the camera (simulated).",
                          [requirePhase](const xfb::MethodContext& aContext) {
                              const auto request = p::ParseSubject(aContext.params);
@@ -788,7 +826,7 @@ int wmain(int argc, wchar_t** argv)
                              const double head[3] = {root[0] + fx * 0.03, root[1] + fy * 0.03, root[2] + 1.62};
                              const double target[3] = {head[0] + fx * request.forward + rx * request.right,
                                                        head[1] + fy * request.forward + ry * request.right, head[2] + request.up};
-                             const double cam[3] = {0.0, 0.0, 1.6};
+                             const double cam[3] = {sim.cameraAt[0], sim.cameraAt[1], sim.cameraAt[2]};
                              const double aspect = 2.4;
                              const double t = std::tan(fov * pi / 360.0);
                              const auto project = [&](double aX, double aY, double aZ) {
