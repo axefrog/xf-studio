@@ -123,6 +123,7 @@
   - taking a game screenshot to a chosen file;
   - opening the full photo mode without input (Codeware's quest-node route opens a restricted one; [photo mode](photo-mode.md));
   - saving to a chosen slot.
+- **Driving V (design only):** teleport with facing, the camera turned by the game's own look-at, navmesh paths, crouch, weapons, consumables, menus and the HUD's interaction choices all have script routes; walking with the game's locomotion, jumping, sprinting and choosing dialogue lines need input, and the retail build carries CD PROJEKT RED's functional-test input natives (`FunctionalTestsGameSystem.FakeInput*`, parameters stripped) as the lead for input without window focus ([player control](player-control.md), [design](../research/runtime/player-control-design.md)).
 - **Capture paths:** capture is external for now (window capture after post-processing). The lossless, before-effects route is an optional ReShade add-on (6.7.x headers, full add-on build only), which must never change the user's preset.
 
 Details and citations: [design §7](../research/runtime/runtime-bridge-design.md#7-autonomy-capability-matrix).
@@ -141,4 +142,4 @@ Details and citations: [design §7](../research/runtime/runtime-bridge-design.md
 
 ## Related pages
 
-[Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [Test card](../research/runtime/runtime-bridge-test-card.md) · [Photo mode and the creator from script](photo-mode.md) · [Mod loading](mod-loading.md) · [Game crashes](game-crashes.md) · [Validation](../docs/validation.md) · [Toolchain](../docs/toolchain.md)
+[Runtime bridge design](../research/runtime/runtime-bridge-design.md) · [Player control](player-control.md) · [Test card](../research/runtime/runtime-bridge-test-card.md) · [Photo mode and the creator from script](photo-mode.md) · [Mod loading](mod-loading.md) · [Game crashes](game-crashes.md) · [Validation](../docs/validation.md) · [Toolchain](../docs/toolchain.md)
