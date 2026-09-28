@@ -45,7 +45,9 @@ So every frame of this session, creator and photo mode alike, carries Ultra+'s R
 
 ## 3. Results
 
-### 3.1 Preflight (bridge 0.4.1; [test card](../../research/runtime/runtime-bridge-test-card.md#session-4-preflight-bridge-041))
+### 3.1 Preflight (bridge 0.4.1)
+
+The rows of the [test card's session-4 preflight](../../research/runtime/runtime-bridge-test-card.md#session-4-preflight-bridge-041) that were recorded:
 
 | Check | Result | Grade |
 |---|---|---|
