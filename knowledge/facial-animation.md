@@ -86,11 +86,11 @@ A smile made with the mouth-corner controls forms a sharp lump beside the nose a
 | Influences hide the fill | `lips_[lr]_nasolabialDeepener` is capped at 1 − `corner_up`, and `corner_wide` by corner up, mid shift, jaw open and stretch together: in the reported expression the deepener set at 100 % solves at 26 % | [resource] [offline] |
 | Limits don't apply | The global limits act only while `lipSyncEnvelope` is above 0; it rests at 0 | [resource] [source] |
 
-`tools/facial_attribution.py` reports, for any saved expression, each stage's effect on the control weights, the in-betweens and correctives that fire, and how far each one moves chosen joints (by switching it off and solving again). A retune, in the preview and as an optional in-game override, is banked as a later feature ([backlog](../research/backlog/README.md#later-features--discuss-with-the-maintainer-before-building-each)); the in-game comparison is [N13](../research/runtime/next-sessions-plan.md#n13-cheek-check-smiles-in-photo-mode).
+`tools/facial_attribution.py` reports, for any saved expression, each stage's effect on the control weights, the in-betweens and correctives that fire, and how far each one moves chosen joints (by switching it off and solving again). A retune, in the preview and as an optional in-game override, is banked as a later feature ([backlog](../research/backlog/README.md#later-features--discuss-with-the-maintainer-before-building-each)); the in-game comparison ran in session 4 ([N13 results](../experiments/029-session-4/README.md#34-n13-cheek-check)) [runtime]. The lump shows in game at the same place as in the preview. It reads milder at a portrait lens, but the lens, the light and the facial setup differ, so its size isn't settled. The cheek raiser doesn't visibly round the cheek there, as offline. From long photo-mode experience the bulge on smiling is a consistent trait of the game's rig at every framing; the default photo-mode face lens (about 66° at 35 cm) exaggerates it.
 
 ## Open questions
 
-1. Which facial setup does the engine solve V's face with: the female head's own or the male player setup the face-rig entity names? A probe is prepared (the bridge's `face.rig.read`, check R1 on the [test card](../research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2); a CET fallback in [experiment 022](../experiments/022-session-3/README.md#part-d-expression-console-checks-optional)).
+1. ~~Which facial setup does the engine solve V's face with?~~ **Answered for photo mode (session 4):** the male player setup, on the photo-mode stand-in's `face_rig` ([facial expressions §1](facial-expressions.md#which-facial-setup-v-actually-uses)). The creator and gameplay faces aren't read yet.
 2. How does the engine combine the joint binds of V's five region targets, and what happens to joints no target lists (the lid roots)?
 3. Does the game's blink close every eye shape completely, or does it leave the slit the preview shows on `h091` and `h011` (measured offline) and `h111` (seen in the browser)? Does `h011` close fully in game, as it does about the base centre?
 4. What counts as a gaze change for the look-at controller's blinks, and what drives blinks in gameplay outside the creator and photo-mode graphs? (Those graphs play the additive blink clips on gaze changes, with minimum intervals, and have no periodic blink: [facial expressions §2](facial-expressions.md#2-which-graph-drives-vs-face-where).)
@@ -99,7 +99,7 @@ A smile made with the mouth-corner controls forms a sharp lump beside the nose a
 7. Is the brow and lid movement seen above V's eyes in the creator the eyes-section showcase (§6), and how much do wrinkle shading and live gaze add?
 8. Where does the game's solver differ from the IO Suite's reading: pupil scale poses, `faceEnvelope`, the lips muzzle, the corrective-entry flag, the double influence pass ([specification §7](../research/animation/facial-solver-spec.md#7-where-the-io-suite-may-differ-from-the-game))? Each is a compile option of XF Studio's solver, so a runtime comparison can switch one at a time.
 9. With a mod that replaces `ui_female_face.anims` without the creator's clips (§5), does the creator's face hold still in game?
-10. Does the game's smile lump sit where and as large as the preview's, and does wrinkle shading change how it reads (§7; [N13](../research/runtime/next-sessions-plan.md#n13-cheek-check-smiles-in-photo-mode))?
+10. The game's smile lump sits where the preview's does ([session 4](../experiments/029-session-4/README.md#34-n13-cheek-check)); is it as large once the preview solves with the male setup at a matched lens and light, and does wrinkle shading change how it reads (§7)?
 
 ## In-game test asks
 
@@ -111,7 +111,7 @@ Batch into one prepared session; record the game version and the face-rig and mo
 4. **Mod lashes on closed lids.** With the CCXL "Lush Manga Eyelashes" chosen, photo mode, eyes closed, one frontal and one three-quarter close-up of the left eye; then the same with vanilla lashes. If the outer lashes kink upward off the lid as in the preview (`evidence/screenshots/head-fixes/lashes-compare.png`, private), the mod's rigging does it in game too.
 5. **The eyes section's brows** (§6). A fixed camera on the creator's head: 25 s hovering only a head-camera row (skin), then 25 s moving back and forth between an XF Eye Artistry row and the eyebrows row. Do the brows lower and the lids narrow only in the second? Compare with the Studio's **Creator close-up** and **Creator close-up, eyes section** idles (`evidence/screenshots/idle-brows/`, private). The runtime bridge can read the active clip and the paperdoll flags meanwhile.
 6. **A replaced creator face set** (§5). With Appearance Menu Mod's female facial expressions installed, open the creator's head camera and watch V's face for 25 s: does it blink and move as the close-up idle does, or hold still?
-7. **Smile lump** (§7): the [N13](../research/runtime/next-sessions-plan.md#n13-cheek-check-smiles-in-photo-mode) cheek check, three prepared expressions at three yaws beside the Studio's renders.
+7. ~~**Smile lump** (§7).~~ Run in session 4 ([N13 results](../experiments/029-session-4/README.md#34-n13-cheek-check)); the size comparison waits for the preview's male setup and a matched lens and light.
 
 ## Related pages
 

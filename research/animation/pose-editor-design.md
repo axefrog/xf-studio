@@ -265,6 +265,19 @@ Offline findings on the way: a constant key is **16 bytes** in the file and in m
 | LP8 | On a vanilla standing pose: `pose.ik.set ikRightArm` 20 cm above the hand; `pose.lookat.set Eyes` to a point left of V; `pose.rotate.set head y 30` | One each | Whether L3's channels act in the pose branch |
 | LP9 | Exit photo mode, load the safety save | — | Nothing persists |
 
+**Face-carrier variant (LP-F; agreed as the one exception to "after 1.0" for live facial control).** It is the same experiment on the face, so it tells us early whether live facial control through a carrier clip can work ([expression editor §7](expression-editor-design.md#7-the-runtime-bridge-and-in-game-preview), `face.controls.apply`). The carrier is an XF expression entry from a staged XF Expressions set. Its clip is 2 frames, with all 414 float tracks and all 344 joints as constant keys ([expression editor §6.5](expression-editor-design.md#65-verification)). Session 4 showed that such an entry is listed and plays in photo mode, and that its menu value (not its faceId) selects it ([experiment 029](../../experiments/029-session-4/README.md#34-n13-cheek-check)).
+
+**Bridge prerequisite:** `pose.live.read` and `pose.live.apply` accept only the body carrier today. The variant needs them, or face siblings, to locate an XF expression set's clip by depot path and read and rewrite its constant **track** keys (not joint keys). The same checks apply: counts against the header, finite values, the carrier selected, the original keys kept for undo and the kill switch.
+
+Run LP-F after LP2 passes, in the same photo-mode visit, face framing at the portrait lens (FOV 22, close/far −1.2), look-at off:
+
+| # | Step | Captures | Decides |
+|---|---|---|---|
+| LP-F1 | `photo.expression.set` the carrier entry by its menu value; read its clip's constant track keys and compare them with the Studio's offline decode of the same clip | JSON | The track-key layout holds in memory; **stop if it doesn't** |
+| LP-F2 | Rewrite one main-pose track (`jaw_mid_open` to 0.4) in the loaded clip | `capture.burst` 10 frames at 50 ms | Whether the face solver reads the constant tracks live, and after how many frames |
+| LP-F3 | If nothing changed: select another expression, then the carrier again; then leave and re-enter photo mode | One each | Cached per selection or per load. If cached, the fallback is re-selecting after each write, or overriding the tracks entering `Sermo` |
+| LP-F4 | Undo; then the kill switch after another write | One each | The carrier's own keys come back |
+
 ## 8. In-game checks for exported poses
 
 Batch into one prepared session after phase E4; record versions and installed pose packs.

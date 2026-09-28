@@ -1,6 +1,6 @@
 # Facial expressions and idles
 
-**Maturity: Draft.** Consolidated on 26 September 2026 (the control measurements, natural expressions, cheek range and wrinkle regions of §8 on 27 September) from the installed 2.31 game's resources, its decompiled scripts, the REDmod TweakDB sources shipped with the game, ArchiveXL 1.27.3 and WolvenKit source, installed photo-mode mods, the Modding Docs and the Cyberpunk Blender add-on. Nothing here has runtime evidence of its own. Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source or decompiled scripts, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established. Provenance, hashes and commands are in the [expressions evidence note](../research/animation/expressions-evidence.md).
+**Maturity: Draft.** Consolidated on 26 September 2026 (the control measurements, natural expressions, cheek range and wrinkle regions of §8 on 27 September) from the installed 2.31 game's resources, its decompiled scripts, the REDmod TweakDB sources shipped with the game, ArchiveXL 1.27.3 and WolvenKit source, installed photo-mode mods, the Modding Docs and the Cyberpunk Blender add-on. Runtime evidence from the bridge's session 4 (28 September; [experiment 029](../experiments/029-session-4/README.md#35-n7-photo-mode-expressions-parity-eye-and-skin-light)) answers which face rig is live and how the expression index is applied (§1, §3). Evidence grades follow the [knowledge rules](README.md): **[source]** engine, framework or tool source or decompiled scripts, **[resource]** extracted game or mod resources, **[wiki]** Modding Docs text or image, **[runtime]** running game, **[hypothesis]** not yet established. Provenance, hashes and commands are in the [expressions evidence note](../research/animation/expressions-evidence.md).
 
 This page answers how V's face gets an expression in photo mode and an idle in the character creator, how mods add to either, and what a Studio expression or idle editor would have to produce. How the facial rig turns controls into bone motion (and the blink in particular) is the subject of [Facial animation and the blink](facial-animation.md); the Studio's current creator-idle preview is described in [CC idle](../research/animation/cc-idle.md). The design options built on these facts are in the [expressions and idles brief](../research/backlog/expressions-and-idles-brief.md).
 
@@ -35,14 +35,24 @@ Because every clip speaks this control vocabulary, **an expression is a vector o
 
 ### Which facial setup V actually uses
 
-Every vanilla player `face_rig` component, female and male, in the creator, gameplay and photo-mode appearance files, references **the male player setup** `base\characters\head\pma\h0_001_ma_c__player\h0_001_ma_c__player_rigsetup.facialsetup`, with the gender's own `h0_000_p[wm]a_c__basehead_skeleton.rig` [resource: `face_rig\h0_000__basehead_face_rig.app`, `…_face_rig_photomode.app`, `ep1\…\h0_000__basehead_face_rig_ep1.app`]. Its track mapping (13/141/86/33), 266 used joints and part info are identical to the female `h0_000_pwa_c__basehead_rigsetup.facialsetup` the Studio's idle bake uses, but its **main-pose and corrective transform data differ** and its `useFemaleAnimSet` flag is 0 where the female setup's is 1 [resource]. Whether the engine really solves the female V with that setup, or substitutes another (the Facial Customisation Rig Fix mod adds a facial-customisation component to every player entity), is not established [hypothesis]; it matters for fidelity and is on the runtime list.
+Every vanilla player `face_rig` component, female and male, in the creator, gameplay and photo-mode appearance files, references **the male player setup** `base\characters\head\pma\h0_001_ma_c__player\h0_001_ma_c__player_rigsetup.facialsetup`, with the gender's own `h0_000_p[wm]a_c__basehead_skeleton.rig` [resource: `face_rig\h0_000__basehead_face_rig.app`, `…_face_rig_photomode.app`, `ep1\…\h0_000__basehead_face_rig_ep1.app`]. Its track mapping (13/141/86/33), 266 used joints and part info are identical to the female `h0_000_pwa_c__basehead_rigsetup.facialsetup` the Studio's idle bake uses, but its **main-pose and corrective transform data differ** and its `useFemaleAnimSet` flag is 0 where the female setup's is 1 [resource].
+
+**In photo mode the engine does use it for the female V** [runtime, session 4]. The live `face_rig` sits on the photo-mode **stand-in** (`NPCPuppet`), not on the head item `Items.PlayerWaPhotomodeHead`, which carries no `face_rig`, `man_face_base_animations` or `PhotomodeAnimations` at all. The stand-in's `face_rig` reports these path hashes (FNV-1a64 of the lower-case depot path), which match these files [offline]:
+
+| Field | Hash | Depot path |
+|---|---|---|
+| Facial setup | `6833a322173f7bdd` | `base\characters\head\pma\h0_001_ma_c__player\h0_001_ma_c__player_rigsetup.facialsetup` (the male player setup) |
+| Graph | `5e58ab89d2287d68` | `base\animations\facial\_facial_graphs\player_woman_photomode_sermo.animgraph` |
+| Rig | `5af1e771498830a5` | `base\characters\head\player_base_heads\player_female_average\h0_000_pwa_c__basehead\h0_000_pwa_c__basehead_skeleton.rig` |
+
+The same entity holds `man_face_base_animations` (57 gameplay sets) and `PhotomodeAnimations` (16 sets), all at priority 200, on a profile with the Photomode Facial Expression Mega Pack and one XF Expressions set installed. So the placeholder `face_rig` in `player_wa_tpp_head.ent` isn't the live one in photo mode. A preview that solves with the female setup differs from the game in pose data (the male blink turns the upper lid about 3° less; [facial animation](facial-animation.md)). Whether the creator and gameplay faces use it too wasn't read.
 
 ## 2. Which graph drives V's face where
 
 | Context | Face graph (`face_rig` component) | Animation sets on the face | Grade |
 |---|---|---|---|
 | Character creator and inventory preview ("paperdoll") | `_facial_graphs\player_woman_paperdoll_sermo.animgraph` (male: `pma_paperdoll_sermo`) | `ui_female_face.anims` (priority 128) plus the generic facial sets in `man_face_base_animations` | [resource] |
-| Photo mode | `player_woman_photomode_sermo.animgraph` (male: `player_man_photomode_sermo`) | `PhotomodeAnimations`: `ui\photomode\photomode_female_facial.anims` and the empty `photomode__v_female__facial.anims` (male twins) | [resource] |
+| Photo mode | `player_woman_photomode_sermo.animgraph` (male: `player_man_photomode_sermo`) | `PhotomodeAnimations`: `ui\photomode\photomode_female_facial.anims` and the empty `photomode__v_female__facial.anims` (male twins) | [resource]; the graph, and both components on the photo-mode stand-in, confirmed in game [runtime] (§1) |
 | Gameplay third-person head | The gameplay `face_rig` appearance also uses the paperdoll graph | as the creator | [resource]; what plays outside the creator is [hypothesis] |
 | Scenes and dialogue | Scene facial animation and lip sync are pushed through the graph's `FacialMixerSlot` | `facialCinematicAnimSets` on the scene; lip-sync sets found through the per-language lipmap, V's included ([lip sync](lipsync.md)) | [wiki] [resource: slot node present; V has lip-sync sets in 456 scenes, although the wiki's generator guide says V has none] |
 
@@ -68,7 +78,8 @@ flowchart TD
 | 15 vanilla records `PhotoModeFaces.facial_neutral` … `facial_singing_03`, faceId 0–14 | REDmod `faces.tweak`; confirmed present with the same display keys in the installed `tweakdb.bin` and `tweakdb_ep1.bin` | [resource] |
 | The menu lists 12 of them (neutral, charming, furious, bored, pissed, pleased, disgusted, happy, scared, surprised, sadness, whistling); the three singing faces are defined but not listed | `photo_mode.character.faceAnimations` in REDmod `photomode.tweak` | [resource] |
 | `AnimFeature_PhotomodeFacial { facialPoseIndex: Int32 }` is the only input | decompiled `orphans.script`; the graph's `animFeatures[0]` and two `IntInput` nodes (group `PhotomodeFacial`) | [source] [resource] |
-| faceId is passed as `facialPoseIndex` | native; the Mega Pack's records use faceId = CSV Index for 202 faces | [hypothesis], strongly supported by [resource] |
+| faceId is passed as `facialPoseIndex`, and it is the CSV's index, **not the menu's option value** | `photo.expression.index` 60 on the stand-in shows "Static: Sleeping" (faceId 60), which the menu offers as option value 56; index 56 shows "Static: Skeptical" (menu value 52). The menu's value is the entry's position in the list; with the Mega Pack and one XF set installed it trails the faceId by 4 at Sleeping and by 10 at the list's end (faceIds 217–219 at menu values 207–209). The Mega Pack's records use faceId = CSV Index for 202 faces | [runtime] session 4; [resource] |
+| **Only the stand-in takes the feature**: `AnimFeature_PhotomodeFacial` applied to the photo-mode stand-in changes the face and holds (5 s and more); applied to the head item it does nothing. Undo through the menu restores it | bridge `photo.expression.index` on both targets | [runtime] session 4 |
 | The CSV `anim_motion_database\photomode_facial_poses.csv` maps Index → `AnimationName`, `streamingContext` (`photomode`), `FallbackAnimationName` (15 vanilla rows, each its own fallback) | extracted 2D array | [resource] |
 | Two `AnimDatabase` states swap on the external event `updateFacialPose` with a 1 s linear blend, so changing expression cross-fades | graph | [resource] |
 | Vanilla `AnimDatabase` nodes have `isLooped` 0: an expression clip plays once and holds | graph; the Mega Pack's override sets it to 1 to loop animated faces | [resource] |
@@ -191,12 +202,22 @@ What the controls do, measured by solving each one alone with the pinned solver 
 - **Five natural samples** (warm smile, confusion, disgust, mild surprise, thinking) are FACS recipes at low to moderate intensity, committed as expression presets in [`data/expression-samples/`](../projects/xf-studio/authoring/data/expression-samples/).
 - **MediaPipe's 52 ARKit-named blendshapes can drive V** through a mapping onto these controls (7 to 12 ms detection plus a 6 to 8 ms solve per frame). On V's renders they recover gaze, blinks, brow raises and smiles well but miss brow lowering, the nose wrinkle, the upper-lip raise and one-sided mouth movements. On unmirrored frames MediaPipe's *Left* is the subject's left. `@mediapipe/tasks-vision` uploads usage metrics to Google every minute unless the page blocks it [offline] [source].
 
+### How game expressions read in photo mode (session 4)
+
+At face framing in game [runtime, the maintainer's judgement, 28 September]:
+- Expressions look better in the Studio's preview than in game, where they read more comical, and the game's lighting makes a large difference to how well a face renders.
+- The Studio's render quality is something the game reaches only under near-perfect lighting.
+- Photo-mode expressions usually read as unrealistic and undercut a photo's gravity, unless frozen at a very subtle intensity.
+- The cheek bulge beside the nose on smiling is a consistent trait of the game's rig at every framing. The default photo-mode face framing, about 66° at about 35 cm ([photo mode §4](photo-mode.md#4-camera-placement)), exaggerates it, but a portrait lens doesn't remove it ([experiment 029](../experiments/029-session-4/README.md#34-n13-cheek-check)).
+
+So the value of authored expressions lies in subtle, low-intensity faces; exporting at a chosen intensity is banked in the [backlog](../research/backlog/README.md).
+
 ## Open questions
 
-Questions 1 and 2 have bridge commands ready (`face.rig.read` and `photo.expression.index`, offline only) and are on the runtime bridge's next [test card](../research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2).
+Questions 1 and 2 were answered in session 4 (§1, §3): photo mode's live face rig is on the stand-in and solves with the male player setup, and faceId is the table index, applied only to the stand-in, while the menu's option value is a list position. What remains of them:
 
-1. Does the engine use the male player facial setup for the female V, as the `face_rig` components say? The face rig lives on the photo-mode head **item** (`Items.PlayerWaPhotomodeHead` in `AttachmentSlots.TppHead`), not on the puppet, and that item's own `player_wa_tpp_head.ent` carries a placeholder `face_rig` (demo_vicky facial setup, `woman_average_sermo` graph, no sets) beside the photo-mode `.app`'s one [resource]. A read-only CET probe of the live head item is prepared in [session 3 Part D](../experiments/022-session-3/README.md#part-d-expression-console-checks-optional) ([API evidence](../research/animation/expressions-evidence.md#session-3-probes)).
-2. Is faceId passed straight to `facialPoseIndex`, and does the database look rows up by the Index column or by position (can Index values be sparse)? With the Mega Pack, menu position and faceId differ for most faces ("Static: Sleeping" is 57th in the menu list (index 56) but has faceId 60), so picking it in the menu tells the two apart; its CSV's Index equals row position everywhere, so sparseness needs a test CSV (brief R5) [resource].
+1. Do the creator and the gameplay head use the male setup too? `face.rig.read` in the creator and in gameplay answers it. So does a read with the Mega Pack disabled, which tells which sets are the pack's.
+2. Can table indices be sparse (the database looking rows up by the Index column rather than by position)? That still needs a test table (brief R5).
 3. Does ArchiveXL `animations:` with `component: face_rig` reach the photo-mode face rig, and does a higher-priority set shadow a vanilla clip name? (Export no longer needs this: it attaches through a resource patch, §6.)
 4. Does a WolvenKit-imported 2-frame `AdditiveFromRefPose` float-track clip play in photo mode exactly as the preview solves it?
 5. What does the paperdoll graph play on V's face outside the creator, and can a scene or reaction feature drive a looping facial idle on V?
