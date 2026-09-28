@@ -199,7 +199,7 @@ test("every scene method that changes what is drawn is wrapped to request a fram
   const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
   const body = source.slice(source.indexOf("  const api = {"), source.indexOf("  // Every call that changes what is drawn"));
   const keys = [...body.matchAll(/^    (?:\/\/.*\n    )?([A-Za-z]+)(?::|,)/gm)].map(match => match[1]!);
-  const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
+  const wrapped = [...source.slice(source.indexOf("Object.assign(api, invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   expect(keys.length).toBeGreaterThan(40);
   const mutators = keys.filter(key => /^(set|apply|animate|restore|update|reconcile)/.test(key) || ["eyeShape", "front", "resize"].includes(key));
   expect(mutators.filter(key => !wrapped.includes(key))).toEqual([]);
@@ -229,7 +229,7 @@ test("every scene method that changes what is drawn is wrapped to request a fram
 
 test("the authored plate's light, skin and composite change only inside calls that request a frame, and idle costs nothing", async () => {
   const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
-  const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
+  const wrapped = [...source.slice(source.indexOf("Object.assign(api, invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   // The drawn skin changes only with the V's details or what features supersede, each inside a call that requests a frame: feature
   // renderers hear once and read its light and the skin under their surfaces again (behaviour: tests/character-renderer.test.ts;
   // tests/scene-feature-renderers.test.ts drives eye makeup's renderer through the port).
@@ -296,7 +296,7 @@ test("the authored plate's light, skin and composite change only inside calls th
 
 test("face details request frames when they arrive, leave or change normals, and draw between the skin and the makeup plates", async () => {
   const source = sceneSource("scene-host"), character = sceneSource("character-renderer");
-  const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
+  const wrapped = [...source.slice(source.indexOf("Object.assign(api, invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   for (const change of ["setCharacterDetails", "setNormals", "applySavedV", "setStage"]) expect(wrapped).toContain(change);
   // The normals toggle reaches every loaded decal; a new V's decals take the current setting.
   const normals = source.slice(source.indexOf("    setNormals: (v: boolean) => {"), source.indexOf("    setExposure:"));

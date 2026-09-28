@@ -19,3 +19,15 @@ test("the rig's motion keeps the loader's catalogue and face reason live", () =>
   expect(motion.idles?.idles.map(entry => entry.id)).toContain("closeup-eyes");
   expect(motion.faceError).toBe("");
 });
+
+// The scene host has the same hazard one level up: its `idles` getter reads the rig's catalogue, and the host returned `{ ...api, … }`,
+// which read it once while the head was built. Both must hand on the live object (the WebGL probe can't reach a late face, so the
+// source is checked).
+test("neither the rig nor the scene host copies its motion getters", async () => {
+  const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text();
+  const [host, rig] = await Promise.all([read("../src/platform/scene/scene-host.ts"), read("../src/platform/scene/head-rig.ts")]);
+  expect(host).toContain("get idles() { return motion.idles; }");
+  expect(host).not.toMatch(/return\s*\{\s*\.\.\.api\b/);
+  expect(host).toMatch(/return Object\.assign\(api, invalidating\(api,/);
+  expect(rig).not.toMatch(/motion:\s*\{\s*\.\.\.motion\b/);
+});

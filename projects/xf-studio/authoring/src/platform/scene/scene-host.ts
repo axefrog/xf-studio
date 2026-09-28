@@ -462,9 +462,10 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     /** Evidence: the setup drawn now, and how the room is lit on this GPU. */
     lightingEvidence: () => ({ setup: lighting.shown(), environmentMode: lighting.environment.mode }),
   };
-  // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't.
-  return { ...api, ...invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
+  // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't. The host is `api` itself (as with the lighting above), so
+  // its getters stay live: a spread copy read `idles` once, before the eyes section joined (PREV-187).
+  return Object.assign(api, invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
     "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
     "setBlink", "animateBlink", "setWire", "setNormals", "setStage", "setLighting",
-    "setSkinScatter", "setFaceShadows", "setHairLook"], invalidate) };
+    "setSkinScatter", "setFaceShadows", "setHairLook"], invalidate));
 }

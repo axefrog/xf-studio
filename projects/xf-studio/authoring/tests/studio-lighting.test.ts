@@ -98,7 +98,7 @@ test("restoring the workspace hands the rig to the scene before the preview's ac
 
 test("a lighting change requests a frame and nothing else draws (render on demand)", () => {
   const source = require("node:fs").readFileSync(require("node:path").resolve(import.meta.dir, "..", "src", "platform", "scene", "scene-host.ts"), "utf8") as string;
-  const wrapped = [...source.slice(source.indexOf("...invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
+  const wrapped = [...source.slice(source.indexOf("Object.assign(api, invalidating(api, [")).matchAll(/"([A-Za-z]+)"/g)].map(match => match[1]!);
   expect(wrapped).toContain("setLighting");
   // The evidence reader does not.
   expect(wrapped).not.toContain("lightingEvidence");
