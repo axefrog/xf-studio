@@ -19,6 +19,7 @@
 
 11. Scripted cinematic camera moves (orbit, dolly, rack focus) for photo mode and cutscene-like shots.
 12. Portrait lighting rigs that follow V in normal play.
+12a. An XF light-rig controller that supersedes photo mode's fiddly light controls: lights as a group rig orbited around the subject with the mouse, per-light tweaks, saved and recalled rigs (the Studio's lighting setups included), live in our own overlay. CharLi's group rotation is the prior art the maintainer prefers.
 13. A virtual photo studio: a stage with backdrops and our lighting, reachable from anywhere.
 
 ## V and characters
