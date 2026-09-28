@@ -74,7 +74,13 @@ The entries above lean towards tools. These are the player's side: what the game
 ### Play as more
 
 42. Side stories starring other characters, the way the flashback sequences swap the player.
-43. Braindance creation: record V's own play as a braindance, edit it and watch it back.
+43. Braindances as a system, not a set piece (vanilla uses the braindance editor for a handful of scripted investigations; it is widely seen as underused):
+    - **Braindances as the way to play as others**: lore-consistent side stories where a street braindance puts the player in another character's life for a short story (pairs with entry 42).
+    - **Editing as a career**: raw recordings from clients, cut and layered with the editor's tools, paid by quality.
+    - **Investigation gigs**: generated detective work across the visual, thermal and audio layers, with clues that lead to real places in the city.
+    - **Recording V's own play** (entry 28) as a braindance to scrub, re-frame with photo-mode camera control and share.
+    - **An underground scene**: black-market braindances, braindance clubs, addiction as a survival-style risk.
+    - Prior art in the installed-mod survey: Lizzie's Braindances (rank 13; quest phases and journal around braindance content).
 44. Photography as a career: shots for news outlets or fixers, with photo mode as a job skill.
 45. Deeper netrunning and hacking; vehicle life (tuning, races, garages).
 
