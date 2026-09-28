@@ -1,6 +1,6 @@
 # Session 4: finish sweep, cheek check, photo-mode expressions and parity, creator colour checks
 
-**Status:** run on 28 September 2026 through the runtime bridge; results and the offline analysis are below. The coordinator drove the bridge; the maintainer was at the game, opened the creator with F12 and gave the judgement answers. The session took rows from the [next-sessions plan](../../research/runtime/next-sessions-plan.md): the 0.4.1 preflight, N1's Gloss verdict (1.5), N2's headgear row (2.6), N13, N7, N5 and N6. Structure follows [session 3](../028-session-3/README.md#5-results-28-september-2026).
+**Status:** run on 28 September 2026 through the runtime bridge; results and the offline analysis are below. The coordinator drove the bridge; the maintainer was at the game, opened the creator with F12 and gave the judgement answers. The session took rows from the [next-sessions plan](../../research/runtime/next-sessions-plan.md): the 0.4.1 preflight, N1's Gloss verdict (1.5), N2's headgear row (2.6), N13, N7, N5 and N6; the answered plan rows now live here. Structure follows [session 3](../028-session-3/README.md#5-results-28-september-2026).
 
 **Evidence.** Private and ignored, never committed: the notes with verdicts word for word and the full bridge log with every JSON answer (`local/sessions/2026-09-28-session-4/`), and the 599 capture files (full frames, crops and JSON sidecars), copied to their canonical home `experiments/029-session-4/generated/captures/`. This page names captures by their capture name only (`s4-glossC-yaw0` is `<timestamp>-s4-glossC-yaw0.full.png`). The offline numbers in §4 come from [`analyse_captures.py`](analyse_captures.py), which reads those captures and prints every figure quoted here.
 
@@ -14,7 +14,7 @@
 | Bridge | **0.4.1 `-writes`**, build commit `911ad89941accdbe34500f1db1b2dfd603efad14` (not dirty), protocol 1, 10 natives. Write classes photo, world, character, **inventory** (approved for this session) and save |
 | MO2 profile | `XF Studio diagnostic 2026-09-25` |
 | XF Eye Artistry | Still the **session 2 diagnostic build** (`xfs_c0200a5e52e554c029d0b0000000000d0`, Off + 12; [experiment 020](../020-session-2/README.md#build-record-25-september-2026)). The alpha.2-built (`hx_`) export was not staged, so the headgear row couldn't test it. The sweep left **Metal ramp · lifted confirmed on V** for the rest of the session, including N5 and N6 (the plan wanted XF Off there) |
-| XF Expressions | "Cheek check" set staged ([plan N13](../../research/runtime/next-sessions-plan.md#n13-cheek-check-smiles-in-photo-mode)); it showed as the last three of 210 photo-mode expressions |
+| XF Expressions | "Cheek check" set staged (three expressions, faceIds 217–219; [facial correctives tuning](../../research/animation/facial-correctives-tuning.md)); it showed as the last three of 210 photo-mode expressions |
 | Creator | Opened with F12 (Character Customization Anywhere): `edit_mode` `NewGame`, `updating_finalized_state` true. The bridge's `cc.open` was used once, at the start of the finish sweep (§5) |
 | Other mods that mattered | Photomode Facial Expression Mega Pack, Photo Mode Ex, Realistic Complexion III, **Ultra+ v9.0.0_rc2**, **Thread Locker**, **Hide Body Parts - Body Toggles** |
 
