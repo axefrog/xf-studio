@@ -46,8 +46,8 @@ export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody) =
 
 /**
  * The game idle (with the eyeballs given gaze joints when the core eye is rigid) and the game's blink. The idle comes from the host
- * (idle-source.ts): read from the player's game files, its body moves; its face moves only where a face clip was prepared on this computer
- * (the facial solver isn't part of the app yet), and otherwise holds still (`faceError`). The idle is the feminine V's, so a masculine head
+ * (idle-source.ts): read from the player's game files, its body moves and its face moves as XF Studio's own facial solver solves it on the
+ * host; where the face can't be read it holds still (`faceError`, the host's reason). The idle is the feminine V's, so a masculine head
  * holds still (`IDLE_MASCULINE`); the blink checks its own joints against the head (game-blink.ts).
  */
 export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") => {
@@ -60,7 +60,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female") 
     source = await loadIdleSource();
     const first = source.first;
     const [clip, facial] = await Promise.all([source.body(first), source.face(first).catch(() => null)]);
-    if (!facial) faceError = IDLE_FACE_MISSING;
+    if (!facial) faceError = source.faceReason ?? IDLE_FACE_MISSING;
     // The legacy eyeball preview is rigid geometry. Give each disconnected eye
     // one authoritative eye-joint influence so gaze rotates around the game pivot.
     const eyes = eye.mesh;

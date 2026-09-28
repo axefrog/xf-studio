@@ -14,6 +14,14 @@ import type { FacialStartPoint } from "./platform/api/facial";
 /** The player face the Studio's head is: the female basehead skeleton and its own facial setup (design D1; the blink and idle use it). */
 export const FACE_SKELETON = "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\h0_000_pwa_c__basehead_skeleton.rig";
 export const FACE_SETUP = "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\h0_000_pwa_c__basehead_rigsetup.facialsetup";
+/** The head's and the eyes' morph targets: each eye shape's joint binds, which the blink re-seats its rig on (knowledge/facial-animation.md §4). */
+export const FACE_MORPHS = "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa__morphs.morphtarget";
+export const EYE_MORPHS = "base\\characters\\head\\player_base_heads\\player_female_average\\he_000_pwa__morphs.morphtarget";
+/**
+ * The creator puppet's face clips (the face graph's set, `player_woman_paperdoll_sermo.animgraph`): each idle's face is the clip of the
+ * same name, and the eyes section's showcase is `ui_closeup_shot_eyes` [resource: research/animation/cc-idle.md].
+ */
+export const UI_FACE_SET = "base\\animations\\ui\\female\\ui_female_face.anims";
 /** The game's generic facial additives: its normal blink composes with a held expression. */
 export const FACIAL_ADDITIVES = "base\\animations\\facial\\generic\\interactive_scene\\generic_facial_additives.anims";
 export const BLINK_CLIP = "additive__blink_normal__01";

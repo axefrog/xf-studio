@@ -11,6 +11,30 @@ export const FACIAL_STATE_SCHEMA = "xfs/facial-state-1";
 export const FACIAL_ENDPOINT = "/api/facial";
 export const FACIAL_SOLVE_ENDPOINT = "/api/facial/solve";
 export const FACIAL_EXPRESSIONS_ENDPOINT = "/api/facial/expressions";
+/** The game's blink, solved by XF Studio's own facial solver on the host (`FacialBlinkRecord`). */
+export const FACIAL_BLINK_ENDPOINT = "/api/facial/blink";
+export const FACE_MOTION_SCHEMA = "xfs/face-motion-1";
+
+/**
+ * A face skeleton at rest and solved motion on it, as the host bakes it with XF Studio's own facial solver (engines/facial-rig/bake.ts) for
+ * the idle's face and the blink: the form the developer bakes' GLBs had. glTF axes; base64 little-endian float32.
+ */
+export type FaceMotionRest = {
+  readonly names: readonly string[];
+  /** Parent index per joint (−1 for a root). */
+  readonly parents: readonly number[];
+  /** Per joint: translation (3), rotation x y z w (4), scale (3). */
+  readonly local: string;
+};
+/** One clip: its times (seconds, or the blink closure 0–1), the moving joints (names) and per frame and joint translation (3) then rotation (4). */
+export type FaceMotionClip = { readonly name: string; readonly times: string; readonly joints: readonly string[]; readonly local: string };
+/** An idle's face motion (`GET /api/idles?face=<entry id>`). */
+export type FaceClipRecord = { readonly schema: typeof FACE_MOTION_SCHEMA; readonly rest: FaceMotionRest; readonly clip: FaceMotionClip;
+  /** The rig and facial setup it was solved with. */
+  readonly rig: { readonly skeleton: string; readonly setup: string } };
+/** The game's blink (`GET /api/facial/blink`): the description the blink reads (game-blink.ts `GameBlinkDescription`) and its two clips. */
+export type FacialBlinkRecord = { readonly schema: typeof FACE_MOTION_SCHEMA; readonly rest: FaceMotionRest; readonly description: Readonly<Record<string, unknown>>;
+  readonly clips: readonly FaceMotionClip[] };
 
 export type FacialControlGroup = "brows" | "lids" | "gaze" | "nose" | "cheeks" | "mouth" | "jaw" | "neck" | "ears" | "advanced" | "other";
 /** One main-pose control of the rig, as the drawer lists it (engines/facial-rig/vocabulary.ts `ControlInfo`). */
@@ -41,8 +65,12 @@ export type FacialHostState = {
     readonly axes?: readonly FacialAxisPair[];
     /** Whether each horizontal gaze control's counterpart turns the other eye the same world way (null: nothing to check). */
     readonly gazeSameWay?: boolean | null };
-  /** The external solver kept warm (the pinned, unmodified IO Suite modules run as their own program). */
-  readonly solver: { readonly phase: "missing" | "starting" | "ready" | "failed"; readonly reason?: string; readonly compileMs?: number };
+  /**
+   * The facial solver: XF Studio's own, in the host (`in-app`), or, for a developer's parity check, the pinned IO Suite run as its own
+   * program (`oracle`, XFS_FACIAL_SOLVER_ORACLE=1 on localhost).
+   */
+  readonly solver: { readonly phase: "missing" | "starting" | "ready" | "failed"; readonly reason?: string; readonly compileMs?: number;
+    readonly kind?: "in-app" | "oracle" };
   /** The game's normal blink, which composes with a held expression before the solve (the game adds blink tracks first). */
   readonly blink: { readonly available: boolean; readonly closedTime?: number; readonly duration?: number; readonly rate?: number };
   /** The installed photo-mode expressions (start points). */

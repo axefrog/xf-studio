@@ -152,8 +152,9 @@ if (import.meta.main) {
   if (generate) {
     const { locateFacialSolver } = await import("../src/facial-host");
     const python = process.env.XFS_PYTHON || join(process.env.LOCALAPPDATA ?? "", "Python", "pythoncore-3.14-64", "python.exe");
-    const location = locateFacialSolver({ env: { ...process.env, XFS_PYTHON: python }, repoRoot: primaryCheckout(), script: join(AUTHORING, "tools", "facial_solver_server.py") });
-    if ("missing" in location) { console.error("The IO Suite checkout or Python wasn't found (XFS_FACIAL_SOLVER, XFS_PYTHON)."); process.exit(2); }
+    const location = locateFacialSolver({ env: { ...process.env, XFS_PYTHON: python, XFS_FACIAL_SOLVER_ORACLE: "1" }, repoRoot: primaryCheckout(),
+      script: join(AUTHORING, "tools", "facial_solver_server.py") });
+    if (!("addon" in location)) { console.error("The IO Suite checkout or Python wasn't found (XFS_FACIAL_SOLVER, XFS_PYTHON)."); process.exit(2); }
     const guard = join(primaryCheckout(), "tools", "memory_guard.py");
     const clips = loadClips(paths, oodle.decompress);
     const cases = buildCases(female.rig, female.setupRoot, clips);

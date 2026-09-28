@@ -145,14 +145,16 @@ const poseSettings = () => {
 const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")), log: diagnostics.log.logger("poses") });
 const poseRequest = createPoseHandler(poses);
-// The game's preview idles (V's body idle), read from the same launch route by XF Studio's own reader, as the desktop does.
-// `XFS_IDLE_SOURCE=prepared` plays the developer preparation's files instead (the Python oracle); `XFS_PREPARED_MOTION=off` hides that
-// preparation's motion files (idle faces, blink) so this server shows what the desktop app shows.
-const preparedMotion = process.env.XFS_PREPARED_MOTION !== "off";
+// The game's preview idles (V's body idle and, solved by XF Studio's own facial solver, its face), read from the same launch route by XF
+// Studio's own reader, as the desktop does. `XFS_IDLE_SOURCE=prepared` plays the developer preparation's files instead (the Python oracle),
+// and `XFS_PREPARED_MOTION=on` serves that preparation's motion files (idle faces, blink) for comparison; by default they are hidden, so
+// this server shows what the desktop app shows.
+const preparedMotion = process.env.XFS_PREPARED_MOTION === "on" || process.env.XFS_IDLE_SOURCE === "prepared";
 const idleResolverCache = resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache"));
 const idles = new IdleHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
   resolverCache: idleResolverCache, source: process.env.XFS_IDLE_SOURCE === "prepared" ? "prepared" : "game",
   preparedAssets: () => preparedMotion ? (assetOverlay && existsSync(resolve(assetOverlay, "cc-idle-catalogue.json")) ? assetOverlay : resolve(import.meta.dir, "public", "assets")) : null,
+  faces: () => facial.faceSource(),
   log: diagnostics.log.logger("preview") });
 const idleRequest = createIdleHandler(idles);
 // The creator lighting preset's grading LUT: the winner of the environment's LUT path on the same launch route.
@@ -165,8 +167,9 @@ const gradingLut = new GradingLutHost({ cacheRoot: previewCacheRoot,
   },
   log: diagnostics.log.logger("lut") });
 const gradingLutRequest = createGradingLutHandler(gradingLut);
-// The live facial preview: V's face rig, the installed photo-mode expressions and the external facial solver kept warm (facial-host.ts).
-// The solver is the pinned IO Suite checkout, found through XFS_FACIAL_SOLVER, XF Studio's tools folder or beside the repository.
+// The live facial preview: V's face rig, the installed photo-mode expressions and XF Studio's own facial solver (facial-host.ts). A
+// developer's parity check swaps in the pinned IO Suite checkout with XFS_FACIAL_SOLVER_ORACLE=1 (found through XFS_FACIAL_SOLVER, XF
+// Studio's tools folder or beside the repository).
 const facial = new FacialHost({ cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
