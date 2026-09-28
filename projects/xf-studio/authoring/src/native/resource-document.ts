@@ -12,6 +12,7 @@
  * watched property was left out and written as its default. One `DecodeSession` budgets decoding, deriving and writing.
  */
 import { readCr2w } from "./cr2w-reader";
+import { FACIAL_SETUP_BUFFERS, type FacialSetupBuffer, facialSetupCounts, readFacialSetupBuffer } from "./facial-setup";
 import type { Decompress } from "./kark";
 import { type DefaultedProperty, DecodeSession, type NativeLimits, type NativeNote, type NativeUsage } from "./limits";
 import { type JsonWriteOptions, writeResourceJson } from "./red-json-writer";
@@ -50,6 +51,17 @@ function derive(object: RedObject, seen: Set<RedObject>, session: DecodeSession)
       const entity = parsed.cruidIndex >= 0 ? parsed.chunks[parsed.cruidIndex] ?? null : null;
       fields.entity ??= entity ? new RedHandle(entity) : null;
       fields.components ??= parsed.chunks.filter(chunk => chunk !== entity);
+      break;
+    }
+    case "animFacialSetup": {
+      // The three data buffers hold the solver's tables and poses (facial-setup.ts), sized by the setup's own counts.
+      const counts = facialSetupCounts(fields.info, fields.posesInfo);
+      for (const property of Object.keys(FACIAL_SETUP_BUFFERS) as FacialSetupBuffer[]) {
+        const buffer = fields[property];
+        if (!(buffer instanceof RedBuffer) || buffer.parsed || !buffer.memSize) continue;
+        fields[property] = new RedBuffer(buffer.flags, buffer.memSize, buffer.bytes,
+          { kind: "data", type: FACIAL_SETUP_BUFFERS[property], data: readFacialSetupBuffer(property, buffer.bytes(), counts, session) }, buffer.shared);
+      }
       break;
     }
     case "appearanceAppearanceDefinition": {

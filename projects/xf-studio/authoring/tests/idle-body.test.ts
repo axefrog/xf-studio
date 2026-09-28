@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as THREE from "three";
-import { EYES_SECTION_ID, idleCatalogue, previewIdles, restJoints, rigAncestry, type GraphIdle } from "../src/idle-body";
+import { EYES_SECTION_ID, faceClipFor, idleCatalogue, previewIdles, restJoints, rigAncestry, type GraphIdle } from "../src/idle-body";
 import { IDLE_CACHE_KEYS, IDLE_HOST_VERSION, IdleHost, IdleSetupError, pruneIdleCache } from "../src/idle-host";
 import { createIdleHandler } from "../src/idle-server";
 import type { IdleEntry } from "../src/idle-catalogue";
@@ -96,15 +96,16 @@ describe("rests, ancestry and the page's skeleton", () => {
 
 describe("the idle host and its endpoint", () => {
   const route = { gameRoot: "G", launchRoute: "direct" as const, mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null };
-  test("without a game folder it needs setup; a disk cache answers without opening the game; a prepared face joins while its file is there", async () => {
+  test("without a game folder it needs setup; a disk cache answers without opening the game; faces come from the facial host or say why not", async () => {
     const root = mkdtempSync(join(tmpdir(), "xfs-idles-"));
     try {
       expect((await new IdleHost({ route: () => null, fingerprint: () => "f", resolverCache: root }).state()).phase).toBe("needs-setup");
       const assets = join(root, "assets");
       mkdirSync(assets);
-      let opened = 0;
+      let opened = 0, reason: string | null = "V's face is still being read.";
       const host = new IdleHost({ route: () => route, fingerprint: () => "fp", resolverCache: join(root, "cache"), preparedAssets: () => assets,
-        open: () => { opened++; throw Error("not in this test"); } });
+        open: () => { opened++; throw Error("not in this test"); },
+        faces: async () => reason ? { reason } : { rig: null as never, identity: "i", skeleton: "s", setup: "u", installation: null } });
       // Seed the cache under the host's own key.
       const key = (host as unknown as { key(): string }).key();
       mkdirSync(join(root, "cache", "idles", key), { recursive: true });
@@ -115,20 +116,34 @@ describe("the idle host and its endpoint", () => {
       expect(opened).toBe(0);
       if (state.phase !== "ready" || state.source !== "game") throw Error("not ready");
       expect(state.catalogue.idles.map(entry => entry.face)).toEqual([null, null, null, null]);
+      expect(state.faceReason).toBe("V's face is still being read.");
       expect(state.ancestry).toEqual({ Armature: null, Root: "Armature" });
-      // A developer preparation's face for the close-up, then its file.
+      // A developer preparation's face no longer joins the game's idles (it is the Python oracle's alone).
       writeFileSync(join(assets, "cc-idle-catalogue.json"), JSON.stringify({ schema: "xfs/idle-catalogue-1", source, left: [], idles: [{ id: "closeup", label: "Creator close-up",
         clip: "ui_closeup_shot", body: "cc-idle-body.glb", duration: 12.333, screen: "creator", state: "closeup", flags: [], face: { clip: "ui_closeup_shot", file: "cc-idle-face.glb" },
         puppet: "creator", evidence: "e" }] }));
-      expect(((await host.state()) as { catalogue: { idles: IdleEntry[] } }).catalogue.idles[0]!.face).toBeNull();
       writeFileSync(join(assets, "cc-idle-face.glb"), "glb");
-      expect(((await host.state()) as { catalogue: { idles: IdleEntry[] } }).catalogue.idles[0]!.face?.file).toBe("cc-idle-face.glb");
+      expect(((await host.state()) as { catalogue: { idles: IdleEntry[] } }).catalogue.idles[0]!.face).toBeNull();
+      // The face is ready but its clips can't be listed (the game can't be opened here): no faces, in plain words.
+      reason = null;
+      const later = await host.state();
+      expect(later.phase === "ready" && later.source === "game" && later.faceReason).toBe("V's face holds still during the idle: XF Studio couldn't read it from your game files.");
+      expect(await host.face("closeup")).toBeNull();
       // A body whose clip the cache can't place is null, not an error.
       expect(await host.body("closeup")).toBeNull();
       // The Python oracle's source answers with the preparation alone.
       const prepared = await new IdleHost({ route: () => route, fingerprint: () => "fp", resolverCache: join(root, "cache"), preparedAssets: () => assets, source: "prepared" }).state();
       expect(prepared.phase === "ready" && prepared.source).toBe("prepared");
     } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test("each idle's face clip: its own name in the face set, the inventory the close-up's, none otherwise", () => {
+    const clips = new Map([["ui_closeup_shot", 1], ["ui_fullbody_shot", 1], ["ui_closeup_shot_eyes", 1]]);
+    expect(faceClipFor({ clip: "ui_closeup_shot", screen: "creator" }, clips)).toBe("ui_closeup_shot");
+    expect(faceClipFor({ clip: "UI_FULLBODY_SHOT", screen: "creator" }, clips)).toBe("ui_fullbody_shot");
+    expect(faceClipFor({ clip: "UI_full_shot", screen: "inventory" }, clips)).toBe("ui_closeup_shot");
+    expect(faceClipFor({ clip: "ui_gender_selection", screen: "gender" }, clips)).toBeNull();
+    expect(faceClipFor({ clip: "UI_full_shot", screen: "inventory" }, new Map())).toBeNull();
   });
 
   test("the idle cache keeps a few installations' folders, least recently used dropped first, never another host's current one (PREV-163)", () => {
@@ -150,7 +165,7 @@ describe("the idle host and its endpoint", () => {
   test("the endpoint: other origins refused, ids checked, a missing idle 404, no game folder 409, a failure 503", async () => {
     const ready = { schema: "xfs/idle-state-1", phase: "needs-setup", message: "m" } as const;
     let body: () => Promise<unknown> = async () => null;
-    const handler = createIdleHandler({ state: async () => ready, body: (() => body()) as never });
+    const handler = createIdleHandler({ state: async () => ready, body: (() => body()) as never, face: async () => null });
     const get = (path: string, headers: Record<string, string> = {}) => handler(new Request(`http://127.0.0.1:4485/api/idles${path}`, { headers }));
     expect((await get("")).status).toBe(200);
     expect((await get("", { Origin: "http://evil.test" })).status).toBe(403);

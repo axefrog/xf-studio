@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFacialHandler, FacialHost, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
+import { createFacialHandler, FacialHost, IN_APP_SOLVER, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
   type FacialSolverProcess, type FacialSolverSpawner } from "../src/facial-host";
 import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG } from "../src/facial-catalogue";
 import { depotHash } from "../src/depot-path";
@@ -113,7 +113,7 @@ test("the face rig, blink and installed expressions come from the winning files;
     expect(state.rig.controls!.map(control => control.name)).toEqual(MAIN);
     expect(state.rig.joints![0]).toMatchObject({ name: "root", t: [0, 1.6, -0] });
     expect(state.blink).toEqual({ available: true, closedTime: expect.closeTo(0.1, 3), duration: 0.5, rate: 60 });
-    expect(state.solver).toEqual({ phase: "ready", compileMs: 12 });
+    expect(state.solver).toEqual({ phase: "ready", compileMs: 12, kind: "oracle" });
     // Checked by the solver before it is ready: a control that acts only with another, or feeds a wrinkle output, is not inert.
     expect(state.rig.inert).toEqual(["lips_tighten_up"]);
     // No proposed opposites on this toy face: no two-way controls, and no gaze to check.
@@ -167,11 +167,17 @@ test("without a game folder the host says so plainly; the solver is found only w
   } finally { rmSync(root, { recursive: true, force: true }); }
   const has = (paths: string[]) => (path: string) => paths.some(entry => path.replaceAll("\\", "/").startsWith(entry));
   const solverFile = "i_scene_cp77_gltf/animation/facial/solver.py";
+  // XF Studio's own solver answers everywhere unless a developer asks for the IO Suite oracle.
   expect(locateFacialSolver({ env: { XFS_FACIAL_SOLVER: "/src/addon", XFS_PYTHON: "/py" }, script: "/s.py", exists: has([`/src/addon/${solverFile}`, "/s.py"]) }))
+    .toEqual(IN_APP_SOLVER);
+  const oracle = { XFS_FACIAL_SOLVER_ORACLE: "1" };
+  expect(locateFacialSolver({ env: { ...oracle, XFS_FACIAL_SOLVER: "/src/addon", XFS_PYTHON: "/py" }, script: "/s.py", exists: has([`/src/addon/${solverFile}`, "/s.py"]) }))
     .toEqual({ addon: "/src/addon", python: "/py", script: "/s.py" });
-  // The desktop: no environment, no repository, no Python: missing, in plain words.
-  expect(locateFacialSolver({ toolsRoot: "/data/tools", script: "/s.py", exists: () => true })).toEqual({ missing: SOLVER_MISSING });
-  expect(locateFacialSolver({ toolsRoot: "/data/tools", script: "/s.py", pythonDefault: "python", exists: () => false })).toEqual({ missing: SOLVER_MISSING });
+  // The desktop passes no environment: always XF Studio's own solver, never Python.
+  expect(locateFacialSolver({ toolsRoot: "/data/tools", script: "/s.py", exists: () => true })).toEqual(IN_APP_SOLVER);
+  // The oracle asked for but not there: missing, in plain words.
+  expect(locateFacialSolver({ env: oracle, toolsRoot: "/data/tools", script: "/s.py", exists: () => true })).toEqual({ missing: SOLVER_MISSING });
+  expect(locateFacialSolver({ env: oracle, toolsRoot: "/data/tools", script: "/s.py", pythonDefault: "python", exists: () => false })).toEqual({ missing: SOLVER_MISSING });
 });
 
 // ---- Solver lifetime and bounds (review at 9f71a56: CORE-99..106) ----

@@ -281,6 +281,32 @@ test("damaged, foreign and missing blink assets are refused in plain words (UI-6
   await expect(loadGameBlink(flat([["l_J_eye_lid_up_rowA_1_JNT", new THREE.Vector3(0, 1.5, 0)]]).bones, serve(good))).rejects.toThrow(GAME_BLINK_OTHER_HEAD);
 });
 
+test("the host's blink record (XF Studio's own solver) is read first; the prepared asset only where the host has none", async () => {
+  const b64 = (values: number[]) => Buffer.from(new Float32Array(values).buffer).toString("base64");
+  // The same miniature rig as a record: face root, lid root at the eye centre, one row, its lash, the eye.
+  const names = ["face_root_JNT", "l_J_eye_lid_up_root_1_JNT", "l_J_eye_lid_up_rowA_1_JNT", "l_J_eye_lid_lashes_up_rowA_1_JNT", "l_J_eye_JNT"];
+  const rest = (t: THREE.Vector3) => [...t.toArray(), 0, 0, 0, 1, 1, 1, 1];
+  const record = { schema: "xfs/face-motion-1", rest: { names, parents: [-1, 0, 1, 2, 0],
+      local: b64([...rest(new THREE.Vector3()), ...rest(CENTRE), ...rest(ROW), ...rest(LASH), ...rest(CENTRE)]) },
+    description: { ...rig().description },
+    clips: [{ name: "eye_blink_closure", times: b64([0, 1]), joints: ["l_J_eye_lid_up_root_1_JNT"], local: b64([...CENTRE.toArray(), 0, 0, 0, 1, ...CENTRE.toArray(), ...CLOSED.toArray()]) },
+      { name: "additive__blink_normal__01", times: b64([0, .1, .5]), joints: ["l_J_eye_lid_up_root_1_JNT"],
+        local: b64([...CENTRE.toArray(), 0, 0, 0, 1, ...CENTRE.toArray(), ...CLOSED.toArray(), ...CENTRE.toArray(), 0, 0, 0, 1]) }] };
+  const asked: string[] = [];
+  const fetcher = async (url: string) => { asked.push(url); return url === "/api/facial/blink" ? Response.json(record) : new Response("Not found", { status: 404 }); };
+  const head = flat([["l_J_eye_lid_up_rowA_1_JNT", rowRest]]).bones;
+  const blink = await loadGameBlink(head, fetcher);
+  expect(asked).toEqual(["/api/facial/blink"]);
+  blink.setClosure(1);
+  expect(world(blink.bindings[0]!.bone).distanceTo(rowRest.clone().sub(CENTRE).applyQuaternion(CLOSED).add(CENTRE))).toBeLessThan(1e-6);
+  // The host can't read the blink: its own words, and no prepared asset either.
+  const refused = async (url: string) => url === "/api/facial/blink" ? Response.json({ code: "unavailable", error: "The game's blink couldn't be read from your game files." }, { status: 503 })
+    : new Response("Not found", { status: 404 });
+  await expect(loadGameBlink(head, refused)).rejects.toThrow("The game's blink couldn't be read from your game files.");
+  // A damaged record is refused, not replaced by the prepared asset.
+  await expect(loadGameBlink(head, async () => Response.json({ ...record, rest: { ...record.rest, local: b64([1, 2, 3]) } }))).rejects.toThrow(GAME_BLINK_DAMAGED);
+});
+
 test("a saved Closure and Play blink come back on reload; the Motion note says why the blink is off or how often it repeats", () => {
   const { source, description, closure, clip } = rig();
   const head = flat([["l_J_eye_lid_up_rowA_1_JNT", rowRest]]);
@@ -321,8 +347,9 @@ test("an idle without face motion: the body plays, the face says why in plain wo
   const motion = new MotionActions(freshWorkspace().preview, port);
   // The face's reason comes from one place and is true in every state (Still, body off): it names no failure and no body motion.
   expect(motion.snapshot()).toMatchObject({ available: true, faceAvailable: false, faceError: IDLE_FACE_MISSING });
-  expect(IDLE_FACE_MISSING).toContain("isn't part of this version of XF Studio yet");
-  expect(IDLE_FACE_MISSING).not.toMatch(/body moves|couldn't|game files/);
+  expect(IDLE_FACE_MISSING).toBe("V's face holds still during the idle: XF Studio couldn't read it from your game files.");
+  // V can be masculine: no "her" or "his" for V.
+  expect(IDLE_FACE_MISSING).not.toMatch(/(?:her|his|she|he)|body moves|version/i);
   // Without the idle playing the blink works; while it plays, the refusal gives the next step and doesn't claim the idle blinks.
   expect(motion.capability({ kind: "motion.playBlink", playing: true }).available).toBe(true);
   motion.dispatch({ kind: "motion.setIdle", enabled: true });

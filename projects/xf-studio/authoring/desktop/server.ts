@@ -217,9 +217,10 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), log: logTo("poses") });
   const poseRequest = createPoseHandler(poses);
-  // The game's preview idles (V's body idle), read by XF Studio's own reader from the same route; no Python, no prepared files.
+  // The game's preview idles (V's body idle and its face, solved by XF Studio's own facial solver), read by XF Studio's own reader from the
+  // same route; no Python, no prepared files.
   const idles = new IdleHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
-    resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), log: logTo("preview") });
+    resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), faces: () => facial.faceSource(), log: logTo("preview") });
   const idleRequest = createIdleHandler(idles);
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
   const gradingLut = new GradingLutHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
@@ -230,8 +231,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     },
     log: logTo("lut") });
   const gradingLutRequest = createGradingLutHandler(gradingLut);
-  // The live facial preview (facial-host.ts). The desktop has no Python and never reads developer environment paths: its preview shows
-  // why the solver isn't available until a consented setup exists; the face rig and installed expressions still load for editing.
+  // The live facial preview (facial-host.ts), solved by XF Studio's own facial solver in this process: no Python. The desktop never reads
+  // developer environment paths, so the IO Suite oracle is never used here.
   const facial = new FacialHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
     settings: () => {
       const settings = savedSettings();

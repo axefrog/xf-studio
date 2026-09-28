@@ -1,11 +1,12 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD } from "./game-blink-messages";
+import { FACE_MOTION_SCHEMA, FACIAL_BLINK_ENDPOINT, type FaceMotionClip, type FaceMotionRest, type FacialBlinkRecord } from "./platform/api/facial";
 
 /**
- * The game's own blink on the preview head (knowledge/facial-animation.md). An offline bake
- * (tools/bake_game_blink.py) runs the player head's facial setup through the external IO Suite solver, as the idle bake
- * does, and stores two animations on the facial rig in one local asset made from the player's game files:
+ * The game's own blink on the preview head (knowledge/facial-animation.md). The host solves the player head's facial setup with XF Studio's
+ * own facial solver (facial-host.ts `blink`, `GET /api/facial/blink`) and answers two animations on the facial rig, made from the player's
+ * game files on demand (a developer's offline bake, tools/bake_game_blink.py through the IO Suite, is read only where the host has none):
  *
  * - the game's `additive__blink_normal__01` clip (generic facial additives), solved at its own timing, for Play blink;
  * - `eye_blink_closure`: that clip's closing half (to the frame where `eye_l_blink` and `eye_r_blink` reach 1), with the
@@ -338,20 +339,83 @@ export class GameBlink {
   }
 }
 
+/** Base64 little-endian float32 (the host's face motion records). */
+function floatsOf(text: string): Float32Array {
+  const bytes = Uint8Array.from(atob(text), char => char.charCodeAt(0));
+  if (bytes.byteLength % 4) throw Error(GAME_BLINK_DAMAGED);
+  return new Float32Array(bytes.buffer);
+}
+
+/** A face skeleton at rest from a host face motion record: bones named as the rig's joints under an `Armature` node, glTF axes. */
+export function faceMotionScene(rest: FaceMotionRest): THREE.Object3D {
+  const local = floatsOf(rest.local), root = new THREE.Object3D();
+  root.name = "Armature";
+  if (local.length !== rest.names.length * 10 || rest.parents.length !== rest.names.length) throw Error(GAME_BLINK_DAMAGED);
+  const bones = rest.names.map((name, j) => {
+    const bone = new THREE.Bone();
+    bone.name = name;
+    bone.position.fromArray(local, j * 10); bone.quaternion.fromArray(local, j * 10 + 3); bone.scale.fromArray(local, j * 10 + 7);
+    return bone;
+  });
+  rest.parents.forEach((parent, j) => (parent >= 0 && bones[parent] ? bones[parent]! : root).add(bones[j]!));
+  root.updateMatrixWorld(true);
+  return root;
+}
+
+/** One clip of a host face motion record as a Three clip: linear position and rotation tracks per moving joint. */
+export function faceMotionClip(clip: FaceMotionClip, name = clip.name): THREE.AnimationClip {
+  const times = floatsOf(clip.times), local = floatsOf(clip.local), n = clip.joints.length, F = times.length;
+  if (local.length !== F * n * 7) throw Error(GAME_BLINK_DAMAGED);
+  const tracks = clip.joints.flatMap((joint, i) => {
+    const position = new Float32Array(F * 3), rotation = new Float32Array(F * 4);
+    for (let f = 0; f < F; f++) {
+      const o = (f * n + i) * 7;
+      position.set(local.subarray(o, o + 3), f * 3); rotation.set(local.subarray(o + 3, o + 7), f * 4);
+    }
+    return [new THREE.VectorKeyframeTrack(`${joint}.position`, times, position), new THREE.QuaternionKeyframeTrack(`${joint}.quaternion`, times, rotation)];
+  });
+  return new THREE.AnimationClip(name, times.length ? times[times.length - 1]! : 0, tracks);
+}
+
+/** The host's blink record as the blink's scene and clips (checked like a bake). */
+export function gameBlinkFromRecord(record: FacialBlinkRecord): { scene: THREE.Object3D; clips: GameBlinkClips } {
+  if (record?.schema !== FACE_MOTION_SCHEMA || !Array.isArray(record.clips)) throw Error(GAME_BLINK_DAMAGED);
+  return { scene: faceMotionScene(record.rest), clips: parseGameBlink(record.description, record.clips.map(clip => faceMotionClip(clip))) };
+}
+
 /**
- * Load the local blink asset and bind it to `targets` (the preview head's skeleton). Throws plain errors:
- * GAME_BLINK_MISSING when it was never prepared (or can't be fetched), GAME_BLINK_DAMAGED when it isn't a readable GLB,
- * the parser's own sentence when its description doesn't fit, GAME_BLINK_OTHER_HEAD for another head's rig and
- * GAME_BLINK_NO_JOINTS when none of its joints are in `targets`.
+ * Load the game's blink and bind it to `targets` (the preview head's skeleton): the host's, solved by XF Studio's own solver, else a
+ * developer's prepared asset where the host has none. Throws plain errors: the host's own reason (or GAME_BLINK_MISSING) when neither
+ * is there, GAME_BLINK_DAMAGED when it can't be read, the parser's own sentence when its description doesn't fit, GAME_BLINK_OTHER_HEAD
+ * for another head's rig and GAME_BLINK_NO_JOINTS when none of its joints are in `targets`.
  */
 export async function loadGameBlink(targets: readonly THREE.Object3D[], fetcher: (url: string) => Promise<Response> = fetch,
   timer?: BlinkTimer): Promise<GameBlink> {
+  let reason = GAME_BLINK_MISSING, answer: (FacialBlinkRecord & { error?: string }) | null = null, ok = false;
+  try {
+    const response = await fetcher(FACIAL_BLINK_ENDPOINT);
+    ok = response.ok;
+    answer = await response.json().catch(() => null) as (FacialBlinkRecord & { error?: string }) | null;
+  } catch { /* The host couldn't be reached: a prepared asset, if any. */ }
+  if (ok && answer?.schema === FACE_MOTION_SCHEMA) {
+    const { scene, clips } = gameBlinkFromRecord(answer);
+    const blink = new GameBlink(scene, clips, targets, undefined, timer);
+    if (!blink.bindings.length) throw Error(GAME_BLINK_NO_JOINTS);
+    return blink;
+  }
+  if (typeof answer?.error === "string" && answer.error) reason = answer.error;
+  return loadPreparedBlink(targets, fetcher, timer, reason);
+}
+
+/** A developer's prepared blink asset (the IO Suite oracle's bake), where the host answers none. */
+async function loadPreparedBlink(targets: readonly THREE.Object3D[], fetcher: (url: string) => Promise<Response>, timer: BlinkTimer | undefined,
+  missing: string): Promise<GameBlink> {
   let bytes: ArrayBuffer;
   try {
     const response = await fetcher(GAME_BLINK_ASSET);
-    if (!response.ok) throw Error(GAME_BLINK_MISSING);
+    if (!response.ok) throw Error(missing);
     bytes = await response.arrayBuffer();
-  } catch { throw Error(GAME_BLINK_MISSING); }
+  } catch { throw Error(missing); }
   let gltf: Awaited<ReturnType<GLTFLoader["parseAsync"]>>;
   try { gltf = await new GLTFLoader().parseAsync(bytes, ""); }
   catch { throw Error(GAME_BLINK_DAMAGED); }

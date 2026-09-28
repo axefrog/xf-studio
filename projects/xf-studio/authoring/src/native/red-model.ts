@@ -17,7 +17,9 @@ export class RedHandle {
 /** What a buffer decodes to, when its owner is one the readers parse. */
 export type ParsedBuffer =
   | { kind: "package"; version: number; sections: number; cruidIndex: number; cruidDict: Record<string, string>; chunks: RedObject[] }
-  | { kind: "cr2w-list"; files: RedDocument[] };
+  | { kind: "cr2w-list"; files: RedDocument[] }
+  /** A buffer whose content is plain JSON-ready data under a reference type name (a facial setup's tables, facial-setup.ts). */
+  | { kind: "data"; type: string; data: Record<string, unknown> };
 
 /** A data buffer: its flags from the buffer table, its size in memory, and its bytes or parsed content. */
 export class RedBuffer {

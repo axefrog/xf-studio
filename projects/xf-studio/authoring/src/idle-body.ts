@@ -6,8 +6,8 @@
  *
  * The body motion itself is a `xfs/pose-sample-1` record (pose-sample.ts) with every frame of the clip (`motion`), decoded from the set's
  * clip (anim-set.ts, SIMD for the preview idles) on the rig the set names; the page turns it into a clip as it does a moving pose
- * (pose-clip.ts). The face's idle, which needs the facial solver, is not made here: an entry keeps a face only where a developer
- * preparation left one (`IdleState.source`).
+ * (pose-clip.ts). The face's idle is solved on the host by XF Studio's own facial solver (idle-host.ts `face`); which face clip each idle
+ * plays is `faceClipFor`.
  */
 import { IDLE_CATALOGUE_SCHEMA, type IdleCatalogue, type IdleEntry, type IdleScreen } from "./idle-catalogue";
 
@@ -19,7 +19,8 @@ export type RestJoint = { readonly bone: string; readonly parent: string | null;
  * What the page reads to play the idles (`GET /api/idles`):
  * - `source`: `game`, read from the player's game files by XF Studio itself (both hosts); `prepared`, the developer preparation's files
  *   under `/assets/` (localhost with `XFS_IDLE_SOURCE=prepared`, the Python oracle).
- * - `catalogue`: the idles (idle-catalogue.ts); an entry's `face` is set only where a prepared face exists on this computer.
+ * - `catalogue`: the idles (idle-catalogue.ts); an entry's `face` is set where XF Studio can solve its face from the game files (`faceReason`
+ *   says why not, in plain words, when none can be).
  * - `rig`: the body clips' rig and its rest (the skeleton the clips play on), `ancestry`: the face rig's parents (the head's joints follow
  *   their nearest driven ancestor), `face`: the face rig's rest (the eyes' gaze pivots when no face clip is loaded).
  */
@@ -27,7 +28,7 @@ export type IdleState =
   | { readonly schema: typeof IDLE_STATE_SCHEMA; readonly phase: "needs-setup" | "preparing" | "failed"; readonly message: string }
   | { readonly schema: typeof IDLE_STATE_SCHEMA; readonly phase: "ready"; readonly message: ""; readonly source: "game"; readonly catalogue: IdleCatalogue;
       readonly rig: { readonly path: string; readonly joints: readonly RestJoint[] }; readonly ancestry: Readonly<Record<string, string | null>>;
-      readonly face: { readonly path: string; readonly joints: readonly RestJoint[] } | null }
+      readonly face: { readonly path: string; readonly joints: readonly RestJoint[] } | null; readonly faceReason?: string }
   | { readonly schema: typeof IDLE_STATE_SCHEMA; readonly phase: "ready"; readonly message: ""; readonly source: "prepared"; readonly catalogue: IdleCatalogue };
 
 type Json = unknown;
@@ -156,14 +157,25 @@ export function previewIdles(root: JsonObject): { entries: GraphIdle[]; left: { 
   return { entries, left };
 }
 
+/**
+ * The face clip an idle plays from the creator puppet's face set: the clip of the idle's own name (the face graph loops each screen's face
+ * with its body), else, on the inventory screen, the close-up's (it loops the close-up face after a one-shot pickup); null when the set has
+ * neither [resource: research/animation/cc-idle.md].
+ */
+export function faceClipFor(entry: { clip: string; screen: IdleScreen }, clips: ReadonlyMap<string, unknown>): string | null {
+  const own = [...clips.keys()].find(name => name.toLowerCase() === entry.clip.toLowerCase());
+  if (own) return own;
+  return entry.screen === "inventory" && clips.has("ui_closeup_shot") ? "ui_closeup_shot" : null;
+}
+
 /** The asset name the developer preparation gives an idle's body clip (kept as the entry's key, so both sources name entries alike). */
 export const bodyAssetName = (clip: string) => clip === "ui_closeup_shot" ? "cc-idle-body.glb" : `cc-idle-body-${clip.toLowerCase()}.glb`;
-/** The eyes-section entry: the close-up body with the creator's eyes showcase on the face, which only a prepared face can give. */
+/** The eyes-section entry: the close-up body with the creator's eyes showcase on the face (only where the face can be solved). */
 export const EYES_SECTION_ID = "closeup-eyes";
 
 /**
- * The catalogue for the graph's idles: each entry's clip length from its set, its face from a developer preparation's catalogue where one
- * exists (`faces`, by entry id; the eyes-section entry only then), the creator's puppet for the creator's screens (lifted feet).
+ * The catalogue for the graph's idles: each entry's clip length from its set, its face where one can be solved (`faces`, by entry id; the
+ * eyes-section entry only then), the creator's puppet for the creator's screens (lifted feet).
  */
 export function idleCatalogue(input: { entries: readonly GraphIdle[]; left: { clip: string; why: string }[]; durations: ReadonlyMap<string, number>;
   source: IdleCatalogue["source"]; faces?: ReadonlyMap<string, IdleEntry> }): IdleCatalogue {

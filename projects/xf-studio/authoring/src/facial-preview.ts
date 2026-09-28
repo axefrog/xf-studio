@@ -234,7 +234,7 @@ export class FacialPreview {
     if (host.rig.phase !== "ready") return { ...base, phase: "unavailable", reason: host.rig.reason, next: host.rig.phase === "unconfigured" ? "game-setup" : "retry" };
     if (this.sinkError) return { ...base, phase: "unavailable", reason: this.sinkError };
     if (host.solver.phase === "starting") return { ...base, phase: "preparing", reason: "Starting the facial solver…" };
-    // No solver on this computer (the desktop app has none yet): the expression still saves and exports, so the step is Expression sets.
+    // No solver (only where a developer asked for the IO Suite oracle and it isn't there): the expression still saves and exports.
     if (host.solver.phase === "missing") return { ...base, phase: "unavailable", reason: host.solver.reason, next: "export" };
     if (host.solver.phase !== "ready") return { ...base, phase: "unavailable", reason: host.solver.reason, next: GUIDE_SOLVER };
     if (this.failure) return { ...base, phase: "failed", reason: this.failure, next: "retry" };

@@ -97,3 +97,28 @@ export function clipControlVector(clip: ClipTracks, animationType: string, track
   }
   return Object.fromEntries(Object.keys(out).sort().map(name => [name, out[name]!]));
 }
+
+/** One float-track key as the native clip reader gives it (src/native/anim-set.ts `TrackKey`). */
+export type FloatTrackKey = { readonly track: number; readonly time: number; readonly value: number };
+/**
+ * A clip's float tracks from its decoded keys (the native reader's `trackKeys` and `constTrackKeys`), by the same rules as
+ * `decodeClipTracks`: animated keys sorted by time (file order kept for equal times), and a constant key only for a track without animated
+ * keys. Throws a plain error for an invalid number.
+ */
+export function clipTracksFromKeys(duration: number, trackKeys: readonly FloatTrackKey[], constTrackKeys: readonly FloatTrackKey[]): ClipTracks {
+  const keyed = new Map<number, [number, number][]>();
+  for (const key of trackKeys) {
+    if (!Number.isFinite(key.value) || !Number.isFinite(key.time)) throw Error("The clip holds an invalid number.");
+    const list = keyed.get(key.track) ?? []; list.push([key.time, key.value]); keyed.set(key.track, list);
+  }
+  const tracks = new Map<number, TrackKeys>();
+  for (const [track, list] of keyed) {
+    list.sort((a, b) => a[0] - b[0]);
+    tracks.set(track, { times: list.map(key => key[0]), values: list.map(key => key[1]) });
+  }
+  for (const key of constTrackKeys) {
+    if (!Number.isFinite(key.value)) throw Error("The clip holds an invalid number.");
+    if (!tracks.has(key.track)) tracks.set(key.track, { times: [0], values: [key.value] });
+  }
+  return { duration: Number.isFinite(duration) && duration > 0 ? duration : 0, tracks };
+}

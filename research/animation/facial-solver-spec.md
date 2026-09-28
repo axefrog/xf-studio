@@ -2,7 +2,7 @@
 
 > **Clean-room statement.** This specification was written from reading the Cyberpunk IO Suite, the WolvenKit organisation's Cyberpunk 2077 Blender add-on ([GitHub](https://github.com/WolvenKit/Cyberpunk-Blender-add-on), commit `7a4ee793c36d9615946fe87ec9d42cde7568021d`, add-on version 2.1.0, declared `GPL-3.0-or-later` in its `blender_manifest.toml`), as a behavioural reference, and from reading the game's own facial setup and rig data. It describes what that solver computes, in our own words and standard notation. It contains no code from the IO Suite, and no function in it is a transliteration of the add-on's code. An engineer implementing XF Studio's solver works from this document and the game data only, and checks the result against the IO Suite run as an external black box (§9). The IO Suite is credited in the [community credits](../../docs/community-credits.md).
 
-**Status: specification, 28 September 2026.** Nothing here has runtime evidence. Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[resource]** read from the game's files, **[reference]** the IO Suite's behaviour (a community reading of the engine, not the engine), **[hypothesis]** not established. Where the IO Suite's behaviour may differ from the game's, §7 says so; the implementation reproduces the IO Suite first (it is the only oracle we have) and keeps each doubtful choice behind a named option.
+**Status: specification, 28 September 2026; implemented the same day** (`src/engines/facial-rig/solver.ts`, [implementation notes](#10-implementation-notes)): every group of §9 passes against the IO Suite. Nothing here has runtime evidence. Evidence grades follow the [knowledge rules](../../knowledge/README.md): **[resource]** read from the game's files, **[reference]** the IO Suite's behaviour (a community reading of the engine, not the engine), **[hypothesis]** not established. Where the IO Suite's behaviour may differ from the game's, §7 says so; the implementation reproduces the IO Suite first (it is the only oracle we have) and keeps each doubtful choice behind a named option.
 
 Background: [facial animation §1](../../knowledge/facial-animation.md#1-from-control-values-to-moving-bones), [facial expressions §1](../../knowledge/facial-expressions.md#1-the-face-is-driven-by-controls-not-bones), [expression editor design, phase 5](expression-editor-design.md).
 
@@ -17,6 +17,7 @@ Background: [facial animation §1](../../knowledge/facial-animation.md#1-from-co
 7. [Where the IO Suite may differ from the game](#7-where-the-io-suite-may-differ-from-the-game)
 8. [The implementer's interface](#8-the-implementers-interface)
 9. [Test vectors](#9-test-vectors)
+10. [Implementation notes](#10-implementation-notes)
 
 ## 1. Purpose and scope
 
@@ -389,13 +390,13 @@ Flatten each part at compile time into compressed-row arrays: envelope entries (
 
 ### 9.1 Oracle and harness
 
-The oracle is the pinned, unmodified IO Suite at commit `7a4ee793`, run as a separate program through our own `projects/xf-studio/authoring/tools/facial_solver_server.py`, exactly as the live preview runs it. The implementer uses it strictly as a black box through its line protocol and never reads the IO Suite:
+The oracle is the pinned, unmodified IO Suite at commit `7a4ee793`, run as a separate program through our own `projects/xf-studio/authoring/tools/facial_solver_server.py`, exactly as the live preview ran it before XF Studio's own solver replaced it. The implementer uses it strictly as a black box through its line protocol and never reads the IO Suite:
 
 - Start: `python projects/xf-studio/authoring/tools/facial_solver_server.py --addon <IO Suite checkout> --rig <rig .json> --setup <facialsetup .json>` (WolvenKit JSON of the two files; the local intake at `research/consumers/cc-idle/json/` holds the female head's, SHA-256 `454e38a2…` for the rig and `aae907a8…` for the setup, and the Studio's preview cache `facial/` holds the resolved ones). Use the full Python interpreter path and run it under the memory guard (`tools/memory_guard.py --limit 1 -- …`), as AGENTS.md requires.
 - It prints one ready line: `{"ready": true, "joints": 344, "tracks": 414, "compileMs": …}`.
 - Request, one line: `{"id": n, "frames": [[414 absolute track values], …]}`.
 - Answer, one line: `{"id": n, "ms": …, "q": base64, "t": base64}`: little-endian float32, frame-major, `q` as (x, y, z, w) per joint and `t` as (x, y, z) per joint, REDengine axes, the solve's raw **deltas** (not composed with rest).
-- **Needed extension** (our own MIT wrapper, a few lines, done by the implementer or the coordinator): an optional request field `"outputs": true` that also returns `"o"`, the solve's processed track buffer (float32, frames × 414). The oracle already computes it and the server currently drops it; wrinkle and processed-weight comparisons need it. Until then, wrinkle vectors can be compared through `tools/probe_idle_wrinkles.py`'s report for the idle.
+- **Processed tracks** (our own MIT wrapper): an optional request field `"outputs": true` also returns `"o"`, the solve's processed track buffer (float32, frames × 414), which the wrinkle and processed-weight comparisons use. Added in the wrapper's request handling only.
 
 The harness (new, ours, TypeScript) builds every vector from the reference tracks plus named control values (by `trackNames`), sends them in batches of up to 256 frames, stores inputs and oracle answers as a local fixture, and compares `solveFace` against it. Fixtures are game-derived: keep them in an ignored location (the preview cache or `experiments/<id>/generated/`), never commit them; the committed test skips with a plain message when the fixture or the game data is missing.
 
@@ -432,3 +433,46 @@ All on the female head setup unless stated, λ = 0, each vector = reference trac
 ### 9.4 Tolerances and reporting
 
 Per joint and frame: rotation difference 2 · acos(|q_ours · q_oracle|) ≤ **10⁻⁵ rad**; translation difference ≤ **10⁻⁶ m**; processed tracks and wrinkles ≤ **10⁻⁶** absolute (tongue tracks exempt after the tongue pass if overrides are applied per part, §4.7). These are the editor design's gates. Report the worst joint, frame and case per group, and the stage where a trace first diverges from the oracle's processed tracks. The in-app solver may replace the external one, and then the blink and idle bakes, only when every group passes.
+
+## 10. Implementation notes
+
+XF Studio's solver (`projects/xf-studio/authoring/src/engines/facial-rig/solver.ts`, MIT) was written from §1–§8 and the game's files only; the IO Suite was never read, and its solver was used as a black box through the wrapper (§9.1). This section records what the specification left open and how it was settled, and the result.
+
+### 10.1 Decisions
+
+1. **ε_w is compared as float32.** A control of exactly 0.001 is zeroed by the envelope stage (w ≤ ε) in the oracle, while the float32 input 0.001 (0.00100000005) exceeds the double 0.001. Every comparison with ε_w therefore uses `Math.fround(0.001)`; 0.0009 and 0.0011 behave as §5.6 says either way. Found by groups A and C (13 cases failed with the double threshold, none with the float32 one).
+2. **Lipsync overrides run over all overrides in every part's pass** (§4.7's IO Suite order, not the per-part shortcut), so the processed tracks match the oracle's everywhere and no tongue exemption is needed in §9.4.
+3. **The working buffer O is a `Float32Array`**, rewritten at every stage; weights, products and quaternion arithmetic are doubles; joint accumulators are doubles written to float32 at the end. The worst differences against the oracle stay three orders below the gates (below).
+4. **Corrective-entry bits.** The native reader shows that a corrective entry's second u16 holds the driver in bits 4–15 and `Unknown` in bits 0–3 ([archive formats §13](../../knowledge/archive-format.md#13-facial-setups-facialsetup)); the solver reads `Unknown` as the number WolvenKit's JSON shows.
+5. **Unknown upper/lower parts** (a `Part` above 2, none in the vanilla setups) scale by 1, with a compile warning.
+6. **The §7 alternatives** are compile options (`FacialCompileOptions.compat`) with these meanings where §8.2 named only the switch: `faceEnvelope: "gate"` multiplies every mapped control by clamp01(`faceEnvelope`) at the envelope stage; `lipsMuzzle: "envelope"` also mutes envelope type 1 by 1 − `muzzleLips` (the limits are unchanged); `influencePasses: "second-only-if-lipsync"` runs §4.9 only when a lipsync pose adds a non-zero value to a control of that part; `firstInbetweenSegment: "threshold"` uses w / τ₀; `correctiveFlag: "ignore"` never zeroes a corrective for its flag; `scalePoses: "apply"` returns per-joint scales 1 + Σ w · value per axis (a hypothesis, S1) and `composeLocalPose` multiplies them into the rest scale.
+7. **T1** is a compile warning (`warnings`) when a posed joint has a turned or scaled rest; the composition follows §4.15 either way.
+
+### 10.2 Parity (28 September 2026)
+
+`bun tools/facial-solver-oracle.ts --generate` built the §9.2 cases from the rig, the setup and the game's clips (read with XF Studio's own reader; the clip groups sampled as §3.3 says), asked the oracle in batches of 256 frames with `"outputs": true`, and replayed every input through `solveFace` compiled from XF Studio's own reading of the same files. Every case passes all three gates:
+
+| Group | Cases (frames) | Worst rotation | Worst translation | Worst track |
+|---|---:|---:|---:|---:|
+| A baseline | 6 | 9.6 × 10⁻¹¹ rad | 0 | 2.5 × 10⁻⁸ |
+| B each pose | 282 | 6.0 × 10⁻⁸ | 2.3 × 10⁻¹⁰ m | 0 |
+| C in-betweens | 132 | 8.9 × 10⁻⁸ | 4.7 × 10⁻¹⁰ | 2.5 × 10⁻⁸ |
+| D influences | 54 | 1.6 × 10⁻⁷ | 1.9 × 10⁻⁹ | 3.0 × 10⁻⁸ |
+| E face scaling | 11 | 2.1 × 10⁻⁷ | 2.1 × 10⁻⁹ | 0 |
+| F muzzles | 8 | 1.5 × 10⁻⁷ | 2.3 × 10⁻¹⁰ | 0 |
+| G lip sync | 20 | 2.7 × 10⁻⁷ | 2.1 × 10⁻⁹ | 6.0 × 10⁻⁸ |
+| H correctives | 527 | 7.0 × 10⁻⁷ | 4.0 × 10⁻⁹ | 0 |
+| I blink | 36 (86) | 2.3 × 10⁻⁷ | 9.4 × 10⁻¹⁰ | 7.5 × 10⁻⁸ |
+| J creator idle | 2 (784) | 3.0 × 10⁻⁷ | 1.3 × 10⁻⁹ | 8.9 × 10⁻⁸ |
+| K smile and cheek | 8 | 2.2 × 10⁻⁷ | 2.3 × 10⁻⁹ | 7.5 × 10⁻⁸ |
+| L vanilla expressions | 13 | 5.1 × 10⁻⁷ | 3.9 × 10⁻⁹ | 8.9 × 10⁻⁸ |
+| M random | 1,300 | 1.6 × 10⁻⁶ | 1.6 × 10⁻⁸ | 1.6 × 10⁻⁷ |
+| N robustness | 6 | 7.7 × 10⁻⁷ | 6.7 × 10⁻⁹ | 0 |
+| O male setup | 153 (219) | 1.1 × 10⁻⁷ | 7.0 × 10⁻¹⁰ | 8.5 × 10⁻⁸ |
+
+2,558 cases, 3,456 frames. Group D adds, beyond the named cases, every influenced control at 1 with each influencer at 0.4 and, where it has two, with two influencers summing past 1; group H covers all 259 correctives at 1.0 and 0.6; K and L together hold the 15 vanilla expressions. The fixture is game-derived and stays local (`data/facial-oracle/`); `tests/facial-solver-oracle.test.ts` replays it where it exists and is skipped in CI.
+
+### 10.3 Performance (the maintainer's machine, Bun 1.4.2)
+
+`bun tools/facial-solver-bench.ts`: compile 2.6 ms median (the female setup, from documents already read); native reading of the rig and setup 64 ms. `solveFace`, 5,000 runs after warm-up: neutral 0.003 ms median (p99 0.010), a blink 0.008 (0.011), a sparse expression 0.008 (0.015), dense random 0.091 (0.140), every control at 1 0.032 (0.051). The idle's 663 frames solve in 9 ms. The budget (0.5 ms median, 1.5 ms p99, compile ≤ 50 ms, idle ≤ 0.5 s) is met with a wide margin, so no native module was built.
+

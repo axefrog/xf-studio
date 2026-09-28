@@ -3,7 +3,9 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { IDLES_ENDPOINT } from "../../idle-endpoint";
 import { IDLE_STATE_SCHEMA, type IdleState, type RestJoint } from "../../idle-body";
 import { DEFAULT_IDLE, type IdleCatalogue, type IdleEntry } from "../../idle-catalogue";
+import { faceMotionClip, faceMotionScene } from "../../game-blink";
 import { poseClip, rotationToGltf, scaleToGltf, translationToGltf } from "../../pose-clip";
+import type { FaceClipRecord } from "../api/facial";
 import type { PoseSample } from "../../pose-sample";
 
 /**
@@ -12,7 +14,8 @@ import type { PoseSample } from "../../pose-sample";
  * clips play on, the head joints' ancestry, and each idle's body clip and, where one was prepared, its face clip.
  *
  * - **Game**: the skeleton is built from the rig's rest (its A pose, as WolvenKit's export gives its nodes), under an `Armature` node, in
- *   glTF axes (pose-clip.ts conversions); a body clip is the idle's `xfs/pose-sample-1` record with every frame, played as a moving pose.
+ *   glTF axes (pose-clip.ts conversions); a body clip is the idle's `xfs/pose-sample-1` record with every frame, played as a moving pose; a
+ *   face clip is the idle's `xfs/face-motion-1` record, solved on the host by XF Studio's own facial solver, on one shared face skeleton.
  * - **Prepared**: the body GLB's own skeleton and clips, and `cc-idle-binding.json`'s ancestry, as before.
  */
 export type IdleSource = {
@@ -24,8 +27,10 @@ export type IdleSource = {
   /** The face skeleton at rest (game source only): the eyes' gaze pivots when no face clip is loaded. */
   readonly faceRest: THREE.Object3D | null;
   body(entry: IdleEntry): Promise<THREE.AnimationClip>;
-  /** The entry's face clip and its skeleton, or null when none was prepared on this computer. */
+  /** The entry's face clip and its skeleton, or null when the entry has no face. */
   face(entry: IdleEntry): Promise<{ scene: THREE.Object3D; clip: THREE.AnimationClip } | null>;
+  /** Why no idle has a face, in plain words (the host's), when none has. */
+  readonly faceReason?: string;
 };
 
 /** The idle couldn't be read (plain words; the host's own message when it has one). */
@@ -78,7 +83,26 @@ export async function loadIdleSource(): Promise<IdleSource> {
   };
   if (state.source === "game") {
     const skeleton = restSkeleton(state.rig.joints);
-    return { catalogue, first, skeleton, ancestry: state.ancestry, faceRest: state.face ? restSkeleton(state.face.joints) : null, face,
+    // Every face clip plays on one face skeleton (the idle keeps the first it is given), built from the first record's rest.
+    let faceScene: THREE.Object3D | null = null;
+    const records = new Map<string, Promise<THREE.AnimationClip>>();
+    const gameFace = async (entry: IdleEntry) => {
+      if (!entry.face) return null;
+      let pending = records.get(entry.id);
+      if (!pending) {
+        pending = json(`${IDLES_ENDPOINT}?face=${encodeURIComponent(entry.id)}`).then(value => {
+          const record = value as FaceClipRecord;
+          faceScene ??= faceMotionScene(record.rest);
+          return faceMotionClip(record.clip, `${entry.face!.clip}_face`);
+        });
+        pending.catch(() => records.delete(entry.id));
+        records.set(entry.id, pending);
+      }
+      const clip = await pending;
+      return { scene: faceScene!, clip };
+    };
+    return { catalogue, first, skeleton, ancestry: state.ancestry, faceRest: state.face ? restSkeleton(state.face.joints) : null, face: gameFace,
+      ...(state.faceReason ? { faceReason: state.faceReason } : {}),
       async body(entry) {
         const sample = await json(`${IDLES_ENDPOINT}?body=${encodeURIComponent(entry.id)}`) as PoseSample;
         const clip = poseClip(sample).clip;

@@ -1,13 +1,14 @@
 /**
  * Host service for the live facial preview (research/animation/expression-editor-design.md §5.2; both hosts share it). It reads the
  * player's face skeleton, facial setup and the game's normal blink from the winning files on the launch route (the same resolver Build
- * and the character details use), finds the installed photo-mode expressions the way the game finds them (the winning expression
- * table, clips by name among V's photo-mode face rig's animation sets, ArchiveXL patches of that rig included), and keeps the external
- * facial solver warm to answer solve requests, newest first.
+ * and the character details use) with XF Studio's own reader (WolvenKit per resource where the reader can't), finds the installed
+ * photo-mode expressions the way the game finds them (the winning expression table, clips by name among V's photo-mode face rig's
+ * animation sets, ArchiveXL patches of that rig included), and answers solve requests, newest first, with XF Studio's own facial solver
+ * (engines/facial-rig/solver.ts) in this process. It also bakes the game's blink for the preview (`blink`) and lends the compiled face to
+ * the idle host for the idle's face (`faceSource`).
  *
- * The solver is the Cyberpunk Blender add-on's (IO Suite), the same pinned, unmodified modules the idle and blink bakes run: a separate
- * GPL-3.0 program in its own checkout, started as `tools/facial_solver_server.py` and spoken to over stdin/stdout. None of its code is
- * in XF Studio. Where it isn't set up the preview says so plainly and editing still works (the controls are saved with the look).
+ * The pinned IO Suite solver (the Cyberpunk Blender add-on's, GPL-3.0, run as its own program through `tools/facial_solver_server.py`)
+ * remains a developer's parity oracle only: localhost with XFS_FACIAL_SOLVER_ORACLE=1. None of its code is in XF Studio.
  *
  * Game-derived data stays in the host's private cache (`facial/`): the resolver's JSON of the rig and setup, the decoded start points.
  */
@@ -23,8 +24,12 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
 import type { Installation, InstallationOptions } from "./resolver-host";
 import { runWolvenKit, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
+import { IDLE_FACE_MISSING } from "./game-blink-messages";
+import { bakeClips, bakedRest, clipFrame, eyeShapeSeats, type BakedFrames, type BakedRest } from "./engines/facial-rig/bake";
+import { compileFacialRig, createFacialPose, solveFace, type CompiledFacialRig } from "./engines/facial-rig/solver";
+import { morphBinds, nativeClip, nativeDocument, nativeSetClips } from "./facial-native";
 import { EXPRESSION_SAMPLES } from "./expression-samples";
-import { BLINK_CLIP, EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readAnimSet, readBlink,
+import { BLINK_CLIP, EXPRESSION_TABLE, EYE_MORPHS, FACE_MORPHS, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readAnimSet, readBlink,
   eyeTracks, readFaceRig, readFaceRigSets, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "./facial-catalogue";
 import { findRelations } from "./engines/facial-rig/relations";
 import { posedLocals, worldPositions, type Vec3 } from "./engines/facial-rig/pose";
@@ -33,10 +38,11 @@ import { denseTracks, vectorIssue } from "./engines/facial-rig/vector";
 import { CONTROL_GROUPS, type FacialVocabulary } from "./engines/facial-rig/vocabulary";
 import type { RigRest } from "./engines/facial-rig/pose";
 import type { AxisPair } from "./engines/facial-rig/symmetry";
-import { FACIAL_ENDPOINT, FACIAL_EXPRESSIONS_ENDPOINT, FACIAL_SOLVE_ENDPOINT, FACIAL_STATE_SCHEMA, type FacialBlink, type FacialHostState,
-  type FacialSolveAnswer, type FacialSolveRequest, type FacialStartPoints } from "./platform/api/facial";
+import { FACE_MOTION_SCHEMA, FACIAL_BLINK_ENDPOINT, FACIAL_ENDPOINT, FACIAL_EXPRESSIONS_ENDPOINT, FACIAL_SOLVE_ENDPOINT, FACIAL_STATE_SCHEMA, type FaceMotionClip,
+  type FaceMotionRest, type FacialBlink, type FacialBlinkRecord, type FacialHostState, type FacialSolveAnswer, type FacialSolveRequest,
+  type FacialStartPoints } from "./platform/api/facial";
 
-export { FACIAL_ENDPOINT, FACIAL_EXPRESSIONS_ENDPOINT, FACIAL_SOLVE_ENDPOINT } from "./platform/api/facial";
+export { FACIAL_BLINK_ENDPOINT, FACIAL_ENDPOINT, FACIAL_EXPRESSIONS_ENDPOINT, FACIAL_SOLVE_ENDPOINT } from "./platform/api/facial";
 
 /** The IO Suite revision the bakes reviewed (tools/bake_idle_face.py `PIN`); the solver process refuses any other. */
 export const FACIAL_SOLVER_PIN = "7a4ee793c36d9615946fe87ec9d42cde7568021d";
@@ -50,18 +56,26 @@ export const MAX_SOLVE_FRAMES = 64;
 export const START_POINT_VERSION = 3;
 const STEP_TIMEOUT_MS = 3 * 60_000;
 
-/** Where the solver lives: the add-on checkout, the Python that runs it and the server script; or why there is none, in plain words. */
-export type FacialSolverLocation = { readonly addon: string; readonly python: string; readonly script: string } | { readonly missing: string };
-export const SOLVER_MISSING = "The live face preview comes in a later version. Your expression still saves.";
+/**
+ * Which solver answers: XF Studio's own in this process (`inProcess`, the default everywhere), or the pinned IO Suite checkout run by
+ * Python as a developer's parity oracle (the add-on checkout, the Python that runs it and the server script); or why the asked-for oracle
+ * isn't there, in plain words.
+ */
+export type FacialSolverLocation = { readonly inProcess: true } | { readonly addon: string; readonly python: string; readonly script: string } | { readonly missing: string };
+export const IN_APP_SOLVER: FacialSolverLocation = Object.freeze({ inProcess: true });
+/** A developer asked for the IO Suite oracle (XFS_FACIAL_SOLVER_ORACLE=1) and it isn't there. */
+export const SOLVER_MISSING = "The facial solver oracle asked for (XFS_FACIAL_SOLVER_ORACLE) isn't set up on this computer, so the live face preview is off. Your expression still saves.";
 
 /**
- * Find the solver (localhost): `XFS_FACIAL_SOLVER` (the add-on checkout), else XF Studio's tools folder (`<tools>/io-suite/<pin>/`,
- * where a consented download will put it), else a checkout beside the repository (the developer layout the bakes use). Python is
- * `XFS_PYTHON`, else `python` on the path. The desktop passes no environment and no repository, so only its tools folder counts.
+ * Which solver answers. XF Studio's own (`IN_APP_SOLVER`) unless a developer asks for the IO Suite oracle with XFS_FACIAL_SOLVER_ORACLE=1
+ * (localhost only: the desktop passes no environment): then `XFS_FACIAL_SOLVER` (the add-on checkout), else XF Studio's tools folder
+ * (`<tools>/io-suite/<pin>/`), else a checkout beside the repository (the developer layout the bakes use); Python is `XFS_PYTHON`, else
+ * `python` on the path.
  */
 export function locateFacialSolver(options: { env?: Readonly<Record<string, string | undefined>>; toolsRoot?: string | null;
   repoRoot?: string | null; script: string; pythonDefault?: string | null; exists?: (path: string) => boolean }): FacialSolverLocation {
   const exists = options.exists ?? existsSync, env = options.env ?? {};
+  if (env.XFS_FACIAL_SOLVER_ORACLE !== "1") return IN_APP_SOLVER;
   const candidates = [env.XFS_FACIAL_SOLVER, options.toolsRoot ? join(options.toolsRoot, "io-suite", FACIAL_SOLVER_PIN) : null,
     options.repoRoot ? resolve(options.repoRoot, "..", "Cyberpunk-Blender-add-on") : null].filter((path): path is string => !!path);
   const addon = candidates.find(path => exists(join(path, "i_scene_cp77_gltf", "animation", "facial", "solver.py")));
@@ -78,8 +92,8 @@ export interface FacialSolverProcess {
   readonly exited: boolean;
   dispose(): void;
 }
-export type FacialSolverSpawner = (location: Extract<FacialSolverLocation, { addon: string }>, rigJson: string, setupJson: string,
-  options?: { log?: (message: string) => void }) => FacialSolverProcess;
+export type FacialSolverSpawner = (location: Exclude<FacialSolverLocation, { missing: string }>, rigJson: string, setupJson: string,
+  options?: { log?: (message: string) => void; compiled?: CompiledFacialRig }) => FacialSolverProcess;
 
 /** Most characters of a line the solver printed that a log entry quotes. */
 const LOGGED_LINE_CHARS = 200;
@@ -89,10 +103,43 @@ const LOGGED_LINE_CHARS = 200;
  * after the ready line it fails the oldest request waiting, since the host sends one at a time and that answer is lost (CORE-100).
  */
 export const spawnFacialSolver: FacialSolverSpawner = (location, rigJson, setupJson, options = {}) => {
+  if ("inProcess" in location)
+    return inAppSolver(options.compiled ?? (() => compileFacialRig(JSON.parse(readFileSync(rigJson, "utf8")), JSON.parse(readFileSync(setupJson, "utf8")))));
   const child = Bun.spawn([location.python, location.script, "--addon", location.addon, "--rig", rigJson, "--setup", setupJson],
     { stdin: "pipe", stdout: "pipe", stderr: "pipe", windowsHide: true });
   return solverOverStreams(child, options.log);
 };
+
+/** Float32 values as the solver protocol's base64 (little-endian). */
+const base64Of = (values: Float32Array) => Buffer.from(values.buffer, values.byteOffset, values.byteLength).toString("base64");
+
+/**
+ * XF Studio's own solver behind the same protocol (engines/facial-rig/solver.ts): compiled once, one reused pose, answers at once. It never
+ * stops by itself. A compile failure is its plain refusal.
+ */
+export function inAppSolver(source: CompiledFacialRig | (() => CompiledFacialRig)): FacialSolverProcess {
+  let rig: CompiledFacialRig | null = null, disposed = false;
+  const ready = Promise.resolve().then(() => {
+    const started = performance.now();
+    try { rig = typeof source === "function" ? source() : source; return { ok: true as const, compileMs: performance.now() - started }; }
+    catch (error) { return { ok: false as const, error: error instanceof Error ? error.message : String(error) }; }
+  });
+  let scratch: ReturnType<typeof createFacialPose> | null = null;
+  return {
+    ready,
+    get exited() { return disposed; },
+    async solve(frames) {
+      await ready;
+      if (disposed || !rig) throw Error("The solver stopped.");
+      const compiled: CompiledFacialRig = rig, pose = scratch ??= createFacialPose(compiled);
+      const J = compiled.jointNames.length, q = new Float32Array(frames.length * J * 4), t = new Float32Array(frames.length * J * 3);
+      const started = performance.now();
+      frames.forEach((frame, f) => { solveFace(compiled, frame, pose); q.set(pose.rotations, f * J * 4); t.set(pose.translations, f * J * 3); });
+      return { q: base64Of(q), t: base64Of(t), ms: Math.round((performance.now() - started) * 1000) / 1000 };
+    },
+    dispose() { disposed = true; },
+  };
+}
 
 /** The solver protocol over a started process's pipes (the default spawner's; tests start any program that speaks it). */
 export function solverOverStreams(child: { stdin: { write(text: string): unknown; flush(): unknown; end(): unknown }; stdout: ReadableStream<Uint8Array>;
@@ -217,7 +264,19 @@ export type FacialHostOptions = {
   now?: () => number;
 };
 
-type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTracks; closedTime: number } | null; rigJson: string; setupJson: string;
+type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTracks; closedTime: number } | null;
+  /** The JSON files the oracle solver reads (written from the documents when it is asked for; WolvenKit's cache files otherwise). */
+  rigJson: string; setupJson: string;
+  /** The documents while the oracle may still need them written out (dropped once written or compiled). */
+  documents?: { skeleton: unknown; setup: unknown };
+  /** XF Studio's solver compiled from them, or why it couldn't be (plain words). */
+  compiled: CompiledFacialRig | null; compileError?: string;
+  /** The setup's joint regions (`bakedData.Data.JointRegions`), for the eye shapes' seats. */
+  regions: readonly number[];
+  /** The rig and setup's identity: the winning archives and hashes (the idle's face cache keys by it). */
+  identity: string;
+  /** The game's blink baked for the preview, once asked for. */
+  blinkRecord?: Promise<FacialBlinkRecord | null>;
   /** Tracks the setup's wrinkle outputs read (they show in game even without joint motion). */
   wrinkleSources: readonly number[];
   /** Tracks of the setup's Eyes part (gaze and pupils). */
@@ -230,6 +289,8 @@ type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTra
   /** The check ran (once per face; a restarted solver doesn't repeat it). */
   probed?: boolean };
 type Preparation = { key: string; controller: AbortController; promise: Promise<void>;
+  /** Settles once the face (rig and setup) is read or has failed: what the idle's face and the blink wait for. */
+  rigReady: Promise<void>; rigSettled?: () => void; installation?: Installation;
   rig: FacialHostState["rig"]; rigData?: Rig; expressions: FacialStartPoints; solver: FacialHostState["solver"]; process?: FacialSolverProcess;
   /** The started solver's readiness, the inert check included: a solve waiting for a restarted solver waits for this. */
   starting?: Promise<void>;
@@ -259,7 +320,7 @@ export const STALE_TEMP_MS = 60 * 60_000;
 export const MAX_WAITING_CLIENTS = 8;
 
 const fingerprint = (path: string) => { try { const s = statSync(path); return `${path}|${s.size}|${s.mtimeMs}`; } catch { return path; } };
-const NOT_SET_UP = "Live expressions read your V's face from your game files: set your game folder and WolvenKit in Settings.";
+const NOT_SET_UP = "Live expressions read V's face from your game files: choose your game folder in Settings.";
 /** The solver's program couldn't be started at all (no Python on this computer, CORE-99). */
 export const SOLVER_NOT_SET_UP = "The facial solver isn't set up on this computer, so the live face preview is off. You can still set every " +
   "control: your expression is saved with the look.";
@@ -346,11 +407,12 @@ export class FacialHost {
     if (this.current?.key === key && !this.retryDue(this.current)) return this.current;
     const previous = this.current;
     previous?.controller.abort(); previous?.process?.dispose();
-    const entry: Preparation = { key, controller: new AbortController(), promise: Promise.resolve(),
+    const entry: Preparation = { key, controller: new AbortController(), promise: Promise.resolve(), rigReady: Promise.resolve(),
       rig: { phase: "preparing" }, expressions: { phase: "preparing", items: [] }, solver: { phase: "starting" }, restarts: [],
       failures: previous?.key === key ? previous.failures : 0 };
+    entry.rigReady = new Promise<void>(settle => { entry.rigSettled = settle; });
     this.current = entry;
-    entry.promise = Promise.all([(previous?.promise ?? Promise.resolve()).catch(() => {}), this.clearing]).then(() => this.prepare(entry, settings)).catch(error => {
+    entry.promise = Promise.all([(previous?.promise ?? Promise.resolve()).catch(() => {}), this.clearing]).then(() => this.prepare(entry, settings)).finally(() => entry.rigSettled?.()).catch(error => {
       if (error instanceof Superseded || entry.controller.signal.aborted) return;
       entry.failures++; entry.failedAt = this.now();
       hostFailure("facial", "facial_prepare_failed", "Your V's face couldn't be prepared for live expressions.", error, "warn");
@@ -367,33 +429,78 @@ export class FacialHost {
 
   private async prepare(entry: Preparation, settings: CharacterDetailSettings) {
     const signal = entry.controller.signal, superseded = () => { if (signal.aborted) throw new Superseded(); };
-    if (!settings.gameRoot || !settings.wolvenKitCli || !existsSync(settings.wolvenKitCli)) {
+    if (!settings.gameRoot) {
       entry.rig = { phase: "unconfigured", reason: NOT_SET_UP };
       entry.expressions = { phase: "unconfigured", reason: NOT_SET_UP, items: [] };
       entry.solver = { phase: "missing", reason: NOT_SET_UP };
       return;
     }
     this.sweepTemporary();
-    const cli = settings.wolvenKitCli, tool = wolvenKitIdentityKey(wolvenKitIdentity(cli));
+    // WolvenKit is optional: XF Studio's own reader reads the face, and WolvenKit only what the reader refuses.
+    const cli = settings.wolvenKitCli && existsSync(settings.wolvenKitCli) ? settings.wolvenKitCli : null;
+    const tool = cli ? wolvenKitIdentityKey(wolvenKitIdentity(cli)) : "native";
     const installation = await this.installations.acquire({ gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
       mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: cli, cacheDir: this.options.resolverCache, log: this.options.log });
     superseded();
-    const graph = installation.graph;
-    // The face: skeleton, facial setup and the game's blink clip.
+    entry.installation = installation;
+    const graph = installation.graph, decoder = installation.fetcher.nativeDecoder;
+    // The face: skeleton and facial setup, natively first; the game's blink clip likewise.
     const [skeletonRef, setupRef, additivesRef] = [FACE_SKELETON, FACE_SETUP, FACIAL_ADDITIVES].map(refFromPath) as [DepotRef, DepotRef, DepotRef];
-    const files = await this.readJson(cli, tool, graph, [{ ref: skeletonRef, extension: "rig" }, { ref: setupRef, extension: "facialsetup" },
-      { ref: additivesRef, extension: "anims" }], signal);
+    const documents = new Map<string, unknown>(), identity: string[] = [];
+    for (const ref of [skeletonRef, setupRef]) {
+      const located = graph.locate(ref), archive = located.lookup.winner;
+      if (!archive) continue;
+      identity.push(`${fingerprint(archive.id)}|${located.entry.hash}`);
+      if (decoder) {
+        try { const document = await nativeDocument(decoder, archive, located.entry.hash, this.options.log); if (document) documents.set(ref.hash, document); }
+        catch (error) { hostFailure("facial", "native_face_unreadable", "XF Studio's reader couldn't read V's face; WolvenKit is asked instead.", error, "warn"); }
+      }
+    }
     superseded();
-    const skeleton = files.get(skeletonRef.hash), setup = files.get(setupRef.hash);
-    if (!skeleton || !setup) throw Error("The face skeleton or facial setup is missing from the game files.");
-    const setupDocument = readDocument(setup.file);
-    const { vocabulary, rest } = readFaceRig(readDocument(skeleton.file), setupDocument);
+    let rigJson = "", setupJson = "";
+    const wanted = [{ ref: skeletonRef, extension: "rig" }, { ref: setupRef, extension: "facialsetup" }].filter(item => !documents.has(item.ref.hash));
+    if (wanted.length) {
+      if (!cli) throw Error("The face skeleton or facial setup couldn't be read by XF Studio's reader, and WolvenKit isn't set up.");
+      const files = await this.readJson(cli, tool, graph, wanted, signal);
+      superseded();
+      for (const item of wanted) {
+        const found = files.get(item.ref.hash);
+        if (!found) continue;
+        documents.set(item.ref.hash, readDocument(found.file));
+        if (item.ref === skeletonRef) rigJson = found.file; else setupJson = found.file;
+      }
+    }
+    const skeletonDocument = documents.get(skeletonRef.hash), setupDocument = documents.get(setupRef.hash);
+    if (!skeletonDocument || !setupDocument) throw Error("The face skeleton or facial setup is missing from the game files.");
+    const { vocabulary, rest } = readFaceRig(skeletonDocument, setupDocument);
     const wrinkleSources = wrinkleSourceTracks(setupDocument), eyes = eyeTracks(setupDocument);
+    let compiled: CompiledFacialRig | null = null, compileError: string | undefined;
+    try { compiled = compileFacialRig(skeletonDocument, setupDocument); }
+    catch (error) {
+      compileError = error instanceof Error ? error.message : String(error);
+      hostFailure("facial", "face_not_compiled", "XF Studio's facial solver couldn't take V's facial setup.", error, "warn");
+    }
     let blink: Rig["blink"] = null;
-    try { const additives = files.get(additivesRef.hash); if (additives) blink = readBlink(readAnimSet(readDocument(additives.file)).clips, vocabulary); }
-    catch (error) { hostFailure("facial", "blink_unreadable", `The game's blink (${BLINK_CLIP}) couldn't be read; expressions show without it.`, error, "warn"); }
-    entry.rigData = { vocabulary, rest, blink, rigJson: skeleton.file, setupJson: setup.file, wrinkleSources, eyeTracks: eyes };
+    try {
+      const located = graph.locate(additivesRef), archive = located.lookup.winner;
+      let clips: ReadonlyMap<string, import("./facial-catalogue").SetClip> | null = null;
+      if (archive && decoder) {
+        const clip = await nativeClip(decoder, archive.id, located.entry.hash, BLINK_CLIP).catch(() => null);
+        if (clip) clips = new Map([[clip.name, clip]]);
+      }
+      if (!clips && archive && cli) {
+        const additives = (await this.readJson(cli, tool, graph, [{ ref: additivesRef, extension: "anims" }], signal)).get(additivesRef.hash);
+        if (additives) clips = readAnimSet(readDocument(additives.file)).clips;
+      }
+      if (clips) blink = readBlink(clips, vocabulary);
+    } catch (error) { hostFailure("facial", "blink_unreadable", `The game's blink (${BLINK_CLIP}) couldn't be read; expressions show without it.`, error, "warn"); }
+    superseded();
+    const baked = (setupDocument as { Data?: { RootChunk?: { bakedData?: { Data?: { JointRegions?: unknown } } } } }).Data?.RootChunk?.bakedData?.Data?.JointRegions;
+    entry.rigData = { vocabulary, rest, blink, rigJson, setupJson, wrinkleSources, eyeTracks: eyes, compiled, ...(compileError ? { compileError } : {}),
+      regions: Array.isArray(baked) ? baked.map(Number) : [], identity: identity.join("\n"),
+      ...(rigJson && setupJson ? {} : { documents: { skeleton: skeletonDocument, setup: setupDocument } }) };
     entry.rig = { phase: "ready" };
+    entry.rigSettled?.();
     this.startSolver(entry);
     // The installed expressions, after the face (the editor works without them).
     try { entry.expressions = await this.readStartPoints(installation, cli, tool, vocabulary, signal); }
@@ -403,7 +510,7 @@ export class FacialHost {
       entry.expressions = { phase: "failed", reason: "The installed photo-mode expressions couldn't be read from your game files. Start from rest instead.", items: [] };
     }
     // The face's own files stay; the animation sets beyond the budget go, least recently used first.
-    this.keepJsonWithinBudget(new Set([skeleton.file, setup.file]));
+    this.keepJsonWithinBudget(new Set([entry.rigData.rigJson, entry.rigData.setupJson].filter(Boolean)));
     hostTrace().event("facial", "prepared", { controls: vocabulary.controls.length, joints: rest.joints.length, startPoints: entry.expressions.items.length,
       solver: entry.solver.phase });
   }
@@ -412,11 +519,21 @@ export class FacialHost {
   private startSolver(entry: Preparation) {
     const location = this.options.solver();
     if ("missing" in location) { entry.solver = { phase: "missing", reason: location.missing }; return; }
-    entry.solver = { phase: "starting" };
+    const rig = entry.rigData!, inProcess = "inProcess" in location;
+    // XF Studio's own solver has its compiled face: the documents (the setup's is large) are needed only by the oracle's files.
+    if (inProcess && rig.compiled) rig.documents = undefined;
+    if (inProcess && !rig.compiled && !this.options.spawn) {
+      entry.solver = { phase: "failed", kind: "in-app", reason: "XF Studio couldn't read V's face from your game files, so the live face preview is off. Your expression still saves with the look." };
+      return;
+    }
+    entry.solver = { phase: "starting", kind: inProcess ? "in-app" : "oracle" };
     entry.stale = false;
     entry.starting = undefined;
     let process: FacialSolverProcess;
-    try { process = (this.options.spawn ?? spawnFacialSolver)(location, entry.rigData!.rigJson, entry.rigData!.setupJson, { log: this.options.log }); }
+    try {
+      if (!inProcess) this.writeOracleFiles(rig);
+      process = (this.options.spawn ?? spawnFacialSolver)(location, rig.rigJson, rig.setupJson, { log: this.options.log, ...(rig.compiled ? { compiled: rig.compiled } : {}) });
+    }
     catch (error) {
       entry.process = undefined;
       hostFailure("facial", "solver_not_started", "The facial solver's program couldn't be started.", error, "warn");
@@ -431,8 +548,8 @@ export class FacialHost {
         // the solver starts). A failed probe hides nothing.
         entry.starting = this.findInert(entry, process).then(() => {
           if (this.current !== entry || entry.process !== process) return;
-          entry.solver = { phase: "ready", compileMs: result.compileMs };
-          this.options.log?.(`Facial solver ready (setup compiled in ${Math.round(result.compileMs)} ms).`);
+          entry.solver = { phase: "ready", compileMs: result.compileMs, kind: inProcess ? "in-app" : "oracle" };
+          this.options.log?.(`Facial solver ready (${inProcess ? "XF Studio's own" : "the IO Suite oracle"}; setup compiled in ${Math.round(result.compileMs)} ms).`);
         });
       }
       else {
@@ -443,6 +560,79 @@ export class FacialHost {
       }
     });
   }
+  /** The oracle reads JSON files: the natively read documents are written to the facial cache once, when it is asked for. */
+  private writeOracleFiles(rig: Rig) {
+    if (rig.rigJson && rig.setupJson) return;
+    const documents = rig.documents;
+    if (!documents) throw Error("The face's documents are gone; prepare again.");
+    mkdirSync(join(this.root, "json"), { recursive: true });
+    const file = (name: string) => join(this.root, "json", `${createHash("sha256").update(`facial-native:1|${rig.identity}|${name}`).digest("hex")}.json`);
+    rig.rigJson ||= file("rig"); rig.setupJson ||= file("setup");
+    writeFileAtomic(rig.rigJson, JSON.stringify(documents.skeleton));
+    writeFileAtomic(rig.setupJson, JSON.stringify(documents.setup));
+    rig.documents = undefined;
+  }
+
+  /**
+   * The compiled face for the idle's face (idle-host.ts): waits for the face to be read; null when it can't be (no game folder, a setup
+   * XF Studio's solver can't take), with the plain reason.
+   */
+  async faceSource(): Promise<FaceSource | { reason: string }> {
+    const entry = this.ensure();
+    await entry.rigReady;
+    const rig = entry.rigData;
+    // The idle's own words (the Motion panel shows them): not the Expression panel's.
+    if (entry.rig.phase === "unconfigured") return { reason: IDLE_FACE_NEEDS_SETUP };
+    if (!rig?.compiled) return { reason: IDLE_FACE_MISSING };
+    return { rig: rig.compiled, identity: `${FACE_BAKE_VERSION}|${rig.identity}`, skeleton: rig.vocabulary.rig, setup: rig.vocabulary.setup,
+      installation: entry.installation ?? null };
+  }
+
+  /**
+   * The game's blink baked for the preview (game-blink.ts), solved by XF Studio's own solver: the normal blink clip at 60 Hz for Play blink,
+   * its closing half in 21 steps for the Closure slider (time is the closure), and each eye shape's joint seats from the head's and the
+   * eyes' morph targets. Null, with the reason logged, when the face or the clip can't be read.
+   */
+  async blink(): Promise<FacialBlinkRecord | { reason: string }> {
+    // With the IO Suite oracle in use the whole face is the oracle's: the page reads the developer's prepared blink instead.
+    if (!("inProcess" in this.options.solver())) return { reason: ORACLE_BLINK };
+    const entry = this.ensure();
+    await entry.rigReady;
+    const rig = entry.rigData;
+    if (!rig?.compiled || !rig.blink) return { reason: !rig ? entry.rig.reason ?? "V's face couldn't be read from your game files." : "The game's blink couldn't be read from your game files." };
+    rig.blinkRecord ??= this.bakeBlink(entry, rig).catch(error => {
+      hostFailure("facial", "blink_bake_failed", "The game's blink couldn't be prepared.", error, "warn");
+      rig.blinkRecord = undefined;
+      return null;
+    });
+    return (await rig.blinkRecord) ?? { reason: "The game's blink couldn't be prepared." };
+  }
+  private async bakeBlink(entry: Preparation, rig: Rig): Promise<FacialBlinkRecord> {
+    const compiled = rig.compiled!, blink = rig.blink!, rest = bakedRest(compiled);
+    const clipTimes = Array.from({ length: Math.min(MAX_SOLVE_FRAMES, Math.round(blink.clip.duration * BLINK_RATE) + 1) }, (_, i) => Math.min(blink.clip.duration, i / BLINK_RATE));
+    const closureTimes = Array.from({ length: BLINK_STEPS + 1 }, (_, i) => i / BLINK_STEPS);
+    const [clip, closure] = bakeClips(compiled, [{ frames: clipTimes.map(t => clipFrame(compiled, blink.clip, t)), times: clipTimes },
+      { frames: closureTimes.map(c => clipFrame(compiled, blink.clip, c * blink.closedTime)), times: closureTimes }]) as [BakedFrames, BakedFrames];
+    // Each eye shape's seats (the blink re-seats its rig on the shown shape; knowledge/facial-animation.md §4).
+    let shapes: Record<string, Record<string, number[]>> | undefined;
+    try {
+      const installation = entry.installation, graph = installation?.graph;
+      const read = async (path: string) => {
+        const ref = refFromPath(path), winner = graph?.locate(ref).lookup.winner;
+        return winner && installation ? (await installation.fetcher.fetch(winner, graph!.locate(ref).entry, "morphtarget"))?.document ?? null : null;
+      };
+      const [head, eyes] = await Promise.all([read(FACE_MORPHS), read(EYE_MORPHS)]);
+      if (head) shapes = eyeShapeSeats(rest, rig.regions, morphBinds(head), eyes ? morphBinds(eyes) : []);
+    } catch (error) { hostFailure("facial", "eye_shapes_unreadable", "The eye shapes' joint seats couldn't be read; the blink turns about the base shape.", error, "warn"); }
+    const description = { schema: "xfs/game-blink-1",
+      closure: { animation: "eye_blink_closure", tracks: ["eye_l_blink", "eye_r_blink"], steps: BLINK_STEPS, clip: BLINK_CLIP, closedTime: blink.closedTime },
+      clip: { animation: BLINK_CLIP, source: FACIAL_ADDITIVES, duration: blink.clip.duration, sampleRate: BLINK_RATE },
+      ...(shapes && Object.keys(shapes).length ? { shapes } : {}),
+      rig: { skeleton: rig.vocabulary.rig, setup: rig.vocabulary.setup, bodyGender: "female" } };
+    return { schema: FACE_MOTION_SCHEMA, rest: motionRest(rest), description,
+      clips: [motionClip("eye_blink_closure", closure, rest), motionClip(BLINK_CLIP, clip, rest)] };
+  }
+
   /**
    * The controls that move nothing on this face (research/animation/natural-expressions.md §3.2): each main-pose control is solved at
    * full weight alone and on top of every control at `INERT_CONTEXT`, which catches controls that act only with others (a lip seal that
@@ -563,7 +753,7 @@ export class FacialHost {
    * V's photo-mode face rig with its patches, each by its file's identity (path, size, time); the cache also records the animation sets'
    * archives and is read again when one of them changed (a mod updated in place).
    */
-  private async readStartPoints(installation: Installation, cli: string, tool: string, vocabulary: FacialVocabulary,
+  private async readStartPoints(installation: Installation, cli: string | null, tool: string, vocabulary: FacialVocabulary,
     signal: AbortSignal): Promise<FacialStartPoints> {
     const graph = installation.graph;
     const identity = (ref: DepotRef) => { const winner = graph.locate(ref).lookup.winner; return winner ? fingerprint(winner.id) : "-"; };
@@ -599,9 +789,22 @@ export class FacialHost {
     }
     if (signal.aborted) throw new Superseded();
     const sets = readFaceRigSets(apps);
-    const documents = await this.readJson(cli, tool, graph, sets.map(set => ({ ref: set.ref, extension: "anims" })), signal);
+    // Each set natively first (only the clips the table names), WolvenKit for a set the reader can't read.
+    const decoder = installation.fetcher.nativeDecoder, wantedClips = new Set(rows.map(row => row.AnimationName ?? "").filter(Boolean));
     const decoded: { path: string; provider: string; clips: ReadonlyMap<string, SetClip> }[] = [];
+    const leftOver: typeof sets = [];
+    const nativeSets = new Map<(typeof sets)[number], { path: string; provider: string; clips: ReadonlyMap<string, SetClip> }>();
     for (const set of sets) {
+      const archive = graph.locate(set.ref).lookup.winner, path = graph.named(set.ref).path ?? `#${set.ref.hash}`;
+      if (!archive) continue;
+      const clips = decoder ? await nativeSetClips(decoder, archive.id, graph.locate(set.ref).entry.hash, wantedClips).catch(() => null) : null;
+      if (signal.aborted) throw new Superseded();
+      if (clips) nativeSets.set(set, { path, provider: providerLabel(archive), clips }); else leftOver.push(set);
+    }
+    const documents = leftOver.length && cli ? await this.readJson(cli, tool, graph, leftOver.map(set => ({ ref: set.ref, extension: "anims" })), signal) : new Map();
+    for (const set of sets) {
+      const native = nativeSets.get(set);
+      if (native) { decoded.push(native); continue; }
       const found = documents.get(set.ref.hash), path = graph.named(set.ref).path ?? `#${set.ref.hash}`;
       if (!found) continue;
       // One set's document at a time: decoded, then dropped.
@@ -682,6 +885,26 @@ export class FacialHost {
   }
 }
 
+/**
+ * The idle's face without a game folder. Not reached through the idle today (the idle itself needs the game folder first and says so), kept
+ * so the idle never shows the Expression panel's words.
+ */
+const IDLE_FACE_NEEDS_SETUP = "Choose your game folder in Settings to see V's face move during the idle.";
+/** The blink endpoint's answer while a developer uses the IO Suite oracle (the page then reads the prepared blink asset, if any). */
+const ORACLE_BLINK = "The facial solver oracle is in use, so the blink is the developer preparation's (XFS_PREPARED_MOTION=on serves it).";
+/** The closure slider's steps (21 solved instants from open to the clip's closed frame). */
+export const BLINK_STEPS = 20;
+/** Version of what the face bakes hold (the solver's rules and the record's shape); part of the idle face cache's key. */
+export const FACE_BAKE_VERSION = 1;
+/** The compiled face the idle host bakes the idle's face with (`FacialHost.faceSource`). */
+export type FaceSource = { rig: CompiledFacialRig; identity: string; skeleton: string; setup: string; installation: Installation | null };
+/** A baked rest as the wire record holds it. */
+export function motionRest(rest: BakedRest): FaceMotionRest { return { names: [...rest.names], parents: [...rest.parents], local: base64Of(rest.local) }; }
+/** Baked frames as one wire clip (moving joints by name). */
+export function motionClip(name: string, frames: BakedFrames, rest: BakedRest): FaceMotionClip {
+  return { name, times: base64Of(frames.times), joints: frames.joints.map(j => rest.names[j]!), local: base64Of(frames.local) };
+}
+
 /** The weight every other control holds while `findInert` looks for controls that act only in combination. */
 export const INERT_CONTEXT = 0.25;
 /** Base64 float32 (the solver's answer) as numbers. */
@@ -744,6 +967,10 @@ export function createFacialHandler(host: FacialHost) {
     if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin)) return json({ code: "forbidden", error: "Use the local studio." }, 403);
     if (url.pathname === FACIAL_ENDPOINT && request.method === "GET") { await host.refresh(); return json(host.state()); }
     if (url.pathname === FACIAL_EXPRESSIONS_ENDPOINT && request.method === "GET") return json(host.expressions());
+    if (url.pathname === FACIAL_BLINK_ENDPOINT && request.method === "GET") {
+      const blink = await host.blink();
+      return "reason" in blink ? json({ code: "unavailable", error: blink.reason }, 503) : json(blink);
+    }
     if (url.pathname === FACIAL_SOLVE_ENDPOINT && request.method === "POST") {
       if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json") return json({ ok: false, code: "invalid", message: "Send JSON." }, 400);
       // Read within the limit, never whole first (CORE-106).
