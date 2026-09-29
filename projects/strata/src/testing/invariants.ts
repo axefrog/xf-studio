@@ -132,12 +132,18 @@ export async function checkConsistentCut(graph: Graph, types: readonly TypeSpec[
   const view = await graph.at(pos);
   const replayed = replayTo(types, entries, pos);
   const positions = new Map(entries.map(entry => [`${entry.node.id}@${entry.seq}`, entry.pos]));
+  // Constants have no stream: they are the same at every point.
+  const constants = new Map(graph.debugState().records.filter(rec => rec.constant).map(rec => [rec.ref.id, rec.head]));
   const cache = new Map<number, StatesAt>();
   const statesAt = (at: number): StatesAt => {
     let states = cache.get(at);
     if (!states) {
       const map = at === pos ? replayed : replayTo(types, entries, at);
-      states = ref => { const item = map.get(ref.id); return item && item.ref.type === ref.type && item.state && !item.state.retracted ? item.state : null; };
+      states = ref => {
+        if (constants.has(ref.id)) return constants.get(ref.id) ?? null;
+        const item = map.get(ref.id);
+        return item && item.ref.type === ref.type && item.state && !item.state.retracted ? item.state : null;
+      };
       cache.set(at, states);
     }
     return states;

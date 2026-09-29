@@ -975,7 +975,11 @@ export class StrataGraph implements GraphView {
 
   private applyGroups(groups: Map<string, { ref: NodeRef; def: TypeDef; entries: Entry[] }>, cause: ChangeSet["cause"]): Map<string, NodeState | null> {
     const touched = new Map<string, Touch>();
-    for (const [id, group] of groups) touched.set(id, this.touchOf(group.entries.map(entry => upcast(group.def, entry).op)));
+    for (const [id, group] of groups) {
+      touched.set(id, this.touchOf(group.entries.map(entry => upcast(group.def, entry).op)));
+      // While everything is demanded, a new node's layering combinator exists before it does, so it reports its creation.
+      if (this.allDemand && !this.records.has(id)) this.effectiveNode(group.ref).demand(LATEST, this.allDemand.signal, "all");
+    }
     return this.refresh(touched, () => {
       for (const [id, group] of groups) {
         let rec = this.records.get(id);
@@ -1107,7 +1111,6 @@ export class StrataGraph implements GraphView {
         if (was.trashed !== now.trashed) items.push("trashed");
       }
       meta.push({ node: ref, paths: [], meta: items, via: [] });
-      if (!was && now && this.allDemand) this.effectiveNode(ref).demand(LATEST, this.allDemand.signal, "all");
     }
     const batch = { commit, cause, ...(label ? { label } : {}), meta };
     this.env.transaction(() => {
@@ -2015,10 +2018,20 @@ class Working {
       this.refs.set(ref.id, ref);
       this.states.set(ref.id, raw ? (this.graph as unknown as { records: Map<string, Rec> }).records.get(ref.id)?.head ?? null : this.base(ref));
     }
+    const before = this.states.get(ref.id) ?? null;
+    const after = fold(before, [{ op } as Entry]);
+    // An edit that changes nothing is not recorded: no entry, nothing to undo.
+    const primitive = op.kind === "set" || op.kind === "reset" || op.kind === "tombstone" || op.kind === "layers" || op.kind === "rename";
+    if (primitive && before && equal(before, after)) { if (!this.ops.get(ref.id)!.length) this.drop(ref.id); return; }
     this.ops.get(ref.id)!.push(op);
-    this.states.set(ref.id, fold(this.states.get(ref.id) ?? null, [{ op } as Entry]));
+    this.states.set(ref.id, after);
     this.seqs.set(ref.id, this.seqOf(ref) + 1);
     this.temp?.clear();
+  }
+  private drop(id: string): void {
+    this.ops.delete(id); this.states.delete(id); this.refs.delete(id); this.seqs.delete(id);
+    const index = this.order.indexOf(id);
+    if (index >= 0) this.order.splice(index, 1);
   }
   /** A resolver over this change's working states (for detach, clone and apply-to-source). */
   resolver(): Resolver {
