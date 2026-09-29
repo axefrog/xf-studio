@@ -212,7 +212,7 @@ export type Edit =
 /** Why a commit or an action was refused. Every refusal carries one. */
 export type RefusalCode =
   | "missing" | "constant" | "type" | "path" | "value" | "cycle" | "unique" | "stale" | "conflict" | "unloaded"
-  | "pinned" | "no-source" | "dependents" | "empty" | "exists" | "nothing-to-undo";
+  | "pinned" | "no-source" | "dependents" | "empty" | "exists" | "nothing-to-undo" | "busy";
 export type Refusal = { readonly ok: false; readonly reason: RefusalCode; readonly message: string; readonly conflict?: Conflict; readonly dependents?: readonly NodeRef[] };
 export type CommitResult =
   | { readonly ok: true; readonly commit: string; readonly changes: ChangeSet; readonly created: Readonly<Record<string, NodeRef>> }

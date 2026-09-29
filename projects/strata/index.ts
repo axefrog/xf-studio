@@ -6,6 +6,19 @@
  * snapshots this surface so any change to it is deliberate (see CHANGELOG.md).
  */
 
+// The execution kernel (SPEC §3–§10)
+export { createEnvironment, Environment, KNode, Driver, Process, UNCHANGED, ErrorValue, errorValue, LATEST } from "./src/kernel/kernel";
+export type {
+  NodeKind, KEntry, ErrorRecord, DemandSpec, Demand, InputView, ComputeContext, Compute, Run, Input, RunContext, DriverDefinition,
+  ProcessState, EnvironmentOptions, CycleReport,
+} from "./src/kernel/kernel";
+export { Aborter, StrataSignal, AbortedError, anySignal } from "./src/kernel/abort";
+export type { AbortSignalLike } from "./src/kernel/abort";
+export { map, filter, scan, combine, flatMap, catalogue, standardOperators, inputError } from "./src/kernel/operators";
+export type { Operator, Operators, OperatorApi } from "./src/kernel/operators";
+export { erector, GRAPH_MODEL_SCHEMA } from "./src/kernel/erector";
+export type { GraphModel, NodeModel, NodeRefData } from "./src/kernel/erector";
+
 // Registration
 export { defineType, defineRule, constantId } from "./src/define";
 export type { TypeSpec, TypeDef, RuleSpec, RuleDef, RuleContext, ConflictDraft, DeriveContext, Upcaster } from "./src/define";

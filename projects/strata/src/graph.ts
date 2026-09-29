@@ -11,7 +11,7 @@ import type { RuleDef, TypeDef, TypeSpec } from "./define";
 import { diffStates, EMPTY_STATE, finish, fold, upcast } from "./fold";
 import { covers, isTombstone, keyPath, pathKey } from "./paths";
 import { layerOrder, Resolver } from "./resolve";
-import type { Resolved, StateReader } from "./resolve";
+import type { StateReader } from "./resolve";
 import { ReadModel, hasRefs } from "./model";
 import type { DeriveResult, NodeSnapshot, Reference, Referrer } from "./model";
 import { collapseInline as collapsePrimitive, keepSet, rollupDeltaStream, rollupValueStream } from "./compaction";
@@ -22,6 +22,10 @@ import type { GraphStore, AppendResult } from "./store";
 import type { Sink, SinkDef, SourceDef, Sources } from "./sources";
 import { resolveClaims, trustSelf } from "./trust";
 import type { Claim, TrustPolicy } from "./trust";
+import { Aborter } from "./kernel/abort";
+import type { AbortSignalLike } from "./kernel/abort";
+import { Environment, KNode, LATEST, UNCHANGED } from "./kernel/kernel";
+import type { Process, ProcessState, RunContext } from "./kernel/kernel";
 import type {
   ChangeSet, CommitMeta, CommitResult, Conflict, Edit, Entry, EventRef, Layer, NodeChange, NodeId, NodeRef, NodeState, NodeType, Op,
   Origin, Path, PrimitiveOp, Provenance, Refusal, RefusalCode, Severity, Snapshot, Target, TimePoint,
@@ -48,6 +52,8 @@ export interface GraphOptions {
   /** Retry delay after a failed append (default 250 ms), and how long to wait for a reply (default 10 s). */
   readonly retryMs?: number;
   readonly replyTimeoutMs?: number;
+  /** The graph's lifetime: aborting it stops the store driver and every process it started. */
+  readonly signal?: AbortSignalLike;
   readonly [STRATA_FAULTS]?: Faults;
 }
 
@@ -100,6 +106,11 @@ type CommitRecord = {
   touches: Map<string, { ref: NodeRef; first: number; last: number }>;
 };
 type Touch = "all" | Path[];
+/** A layering combinator's output: the node's effective value and bookkeeping, and the change it reported. */
+type EffectiveOut = {
+  readonly exists: boolean; readonly name: string; readonly trashed: boolean; readonly layers: readonly Layer[];
+  readonly value?: Readonly<Record<string, unknown>>; readonly change?: NodeChange;
+};
 
 const SOURCE_TYPE = "strata:source";
 const refusal = (reason: RefusalCode, message: string, extra: Partial<Refusal> = {}): Refusal => ({ ok: false, reason, message, ...extra });
@@ -157,11 +168,26 @@ export class StrataGraph implements GraphView {
   private readonly ackedCommits = new Set<string>();
   private inflight: number | null = null;
   private token = 0;
-  private retryCancel: (() => void) | null = null;
+  private retrying = false;
   private flushWaiters: (() => void)[] = [];
-  private readonly listeners = new Set<(changes: ChangeSet) => void>();
-  private readonly nodeListeners = new Map<string, Set<(change: NodeChange, changes: ChangeSet) => void>>();
-  private readonly pendingListeners = new Set<(pending: readonly PendingCommit[]) => void>();
+  /** The kernel environment this graph runs in (SPEC §11.1). */
+  readonly env: Environment;
+  private readonly entitySeeds = new Map<string, KNode>();
+  private readonly effectiveNodes = new Map<string, KNode<EffectiveOut>>();
+  /** Observed with each batch (commit, cause, bookkeeping), in the same cycle as the touched nodes' seeds. */
+  private readonly batchSeed: KNode;
+  /** Each assembled change set: what `subscribeAll` demands. */
+  private readonly commitsSeed: KNode;
+  /** The pending commits (the recovery copy) whenever they change. */
+  private readonly pendingSeed: KNode;
+  private reports: NodeChange[] = [];
+  private readonly assembled = new Map<string, ChangeSet>();
+  private lastBatchSeq = 0;
+  private allDemand: Aborter | null = null;
+  private allSubscribers = 0;
+  /** The store driver's run: appends, loads and snapshots are its child processes (SPEC §19.5). */
+  private storeRun?: RunContext;
+  readonly storeProcess?: Process;
   private readonly sinks: readonly { readonly def: SinkDef; readonly sink: Sink }[];
   private headPos = 0;
   private storeHead = 0;
@@ -204,6 +230,14 @@ export class StrataGraph implements GraphView {
     this.head = new ReadModel(this.headReader, () => this.liveRefs(), ref => this.metaOf(ref));
     // The head's referrers come from the index.
     this.head.referrers = ref => this.referrers(ref);
+    this.env = new Environment({ clock: this.sources.clock, onCycle: () => this.onCycle() });
+    this.batchSeed = this.env.seed({ id: "graph:batches", name: "batches" });
+    this.commitsSeed = this.env.seed({ id: "graph:commits", name: "commits" });
+    this.pendingSeed = this.env.seed({ id: "graph:pending", name: "pending", initial: [] });
+    if (this.store) {
+      const driver = this.env.driver({ name: "store", start: run => { this.storeRun = run; } }, "graph:store");
+      this.storeProcess = driver.start(options.signal);
+    }
     if (!this.store) this.loaded = true;
   }
 
@@ -282,7 +316,8 @@ export class StrataGraph implements GraphView {
   async load(): Promise<{ readonly nodes: number; readonly entries: number; readonly foldMs: number }> {
     if (!this.store) { this.loaded = true; return { nodes: 0, entries: 0, foldMs: 0 }; }
     const clock = this.sources.clock;
-    const stored = await this.store.load();
+    const store = this.store;
+    const stored = await this.storeTask("load", () => store.load());
     const started = clock.monotonic();
     let entries = 0;
     const refetch: NodeRef[] = [];
@@ -296,7 +331,7 @@ export class StrataGraph implements GraphView {
       entries += node.tail.length;
     }
     for (const ref of refetch) {
-      const all = await this.store.readStream(ref);
+      const all = await this.storeTask("read", () => store.readStream(ref));
       this.installRecord(ref, this.types.get(ref.type)!, undefined, all);
       entries += all.length;
     }
@@ -342,7 +377,8 @@ export class StrataGraph implements GraphView {
     const rec = this.records.get(ref.id);
     if (!rec || rec.constant || rec.session || rec.base.state === null && rec.base.seq === 0) return;
     if (!this.store) return;
-    const stored = await this.store.readStream(ref);
+    const store = this.store;
+    const stored = await this.storeTask("history", () => store.readStream(ref));
     const current = this.records.get(ref.id);
     if (!current || current !== rec) return;
     const known = new Set(stored.map(entry => entry.seq));
@@ -535,9 +571,10 @@ export class StrataGraph implements GraphView {
     const meta: CommitMeta = { ...firstGroup.entries[0].meta, basis };
     firstGroup.entries[0] = freeze({ ...firstGroup.entries[0], meta });
 
+    if (this.env.inCycle) return refusal("busy", "A change can't be committed while a cycle runs; commit it from a queued change instead.");
     const saved = this.saveRecords(groups.keys());
     const conflictsBefore = check ? new Set([...this.blockingConflicts()].map(item => item.id)) : null;
-    const changes = this.applyGroups(groups, cause);
+    const before = this.applyGroups(groups, cause);
     if (check) {
       const problem = check() ?? this.newBlocking(conflictsBefore!);
       if (problem) {
@@ -567,9 +604,8 @@ export class StrataGraph implements GraphView {
       this.notifyPending();
       this.pump();
     } else this.ackedCommits.add(commitId);
-    const set: ChangeSet = freeze({ commit: commitId, ...(options.label ? { label: options.label } : {}), cause, nodes: changes });
     this.deliverSession(groups);
-    this.publish(set);
+    const set = this.emit(before, cause, commitId, options.label);
     return { ok: true, commit: commitId, changes: set, created: Object.fromEntries(work.created) };
   }
 
@@ -937,7 +973,7 @@ export class StrataGraph implements GraphView {
     return paths;
   }
 
-  private applyGroups(groups: Map<string, { ref: NodeRef; def: TypeDef; entries: Entry[] }>, cause: ChangeSet["cause"]): NodeChange[] {
+  private applyGroups(groups: Map<string, { ref: NodeRef; def: TypeDef; entries: Entry[] }>, cause: ChangeSet["cause"]): Map<string, NodeState | null> {
     const touched = new Map<string, Touch>();
     for (const [id, group] of groups) touched.set(id, this.touchOf(group.entries.map(entry => upcast(group.def, entry).op)));
     return this.refresh(touched, () => {
@@ -971,13 +1007,13 @@ export class StrataGraph implements GraphView {
   private readonly sourceRings = new Map<string, number>();
 
   /**
-   * The heart of propagation. `touched` names each node whose stream changed and the paths its entries change;
-   * `mutate` changes the records. The candidates are those nodes and every live layer dependent whose mask covers a
-   * changed path, transitively; their effective values are compared before and after, so the result is exactly the
-   * (node, path) pairs whose effective value changed. Memos are invalidated for the candidates only; references,
-   * derivations and conflicts follow along the edges a change travels.
+   * Bookkeeping for a change to the records (SPEC §11, "the Studio's graph in these terms"): `touched` names each node
+   * whose stream changed and the paths its entries change; `mutate` changes the records. The candidates are those
+   * nodes and every live layer dependent whose mask covers a changed path, transitively: their resolution memo is
+   * invalidated, and the reverse indexes and (when demanded) the conflict index follow. Nothing is computed for change
+   * reports here; `emit` observes the touched nodes' seeds, and the demanded layering combinators report changes.
    */
-  private refresh(touched: Map<string, Touch>, mutate: () => void, cause: ChangeSet["cause"]): NodeChange[] {
+  private refresh(touched: Map<string, Touch>, mutate: () => void, cause: ChangeSet["cause"]): Map<string, NodeState | null> {
     if (!this.refIndexReady && this.conflictsReady) this.ensureRefIndex();
     // 1. Candidates.
     const candidates = new Map<string, "all" | Map<string, Path>>();
@@ -1010,104 +1046,150 @@ export class StrataGraph implements GraphView {
         if ((depPaths === "all" || depPaths.length) && add(depId, depPaths)) queue.push(depId);
       }
     }
-    // 2. Before.
-    const before = new Map<string, Map<string, Resolved>>();
-    const beforeStates = new Map<string, NodeState | null>();
-    const resolver = this.head.resolver;
-    for (const [id, paths] of candidates) {
-      const rec = this.records.get(id);
-      const ref = rec?.ref;
-      beforeStates.set(id, rec ? this.headState(rec.ref) : null);
-      const values = new Map<string, Resolved>();
-      if (ref) for (const path of paths === "all" ? resolver.leafPaths(ref) : paths.values()) values.set(pathKey(path), resolver.leaf(ref, path));
-      before.set(id, values);
-    }
-    // 3. Mutate.
+    const before = new Map<string, NodeState | null>();
+    for (const id of touched.keys()) { const rec = this.records.get(id); before.set(id, rec ? this.headState(rec.ref) : null); }
+    // 2. Mutate.
     mutate();
-    // 4. Invalidate.
+    // 3. Invalidate the memo along the layer index, for every candidate (demanded or not: reads are never stale).
+    const resolver = this.head.resolver;
     for (const id of candidates.keys()) {
       const rec = this.records.get(id);
       if (rec && this.faults?.skipInvalidation?.(rec.ref)) continue;
       resolver.invalidate(id);
     }
+    this.head.clearDerived();
     if (cause === "rollback" || cause === "sync" || cause === "purge") this.timeModels.clear();
-    // 5. After, and the difference.
-    const changes: NodeChange[] = [];
-    const changedIds = new Set<string>();
-    for (const [id, paths] of candidates) {
-      const rec = this.records.get(id);
-      const prior = before.get(id)!;
-      const keys = new Map<string, Path>();
-      for (const key of prior.keys()) keys.set(key, keyPath(key));
-      if (rec) for (const path of paths === "all" ? resolver.leafPaths(rec.ref) : paths.values()) keys.set(pathKey(path), path);
-      const changed: Path[] = [];
-      for (const [key, path] of keys) {
-        const a = prior.get(key), b = rec ? resolver.leaf(rec.ref, path) : undefined;
-        if (!!a?.has !== !!b?.has || a?.has && !equal(a.value, b!.value)) changed.push(path);
-      }
-      const was = beforeStates.get(id) ?? null, now = rec ? this.headState(rec.ref) : null;
-      const meta: NodeChange["meta"][number][] = [];
-      const recHead = rec?.head ?? null;
-      if (!was && now) meta.push("created");
-      if (was && !now) meta.push(recHead ? "retracted" : cause === "purge" ? "purged" : "retracted");
-      if (was && now) {
-        if (was.name !== now.name) meta.push("name");
-        if (!equal(was.layers, now.layers)) meta.push("layers");
-        if (was.trashed !== now.trashed) meta.push("trashed");
-      }
-      if (changed.length || meta.length) {
-        changedIds.add(id);
-        const ref = rec?.ref ?? this.purgedRefs.get(id);
-        if (ref) changes.push({ node: ref, paths: changed.sort((x, y) => pathKey(x) < pathKey(y) ? -1 : 1), meta, via: [] });
-      }
-    }
-    // 6. References.
+    // 4. References held by candidates whose reference fields may have changed.
+    const changed = new Set<string>(candidates.keys());
     if (this.refIndexReady) {
-      for (const change of changes) {
-        const def = this.types.get(change.node.type);
-        if (change.meta.length || change.paths.some(path => { const at = def && kindAt(def, path); return at && hasRefs(at.spec); }))
-          this.indexRefs(change.node);
+      for (const [id, paths] of candidates) {
+        const ref = this.records.get(id)?.ref ?? this.purgedRefs.get(id);
+        const def = ref && this.types.get(ref.type);
+        if (!ref || !def) continue;
+        if (paths === "all" || [...paths.values()].some(path => { const at = kindAt(def, path); return at && hasRefs(at.spec); })) this.indexRefs(ref);
       }
     }
-    // 7. Along follows references: referrers' derivations are dirty.
-    const via = new Map<string, Set<string>>();
-    if (changedIds.size && this.refIndexReady) {
-      for (const id of changedIds) {
-        const seen = new Set<string>([id]), walk = [id];
-        while (walk.length) {
-          const at = walk.pop()!;
-          for (const [referrer, refs] of this.refIndex.get(at) ?? []) {
-            if (!refs.some(item => item.follows)) continue;
-            let set = via.get(referrer);
-            if (!set) via.set(referrer, set = new Set());
-            set.add(id);
-            if (!seen.has(referrer)) { seen.add(referrer); walk.push(referrer); }
-          }
+    // 5. Conflicts, for the subjects the change reached: the candidates, what references them (following `follows`
+    // edges transitively, since derivations read through them), and the direct layer dependents of touched nodes.
+    if (this.conflictsReady) {
+      const subjects = new Set<string>([...touched.keys(), ...changed]);
+      const walk = [...changed];
+      while (walk.length) {
+        const at = walk.pop()!;
+        for (const [referrer, refs] of this.refIndex.get(at) ?? []) {
+          if (!subjects.has(referrer)) { subjects.add(referrer); if (refs.some(item => item.follows)) walk.push(referrer); }
         }
       }
-    } else if (changedIds.size && this.head) {
-      // Without the index, derivations are simply all dropped.
-      this.head.clearDerived();
-    }
-    for (const id of changedIds) this.head.invalidateDerived(id);
-    for (const id of via.keys()) this.head.invalidateDerived(id);
-    const byId = new Map(changes.map((change, index) => [change.node.id, index]));
-    for (const [id, sources] of via) {
-      const refs = [...sources].map(source => this.records.get(source)?.ref).filter((ref): ref is NodeRef => !!ref);
-      const index = byId.get(id);
-      if (index !== undefined) changes[index] = { ...changes[index], via: refs };
-      else { const rec = this.records.get(id); if (rec) changes.push({ node: rec.ref, paths: [], meta: [], via: refs }); }
-    }
-    // 8. Conflicts, for the subjects the change reached.
-    if (this.conflictsReady) {
-      const subjects = new Set<string>([...touched.keys(), ...changedIds, ...via.keys()]);
-      for (const id of [...touched.keys(), ...changedIds]) {
-        for (const referrer of this.refIndex.get(id)?.keys() ?? []) subjects.add(referrer);
-        for (const dep of this.layerIndex.get(id)?.keys() ?? []) subjects.add(dep);
-      }
+      for (const id of touched.keys()) for (const dep of this.layerIndex.get(id)?.keys() ?? []) subjects.add(dep);
       this.reevaluate(subjects);
     }
-    return changes.map(change => freeze(change));
+    return before;
+  }
+
+  /**
+   * One cycle for a change the records already hold: each touched node's seed observes the change (with the commit),
+   * with the batch seed in the same transaction. Demanded layering combinators compute and report exact changes; after
+   * the cycle the change set is assembled (`onCycle`) and observed on the commits seed for `subscribeAll`. Returns the
+   * change set when the cycle ran at once (a commit outside the kernel's processing), else the bookkeeping part of it.
+   */
+  private emit(before: Map<string, NodeState | null>, cause: ChangeSet["cause"], commit: string, label?: string): ChangeSet {
+    const meta: NodeChange[] = [];
+    for (const [id, was] of before) {
+      const rec = this.records.get(id), ref = rec?.ref ?? this.purgedRefs.get(id);
+      if (!ref) continue;
+      const now = rec ? this.headState(rec.ref) : null;
+      const items: NodeChange["meta"][number][] = [];
+      if (!was && now) items.push("created");
+      if (was && !now) items.push(rec?.head ? "retracted" : "purged");
+      if (was && now) {
+        if (was.name !== now.name) items.push("name");
+        if (!equal(was.layers, now.layers)) items.push("layers");
+        if (was.trashed !== now.trashed) items.push("trashed");
+      }
+      meta.push({ node: ref, paths: [], meta: items, via: [] });
+      if (!was && now && this.allDemand) this.effectiveNode(ref).demand(LATEST, this.allDemand.signal, "all");
+    }
+    const batch = { commit, cause, ...(label ? { label } : {}), meta };
+    this.env.transaction(() => {
+      for (const id of before.keys()) { const seed = this.entitySeeds.get(id); if (seed) this.env.observe(seed, commit); }
+      this.env.observe(this.batchSeed, batch as unknown as Json);
+    });
+    // Rewire demanded layering combinators whose layers changed (after the cycle that reported the change).
+    for (const [id, was] of before) {
+      const node = this.effectiveNodes.get(id), rec = this.records.get(id);
+      if (node && rec && !equal(was?.layers ?? [], rec.head?.layers ?? [])) this.env.setInputs(node, this.effectiveInputs(rec.ref));
+    }
+    const set = this.assembled.get(commit);
+    this.assembled.delete(commit);
+    return set ?? freeze({ commit, ...(label ? { label } : {}), cause, nodes: meta.filter(item => item.meta.length) });
+  }
+
+  /** After each kernel cycle: a cycle carrying a batch assembles its change set from the combinators' reports. */
+  private onCycle(): void {
+    const batchEntry = this.batchSeed.latest();
+    if (!batchEntry || batchEntry.cycle !== this.env.cycle || batchEntry.seq === this.lastBatchSeq) return;
+    this.lastBatchSeq = batchEntry.seq;
+    const batch = batchEntry.value as unknown as { commit: string; cause: ChangeSet["cause"]; label?: string; meta: NodeChange[] };
+    const reported = new Map<string, NodeChange>();
+    for (const change of this.reports) reported.set(change.node.id, change);
+    this.reports = [];
+    const nodes: NodeChange[] = [];
+    for (const item of batch.meta) {
+      const found = reported.get(item.node.id);
+      if (found) { nodes.push({ ...found, meta: [...new Set([...found.meta, ...item.meta])] }); reported.delete(item.node.id); }
+      else if (item.meta.length) nodes.push(item);
+    }
+    nodes.push(...reported.values());
+    const set: ChangeSet = freeze({ commit: batch.commit, ...(batch.label ? { label: batch.label } : {}), cause: batch.cause,
+      nodes: nodes.sort((a, b) => a.node.id < b.node.id ? -1 : a.node.id > b.node.id ? 1 : 0) });
+    this.assembled.set(batch.commit, set);
+    if (this.assembled.size > 64) this.assembled.delete(this.assembled.keys().next().value!);
+    if (set.nodes.length && this.commitsSeed.active) this.env.observe(this.commitsSeed, set as unknown as Json);
+  }
+
+  // ---- the kernel nodes of an entity (created on demand) ----
+
+  private entitySeed(ref: NodeRef): KNode {
+    let seed = this.entitySeeds.get(ref.id);
+    if (!seed) { seed = this.env.seed({ id: `entity:${ref.id}`, name: `${ref.type} ${ref.id}` }); this.entitySeeds.set(ref.id, seed); }
+    return seed;
+  }
+
+  private effectiveInputs(ref: NodeRef): KNode[] {
+    const state = this.records.get(ref.id)?.head;
+    return [this.entitySeed(ref), ...(state?.layers ?? []).filter(layer => !layer.at).map(layer => this.effectiveNode(layer.from))];
+  }
+
+  /** The layering combinator of a node: its effective value, reporting exact changes (SPEC §12.8). */
+  private effectiveNode(ref: NodeRef): KNode<EffectiveOut> {
+    let node = this.effectiveNodes.get(ref.id);
+    if (node) return node;
+    const target = refOf(ref);
+    node = this.env.combinator<EffectiveOut>({ id: `effective:${ref.id}`, name: `effective ${ref.id}`, inputs: [],
+      compute: context => this.computeEffective(target, context.previous?.value as EffectiveOut | undefined) });
+    this.effectiveNodes.set(ref.id, node);
+    this.env.setInputsNow(node, this.effectiveInputs(target));
+    return node;
+  }
+
+  private computeEffective(ref: NodeRef, previous: EffectiveOut | undefined): EffectiveOut | typeof UNCHANGED {
+    const state = this.headState(ref), def = this.types.get(ref.type);
+    const value = state ? this.head.resolver.effective(ref) : undefined;
+    const out: EffectiveOut = { exists: !!state, name: state?.name ?? "", trashed: !!state?.trashed, layers: state?.layers ?? [], ...(value ? { value } : {}) };
+    if (!previous) return out;
+    const paths = def ? diffLeaves(def, previous.value, value) : [];
+    const meta: NodeChange["meta"][number][] = [];
+    if (!previous.exists && out.exists) meta.push("created");
+    if (previous.exists && !out.exists) meta.push(this.records.get(ref.id)?.head ? "retracted" : "purged");
+    if (previous.exists && out.exists) {
+      if (previous.name !== out.name) meta.push("name");
+      if (!equal(previous.layers, out.layers)) meta.push("layers");
+      if (previous.trashed !== out.trashed) meta.push("trashed");
+    }
+    if (!paths.length && !meta.length) return UNCHANGED;
+    const change: NodeChange = { node: ref, paths, meta, via: [] };
+    this.reports.push(change);
+    return { ...out, change };
   }
 
   private readonly purgedRefs = new Map<string, NodeRef>();
@@ -1165,33 +1247,75 @@ export class StrataGraph implements GraphView {
     }
   }
 
-  // ---- publishing ----
+  // ---- publishing: subscriptions are effects (SPEC §5.4), ended by abort signals (§8.4) ----
 
-  /** Subscribes to every commit's change set. Returns an unsubscribe function. */
-  subscribeAll(listener: (changes: ChangeSet) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-  /** Subscribes to one node: called once per commit that changes its value, bookkeeping or what it follows. */
-  subscribe(ref: NodeRef, listener: (change: NodeChange, changes: ChangeSet) => void): () => void {
-    let set = this.nodeListeners.get(ref.id);
-    if (!set) this.nodeListeners.set(ref.id, set = new Set());
-    set.add(listener);
-    if (!this.refIndexReady) this.ensureRefIndex();
-    return () => { set!.delete(listener); if (!set!.size) this.nodeListeners.delete(ref.id); };
-  }
-  /** Subscribes to the pending (unacknowledged) commits: the host keeps them as its recovery copy. */
-  subscribePending(listener: (pending: readonly PendingCommit[]) => void): () => void {
-    this.pendingListeners.add(listener);
-    return () => this.pendingListeners.delete(listener);
+  /**
+   * Every commit's change set, until `signal` aborts. While anyone subscribes to everything, every node's layering
+   * combinator is demanded, so change sets report every changed path.
+   */
+  subscribeAll(listener: (changes: ChangeSet) => void, options: { readonly signal: AbortSignalLike }): void {
+    if (options.signal.aborted) return;
+    if (this.allSubscribers++ === 0) {
+      this.allDemand = new Aborter();
+      for (const rec of this.records.values()) if (!rec.constant) this.effectiveNode(rec.ref).demand(LATEST, this.allDemand.signal, "all");
+    }
+    const effect = this.env.effect({ name: "subscribe all", inputs: [this.commitsSeed], run: context => {
+      for (const entry of context.inputs[0].fresh) listener(entry.value as unknown as ChangeSet);
+    } });
+    this.env.connect(effect, options.signal);
+    options.signal.addEventListener("abort", () => {
+      if (--this.allSubscribers === 0) { this.allDemand?.abort("unsubscribed"); this.allDemand = null; }
+    }, { once: true });
   }
 
-  private publish(set: ChangeSet): void {
-    if (!set.nodes.length) return;
-    for (const listener of [...this.listeners]) listener(set);
-    for (const change of set.nodes) for (const listener of [...this.nodeListeners.get(change.node.id) ?? []]) listener(change, set);
+  /**
+   * One node's changes, until `signal` aborts: called once per cycle that changes its effective value or bookkeeping,
+   * and, with `follows`, when a node it reaches through `follows` references changes (`via` names them).
+   */
+  subscribe(ref: NodeRef, listener: (change: NodeChange) => void, options: { readonly signal: AbortSignalLike; readonly follows?: boolean }): void {
+    if (options.signal.aborted) return;
+    if (options.follows) this.ensureRefIndex();
+    const target = refOf(ref);
+    const self = this.effectiveNode(target);
+    const inputsFor = () => options.follows ? [self, ...this.followsClosure(target).map(item => this.effectiveNode(item))] : [self];
+    let effect: KNode;
+    effect = this.env.effect({ name: `subscribe ${ref.id}`, inputs: inputsFor(), run: context => {
+      const own = context.inputs[0].changed ? (context.inputs[0].value as EffectiveOut | undefined)?.change : undefined;
+      const via = context.inputs.slice(1).filter(input => input.changed && (input.value as EffectiveOut | undefined)?.change)
+        .map(input => (input.value as EffectiveOut).change!.node);
+      if (own || via.length) listener(freeze({ node: target, paths: own?.paths ?? [], meta: own?.meta ?? [], via }));
+      if (options.follows) {
+        const next = inputsFor();
+        if (next.length !== effect.inputs.length || next.some((node, i) => node !== effect.inputs[i].node)) this.env.setInputs(effect, next);
+      }
+    } });
+    this.env.connect(effect, options.signal);
   }
-  private notifyPending(): void { const pending = this.pending(); for (const listener of [...this.pendingListeners]) listener(pending); }
+
+  /** The pending (unacknowledged) commits whenever they change, until `signal` aborts: the host's recovery copy. */
+  subscribePending(listener: (pending: readonly PendingCommit[]) => void, options: { readonly signal: AbortSignalLike }): void {
+    const effect = this.env.effect({ name: "pending", inputs: [this.pendingSeed], run: context => {
+      if (context.inputs[0].changed) listener(context.inputs[0].value as unknown as PendingCommit[]);
+    } });
+    this.env.connect(effect, options.signal);
+  }
+
+  /** Nodes reachable from `ref` through `follows` references (not `ref` itself). */
+  private followsClosure(ref: NodeRef): NodeRef[] {
+    const seen = new Set<string>([ref.id]), out: NodeRef[] = [], stack = [ref];
+    while (stack.length) {
+      const at = stack.pop()!;
+      for (const item of this.refsOut.get(at.id) ?? []) {
+        if (!item.follows || seen.has(item.target.id)) continue;
+        seen.add(item.target.id);
+        out.push(item.target);
+        stack.push(item.target);
+      }
+    }
+    return out;
+  }
+
+  private notifyPending(): void { this.env.observe(this.pendingSeed, this.pending() as unknown as Json); }
 
   private deliverSession(groups: Map<string, { ref: NodeRef; def: TypeDef; entries: Entry[] }>): void {
     for (const group of groups.values()) if (this.records.get(group.ref.id)?.session) this.deliverToSinks(group.entries);
@@ -1216,28 +1340,55 @@ export class StrataGraph implements GraphView {
   /** Whether the store has acknowledged a commit. */
   acknowledged(commit: string): boolean { return this.ackedCommits.has(commit); }
 
+  /** Long-running store work as a child process of the store driver's run; the promise is for the host API. */
+  private storeTask<T>(name: string, work: (signal: AbortSignalLike) => Promise<T>): Promise<T> {
+    const run = this.storeRun;
+    if (!run) return Promise.reject(new Error("The graph has no store."));
+    return new Promise<T>((resolve, reject) => {
+      run.spawn(name, signal => { const promise = work(signal); promise.then(resolve, reject); return promise.then(() => null); });
+    });
+  }
+
+  /**
+   * Sends the oldest pending commit to the store as an `append` process. Its result arrives as an observation of
+   * the process node (SPEC §9.2); an effect hands it to bookkeeping between cycles. A failed or timed-out append is
+   * retried after a `retry` process (a timer) completes.
+   */
   private pump(): void {
-    if (!this.store || this.inflight !== null || this.retryCancel || !this.outbox.length) {
+    if (!this.store || !this.storeRun || this.inflight !== null || this.retrying || !this.outbox.length) {
       if (!this.outbox.length) this.resolveFlush();
       return;
     }
-    const item = this.outbox[0], token = ++this.token;
+    const run = this.storeRun, store = this.store, item = this.outbox[0], token = ++this.token;
     this.inflight = token;
-    let settled = false;
-    const cancelTimeout = this.sources.clock.after(this.replyTimeoutMs, () => {
-      if (settled || this.inflight !== token) return;
-      settled = true;
+    const process = run.spawn("append", signal => new Promise<Json>((resolve, reject) => {
+      this.sources.clock.after(this.replyTimeoutMs, () => reject(new Error("The database didn't answer in time.")), signal);
+      store.append({ commit: item.commit, entries: item.entries, expect: item.expect }).then(result => resolve(result as unknown as Json), reject);
+    }));
+    this.whenSettled(process, state => {
+      if (this.inflight !== token) return;
       this.inflight = null;
-      this.scheduleRetry();
+      if (state.status === "done") this.onReply(item, state.result as unknown as AppendResult);
+      else if (state.status === "failed") this.scheduleRetry();
     });
-    this.store.append({ commit: item.commit, entries: item.entries, expect: item.expect }).then(
-      result => { if (settled || this.inflight !== token) return; settled = true; cancelTimeout(); this.inflight = null; this.onReply(item, result); },
-      () => { if (settled || this.inflight !== token) return; settled = true; cancelTimeout(); this.inflight = null; this.scheduleRetry(); });
+  }
+
+  /** Runs `then` (between cycles) once a process reaches a terminal state. */
+  private whenSettled(process: Process, then: (state: ProcessState) => void): void {
+    const run = this.storeRun!, done = new Aborter(run.signal);
+    run.effect({ name: `${process.name} result`, inputs: [process], signal: done.signal, run: context => {
+      const state = context.inputs[0].value as ProcessState | undefined;
+      if (!state || state.status === "running" || state.status === "progress") return;
+      done.abort("settled");
+      this.env.change(() => then(state));
+    } });
   }
 
   private scheduleRetry(): void {
-    if (this.retryCancel) return;
-    this.retryCancel = this.sources.clock.after(this.retryMs, () => { this.retryCancel = null; this.pump(); });
+    if (this.retrying || !this.storeRun) return;
+    this.retrying = true;
+    const timer = this.storeRun.spawn("retry", signal => new Promise<Json>(resolve => this.sources.clock.after(this.retryMs, () => resolve(null), signal)));
+    this.whenSettled(timer, () => { this.retrying = false; this.pump(); });
   }
 
   private onReply(item: PendingCommit, result: AppendResult): void {
@@ -1295,7 +1446,7 @@ export class StrataGraph implements GraphView {
     for (const item of dropped) this.rejectedCommits.push({ ...item, reason: "stale" });
     const touched = new Map<string, Touch>();
     for (const item of dropped) for (const entry of item.entries) touched.set(entry.node.id, "all");
-    const changes = this.refresh(touched, () => {
+    const beforeStates = this.refresh(touched, () => {
       for (const id of touched.keys()) {
         const rec = this.records.get(id);
         if (!rec) continue;
@@ -1312,7 +1463,7 @@ export class StrataGraph implements GraphView {
     for (const stacks of [this.undoStacks, this.redoStacks]) for (const [scope, stack] of stacks) stacks.set(scope, stack.filter(id => !ids.has(id)));
     for (const id of ids) this.commits.delete(id);
     this.notifyPending();
-    this.publish(freeze({ commit: dropped[0].commit, cause: "rollback", nodes: changes }));
+    this.emit(beforeStates, "rollback", `rollback:${dropped[0].commit}`);
   }
 
   /** Resolves when every pending commit has been acknowledged or rejected. */
@@ -1345,10 +1496,10 @@ export class StrataGraph implements GraphView {
         const moved = freeze({ ...entry, pos: ++this.headPos });
         group.entries.push(moved);
       }
-      const changes = this.applyGroups(groups, "recover");
+      const before = this.applyGroups(groups, "recover");
       this.outbox.push({ ...item, entries: [...groups.values()].flatMap(group => group.entries) });
       applied++;
-      this.publish(freeze({ commit: item.commit, cause: "recover", nodes: changes }));
+      this.emit(before, "recover", item.commit, item.label);
     }
     this.notifyPending();
     this.pump();
@@ -1362,7 +1513,8 @@ export class StrataGraph implements GraphView {
   async sync(): Promise<{ readonly applied: number }> {
     if (!this.store) return { applied: 0 };
     await this.flush();
-    const { head, entries } = await this.store.changesSince(this.storeHead);
+    const store = this.store;
+    const { head, entries } = await this.storeTask("changes", () => store.changesSince(this.storeHead));
     const foreign = entries.filter(entry => !this.ackedCommits.has(entry.commit) && this.types.has(entry.node.type));
     if (this.outbox.length && foreign.some(entry => this.outbox.some(item => item.entries.some(own => own.node.id === entry.node.id))))
       this.rollbackPending();
@@ -1379,23 +1531,19 @@ export class StrataGraph implements GraphView {
       this.ackedCommits.add(entry.commit);
     }
     for (const ref of reload) groups.delete(ref.id);
-    let changes: NodeChange[] = [];
+    const before = new Map<string, NodeState | null>();
     if (groups.size) {
-      changes = this.applyGroups(groups, "sync");
+      for (const [id, state] of this.applyGroups(groups, "sync")) before.set(id, state);
       for (const group of groups.values()) { const rec = this.records.get(group.ref.id)!; rec.ackedSeq = rec.headSeq; }
     }
     for (const ref of reload) {
-      const all = await this.store.readStream(ref);
+      const all = await this.storeTask("read", () => store.readStream(ref));
       const touched = new Map<string, Touch>([[ref.id, "all"]]);
-      changes.push(...this.refresh(touched, () => {
-        const before = this.records.get(ref.id)?.head ?? null;
-        this.installRecord(ref, this.types.get(ref.type)!, undefined, all);
-        void before;
-      }, "sync"));
+      for (const [id, state] of this.refresh(touched, () => this.installRecord(ref, this.types.get(ref.type)!, undefined, all), "sync")) before.set(id, state);
     }
     this.storeHead = Math.max(this.storeHead, head);
     this.headPos = Math.max(this.headPos, head);
-    if (changes.length) this.publish(freeze({ commit: foreign.at(-1)?.commit ?? "sync", cause: "sync", nodes: changes }));
+    if (before.size) this.emit(before, "sync", `sync:${foreign.at(-1)?.commit ?? head}`);
     return { applied: foreign.length };
   }
 
@@ -1415,7 +1563,7 @@ export class StrataGraph implements GraphView {
     const snapshot: Snapshot = freeze({ node: rec.ref, seq: rec.ackedSeq, pos: last?.pos ?? rec.base.pos, schema: rec.def.schema, state });
     rec.snapshotSeq = rec.ackedSeq;
     const store = this.store;
-    this.snapshotQueue = this.snapshotQueue.then(() => store.putSnapshot(snapshot)).catch(() => { rec.snapshotSeq = 0; });
+    this.snapshotQueue = this.snapshotQueue.then(() => this.storeTask("snapshot", () => store.putSnapshot(snapshot))).catch(() => { rec.snapshotSeq = 0; });
   }
 
   /** Writes a snapshot for every node changed since its last one (the Studio calls it when closing). */
@@ -1682,7 +1830,8 @@ export class StrataGraph implements GraphView {
     if (!acked.length) return { ok: true, before: 0, after: 0 };
     const rolled = current.def.stream === "value" ? rollupValueStream(acked, keep) : rollupDeltaStream(current.def, acked, keep, options.bucketMs ?? 1000);
     // The store keeps anything appended after `through` meanwhile; so does memory.
-    if (this.store && !current.session) await this.store.compact(ref, rolled, this.sources.clock.now());
+    const store = this.store;
+    if (store && !current.session) await this.storeTask("compact", () => store.compact(ref, rolled, this.sources.clock.now()));
     const after = this.records.get(ref.id);
     if (after) {
       after.entries = [...rolled, ...after.entries.filter(entry => entry.seq > through)];
@@ -1707,8 +1856,9 @@ export class StrataGraph implements GraphView {
     const host = this.records.get(result.host.node.id)!;
     const rewrite = (entries: readonly Entry[]) => entries.map(entry => entry.seq === result.host.seq ? freeze(result.host) : entry);
     if (this.store) {
-      await this.store.compact(host.ref, rewrite(host.entries.filter(entry => entry.seq <= result.host.seq)), this.sources.clock.now());
-      await this.store.purge(ref);
+      const store = this.store;
+      await this.storeTask("compact", () => store.compact(host.ref, rewrite(host.entries.filter(entry => entry.seq <= result.host.seq)), this.sources.clock.now()));
+      await this.storeTask("purge", () => store.purge(ref));
     }
     host.entries = rewrite(host.entries);
     host.base = { seq: 0, pos: 0, state: null };
@@ -1739,10 +1889,11 @@ export class StrataGraph implements GraphView {
     if (dependents.length && !options.force)
       return refusal("dependents", "Other nodes take values from this one: detach them or point them elsewhere first.", { dependents });
     await this.flush();
-    if (this.store && !rec.session) await this.store.purge(ref);
+    const store = this.store;
+    if (store && !rec.session) await this.storeTask("purge", () => store.purge(ref));
     const touched = new Map<string, Touch>([[ref.id, "all"]]);
     this.purgedRefs.set(ref.id, rec.ref);
-    const changes = this.refresh(touched, () => {
+    const beforeStates = this.refresh(touched, () => {
       const before = rec.head;
       this.records.delete(ref.id);
       this.indexLayers(ref.id, before, null);
@@ -1751,7 +1902,7 @@ export class StrataGraph implements GraphView {
     for (const stacks of [this.undoStacks, this.redoStacks]) for (const [scope, stack] of stacks)
       stacks.set(scope, stack.filter(id => !this.commits.get(id)?.touches.has(ref.id)));
     this.timeModels.clear();
-    this.publish(freeze({ commit: `purge:${ref.id}`, cause: "purge", nodes: changes }));
+    this.emit(beforeStates, "purge", `purge:${ref.id}`);
     return { ok: true };
   }
 
@@ -1820,6 +1971,18 @@ export class StrataGraph implements GraphView {
       outbox: this.outbox,
     };
   }
+}
+
+/** The leaf paths whose values differ between two effective values of a type (maps walked per key). */
+function diffLeaves(def: TypeSpec, a: Readonly<Record<string, unknown>> | undefined, b: Readonly<Record<string, unknown>> | undefined): Path[] {
+  const out: Path[] = [];
+  const walk = (path: string[], kind: import("./types").FieldKind, x: unknown, y: unknown) => {
+    if (kind.kind !== "map") { if (!equal(x, y)) out.push(path); return; }
+    const xs = (x ?? {}) as Record<string, unknown>, ys = (y ?? {}) as Record<string, unknown>;
+    for (const key of [...new Set([...Object.keys(xs), ...Object.keys(ys)])].sort()) walk([...path, key], kind.of, xs[key], ys[key]);
+  };
+  for (const [field, spec] of Object.entries(def.fields)) walk([field], spec, a?.[field], b?.[field]);
+  return out.sort((p, q) => pathKey(p) < pathKey(q) ? -1 : pathKey(p) > pathKey(q) ? 1 : 0);
 }
 
 /** The edits of one commit as they are built: working states, the ops per node, and created labels. */

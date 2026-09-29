@@ -5,6 +5,7 @@
  */
 import { hash } from "../json";
 import { JobQueue } from "../sources";
+import type { AbortSignalLike } from "../kernel/abort";
 import type { Clock, FileSource, InputEvent, InputSource, JobPriority, JobSource, Random, RandomStream, RequestSource } from "../sources";
 
 /** A small, fast, seedable PRNG (sfc32). */
@@ -104,8 +105,16 @@ export function simClock(scheduler: Scheduler): Clock {
   return {
     now: () => scheduler.epoch + scheduler.now,
     monotonic: () => scheduler.now,
-    after: (ms, run) => scheduler.schedule(ms, "timer", `after ${ms}`, run),
-    frame: run => scheduler.schedule(16, "frame", "frame", () => run(scheduler.now)),
+    after: (ms, run, signal) => {
+      if (signal?.aborted) return;
+      const cancel = scheduler.schedule(ms, "timer", `after ${ms}`, run);
+      signal?.addEventListener("abort", cancel, { once: true });
+    },
+    frame: (run, signal) => {
+      if (signal?.aborted) return;
+      const cancel = scheduler.schedule(16, "frame", "frame", () => run(scheduler.now));
+      signal?.addEventListener("abort", cancel, { once: true });
+    },
   };
 }
 
@@ -168,7 +177,11 @@ export class SimFiles implements FileSource {
 export class SimInput implements InputSource {
   private listeners = new Set<(event: InputEvent) => void>();
   constructor(private scheduler: Scheduler) {}
-  subscribe(listener: (event: InputEvent) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  subscribe(listener: (event: InputEvent) => void, signal: AbortSignalLike) {
+    if (signal.aborted) return;
+    this.listeners.add(listener);
+    signal.addEventListener("abort", () => this.listeners.delete(listener), { once: true });
+  }
   emit(event: InputEvent, delay = 0): void {
     this.scheduler.schedule(delay, "input", event.kind, () => { for (const listener of [...this.listeners]) listener(event); });
   }

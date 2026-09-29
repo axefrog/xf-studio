@@ -134,7 +134,7 @@ export interface RunContext {
   /** The run's process node. */
   readonly process: Process;
   /** An effect connected for the length of the run (it demands its inputs while connected). */
-  effect(spec: { readonly name?: string; readonly inputs: readonly Input[]; readonly run: Run; readonly id?: string }): KNode;
+  effect(spec: { readonly name?: string; readonly inputs: readonly Input[]; readonly run: Run; readonly id?: string; readonly signal?: AbortSignalLike }): KNode;
   /** A child process doing long-running work in the context of `parent` (the run's process by default). */
   spawn<R extends Json>(name: string, work: (signal: AbortSignalLike, report: (progress: Json) => void) => Promise<R>, options?: { readonly parent?: Process; readonly id?: string }): Process;
   /** Starts a child driver whose run is a child of `parent` (the run's process by default). */
@@ -166,6 +166,9 @@ export type CycleReport = {
   /** Nodes that received START but never finished (must be empty: K5). */
   readonly unbalanced: readonly KNode[];
 };
+
+/** Creates a kernel environment. */
+export const createEnvironment = (options: EnvironmentOptions): Environment => new Environment(options);
 
 /** A kernel environment: nodes, cycles and the queue of pending changes and observations. */
 export class Environment {
@@ -602,7 +605,9 @@ export class Environment {
       effect: spec => {
         const effect = this.effect(spec);
         scope.nodes.push(effect);
-        this.change(() => { if (!scope.signal.aborted) this.connectEffect(effect, scope); });
+        this.change(() => { if (!scope.signal.aborted && !spec.signal?.aborted) this.connectEffect(effect, scope); });
+        // An effect may end before its run, by its own token.
+        onAbort(spec.signal, () => this.change(() => { this.disconnect(effect); this.nodes.delete(effect.id); }));
         return effect;
       },
       spawn: (name, work, options = {}) => this.spawn(name, work, options.parent ?? scope.process, options.id),

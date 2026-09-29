@@ -4,6 +4,7 @@
  * ones in tests (`strata/testing`); nothing else changes between the two. The engine itself reads only these.
  */
 import type { Entry, NodeType } from "./types";
+import type { AbortSignalLike } from "./kernel/abort";
 
 /** Wall time, monotonic time and timers. */
 export interface Clock {
@@ -11,10 +12,10 @@ export interface Clock {
   now(): number;
   /** A monotonic time in milliseconds, for measuring durations. */
   monotonic(): number;
-  /** Runs `run` after `ms` milliseconds; returns a cancel function. */
-  after(ms: number, run: () => void): () => void;
-  /** Runs `run` at the next animation frame, where the host has frames (otherwise soon). Returns a cancel function. */
-  frame?(run: (time: number) => void): () => void;
+  /** Runs `run` after `ms` milliseconds, unless `signal` aborts first. */
+  after(ms: number, run: () => void, signal?: AbortSignalLike): void;
+  /** Runs `run` at the next animation frame, where the host has frames (otherwise soon), unless `signal` aborts first. */
+  frame?(run: (time: number) => void, signal?: AbortSignalLike): void;
 }
 
 /** One named, seeded stream of randomness. */
@@ -31,7 +32,7 @@ export interface Random { stream(name: string): RandomStream }
 
 /** Input events from people: pointer, keys, wheel, focus, file picks and drops, window and theme changes. */
 export type InputEvent = { readonly kind: string; readonly [key: string]: unknown };
-export interface InputSource { subscribe(listener: (event: InputEvent) => void): () => void }
+export interface InputSource { subscribe(listener: (event: InputEvent) => void, signal: AbortSignalLike): void }
 
 /** Files through the host: listings and bytes. */
 export interface FileSource {
