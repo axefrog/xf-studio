@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "process.schema.json",
+  "title": "A process model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "driver",
+    "work",
+    "progress",
+    "result",
+    "failure",
+    "cancel",
+    "cleanup",
+    "deadline",
+    "lane"
+  ],
+  "properties": {
+    "kind": {
+      "const": "process"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "driver": {
+      "type": "string",
+      "pattern": "^(driver):[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "work": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "progress": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "result": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "failure": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "cancel": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "cleanup": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "deadline": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      ]
+    },
+    "lane": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "faults": {
+      "$ref": "common.schema.json#/$defs/faults"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

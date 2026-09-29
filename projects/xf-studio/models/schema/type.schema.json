@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "type.schema.json",
+  "title": "A type model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "class",
+    "schema",
+    "stream",
+    "fields"
+  ],
+  "properties": {
+    "kind": {
+      "const": "type"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "class": {
+      "enum": [
+        "authored",
+        "session"
+      ]
+    },
+    "schema": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "stream": {
+      "enum": [
+        "delta",
+        "value"
+      ]
+    },
+    "fields": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "common.schema.json#/$defs/fieldKind"
+      }
+    },
+    "defaults": {
+      "type": "object"
+    },
+    "constants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "label",
+          "fields"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "label": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "fields": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "uniqueItems": true
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "how"
+      ],
+      "properties": {
+        "from": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "how": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "dryRun": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "copy": {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runtime.schema.json",
+  "title": "A runtime model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "key",
+    "factory",
+    "ready",
+    "query",
+    "linger"
+  ],
+  "properties": {
+    "kind": {
+      "const": "runtime"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "environment": {
+      "$ref": "common.schema.json#/$defs/environment"
+    },
+    "key": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "common.schema.json#/$defs/ref"
+          },
+          {
+            "$ref": "common.schema.json#/$defs/text"
+          }
+        ]
+      }
+    },
+    "factory": {
+      "$ref": "common.schema.json#/$defs/adapter"
+    },
+    "ready": {
+      "anyOf": [
+        {
+          "$ref": "common.schema.json#/$defs/ref"
+        },
+        {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      ]
+    },
+    "query": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "input",
+          "output"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-zA-Z0-9]*$"
+          },
+          "input": {
+            "$ref": "common.schema.json#/$defs/jsonSchema"
+          },
+          "output": {
+            "$ref": "common.schema.json#/$defs/jsonSchema"
+          },
+          "budget": {
+            "$ref": "common.schema.json#/$defs/text"
+          }
+        }
+      }
+    },
+    "linger": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

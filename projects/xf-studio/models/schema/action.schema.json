@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "action.schema.json",
+  "title": "A action model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "name",
+    "target",
+    "input",
+    "capability",
+    "effect",
+    "undo"
+  ],
+  "properties": {
+    "kind": {
+      "const": "action"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9]+(\\.[a-zA-Z0-9]+)*$"
+    },
+    "target": {
+      "type": "string",
+      "pattern": "^(type):[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "input": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "when"
+      ],
+      "properties": {
+        "when": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "refusals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "reason"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+              },
+              "reason": {
+                "$ref": "common.schema.json#/$defs/text"
+              }
+            }
+          }
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 2,
+      "properties": {
+        "commit": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "raises": {
+          "type": "string",
+          "pattern": "^(request):[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "session": {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      }
+    },
+    "undo": {
+      "enum": [
+        "look",
+        "character",
+        "clothing",
+        "view-lighting",
+        "none"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

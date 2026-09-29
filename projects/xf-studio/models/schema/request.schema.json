@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "request.schema.json",
+  "title": "A request model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "goal",
+    "accepts",
+    "reasons",
+    "servedBy"
+  ],
+  "properties": {
+    "kind": {
+      "const": "request"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "goal": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "accepts": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "shows",
+          "supplies",
+          "blocks",
+          "warms",
+          "consents",
+          "person",
+          "maintains",
+          "cleans"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "servedBy": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^(driver):[a-z0-9]+(-[a-z0-9]+)*$"
+      }
+    },
+    "faults": {
+      "$ref": "common.schema.json#/$defs/faults"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}
