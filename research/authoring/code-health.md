@@ -707,6 +707,7 @@ Track D of the 1.0 readiness audit, copy, terminology and states ([audit](releas
 - **States and colours (C-21 to C-25):** menu and palette reasons muted; danger only for removals Undo or recovery can't bring back; Hair look's readout a number between its named ends; the Mottle switch reads "Break up the coverage"; an unavailable primary takes the default button's colours.
 - **Status line (C-14):** see UI-151.
 - **UI-142** (partial), **UI-143**, **UI-145**, **UI-147**, **UI-148**, **UI-149**, **UI-151**, **UI-153**, **DESK-05** (already fixed by `efb79ac`): see their rows.
+- **UI/UX gate fixes (29 September, after merging the layout track):** the desktop Build reasons name Settings › Game and plain WolvenKit; the Activity log files preview.* actions under 3D view or Camera & light; "the prepared 3D view files", "A preset holds up to 32 layers", "one Colour-shifting layer"; the palette's "Preview quality: Try again" (keywords keep "rebuild"); the menu's `quietReason` flag is gone (every menu reason is muted; lib-menu says so once) and SliderWithValue's guide entry names `quietReason`; the mod line's direct Rename goes through `modLine`'s action slot, neutral and centred like any ghost button, with the state in lib-mod-line; the Report dialog keeps the layout track's switches and wording with no per-part or per-group sizes; the site says "3D view" and "More finishes that can be built".
 
 ## Fixed in claude/track-d-layout
 

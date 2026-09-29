@@ -64,14 +64,17 @@ test("a set's mod renames from its button while the name is the default, with th
   const globals = globalThis as { window?: unknown; requestAnimationFrame?: unknown };
   const had = { window: globals.window, raf: globals.requestAnimationFrame };
   globals.window = { innerWidth: 1200, innerHeight: 800 };
-  globals.requestAnimationFrame ??= (run: () => void) => setTimeout(run, 0);
+  // Focus placement after a frame isn't what this checks: a frame that never comes keeps it out of the light DOM.
+  globals.requestAnimationFrame = () => 0;
   try {
     const { close } = openValuePopover({ kind: "text", label: "Mod name", value: "XF Smiles", maxLength: 80 }, { x: 10, y: 10 },
       { title: "Rename mod", apply: "Rename", hint: MOD_NAME_HINT, validate: () => ({ available: true }), commit: () => {} });
     const note = document.body.querySelector(".popover-note")!;
     expect([note.textContent, note.classList.contains("hint")]).toEqual(["The name your mod manager shows for this mod.", true]);
+    // Let the popover arm its outside-click listener, then close it, so nothing of it outlives this test.
+    await new Promise(done => setTimeout(done, 5));
     close(false);
-  } finally { globals.window = had.window; if (!had.raf) delete globals.requestAnimationFrame; }
+  } finally { globals.window = had.window; if (had.raf) globals.requestAnimationFrame = had.raf; else delete globals.requestAnimationFrame; }
   // While a Build runs, the line says what it does and how long it usually takes, never a bare "Building…" (UI-142).
   expect([...root.querySelectorAll("span")].some(span => span.textContent === "Making and checking the mod files. This usually takes a minute or two…")).toBe(true);
   sets = [{ ...sets[0]!, modName: "XF Grins", revision: 2 }];

@@ -29,7 +29,7 @@ export function editLayers(value: Recipe, activeId: string | undefined, command:
   const index = "id" in command ? layers.findIndex(l => l.id === command.id) : -1;
   if ("id" in command && index < 0) throw Error("That layer no longer exists.");
   if (command.kind === "add" || command.kind === "duplicate") {
-    if (layers.length >= MAX_LAYERS) throw Error(`This preview currently supports up to ${MAX_LAYERS} layers.`);
+    if (layers.length >= MAX_LAYERS) throw Error(`A preset holds up to ${MAX_LAYERS} layers.`);
     const layer = structuredClone(command.kind === "duplicate" ? layers[index] : region.newLayer());
     if (!command.newId) throw Error("A new layer needs its ID from the host.");
     layer.id = command.newId;
@@ -58,7 +58,7 @@ export function layerCapability(recipe: Recipe, action: LayerAction): Capability
     return refusal("missing_target", "That layer no longer exists.");
   if (action.kind === "layer.edit") {
     if ((command.kind === "add" || command.kind === "duplicate") && recipe.layers.length >= MAX_LAYERS)
-      return refuse({ code: "range", message: `This preview currently supports up to ${MAX_LAYERS} layers.` });
+      return refuse({ code: "range", message: `A preset holds up to ${MAX_LAYERS} layers.` });
     if ((command.kind === "add" || command.kind === "duplicate") && command.newId !== undefined &&
         (typeof command.newId !== "string" || !command.newId || recipe.layers.some(layer => layer.id === command.newId)))
       return refusal("invalid_value", "The new layer needs an unused ID.");

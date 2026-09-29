@@ -60,7 +60,7 @@ export const PREVIEW_CORE_STEPS: readonly { step: PreviewCoreStep; label: string
   { step: "checking", label: "Checking the head against the supported game version" },
   { step: "assembling", label: "Building the 3D head, eye plate and eyes" },
   { step: "maps", label: "Converting the skin and eye textures" },
-  { step: "verifying", label: "Checking the prepared preview files" },
+  { step: "verifying", label: "Checking the prepared 3D view files" },
 ];
 export type EnsurePreviewCoreOptions = { gameRoot: string; cacheRoot: string; exporter: GameAssetExporter;
   /** Archive source to read; defaults to the game's own content archives. */

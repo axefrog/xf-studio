@@ -107,7 +107,7 @@ export const FINISH_EXPORT = {
     earlierModel: "browser-only facet filtering" },
   iridescent: { gameOptics: true, route: "fresnel", experimental: true,
     layerNote: "Built as one shift tint toward the lid's edges. Not yet checked in game.",
-    summary: "Experimental: built as one shift tint when the whole preset is one colour-shift pigment. Not yet checked in game.",
+    summary: "Experimental: built as one shift tint when the whole preset is one Colour-shifting layer. Not yet checked in game.",
     earlierModel: "a fixed thin-film study with no chosen shift colour" },
   glitter: { gameOptics: false, route: null, experimental: false, layerNote: "",
     summary: "Not built into mods yet: Check and Build leave these layers out and say so.",
