@@ -90,6 +90,14 @@ ArchiveXL already changes world data as it loads. It appends mods' blocks to the
 
 It is MIT-licensed, so its techniques and code can be adapted with credit. Under the self-contained integration rule, our plugin would carry its own versions of what the generator needs, rather than requiring Red Hot Tools at runtime.
 
+**Streaming probes** (R&D that can run before 1.0 as a low-cost part of a bridge session, since it only observes): the bridge's plugin tracks sectors and nodes as they stream, as Red Hot Tools' inspector does, and logs:
+- each sector's time from box entry to load and to its nodes becoming visible;
+- load order by level and distance;
+- any prefetch margin beyond the box;
+- any bias towards where the camera or car is heading.
+
+The probes run at walking pace, in a car at speed on a fixed route, and after a teleport, with the streaming override used to test points without moving V. The results answer [world and streaming](../../knowledge/world-and-streaming.md) open question 1, and set the time budget and priority order a load-time generator must work within. The expectation to test: with the game's own hierarchy, cheap cached output for far levels and detail only for the level-0 sectors around V, plus prioritisation by heading and speed, holds up even when driving fast.
+
 **First feasibility steps:**
 1. Read Red Hot Tools' sector and node tracking and ArchiveXL's streaming hooks for where a generator could attach.
 2. Measure a sector's load budget with the bridge.
