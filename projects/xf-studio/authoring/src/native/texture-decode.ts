@@ -16,7 +16,7 @@ import type { Decompress } from "./kark";
 import { DecodeSession, DEFAULT_LIMITS, type NativeLimits } from "./limits";
 import { classifyNativeFailure, type NativeFailureKind } from "./native-errors";
 import { DEFAULT_TEXTURE_LIMITS, mipRows, servedMip, textureLayout, type TextureLimits } from "./xbm-texture";
-import { decodeMaskLayers, maskLayout } from "./mlmask";
+import { DEFAULT_MASK_LIMITS, maskLayers, maskLayout, type MaskLimits } from "./mlmask";
 
 /**
  * Version of the texture output rules; part of the texture reader's identity in cache keys. Bump it whenever what a texture decodes to
@@ -102,13 +102,13 @@ export type NativeMaskOutcome =
 
 /** Read, check and decode one `.mlmask`'s layers to PNGs (mlmask.ts); every failure is returned with its kind. */
 export async function decodeMaskFromPool(pool: NativeArchivePool, decompress: Decompress, request: NativeMaskRequest,
-  limits: NativeLimits = TEXTURE_READ_LIMITS): Promise<NativeMaskOutcome> {
+  limits: NativeLimits = TEXTURE_READ_LIMITS, maskLimits: MaskLimits = DEFAULT_MASK_LIMITS): Promise<NativeMaskOutcome> {
   try {
     const bytes = pool.read(request.archivePath, request.hash);
     if (!bytes) return { ok: false, kind: "not-indexed", message: "The archive does not list the resource." };
-    const layers = decodeMaskLayers(maskLayout(readCr2w(bytes, decompress, new DecodeSession(limits))));
+    // Each layer is encoded as soon as it is decoded, so one layer's texels are held at a time (NATIVE-71).
     const encoded = [];
-    for (const layer of layers) {
+    for (const layer of maskLayers(maskLayout(readCr2w(bytes, decompress, new DecodeSession(limits)), maskLimits))) {
       // Rows as RGBA (grey, opaque); written as RGB.
       const row = new Uint8Array(layer.width * 4).fill(255);
       const png = await encodePngRows(layer.width, layer.height, r => {

@@ -20,9 +20,13 @@
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "./native-errors";
 import { RedBuffer, type RedDocument, RedHandle, RedObject } from "./red-model";
 
-/** Caps on what one mask may ask for (the engine's layer limit is 20; masks on the reference installation are at most 4096² with 20 layers). */
-export type MaskLimits = { maxSide: number; maxLayers: number; maxAtlasSide: number };
-export const DEFAULT_MASK_LIMITS: MaskLimits = Object.freeze({ maxSide: 8192, maxLayers: 32, maxAtlasSide: 16384 });
+/**
+ * Caps on what one mask may ask for (the engine's layer limit is 20; masks on the reference installation are at most 4096² with 20 layers).
+ * `maxTexels` caps the layers' texels together, each counted at the full size (NATIVE-71: the side and layer caps alone let a 5 KB mask
+ * ask for 8192²×32 texels, about 2 GiB, from a decode lane budgeted at about 300 MB); layers are decoded and handed on one at a time.
+ */
+export type MaskLimits = { maxSide: number; maxLayers: number; maxAtlasSide: number; maxTexels: number };
+export const DEFAULT_MASK_LIMITS: MaskLimits = Object.freeze({ maxSide: 8192, maxLayers: 32, maxAtlasSide: 16384, maxTexels: 20 * 4096 * 4096 });
 
 export interface MaskLayout {
   readonly atlasWidth: number;
@@ -66,6 +70,8 @@ export function maskLayout(document: RedDocument, limits: MaskLimits = DEFAULT_M
   if (!width || !height || width > limits.maxSide || height > limits.maxSide || widthLow > width || heightLow > height)
     throw new (width > limits.maxSide || height > limits.maxSide ? NativeBudgetError : NativeMalformedError)(`A ${width}×${height} mask is outside what is decoded.`);
   if (layers > limits.maxLayers) throw new NativeBudgetError(`A mask of ${layers} layers is more than ${limits.maxLayers}.`);
+  if (layers * width * height > limits.maxTexels)
+    throw new NativeBudgetError(`A mask of ${layers} layers of ${width}×${height} is more texels than ${limits.maxTexels} together.`);
   if (atlasWidth > limits.maxAtlasSide || atlasHeight > limits.maxAtlasSide) throw new NativeBudgetError(`A ${atlasWidth}×${atlasHeight} mask atlas is too large.`);
   const atlasBuffer = blob.fields.atlasData, tilesBuffer = blob.fields.tilesData;
   if (!(atlasBuffer instanceof RedBuffer) || !(tilesBuffer instanceof RedBuffer)) throw new NativeMalformedError("The mask blob has no atlas or tile data.");
@@ -121,12 +127,17 @@ export function decodeMaskAtlas(data: Uint8Array, width: number, height: number)
 const popcount = (value: number) => { let v = value >>> 0, n = 0; while (v) { v &= v - 1; n++; } return n; };
 const divCeil = (a: number, b: number) => Math.floor((a + b - 1) / b);
 
+/** Every layer's image, in layer order, all at once (`maskLayers`; tests and oracles). */
+export function decodeMaskLayers(layout: MaskLayout): MaskLayer[] { return [...maskLayers(layout)]; }
+
 /**
- * Every layer's image, in layer order (see the module comment for the rules). Worked a tile at a time: which declaration a texel reads
- * depends only on its tile, so each tile is resolved once and only tiles that hold the layer are filled; a layer written at the
- * low-resolution size samples its nearest full-size texels directly (it has no full-size tile, so each reads the low-resolution grid).
+ * Each layer's image, in layer order, one at a time (see the module comment for the rules): a layer is decoded when the next is asked for,
+ * so a caller that encodes each before asking for the next holds one layer's texels at a time (NATIVE-71). Worked a tile at a time: which
+ * declaration a texel reads depends only on its tile, so each tile is resolved once and only tiles that hold the layer are filled; a layer
+ * written at the low-resolution size samples its nearest full-size texels directly (it has no full-size tile, so each reads the
+ * low-resolution grid).
  */
-export function decodeMaskLayers(layout: MaskLayout): MaskLayer[] {
+export function* maskLayers(layout: MaskLayout): Generator<MaskLayer, void, undefined> {
   const { width, height, widthLow, heightLow, tileSize, atlasWidth } = layout;
   const atlas = decodeMaskAtlas(layout.atlas(), layout.atlasWidth, layout.atlasHeight), tiles = layout.tiles();
   const atlasTile = tileSize + ATLAS_PADDING;
@@ -151,7 +162,6 @@ export function decodeMaskLayers(layout: MaskLayout): MaskLayer[] {
   /** The low-resolution grid's declaration for the full-size tile (tx, ty) (tile coordinates divided by the scale, in integers). */
   const lowDeclaration = (tx: number, ty: number, layer: number) =>
     declaration(widthInTilesLow * Math.floor(ty / lowScale) + Math.floor(tx / lowScale) + lowOffset, layer);
-  const out: MaskLayer[] = [];
   for (let layer = 0; layer < layout.layers; layer++) {
     let highRes = false;
     for (let tile = 0; tile < widthInTiles * heightInTiles && !highRes; tile++) if (tile * 2 + 1 < tiles.length && (tiles[tile * 2 + 1]! & (1 << layer))) highRes = true;
@@ -165,7 +175,7 @@ export function decodeMaskLayers(layout: MaskLayout): MaskLayer[] {
           if (found >= 0) small[y * widthLow + x] = texel(found, sx, sy);
         }
       }
-      out.push({ width: widthLow, height: heightLow, pixels: small });
+      yield { width: widthLow, height: heightLow, pixels: small };
       continue;
     }
     const pixels = new Uint8Array(width * height);
@@ -176,7 +186,6 @@ export function decodeMaskLayers(layout: MaskLayout): MaskLayer[] {
       const x1 = Math.min(width, (tx + 1) * tileSize), y1 = Math.min(height, (ty + 1) * tileSize);
       for (let y = ty * tileSize; y < y1; y++) for (let x = tx * tileSize; x < x1; x++) pixels[y * width + x] = texel(found, x, y);
     }
-    out.push({ width, height, pixels });
+    yield { width, height, pixels };
   }
-  return out;
 }
