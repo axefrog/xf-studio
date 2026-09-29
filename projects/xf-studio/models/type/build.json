@@ -1,0 +1,163 @@
+{
+  "kind": "type",
+  "id": "build",
+  "owner": "export",
+  "summary": "The record of one Check or Build of a mod: what it packed at which entries, what it left out and why, the verifiers' verdicts and the outcome.",
+  "status": "both",
+  "replaces": [
+    "platform/export/manifest",
+    "studio-file-operations",
+    "package-action"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "value",
+  "fields": {
+    "mod": {
+      "kind": "ref",
+      "to": "type:mod",
+      "clone": "share",
+      "doc": "The mod checked or built."
+    },
+    "action": {
+      "kind": "value",
+      "doc": "Check or Build.",
+      "shape": {
+        "enum": [
+          "check",
+          "build"
+        ]
+      }
+    },
+    "presets": {
+      "kind": "value",
+      "doc": "Every preset packed, at the entry it was packed from (node@seq), each also tagged on its own stream.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeAt"
+        }
+      }
+    },
+    "candidate": {
+      "kind": "value",
+      "doc": "The candidate's ID and manifest summary (xfs/local-package-2); files stay on disk.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "manifest": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "products": {
+      "kind": "value",
+      "doc": "Per product: its name, archive and the features it carries.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "omitted": {
+      "kind": "value",
+      "doc": "Every omitted layer or preset, with a plain reason (partial export).",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "what": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "what",
+            "reason"
+          ]
+        }
+      }
+    },
+    "identity": {
+      "kind": "value",
+      "doc": "The identity keys the mod projects to (archives, namespaces, option names, slots).",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "verifiers": {
+      "kind": "value",
+      "doc": "Each independent verifier's verdict.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "passed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "passed"
+          ]
+        }
+      }
+    },
+    "outcome": {
+      "kind": "value",
+      "doc": "Passed, promoted, refused, or failed, with a plain message.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "passed",
+              "promoted",
+              "refused",
+              "failed"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ]
+      }
+    }
+  },
+  "rules": [
+    "build-of-changed-mod"
+  ],
+  "x-friction": [
+    {
+      "gap": "Promotion into the dist store happens once after every gate, even across a crash; a replay must see the recorded outcome, never promote twice.",
+      "capability": "once-only-effects",
+      "closes": "Outside effects with an idempotency key whose outcome is recorded in the build's stream before and after."
+    }
+  ]
+}

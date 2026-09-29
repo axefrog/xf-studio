@@ -1,0 +1,131 @@
+{
+  "kind": "type",
+  "id": "save",
+  "owner": "character",
+  "summary": "A game save the Studio has done something with: where it is, its last fingerprint, its overwrite policy and its write history.",
+  "status": "target",
+  "replaces": [
+    "features/save-explorer/actions"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "ref": {
+      "kind": "value",
+      "doc": "Where the save is: the detected or chosen saves folder and the save's folder name; never a path.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "enum": [
+              "detected",
+              "chosen"
+            ]
+          },
+          "folder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "root",
+          "folder"
+        ]
+      }
+    },
+    "fingerprint": {
+      "kind": "value",
+      "doc": "The save as last seen: hashes, sizes, times and versions, and the creator node's hash (to tell 'played since' from 'changed at a mirror').",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "savedAt": {
+            "type": "string"
+          },
+          "gameVersion": {
+            "type": "number"
+          },
+          "saveVersion": {
+            "type": "number"
+          },
+          "presetVersion": {
+            "type": "number"
+          },
+          "isMale": {
+            "type": "boolean"
+          },
+          "creatorNodeSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha256",
+          "bytes",
+          "savedAt",
+          "gameVersion",
+          "saveVersion",
+          "presetVersion",
+          "isMale",
+          "creatorNodeSha256"
+        ]
+      }
+    },
+    "policy": {
+      "kind": "ref",
+      "to": "type:save-policy",
+      "clone": "follow",
+      "doc": "This save's overwrite policy, a fork of the library's save defaults."
+    },
+    "writes": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Write ID → when, which V, which route, and the hashes before and after.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "v": {
+            "$ref": "shapes.schema.json#/$defs/nodeRef"
+          },
+          "route": {
+            "enum": [
+              "new-save",
+              "overwrite"
+            ]
+          },
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "v",
+          "route",
+          "before",
+          "after"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "writes": {}
+  },
+  "rules": [
+    "save-changed-on-disk",
+    "save-missing"
+  ]
+}

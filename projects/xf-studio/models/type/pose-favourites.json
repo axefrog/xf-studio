@@ -1,0 +1,58 @@
+{
+  "kind": "type",
+  "id": "pose-favourites",
+  "owner": "poses",
+  "summary": "The person's favourite and recent photo-mode poses and which pose groups are open.",
+  "status": "both",
+  "replaces": [
+    "features/poses/host/preferences-store",
+    "features/poses/preferences"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "favourites": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Pose ID → favourite.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "recent": {
+      "kind": "value",
+      "doc": "Pose IDs most recent first (at most 20).",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20
+      }
+    },
+    "openGroups": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Group → open.",
+      "shape": {
+        "type": "boolean"
+      }
+    }
+  },
+  "defaults": {
+    "favourites": {},
+    "recent": [],
+    "openGroups": {}
+  },
+  "migration": {
+    "from": [
+      "the host's pose preferences JSON (and its verification copy)"
+    ],
+    "how": "One node per library, its revision history as entries."
+  }
+}

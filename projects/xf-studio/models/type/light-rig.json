@@ -1,0 +1,190 @@
+{
+  "kind": "type",
+  "id": "light-rig",
+  "owner": "views",
+  "summary": "A lighting setup: its lights by ID, their order, the room light, backdrop, display transform and exposure; built-ins are constants and the person's own are forks.",
+  "status": "both",
+  "replaces": [
+    "lighting-setups",
+    "studio-lighting",
+    "creator-lighting",
+    "creator-calibration",
+    "creator-lighting-rig"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The setup's name.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60
+      }
+    },
+    "lights": {
+      "kind": "map",
+      "of": {
+        "kind": "map",
+        "of": {
+          "kind": "value"
+        }
+      },
+      "doc": "Light ID → its type, name, position, target, colour, intensity, shadows and spot shape.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "directional",
+              "spot"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "target": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "colour": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "shadows": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "position",
+          "target"
+        ]
+      }
+    },
+    "lightOrder": {
+      "kind": "value",
+      "doc": "Light IDs in list order (at most 16).",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 16,
+        "uniqueItems": true
+      }
+    },
+    "focus": {
+      "kind": "value",
+      "doc": "The point the lights are placed about.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "number"
+        },
+        "minItems": 3,
+        "maxItems": 3
+      }
+    },
+    "room": {
+      "kind": "value",
+      "doc": "The room environment's strength; 0 means none.",
+      "shape": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "backdrop": {
+      "kind": "value",
+      "doc": "The stage backdrop.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "displayTransform": {
+      "kind": "value",
+      "doc": "studio (ACES) or the game's creator grade.",
+      "shape": {
+        "enum": [
+          "aces",
+          "game"
+        ]
+      }
+    },
+    "exposure": {
+      "kind": "value",
+      "doc": "ACES exposure, or the game display's k before the grade.",
+      "shape": {
+        "type": "number",
+        "minimum": 0.01,
+        "maximum": 20
+      }
+    },
+    "creator": {
+      "kind": "value",
+      "doc": "The creator rig's own readings (intensity form, cone reading, shadows), resolved per the scene's body at draw time.",
+      "shape": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  "constants": [
+    {
+      "name": "soft",
+      "label": "Soft studio",
+      "fields": {
+        "name": "Soft studio",
+        "displayTransform": "aces"
+      }
+    },
+    {
+      "name": "creator",
+      "label": "Character creator",
+      "fields": {
+        "name": "Character creator",
+        "displayTransform": "game"
+      }
+    }
+  ],
+  "rules": [
+    "shadow-casters-within-budget"
+  ],
+  "migration": {
+    "from": [
+      "preview.lightingSetups, lightingPreset, studioLights, lightAngle, exposure and creatorLighting"
+    ],
+    "how": "Each of the person's setups becomes a fork of the built-in it descends from; the shown one is referenced by the main view."
+  },
+  "x-friction": [
+    {
+      "gap": "Lights are keyed by ID but shown and numbered in order; a move rewrites the order list.",
+      "capability": "ordered-maps",
+      "closes": "A map field with an order and an identity-keeping move."
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "kind": "type",
+  "id": "layout",
+  "owner": "shell",
+  "summary": "A dock arrangement: a tree per size class, the modules shown, and panel instances with the pointer each is bound to.",
+  "status": "both",
+  "replaces": [
+    "layout-library",
+    "studio-ui/dock/layout",
+    "studio-ui/layouts",
+    "studio-ui/layout-defaults"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The layout's name in the Layouts menu.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60
+      }
+    },
+    "trees": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Size class (narrow, medium, wide) → the dock tree: groups, splits, floating windows and tab order.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "root"
+        ]
+      }
+    },
+    "modules": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Module ID → shown in this layout.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "panels": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Panel instance ID → which panel it is.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "panel": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "panel"
+        ]
+      }
+    },
+    "bindings": {
+      "kind": "map",
+      "of": {
+        "kind": "ref",
+        "to": "type:pointer",
+        "clone": "follow"
+      },
+      "doc": "Panel instance ID → the pointer its content follows."
+    },
+    "remember": {
+      "kind": "value",
+      "doc": "Whether switching away keeps changes made to this layout.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "autoSize": {
+      "kind": "value",
+      "doc": "The size class this layout is chosen for automatically, if any.",
+      "shape": {
+        "enum": [
+          "narrow",
+          "medium",
+          "wide"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "trees": {},
+    "modules": {},
+    "panels": {},
+    "bindings": {},
+    "remember": true
+  },
+  "constants": [
+    {
+      "name": "factory",
+      "label": "Factory layout",
+      "fields": {
+        "name": "Factory layout"
+      }
+    }
+  ],
+  "rules": [
+    "panel-unknown",
+    "binding-target-missing"
+  ],
+  "migration": {
+    "from": [
+      "uiPreferences.layouts (the saved layouts library)",
+      "uiPreferences.layout (the live arrangement)"
+    ],
+    "how": "Each saved layout becomes a layout node; the live arrangement stays a per-window value on the window until saved."
+  }
+}

@@ -1,0 +1,208 @@
+{
+  "kind": "type",
+  "id": "host-settings",
+  "owner": "setup",
+  "summary": "This computer's configuration: the game folder, launch route and mod manager, WolvenKit, saves folder, caches, install mode, updates and diagnostics.",
+  "status": "both",
+  "replaces": [
+    "local-settings-store",
+    "local-settings-server",
+    "local-settings",
+    "local-setup-actions",
+    "host-state"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "gameRoot": {
+      "kind": "value",
+      "doc": "The game folder, or null to detect.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "launchRoute": {
+      "kind": "value",
+      "doc": "How the game is launched: through MO2 or directly.",
+      "shape": {
+        "enum": [
+          "mo2",
+          "direct",
+          "vortex"
+        ]
+      }
+    },
+    "mo2Root": {
+      "kind": "value",
+      "doc": "The MO2 instance folder.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "mo2ProfileId": {
+      "kind": "value",
+      "doc": "The MO2 profile the preview resolves through.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "manualModRoot": {
+      "kind": "value",
+      "doc": "A manual mod folder for the direct route.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "wolvenKitCli": {
+      "kind": "value",
+      "doc": "A WolvenKit CLI the person chose; null uses the managed one.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "savesDirectory": {
+      "kind": "value",
+      "doc": "A saves folder the person chose; null uses the detected one.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "sourceCache": {
+      "kind": "value",
+      "doc": "The source cache folder and its size limit.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "directory",
+          "maxBytes"
+        ]
+      }
+    },
+    "preview": {
+      "kind": "value",
+      "doc": "Preview cache and output folders.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "cacheDirectory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputDirectory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cacheDirectory",
+          "outputDirectory"
+        ]
+      }
+    },
+    "installMode": {
+      "kind": "value",
+      "doc": "Where Add to my mod manager places a build.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "eyePlateHead": {
+      "kind": "value",
+      "doc": "Which head the eye plate is cut from when an installed head mod isn't supported.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "updates": {
+      "kind": "value",
+      "doc": "The update channel and whether to check automatically.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "checkAutomatically": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "channel",
+          "checkAutomatically"
+        ]
+      }
+    },
+    "diagnosticMode": {
+      "kind": "value",
+      "doc": "Whether the host keeps detailed traces.",
+      "shape": {
+        "type": "boolean"
+      }
+    }
+  },
+  "defaults": {
+    "launchRoute": "direct",
+    "gameRoot": null,
+    "wolvenKitCli": null,
+    "savesDirectory": null,
+    "diagnosticMode": false
+  },
+  "rules": [
+    "game-root-missing",
+    "mo2-profile-missing",
+    "wolvenkit-unusable"
+  ],
+  "migration": {
+    "from": [
+      "the host's settings.json (and the verification copy)"
+    ],
+    "how": "One host-settings node in the real library; the verification library's node is a fork of it, so it starts from the real settings and differs only where changed."
+  },
+  "x-friction": [
+    {
+      "gap": "Every host service reads these settings synchronously on every request; as a node they live in the host's graph and must re-key host work when they change, which needs the host to run a graph that shares nodes with the page.",
+      "capability": "live-sync",
+      "closes": "Nodes shared between the host's graph and the page's, with changes pushed both ways."
+    },
+    {
+      "gap": "The verification scope's settings are a second copy chosen by URL, not a profile or a fork in one library.",
+      "capability": "separate-libraries",
+      "closes": "Two graphs side by side on one host, chosen per window, with a fork from one into the other."
+    }
+  ]
+}

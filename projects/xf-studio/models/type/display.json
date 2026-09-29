@@ -1,0 +1,79 @@
+{
+  "kind": "type",
+  "id": "display",
+  "owner": "views",
+  "summary": "How a view draws: which content slots show, the stage, resolution scale and the rendering options.",
+  "status": "both",
+  "replaces": [
+    "preview-view-graph"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "content": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Content slot (brows, lashes, hair, piercings, body, clothing, and each module's own) → shown.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "stage": {
+      "kind": "value",
+      "doc": "Whether the stage is drawn.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "resolutionScale": {
+      "kind": "value",
+      "doc": "Drawing resolution relative to the view's pixels.",
+      "shape": {
+        "type": "number",
+        "minimum": 0.25,
+        "maximum": 2
+      }
+    },
+    "skinScatter": {
+      "kind": "value",
+      "doc": "Skin subsurface scattering on.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "faceShadows": {
+      "kind": "value",
+      "doc": "Contact shadows on the face on.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "hairLook": {
+      "kind": "value",
+      "doc": "The hair shading look amount.",
+      "shape": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    }
+  },
+  "defaults": {
+    "content": {
+      "brows": true,
+      "lashes": true,
+      "hair": true,
+      "piercings": true,
+      "body": false,
+      "clothing": true
+    },
+    "stage": true,
+    "resolutionScale": 1,
+    "skinScatter": true,
+    "faceShadows": true,
+    "hairLook": 0.5
+  }
+}

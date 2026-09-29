@@ -1,0 +1,160 @@
+{
+  "kind": "type",
+  "id": "preferences",
+  "owner": "shell",
+  "summary": "The person's authored preferences: theme, hints, research tools, tour records, easings, preview setup choices and texture size.",
+  "status": "both",
+  "replaces": [
+    "ui-preferences",
+    "preview-quality-actions",
+    "preview-quality",
+    "studio-ui/guidance/controller"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "theme": {
+      "kind": "value",
+      "doc": "Light, dark or match the system.",
+      "shape": {
+        "enum": [
+          "system",
+          "light",
+          "dark"
+        ]
+      }
+    },
+    "inputHints": {
+      "kind": "value",
+      "doc": "Whether viewport input hints are shown.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "researchTools": {
+      "kind": "value",
+      "doc": "Whether research tools are shown.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "tours": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Tour ID → how it ended and when.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "enum": [
+              "finished",
+              "skipped"
+            ]
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "at"
+        ]
+      }
+    },
+    "easings": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Operation scope → easing ID.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "previewSetup": {
+      "kind": "value",
+      "doc": "Whether preparation starts automatically, and whether the person declined setup.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "autostart": {
+            "type": "boolean"
+          },
+          "declined": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "autostart",
+          "declined"
+        ]
+      }
+    },
+    "textureSize": {
+      "kind": "value",
+      "doc": "The preview texture tier asked for.",
+      "shape": {
+        "enum": [
+          512,
+          1024,
+          2048,
+          4096
+        ]
+      }
+    },
+    "controlSizes": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Control → size.",
+      "shape": {
+        "type": "number"
+      }
+    },
+    "choiceSizes": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Choice type → tile size.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "choiceLayouts": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Choice type → tile layout; the key * is the panel-wide default.",
+      "shape": {
+        "type": "string"
+      }
+    }
+  },
+  "defaults": {
+    "theme": "system",
+    "inputHints": true,
+    "researchTools": false,
+    "tours": {},
+    "easings": {},
+    "previewSetup": {
+      "autostart": true,
+      "declined": false
+    },
+    "textureSize": 2048,
+    "controlSizes": {},
+    "choiceSizes": {},
+    "choiceLayouts": {}
+  },
+  "migration": {
+    "from": [
+      "the workspace's uiPreferences (theme, hints, research tools, tours, easings, sizes), previewSetup and preview.textureSize"
+    ],
+    "how": "One preferences node per library, referenced by every profile; per-viewer conveniences (expanded, scroll, sizes of regions) stay in page storage."
+  }
+}

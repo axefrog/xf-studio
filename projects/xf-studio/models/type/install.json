@@ -1,0 +1,94 @@
+{
+  "kind": "type",
+  "id": "install",
+  "owner": "install",
+  "summary": "A receipt for placing one build into a mod manager or the game folder: where, which files with their hashes, and the mod list before.",
+  "status": "both",
+  "replaces": [
+    "mod-install-host",
+    "mo2-placement",
+    "vortex-deployment"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "value",
+  "fields": {
+    "build": {
+      "kind": "ref",
+      "to": "type:build",
+      "clone": "share",
+      "doc": "The build installed."
+    },
+    "target": {
+      "kind": "value",
+      "doc": "Where it went: MO2 (instance, profile, separator) or the game folder.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "enum": [
+              "mo2",
+              "game-folder",
+              "vortex"
+            ]
+          },
+          "place": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "route",
+          "place"
+        ]
+      }
+    },
+    "files": {
+      "kind": "value",
+      "doc": "Each file placed, with its hash.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ]
+        }
+      }
+    },
+    "previousModlist": {
+      "kind": "value",
+      "doc": "The mod list as it was before, for restoring.",
+      "shape": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "replaced": {
+      "kind": "ref",
+      "to": "type:install",
+      "clone": "share",
+      "doc": "The earlier install of the same mod this one replaced."
+    }
+  },
+  "migration": {
+    "from": [
+      "the host's install receipts"
+    ],
+    "how": "Each receipt becomes an install node referencing the build of the mod node with the same UUID."
+  },
+  "x-friction": [
+    {
+      "gap": "Copying into a mod manager isn't repeatable; a crash mid-copy must resume from the recorded outcome.",
+      "capability": "once-only-effects",
+      "closes": "An outside effect with an idempotency key and a recorded outcome."
+    }
+  ]
+}

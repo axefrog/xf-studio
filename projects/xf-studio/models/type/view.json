@@ -1,0 +1,85 @@
+{
+  "kind": "type",
+  "id": "view",
+  "owner": "views",
+  "summary": "A 3D view: one reference each to its scene, camera, lights, display and tools, and an optional title.",
+  "status": "both",
+  "replaces": [
+    "platform/core/view-graph",
+    "preview-view-graph",
+    "view-actions"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "kind": {
+      "kind": "value",
+      "doc": "The view kind; 3d today, map2d later.",
+      "shape": {
+        "enum": [
+          "3d",
+          "map2d"
+        ]
+      }
+    },
+    "title": {
+      "kind": "value",
+      "doc": "The person's own title; absent means one derived from the graph.",
+      "shape": {
+        "type": "string",
+        "maxLength": 60
+      }
+    },
+    "scene": {
+      "kind": "ref",
+      "to": "type:scene",
+      "clone": "share",
+      "doc": "What the view shows; shared when a view is added."
+    },
+    "camera": {
+      "kind": "ref",
+      "to": "type:camera",
+      "clone": "follow",
+      "doc": "Where it looks from; copied when a view is added or duplicated."
+    },
+    "lights": {
+      "kind": "ref",
+      "to": "type:light-rig",
+      "clone": "share",
+      "doc": "How it is lit; shared by default."
+    },
+    "display": {
+      "kind": "ref",
+      "to": "type:display",
+      "clone": "share",
+      "doc": "What the image contains and how it is drawn; shared by default."
+    },
+    "tools": {
+      "kind": "ref",
+      "to": "type:tools",
+      "clone": "follow",
+      "doc": "Overlays and editing tools; fresh per view."
+    }
+  },
+  "defaults": {
+    "kind": "3d"
+  },
+  "rules": [
+    "camera-kind-fits-scene",
+    "tool-fits-scene"
+  ],
+  "migration": {
+    "from": [
+      "the workspace's views (xfs/view-graph-1) or, when absent, the default one-view graph from preview"
+    ],
+    "how": "Each view and node becomes a node; link and unlink become reference and fork."
+  },
+  "x-friction": [
+    {
+      "gap": "A view of a kind this build doesn't know (a newer build's map2d) must be kept, never drawn, and written back.",
+      "capability": "unknown-data-kept",
+      "closes": "Nodes of an unknown type or schema kept verbatim and read-only."
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "kind": "type",
+  "id": "profile",
+  "owner": "platform",
+  "summary": "What the interface anchors to: the nodes it introduces by role, its layout, its named pointers, module overrides and needs.",
+  "status": "target",
+  "replaces": [
+    "studio-startup",
+    "compose/studio-registry"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The profile's name.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+      }
+    },
+    "roles": {
+      "kind": "map",
+      "of": {
+        "kind": "refs",
+        "to": "*",
+        "clone": "share"
+      },
+      "doc": "Role (v, view, layout, mod, look, or a module's own) → the nodes introduced in it."
+    },
+    "layout": {
+      "kind": "ref",
+      "to": "type:layout",
+      "clone": "follow",
+      "doc": "The dock layout this profile opens with."
+    },
+    "pointers": {
+      "kind": "map",
+      "of": {
+        "kind": "ref",
+        "to": "type:pointer",
+        "clone": "follow"
+      },
+      "doc": "Pointer name (focus.view, focus.v, focus.preset, focus.mod) → the pointer node."
+    },
+    "modules": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Module ID → shown, overriding the module's default.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "needs": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Need ID → a constraint on what the profile introduces (at least one V; a masculine V).",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "min": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "where": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "role"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "roles": {},
+    "pointers": {},
+    "modules": {},
+    "needs": {}
+  },
+  "constants": [
+    {
+      "name": "starter",
+      "label": "My Studio",
+      "fields": {
+        "name": "My Studio"
+      }
+    }
+  ],
+  "rules": [
+    "profile-need-unmet",
+    "pointer-target-missing"
+  ],
+  "migration": {
+    "from": [
+      "the workspace as a whole"
+    ],
+    "how": "One profile introducing the migrated V, views, layout and mod, with focus pointers for the view, V, preset and mod the workspace had selected."
+  }
+}

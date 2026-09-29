@@ -1,0 +1,112 @@
+{
+  "kind": "type",
+  "id": "preset-expression",
+  "owner": "expressions",
+  "summary": "One saved facial expression: sparse control weights by track name, the left and right links, its menu label and where editing started.",
+  "status": "both",
+  "replaces": [
+    "part-presets",
+    "part-preset-store",
+    "features/expressions/export/index"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The preset's name.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    },
+    "exportId": {
+      "kind": "value",
+      "doc": "Six-character export ID used in built expression mods.",
+      "inherit": false,
+      "unique": true,
+      "shape": {
+        "type": "string",
+        "pattern": "^[0-9a-hjkmnp-tv-z]{6}$"
+      }
+    },
+    "label": {
+      "kind": "value",
+      "doc": "The photo-mode menu text; absent means the preset's name.",
+      "shape": {
+        "type": "string",
+        "maxLength": 80
+      }
+    },
+    "controls": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Control (track) name → weight in (0, 1]; absent keys are at rest.",
+      "shape": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "links": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Per left/right pair key, whether edits move both sides.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "origin": {
+      "kind": "value",
+      "doc": "Where editing started: rest, an installed photo-mode expression, or another preset (provenance only).",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "rest",
+              "installed",
+              "preset"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "controls": {},
+    "links": {}
+  },
+  "constants": [
+    {
+      "name": "rest",
+      "label": "Rest face",
+      "fields": {
+        "name": "Rest face",
+        "controls": {},
+        "links": {}
+      }
+    }
+  ],
+  "rules": [
+    "controls-known-to-rig"
+  ],
+  "migration": {
+    "from": [
+      "the library's part_presets rows for the expressions feature",
+      "expression parts carried on collection looks"
+    ],
+    "how": "Each row becomes a preset node with the same UUID and a new export ID, its revisions as entries at their original times; a look's expression part becomes a preset referenced by that look's row.",
+    "dryRun": "Row and revision counts read against planned; every part round-trips to the same canonical bytes.",
+    "copy": "The library is copied beside itself before anything is written."
+  }
+}
