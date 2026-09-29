@@ -215,3 +215,20 @@ test("the native-first exporter reads masks itself on two lanes, caches them by 
   expect(again.nativeTextures.masks.cached).toBe(1);
   expect(NATIVE_MASK_IDENTITY).toMatch(/^xfs-native-mask:\d+:\d+:[0-9a-f]{12}$/);
 });
+
+test("a resource several requests want is decoded once, by one lane, and answers each of them (two lanes once raced to publish it)", async () => {
+  const archive = maskArchive({ "base\\m\\hair.mlmask": maskResource(), "base\\m\\other.mlmask": maskResource() });
+  const cacheRoot = join(tempRoot(), "exports");
+  const inner: GameAssetExporter = { tool: { key: "wk", label: "WolvenKit" }, open() { throw new Error("not used"); },
+    async exportAll(requests) { return requests.map((): ExportAnswer => ({ geometry: new Map(), textures: new Map(), masks: new Map() })); } };
+  const pool = new NativeArchivePool(fakeDecompress);
+  const decoded: string[] = [];
+  const decoder: TextureDecoder = { decodeMask: async request => { decoded.push(String(request.hash)); await Bun.sleep(5); return decodeMaskFromPool(pool, fakeDecompress, request); } };
+  const exporter = createNativeFirstExporter(inner, { cacheRoot, maxSide: 4, decoder: async () => decoder, lanes: () => 2, onFallback: () => {} });
+  const source = archiveExportSource(archive, tempRoot());
+  const masks = ["base\\m\\hair.mlmask", "base\\m\\other.mlmask"];
+  const answers = await exporter.exportAll!([{ source, geometry: [], textures: [], masks }, { source, geometry: [], textures: [], masks: [...masks].reverse() }]);
+  expect(decoded.length).toBe(2);
+  for (const answer of answers) for (const path of masks) expect(answer.masks.get(path)!.layers.length).toBe(2);
+  expect(answers[0]!.masks.get(masks[0]!)!.layers).toEqual(answers[1]!.masks.get(masks[0]!)!.layers);
+});

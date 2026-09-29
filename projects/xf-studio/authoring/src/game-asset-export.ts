@@ -397,6 +397,13 @@ export class GameAssetExportCache extends DerivedCache {
   /** Copy `files` (name → source path) into a new entry, replacing any older one atomically. `partialRuns` marks a partial geometry export. */
   write(depotPath: string, source: ExportSource, files: Record<string, string>, partialRuns?: number, rawChecked = true): Record<string, string> {
     const directory = this.entryDirectory(depotPath, source);
+    // A verified entry of the same resource, source and identity already holds these files (another decode lane or export published it
+    // first): keep it. Replacing it would delete files that export may still be reading, and on Windows the rename then fails (EPERM).
+    // Partial geometry counts and raw checks are updated by rewriting, so those always write.
+    if (partialRuns === undefined && !files.raw && !files[REPAIR_NOTE]) {
+      const kept = this.read(depotPath, source);
+      if (kept && Object.keys(files).every(name => name in kept) && Object.keys(kept).length === Object.keys(files).length) return kept;
+    }
     const staging = `${directory}.${process.pid}.${Date.now()}.tmp`;
     mkdirSync(staging, { recursive: true, mode: 0o700 });
     const meta: EntryMeta = { schema: "xfs/game-asset-export-1", version: GAME_ASSET_EXPORT_VERSION, depotPath, hash: depotHash(depotPath),

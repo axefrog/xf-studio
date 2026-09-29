@@ -131,8 +131,17 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
       stats.byKind[kind] = (stats.byKind[kind] ?? 0) + 1;
       out.refused.push(job);
     };
+    // The same resource wanted by several requests is decoded once, by one lane, and answers each of them (`twinsOf`): two lanes decoding
+    // it side by side both published the same cache entry, and on Windows the second one's rename failed.
+    const twins = new Map<string, Job[]>();
+    for (const job of jobs) {
+      const key = `${job.kind}|${job.source.fingerprint}|${job.depotPath}`;
+      const group = twins.get(key);
+      if (group) group.push(job); else twins.set(key, [job]);
+    }
+    const twinsOf = new Map<Job, Job[]>([...twins.values()].map(group => [group[0]!, group]));
     if (!decoders.length) { for (const job of jobs) refuse(job, "unavailable"); return out; }
-    const queue = [...jobs];
+    const queue = [...twinsOf.keys()];
     const works: string[] = [];
     const lane = async (decoder: TextureDecoder) => {
       for (let job = queue.shift(); job; job = queue.shift()) {
@@ -147,7 +156,7 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
             catch (error) { outcome = { ok: false, kind: "internal", message: String((error as Error)?.message ?? error), stack: (error as Error)?.stack }; }
           }
           stats.decodeMs += performance.now() - began;
-          if (!outcome.ok) { onFallback(outcome.kind, label, outcome.message, outcome.stack); refuse(job, outcome.kind); continue; }
+          if (!outcome.ok) { onFallback(outcome.kind, label, outcome.message, outcome.stack); for (const twin of twinsOf.get(job)!) refuse(twin, outcome.kind); continue; }
           const work = maskCache.createWork(), name = depotHash(job.depotPath), files: Record<string, string> = {};
           works.push(work);
           mkdirSync(work, { recursive: true });
@@ -157,7 +166,7 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
             extractedSha256: outcome.mask.extractedSha256 }));
           files["mask.json"] = meta;
           const written = maskCache.write(job.depotPath, job.source, files);
-          out.masks[job.index]!.set(job.depotPath, { depotPath: job.depotPath, hash: depotHash(job.depotPath), layers: layersOf(written) ?? [], cached: false });
+          for (const twin of twinsOf.get(job)!) out.masks[twin.index]!.set(job.depotPath, { depotPath: job.depotPath, hash: depotHash(job.depotPath), layers: layersOf(written) ?? [], cached: false });
           stats.masks.decoded++;
           continue;
         }
@@ -170,7 +179,7 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
           catch (error) { outcome = { ok: false, kind: "internal", message: String((error as Error)?.message ?? error), stack: (error as Error)?.stack }; }
         }
         stats.decodeMs += performance.now() - began;
-        if (!outcome.ok) { onFallback(outcome.kind, label, outcome.message, outcome.stack); refuse(job, outcome.kind); continue; }
+        if (!outcome.ok) { onFallback(outcome.kind, label, outcome.message, outcome.stack); for (const twin of twinsOf.get(job)!) refuse(twin, outcome.kind); continue; }
         const { texture } = outcome;
         const work = cache.createWork(), name = depotHash(job.depotPath), png = join(work, `${name}.png`), meta = join(work, `${name}.json`);
         works.push(work);
@@ -178,7 +187,8 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
         writeFileSync(png, texture.png);
         writeFileSync(meta, JSON.stringify({ reader: NATIVE_TEXTURE_IDENTITY, depotPath: job.depotPath, width: texture.width, height: texture.height, gameWidth: texture.gameWidth,
           gameHeight: texture.gameHeight, mip: texture.mip, format: texture.format, isGamma: texture.isGamma, extractedSha256: texture.extractedSha256 }));
-        out.textures[job.index]!.set(job.depotPath, answerOf(job.depotPath, cache.write(job.depotPath, job.source, { "texture.png": png, "texture.json": meta }), false));
+        const answer = answerOf(job.depotPath, cache.write(job.depotPath, job.source, { "texture.png": png, "texture.json": meta }), false);
+        for (const twin of twinsOf.get(job)!) out.textures[twin.index]!.set(job.depotPath, answer);
         stats.decoded++;
       }
     };
