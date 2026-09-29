@@ -87,9 +87,10 @@ function activePort(profile: string): number | null {
   return Number.isInteger(port) && port > 0 ? port : null;
 }
 /** Stop a Chrome and wait (briefly) until it has exited, so the next start never meets its port or profile. */
-async function stopChrome(chrome: Subprocess, profile: string): Promise<void> {
+async function stopChrome(chrome: Subprocess, profile: string, keep = false): Promise<void> {
   chrome.kill();
   await Promise.race([chrome.exited, Bun.sleep(5_000)]);
+  if (keep) return;
   try { rmSync(profile, { recursive: true, force: true }); } catch { /* A file Chrome still holds; the temp folder is cleaned later. */ }
 }
 /**
@@ -97,10 +98,11 @@ async function stopChrome(chrome: Subprocess, profile: string): Promise<void> {
  * its profile), so concurrent or back-to-back starts never collide on one. A start that exposes no page within its deadline, or exits,
  * is stopped and tried again with a fresh profile, a bounded number of times, then fails with a clear message.
  */
-async function startChrome(options: { width?: number; height?: number; debugPort?: number; args?: readonly string[] }) {
+async function startChrome(options: { width?: number; height?: number; debugPort?: number; args?: readonly string[]; profile?: string }) {
   const failures: string[] = [];
   for (let attempt = 1; attempt <= PAGE_TARGET_LIMITS.attempts; attempt++) {
-    const profile = mkdtempSync(join(tmpdir(), "xfs-ui-chrome-"));
+    const profile = options.profile ? (mkdirSync(options.profile, { recursive: true }), options.profile) : mkdtempSync(join(tmpdir(), "xfs-ui-chrome-"));
+    if (options.profile) rmSync(join(profile, "DevToolsActivePort"), { force: true });
     const chrome: Subprocess = Bun.spawn([CHROME, "--headless=new", `--remote-debugging-port=${options.debugPort ?? 0}`, `--user-data-dir=${profile}`,
       `--window-size=${options.width ?? 1600},${options.height ?? 1000}`, "--no-first-run", "--no-default-browser-check",
       "--ignore-gpu-blocklist", "--enable-gpu", "--use-angle=d3d11", "--hide-scrollbars", ...(options.args ?? []), "about:blank"], { stdout: "ignore", stderr: "ignore" });
@@ -112,7 +114,7 @@ async function startChrome(options: { width?: number; height?: number; debugPort
       return { chrome, profile, page };
     } catch (error) {
       failures.push(`attempt ${attempt}: ${(error as Error).message}`);
-      await stopChrome(chrome, profile);
+      await stopChrome(chrome, profile, !!options.profile);
     }
   }
   throw Error(`Chrome did not expose a page target after ${PAGE_TARGET_LIMITS.attempts} attempts (${CHROME}): ${failures.join("; ")}`);
@@ -121,10 +123,11 @@ async function startChrome(options: { width?: number; height?: number; debugPort
 /**
  * `args`: extra Chrome switches (for example a fake camera: `--use-fake-device-for-media-stream`). `scheme` and `motion` pin the page's
  * `prefers-color-scheme` and `prefers-reduced-motion` instead of taking the machine's settings. `init`: a script run in the page before its
- * own (instrumentation for a measurement, for example).
+ * own (instrumentation for a measurement, for example). `profile`: a Chrome profile folder kept between launches (its GPU program cache and
+ * page storage survive, as an installed app's do); by default each launch gets a throwaway one.
  */
 export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark";
-  motion?: "reduce" | "no-preference"; args?: readonly string[]; init?: string } = {}) {
+  motion?: "reduce" | "no-preference"; args?: readonly string[]; init?: string; profile?: string } = {}) {
   const { chrome, profile, page } = await startChrome(options);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { socket.onopen = ok; socket.onerror = fail; });
@@ -224,7 +227,7 @@ export async function launch(url: string, options: { width?: number; height?: nu
       }
       throw Error(`Timed out waiting for ${expression}`);
     },
-    async close() { socket.close(); await stopChrome(chrome, profile); },
+    async close() { socket.close(); await stopChrome(chrome, profile, !!options.profile); },
   };
   if (options.width) await session.viewport(options.width, options.height ?? 1000);
   if (options.motion) media.set("prefers-reduced-motion", options.motion);
