@@ -151,10 +151,18 @@ export class SqliteGraphStore implements GraphStore {
     return { head: this.head(), nodes };
   }
 
-  /** The greatest position ever assigned: it never decreases, even when the newest entries are purged (SPEC §19.3). */
+  /** Whether SQLite's `sqlite_sequence` exists (made with the first `AUTOINCREMENT` table; once made, it stays). */
+  private sequence = false;
+  /**
+   * The greatest position ever assigned: it never decreases, even when the newest entries are purged (SPEC §19.3). A G1 library whose
+   * migration couldn't run yet has no `sqlite_sequence` (CORE-143): its head is its greatest stored position, as G1 read it.
+   */
   private head(): number {
-    return (this.db.query(`SELECT MAX(COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'events'), 0),
-      COALESCE((SELECT MAX(pos) FROM events), 0)) AS head`).get() as { head: number }).head;
+    this.sequence ||= !!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'").get();
+    const top = (this.db.query("SELECT COALESCE(MAX(pos), 0) AS top FROM events").get() as { top: number }).top;
+    if (!this.sequence) return top;
+    const seq = (this.db.query("SELECT seq FROM sqlite_sequence WHERE name = 'events'").get() as { seq: number } | null)?.seq ?? 0;
+    return Math.max(seq, top);
   }
 
   async readStream(node: NodeRef, afterSeq = 0): Promise<readonly Entry[]> {

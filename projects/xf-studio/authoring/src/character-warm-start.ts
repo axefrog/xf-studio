@@ -11,8 +11,10 @@
  * reading them again (character-detail-loader.ts `warmed`).
  *
  * Only a V the page asked for last is read, only when the host already has it, and whatever the page didn't take within
- * `WARM_KEEP_MS` is let go (its bitmaps closed), so a V that changed meanwhile costs a few seconds of reading at most. Nothing here
- * decides what V is shown: the character context does, as before.
+ * `WARM_KEEP_MS` is let go (its bitmaps closed), so a V that changed meanwhile costs a few seconds of reading at most; when the page asks
+ * for another V, it is let go at once (PREV-199), so the stale V's bitmaps are never held beside the real one's. What is read ahead
+ * follows the loader's budgets: the maps its texel budget would decode (`plannedReads`), and at most its byte budget; the load counts
+ * what it takes against its own budget as if it had read it. Nothing here decides what V is shown: the character context does, as before.
  */
 import { cpuReadFiles, cpuReadSize, decodeDetailTexture, fetchDetailFile, parseDetailGeometry, plannedReads, readCharacterRecord,
   type CharacterDetailFetch, type DecodedTexture, type ParsedGeometry, type WarmedFiles } from "./character-detail-loader";
@@ -37,9 +39,11 @@ export type CharacterWarmStartOptions = {
 export class CharacterWarmStart {
   private readonly fetcher: CharacterDetailFetch;
   private bytes = new Map<string, Promise<ArrayBuffer>>();
-  private textures = new Map<string, Promise<DecodedTexture>>();
-  private geometries = new Map<string, Promise<ParsedGeometry>>();
+  private textures = new Map<string, Promise<DecodedTexture & { bytes: number }>>();
+  private geometries = new Map<string, Promise<ParsedGeometry & { bytes: number }>>();
   private remembered: string | null = null;
+  /** The request whose files are being read ahead (as `parseCharacterRequest` reads it), until they are let go. */
+  private warming: string | null = null;
   private released = false;
   /** What the loader takes instead of reading (each file once). */
   readonly files: WarmedFiles;
@@ -51,6 +55,12 @@ export class CharacterWarmStart {
 
   /** The page asked the host for this V: the next start reads it ahead. Storage that refuses is fine (the next start just doesn't). */
   remember(request: CharacterRequest): void {
+    // The page asks for another V than the one read ahead: let it go now rather than hold both for `WARM_KEEP_MS` (PREV-199).
+    if (this.warming !== null && !this.released) {
+      let asked: string | null = null;
+      try { asked = JSON.stringify(parseCharacterRequest(JSON.parse(JSON.stringify(request)))); } catch { /* Not one the host reads. */ }
+      if (asked !== this.warming) this.release();
+    }
     const text = JSON.stringify(request);
     if (text === this.remembered) return;
     this.remembered = text;
@@ -65,6 +75,7 @@ export class CharacterWarmStart {
       if (!stored) return;
       request = parseCharacterRequest(JSON.parse(stored));
     } catch { return; }
+    this.warming = JSON.stringify(request);
     (this.options.setTimer ?? setTimeout)(() => this.release(), WARM_KEEP_MS);
     try {
       const response = await this.fetcher(CHARACTER_DETAIL_ENDPOINT, { method: "POST",
@@ -102,14 +113,17 @@ export class CharacterWarmStart {
           if (this.textures.has(texture.file)) continue;
           const bytesOf = fetchOnce(texture);
           this.bytes.delete(texture.file);
-          const decoded = bytesOf.then(buffer => decodeDetailTexture(buffer, cpuRead.has(texture.file) ? cpuReadSize(texture) : null, cpuRead.has(texture.file)));
+          const decoded = bytesOf.then(async buffer => {
+            const bytes = buffer.byteLength;
+            return { ...await decodeDetailTexture(buffer, cpuRead.has(texture.file) ? cpuReadSize(texture) : null, cpuRead.has(texture.file)), bytes };
+          });
           decoded.catch(() => { /* The load reads it again and reports it. */ });
           this.textures.set(texture.file, decoded);
         }
         if (!this.geometries.has(component.geometry.file)) {
           const bytesOf = fetchOnce(component.geometry);
           this.bytes.delete(component.geometry.file);
-          const parsed = bytesOf.then(parseDetailGeometry);
+          const parsed = bytesOf.then(async buffer => { const bytes = buffer.byteLength; return { ...await parseDetailGeometry(buffer), bytes }; });
           parsed.catch(() => { /* The load reads it again and reports it. */ });
           this.geometries.set(component.geometry.file, parsed);
         }

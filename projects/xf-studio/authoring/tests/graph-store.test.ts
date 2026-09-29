@@ -5,9 +5,9 @@
  */
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Aborter, createGraph } from "strata";
 import type { Entry, GraphStore } from "strata";
 import { STORE_CASES, Scheduler, seededRandom, settle, simClock } from "strata/testing";
@@ -290,4 +290,97 @@ test("the host sources: a clock whose timers end with their signal, and unique r
   const ids = new Set([hostRandom(), hostRandom()].flatMap(random => Array.from({ length: 50 }, () => random.stream("ids").uuid())));
   expect(ids.size).toBe(100);
   expect([...ids].every(id => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id))).toBe(true);
+});
+
+test("a library whose positions migration failed still works: it reads, loads and appends as G1 did (CORE-143)", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  try {
+    new LookLibrary(path).close();
+    const g1 = new Database(path);
+    g1.exec(`PRAGMA journal_mode=WAL; ${G1_EVENTS}`);
+    g1.close();
+    const store = new SqliteGraphStore(path, { beforeMigration: () => { throw new Error("no backup could be taken"); } });
+    try {
+      expect(store.migrationError).toBe("no backup could be taken");
+      expect(await store.changesSince(0)).toEqual({ head: 0, entries: [] });
+      expect((await store.load()).head).toBe(0);
+      const result = await store.append({ commit: "c1", expect: [["n1", 0]], entries: [{ node: { type: POINTER, id: "n1" }, seq: 1, pos: 0, commit: "c1",
+        actor: "local", actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "n", own: {}, layers: [], trashed: false, retracted: false } } }] });
+      expect(result.ok && result.positions).toEqual([1]);
+      expect((await store.changesSince(0)).head).toBe(1);
+      expect((await store.load()).head).toBe(1);
+    } finally { store.close(); }
+  } finally { cleanup(); }
+});
+
+test("one pre-migration copy per migration: a second open the same day keeps the first, a later day's replaces it (CORE-144)", () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  let now = START;
+  try {
+    new LookLibrary(path).close();
+    const backups = new LibraryBackups(path, () => now);
+    const first = backups.beforeMigration("graph-positions");
+    const taken = statSync(first).mtimeMs;
+    // Another window opening while the first migrates (or an open whose migration failed after its copy): the copy is kept as it is.
+    expect(backups.beforeMigration("graph-positions")).toBe(first);
+    expect(statSync(first).mtimeMs).toBe(taken);
+    // A migration of another kind takes its own.
+    backups.beforeMigration("other-migration");
+    now += DAY;
+    const later = backups.beforeMigration("graph-positions");
+    expect(later).not.toBe(first);
+    expect(backups.list().filter(item => item.kind === "pre-migration").map(item => basename(item.file)).sort())
+      .toEqual([basename(later), "library.pre-migration.2026-09-01.other-migration.sqlite"].sort());
+    expect(readdirSync(join(dir, "backups")).some(name => name.endsWith(".tmp"))).toBe(false);
+  } finally { cleanup(); }
+});
+
+test("a backup SQLite can never read is removed by a purge instead of keeping it pending forever (CORE-145)", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: { ...simClock(new Scheduler()), now: () => START }, random: seededRandom("u") });
+  try {
+    const node = { type: POINTER, id: "n1" };
+    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
+      actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } }] });
+    library.dailyBackup();
+    const damaged = join(dir, "backups", "library.daily.2026-08-01.sqlite");
+    writeFileSync(damaged, "this is not a database at all, and it never will be ....................................................................");
+    await library.store.purge(node);
+    expect(library.store.pendingPurges()).toEqual([]);
+    expect(existsSync(damaged)).toBe(false);
+    expect(library.backups.list().every(item => item.nodes === 0)).toBe(true);
+  } finally { library.close(); cleanup(); }
+});
+
+test("a restore is made beside the library and renamed over it, refused if another window opened it meanwhile (CORE-145)", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  try {
+    // A purge left pending by a locked copy, so the restore applies it to the copy it restores.
+    const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: { ...simClock(new Scheduler()), now: () => START }, random: seededRandom("r") });
+    const node = { type: POINTER, id: "n1" };
+    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
+      actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } }] });
+    const copy = library.backups.daily()!;
+    const lock = new Database(copy);
+    lock.exec("BEGIN EXCLUSIVE");
+    await library.store.purge(node);
+    lock.exec("ROLLBACK"); lock.close();
+    library.close();
+    const backups = new LibraryBackups(path, () => START);
+    // A window opens the library while the restore prepares its copy (after the restore's first check).
+    let window: Database | null = null;
+    const original = Database.prototype.close;
+    Database.prototype.close = function (this: Database, ...args: Parameters<typeof original>) {
+      const result = original.apply(this, args);
+      if (!window && (this as unknown as { filename: string }).filename.endsWith(".restoring")) { window = new Database(path); window.exec("PRAGMA journal_mode=WAL; SELECT 1;"); }
+      return result;
+    };
+    try { expect(() => backups.restore(copy)).toThrow("other windows"); }
+    finally { Database.prototype.close = original; (window as Database | null)?.close(); }
+    // The window's library was left as it was; nothing staged is left behind; with the window closed the restore goes ahead.
+    expect(readdirSync(dir).filter(name => name.includes("restoring"))).toEqual([]);
+    expect(existsSync(backups.restore(copy))).toBe(true);
+    const restored = new Database(path, { readonly: true });
+    try { expect((restored.query("SELECT COUNT(*) AS n FROM events").get() as { n: number }).n).toBe(0); } finally { restored.close(); }
+  } finally { cleanup(); }
 });

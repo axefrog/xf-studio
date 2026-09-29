@@ -6,7 +6,7 @@
  * deleted pages.
  */
 import { Database } from "bun:sqlite";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { NODE_ROWS } from "./sqlite-store";
 
@@ -36,11 +36,20 @@ export class LibraryBackups {
 
   private name(kind: BackupKind, day: string, suffix = ""): string { return join(this.folder, `${this.stem}.${kind}.${day}${suffix}.sqlite`); }
 
-  private copy(target: string): string {
+  /**
+   * A consistent copy of the library at `target`, written beside it first and renamed into place, so a copy is never seen half-made. Made
+   * through `through` when given (a connection the caller holds), else through a read-only connection of its own.
+   */
+  private copy(target: string, through?: Database): string {
     mkdirSync(this.folder, { recursive: true });
-    if (existsSync(target)) rmSync(target);
-    const db = new Database(this.library, { readonly: true });
-    try { db.query("VACUUM INTO ?").run(target); } finally { db.close(); }
+    const staging = `${target}.${process.pid}.tmp`;
+    rmSync(staging, { force: true });
+    const db = through ?? new Database(this.library, { readonly: true });
+    try { db.query("VACUUM INTO ?").run(staging); } finally { if (!through) db.close(); }
+    try {
+      if (existsSync(target)) rmSync(target);
+      renameSync(staging, target);
+    } catch (error) { rmSync(staging, { force: true }); throw error; }
     return target;
   }
 
@@ -54,9 +63,20 @@ export class LibraryBackups {
     return target;
   }
 
-  /** A copy taken before a migration (kept until removed). */
+  /**
+   * A copy taken before a migration, one per migration (CORE-144): a copy already taken today for the same migration is kept as it is (a
+   * Studio opened while another migrated, or an open whose migration failed after its copy, would otherwise replace it, perhaps with an
+   * already migrated library), and a new day's copy for a migration that still hasn't run replaces the older ones. Pre-migration copies
+   * of other migrations are kept until removed. Returns the copy.
+   */
   beforeMigration(label: string): string {
-    return this.copy(this.name("pre-migration", isoDay(this.now()), `.${label.replace(/[^a-z0-9-]/gi, "-")}`));
+    const suffix = `.${label.replace(/[^a-z0-9-]/gi, "-")}`;
+    const target = this.name("pre-migration", isoDay(this.now()), suffix);
+    if (existsSync(target)) return target;
+    this.copy(target);
+    for (const item of this.list())
+      if (item.kind === "pre-migration" && item.file !== target && basename(item.file).endsWith(`${suffix}.sqlite`)) rmSync(item.file, { force: true });
+    return target;
   }
 
   /**
@@ -98,42 +118,68 @@ export class LibraryBackups {
 
   /**
    * Removes a purged node's rows from every copy, and their freed pages with them. Every copy is tried; if any
-   * couldn't be purged (locked, unreadable) it throws afterwards, naming them, so the store keeps the purge pending
-   * and tries again later.
+   * couldn't be purged (locked) it throws afterwards, naming them, so the store keeps the purge pending and tries
+   * again later. A copy SQLite can't read at all is removed instead.
    */
   purge(node: string): void {
     const failed: string[] = [];
     for (const item of this.list()) {
-      try { purgeFile(item.file, [node]); } catch { failed.push(basename(item.file)); }
+      // A copy this process already purged of the node, unchanged since, isn't opened again on a retry.
+      const key = `${node}|${item.file}|${item.bytes}|${fileTime(item.file)}`;
+      if (this.purged.has(key)) continue;
+      try { purgeFile(item.file, [node]); this.purged.add(`${node}|${item.file}|${statSync(item.file).size}|${fileTime(item.file)}`); }
+      catch (error) {
+        // A copy SQLite can never read (not a database, damaged) can't serve a restore and can't be purged, so it would keep the purge
+        // pending forever (CORE-145): it is removed, which purges it. A locked copy is tried again later.
+        const code = (error as { code?: unknown })?.code;
+        if (code === "SQLITE_NOTADB" || code === "SQLITE_CORRUPT") { try { rmSync(item.file); continue; } catch { /* In use: later. */ } }
+        failed.push(basename(item.file));
+      }
     }
     if (failed.length) throw new Error(`Some backups couldn't be purged yet: ${failed.join(", ")}.`);
   }
+  /** Copies purged of a node by this process (node, file, size and time), skipped when a pending purge is retried. */
+  private readonly purged = new Set<string>();
 
   /**
    * Restores a copy: the current library is kept as a pre-restore copy first. Refused while any other connection has
    * the library open (the host closes its stores first and restarts them afterwards): the last connection to close
    * removes the write-ahead log, so a log left after this one closes means another is still open. Purges still pending
-   * in the current library are applied to the restored one, so a restore never brings a purged node back.
+   * in the current library are applied to the restored one before it replaces the library, so a restore never brings a
+   * purged node back.
    */
   restore(file: string): string {
     if (!this.list().some(item => item.file === file)) throw new Error("That isn't one of this library's backups.");
-    let pending: string[] = [];
+    const refuse = () => new Error("Close the Studio's other windows before restoring a backup.");
+    // Another connection keeps the write-ahead log after ours closes (the last one to close removes it).
+    const busy = () => existsSync(`${this.library}-wal`);
+    let pending: string[] = [], kept = "";
     if (existsSync(this.library)) {
+      // One connection reads the pending purges and makes the pre-restore copy, so nothing of ours is left open or behind.
       const db = new Database(this.library);
       try {
         const tables = new Set((db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(row => row.name));
         if (tables.has("purge_pending")) pending = (db.query("SELECT node FROM purge_pending").all() as { node: string }[]).map(row => row.node);
+        kept = this.copy(this.name("pre-restore", isoDay(this.now()), `.${this.now()}`), db);
       } finally { db.close(); }
-      if (existsSync(`${this.library}-wal`)) throw new Error("Close the Studio's other windows before restoring a backup.");
+      if (busy()) throw refuse();
     }
-    const kept = existsSync(this.library) ? this.copy(this.name("pre-restore", isoDay(this.now()), `.${this.now()}`)) : "";
-    // Only this process's read-only copy connection can have left these, and it is closed.
-    for (const suffix of ["-wal", "-shm"]) rmSync(`${this.library}${suffix}`, { force: true });
-    copyFileSync(file, this.library);
-    if (pending.length) purgeFile(this.library, pending);
+    // The restored copy is made beside the library, pending purges applied to it, and renamed over it in one step (CORE-145): a Studio
+    // that opened the library meanwhile made its write-ahead log (checked again just before), and on Windows the rename itself is refused
+    // while any connection has the file open, so nobody's open library is replaced under them.
+    const staged = `${this.library}.${process.pid}.restoring`;
+    try {
+      copyFileSync(file, staged);
+      if (pending.length) purgeFile(staged, pending);
+      for (const suffix of ["-wal", "-shm"]) rmSync(`${staged}${suffix}`, { force: true });
+      if (busy()) throw refuse();
+      try { rmSync(`${this.library}-shm`, { force: true }); renameSync(staged, this.library); } catch { throw refuse(); }
+    } finally { rmSync(staged, { force: true }); }
     return kept;
   }
 }
+
+const fileTime = (file: string): number => { try { return statSync(file).mtimeMs; } catch { return 0; } };
 
 /** Removes nodes' rows from one SQLite file (a backup, or a restored library), and their freed pages with them. */
 function purgeFile(file: string, nodes: readonly string[]): void {

@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CharacterDetailHost, installationFingerprint, characterRequestKey, type CharacterDetailSettings } from "../src/character-detail-host";
-import { codeIdentityOf } from "../src/host-code-identity";
+import { codeIdentityOf, hostCodeIdentity, includeHostCode, memoisedRead } from "../src/host-code-identity";
 import { InstallationRegistry, installationRouteKey } from "../src/installation-registry";
 import { DiscoverySnapshots, watchDigest, watchUnchanged } from "../src/installation-snapshot";
 import { KEEP_ANSWERS, PreparedAnswers } from "../src/prepared-answers";
@@ -11,6 +11,7 @@ import { discoverRoute, DISCOVERY_LIMITS, openInstallation, type InstallationOpt
 import { routeIdentity } from "../src/route-fingerprint";
 import { pathStamp, type WatchedPath } from "../src/source-discovery";
 import { CHARACTER_DETAIL_SCHEMA } from "../src/render-detail";
+import { CharacterWarmStart } from "../src/character-warm-start";
 import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 
 /**
@@ -98,6 +99,32 @@ describe("a route's kept discovery", () => {
     expect(await snapshots.read(g.options.cacheDir, route)).toBeNull();
   });
 
+  test("a discovery that met a read failure is neither kept nor reused; an unreadable code identity is a walk (PIPE-127, PIPE-128)", async () => {
+    const g = game();
+    const route = { route: routeIdentity(g.options), limits: DISCOVERY_LIMITS };
+    const snapshots = new DiscoverySnapshots({ code: async () => "code" });
+    const walked = discoverRoute(g.options);
+    const failed = { ...walked, complete: false, issues: [...walked.issues, { code: "entry_unreadable", detail: "direct entry could not be inspected.", blocking: true }] };
+    await snapshots.write(g.options.cacheDir, route, failed);
+    expect(await snapshots.read(g.options.cacheDir, route)).toBeNull();
+    // A snapshot an earlier version kept with such an issue is not reused either.
+    await snapshots.write(g.options.cacheDir, route, walked);
+    expect(await snapshots.read(g.options.cacheDir, route)).not.toBeNull();
+    const folder = join(g.options.cacheDir, "discovery");
+    for (const name of readdirSync(folder)) {
+      const kept = JSON.parse(readFileSync(join(folder, name), "utf8"));
+      kept.discovery.issues.push({ code: "directory_unreadable", detail: "x", blocking: true });
+      writeFileSync(join(folder, name), JSON.stringify(kept));
+    }
+    expect(await snapshots.read(g.options.cacheDir, route)).toBeNull();
+    // The code identity can't be read: nothing is kept or read, and nothing throws.
+    const broken = new DiscoverySnapshots({ code: async () => { throw new Error("stat failed"); } });
+    expect(await broken.read(g.options.cacheDir, route)).toBeNull();
+    await broken.write(g.options.cacheDir, route, walked);
+    const answers = new PreparedAnswers(temporary(), { code: async () => { throw new Error("stat failed"); }, recordSchema: CHARACTER_DETAIL_SCHEMA, recordExists: () => true });
+    expect(await answers.find("route", REQUEST_A)).toBeNull();
+  });
+
   test("the registry opens from the kept discovery on a later start, and walks again once a mod changed", async () => {
     const g = game();
     const seen: ("kept" | "walked")[] = [];
@@ -130,11 +157,35 @@ describe("the host code identity", () => {
     expect(await codeIdentityOf(main)).toBe(first);
     put(other, "export const a = 2;");
     expect(await codeIdentityOf(main)).not.toBe(first);
+    // Data the code loads (the resource reader's tables, the eye plate's recipe) is part of it (PIPE-129).
+    const withJson = await codeIdentityOf(main);
+    put(join(root, "native", "rtti-subset.json"), "{}");
+    expect(await codeIdentityOf(main)).not.toBe(withJson);
     const bundle = join(root, "host.js");
     put(bundle, "bundle 1");
     const built = await codeIdentityOf(bundle);
     put(bundle, "bundle 22");
     expect(await codeIdentityOf(bundle)).not.toBe(built);
+    // A packaged host's decode worker bundle counts beside the main bundle.
+    const worker = join(root, "native-decode-worker.js");
+    put(worker, "worker 1");
+    const withWorker = await codeIdentityOf(bundle, [worker]);
+    expect(withWorker).not.toBe(await codeIdentityOf(bundle));
+    put(worker, "worker 22");
+    expect(await codeIdentityOf(bundle, [worker])).not.toBe(withWorker);
+  });
+
+  test("a failed read of the host's identity is not remembered; a counted worker bundle reads it again (PIPE-128, PIPE-129)", async () => {
+    let calls = 0;
+    const read = memoisedRead(async () => { if (++calls === 1) throw new Error("stat failed"); return `identity ${calls}`; });
+    await expect(read.get()).rejects.toThrow("stat failed");
+    expect(await read.get()).toBe("identity 2");
+    expect(await read.get()).toBe("identity 2");
+    expect(calls).toBe(2);
+    const first = await hostCodeIdentity();
+    expect(await hostCodeIdentity()).toBe(first);
+    includeHostCode(join(temporary(), "worker.js"));
+    expect(await hostCodeIdentity()).not.toBe(first);
   });
 });
 
@@ -215,3 +266,40 @@ describe("the character-detail host's kept answers", () => {
   });
 });
 
+
+describe("the page's warm start after a reload (PREV-199)", () => {
+  test("a V this process answered is checked against the installation before the warm start is told it is ready", async () => {
+    const g = game();
+    const settings: CharacterDetailSettings = { gameRoot: g.gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: g.cli };
+    const cacheRoot = join(g.root, "details");
+    const answers = new PreparedAnswers(join(cacheRoot, "choices", "answers"), { code: async () => "code", recordSchema: CHARACTER_DETAIL_SCHEMA,
+      recordExists: () => true });
+    // The mod folder's time in whole seconds, so setting it back below restores its stamp exactly.
+    const folderTime = Math.floor(Date.now() / 1000) - 60;
+    utimesSync(g.mod, folderTime, folderTime);
+    const host = new CharacterDetailHost({ cacheRoot, settings: () => settings, keptAnswers: answers,
+      prepare: async options => { await options.open!(g.options); return { record: {} as never, recordFile: "c".repeat(64) + ".json", degraded: false }; } });
+    host.request(REQUEST_A, "page");
+    await host.settled();
+    expect(await host.known(REQUEST_A, "warm-start")).toMatchObject({ phase: "ready" });
+    // A mod is updated in place while the host runs (its folder's time, which the route's own stamps read, stays); the page reloads and its
+    // warm start asks: the old record is not offered.
+    put(join(g.mod, "hair.archive"), rdar(2));
+    utimesSync(g.mod, folderTime, folderTime);
+    expect((await host.known(REQUEST_A, "warm-start")).phase).toBe("unknown");
+  });
+
+  test("files read ahead for one V are let go as soon as the page asks for another", async () => {
+    const stored = new Map<string, string>();
+    const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); } };
+    const first = new CharacterWarmStart({ storage, verification: true, setTimer: () => 0, fetcher: async () => Response.json({ phase: "unknown" }) });
+    first.remember(REQUEST_A);
+    const warm = new CharacterWarmStart({ storage, verification: true, setTimer: () => 0, fetcher: async () => Response.json({ phase: "unknown" }) });
+    await warm.start();
+    const released = () => (warm as unknown as { released: boolean }).released;
+    warm.remember(REQUEST_A);
+    expect(released()).toBe(false);
+    warm.remember(REQUEST_B);
+    expect(released()).toBe(true);
+  });
+});

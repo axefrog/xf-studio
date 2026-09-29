@@ -96,11 +96,14 @@ export type CharacterDetailLoadOptions = {
 export type DecodedTexture = { image: HTMLImageElement; bitmap: ImageBitmap | null; reduced: ImageBitmap | null };
 /** A geometry file parsed: its scene and the skin weights of its skinned meshes as the file stores them, by node name. */
 export type ParsedGeometry = { scene: THREE.Group; weights: Map<string, Float32Array> };
-/** Files a load takes instead of reading them itself (`warmed`); each answer is handed over once. */
+/**
+ * Files a load takes instead of reading them itself (`warmed`); each answer is handed over once. A decoded texture or parsed geometry
+ * names the bytes it was read from (`bytes`), which count against the load's byte budget as its own reads do (PREV-199).
+ */
 export type WarmedFiles = {
   bytes(file: string): Promise<ArrayBuffer> | undefined;
-  texture(file: string): Promise<DecodedTexture> | undefined;
-  geometry(file: string): Promise<ParsedGeometry> | undefined;
+  texture(file: string): Promise<DecodedTexture & { bytes?: number }> | undefined;
+  geometry(file: string): Promise<ParsedGeometry & { bytes?: number }> | undefined;
 };
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
@@ -574,17 +577,19 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   };
   const aborted = () => { if (signal?.aborted) throw new DOMException("Loading the details was cancelled.", "AbortError"); };
   const warmed = options.warmed ?? null;
+  const spend = (bytes: number) => {
+    bytesUsed += bytes;
+    if (bytesUsed > MAX_BYTES) throw Error("The prepared details are larger than the preview allows.");
+  };
+  /** A warmed texture or geometry, its bytes counted as this load's own (PREV-199). */
+  const takeWarmed = <T extends { bytes?: number }>(pending: Promise<T> | undefined) => pending?.then(item => { spend(item.bytes ?? 0); return item; });
   const bytesOf = new Map<string, Promise<ArrayBuffer>>();
   const fetchBytes = (resource: Pick<RenderResource, "file" | "sha256">) => {
     let pending = bytesOf.get(resource.file);
     if (!pending) {
       // Not cancelled once asked for: a part whose files are on their way is finished and kept (`pool`), so a superseded change's
       // work is there for the next one (research/backlog/performance.md, scheduling rule). The files are local and content-addressed.
-      pending = (warmed?.bytes(resource.file) ?? fetchDetailFile(fetcher, resource)).then(bytes => {
-        bytesUsed += bytes.byteLength;
-        if (bytesUsed > MAX_BYTES) throw Error("The prepared details are larger than the preview allows.");
-        return bytes;
-      });
+      pending = (warmed?.bytes(resource.file) ?? fetchDetailFile(fetcher, resource)).then(bytes => { spend(bytes.byteLength); return bytes; });
       bytesOf.set(resource.file, pending);
     }
     return pending;
@@ -615,7 +620,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     let pending = decoding.get(texture.file);
     if (!pending) {
       // A map decoded before the load asked (a warm start, which fetched it within the same byte budget) is taken as it is.
-      const decoded = warmed?.texture(texture.file) ?? fetchBytes(texture).then(async bytes => {
+      const decoded = takeWarmed(warmed?.texture(texture.file)) ?? fetchBytes(texture).then(async bytes => {
         const again = ledger.images.get(texture.file);
         return again ? { image: again, bitmap: null, reduced: null } : decodeDetailTexture(bytes, cpuRead.has(texture.file) ? cpuReadSize(texture) : null, cpuRead.has(texture.file));
       });
@@ -642,7 +647,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     let pending = parsed.get(resource.file);
     if (!pending) {
       // Each stage in a task of its own (PREV-189): a hairstyle's 10 MB file read, parsed and built in one took 80 ms of the page.
-      pending = warmed?.geometry(resource.file) ?? fetchBytes(resource).then(parseDetailGeometry);
+      pending = takeWarmed(warmed?.geometry(resource.file)) ?? fetchBytes(resource).then(parseDetailGeometry);
       parsed.set(resource.file, pending);
     }
     return pending;

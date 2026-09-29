@@ -3,7 +3,7 @@
  * them in step as the model changes. Models name operators from a registry, so they stay data. It delivers a node
  * whose latest entry maps each model ID to its live node.
  */
-import { canonical } from "../json";
+import { canonical, isJson } from "../json";
 import type { Json } from "../json";
 import { kernelInternals, KNode, LATEST } from "./kernel";
 import type { Demand, DemandSpec, Driver, Environment, Input, RunContext } from "./kernel";
@@ -42,10 +42,10 @@ export function erector(env: Environment, model: KNode<GraphModel>, operators: O
     if (problem) { env.observe(env.errors, { message: `This model can't be erected: ${problem}`, code: "model" }); return; }
     const apiFor = (id: string): OperatorApi => ({ id, env, run, node: modelId => live.get(modelId)?.node });
     const wanted = new Map((graph?.nodes ?? []).map(item => [item.id, item]));
-    // Released: IDs gone, or whose kind, operator or parameters changed.
-    for (const [id, item] of [...live]) {
-      const next = wanted.get(id);
-      if (next && shape(next) === shape(item.model)) continue;
+    // Released: IDs gone, or whose kind, operator or parameters changed. Which ones is decided whole before any is released
+    // (STRATA-16), so nothing that can fail runs between two releases.
+    const released = [...live].filter(([id, item]) => { const next = wanted.get(id); return !next || shape(next) !== shape(item.model); });
+    for (const [id, item] of released) {
       kernelInternals.removeNow(env, item.node);
       live.delete(id);
     }
@@ -120,7 +120,8 @@ const isNodeRef = (value: unknown): value is NodeRefData =>
 /**
  * Why a graph model isn't valid in format 1, or null (SPEC §10.2): `nodes` an array of node models, each with a
  * non-empty ID unique in the model and not beginning with `$` (reserved for the environment), a known kind, an
- * operator name if any, inputs that are model IDs or live node references, and a demand that is a spec or a model ID.
+ * operator name if any, inputs that are model IDs or live node references, a demand that is a spec or a model ID, and
+ * parameters and a first entry that are plain data.
  * `taken` says whether an ID would collide with a node the environment already has that this erector didn't make.
  */
 export function modelProblem(graph: unknown, taken: (id: string) => boolean = () => false): string | null {
@@ -142,6 +143,10 @@ export function modelProblem(graph: unknown, taken: (id: string) => boolean = ()
       return `${model.id}'s inputs must be model IDs or node references.`;
     if (model.demand !== undefined && typeof model.demand !== "string" && (!model.demand || typeof model.demand !== "object" || Array.isArray(model.demand)))
       return `${model.id}'s demand must be a spec or a model ID.`;
+    // Parameters and a seed's first entry are data (SPEC §2.1): a value that isn't (a number that isn't finite, a lone surrogate) has no
+    // canonical form, so it would fail only once the erector compared shapes, after it had begun releasing (STRATA-16).
+    if (model.params !== undefined && !isJson(model.params)) return `${model.id}'s parameters must be plain data.`;
+    if (model.initial !== undefined && !isJson(model.initial)) return `${model.id}'s first entry must be plain data.`;
   }
   return null;
 }

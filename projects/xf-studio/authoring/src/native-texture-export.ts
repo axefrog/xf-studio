@@ -143,8 +143,10 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
     if (!decoders.length) { for (const job of jobs) refuse(job, "unavailable"); return out; }
     const queue = [...twinsOf.keys()];
     const works: string[] = [];
+    // Set once a lane stops with an error (the export cancelled): the other lanes take no further job.
+    let stopped = false;
     const lane = async (decoder: TextureDecoder) => {
-      for (let job = queue.shift(); job; job = queue.shift()) {
+      for (let job = stopped ? undefined : queue.shift(); job; job = stopped ? undefined : queue.shift()) {
         if (signal?.aborted) throw new GameAssetExportError("cancelled", "The export was cancelled.");
         const began = performance.now();
         const label = `${job.source.archivePath.split(/[\\/]/).pop()}: ${job.depotPath}`;
@@ -192,8 +194,12 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
         stats.decoded++;
       }
     };
-    try { await Promise.all(decoders.map(lane)); }
-    finally { for (const work of works) { try { cache.remove(work); } catch { /* Best effort. */ } } }
+    // Every lane settles before the work folders are removed (PREV-198): one lane cancelled while another was still decoding left that
+    // lane's later work folder behind, outside the prepared files' budget and Clear.
+    const settled = await Promise.allSettled(decoders.map(decoder => lane(decoder).catch(error => { stopped = true; throw error; })));
+    for (const work of works) { try { cache.remove(work); } catch { /* Best effort; swept at a later start (prepared-files.ts). */ } }
+    const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === "rejected");
+    if (failed) throw failed.reason;
     return out;
   };
 

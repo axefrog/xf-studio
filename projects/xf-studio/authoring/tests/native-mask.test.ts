@@ -5,17 +5,18 @@
  * `tools/native-mask-oracle.ts` (every mask WolvenKit exported into a cache, texel for texel).
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { depotHash } from "../src/depot-path";
 import { archiveExportSource, type ExportAnswer, type ExportRequest, type GameAssetExporter } from "../src/game-asset-export";
 import { createNativeFirstExporter, NATIVE_MASK_IDENTITY, type TextureDecoder } from "../src/native-texture-export";
 import { NativeArchivePool } from "../src/native/archive-reader";
-import { decodeMaskAtlas, decodeMaskLayers, type MaskLayout } from "../src/native/mlmask";
+import { decodeMaskAtlas, decodeMaskLayers, DEFAULT_MASK_LIMITS, maskLayers, type MaskLayout } from "../src/native/mlmask";
 import { InProcessDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { decodeMaskFromPool } from "../src/native/texture-decode";
 import { decodePng } from "../src/png";
+import { evictPrepared, STALE_WORK_MS, sweepStaleWork } from "../src/prepared-files";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
 
@@ -115,7 +116,7 @@ test("the tiled layers equal WolvenKit's per-texel exporter on random masks (ful
 });
 
 /** A `Multilayer_Mask` resource: 8×4, tiles of 4 in a 12×12 atlas; layer 0 full-size, layer 1 low-resolution only (4×2). */
-function maskResource(options: { tileSize?: number } = {}): Uint8Array {
+function maskResource(options: { tileSize?: number; width?: number; height?: number; layers?: number } = {}): Uint8Array {
   const tileSize = options.tileSize ?? 4;
   // The atlas's 3×3 blocks: every texel 10 (index 0) except the second atlas tile across (texels 6–11) 20 (index 1), and the second
   // down 255 (index 7, which is 1 when e0 ≤ e1).
@@ -133,7 +134,8 @@ function maskResource(options: { tileSize?: number } = {}): Uint8Array {
   file.export("Multilayer_Mask", [prop("renderResourceBlob", "rendRenderMultilayerMaskResource", v.struct([prop("renderResourceBlobPC", "handle:IRenderResourceBlob", v.handle(1))]))]);
   file.export("rendRenderMultilayerMaskBlobPC", [
     prop("header", "rendRenderMultilayerMaskBlobHeader", v.struct([prop("version", "Uint32", v.u32(3)), prop("atlasWidth", "Uint32", v.u32(12)),
-      prop("atlasHeight", "Uint32", v.u32(12)), prop("numLayers", "Uint32", v.u32(2)), prop("maskWidth", "Uint32", v.u32(8)), prop("maskHeight", "Uint32", v.u32(4)),
+      prop("atlasHeight", "Uint32", v.u32(12)), prop("numLayers", "Uint32", v.u32(options.layers ?? 2)), prop("maskWidth", "Uint32", v.u32(options.width ?? 8)),
+      prop("maskHeight", "Uint32", v.u32(options.height ?? 4)),
       prop("maskWidthLow", "Uint32", v.u32(4)), prop("maskHeightLow", "Uint32", v.u32(2)), prop("maskTileSize", "Uint32", v.u32(tileSize))])),
     prop("atlasData", "serializationDeferredDataBuffer", w => { w.u16(atlasBuffer + 1); }),
     prop("tilesData", "serializationDeferredDataBuffer", w => { w.u16(tilesBuffer + 1); })]);
@@ -231,4 +233,64 @@ test("a resource several requests want is decoded once, by one lane, and answers
   expect(decoded.length).toBe(2);
   for (const answer of answers) for (const path of masks) expect(answer.masks.get(path)!.layers.length).toBe(2);
   expect(answers[0]!.masks.get(masks[0]!)!.layers).toEqual(answers[1]!.masks.get(masks[0]!)!.layers);
+});
+
+test("a cancelled export waits for every lane before removing its work folders, so none is left behind (PREV-198)", async () => {
+  const masks = "abcdefghij".split("").map(name => `base\\m\\${name}.mlmask`);
+  const archive = maskArchive(Object.fromEntries(masks.map(mask => [mask, maskResource()])));
+  const cacheRoot = join(tempRoot(), "exports");
+  const inner: GameAssetExporter = { tool: { key: "wk", label: "WolvenKit" }, open() { throw new Error("not used"); },
+    async exportAll(requests) { return requests.map((): ExportAnswer => ({ geometry: new Map(), textures: new Map(), masks: new Map() })); } };
+  const pool = new NativeArchivePool(fakeDecompress);
+  // Lane 0 decodes quickly and meets the cancellation between jobs; lane 1 is still decoding then, and writes its work folder after.
+  const slow = (ms: number): TextureDecoder => ({ decodeMask: async request => { await Bun.sleep(ms); return decodeMaskFromPool(pool, fakeDecompress, request); } });
+  const exporter = createNativeFirstExporter(inner, { cacheRoot, maxSide: 4, decoder: async (_, lane) => slow(lane === 0 ? 20 : 200), lanes: () => 2, onFallback: () => {} });
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 50);
+  const outcome = await exporter.exportAll!([{ source: archiveExportSource(archive, tempRoot()), geometry: [], textures: [], masks }], controller.signal)
+    .then(() => "finished", (error: { code?: string }) => error.code);
+  expect(outcome).toBe("cancelled");
+  await Bun.sleep(250);
+  expect(readdirSync(cacheRoot).filter(name => name.startsWith(".work-"))).toEqual([]);
+});
+
+test("work folders left over by a crash are swept once they are an hour old; newer ones are kept (PREV-198)", async () => {
+  const exports = tempRoot();
+  const old = join(exports, ".work-old"), recent = join(exports, ".work-recent");
+  for (const folder of [old, recent]) { mkdirSync(folder); writeFileSync(join(folder, "layer.png"), "png"); }
+  const hourAgo = (Date.now() - STALE_WORK_MS - 60_000) / 1000;
+  utimesSync(old, hourAgo, hourAgo);
+  expect(await sweepStaleWork(exports)).toBe(1);
+  expect(readdirSync(exports)).toEqual([".work-recent"]);
+  // The budget check sweeps them too, even under budget.
+  mkdirSync(old); utimesSync(old, hourAgo, hourAgo);
+  await evictPrepared({ exports, resolver: tempRoot(), store: tempRoot(), manifests: tempRoot() }, Infinity);
+  expect(readdirSync(exports)).toEqual([".work-recent"]);
+});
+
+test("a mask asking for more texels than the cap is refused before any layer is decoded; layers are decoded one at a time (NATIVE-71)", async () => {
+  // A few kilobytes asking for 2048²×32 texels (the review's case, 134 M texels): refused under a cap scaled down to 2048²×4.
+  const archive = maskArchive({ "base\m\huge.mlmask": maskResource({ width: 2048, height: 2048, layers: 32 }),
+    "base\m\giant.mlmask": maskResource({ width: 8192, height: 8192, layers: 32 }) });
+  const pool = new NativeArchivePool(fakeDecompress);
+  const began = performance.now();
+  const refused = await decodeMaskFromPool(pool, fakeDecompress, { archivePath: archive, hash: depotHash("base\m\huge.mlmask") }, undefined,
+    { ...DEFAULT_MASK_LIMITS, maxTexels: 2048 * 2048 * 4 });
+  expect(refused.ok ? "ok" : refused.kind).toBe("over-budget");
+  expect(performance.now() - began).toBeLessThan(500);
+  // The default cap (the reference maximum, 20 layers of 4096²) refuses 8192²×32 (about 2 GiB) the same way.
+  const giant = await decodeMaskFromPool(pool, fakeDecompress, { archivePath: archive, hash: depotHash("base\m\giant.mlmask") });
+  expect(giant.ok ? "ok" : giant.kind).toBe("over-budget");
+  expect(DEFAULT_MASK_LIMITS.maxTexels).toBe(20 * 4096 * 4096);
+  // Layers come one at a time: the next layer is decoded only when asked for (a change to the tile table after the first layer was
+  // handed out shows in the second), so a caller that encodes each first holds one layer's texels.
+  const tiles = Uint32Array.from([2, 0, 0]);
+  const atlas = new Uint8Array(3 * 3 * 8).fill(255);
+  const layout: MaskLayout = { atlasWidth: 12, atlasHeight: 12, layers: 2, width: 4, height: 4, widthLow: 0, heightLow: 0, tileSize: 4,
+    atlas: () => atlas, tiles: () => tiles };
+  const layers = maskLayers(layout);
+  expect([...layers.next().value!.pixels].every(texel => texel === 0)).toBe(true);
+  tiles[1] = 0b10; // The tile now holds layer 1, declared at word 2 (atlas tile 0, 0).
+  expect([...layers.next().value!.pixels].some(texel => texel !== 0)).toBe(true);
+  expect(layers.next().done).toBe(true);
 });

@@ -53,26 +53,50 @@ export const watchDigest = (watch: readonly WatchedPath[]): string =>
 
 type Snapshot = { schema: typeof DISCOVERY_SNAPSHOT_SCHEMA; key: string; discovery: SourceDiscovery };
 
+/**
+ * Issues from a read that failed (PIPE-127): a folder or entry that couldn't be listed or inspected, a profile or manifest that couldn't be
+ * read. Such a failure may not repeat and changes no stamp (the folder is stamped before it is read), so a discovery that met one is
+ * never kept or reused: the next start walks again.
+ */
+export const TRANSIENT_DISCOVERY_ISSUES: ReadonlySet<string> = new Set(["directory_unreadable", "entry_unreadable", "profile_unreadable", "vortex_manifest_unreadable"]);
+/** Whether a discovery may be kept for a later start: it met no read failure that may not repeat. */
+export const keepableDiscovery = (discovery: SourceDiscovery): boolean =>
+  Array.isArray(discovery.issues) && !discovery.issues.some(issue => TRANSIENT_DISCOVERY_ISSUES.has(issue?.code));
+
 /** The snapshots of one cache folder. `key`: the route's settings and scan limits; `code`: the host code identity. */
 export class DiscoverySnapshots {
   constructor(private readonly options: { code: () => Promise<string>; stamp?: (path: string) => Promise<string> }) {}
 
   private file(cacheDir: string, key: string) { return join(cacheDir, "discovery", `${createHash("sha256").update(key).digest("hex").slice(0, 32)}.json`); }
-  private async fullKey(route: unknown): Promise<string> { return canonicalJson({ schema: DISCOVERY_SNAPSHOT_SCHEMA, route, code: await this.options.code() }); }
+  /** The snapshot's full key, or null when the host code identity can't be read (then nothing is kept or reused: PIPE-128). */
+  private async fullKey(route: unknown): Promise<string | null> {
+    try { return canonicalJson({ schema: DISCOVERY_SNAPSHOT_SCHEMA, route, code: await this.options.code() }); }
+    catch { return null; }
+  }
 
-  /** The kept discovery of `route` when every stamp it depends on is unchanged, else null (none kept, another version, or changed). */
+  /**
+   * The kept discovery of `route` when every stamp it depends on is unchanged, else null (none kept, another version, changed, or one that
+   * met a read failure). Never throws: anything that goes wrong is a walk.
+   */
   async read(cacheDir: string, route: unknown): Promise<SourceDiscovery | null> {
     const key = await this.fullKey(route);
+    if (!key) return null;
     let snapshot: Snapshot;
     try { snapshot = JSON.parse(await readFile(this.file(cacheDir, key), "utf8")) as Snapshot; } catch { return null; }
     if (snapshot?.schema !== DISCOVERY_SNAPSHOT_SCHEMA || snapshot.key !== key || !Array.isArray(snapshot.discovery?.watched)
-      || !Array.isArray(snapshot.discovery?.candidates)) return null;
-    return await watchUnchanged(snapshot.discovery.watched, this.options.stamp) ? snapshot.discovery : null;
+      || !Array.isArray(snapshot.discovery?.candidates) || !keepableDiscovery(snapshot.discovery)) return null;
+    try { return await watchUnchanged(snapshot.discovery.watched, this.options.stamp) ? snapshot.discovery : null; }
+    catch { return null; }
   }
 
-  /** Keep a fresh discovery of `route` (advisory: a failed write only means the next start walks again). */
+  /**
+   * Keep a fresh discovery of `route` (advisory: a failed write only means the next start walks again). A discovery that met a read failure
+   * that may not repeat (`keepableDiscovery`) is not kept.
+   */
   async write(cacheDir: string, route: unknown, discovery: SourceDiscovery): Promise<void> {
+    if (!keepableDiscovery(discovery)) return;
     const key = await this.fullKey(route);
+    if (!key) return;
     try {
       mkdirSync(join(cacheDir, "discovery"), { recursive: true });
       writeFileAtomic(this.file(cacheDir, key), JSON.stringify({ schema: DISCOVERY_SNAPSHOT_SCHEMA, key, discovery } satisfies Snapshot));

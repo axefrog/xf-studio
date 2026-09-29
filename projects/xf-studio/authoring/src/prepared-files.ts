@@ -14,11 +14,13 @@
  * pictures a style or turntable version bump orphaned go first once the budget is reached. Anything used by this process is never
  * evicted, so a V on screen, its tried choices, the pictures shown and a running preparation keep their files; the budget can be
  * exceeded by what this session uses, and eviction then stops. The resolver's failure markers, archive indexes and creator texts are
- * small and kept. The store and manifests are removed only by Clear.
+ * small and kept. The store and manifests are removed only by Clear. The exports' work folders are outside both (an export may be
+ * writing into one); one left over by a crash is swept with the budget check once it is an hour old (`sweepStaleWork`, PREV-198).
  */
 import { lstat, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { usedThisSession } from "./game-asset-export";
+import { hostClock } from "./platform/graph-adapters/host-sources";
 
 export type PreparedRoots = { exports: string; resolver: string; store: string; manifests: string;
   /** Choice previews (`images/*.webp`, `sources/*.json`): evicted with the budget; their size is counted and cleared by their store. */
@@ -88,6 +90,31 @@ async function folderBytes(root: string, skip: (name: string) => boolean = () =>
   return total;
 }
 const exportsSkip = (name: string) => name.startsWith(".work-") || name.endsWith(".tmp");
+
+/**
+ * A work folder older than this is left over (PREV-198): an export's work folder lives for one batch (seconds; a WolvenKit launch writing
+ * into one keeps its time current) and is removed when the batch ends, so one this old was orphaned by a crash or a stopped batch.
+ */
+export const STALE_WORK_MS = 60 * 60 * 1000;
+/**
+ * Remove the exports' leftover work folders (`.work-*` older than `STALE_WORK_MS`): they are outside the budget and Clear, which skip work
+ * folders a running export may be writing into. Runs with the budget check, so at the first preparation after a start and at most once a
+ * minute after. Returns how many were removed.
+ */
+export async function sweepStaleWork(exportsRoot: string, now = hostClock().now(), maxAgeMs = STALE_WORK_MS): Promise<number> {
+  let names: string[];
+  try { names = await limited(() => readdir(exportsRoot)); } catch { return 0; }
+  let removed = 0;
+  await eachBounded(names.filter(name => name.startsWith(".work-")), async name => {
+    const path = join(exportsRoot, name);
+    try {
+      const info = await limited(() => lstat(path));
+      if (!info.isDirectory() || now - info.mtimeMs < maxAgeMs) return;
+    } catch { return; }
+    if (await removeTree(path)) removed++;
+  });
+  return removed;
+}
 
 /**
  * Remove a file or a folder and everything in it, one file-system call per file and folder, each within the shared bound (PREV-140). A
@@ -160,6 +187,7 @@ async function fileEntries(folder: string, suffix: string): Promise<Evictable[]>
  * removed and the size after. Under budget (the usual case) it only counts their size: nothing is listed entry by entry (PREV-125).
  */
 export async function evictPrepared(roots: PreparedRoots, budget = PREPARED_BUDGET_BYTES): Promise<{ removed: number; freed: number; bytes: number }> {
+  await sweepStaleWork(roots.exports);
   const counted = (await Promise.all([folderBytes(roots.exports, exportsSkip), folderBytes(join(roots.resolver, "json"), name => !name.endsWith(".json")),
     roots.previews ? folderBytes(roots.previews, name => name.endsWith(".tmp")) : 0]))
     .reduce((sum, bytes) => sum + bytes, 0);

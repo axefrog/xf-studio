@@ -30,6 +30,7 @@ import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview-core-host";
+import { includeHostCode } from "../src/host-code-identity";
 import { createPreviewCoreHandler } from "../src/preview-core-server";
 import type { GameAssetExporter } from "../src/game-asset-export";
 import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview-core-recipe";
@@ -157,7 +158,11 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const diagnostics = hostDiagnosticsAt(dataRoot);
   setProcessDiagnostics(diagnostics);
   // The resolver reads game files natively first, in a worker; the packaged app starts the built one.
-  if (hostOptions.nativeDecodeWorker) installations.useNativeWorker(hostOptions.nativeDecodeWorker);
+  if (hostOptions.nativeDecodeWorker) {
+    installations.useNativeWorker(hostOptions.nativeDecodeWorker);
+    // Its bundle is code the host runs: answers kept across restarts are named by it too (PIPE-129).
+    includeHostCode(hostOptions.nativeDecodeWorker);
+  }
   let listener: ((message: string) => void) | null = null;
   const logTo = (area: string) => (message: string) => { diagnostics.log.info(area, "event", message); listener?.(message); };
   const report = logTo("desktop");

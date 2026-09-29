@@ -146,6 +146,26 @@
         { "observe": { "a": 2, "ev": "go" } }
       ],
       "expect": { "errorCodes": ["model"], "logs": { "log": [[1, { "state": "idle" }], [2, { "state": "idle" }]] }, "streams": { "sm": [{ "state": "idle" }] } }
+    },
+    {
+      "name": "a-model-whose-parameters-arent-plain-data-is-refused-whole",
+      "kind": "kernel",
+      "rules": ["10.2", "2.1", "7.4"],
+      "description": "A model that would replace a (its first entry changed) and b, whose parameters hold a string with a lone surrogate (not plain data), is refused with code model before anything is released: a and b keep working as erected.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "b", "kind": "combinator", "op": "sum", "inputs": ["a"], "params": { "add": 1 } },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["b"] }
+      ] },
+      "script": [
+        { "model": { "nodes": [
+          { "id": "a", "kind": "seed", "initial": 5 },
+          { "id": "b", "kind": "combinator", "op": "sum", "inputs": ["a"], "params": { "add": 1, "label": "\ud800" } },
+          { "id": "log", "kind": "effect", "op": "record", "inputs": ["b"] }
+        ] } },
+        { "observe": { "a": 2 } }
+      ],
+      "expect": { "errorCodes": ["model"], "streams": { "b": [2, 3] }, "logs": { "log": [[2], [3]] } }
     }
   ]
 }
