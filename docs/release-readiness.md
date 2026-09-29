@@ -21,5 +21,6 @@ The first full [readiness audit](../research/authoring/release-readiness-audit.m
 
 - **Speed:** choosing Colour-shifting froze the UI for 5–10 s (PREV-188); switching hairstyle is very slow (PREV-189); first-run preparation takes about 55 s (a one-time step with WolvenKit download and progress, but still measured against a budget).
 - **Finishes:** Glitter and Shimmer reworked offline and waiting for in-game verdicts; Glossy and Colour-shifting still experimental.
-- **Clutter:** preview-only finishes and research tools need an audit against "exportable first".
+- **Clutter:** audited and cleared from the default path (audit items 5–8): Shimmer and Glitter, the rendering and display studies and the raw exports sit behind research tools until they pass in game or are needed.
+- **Beta scope:** a Beta badge, the beta's What's new tour, Help's limitations and Report a problem in the first-run texts are in place; the way to learn about updates is **Check for updates** in Help (the releases page). A network update check awaits a consent design (audit item 22).
 - **Consistency:** open UI findings in the ledger (UI-139, UI-144..157 and others), and layer names repeating after a removal (CORE-125).

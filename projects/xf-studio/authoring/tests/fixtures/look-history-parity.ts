@@ -156,7 +156,11 @@ export function session(stored: unknown) {
   record("redo refused", app.dispatch({ kind: "history.redo" }));
   if (actions) {
     const home = actions.summary().selected!;
-    actions.dispatch({ kind: "preset.edit", command: { kind: "add" } }); record("preset add");
+    actions.dispatch({ kind: "preset.edit", command: { kind: "add" } });
+    // Add preset now starts from the starter look (release-readiness-audit.md item 12). This session starts the new look empty, as
+    // the code the golden was captured from did (no history step), so it still checks Undo, Redo and History parity.
+    document.restore({ ...document.export(), recipe: { ...document.export().recipe, layers: [] }, active: 0, selected: 0 });
+    record("preset add");
     const added = actions.summary().selected!;
     record("undo in the new preset", app.dispatch({ kind: "history.undo" }));
     record("edit the new preset", app.dispatch({ kind: "layer.edit", command: { kind: "add" } }));

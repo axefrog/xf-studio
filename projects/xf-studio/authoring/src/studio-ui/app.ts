@@ -217,18 +217,25 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   requestAnimationFrame(() => layouts.sizeClass(dock.sizeClass, false));
 
   /**
-   * The 3D preview setup card sits in the 3D view pane, its subject, whenever that pane is shown (release-readiness-audit.md item 10), so
-   * it never covers an inspector; it floats over the window only while the pane is hidden. Moving it keeps focus where it was.
+   * The 3D preview setup card sits in the 3D view pane, its subject, whenever that pane is shown and has room for it
+   * (release-readiness-audit.md item 10), so it never covers an inspector; it floats over the window only while the pane is hidden or
+   * squeezed below the card's reading size. Placed only while the card shows (its size is read then); moving it keeps focus.
    */
   const headPane = byId.get("head")?.spec.element;
   const dockSetupCard = (frame: Frame) => {
-    const host = headPane && dock.isVisible("head") ? headPane : root;
-    if (setupCard.element.parentElement !== host) {
-      const focused = setupCard.element.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
-      if (host === root) root.insertBefore(setupCard.element, setupCard.consent); else host.append(setupCard.element);
-      focused?.focus({ preventScroll: true });
+    const open = frame.previewSetup.card.open;
+    if (open) {
+      const pane = headPane && dock.isVisible("head") ? headPane.getBoundingClientRect() : undefined;
+      // A pane not laid out yet (0 × 0, the first paint) counts as roomy; the card scrolls inside a pane down to 280 × 220.
+      const roomy = !!pane && ((pane.width === 0 && pane.height === 0) || (pane.width >= 280 && pane.height >= 220));
+      const host = roomy ? headPane! : root;
+      if (setupCard.element.parentElement !== host) {
+        const focused = setupCard.element.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+        if (host === root) root.insertBefore(setupCard.element, setupCard.consent); else host.append(setupCard.element);
+        focused?.focus({ preventScroll: true });
+      }
     }
-    headPane?.classList.toggle("setup-card-docked", host === headPane && frame.previewSetup.card.open);
+    headPane?.classList.toggle("setup-card-docked", open && setupCard.element.parentElement === headPane);
   };
   rt.setupCardDocked = () => setupCard.element.parentElement === headPane;
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;

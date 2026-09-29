@@ -1,6 +1,6 @@
 # Release readiness audit: "ready for Nexus?"
 
-**Status:** first full audit against the [1.0 readiness bar](../../docs/release-readiness.md), run on 29 September 2026 at `main` `95e6d0a`. Read-only: no product code was changed. It measures the gap; it does not close it. The ranked closing list is at the [end](#6-ranked-closing-list).
+**Status:** first full audit against the [1.0 readiness bar](../../docs/release-readiness.md), run on 29 September 2026 at `main` `95e6d0a`. Read-only: no product code was changed. It measures the gap; it does not close it. The ranked closing list is at the [end](#6-ranked-closing-list). Tracks B, C and E (items 5–14 and 21–23) were closed on `claude/beta-polish-1` (`353d967`, `97e991a` and the follow-up commits named per item); each row below says what was done.
 
 ## How it was run
 
@@ -68,15 +68,15 @@ Default path = what a new user sees: the Eye makeup module shown, and the Expres
 | **Matte, Satin, Metallic** | Colour & finish | In game: the selector and switching were confirmed, and Metallic has no angular highlights. Matte and Satin were retuned after they read too glossy; the retune hasn't been seen in game yet | Keep; they're the product |
 | **Colour-shift** | Colour & finish | Exports, experimental; seen in game "behaves as designed", one pigment per preset | Keep, under **Experimental** |
 | **Glossy** | Colour & finish | Exports, experimental; Gloss A and C separate in close-up, B and D not seen yet; Help says it doesn't yet look different from Satin | Keep under Experimental for the beta, or Move if the rework misses the beta |
-| **Shimmer** | Colour & finish | **Exports, failed in game** (session 6: "glossy vinyl"); being reworked | **Move** until the rework passes in game; the tile currently promises a finish that fails |
-| **Glitter** | Colour & finish, palette, Mod package list | **Preview only** (guarded from export; the in-game candidate failed) | **Move**, together with its model list. A preview-only finish in the main picker is the clearest breach of "exportable first" |
+| **Shimmer** | Colour & finish | **Exports, failed in game** (session 6: "glossy vinyl"); being reworked | **Move** until the rework passes in game; the tile currently promises a finish that fails. **Moved** (`353d967`) |
+| **Glitter** | Colour & finish, palette, Mod package list | **Preview only** (guarded from export; the in-game candidate failed) | **Move**, together with its model list. A preview-only finish in the main picker is the clearest breach of "exportable first". **Moved** (`353d967`) |
 | Surface controls, Front view, Whole body, Play the game idle | 3D view toolbar | Support (preview) | Keep |
 | Both eyes, Single eye, Other eye, Fit shape | UV map | Support | Keep |
 | Import or export a collection, import or export a preset recipe | Library › Files | Support (portable files) | Keep |
-| **Export layer mask** ("Export selected layer mask (2048²)" in the palette) | Library › Files, palette | Research (a raw texture) | **Move** |
-| Save, Save as new collection, saved collections, Reopen or Open, Recover previous draft | Library | Support | Keep; remove **Refresh** ([§5](#5-annoyances)) |
+| **Export layer mask** ("Export selected layer mask (2048²)" in the palette) | Library › Files, palette | Research (a raw texture) | **Move**. **Moved** (`353d967`) |
+| Save, Save as new collection, saved collections, Reopen or Open, Recover previous draft | Library | Support | Keep; remove **Refresh** ([§5](#5-annoyances)). **Done** (`97e991a`): no Refresh; **Recent drafts** replaces Recover previous draft |
 | Check, Build mod files…, Add to my mod manager, Show in folder | Mod package | Exports | Keep |
-| "What can be packaged" (seven finishes with badges) | Mod package | Support | **Remove** or fold into Help: it repeats the finish picker's grouping (G3) |
+| "What can be packaged" (seven finishes with badges) | Mod package | Support | **Remove** or fold into Help: it repeats the finish picker's grouping (G3). **Removed** (`353d967`) |
 | History | History | Support | Keep |
 
 ### Your V and the view (preview only by design)
@@ -91,18 +91,18 @@ These are preview only by nature: they let the user judge a look on a V. They st
 | Show my V's own makeup | Character | Preview only | Keep |
 | Show my V uncensored | Character › Body | Preview only (policy: opt in) | Keep |
 | Clothing and its switch | Character | Preview only (vanilla items only) | Keep |
-| **Export appearance data** | Character › Files | Research | **Move** |
-| **Clear prepared game files** | Character › Files | Support (cache maintenance) | **Hide**: Settings › Tools or the palette only |
+| **Export appearance data** | Character › Files | Research | **Move**. **Moved** (`353d967`) |
+| **Clear prepared game files** | Character › Files | Support (cache maintenance) | **Hide**: Settings › Tools or the palette only. **Done** (`353d967`): Settings › Tools and the palette |
 | Field of view, Front view, Whole body | Camera & light | Preview only | Keep |
 | Creator face and Creator hair cameras | Camera & light, palette | Preview only (for comparing with the game) | Keep; they help judge a look as the game frames it |
 | Lighting setups: New setup, Rename, Reset, Delete, lights and the direction dial | Camera & light | Preview only | Keep, but show which setup is current ([§2](#2-consistency-sweep) C-20) |
 | Exposure, Room light, Backdrop, Colour grade | Camera & light › Surroundings | Preview only | Keep |
-| **Preview normal map** | Camera & light › Display | Research | **Move** |
+| **Preview normal map** | Camera & light › Display | Research | **Move**. **Moved** (`353d967`) |
 | Game idle (Still or Creator close-up), Pause, Body and Facial movement, Blink | Motion | Preview only | Keep |
 | Hair physics (Early access) | Motion | Preview only | Keep, tagged |
 | Texture size (512 to 4K) | Preview quality | Preview only | Keep |
-| **Rebuild preview** | Preview quality, palette | Support (a recovery action) | **Hide**: make it the next step of an error state, not a standing button |
-| **Rendering: Skin scattering, Face shadows, Hair look (Crisp or Game-like)** | Preview quality, six palette commands | Research (fidelity experiments) | **Move**; keep one good default |
+| **Rebuild preview** | Preview quality, palette | Support (a recovery action) | **Hide**: make it the next step of an error state, not a standing button. **Done** (`353d967`): shown only when the textures failed; the palette keeps it |
+| **Rendering: Skin scattering, Face shadows, Hair look (Crisp or Game-like)** | Preview quality, six palette commands | Research (fidelity experiments) | **Move**; keep one good default. **Moved** (`353d967`); the defaults stay |
 | "About 23 MiB of memory at this size" | Preview quality | Support | Keep the fact; say it as "Uses about 23 MB of memory" (G4) |
 | Activity | closed by default | Support | Keep |
 | Settings, Help, Report a problem, Diagnostic mode | closed by default, header | Support | Keep |
@@ -150,8 +150,8 @@ These are preview only by nature: they let the user judge a look on a V. They st
 | C-12 | Raw units in the default path: "Point blend 0.05% UV", "Edge softness 0.60% UV" | `nogame-edge-*` | G4 ("no raw units such as '% UV' outside research tools") | M (needs a unit the person can judge: mm on the face, or 0–100) |
 | C-13 | Developer and jargon words shown by default:<br>• "WolvenKit CLI" (Settings, Mod package);<br>• "Rebuild preview";<br>• "MiB";<br>• "Refresh" (library);<br>• "No active exportable layers remain" (Check);<br>• "preset(s)" (status line);<br>• "1 entries" (Report a problem);<br>• byte sizes such as "1006 B" and "357 B" on every report part | `nogame-package-*`, `nogame-quality-*`, `nogame-dlg-report-a-problem.png`, `21-after-check-save.png` | G4, [f-copy] | S each |
 | C-14 | The Check status line runs past one line and ends in an ellipsis ("…whether the mod can also fi…") | `21-after-check-save.png` status bar | G1 (a status line is one line, about 70 characters), I3 | S |
-| C-15 | Stale product text:<br>• the tour "What's new in 0.1.0-alpha.1" (alpha.2 is published; 1.0 needs a current one);<br>• Help › "What's not in this version yet" says the rebuilt Shimmer "hasn't been tried in the game yet", but session 6 tried it and it failed | `nogame-help-light-480.png`, `tours.ts`, `help-topics.ts` | [f-copy] honesty; the beta framing | S |
-| C-16 | The WolvenKit notice says "XF Studio can download it for you from the 3D preview card". It is shown in Settings › Game and Mod package while no such card is visible (the card appears only after the game folder is set) | `nogame-settings-light-480.png` | H4 (the one next step, with its button) | S |
+| C-15 | Stale product text:<br>• the tour "What's new in 0.1.0-alpha.1" (alpha.2 is published; 1.0 needs a current one);<br>• Help › "What's not in this version yet" says the rebuilt Shimmer "hasn't been tried in the game yet", but session 6 tried it and it failed | `nogame-help-light-480.png`, `tours.ts`, `help-topics.ts` | [f-copy] honesty; the beta framing | S. **Fixed** (`97e991a`) |
+| C-16 | The WolvenKit notice says "XF Studio can download it for you from the 3D preview card". It is shown in Settings › Game and Mod package while no such card is visible (the card appears only after the game folder is set) | `nogame-settings-light-480.png` | H4 (the one next step, with its button) | S. **Fixed** (`353d967`) |
 | C-17 | The same sentence, "The 3D preview needs your Cyberpunk 2077 game folder", is repeated as a reason in six or more places at once:<br>• the 3D view;<br>• Character: Your V line and Eyes;<br>• Motion;<br>• the Preview quality line;<br>• about 25 palette reasons | `m/char-light-dark-300.png` | G3 (one place per state), B4 (a shared reason says it once) | M |
 
 ### States and badges
@@ -315,27 +315,27 @@ The **budgets** are from the [performance backlog](../backlog/performance.md) (s
 
 ### Track B: declutter, exportable first (blocks: "Exportable first" row)
 
-5. **Move Glitter** (tile, palette command, Mod package row) and **Shimmer** (until its rework passes in game) behind research tools. Keep the three in-game finishes, plus Colour-shifting and Glossy under Experimental. **M** (catalogue flag and the Check and Help text follow)
+5. **Move Glitter** (tile, palette command, Mod package row) and **Shimmer** (until its rework passes in game) behind research tools. Keep the three in-game finishes, plus Colour-shifting and Glossy under Experimental. **M** (catalogue flag and the Check and Help text follow). **Done** (`353d967`): the finish catalogue's `research` flag (`RESEARCH_FINISHES`); the picker, layer menu and palette offer them only with research tools on or on a layer already using one; Check and Build are unchanged
 6. **Move the research controls:**
    - Preview quality › Rendering (skin scattering, face shadows, hair look) and its six palette commands;
    - Camera & light › Preview normal map;
    - Export layer mask;
    - Character › Export appearance data.
 
-   **Hide** Clear prepared game files and Rebuild preview as standing buttons; offer them where they're the next step. **M**
-7. **Drop Mod package's "What can be packaged" list:** the picker already groups finishes by status. **S**
-8. **Palette hygiene:** stop listing about 25 3D-view commands as disabled until the game is set (show one "Set up the 3D preview…" command instead), and hide the research ones. **M**
+   **Hide** Clear prepared game files and Rebuild preview as standing buttons; offer them where they're the next step. **M**. **Done** (`353d967`)
+7. **Drop Mod package's "What can be packaged" list:** the picker already groups finishes by status. **S**. **Done** (`353d967`)
+8. **Palette hygiene:** stop listing about 25 3D-view commands as disabled until the game is set (show one "Set up the 3D preview…" command instead), and hide the research ones. **M**. **Done** (`353d967`): `withPreviewSetup` in `studio-ui/app.ts` folds every command refused as `asset_unavailable` (or with the head's own words) into one entry that carries their keywords
 
 ### Track C: discoverability and first run (blocks: "Discoverable" and "No annoyances" rows)
 
-9. **The first-run card asks how you install mods** (MO2 profile or game folder) when MO2 is detected, so the route and the framework check are right on first run. Verify against the desktop welcome first. **M**
-10. **The first-run card never covers the inspector:** dock it inside the 3D view pane (where its subject is), and don't re-show it after dialogs once the person chose Not now. **M**
+9. **The first-run card asks how you install mods** (MO2 profile or game folder) when MO2 is detected, so the route and the framework check are right on first run. Verify against the desktop welcome first. **M**. **Done** (`97e991a`): the desktop welcome doesn't ask; the card now does when Mod Organizer 2 manages the game (`previewSetup.chooseRoute`), defaulting to the instance found and its last-used profile, saved with **Use this folder**
+10. **The first-run card never covers the inspector:** dock it inside the 3D view pane (where its subject is), and don't re-show it after dialogs once the person chose Not now. **M**. **Done** (`97e991a`, room check in the docs commit): docked whenever the pane is shown with room for it (floats otherwise); Not now is kept in the workspace
 11. **Make the first run obvious:**
     - offer the Getting started tour on first run;
-    - don't show "Unsaved changes" or a phantom "version 1 · 0 presets" for an untouched first draft. **S–M**
-12. **Add preset starts from a useful default** (one layer like the first preset), and **Save as new collection asks for a name**, or makes it unique ("Makeup collection 2"). Same pattern as CORE-125. **S**
-13. **The library updates itself** (remove Refresh). Recover draft becomes a small list of recent drafts with times. **M**
-14. **The WolvenKit notice names the one next step with its button** (Set up WolvenKit…), not "the 3D preview card". Drop "CLI". **S**
+    - don't show "Unsaved changes" or a phantom "version 1 · 0 presets" for an untouched first draft. **S–M**. **Done** (`97e991a`): the offer shows beside the docked card; a fresh library starts empty, so the first draft reads "Not saved yet"
+12. **Add preset starts from a useful default** (one layer like the first preset), and **Save as new collection asks for a name**, or makes it unique ("Makeup collection 2"). Same pattern as CORE-125. **S**. **Done** (`97e991a`): the starter look; "My collection 2" (`uniqueCollectionName`)
+13. **The library updates itself** (remove Refresh). Recover draft becomes a small list of recent drafts with times. **M**. **Done** (`97e991a`) without times: the recovery queue keeps no time, and adding one changes the stored workspace format, left to the storage track. Each row names the draft, its presets and its version
+14. **The WolvenKit notice names the one next step with its button** (Set up WolvenKit…), not "the 3D preview card". Drop "CLI". **S**. **Done** (`353d967`): the step button in Settings (Game and Tools) and Mod package; "CLI" dropped from those lines and the consent intro
 
 ### Track D: consistency (blocks: "Consistency" row; every UI finding closed)
 
@@ -371,9 +371,9 @@ The **budgets** are from the [performance backlog](../backlog/performance.md) (s
 21. **Current release texts:**
     - a "What's new" tour for the beta, replacing alpha.1's;
     - Help › "What's not in this version yet" corrected for Shimmer's session-6 result and the Glitter status;
-    - the changelog's Known limitations kept in step (C-15). **S**
-22. **A visible beta marker** and an **update notice:** the readiness bar asks for "a way to learn about updates", and the updater is disabled (`updater_unavailable`). A minimum is a "new version available" check against GitHub Releases, or a Help link plus a line in About. **M**
-23. **Report a problem stays the one obvious path** (it works). Surface it in the beta's first-run and What's new texts. **S**
+    - the changelog's Known limitations kept in step (C-15). **S**. **Done** (`97e991a`; changelog in the docs commit)
+22. **A visible beta marker** and an **update notice:** the readiness bar asks for "a way to learn about updates", and the updater is disabled (`updater_unavailable`). A minimum is a "new version available" check against GitHub Releases, or a Help link plus a line in About. **M**. **Done, minimum** (`97e991a`): a **Beta** badge beside the name, and **Check for updates** in Help and the palette, which opens the releases page (About already says updates are off and where to get them). No network check: nothing is designed for its consent (the settings' `updates.checkAutomatically` has no UI or host endpoint, and the signed updater gate isn't integrated), so it is the maintainer's call
+23. **Report a problem stays the one obvious path** (it works). Surface it in the beta's first-run and What's new texts. **S**. **Done** (`97e991a`): the onboarding offer, the desktop welcome and the What's new tour's last step
 
 **Size of the gap:**
 - 23 items: 3 L, 11 M, 9 S (counting a range at its upper size).

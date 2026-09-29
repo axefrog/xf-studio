@@ -304,7 +304,7 @@ test("Build readiness turns green once XF Studio's own WolvenKit is downloaded, 
     const before = await readiness();
     expect(before.ready).toBe(false);
     expect(before.issues.map((issue: { code: string }) => issue.code)).toEqual(["wolvenkit_unset"]);
-    expect(before.issues[0].reason).toContain("download it for you");
+    expect(before.issues[0].reason).toContain("set it up for you");
     expect((await (await fetch(base + "/api/desktop/capabilities", { headers: read })).json()).packageBuild).toBe(false);
     expect((await fetch(base + "/api/desktop/wolvenkit")).status).toBe(403);
     expect(await (await fetch(base + "/api/desktop/wolvenkit", { headers: read })).json()).toMatchObject({ phase: "available", canInstall: true });
