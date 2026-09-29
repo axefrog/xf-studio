@@ -718,13 +718,13 @@ span.category { border-color: transparent; background: transparent; padding-left
 
 /* Finish chooser */
 /* Finish chooser: one row group per export status. Three equal columns (one column in narrow panels,
-   where three would clip "Colour-shift") keep every card the same
+   where three would clip "Colour-shifting", the finish's one name since C-1) keep every card the same
    width at all panel widths (a lone Glitter is the whole "Preview only" row, by design); cards
    are one line tall, and names never wrap. */
 .finish-groups { display: grid; gap: var(--sp-3); container-type: inline-size; }
 .finish-group { display: grid; gap: var(--sp-1); }
 .finish-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
-@container (max-width: 329px) { .finish-grid { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 369px) { .finish-grid { grid-template-columns: minmax(0, 1fr); } }
 .finish-option { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-3); align-items: center; padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--line); background: var(--bg-raised); text-align: left; border-radius: 0 var(--bevel-sm) 0 0; height: 40px; min-width: 0; }
 .finish-option:hover:not(:disabled) { background: var(--bg-hover); }
