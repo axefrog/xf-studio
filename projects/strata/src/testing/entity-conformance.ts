@@ -28,6 +28,7 @@ export type EntityStep =
   | { readonly advance: number }
   | { readonly forget: string }
   | { readonly reload: true }
+  | { readonly window: string } | { readonly sync: true }
   | { readonly entries: readonly Json[] };
 export type EntityVector = {
   readonly name: string; readonly kind: "entity"; readonly rules?: readonly string[]; readonly description?: string;
@@ -40,6 +41,8 @@ export type EntityVector = {
     readonly changes?: readonly (readonly string[])[];
     /** Per node, its entries' `[seq, actor, actorSeq]` (SPEC §17.1, §17.2). */
     readonly actors?: Readonly<Record<string, readonly (readonly [number, string, number])[]>>;
+    /** Per window other than the main one: the effective values it reads at the end. */
+    readonly windows?: Readonly<Record<string, { readonly effective?: Readonly<Record<string, Json | null>> }>>;
   };
 };
 
@@ -88,16 +91,19 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
     at++;
   }
   let session = new Aborter(life.signal), sessions = 0;
-  const open = async () => {
-    const opened = createGraph({ types, store: memory, signal: session.signal,
-      sources: { clock: simClock(scheduler), random: seededRandom(`${vector.seed ?? vector.name}${sessions ? `:${sessions}` : ""}`) } });
+  // Windows: other graphs over the same store (other actors), opened on first use; "main" is the first.
+  const open = async (peer = "main") => {
+    const opened = createGraph({ types, store: memory, signal: session.signal, ...(peer === "main" ? {} : { actor: peer }),
+      sources: { clock: simClock(scheduler), random: seededRandom(`${vector.seed ?? vector.name}${sessions ? `:${sessions}` : ""}${peer === "main" ? "" : `:${peer}`}`) } });
     await opened.load();
-    opened.subscribeAll(set => sets.push(set), { signal: session.signal });
+    if (peer === "main") opened.subscribeAll(set => sets.push(set), { signal: session.signal });
     return opened;
   };
   const sets: ChangeSet[] = [];
   let graph = await open();
+  const windows = new Map([["main", graph]]);
   const refusals: (string | null)[] = [];
+  const problems: string[] = [];
   const changes: string[][] = [];
   for (const step of vector.script.slice(at)) {
     sets.length = 0;
@@ -107,7 +113,12 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
       const committed = graph.commit(edits, (step.options ?? {}) as never);
       result = committed;
       if (committed.ok) for (const [label, ref] of Object.entries(committed.created)) { labels.set(label, ref); names.set(ref.id, label); }
-    } else if ("undo" in step) result = graph.undo(step.undo);
+      await graph.flush();
+    } else if ("window" in step) {
+      if (!windows.has(step.window)) windows.set(step.window, await open(step.window));
+      graph = windows.get(step.window)!;
+    } else if ("sync" in step) await graph.sync();
+    else if ("undo" in step) result = graph.undo(step.undo);
     else if ("redo" in step) result = graph.redo(step.redo);
     else if ("compact" in step) {
       await graph.flush();
@@ -120,17 +131,20 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
     else if ("reload" in step) {
       // A new session over the same store: snapshots written at close, then loaded from them and their tails.
       await graph.snapshotAll();
+      for (const peer of windows.values()) if (peer !== graph) await peer.snapshotAll();
       session.abort("closed");
       session = new Aborter(life.signal);
       sessions++;
       graph = await open();
-    }
+      windows.clear();
+      windows.set("main", graph);
+    } else problems.push(`${vector.name}: the script has a step this runner doesn't know: ${canonical(step)}`);
     if (result) refusals.push(result.ok ? null : result.reason ?? "unknown");
     await settle();
     changes.push(sets.flatMap(set => set.nodes.flatMap(change => change.paths.map(path => `${names.get(change.node.id) ?? change.node.id} ${pathKey(path)}`))).sort());
   }
-  await graph.flush();
-  const problems: string[] = [];
+  for (const peer of windows.values()) await peer.flush();
+  graph = windows.get("main")!;
   const show = (value: unknown) => canonical(value);
   const expect = vector.expect;
   for (const [label, expected] of Object.entries(expect.effective ?? {})) {
@@ -158,6 +172,15 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
     const ref = labels.get(label);
     const actual = ref ? (await graph.history(ref)).map(entry => [entry.seq, entry.actor, entry.actorSeq]) : [];
     if (!equal(actual, expected)) problems.push(`${vector.name}: actors of ${label} are ${show(actual)}, expected ${show(expected)}`);
+  }
+  for (const [name, expected] of Object.entries(expect.windows ?? {})) {
+    const peer = windows.get(name);
+    if (!peer) { problems.push(`${vector.name}: no step opened the window ${name}`); continue; }
+    for (const [label, value] of Object.entries(expected.effective ?? {})) {
+      const ref = labels.get(label);
+      const actual = ref ? peer.resolve(ref) ?? null : null;
+      if (!equal(actual, resolveLabels(value))) problems.push(`${vector.name}: in ${name}, ${label} is ${show(actual)}, expected ${show(resolveLabels(value))}`);
+    }
   }
   life.abort();
   return problems;

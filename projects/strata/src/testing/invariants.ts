@@ -24,14 +24,22 @@ export function headStates(graph: Graph): StatesAt {
 /** States at a pinned layer's point, replayed from the graph's in-memory entries. */
 function pinnedFrom(graph: Graph, types: readonly TypeSpec[]): (layer: Layer) => StatesAt | null {
   const cache = new Map<number, StatesAt>();
-  const entries = graph[STRATA_DEBUG]().records.flatMap(rec => rec.base.seq > 0 ? [] : rec.entries);
+  const byType = new Map(types.map(def => [def.type, def]));
+  const records = new Map(graph[STRATA_DEBUG]().records.map(rec => [rec.ref.id, rec]));
   return layer => {
     const pos = layer.at ? graph.posOf(layer.at) : undefined;
     if (pos === undefined) return null;
     let states = cache.get(pos);
     if (!states) {
-      const replayed = replayTo(types, entries, pos);
-      states = ref => { const item = replayed.get(ref.id); return item && item.ref.type === ref.type && item.state && !item.state.retracted ? item.state : null; };
+      // Each stream folded from empty (or from the snapshot it was loaded from, when that is no later) up to the point.
+      states = ref => {
+        const rec = records.get(ref.id);
+        if (!rec || rec.ref.type !== ref.type) return null;
+        if (rec.constant) return rec.head;
+        if (rec.base.seq > 0 && rec.base.pos > pos) return null;
+        const state = fold(rec.base.state, rec.entries.filter(entry => entry.pos <= pos), byType.get(ref.type));
+        return state && !state.retracted ? state : null;
+      };
       cache.set(pos, states);
     }
     return states;

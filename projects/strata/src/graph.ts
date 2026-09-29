@@ -204,7 +204,14 @@ export class StrataGraph implements GraphView {
   readonly actorProcess: Process;
   private readonly sinks: readonly { readonly def: SinkDef; readonly sink: Sink }[];
   private headPos = 0;
+  /** The greatest position the store has acknowledged or reported (pending entries are kept above it). */
   private storeHead = 0;
+  /**
+   * The position up to which this graph has read what other windows committed: `sync` reads after it. Only a load or
+   * a sync moves it, never the acknowledgement of this graph's own append, since other windows' entries can hold
+   * positions below an acknowledged one that this graph hasn't read yet.
+   */
+  private readPos = 0;
   private actorSeq = 0;
   private loaded = false;
   private snapshotQueue: Promise<void> = Promise.resolve();
@@ -364,8 +371,11 @@ export class StrataGraph implements GraphView {
       const all = await this.storeTask("read", () => store.readStream(ref));
       this.installRecord(ref, this.types.get(ref.type)!, undefined, all);
       entries += all.length;
+      // Its snapshot couldn't be used: write one that can, so the next load doesn't fold the whole stream again.
+      this.slowFolds.add(ref.id);
     }
     this.storeHead = Math.max(this.storeHead, stored.head);
+    this.readPos = Math.max(this.readPos, stored.head);
     this.headPos = Math.max(this.headPos, stored.head);
     const foldMs = clock.monotonic() - started;
     await this.loadPinnedHistory();
@@ -392,14 +402,45 @@ export class StrataGraph implements GraphView {
 
   /** Pinned layers read their source as it was: make sure that history is in memory. */
   private async loadPinnedHistory(): Promise<void> {
-    for (let round = 0; round < 8; round++) {
-      const needed = new Set<string>();
-      for (const rec of this.records.values()) for (const layer of rec.head?.layers ?? []) {
-        if (layer.at && this.posOf(layer.at) === undefined && this.records.has(layer.at.node.id)) needed.add(layer.at.node.id);
+    // Everything read at the head, and through each pin at its own point: the pinned source and its own layers then.
+    await this.loadReachable([...this.records.values()].map(rec => [rec.ref.id, this.headPos]));
+  }
+
+  /**
+   * Loads the history that reading these nodes at these points needs: each node's stream back to the point, and the
+   * same for every layer source its state then names (a pinned layer at the pinned entry's point).
+   */
+  private async loadReachable(queue: [string, number][]): Promise<void> {
+    const seen = new Set<string>();
+    while (queue.length) {
+      const [id, at] = queue.pop()!;
+      const key = `${id}@${at}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const rec = this.records.get(id);
+      if (!rec) continue;
+      if (rec.base.seq > 0 && rec.base.pos > at) await this.loadHistory(rec.ref);
+      const state = this.stateAt(rec, at);
+      for (const layer of state?.layers ?? []) {
+        if (layer.at && this.posOf(layer.at) === undefined) await this.loadHistory(layer.at.node);
+        queue.push([layer.from.id, layer.at ? this.posOf(layer.at) ?? at : at]);
       }
-      if (!needed.size) return;
-      for (const id of needed) await this.loadHistory(this.records.get(id)!.ref);
     }
+  }
+
+  /** Whether reading a node at a point needs no history that isn't in memory (its layers', at that point, included). */
+  private historyAt(id: string, at: number, seen = new Set<string>()): boolean {
+    const key = `${id}@${at}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+    const rec = this.records.get(id);
+    if (!rec) return true;
+    if (rec.base.seq > 0 && rec.base.pos > at) return false;
+    for (const layer of this.stateAt(rec, at)?.layers ?? []) {
+      const pos = layer.at ? this.posOf(layer.at) : at;
+      if (pos === undefined || !this.historyAt(layer.from.id, pos, seen)) return false;
+    }
+    return true;
   }
 
   /** Loads a node's whole stored stream into memory (its history, before the snapshot it loaded from). */
@@ -511,22 +552,7 @@ export class StrataGraph implements GraphView {
    */
   async at(point: TimePoint, roots?: readonly NodeRef[]): Promise<GraphView> {
     let pos = this.toPos(point);
-    const seen = new Set<string>();
-    const queue: [string, number][] = (roots ?? [...this.records.values()].map(rec => rec.ref)).map(ref => [ref.id, pos]);
-    while (queue.length) {
-      const [id, at] = queue.pop()!;
-      const key = `${id}@${at}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const rec = this.records.get(id);
-      if (!rec) continue;
-      if (rec.base.seq > 0 && rec.base.pos > at) await this.loadHistory(rec.ref);
-      const state = this.stateAt(rec, at);
-      for (const layer of state?.layers ?? []) {
-        if (layer.at && this.posOf(layer.at) === undefined) await this.loadHistory(layer.at.node);
-        queue.push([layer.from.id, layer.at ? this.posOf(layer.at) ?? at : at]);
-      }
-    }
+    await this.loadReachable((roots ?? [...this.records.values()].map(rec => rec.ref)).map(ref => [ref.id, pos]));
     if (typeof point !== "number" && point !== "head") pos = this.toPos(point);
     return this.viewOf(this.modelAt(pos), pos);
   }
@@ -952,7 +978,9 @@ export class StrataGraph implements GraphView {
         if (layer.at.node?.id !== from.id || !Number.isSafeInteger(layer.at.seq) || layer.at.seq < 1) refuse("value", "A pin names an entry of the layer's source.");
         if (work.refs.has(from.id) && !this.records.has(from.id)) refuse("pinned", "A node created in this change has no earlier version to pin to.");
         if (layer.at.seq > (this.records.get(from.id)?.headSeq ?? 0)) refuse("missing", "That version doesn't exist.");
-        if (this.posOf(layer.at) === undefined) refuse("unloaded", "Load the source's history first.");
+        // Reading the source at the pinned entry reads its own layers then too: all that history must be in memory.
+        const pinnedAt = this.posOf(layer.at);
+        if (pinnedAt === undefined || !this.historyAt(from.id, pinnedAt)) refuse("unloaded", "Load the source's history first.");
       }
       out.push({ from, role: layer.role, paths: layer.paths === "*" ? "*" : layer.paths.map(path => [...path]),
         ...(layer.at ? { at: { node: from, seq: layer.at.seq } } : {}) });
@@ -1423,8 +1451,12 @@ export class StrataGraph implements GraphView {
     const run = this.storeRun, store = this.store, item = this.outbox[0], token = ++this.token;
     this.inflight = token;
     const process = run.spawn("append", signal => new Promise<Json>((resolve, reject) => {
-      this.sources.clock.after(this.replyTimeoutMs, () => reject(new Error("The database didn't answer in time.")), signal);
-      store.append({ commit: item.commit, entries: item.entries, expect: item.expect }).then(result => resolve(result as unknown as Json), reject);
+      // The wait for a reply ends with the reply (or the process): no timer outlives the append.
+      const waiting = new Aborter(signal);
+      this.sources.clock.after(this.replyTimeoutMs, () => reject(new Error("The database didn't answer in time.")), waiting.signal);
+      store.append({ commit: item.commit, entries: item.entries, expect: item.expect }).then(
+        result => { waiting.abort("answered"); resolve(result as unknown as Json); },
+        error => { waiting.abort("answered"); reject(error); });
     }));
     this.whenSettled(process, state => {
       if (this.inflight !== token) return;
@@ -1466,12 +1498,14 @@ export class StrataGraph implements GraphView {
   }
 
   private onReply(item: PendingCommit, result: AppendResult): void {
-    if (this.outbox[0] !== item) return;
+    // The commit was dropped meanwhile (rejected with the rest of the outbox): send whatever is pending now.
+    if (this.outbox[0] !== item) { this.pump(); return; }
     if (!result.ok) { this.rollbackPending(); this.pump(); return; }
     this.outbox.shift();
     this.ackedCommits.add(item.commit);
     const positions = new Map<string, number>();
     item.entries.forEach((entry, index) => positions.set(`${entry.node.id}@${entry.seq}`, result.positions[index]));
+    let moved = false;
     const acked: Entry[] = [];
     for (const id of new Set(item.entries.map(entry => entry.node.id))) {
       const rec = this.records.get(id);
@@ -1479,15 +1513,17 @@ export class StrataGraph implements GraphView {
       rec.entries = rec.entries.map(entry => {
         const pos = entry.commit === item.commit ? positions.get(`${id}@${entry.seq}`) : undefined;
         if (pos === undefined || pos === entry.pos) return entry;
-        const updated = freeze({ ...entry, pos });
-        return updated;
+        moved = true;
+        return freeze({ ...entry, pos });
       });
       for (const entry of rec.entries) if (entry.commit === item.commit) { acked.push(entry); rec.ackedSeq = Math.max(rec.ackedSeq, entry.seq); }
       if (rec.ackedSeq - rec.snapshotSeq >= this.snapshotEvery) this.writeSnapshot(rec);
     }
     for (const pos of result.positions) { if (pos > this.storeHead) this.storeHead = pos; if (pos > this.headPos) this.headPos = pos; }
-    this.repositionPending();
+    if (this.repositionPending()) moved = true;
     this.timeModels.clear();
+    // Positions this graph had assigned for itself moved to the store's: every pin reads its point anew.
+    if (moved) this.refreshPinned(`ack:${item.commit}`);
     this.deliverToSinks(acked);
     this.notifyPending();
     this.pump();
@@ -1497,8 +1533,8 @@ export class StrataGraph implements GraphView {
    * Keeps pending entries after every acknowledged position: another window's appends can push the store's positions
    * past the provisional ones, and a node's entries must stay in position order.
    */
-  private repositionPending(): void {
-    if (!this.outbox.some(item => item.entries.some(entry => entry.pos <= this.storeHead))) return;
+  private repositionPending(): boolean {
+    if (!this.outbox.some(item => item.entries.some(entry => entry.pos <= this.storeHead))) return false;
     const moved = new Map<string, Entry>();
     this.outbox = this.outbox.map(item => ({ ...item, entries: item.entries.map(entry => {
       const next = freeze({ ...entry, pos: ++this.headPos });
@@ -1509,13 +1545,26 @@ export class StrataGraph implements GraphView {
       const rec = this.records.get(id);
       if (rec) rec.entries = rec.entries.map(entry => moved.get(`${id}@${entry.seq}@${entry.commit}`) ?? entry);
     }
+    return true;
   }
 
-  /** Drops every pending commit from memory (the first was refused as stale); they stay available as rejected. */
-  private rollbackPending(): void {
-    if (!this.outbox.length) return;
-    const dropped = this.outbox;
-    this.outbox = [];
+  /**
+   * After entries' positions moved (the store assigned its own to entries this graph had placed provisionally), a
+   * pinned layer's point may now fall elsewhere among its source's entries: every node with a pinned layer is read
+   * again, and its subscribers told what changed.
+   */
+  private refreshPinned(commit: string): void {
+    const touched = new Map<string, Touch>();
+    for (const rec of this.records.values()) if (rec.head?.layers.some(layer => layer.at)) touched.set(rec.ref.id, "all");
+    if (!touched.size) return;
+    this.emit(this.refresh(touched, () => undefined, "sync"), "sync", commit);
+  }
+
+  /** Drops the pending commits from `from` on (the first of them was, or would be, refused as stale); they stay available as rejected. */
+  private rollbackPending(from = 0): void {
+    if (this.outbox.length <= from) return;
+    const dropped = this.outbox.slice(from);
+    this.outbox = this.outbox.slice(0, from);
     const ids = new Set(dropped.map(item => item.commit));
     for (const item of dropped) this.rejectedCommits.push({ ...item, reason: "stale" });
     const touched = new Map<string, Touch>();
@@ -1538,6 +1587,8 @@ export class StrataGraph implements GraphView {
     for (const id of ids) this.commits.delete(id);
     this.notifyPending();
     this.emit(beforeStates, "rollback", `rollback:${dropped[0].commit}`);
+    // A pin may have pointed into what was dropped.
+    this.refreshPinned(`rollback-pins:${dropped[0].commit}`);
   }
 
   /**
@@ -1591,10 +1642,13 @@ export class StrataGraph implements GraphView {
     if (!this.store) return { applied: 0 };
     await this.flush();
     const store = this.store;
-    const { head, entries } = await this.storeTask("changes", () => store.changesSince(this.storeHead));
+    const { head, entries } = await this.storeTask("changes", () => store.changesSince(this.readPos));
     const foreign = entries.filter(entry => !this.ackedCommits.has(entry.commit) && this.types.has(entry.node.type));
-    if (this.outbox.length && foreign.some(entry => this.outbox.some(item => item.entries.some(own => own.node.id === entry.node.id))))
-      this.rollbackPending();
+    // The first pending commit touching a node another window changed would be refused as stale, and so would every
+    // commit after it: those are rejected now. The commits before it stand (one may already be on its way to the store).
+    const changed = new Set(foreign.map(entry => entry.node.id));
+    const first = this.outbox.findIndex(item => item.entries.some(own => changed.has(own.node.id)));
+    if (first >= 0) this.rollbackPending(first);
     const groups = new Map<string, { ref: NodeRef; def: TypeDef; entries: Entry[] }>();
     const reload: NodeRef[] = [];
     for (const entry of foreign) {
@@ -1619,8 +1673,13 @@ export class StrataGraph implements GraphView {
       for (const [id, state] of this.refresh(touched, () => this.installRecord(ref, this.types.get(ref.type)!, undefined, all), "sync")) before.set(id, state);
     }
     this.storeHead = Math.max(this.storeHead, head);
+    this.readPos = Math.max(this.readPos, head);
     this.headPos = Math.max(this.headPos, head);
-    if (before.size) this.emit(before, "sync", `sync:${foreign.at(-1)?.commit ?? head}`);
+    if (before.size) {
+      this.emit(before, "sync", `sync:${foreign.at(-1)?.commit ?? head}`);
+      // Another window's entries can fall before a pinned point this graph already read (their positions are lower).
+      this.refreshPinned(`sync-pins:${foreign.at(-1)?.commit ?? head}`);
+    }
     return { applied: foreign.length };
   }
 
@@ -1646,6 +1705,8 @@ export class StrataGraph implements GraphView {
   /** Writes a snapshot for every node changed since its last one (the Studio calls it when closing). */
   async snapshotAll(): Promise<number> {
     await this.flush();
+    // A graph without a store, or one that writes none (a read-only view), writes nothing and says so.
+    if (!this.store || !this.writeSnapshots) return 0;
     let written = 0;
     for (const rec of this.records.values()) if (!rec.constant && !rec.session && rec.ackedSeq > rec.snapshotSeq) { this.writeSnapshot(rec); written++; }
     await this.snapshotQueue;
@@ -1925,25 +1986,30 @@ export class StrataGraph implements GraphView {
     const rec = this.records.get(ref.id);
     if (!rec || rec.constant) return refusal("missing", "That can't be compacted.");
     if (this.compacting.has(ref.id)) return refusal("busy", "That is already being compacted.");
-    await this.flush();
-    // Other windows' tags and pins count too: read what they committed first.
-    if (this.store && !rec.session) await this.sync();
-    await this.allStreams();
-    // From here to the store call nothing awaits: the keep set sees every entry committed until now (SPEC §16.1).
-    const current = this.records.get(ref.id);
-    if (!current || current.base.seq > 0) return refusal("missing", "That changed while it was being compacted.");
-    const streams = [...this.records.values()].filter(item => !item.constant).map(item => ({ ref: item.ref, entries: item.entries }));
-    const keep = keepSet(streams, type => this.types.get(type), { roots: options.roots, undoReach: this.undoReach() });
-    const through = current.ackedSeq;
-    const acked = current.entries.filter(entry => entry.seq <= through);
-    if (!acked.length) return { ok: true, before: 0, after: 0 };
-    const rolled = current.def.stream === "value" ? rollupValueStream(acked, keep) : rollupDeltaStream(current.def, acked, keep, options.bucketMs ?? 1000);
-    // While the store compacts, this graph refuses (busy) a commit referencing an entry being rolled up.
-    const surviving = new Set(rolled.map(entry => entry.seq));
-    this.compacting.set(ref.id, new Set(acked.filter(entry => !surviving.has(entry.seq)).map(entry => entry.seq)));
-    // The store keeps anything appended after `through` meanwhile; so does memory.
-    const store = this.store;
+    // Reserved from the start: a second compaction of this node asked for while this one waits is refused, and
+    // neither can clear the other's guard.
+    const rolling = new Set<number>();
+    this.compacting.set(ref.id, rolling);
+    let rolled: Entry[], through: number, acked: Entry[];
     try {
+      await this.flush();
+      // Other windows' tags and pins count too: read what they committed first.
+      if (this.store && !rec.session) await this.sync();
+      await this.allStreams();
+      // From here to the store call nothing awaits: the keep set sees every entry committed until now.
+      const current = this.records.get(ref.id);
+      if (!current || current.base.seq > 0) return refusal("missing", "That changed while it was being compacted.");
+      const streams = [...this.records.values()].filter(item => !item.constant).map(item => ({ ref: item.ref, entries: item.entries }));
+      const keep = keepSet(streams, type => this.types.get(type), { roots: options.roots, undoReach: this.undoReach() });
+      through = current.ackedSeq;
+      acked = current.entries.filter(entry => entry.seq <= through);
+      if (!acked.length) return { ok: true, before: 0, after: 0 };
+      rolled = current.def.stream === "value" ? rollupValueStream(acked, keep) : rollupDeltaStream(current.def, acked, keep, options.bucketMs ?? 1000);
+      // While the store compacts, this graph refuses (busy) a commit referencing an entry being rolled up.
+      const surviving = new Set(rolled.map(entry => entry.seq));
+      for (const entry of acked) if (!surviving.has(entry.seq)) rolling.add(entry.seq);
+      // The store keeps anything appended after `through` meanwhile; so does memory.
+      const store = this.store;
       if (store && !current.session) await this.storeTask("compact", () => store.compact(ref, rolled, this.sources.clock.now()));
     } finally { this.compacting.delete(ref.id); }
     const after = this.records.get(ref.id);
@@ -2015,6 +2081,7 @@ export class StrataGraph implements GraphView {
       host.snapshotSeq = 0;
     }
     const touched = new Map<string, Touch>([[ref.id, "all"]]);
+    for (const [id, layers] of this.layerIndex.get(ref.id) ?? []) if (layers.some(layer => layer.at)) touched.set(id, "all");
     this.purgedRefs.set(ref.id, item.ref);
     const beforeStates = this.refresh(touched, () => { this.inlined.delete(ref.id); }, "purge");
     this.timeModels.clear();
@@ -2045,6 +2112,8 @@ export class StrataGraph implements GraphView {
     const store = this.store;
     if (store && !rec.session) await this.storeTask("purge", () => store.purge(ref));
     const touched = new Map<string, Touch>([[ref.id, "all"]]);
+    // A layer pinned to the purged node's history reads nothing now: its dependents change too.
+    for (const [id, layers] of this.layerIndex.get(ref.id) ?? []) if (layers.some(layer => layer.at)) touched.set(id, "all");
     this.purgedRefs.set(ref.id, rec.ref);
     const beforeStates = this.refresh(touched, () => {
       const before = rec.head;

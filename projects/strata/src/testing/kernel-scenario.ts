@@ -27,7 +27,12 @@ export type KernelWorld = {
   processes: Map<Process, KEntry[]>;
   /** Host demand and host nodes, each ended by its token. */
   hosted: { token: Aborter; node: KNode; owned: boolean }[];
+  /** The erector's token, and the nodes there were before it started (all that may remain after the teardown). */
+  life: Aborter; baseline: ReadonlySet<string>;
 };
+
+/** How many listeners a token has (its own; the engine's tokens keep them in a list). */
+const listenerCount = (signal: unknown) => (signal as { listeners?: unknown[] }).listeners?.length ?? 0;
 
 const PURE = ["sum", "product", "threshold", "identity", "combine", "fail-when"];
 
@@ -154,13 +159,32 @@ export function kernelScenario(): Scenario<KernelWorld> {
       const operators = conformanceOperators(logs);
       const model = env.seed<GraphModel>({ id: "$model", initial: randomModel(seed) });
       const erected = erector(env, model, operators);
-      world = { scheduler, env, model, operators, live: id => erected.live(id), tokens: [], problems: [], processes, hosted: [] };
-      erected.driver.start(new Aborter().signal);
+      const life = new Aborter();
+      world = { scheduler, env, model, operators, live: id => erected.live(id), tokens: [], problems: [], processes, hosted: [], life,
+        baseline: new Set(env.allNodes().map(node => node.id)) };
+      erected.driver.start(life.signal);
       return world;
     },
     actions,
     deliver: (world, pick) => { world.scheduler.deliver(pick); },
     advance: (world, ms) => { world.scheduler.advance(ms); },
+    teardown(world) {
+      // Everything the host started ends: tokens, host demand and nodes, driver runs, the erector.
+      for (const token of world.tokens) token.abort("teardown");
+      for (const item of world.hosted) item.token.abort("teardown");
+      world.life.abort("teardown");
+      world.scheduler.advance(10_000);
+      const problems: string[] = [];
+      const left = world.env.allNodes().filter(node => !world.baseline.has(node.id));
+      if (left.length) problems.push(`leak: ${left.map(node => `${node.kind} ${node.name}`).join(", ")} outlived the teardown`);
+      for (const node of world.env.allNodes()) {
+        if (node.active) problems.push(`leak: ${node.name} is still active`);
+        if (node.demands.size) problems.push(`leak: ${node.name} still has demand on it`);
+      }
+      if (world.env.root.children.length) problems.push(`leak: the root still has ${world.env.root.children.length} children`);
+      if (listenerCount(world.env.root.signal)) problems.push(`leak: the root's token still has ${listenerCount(world.env.root.signal)} listeners`);
+      return problems;
+    },
     check(world) {
       const problems = [...world.problems];
       world.problems.length = 0;
@@ -193,6 +217,11 @@ export function kernelScenario(): Scenario<KernelWorld> {
       for (const item of world.hosted) if (item.token.signal.aborted && item.owned && world.env.node(item.node.id) === item.node)
         problems.push(`lifetime: ${item.node.name} outlived its token`);
       world.hosted = world.hosted.filter(item => !item.token.signal.aborted);
+      // Lifetimes: every effect in the environment is connected (a run's or the host's), and the root's token has one
+      // listener per child it still has (a finished child lets go of its parent).
+      for (const node of world.env.allNodes()) if (node.kind === "effect" && !node.scope) problems.push(`lifetime: effect ${node.name} is neither connected nor forgotten`);
+      const rootListeners = listenerCount(world.env.root.signal);
+      if (rootListeners !== world.env.root.children.length) problems.push(`lifetime: the root's token has ${rootListeners} listeners for ${world.env.root.children.length} children`);
       for (const entry of world.env.errors.entries) {
         const code = (entry.value as { code?: string }).code;
         if (code !== "cycle" && code !== "effect") problems.push(`errors: unexpected ${code}: ${(entry.value as { message: string }).message}`);

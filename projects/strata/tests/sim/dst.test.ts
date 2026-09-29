@@ -10,7 +10,8 @@ import { join } from "node:path";
 import { graphScenario, kernelScenario, replay, runSteps, shrink, simulate } from "strata/testing";
 import type { Regression, Scenario, SimResult } from "strata/testing";
 
-const SEEDS = 500, STEPS = 200, BATCH = 100;
+// STRATA_SIM_SEEDS runs fewer seeds (mutation testing runs the suite once per mutant).
+const SEEDS = Number(process.env.STRATA_SIM_SEEDS ?? 500), STEPS = 200, BATCH = Math.min(100, SEEDS);
 const describe = (result: SimResult) => result.ok ? "ok" : `seed ${result.seed} failed at step ${result.failure.step}: ${result.failure.problems.slice(0, 3).join(" | ")}`;
 
 async function batch(scenario: Scenario<unknown>, from: number): Promise<string[]> {

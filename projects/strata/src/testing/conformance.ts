@@ -18,7 +18,7 @@ import type { Operators } from "../kernel/operators";
 import { Scheduler, settle, simClock } from "./sim-sources";
 
 export type KernelStep =
-  | { readonly observe: Readonly<Record<string, Json>> }
+  | { readonly observe: Readonly<Record<string, Json>> | readonly (readonly [string, Json])[] }
   | { readonly start: string; readonly as: string }
   | { readonly abort: string; readonly reason?: Json }
   | { readonly advance: number }
@@ -83,7 +83,8 @@ export function conformanceOperators(logs: Map<string, Json[]>): Operators {
       return context => {
         const on = context.inputs[0].value === true;
         const driver = api.node(String(record(params).driver)) as Driver | undefined;
-        if (on && !token && driver) { token = new Aborter(); driver.start(token.signal); }
+        // The run it starts ends with the erector's run at the latest (an effect has no way to learn it was released).
+        if (on && !token && driver) { token = new Aborter(api.run.signal); driver.start(token.signal); }
         if (!on && token) { token.abort("off"); token = undefined; }
       };
     } },
@@ -161,7 +162,8 @@ export async function runKernelVector(vector: KernelVector): Promise<string[]> {
   await settle();
   for (const step of vector.script) {
     if ("observe" in step) {
-      const pairs = Object.entries(step.observe).map(([id, value]) => [need(id, "observes"), value] as const);
+      // An object observes each seed once; a list of pairs may observe one seed several times, in order.
+      const pairs = (Array.isArray(step.observe) ? step.observe as [string, Json][] : Object.entries(step.observe)).map(([id, value]) => [need(id, "observes"), value] as const);
       env.transaction(() => { for (const [seed, value] of pairs) if (seed) env.observe(seed, value); });
     } else if ("start" in step) {
       const driver = need(step.start, "starts");
@@ -196,7 +198,7 @@ export async function runKernelVector(vector: KernelVector): Promise<string[]> {
       const token = tokens.get(step.listen);
       if (!token) problems.push(`${vector.name}: the script listens to ${step.listen}, which no step named`);
       else if (!token.signal.aborted) token.signal.addEventListener("abort", () => log(step.log, { value: step.value ?? null, reason: token.signal.reason as Json }));
-    }
+    } else problems.push(`${vector.name}: the script has a step this runner doesn't know: ${canonical(step)}`);
     await settle();
   }
   const expect = vector.expect;
