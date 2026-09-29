@@ -1,11 +1,13 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
-import { BUILD_TOOLS_SCHEMA, builderEntry, desktopBuildIssue, desktopPackageAdapter, probeBun, useBuilderBun, type WolvenKitProbe } from "../build";
+import { BUILD_TOOLS_SCHEMA, builderEntry, cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
+  warmBuildProbes, type WolvenKitProbe } from "../build";
+import { probeWolvenKitCliAsync } from "../../src/wolvenkit-cli";
 import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/eye-plate-service";
 import { runProductBuild, hostCollection, type HostPrerequisite, type PackageHostOutcome } from "../../src/platform/export/product-host";
 import { checkProducts } from "../../src/platform/export/product-check";
@@ -344,4 +346,22 @@ test("PIPE-70: a posted collection's glitter knob never reaches the desktop buil
   const record = JSON.parse(readFileSync(seen, "utf8"));
   expect(record.keys).not.toContain("diagnostics");
   expect(record.argv).not.toContain("--diagnostics");
+});
+
+test("a failed tool check keeps its answer: after the old 10 s expiry, readiness says the failure, never checking again (DESK-15)", async () => {
+  const bun = resolve(root, "broken-bun.exe"), wolvenKit = resolve(root, "broken-wolvenkit.exe");
+  writeFileSync(bun, "not a program"); writeFileSync(wolvenKit, "not a program");
+  // Never checked: checking, and the check starts in the background.
+  expect(cachedBunProbe(bun)).toBe(PROBE_PENDING);
+  expect(cachedWolvenKitProbe(wolvenKit)).toBe(PROBE_PENDING);
+  await warmBuildProbes({ wolvenKitCli: wolvenKit }, bun);
+  const bunIssue = cachedBunProbe(bun), wolvenKitIssue = cachedWolvenKitProbe(wolvenKit);
+  expect([bunIssue, wolvenKitIssue].some(issue => issue === null || issue === PROBE_PENDING)).toBe(false);
+  const now = Date.now(), clock = spyOn(Date, "now").mockReturnValue(now + 60_000);
+  try {
+    expect(cachedBunProbe(bun)).toBe(bunIssue);
+    // WolvenKit is retried in the background (its cause can be fixed without touching the file), but readiness keeps the failure.
+    expect(cachedWolvenKitProbe(wolvenKit)).toBe(wolvenKitIssue);
+    await probeWolvenKitCliAsync(wolvenKit);
+  } finally { clock.mockRestore(); }
 });

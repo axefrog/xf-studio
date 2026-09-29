@@ -15,7 +15,7 @@
  *   result offers Add to my mod manager (the shell's review-then-consent sheet, `ctx.modInstall`, exactly as the Mod package panel) and
  *   Show in folder; nothing is added to the game or a mod manager until the person accepts the reviewed plan.
  */
-import { applyCapability, badge, button, emptyState, GroupSection, hasCommands, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
+import { applyCapability, badge, button, setButtonLabel, emptyState, GroupSection, hasCommands, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
   section, Segmented, modLine as modLineItem, type MenuItem } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
@@ -409,7 +409,7 @@ export function expressionSets(ctx: Ctx): PanelController {
       }
       // The install rows follow every paint: availability, and what happened last.
       for (const [product, row] of installRows) {
-        setText(row.add.querySelector("span")!, ctx.modInstall.label());
+        setButtonLabel(row.add, ctx.modInstall.label());
         applyCapability(row.add, ctx.modInstall.capability(product));
         applyCapability(row.show, ctx.presets.capability({ kind: "partPresetSet.reveal", id: row.set }));
         const outcome = ctx.modInstall.outcome(product);

@@ -1,6 +1,6 @@
 import { chordsLabel, KEY_BINDINGS, keyBinding, modifierKey, modifiersOf, pointerBinding, shortcutLabel, type ViewportScope } from "../../input-bindings";
 import { ViewportInputHints } from "../input-hints";
-import { button, applyCapability } from "../controls";
+import { button, applyCapability, setButtonLabel } from "../controls";
 import { progressBar } from "../components/progress";
 import { h, setAttr, setText, isTextInput, uid } from "../dom";
 import { icon, isIconName, type IconName } from "../icons";
@@ -147,7 +147,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
     nextAction = step?.action as typeof nextAction;
     next.hidden = !step;
     if (step) {
-      setText(next.querySelector("span")!, step.label);
+      setButtonLabel(next, step.label);
       // The step's own capability: disabled with its reason while the last step is still running (UI-35).
       applyCapability(next, port.previewSetup.capability(nextAction!));
     }

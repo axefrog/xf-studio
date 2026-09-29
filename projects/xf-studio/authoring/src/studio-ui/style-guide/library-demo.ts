@@ -1,10 +1,10 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { badge, blockSection, button, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
-import { h } from "../dom";
+import { h, setText } from "../dom";
 import { EYE_MAKEUP_MOD } from "../../mod-branding";
 
 type Mount = () => HTMLElement;
@@ -34,6 +34,19 @@ const MOUNTS: Record<string, Mount> = {
       button({ label: "Check", icon: "check", onClick: () => {} }), button({ label: "Restore removed", icon: "reset", variant: "quiet", onClick: () => {} }),
       button({ label: "More actions", icon: "more", iconOnly: true, variant: "ghost", menu: true, onClick: event => openMenu([{ kind: "action", label: "Duplicate", icon: "duplicate", run: () => {} }], event.currentTarget as Element, { label: "More actions" }) }),
       unavailable); },
+  "lib-button-in-place": () => {
+    // Settings › Updates in miniature, each row one button pair changed in place from the same start: at rest, checking (Check now says
+    // so and waits; the line keeps its last text), and after a newer version is found (the releases page becomes the main action).
+    const updates = (state: "rest" | "checking" | "newer") => {
+      const check = button({ label: "Check now", icon: "refresh", small: true, onClick: () => {} });
+      const releases = button({ label: "Open the releases page", icon: "link", small: true, variant: "quiet", onClick: () => {} });
+      if (state === "checking") { setButtonLabel(check, "Checking…"); applyCapability(check, { available: false, reason: "Already checking for updates." }); }
+      if (state === "newer") { setButtonVariant(check, "quiet"); setButtonVariant(releases, "primary"); }
+      const line = h("span", { class: "muted small", role: "status" });
+      setText(line, state === "newer" ? "XF Studio 0.9.0 is available. You have 0.8.2." : "You have the latest XF Studio.");
+      return h("div", { class: "row wrap gap-s align-center" }, check, line, releases);
+    };
+    return stack({ gap: "normal" }, updates("rest"), updates("checking"), updates("newer")); },
   "lib-icon-button": () => h("div", { class: "row gap-s" }, iconButton({ label: "Close", icon: "close" }), iconButton({ label: "Hide Petal wash", icon: "eye", pressed: true, small: true }),
     iconButton({ label: "Layout options", icon: "more", menu: true }), iconButton({ label: "Reset brows", icon: "reset", small: true }),
     iconButton({ label: "Mirror sides: Brows", icon: "mirror", small: true, mode: true, pressed: true })),

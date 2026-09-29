@@ -1,4 +1,4 @@
-import { applyCapability, button, note, section, Segmented, Toggle } from "../controls";
+import { applyCapability, button, note, setButtonLabel, setButtonVariant, section, Segmented, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import type { HelpText } from "../help-tip";
@@ -56,7 +56,6 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     rt.changed();
   }
   const checkNow = button({ label: "Check now", icon: "refresh", small: true, onClick: () => void checkForUpdatesNow(rt, false) });
-  const checkNowLabel = checkNow.querySelector("span")!;
   const updateText = h("span", { class: "muted small", role: "status" });
   const releases = button({ label: "Open the releases page", icon: "link", small: true, variant: "quiet", onClick: () => void openReleasesPage(rt) });
 
@@ -121,16 +120,15 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       // While checking, the button says so (and waits); the line and the releases button keep the last result, so the row never
       // reflows. A newer version makes the releases page the main action and Check now the quiet one.
       const state = port.updates.snapshot(), checking = checkingForUpdates(state);
-      setText(checkNowLabel, checking ? "Checking…" : "Check now");
+      setButtonLabel(checkNow, checking ? "Checking…" : "Check now");
       applyCapability(checkNow, port.updates.capability({ kind: "updates.check" }));
       if (!checking) {
         const line = updateCheckLine(state);
         setText(updateText, line?.text ?? "");
         releases.hidden = !line?.releases;
         const newer = state.answer?.result === "newer" && !!line?.releases && !state.unreachable;
-        checkNow.classList.toggle("quiet", newer);
-        releases.classList.toggle("primary", newer);
-        releases.classList.toggle("quiet", !newer);
+        setButtonVariant(checkNow, newer ? "quiet" : undefined);
+        setButtonVariant(releases, newer ? "primary" : "quiet");
       }
       theme.update(appearance.theme());
       hints.update(appearance.hints());

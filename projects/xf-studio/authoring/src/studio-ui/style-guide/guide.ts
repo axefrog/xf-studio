@@ -41,7 +41,7 @@ body.guide { overflow: auto; height: auto; }
 .pattern[data-status="future"] { border-style: dashed; }
 .specimen { position: relative; padding: var(--sp-5); background: var(--bg-app); border: 1px solid var(--line-soft); overflow: auto; color: var(--text); }
 .specimen.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0; }
-.specimen.compare:has(.mock-shell, .token-grid, .icon-grid, .layout-maps, .ref-table) { grid-template-columns: 1fr; }
+.specimen.compare:has(.mock-shell, .token-grid, .icon-grid, .layout-maps, .ref-table, .link-theme-pair) { grid-template-columns: 1fr; }
 .specimen .pane { padding: var(--sp-5); background: var(--bg-app); color: var(--text); overflow: auto; min-width: 0; }
 .specimen .pane::before { content: attr(data-label); display: block; margin-bottom: var(--sp-4); font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); }
 .guidance { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: var(--sp-3) var(--sp-5); margin: 0; font-size: var(--fs-sm); }

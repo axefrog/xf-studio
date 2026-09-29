@@ -31,7 +31,7 @@
  * It reaches the feature only through its view context (UI-73): the generic facade (the part, actions and form-control transactions),
  * the facial preview's snapshot (the rig's controls, the installed expressions and the built-in samples) and its part presets.
  */
-import { applyCapability, button, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
+import { applyCapability, button, setButtonLabel, GroupSection, helpTip, iconButton, note, openConfirmPopover, openMenu, openValuePopover, PairControl, progressBar, SearchField,
   ScrubSlider, Segmented, setHelp, SliderWithValue, BipolarSlider, Toggle, TreeView, RememberedSet, type MenuItem, type TreeGroupData, type TreeItemRef,
   type TreeRowData } from "../../../studio-ui/components";
 import { centredAmount, EASING_IDS, EASING_LABELS, easingPreset, type EasingId } from "../../../platform/api/easing";
@@ -515,7 +515,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
       const shown = statusText(preview);
       statusLine.hidden = !shown;
       setText(status, shown?.text ?? ""); status.className = `note ${shown?.tone ?? "muted"} expr-status`;
-      next.hidden = !shown?.next; if (shown?.next) setText(next.querySelector("span") ?? next, shown.next);
+      next.hidden = !shown?.next; if (shown?.next) setButtonLabel(next, shown.next);
       updating.element.classList.toggle("active", preview?.phase === "updating");
       setText(updatingText, preview?.phase === "updating" ? "Updating the face…" : "");
       const editable = ctx.facade.editable();

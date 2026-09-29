@@ -57,8 +57,12 @@ export function runProcessTree(command: string, args: readonly string[], options
   const keep = options.keep ?? 128_000;
   return new Promise(done => {
     if (options.signal?.aborted) { done({ exitCode: null, stdout: "", stderr: "", stopped: "cancelled" }); return; }
-    const child = spawn(command, [...args], { cwd: options.cwd, env: options.env, windowsHide: true,
-      detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
+    // A file that isn't a program can make spawn throw at once (Bun on Windows: EUNKNOWN) rather than emit "error"; it still resolves.
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, [...args], { cwd: options.cwd, env: options.env, windowsHide: true,
+        detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) { done({ exitCode: null, stdout: "", stderr: "", stopped: null, error: error instanceof Error ? error : new Error(String(error)) }); return; }
     if (lowPriorityNow(options.lowPriority) && child.pid) {
       try { setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL); lowPriority.add(child.pid); } catch { /* Advisory. */ }
     }

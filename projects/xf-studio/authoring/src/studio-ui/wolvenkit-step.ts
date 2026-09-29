@@ -1,6 +1,5 @@
 import type { PreviewSetupAction } from "../preview-setup";
-import { applyCapability, button } from "./controls";
-import { setText } from "./dom";
+import { applyCapability, button, setButtonLabel } from "./controls";
 import type { Frame, StudioRuntime } from "./runtime";
 
 /**
@@ -27,7 +26,7 @@ export function wolvenKitStepButton(rt: StudioRuntime, options: { small?: boolea
       element.hidden = !step;
       action = step ? step.action as PreviewSetupAction : null;
       if (!step) return;
-      setText(element.querySelector("span")!, step.label);
+      setButtonLabel(element, step.label);
       element.dataset.action = step.action.kind;
       applyCapability(element, rt.port.previewSetup.capability(action!));
     },

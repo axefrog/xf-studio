@@ -1379,7 +1379,10 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .setup-card-notice { color: var(--warning); font-size: var(--fs-sm); }
 .setup-card-links { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-6); }
 .link-button { padding: 0; border: 0; background: none; color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; font: inherit; font-size: var(--fs-sm); cursor: pointer; }
-.link-button:hover { text-decoration-thickness: 2px; }
+.link-button:hover:not(:disabled):not([aria-disabled="true"]) { text-decoration-thickness: 2px; }
+/* Unavailable (UI-174): secondary text, no underline and the not-allowed cursor, so it no longer reads as a link. Unlike .btn it doesn't
+   fade: a link button is bare text, and fading it would drop below readable contrast; losing the underline says it without colour. */
+.link-button:disabled, .link-button[aria-disabled="true"] { color: var(--text-muted); text-decoration: none; cursor: not-allowed; }
 .setup-card-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); justify-content: flex-end; }
 .consent-sheet { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
 .consent-sheet[open] { display: grid; gap: var(--sp-5); }
