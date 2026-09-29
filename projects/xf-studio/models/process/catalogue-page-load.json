@@ -1,0 +1,58 @@
+{
+  "kind": "process",
+  "id": "catalogue-page-load",
+  "owner": "character",
+  "summary": "Loading one page of a row's choices from the host's catalogue.",
+  "status": "target",
+  "driver": "driver:catalogue-page",
+  "work": "Fetches a page of choices with their names and picture keys.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "option": {
+        "type": "string"
+      },
+      "page": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "choices": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "option",
+      "page",
+      "choices"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "catalogue-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, the person's own"
+}

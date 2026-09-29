@@ -1,0 +1,19 @@
+{
+  "kind": "runtime",
+  "id": "pose-set-index",
+  "owner": "poses",
+  "summary": "The pose set index cache per installation and language.",
+  "status": "both",
+  "replaces": [
+    "pose-catalogue-host"
+  ],
+  "environment": "host",
+  "key": [
+    "the installation",
+    "the language"
+  ],
+  "factory": "pose-catalogue-host",
+  "ready": "driver:pose-catalogue",
+  "query": [],
+  "linger": 60000
+}

@@ -1,0 +1,37 @@
+{
+  "kind": "process",
+  "id": "desktop-app-launch",
+  "owner": "setup",
+  "summary": "Opening the desktop app, or running the built setup the person confirmed.",
+  "status": "target",
+  "driver": "driver:desktop-offer",
+  "work": "Starts the app or the setup program named by the confirmed installer ID.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "null"
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "installer-changed",
+              "launch-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host, the person's own"
+}

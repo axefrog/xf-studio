@@ -1,0 +1,59 @@
+{
+  "kind": "process",
+  "id": "native-decode",
+  "owner": "host",
+  "summary": "Decoding one game resource natively in a worker thread within a time budget.",
+  "status": "target",
+  "driver": "driver:decode-pool",
+  "work": "Reads the resource from its archive and decodes it (CR2W, Oodle, mesh, texture, animation).",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "resource": {
+        "type": "string"
+      },
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "resource",
+      "data"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "over-time-budget",
+              "unsupported-resource",
+              "worker-crashed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The worker is terminated.",
+  "cleanup": "The lane's worker is recreated on the next demand.",
+  "deadline": "the decode time budget, after which WolvenKit is tried",
+  "lane": "host decode workers; lanes by free memory",
+  "faults": [
+    {
+      "code": "over-time-budget",
+      "when": "The decode took longer than its budget.",
+      "fault": "owner",
+      "goesTo": "request:decode-resource",
+      "then": "fallback"
+    }
+  ]
+}

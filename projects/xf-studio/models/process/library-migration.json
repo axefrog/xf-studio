@@ -1,0 +1,74 @@
+{
+  "kind": "process",
+  "id": "library-migration",
+  "owner": "library",
+  "summary": "The one-time migration of a library onto the graph: copy, dry run, append, verify.",
+  "status": "target",
+  "driver": "driver:migration",
+  "work": "Copies the library, plans every node from legacy rows, checks counts, appends import entries and verifies round trips.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "stage": {
+        "enum": [
+          "copy",
+          "dry-run",
+          "append",
+          "verify"
+        ]
+      },
+      "done": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "total": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "stage",
+      "done",
+      "total"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "nodes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "entries": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "nodes",
+      "entries"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "counts-mismatch",
+              "round-trip-differs"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Not cancellable once appending starts; a crash restarts from the copy.",
+  "cleanup": "A refused migration writes nothing.",
+  "deadline": "none",
+  "lane": "host, before the first window loads"
+}

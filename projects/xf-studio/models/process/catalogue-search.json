@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "catalogue-search",
+  "owner": "character",
+  "summary": "Searching the creator catalogue.",
+  "status": "target",
+  "driver": "driver:catalogue-page",
+  "work": "Sends the search text and receives matching choices.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "matches": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "matches"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "catalogue-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "A newer search text aborts it.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "page, the person's own"
+}

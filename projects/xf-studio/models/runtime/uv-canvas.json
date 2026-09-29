@@ -1,0 +1,51 @@
+{
+  "kind": "runtime",
+  "id": "uv-canvas",
+  "owner": "eye-makeup",
+  "summary": "The flat UV editor's canvas for one editor session.",
+  "status": "both",
+  "replaces": [
+    "uv-editor"
+  ],
+  "environment": "page",
+  "key": [
+    "type:editor-session"
+  ],
+  "factory": "planned",
+  "ready": "driver:view-input",
+  "query": [
+    {
+      "name": "hit",
+      "input": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "target"
+        ]
+      },
+      "budget": "under 1 ms"
+    }
+  ],
+  "linger": 0
+}

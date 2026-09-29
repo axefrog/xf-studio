@@ -1,0 +1,36 @@
+{
+  "kind": "process",
+  "id": "host-run",
+  "owner": "host",
+  "summary": "The host process's root run; its tree is every piece of host work.",
+  "status": "target",
+  "driver": "driver:host",
+  "work": "Serves endpoints and runs host drivers per library until shutdown.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "null"
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "port-taken"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Shutdown aborts the token; every host run gets the abort.",
+  "cleanup": "Stores close with their runs; staged work folders are swept at the next start.",
+  "deadline": "none",
+  "lane": "host, root"
+}

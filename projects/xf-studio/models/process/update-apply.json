@@ -1,0 +1,37 @@
+{
+  "kind": "process",
+  "id": "update-apply",
+  "owner": "desktop",
+  "summary": "Applying an update and restarting, only while no package or install work runs.",
+  "status": "target",
+  "driver": "driver:updates",
+  "work": "Reserves the restart lease, waits for work to end, applies and restarts.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "null"
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "work-running",
+              "apply-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The person cancels before the restart.",
+  "cleanup": "The lease is released.",
+  "deadline": "none",
+  "lane": "desktop, the person's own"
+}

@@ -1,0 +1,59 @@
+{
+  "kind": "process",
+  "id": "swatch-derive",
+  "owner": "character",
+  "summary": "Deriving colour swatches for the creator's colour rows, family by family.",
+  "status": "target",
+  "driver": "driver:swatches",
+  "work": "Samples each family's textures into swatches.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "families": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "total": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "families",
+      "total"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "swatches": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "swatches"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between families.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "host, background, asked rows first"
+}

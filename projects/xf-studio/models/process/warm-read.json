@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "warm-read",
+  "owner": "character",
+  "summary": "Fetching, verifying and decoding the last shown V's files at start, while the head loads.",
+  "status": "target",
+  "driver": "driver:warm-start",
+  "work": "Asks the host (never letting it prepare) for the remembered V's record and decodes its files.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "record": {
+        "type": "string"
+      },
+      "files": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "record",
+      "files"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "not-kept"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Unclaimed files are released after the keep time.",
+  "deadline": "WARM_KEEP_MS",
+  "lane": "page, warming"
+}

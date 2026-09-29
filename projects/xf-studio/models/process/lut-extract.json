@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "lut-extract",
+  "owner": "views",
+  "summary": "Extracting and decoding the winning creator grade.",
+  "status": "target",
+  "driver": "driver:lut-host",
+  "work": "Resolves the grade resource, extracts it and decodes the cube.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "cube": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "key",
+      "cube"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "lut-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "The extraction folder is swept.",
+  "deadline": 60000,
+  "lane": "host"
+}

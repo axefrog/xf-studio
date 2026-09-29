@@ -1,0 +1,56 @@
+{
+  "kind": "process",
+  "id": "stamp-check",
+  "owner": "host",
+  "summary": "Checking an opened installation's file stamps are unchanged.",
+  "status": "target",
+  "driver": "driver:installation",
+  "work": "Re-reads the watched stamps, 1,024 at a time.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "valid": {
+        "type": "boolean"
+      },
+      "changed": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "valid",
+      "changed"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 2000,
+  "lane": "host, the person's own",
+  "x-friction": [
+    {
+      "gap": "Re-reading 10,209 stamps costs 40–90 ms per change asked for.",
+      "capability": "stamped-files",
+      "closes": "Stamp sets checked on demand within a freshness window."
+    }
+  ]
+}

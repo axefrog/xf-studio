@@ -1,0 +1,61 @@
+{
+  "kind": "process",
+  "id": "store-append",
+  "owner": "platform",
+  "summary": "Appending a commit to the library and waiting for the store's acknowledgement.",
+  "status": "target",
+  "driver": "driver:store",
+  "work": "Sends a commit's entries to the host store and records its acknowledgement or refusal.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "commit": {
+        "type": "string"
+      },
+      "positions": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "required": [
+      "commit",
+      "positions"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "stale",
+              "conflict",
+              "unreachable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Appends are never cancelled; an unacknowledged commit stays pending.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "page, the person's own, in commit order",
+  "x-friction": [
+    {
+      "gap": "An unacknowledged commit must survive a crash of both sides.",
+      "capability": "durable-pending",
+      "closes": "Pending changes kept durably until acknowledged."
+    }
+  ]
+}

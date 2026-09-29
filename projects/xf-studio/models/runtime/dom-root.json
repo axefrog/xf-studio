@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "dom-root",
+  "owner": "shell",
+  "summary": "The window's DOM root the presentation mounts into.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/app"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window"
+  ],
+  "factory": "planned",
+  "ready": "type:window",
+  "query": [],
+  "linger": 0
+}

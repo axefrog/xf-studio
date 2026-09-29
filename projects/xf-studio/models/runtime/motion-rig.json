@@ -1,0 +1,55 @@
+{
+  "kind": "runtime",
+  "id": "motion-rig",
+  "owner": "motion",
+  "summary": "A scene's motion: the idle mixer, the blink, dangles, deformation rigs and the face driver.",
+  "status": "both",
+  "replaces": [
+    "platform/scene/head-rig",
+    "platform/scene/face-driver",
+    "game-blink",
+    "dangle-motion"
+  ],
+  "environment": "page",
+  "key": [
+    "type:scene"
+  ],
+  "factory": "planned",
+  "ready": "driver:motion-data",
+  "query": [
+    {
+      "name": "pose",
+      "input": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "at"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "bones": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "bones"
+        ]
+      }
+    }
+  ],
+  "linger": 0,
+  "x-friction": [
+    {
+      "gap": "Idle time and dangles integrate over time and must replay exactly to a seek time.",
+      "capability": "frame-timing",
+      "closes": "State integrated over the frame source's dt."
+    }
+  ]
+}

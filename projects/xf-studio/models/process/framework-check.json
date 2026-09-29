@@ -1,0 +1,63 @@
+{
+  "kind": "process",
+  "id": "framework-check",
+  "owner": "setup",
+  "summary": "Checking the frameworks' versions on the configured route.",
+  "status": "target",
+  "driver": "driver:detection",
+  "work": "Reads each framework's installed version and compares it with the current stable one.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "frameworks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "installed": {
+              "type": "string"
+            },
+            "current": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "installed",
+            "current"
+          ]
+        }
+      }
+    },
+    "required": [
+      "frameworks"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "scan-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 15000,
+  "lane": "host"
+}

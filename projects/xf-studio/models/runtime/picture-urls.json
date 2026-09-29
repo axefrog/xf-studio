@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "picture-urls",
+  "owner": "character",
+  "summary": "Object URLs for shown choice pictures, capped in number.",
+  "status": "both",
+  "replaces": [
+    "choice-preview-service"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window"
+  ],
+  "factory": "planned",
+  "ready": "driver:choice-previews",
+  "query": [],
+  "linger": 5000
+}

@@ -1,0 +1,51 @@
+{
+  "kind": "process",
+  "id": "store-load",
+  "owner": "platform",
+  "summary": "Loading demanded nodes (a snapshot and a short tail) or a listing from the store.",
+  "status": "target",
+  "driver": "driver:store",
+  "work": "Reads snapshots and the entries after them for the nodes a consumer demands.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "nodes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "entries": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "nodes",
+      "entries"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreachable",
+              "damaged"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "page, the person's own"
+}

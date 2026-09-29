@@ -1,0 +1,22 @@
+{
+  "kind": "runtime",
+  "id": "bridge-pipe",
+  "owner": "bridge",
+  "summary": "The named-pipe client to the game's bridge.",
+  "status": "target",
+  "environment": "bridge",
+  "key": [
+    "type:bridge-session"
+  ],
+  "factory": "planned",
+  "ready": "type:bridge-session",
+  "query": [],
+  "linger": 30000,
+  "x-friction": [
+    {
+      "gap": "The pipe closes after an idle period rather than at once.",
+      "capability": "keep-after-use",
+      "closes": "Demand that lingers after its last consumer."
+    }
+  ]
+}

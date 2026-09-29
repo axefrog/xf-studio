@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "trace-flush",
+  "owner": "diagnostics",
+  "summary": "Flushing a segment of the rolling trace window.",
+  "status": "target",
+  "driver": "driver:host-log",
+  "work": "Writes the buffered trace segment and drops segments older than 30 minutes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "bytes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "write-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 2000,
+  "lane": "host, background, every second at most"
+}

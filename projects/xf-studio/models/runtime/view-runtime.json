@@ -1,0 +1,65 @@
+{
+  "kind": "runtime",
+  "id": "view-runtime",
+  "owner": "views",
+  "summary": "One visible view's camera at its aspect, its controls, presentation canvas and editors.",
+  "status": "both",
+  "replaces": [
+    "viewport-attachment",
+    "camera-framing"
+  ],
+  "environment": "page",
+  "key": [
+    "type:view"
+  ],
+  "factory": "planned",
+  "ready": "driver:view",
+  "query": [
+    {
+      "name": "project",
+      "input": {
+        "type": "object",
+        "properties": {
+          "point": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "point"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "visible"
+        ]
+      }
+    }
+  ],
+  "linger": 0,
+  "x-friction": [
+    {
+      "gap": "Host objects are created per node tuple, counted by demand and released whole on failure, but no engine registry keeps them; each is wired by hand today.",
+      "capability": "host-objects-per-node",
+      "closes": "A registry of host objects keyed by node tuples, with readiness published and plain synchronous queries."
+    }
+  ]
+}

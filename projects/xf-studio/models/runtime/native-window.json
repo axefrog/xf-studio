@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "native-window",
+  "owner": "desktop",
+  "summary": "A native desktop window and its web view.",
+  "status": "both",
+  "replaces": [
+    "../desktop/main"
+  ],
+  "environment": "desktop",
+  "key": [
+    "type:window"
+  ],
+  "factory": "../desktop/main",
+  "ready": "driver:desktop-shell",
+  "query": [],
+  "linger": 0
+}

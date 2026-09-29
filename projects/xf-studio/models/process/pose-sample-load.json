@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "pose-sample-load",
+  "owner": "poses",
+  "summary": "Loading a held pose's sampled clip.",
+  "status": "target",
+  "driver": "driver:pose-sample",
+  "work": "Fetches the pose's sampled tracks for its body.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "id",
+      "data"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "pose-missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Holding another pose aborts it.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, the person's own"
+}

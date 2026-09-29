@@ -1,0 +1,52 @@
+{
+  "kind": "process",
+  "id": "eye-plate-cut",
+  "owner": "export",
+  "summary": "Cutting the eye plate for a body from the installed head.",
+  "status": "target",
+  "driver": "driver:prerequisites",
+  "work": "Exports the head and cuts the plate through the verified vertex mapping, keeping skin bytes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      },
+      "plate": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "body",
+      "plate"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "head-unsupported",
+              "run-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "The staging folder is removed.",
+  "deadline": 300000,
+  "lane": "host, before a Build"
+}

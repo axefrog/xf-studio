@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "raster-worker",
+  "owner": "eye-makeup",
+  "summary": "The page's raster worker thread.",
+  "status": "both",
+  "replaces": [
+    "raster-client"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window"
+  ],
+  "factory": "raster-client",
+  "ready": "driver:raster-pool",
+  "query": [],
+  "linger": 15000
+}

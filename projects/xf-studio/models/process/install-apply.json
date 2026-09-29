@@ -1,0 +1,46 @@
+{
+  "kind": "process",
+  "id": "install-apply",
+  "owner": "install",
+  "summary": "Placing a build after the person accepted its plan: copy with hash checks, write the receipt, place it in the mod list.",
+  "status": "target",
+  "driver": "driver:install",
+  "work": "Re-plans, compares with the token, then copies and records the receipt.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "install": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "install"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "plan-changed",
+              "copy-failed",
+              "manager-running"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Never cancelled once copying starts; a crash resumes from the recorded outcome.",
+  "cleanup": "Nothing half-placed is left unrecorded.",
+  "deadline": "none",
+  "lane": "host, one at a time, under the restart lease"
+}

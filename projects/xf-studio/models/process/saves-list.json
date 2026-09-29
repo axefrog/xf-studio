@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "saves-list",
+  "owner": "save-explorer",
+  "summary": "Listing the player's saves.",
+  "status": "target",
+  "driver": "driver:saves-listing",
+  "work": "Reads the saves folder's entries and their metadata.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "saves": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "saves"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "folder-missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host"
+}

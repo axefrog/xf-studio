@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "discovery",
+  "owner": "host",
+  "summary": "Discovering an installation: walking archives and mod folders, reading indexes and ArchiveXL and TweakXL declarations.",
+  "status": "target",
+  "driver": "driver:installation",
+  "work": "Walks the route's sources, reads archive indexes and parses declarations into the installation's winners.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "installation": {
+        "$ref": "shapes.schema.json#/$defs/installation"
+      }
+    },
+    "required": [
+      "installation"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "discovery-failed",
+              "game-root-missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between sources.",
+  "cleanup": "A discovery with read failures is never kept.",
+  "deadline": "none",
+  "lane": "host, sliced so the person's requests get turns"
+}

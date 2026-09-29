@@ -1,0 +1,36 @@
+{
+  "kind": "process",
+  "id": "reveal-build",
+  "owner": "install",
+  "summary": "Showing a build or install in the file browser.",
+  "status": "target",
+  "driver": "driver:install",
+  "work": "Opens the folder in the system's file browser.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "null"
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "host"
+}

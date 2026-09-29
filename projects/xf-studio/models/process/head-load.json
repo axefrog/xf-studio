@@ -1,0 +1,57 @@
+{
+  "kind": "process",
+  "id": "head-load",
+  "owner": "views",
+  "summary": "Loading the core head for a scene's body into its runtime.",
+  "status": "target",
+  "driver": "driver:scene",
+  "work": "Fetches the prepared core head, plate and maps and builds the scene's head.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "body"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "head-load-failed",
+              "masculine-core-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The scene leaving view or its body changing aborts the fetches.",
+  "cleanup": "The half-built runtime is released whole.",
+  "deadline": 30000,
+  "lane": "page, the person's own",
+  "faults": [
+    {
+      "code": "masculine-core-unavailable",
+      "when": "The masculine core can't be prepared.",
+      "fault": "owner",
+      "goesTo": "driver:scene",
+      "then": "fallback"
+    }
+  ]
+}

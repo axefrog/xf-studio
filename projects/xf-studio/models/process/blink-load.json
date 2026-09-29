@@ -1,0 +1,44 @@
+{
+  "kind": "process",
+  "id": "blink-load",
+  "owner": "motion",
+  "summary": "Loading the game's blink for a scene.",
+  "status": "target",
+  "driver": "driver:motion-data",
+  "work": "Fetches the baked blink curve.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "data"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "blink-missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, warming"
+}

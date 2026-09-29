@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "webview2-install",
+  "owner": "desktop",
+  "summary": "Running the WebView2 bootstrapper after the person's consent.",
+  "status": "target",
+  "driver": "driver:webview2",
+  "work": "Runs the bootstrapper and waits for it to finish.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "installed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "installed"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "install-failed",
+              "timed-out"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The bootstrapper process is killed.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 600000,
+  "lane": "desktop, before any window"
+}

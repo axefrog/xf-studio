@@ -1,0 +1,19 @@
+{
+  "kind": "runtime",
+  "id": "lut-texture",
+  "owner": "views",
+  "summary": "The creator grade's 3D texture in one context.",
+  "status": "both",
+  "replaces": [
+    "browser-grading-lut-device"
+  ],
+  "environment": "page",
+  "key": [
+    "runtime:gl-renderer",
+    "the installation"
+  ],
+  "factory": "planned",
+  "ready": "driver:lut",
+  "query": [],
+  "linger": 10000
+}

@@ -1,0 +1,47 @@
+{
+  "kind": "process",
+  "id": "folder-pick",
+  "owner": "setup",
+  "summary": "The native folder picker for a settings field.",
+  "status": "target",
+  "driver": "driver:folder-picker",
+  "work": "Shows the picker and returns the chosen folder.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "folder": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "folder"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The picker can't be cancelled from here; a later answer is discarded.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "desktop, the person's own"
+}

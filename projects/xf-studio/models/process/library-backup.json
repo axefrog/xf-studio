@@ -1,0 +1,50 @@
+{
+  "kind": "process",
+  "id": "library-backup",
+  "owner": "library",
+  "summary": "An online backup of the library into its backups folder.",
+  "status": "target",
+  "driver": "driver:backups",
+  "work": "Copies the database with SQLite's online backup and prunes to seven daily and four weekly copies.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "string"
+      },
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "file",
+      "bytes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "locked",
+              "disk-full"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "A partial copy is removed.",
+  "deadline": 300000,
+  "lane": "host, background"
+}

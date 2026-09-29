@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "bridge-capture",
+  "owner": "bridge",
+  "summary": "Capturing an image from the game.",
+  "status": "target",
+  "driver": "driver:bridge",
+  "work": "Asks the game for a capture and receives the file by reference.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "capture": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "capture"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "command-refused",
+              "no-bridge"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "bridge pipe"
+}

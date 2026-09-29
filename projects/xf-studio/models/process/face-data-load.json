@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "face-data-load",
+  "owner": "expressions",
+  "summary": "Loading the face rig's rest pose and control vocabulary.",
+  "status": "target",
+  "driver": "driver:face-solve",
+  "work": "Fetches the prepared face data for the scene's body.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "controls": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "controls"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "face-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, warming"
+}

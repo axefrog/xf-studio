@@ -1,0 +1,47 @@
+{
+  "kind": "process",
+  "id": "core-rebuild",
+  "owner": "preview",
+  "summary": "Rebuilding the core preview after the person asks, ignoring what is cached.",
+  "status": "target",
+  "driver": "driver:core",
+  "work": "Clears the body's cached core and derives it again.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "body"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "derivation-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between stages.",
+  "cleanup": "The staged work folder is removed.",
+  "deadline": "none",
+  "lane": "host, one derivation at a time"
+}

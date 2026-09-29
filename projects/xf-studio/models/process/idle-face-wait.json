@@ -1,0 +1,56 @@
+{
+  "kind": "process",
+  "id": "idle-face-wait",
+  "owner": "motion",
+  "summary": "Waiting for the host to solve an idle clip's face, polling until a limit.",
+  "status": "target",
+  "driver": "driver:motion-data",
+  "work": "Polls for the idle's solved face frames until they are ready or the limit passes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "frames": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "frames",
+      "data"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "face-timed-out"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "FACE_POLL_LIMIT_MS (the idle plays without its face after)",
+  "lane": "page, warming",
+  "x-friction": [
+    {
+      "gap": "The work runs on the host; the page follows it by polling with backoff and re-asks if the host restarted.",
+      "capability": "cross-process-work",
+      "closes": "Work in another process mirrored here as a process, resumed after restarts and cancelled by asking."
+    }
+  ]
+}

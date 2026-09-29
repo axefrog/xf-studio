@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "log-files",
+  "owner": "diagnostics",
+  "summary": "The host log's and trace window's open files.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/host-log"
+  ],
+  "environment": "host",
+  "key": [
+    "driver:host-log"
+  ],
+  "factory": "diagnostics/host-log",
+  "ready": "driver:host-log",
+  "query": [],
+  "linger": 0
+}

@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "warm-files",
+  "owner": "character",
+  "summary": "Decoded textures and geometry of the last V, held for the first load to claim.",
+  "status": "both",
+  "replaces": [
+    "character-warm-start"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window"
+  ],
+  "factory": "character-warm-start",
+  "ready": "driver:warm-start",
+  "query": [],
+  "linger": 20000
+}

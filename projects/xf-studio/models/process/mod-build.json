@@ -1,0 +1,85 @@
+{
+  "kind": "process",
+  "id": "mod-build",
+  "owner": "export",
+  "summary": "Building a mod in a bounded child process: stage, pack once, verify, gate and promote exactly once.",
+  "status": "target",
+  "driver": "driver:package",
+  "work": "Stages every product, packs with WolvenKit, runs the verifiers and promotes the candidate.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "stage": {
+        "enum": [
+          "staging",
+          "packing",
+          "verifying",
+          "promoting"
+        ]
+      }
+    },
+    "required": [
+      "stage"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "build": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "candidate": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "build",
+      "candidate"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "not-ready",
+              "gate-failed",
+              "deadline",
+              "stale-prerequisite"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The child process tree is killed.",
+  "cleanup": "The candidate folder is removed unless promoted.",
+  "deadline": "PACKAGE_BUILD_DEADLINE_MS, with one retry after a stale prerequisite",
+  "lane": "host builder process, one at a time",
+  "faults": [
+    {
+      "code": "stale-prerequisite",
+      "when": "A prerequisite changed during the build.",
+      "fault": "owner",
+      "goesTo": "driver:package",
+      "then": "fallback"
+    }
+  ],
+  "x-friction": [
+    {
+      "gap": "Promotion happens once even across a crash.",
+      "capability": "once-only-effects",
+      "closes": "Recorded outcomes for outside effects."
+    },
+    {
+      "gap": "No progress is published while a Build runs for minutes.",
+      "capability": "streamed-results",
+      "closes": "Progress streamed from host work to the page."
+    }
+  ]
+}

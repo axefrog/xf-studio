@@ -1,0 +1,15 @@
+{
+  "kind": "runtime",
+  "id": "sqlite-connection",
+  "owner": "platform",
+  "summary": "The library's SQLite connection.",
+  "status": "current",
+  "environment": "host",
+  "key": [
+    "the library"
+  ],
+  "factory": "platform/graph-adapters/sqlite-store",
+  "ready": "driver:library",
+  "query": [],
+  "linger": 0
+}

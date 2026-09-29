@@ -1,0 +1,50 @@
+{
+  "kind": "process",
+  "id": "prepared-eviction",
+  "owner": "host",
+  "summary": "Evicting the least recently used prepared files to fit the budget.",
+  "status": "target",
+  "driver": "driver:prepared-budget",
+  "work": "Removes prepared files oldest-used first until under the budget.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "removed": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "removed",
+      "bytes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "locked"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "host, background"
+}

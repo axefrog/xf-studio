@@ -1,0 +1,15 @@
+{
+  "kind": "runtime",
+  "id": "python-oracle",
+  "owner": "expressions",
+  "summary": "The Python solver used only as an oracle in tests and studies.",
+  "status": "target",
+  "environment": "host",
+  "key": [
+    "driver:face-host"
+  ],
+  "factory": "facial-host",
+  "ready": "driver:face-host",
+  "query": [],
+  "linger": 0
+}

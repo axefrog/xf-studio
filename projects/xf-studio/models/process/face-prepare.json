@@ -1,0 +1,44 @@
+{
+  "kind": "process",
+  "id": "face-prepare",
+  "owner": "expressions",
+  "summary": "Preparing the player's face rig from the winning files.",
+  "status": "target",
+  "driver": "driver:face-host",
+  "work": "Reads the face skeleton, facial setup and blink and compiles the solver.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "face-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "A newer key supersedes it.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "host"
+}

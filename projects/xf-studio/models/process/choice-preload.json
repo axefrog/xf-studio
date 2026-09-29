@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "choice-preload",
+  "owner": "character",
+  "summary": "Preloading a hovered choice's parts into the pool.",
+  "status": "target",
+  "driver": "driver:detail-preload",
+  "work": "Fetches and decodes the parts a prepared choice would add, without showing them.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "parts": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "parts"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "not-prepared"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The pointer leaving aborts the fetches.",
+  "cleanup": "Loaded parts stay in the pool for a claim.",
+  "deadline": "none",
+  "lane": "page, warming"
+}

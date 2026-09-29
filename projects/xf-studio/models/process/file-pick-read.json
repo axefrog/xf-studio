@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "file-pick-read",
+  "owner": "platform",
+  "summary": "Opening a picker and reading the chosen file's bytes.",
+  "status": "target",
+  "driver": "driver:files",
+  "work": "Shows the picker for one purpose and reads the chosen file by reference.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "name",
+      "bytes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "cancelled",
+              "unreadable-file"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The picker can't be cancelled from here; a later answer is discarded.",
+  "cleanup": "The hidden input is reset.",
+  "deadline": "none",
+  "lane": "page, the person's own"
+}

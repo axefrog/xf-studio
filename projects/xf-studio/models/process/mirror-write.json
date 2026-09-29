@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "mirror-write",
+  "owner": "platform",
+  "summary": "One write of the legacy workspace mirror, trimmed to fit the budget.",
+  "status": "target",
+  "driver": "driver:legacy-mirror",
+  "work": "Writes the mirror text when it changed, trimming Undo and recovery drafts until it fits.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "trimmed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "bytes",
+      "trimmed"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "quota"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "A newer mirror supersedes it before it starts.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 1000,
+  "lane": "page, background, debounced 180 ms"
+}

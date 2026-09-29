@@ -1,0 +1,60 @@
+{
+  "kind": "process",
+  "id": "wolvenkit-download",
+  "owner": "setup",
+  "summary": "Downloading the pinned WolvenKit release the person consented to, hashing as it streams.",
+  "status": "target",
+  "driver": "driver:wolvenkit-setup",
+  "work": "Streams the release archive with a stall limit and retries.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "total": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "bytes",
+      "total"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "archive": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "archive"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "download-stalled",
+              "hash-mismatch",
+              "network"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The stream is aborted; retry delays end early.",
+  "cleanup": "The partial download is removed.",
+  "deadline": "none",
+  "lane": "host, the person's own"
+}

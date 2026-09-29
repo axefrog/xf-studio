@@ -1,0 +1,50 @@
+{
+  "kind": "process",
+  "id": "collection-import",
+  "owner": "library",
+  "summary": "Importing a collection file as new mod, look and preset nodes.",
+  "status": "target",
+  "driver": "driver:files",
+  "work": "Reads the collection file and commits its looks as presets in a new mod, in one commit.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "mod": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "presets": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "mod",
+      "presets"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable-file",
+              "too-large"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "page, the person's own"
+}

@@ -1,0 +1,50 @@
+{
+  "kind": "process",
+  "id": "save-write",
+  "owner": "character",
+  "summary": "Writing a V into a new save, or over one by its policy after backing it up.",
+  "status": "target",
+  "driver": "driver:save-writer",
+  "work": "Copies the save into the save backups, writes the V's creator state and verifies the result.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "save": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "after": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "save",
+      "after"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "policy-never",
+              "save-changed",
+              "verify-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Not cancellable once writing starts.",
+  "cleanup": "A failed write restores the backup copy.",
+  "deadline": 60000,
+  "lane": "host, the person's own"
+}

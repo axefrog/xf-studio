@@ -1,0 +1,53 @@
+{
+  "kind": "process",
+  "id": "mod-check",
+  "owner": "export",
+  "summary": "Checking a mod in a fresh worker: eligibility, omissions and identity keys, without building.",
+  "status": "target",
+  "driver": "driver:package",
+  "work": "Runs the check over the mod's package snapshot with the prerequisites last left.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "build": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "build"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "not-ready",
+              "gate-failed",
+              "deadline"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The worker is terminated.",
+  "cleanup": "The worker exits.",
+  "deadline": "PACKAGE_CHECK_DEADLINE_MS",
+  "lane": "host Check worker, one at a time",
+  "x-friction": [
+    {
+      "gap": "A deadline aborts the check with its own reason.",
+      "capability": "deadlines",
+      "closes": "Deadline-bound work."
+    }
+  ]
+}

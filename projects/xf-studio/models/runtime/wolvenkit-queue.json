@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "wolvenkit-queue",
+  "owner": "host",
+  "summary": "The WolvenKit CLI process queue: one run at a time, batched fetches.",
+  "status": "both",
+  "replaces": [
+    "wolvenkit-cli"
+  ],
+  "environment": "host",
+  "key": [
+    "driver:wolvenkit"
+  ],
+  "factory": "wolvenkit-cli",
+  "ready": "driver:wolvenkit",
+  "query": [],
+  "linger": 5000
+}

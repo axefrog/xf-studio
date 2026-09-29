@@ -1,0 +1,49 @@
+{
+  "kind": "runtime",
+  "id": "face-solver",
+  "owner": "expressions",
+  "summary": "The compiled in-process face solver for an installation.",
+  "status": "both",
+  "replaces": [
+    "facial-host"
+  ],
+  "environment": "host",
+  "key": [
+    "the installation"
+  ],
+  "factory": "facial-host",
+  "ready": "driver:face-host",
+  "query": [
+    {
+      "name": "solve",
+      "input": {
+        "type": "object",
+        "properties": {
+          "controls": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "controls"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "pose": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "pose"
+        ]
+      },
+      "budget": "0.003–0.09 ms"
+    }
+  ],
+  "linger": 60000
+}

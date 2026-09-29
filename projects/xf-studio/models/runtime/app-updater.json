@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "app-updater",
+  "owner": "desktop",
+  "summary": "The desktop app's updater.",
+  "status": "both",
+  "replaces": [
+    "../desktop/update-service"
+  ],
+  "environment": "desktop",
+  "key": [
+    "driver:updates"
+  ],
+  "factory": "../desktop/update-service",
+  "ready": "driver:updates",
+  "query": [],
+  "linger": 0
+}

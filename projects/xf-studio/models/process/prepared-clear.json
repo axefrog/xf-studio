@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "prepared-clear",
+  "owner": "host",
+  "summary": "Clearing every prepared game file when the person asks.",
+  "status": "target",
+  "driver": "driver:prepared-budget",
+  "work": "Removes the prepared files, keeping nothing in use.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "bytes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "locked"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 60000,
+  "lane": "host, the person's own"
+}

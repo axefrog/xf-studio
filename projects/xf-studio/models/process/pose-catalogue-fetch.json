@@ -1,0 +1,52 @@
+{
+  "kind": "process",
+  "id": "pose-catalogue-fetch",
+  "owner": "poses",
+  "summary": "Fetching the pose catalogue, waiting while the host builds it.",
+  "status": "target",
+  "driver": "driver:poses",
+  "work": "Asks for the catalogue and follows the host's build.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "poses": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "poses"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "catalogue-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 60000,
+  "lane": "page, the person's own",
+  "x-friction": [
+    {
+      "gap": "The work runs on the host; the page follows it by polling with backoff and re-asks if the host restarted.",
+      "capability": "cross-process-work",
+      "closes": "Work in another process mirrored here as a process, resumed after restarts and cancelled by asking."
+    }
+  ]
+}

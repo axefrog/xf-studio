@@ -1,0 +1,44 @@
+{
+  "kind": "process",
+  "id": "deformation-rig-compile",
+  "owner": "character",
+  "summary": "Compiling a garment or hair's deformation rig.",
+  "status": "target",
+  "driver": "driver:v-host",
+  "work": "Reads the rig resource and writes the compiled rig.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "rig": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "rig"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unsupported"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "host, with its preparation"
+}

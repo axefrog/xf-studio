@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "game-wait",
+  "owner": "bridge",
+  "summary": "Waiting for a game condition (loaded, in photo mode) with a signal.",
+  "status": "target",
+  "driver": "driver:bridge",
+  "work": "Waits on the game's status until the condition holds.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "state": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "state"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "timed-out",
+              "no-bridge"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The signal ends the wait.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "the caller's",
+  "lane": "bridge pipe"
+}

@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "expression-table-read",
+  "owner": "export",
+  "summary": "Reading the game's expression table for expression mods.",
+  "status": "target",
+  "driver": "driver:prerequisites",
+  "work": "Extracts and parses the photo-mode expression table.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "rows": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "rows"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 60000,
+  "lane": "host, before a Build"
+}

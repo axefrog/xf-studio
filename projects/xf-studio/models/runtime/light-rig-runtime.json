@@ -1,0 +1,27 @@
+{
+  "kind": "runtime",
+  "id": "light-rig-runtime",
+  "owner": "views",
+  "summary": "A light rig's lights as objects in one scene, resolved per the scene's body for the creator rig.",
+  "status": "both",
+  "replaces": [
+    "lighting-setup-stage",
+    "studio-environment"
+  ],
+  "environment": "page",
+  "key": [
+    "type:light-rig",
+    "type:scene"
+  ],
+  "factory": "planned",
+  "ready": "driver:view",
+  "query": [],
+  "linger": 1000,
+  "x-friction": [
+    {
+      "gap": "Lights must be objects in the scene they light, so the runtime is keyed by a pair of nodes.",
+      "capability": "host-objects-per-node",
+      "closes": "Host objects keyed by a tuple of nodes."
+    }
+  ]
+}

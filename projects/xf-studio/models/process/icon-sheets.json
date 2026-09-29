@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "icon-sheets",
+  "owner": "character",
+  "summary": "Deriving the creator's icon sheets.",
+  "status": "target",
+  "driver": "driver:icons",
+  "work": "Exports and packs the icon atlases the rows use.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "sheets": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "sheets"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between sheets.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "host, background"
+}

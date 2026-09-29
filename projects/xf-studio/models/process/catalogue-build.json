@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "catalogue-build",
+  "owner": "character",
+  "summary": "Building a body gender's creator catalogue with texts in the game's language.",
+  "status": "target",
+  "driver": "driver:catalogue",
+  "work": "Reads the creator resources, texts and TweakDB flats into the catalogue.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "options": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "options",
+      "key"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "catalogue-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between sections.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "host, sliced (4–5 s of work)"
+}

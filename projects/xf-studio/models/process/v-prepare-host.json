@@ -1,0 +1,64 @@
+{
+  "kind": "process",
+  "id": "v-prepare-host",
+  "owner": "character",
+  "summary": "Preparing a V on the host: open the route, resolve, plan, export and write a content-addressed record.",
+  "status": "target",
+  "driver": "driver:v-host",
+  "work": "Turns a character request into a record of components per slot and the files they need.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "stage": {
+        "type": "string"
+      },
+      "done": {
+        "type": "number",
+        "minimum": 0
+      },
+      "total": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "stage",
+      "done",
+      "total"
+    ]
+  },
+  "result": {
+    "$ref": "shapes.schema.json#/$defs/characterRecord"
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "preparation-failed",
+              "needs-wolvenkit"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Each requester's share ends; the run ends with the last.",
+  "cleanup": "Nothing half-written is kept.",
+  "deadline": "none",
+  "lane": "host, the person's own before prefetch",
+  "faults": [
+    {
+      "code": "needs-wolvenkit",
+      "when": "A resource needs WolvenKit.",
+      "fault": "owner",
+      "goesTo": "request:set-up-wolvenkit",
+      "then": "suspend"
+    }
+  ]
+}
