@@ -14,9 +14,17 @@ import type { StatesAt } from "./reference";
 
 const short = (value: unknown) => { const text = canonical(value); return text.length > 300 ? `${text.slice(0, 300)}…` : text; };
 
-/** Head states as the graph holds them (for the reference model). */
+/** Streams collapsed into the graph's entries: each is read from its host entry's copy. */
+function collapsedStreams(graph: Graph): Map<string, { ref: NodeRef; entries: readonly Entry[] }> {
+  const out = new Map<string, { ref: NodeRef; entries: readonly Entry[] }>();
+  for (const rec of graph[STRATA_DEBUG]().records) for (const entry of rec.entries) for (const inner of entry.inlined ?? []) out.set(inner.node.id, { ref: inner.node, entries: inner.entries });
+  return out;
+}
+
+/** Head states as the graph holds them (for the reference model), collapsed nodes folded from their host entries. */
 export function headStates(graph: Graph): StatesAt {
   const states = new Map<string, { ref: NodeRef; head: NodeState | null }>();
+  for (const [id, stream] of collapsedStreams(graph)) states.set(id, { ref: stream.ref, head: fold(null, stream.entries) });
   for (const rec of graph[STRATA_DEBUG]().records) states.set(rec.ref.id, { ref: rec.ref, head: rec.head });
   return ref => { const item = states.get(ref.id); return item && item.ref.type === ref.type && item.head && !item.head.retracted ? item.head : null; };
 }
@@ -24,14 +32,34 @@ export function headStates(graph: Graph): StatesAt {
 /** States at a pinned layer's point, replayed from the graph's in-memory entries. */
 function pinnedFrom(graph: Graph, types: readonly TypeSpec[]): (layer: Layer) => StatesAt | null {
   const cache = new Map<number, StatesAt>();
-  const entries = graph[STRATA_DEBUG]().records.flatMap(rec => rec.base.seq > 0 ? [] : rec.entries);
+  const byType = new Map(types.map(def => [def.type, def]));
+  const records = new Map(graph[STRATA_DEBUG]().records.map(rec => [rec.ref.id, rec]));
+  // A pinned layer reads the point its entry names: the greatest position of the entry's commit.
+  const collapsed = collapsedStreams(graph);
+  const ends = new Map<string, number>();
+  for (const entries of [...[...records.values()].map(rec => rec.entries), ...[...collapsed.values()].map(stream => stream.entries)])
+    for (const entry of entries) ends.set(entry.commit, Math.max(ends.get(entry.commit) ?? -1, entry.pos));
   return layer => {
-    const pos = layer.at ? graph.posOf(layer.at) : undefined;
+    const at = layer.at, pinned = at && records.get(at.node.id);
+    if (!at || !pinned) return null;
+    const entry = pinned.constant ? undefined : pinned.entries.find(item => item.seq === at.seq);
+    const pos = pinned.constant ? 0 : entry ? ends.get(entry.commit)! : undefined;
     if (pos === undefined) return null;
     let states = cache.get(pos);
     if (!states) {
-      const replayed = replayTo(types, entries, pos);
-      states = ref => { const item = replayed.get(ref.id); return item && item.ref.type === ref.type && item.state && !item.state.retracted ? item.state : null; };
+      // Each stream folded from empty (or from the snapshot it was loaded from, when that is no later) up to the point.
+      states = ref => {
+        const rec = records.get(ref.id), stream = collapsed.get(ref.id);
+        if (!rec && stream && stream.ref.type === ref.type) {
+          const state = fold(null, stream.entries.filter(entry => entry.pos <= pos), byType.get(ref.type));
+          return state && !state.retracted ? state : null;
+        }
+        if (!rec || rec.ref.type !== ref.type) return null;
+        if (rec.constant) return rec.head;
+        if (rec.base.seq > 0 && rec.base.pos > pos) return null;
+        const state = fold(rec.base.state, rec.entries.filter(entry => entry.pos <= pos), byType.get(ref.type));
+        return state && !state.retracted ? state : null;
+      };
       cache.set(pos, states);
     }
     return states;
@@ -132,7 +160,11 @@ export function checkSnapshots(store: MemoryStore, types: readonly TypeSpec[]): 
 export async function checkConsistentCut(graph: Graph, types: readonly TypeSpec[], entries: readonly Entry[], pos: number): Promise<string[]> {
   const view = await graph.at(pos);
   const replayed = replayTo(types, entries, pos);
-  const positions = new Map(entries.map(entry => [`${entry.node.id}@${entry.seq}`, entry.pos]));
+  // A pin reads the point its entry names: the greatest position of the entry's commit.
+  const all = entries.flatMap(item => [item, ...(item.inlined ?? []).flatMap(inner => inner.entries)]);
+  const ends = new Map<string, number>();
+  for (const entry of all) ends.set(entry.commit, Math.max(ends.get(entry.commit) ?? -1, entry.pos));
+  const positions = new Map(all.map(entry => [`${entry.node.id}@${entry.seq}`, ends.get(entry.commit)!]));
   // Constants have no stream: they are the same at every point.
   const constants = new Map(graph[STRATA_DEBUG]().records.filter(rec => rec.constant).map(rec => [rec.ref.id, rec.head]));
   const cache = new Map<number, StatesAt>();

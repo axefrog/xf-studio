@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import { Aborter, canonical, constantId, pathKey } from "strata";
 import type { ChangeSet, Edit, FieldKind, NodeRef, TypeSpec } from "strata";
-import { checkConflictIndex, checkResolution, headStates, prng, referenceModel, SYNTHETIC_TYPES } from "strata/testing";
+import { checkConflictIndex, checkResolution, headStates, prng, referenceModel, replayTo, STRATA_DEBUG, SYNTHETIC_TYPES } from "strata/testing";
 import { harness } from "./helpers";
 import { ITEM, GROUP } from "../src/testing/synthetic";
 
@@ -34,8 +34,17 @@ for (let seed = 1; seed <= SEEDS; seed++) test(`random operations agree with the
   const life = new Aborter();
   const sets: ChangeSet[] = [];
   graph.subscribeAll(set => sets.push(set), { signal: life.signal });
-  const model = referenceModel(SYNTHETIC_TYPES, () => null);
+  // Pinned layers read their source replayed to the point the pinned entry names (the greatest position of its
+  // commit), from every entry in memory.
   const snapshot = () => {
+    const entries = graph[STRATA_DEBUG]().records.flatMap(rec => rec.entries);
+    const model = referenceModel(SYNTHETIC_TYPES, layer => {
+      const pinned = layer.at && entries.find(entry => entry.node.id === layer.at!.node.id && entry.seq === layer.at!.seq);
+      const pos = pinned ? Math.max(...entries.filter(entry => entry.commit === pinned.commit).map(entry => entry.pos)) : undefined;
+      if (pos === undefined) return null;
+      const replayed = replayTo(SYNTHETIC_TYPES, entries, pos);
+      return ref => { const item = replayed.get(ref.id); return item && item.ref.type === ref.type && item.state && !item.state.retracted ? item.state : null; };
+    });
     const states = headStates(graph), out = new Map<string, Map<string, string>>();
     for (const ref of graph.list()) if (!ref.id.startsWith("builtin:")) out.set(ref.id, leaves(byType.get(ref.type)!, model.effective(states, ref)));
     return out;
@@ -58,7 +67,8 @@ for (let seed = 1; seed <= SEEDS; seed++) test(`random operations agree with the
             : { op: "create", type: ITEM, fields: { title: `t${step}`, tags: { [pick(keys)]: step } } }];
     } else {
       const node = pick(live), other = pick(items);
-      const kinds = ["title", "tag", "meta", "tombstone", "reset", "feed", "rebase", "detach", "trash", "rename", "link", "apply", "group"];
+      const kinds = ["title", "tag", "meta", "tombstone", "reset", "feed", "rebase", "detach", "trash", "rename", "link", "apply", "group",
+        "revert", "put", "pinned", "list", "several"];
       switch (pick(kinds)) {
         case "title": edits = [{ op: "set", node, path: ["title"], value: `v${step}` }]; break;
         case "tag": edits = [{ op: "set", node, path: ["tags", pick(keys)], value: Math.floor(next() * 5) }]; break;
@@ -72,6 +82,13 @@ for (let seed = 1; seed <= SEEDS; seed++) test(`random operations agree with the
         case "rename": edits = [{ op: "rename", node, name: `n${step}` }]; break;
         case "link": edits = [{ op: "set", node, path: ["link"], value: pick(live) }]; break;
         case "apply": edits = [{ op: "applyToSource", node, path: pick([["title"], ["tags", pick(keys)]]) }]; break;
+        case "revert": edits = [{ op: "revert", node, to: 1 + Math.floor(next() * Math.max(1, graph.seqOf(node))) }]; break;
+        case "put": edits = [{ op: "put", node, fields: { title: `p${step}`, tags: { [pick(keys)]: step } } }]; break;
+        // A feed pinned to an entry of its source: later changes to the source don't reach it.
+        case "pinned": edits = other.id.startsWith("builtin:") ? [{ op: "rename", node, name: "y" }] : [{ op: "feed", node, from: other, paths: [["title"]], at: graph.seqOf(other) }]; break;
+        case "list": edits = [{ op: "set", node, path: ["others"], value: [pick(live), ...(groups.length ? [pick(groups)] : [])] }]; break;
+        // Several edits of several nodes in one commit.
+        case "several": edits = [{ op: "set", node, path: ["title"], value: `s${step}` }, { op: "set", node: pick(live), path: ["tags", pick(keys)], value: step }, { op: "rename", node: pick(live), name: `r${step}` }]; break;
         default: edits = groups.length ? [{ op: "set", node: pick(groups), path: ["members", pick(keys)], value: node }] : [{ op: "rename", node, name: "x" }];
       }
     }

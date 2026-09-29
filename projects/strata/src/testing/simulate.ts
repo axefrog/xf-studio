@@ -32,6 +32,11 @@ export interface Scenario<W> {
   crash?(world: W): W | Promise<W>;
   /** Invariant problems after a step (empty when every invariant holds). Each starts with the invariant's ID and a colon. */
   check(world: W, step: number): string[] | Promise<string[]>;
+  /**
+   * After the last step: ends everything the world started and returns what outlived it (lifetime problems: nodes,
+   * processes, effects, demand or listeners left behind).
+   */
+  teardown?(world: W): string[] | Promise<string[]>;
 }
 
 export type SimFailure = { readonly seed: string; readonly step: number; readonly steps: readonly Step[]; readonly problems: readonly string[] };
@@ -78,6 +83,11 @@ export async function runSteps<W>(scenario: Scenario<W>, seed: string, steps: re
     }
     const problems = await scenario.check(world, i);
     if (problems.length) return { ok: false, seed, failure: { seed, step: i, steps: steps.slice(0, i + 1), problems } };
+  }
+  if (scenario.teardown) {
+    let problems: string[];
+    try { problems = await scenario.teardown(world); } catch (error) { problems = [`exception: ${(error as Error)?.stack ?? error}`]; }
+    if (problems.length) return { ok: false, seed, failure: { seed, step: steps.length, steps, problems } };
   }
   return { ok: true, seed, steps };
 }

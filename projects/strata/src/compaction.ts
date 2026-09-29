@@ -34,9 +34,10 @@ function valuesOfKind(def: TypeSpec | undefined, state: NodeState, want: FieldKi
 
 /**
  * The entries an entry references: tags, reverts, pins in layers, entry-valued fields, and (only while its commit is
- * in reach of an undo stack) what a compensation reverses.
+ * in reach of an undo stack) what a compensation reverses. Streams inlined in the entry count too, each read as its
+ * own node's type (`defs`; without it, their fields aren't known).
  */
-export function entryReferences(entry: Entry, def: TypeSpec | undefined, undoReach?: ReadonlySet<string>): EventRef[] {
+export function entryReferences(entry: Entry, def: TypeSpec | undefined, undoReach?: ReadonlySet<string>, defs?: (type: string) => TypeSpec | undefined): EventRef[] {
   const out: EventRef[] = [];
   const op: Op = def ? upcast(def, entry).op : entry.op;
   const pins = (layers: NodeState["layers"]) => { for (const layer of layers) if (layer.at) out.push(layer.at); };
@@ -55,21 +56,22 @@ export function entryReferences(entry: Entry, def: TypeSpec | undefined, undoRea
       for (const value of valuesOfKind(def, op.state, "entry")) if (isEventRef(value)) out.push(value);
       break;
   }
-  for (const inlined of entry.inlined ?? []) for (const inner of inlined.entries) out.push(...entryReferences(inner, def, undoReach));
+  for (const inlined of entry.inlined ?? []) for (const inner of inlined.entries) out.push(...entryReferences(inner, defs?.(inlined.node.type), undoReach, defs));
   return out;
 }
 
-/** The nodes an entry references through reference fields (for inline collapse). */
-export function nodeReferences(entry: Entry, def: TypeSpec | undefined): NodeRef[] {
+/** The nodes an entry references through reference fields (for inline collapse), streams inlined in it included. */
+export function nodeReferences(entry: Entry, def: TypeSpec | undefined, defs?: (type: string) => TypeSpec | undefined): NodeRef[] {
   const op: Op = def ? upcast(def, entry).op : entry.op;
+  const out: NodeRef[] = [];
   if (op.kind === "set" && def) {
     const at = kindAt(def, op.path);
-    if (at?.kind.kind === "ref" && isRef(op.value)) return [op.value];
-    if (at?.kind.kind === "refs" && Array.isArray(op.value)) return op.value.filter(isRef);
-    return [];
+    if (at?.kind.kind === "ref" && isRef(op.value)) out.push(op.value);
+    if (at?.kind.kind === "refs" && Array.isArray(op.value)) out.push(...op.value.filter(isRef));
   }
-  if (op.kind === "create" || op.kind === "import" || op.kind === "state") return valuesOfKind(def, op.state, "ref").filter(isRef);
-  return [];
+  if (op.kind === "create" || op.kind === "import" || op.kind === "state") out.push(...valuesOfKind(def, op.state, "ref").filter(isRef));
+  for (const inlined of entry.inlined ?? []) for (const inner of inlined.entries) out.push(...nodeReferences(inner, defs?.(inlined.node.type), defs));
+  return out;
 }
 
 export type KeepOptions = {
@@ -95,10 +97,58 @@ export function keepSet(streams: readonly Stream[], defs: (type: string) => Type
     for (const entry of stream.entries) {
       if (entry.op.kind === "tag" && !untagged.has(entry.seq)) keep.add(entryKey(entry));
       if (options.undoReach?.has(entry.commit)) keep.add(entryKey(entry));
-      for (const ref of entryReferences(entry, def, options.undoReach)) keep.add(entryKey(ref));
+      // An entry holding inlined streams is the only copy of them.
+      if (entry.inlined?.length) keep.add(entryKey(entry));
+      for (const ref of entryReferences(entry, def, options.undoReach, defs)) keep.add(entryKey(ref));
     }
   }
+  // A referenced entry names a point to read its node at: what that reading needs is kept too.
+  const points = [...options.roots ?? [], ...streams.flatMap(stream => stream.entries.flatMap(entry => entryReferences(entry, defs(stream.ref.type), undefined, defs)))];
+  for (const key of readingNeeds(streams, defs, points)) keep.add(key);
   return keep;
+}
+
+/**
+ * What reading each named entry's node at the point the entry names (the greatest position of its commit) needs: at
+ * that point, the latest entry of the node and of every live layer source its state names, transitively, and each
+ * pinned layer's own entry and its needs. Kept, these fold exactly as before, so every pin reads what it always read.
+ */
+function readingNeeds(streams: readonly Stream[], defs: (type: string) => TypeSpec | undefined, named: readonly EventRef[]): Set<string> {
+  // Collapsed streams are read from their host entries (which are kept whole) like any other.
+  const all: Stream[] = [...streams, ...streams.flatMap(stream => stream.entries.flatMap(entry => (entry.inlined ?? []).map(inner => ({ ref: inner.node, entries: inner.entries }))))];
+  const byId = new Map<string, Stream>();
+  for (const stream of all) if (!byId.has(stream.ref.id)) byId.set(stream.ref.id, stream);
+  const ends = new Map<string, number>();
+  for (const stream of all) for (const entry of stream.entries) ends.set(entry.commit, Math.max(ends.get(entry.commit) ?? -1, entry.pos));
+  // Each stream's states, folded as far as asked.
+  const folded = new Map<string, (NodeState | null)[]>();
+  const stateThrough = (stream: Stream, index: number): NodeState | null => {
+    const states = folded.get(stream.ref.id) ?? [];
+    folded.set(stream.ref.id, states);
+    for (let i = states.length; i <= index; i++) states.push(fold(i ? states[i - 1] : null, [stream.entries[i]], defs(stream.ref.type)));
+    return states[index];
+  };
+  const out = new Set<string>(), seen = new Set<string>();
+  const queue: EventRef[] = [...named];
+  const read = (id: string, point: number): void => {
+    if (seen.has(`read ${id}@${point}`)) return;
+    seen.add(`read ${id}@${point}`);
+    const stream = byId.get(id);
+    if (!stream) return;
+    let index = -1;
+    for (let i = 0; i < stream.entries.length && stream.entries[i].pos <= point; i++) index = i;
+    if (index < 0) return;
+    out.add(entryKey(stream.entries[index]));
+    for (const layer of stateThrough(stream, index)?.layers ?? []) {
+      if (layer.at) queue.push(layer.at);
+      else read(layer.from.id, point);
+    }
+  };
+  for (let ref = queue.pop(); ref; ref = queue.pop()) {
+    const entry = byId.get(ref.node.id)?.entries.find(item => item.seq === ref!.seq);
+    if (entry && !seen.has(entryKey(entry))) { seen.add(entryKey(entry)); read(ref.node.id, ends.get(entry.commit)!); }
+  }
+  return out;
 }
 
 /** A value stream rolled up: unreferenced entries dropped. */
@@ -156,12 +206,14 @@ export function collapseInline(streams: readonly Stream[], defs: (type: string) 
     if (other.ref.id === target.id) continue;
     const def = defs(other.ref.type);
     for (const entry of other.entries) {
-      if (nodeReferences(entry, def).some(ref => ref.id === target.id)) referrers.push(entry);
-      if (entryReferences(entry, def).some(ref => ref.node.id === target.id)) entryRefs++;
+      if (nodeReferences(entry, def, defs).some(ref => ref.id === target.id)) referrers.push(entry);
+      if (entryReferences(entry, def, undefined, defs).some(ref => ref.node.id === target.id)) entryRefs++;
     }
   }
   if (referrers.length !== 1 || entryRefs) return { ok: false, referrers: referrers.length + entryRefs,
     reason: referrers.length + entryRefs === 0 ? "Nothing references it." : "More than one entry references it." };
   const host = referrers[0];
-  return { ok: true, stream, host: { ...host, inlined: [...(host.inlined ?? []), { node: stream.ref, entries: stream.entries }] } };
+  // A copy of the stream (the host entry is frozen with it; the node's own stream stays as it is until the collapse
+  // completes), replacing any copy an earlier, interrupted collapse left in the host.
+  return { ok: true, stream, host: { ...host, inlined: [...(host.inlined ?? []).filter(inner => inner.node.id !== target.id), { node: stream.ref, entries: [...stream.entries] }] } };
 }

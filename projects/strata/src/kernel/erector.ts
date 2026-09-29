@@ -6,7 +6,7 @@
 import { canonical, isJson } from "../json";
 import type { Json } from "../json";
 import { kernelInternals, KNode, LATEST } from "./kernel";
-import type { Demand, DemandSpec, Driver, Environment, Input, RunContext } from "./kernel";
+import type { Demand, DemandSpec, Driver, Environment, RunContext } from "./kernel";
 import type { OperatorApi, Operators } from "./operators";
 
 export type NodeRefData = { readonly $node: string };
@@ -41,7 +41,7 @@ export function erector(env: Environment, model: KNode<GraphModel>, operators: O
     });
     if (problem) { env.observe(env.errors, { message: `This model can't be erected: ${problem}`, code: "model" }); return; }
     const apiFor = (id: string): OperatorApi => ({ id, env, run, node: modelId => live.get(modelId)?.node });
-    const wanted = new Map((graph?.nodes ?? []).map(item => [item.id, item]));
+    const wanted = new Map(graph.nodes.map(item => [item.id, item]));
     // Released: IDs gone, or whose kind, operator or parameters changed. Which ones is decided whole before any is released
     // (STRATA-16), so nothing that can fail runs between two releases.
     const released = [...live].filter(([id, item]) => { const next = wanted.get(id); return !next || shape(next) !== shape(item.model); });
@@ -50,12 +50,12 @@ export function erector(env: Environment, model: KNode<GraphModel>, operators: O
       live.delete(id);
     }
     const resolve = (ref: string | NodeRefData): KNode | undefined => typeof ref === "string" ? live.get(ref)?.node : env.node(ref.$node);
-    const inputsOf = (item: NodeModel): Input[] => {
+    const inputsOf = (item: NodeModel): { node: KNode; demand: Demand }[] => {
       const demand: Demand = typeof item.demand === "string" ? (resolve(item.demand) as KNode<DemandSpec> | undefined) ?? LATEST : item.demand ?? LATEST;
       return (item.inputs ?? []).map(resolve).filter((node): node is KNode => !!node).map(node => ({ node, demand }));
     };
-    // Created, in model order; seeds and drivers first so every input exists.
-    const order = [...wanted.values()].sort((a, b) => rank(a.kind) - rank(b.kind));
+    // Created in model order, every one unwired; wiring follows once every node exists.
+    const order = [...wanted.values()];
     for (const item of order) {
       if (live.has(item.id)) continue;
       const id = `${prefix}${item.id}`;
@@ -84,10 +84,10 @@ export function erector(env: Environment, model: KNode<GraphModel>, operators: O
       const current = live.get(item.id);
       if (!current || (item.kind !== "combinator" && item.kind !== "effect")) continue;
       const next = inputsOf(item);
+      // The same inputs with the same demand (a spec node compared by its identity): nothing to rewire.
+      const demandKey = (demand: Demand) => canonical(demand instanceof KNode ? demand.id : demand);
       const same = next.length === current.node.inputs.length &&
-        next.every((input, i) => typeof input !== "object" || !("node" in input) ? false :
-          input.node === current.node.inputs[i].node && canonical(input.demand instanceof KNode ? input.demand.id : input.demand) ===
-            canonical(current.node.inputs[i].demand instanceof KNode ? (current.node.inputs[i].demand as KNode).id : current.node.inputs[i].demand));
+        next.every((input, i) => input.node === current.node.inputs[i].node && demandKey(input.demand) === demandKey(current.node.inputs[i].demand));
       current.model = item;
       if (!same) kernelInternals.setInputsNow(env, current.node, next);
     }
@@ -100,8 +100,14 @@ export function erector(env: Environment, model: KNode<GraphModel>, operators: O
     name: options.name ?? "erector",
     start(run) {
       run.effect({ name: `${options.name ?? "erector"} model`, inputs: [model], run: context => {
-        const graph = context.inputs[0].value as GraphModel | undefined;
-        env.change(() => { if (!run.signal.aborted) erect(run, graph ?? { nodes: [] }); });
+        // No entry yet: nothing to erect. An error entry isn't a model: it is refused like any other, and what was
+        // erected stays (null and other values that aren't models are refused by the format check).
+        const latest = context.inputs[0].latest;
+        env.change(() => {
+          if (run.signal.aborted) return;
+          if (latest?.error) env.observe(env.errors, { message: `The model is an error: ${latest.error.message}`, code: "model" });
+          else erect(run, latest ? latest.value as GraphModel : { nodes: [] });
+        });
       } });
       run.signal.addEventListener("abort", () => env.change(() => {
         for (const item of live.values()) if (item.node.kind !== "effect") kernelInternals.removeNow(env, item.node);
@@ -112,7 +118,6 @@ export function erector(env: Environment, model: KNode<GraphModel>, operators: O
   return { driver, nodes, live: id => live.get(id)?.node };
 }
 
-const rank = (kind: NodeModel["kind"]) => kind === "seed" ? 0 : kind === "driver" ? 1 : kind === "combinator" ? 2 : 3;
 const KINDS: ReadonlySet<string> = new Set(["seed", "combinator", "effect", "driver"]);
 const isNodeRef = (value: unknown): value is NodeRefData =>
   !!value && typeof value === "object" && !Array.isArray(value) && typeof (value as NodeRefData).$node === "string";

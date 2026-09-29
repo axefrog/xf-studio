@@ -53,6 +53,10 @@ bun test                    # kernel, entity and stream tests, property tests, 1
 bun run check               # the engine against ES2022 alone; the tests and example with Bun's types
 bun run bench               # the load and commit budgets
 bun run sim:long 5000 400   # a longer simulation for the review cadence (under the memory guard)
+bun tools/coverage.ts --list uncovered.txt   # branch coverage (every branch outcome of the engine)
+bun tools/mutate.ts --survivors survivors.txt # mutation testing: every surviving mutant is a missing test or an equivalent change
 ```
+
+The two quality tools parse the engine with acorn, which isn't a dependency of the package: set `STRATA_ACORN` to an acorn `dist/acorn.mjs` (npm `acorn`, MIT). Run both under the memory guard; the mutation tool also takes `STRATA_GUARD` (`<python>|<memory_guard.py>|<GB>`) to guard each test process, since a mutant can loop or allocate without bound. Mutants recorded as equivalent, with the reason, are in `tools/equivalent-mutants.json`; branches left uncovered on purpose are listed, with the reason, in `tools/uncovered-branches.md`.
 
 A failing simulation prints its seed and steps; the harness shrinks them to a minimal trace, which goes into `tests/sim/regressions.json` and replays on every run.

@@ -394,8 +394,9 @@ export class Environment {
     } finally { this.applying = false; }
   }
 
-  private fail(message: string, code?: string): void {
-    this.pendingObservations.push([[this.errors, freeze({ message, ...(code ? { code } : {}) })]]);
+  /** Every failure of the environment carries a code (programs read codes; messages are for people). */
+  private fail(message: string, code: string): void {
+    this.pendingObservations.push([[this.errors, freeze({ message, code })]]);
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -580,7 +581,7 @@ export class Environment {
       node.activationAborter = aborter;
       const seed = node;
       try { node.activation({ signal: aborter.signal, observe: value => { if (!aborter.signal.aborted) this.observe(seed, value); } }); }
-      catch (error) { this.fail(`Seed ${node.name} failed to activate: ${messageOf(error)}`); }
+      catch (error) { this.fail(`Seed ${node.name} failed to activate: ${messageOf(error)}`, "activation"); }
     }
   }
 

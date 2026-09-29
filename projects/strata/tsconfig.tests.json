@@ -5,5 +5,5 @@
     "noUnusedLocals": false,
     "paths": { "strata": ["./index.ts"], "strata/testing": ["./testing.ts"] }
   },
-  "include": ["index.ts", "testing.ts", "src", "tests", "examples"]
+  "include": ["index.ts", "testing.ts", "src", "tests", "examples", "tools"]
 }

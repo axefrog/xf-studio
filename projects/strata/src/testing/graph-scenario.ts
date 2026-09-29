@@ -29,7 +29,18 @@ export type GraphWorld = {
   problems: string[];
   restarts: number;
   faults?: Faults;
+  /** Nodes a purge was asked for (another window keeps a purged node until it loads again). */
+  purged: Set<string>;
+  /** Nodes collapsed into another entry (their own stream left the store, as a purge's does). */
+  collapsed: Set<string>;
+  /** After setup: each window's kernel nodes other than entities' own, and its lifetime token's listeners. */
+  baseline: { nodes: [number, number]; listeners: [number, number] };
 };
+
+/** How many listeners a token has (the engine's tokens keep them in a list). */
+const listenerCount = (signal: unknown) => (signal as { listeners?: unknown[] }).listeners?.length ?? 0;
+/** A window's kernel nodes, leaving out its entities' own (an entity's seed and layering combinator live as long as it does). */
+const machinery = (graph: Graph) => graph.env.allNodes().filter(node => !node.id.startsWith("entity:") && !node.id.startsWith("effective:")).length;
 
 const MAX_NODES = 24;
 const pickFrom = <T>(items: readonly T[], n: number): T | undefined => items.length ? items[n % items.length] : undefined;
@@ -89,7 +100,8 @@ function checkUndo(world: GraphWorld, scope = "default"): void {
   const exact = touched.every(id => world.lastWriter.get(id) === top);
   const seqs = touched.map(id => graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === id)?.headSeq ?? 0);
   const result = track(world, () => graph.undo(scope));
-  if (!result.ok) { if (result.reason !== "empty" && result.reason !== "unloaded") world.problems.push(`undo: refused ${result.reason}`); return; }
+  // Nothing to undo, history not loaded, a node in it being collapsed right now, or earlier layers that would now close a cycle.
+  if (!result.ok) { if (!["empty", "unloaded", "busy", "cycle"].includes(result.reason)) world.problems.push(`undo: refused ${result.reason}`); return; }
   touched.forEach((id, i) => {
     const seq = graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === id)?.headSeq ?? 0;
     if (seq < seqs[i]) world.problems.push(`undo: the stream of ${id.slice(0, 8)} shrank`);
@@ -103,8 +115,11 @@ const actions: SimAction<GraphWorld>[] = [
     const graph = world.graph, items = graph.list(ITEM);
     if (graph.list().length >= MAX_NODES) return;
     const source = pickFrom(items, a)!;
-    const shape = b % 5;
-    commit(world, [shape === 0 ? { op: "create", type: ITEM, from: { fork: source } }
+    const shape = b % 6;
+    // A fork pinned to its source's current entry (constants have no entries to pin to).
+    const pinned = shape === 5 && !source.id.startsWith("builtin:") && world.graph.seqOf(source) > 0;
+    commit(world, [pinned ? { op: "create", type: ITEM, from: { fork: source, at: world.graph.seqOf(source) } }
+      : shape === 0 ? { op: "create", type: ITEM, from: { fork: source } }
       : shape === 1 ? { op: "create", type: ITEM, from: { clone: source } }
         : shape === 2 ? { op: "create", type: GROUP, fields: { label: "g", members: { m: source } } }
           : { op: "create", type: ITEM, fields: { title: `t${c % 7}`, tags: { [`k${c % 3}`]: c % 5 } } }]);
@@ -132,6 +147,7 @@ const actions: SimAction<GraphWorld>[] = [
     const ops: Edit[] = [
       { op: "feed", node, from: source, paths: [[["tags"]], [["title"]], [["tags", `k${c % 3}`]], "*"][b % 4] as "*" },
       { op: "rebase", node, base: source },
+      ...(source.id.startsWith("builtin:") ? [] : [{ op: "feed" as const, node, from: source, paths: [["title"]], at: world.graph.seqOf(source) }]),
       { op: "detach", node },
       { op: "applyToSource", node, path: [["title"], ["tags", `k${c % 3}`]][b % 2] },
     ];
@@ -172,9 +188,29 @@ const actions: SimAction<GraphWorld>[] = [
   { name: "other-sync", run(world) { void world.other.sync().catch(stopped); } },
   { name: "store-fault", run(world, [a]) { if (a % 2) world.store.failNext++; else world.store.loseNext++; } },
   { name: "jobs", run(world, [a]) { void world.jobs.run({ kind: `job${a % 3}`, input: a, priority: a % 3 === 0 ? "user" : "background" }).catch(() => undefined); } },
-  { name: "compact", weight: 0.3, run(world, [a]) {
+  { name: "purge", weight: 0.2, run(world, [a, b]) {
+    // Deleting for good, sometimes from under nodes that layer from it (pinned or live).
     const node = pickFrom(world.graph.list(ITEM).filter(ref => !ref.id.startsWith("builtin:")), a);
-    if (node) void world.graph.compact(node).catch(stopped);
+    if (!node) return;
+    world.purged.add(node.id);
+    void world.graph.purge(node, { force: b % 2 === 0 }).catch(stopped);
+  } },
+  { name: "collapse", weight: 0.3, run(world, [a]) {
+    // Inline collapse, when exactly one entry references the node: it must still read the same, here and after a reload.
+    const node = pickFrom(world.graph.list(ITEM).filter(ref => !ref.id.startsWith("builtin:")), a);
+    if (!node) return;
+    void world.graph.collapseInline(node).then(result => { if (result.ok) world.collapsed.add(node.id); }, stopped);
+  } },
+  // A session's Undo history ends: compaction then rolls up what it no longer needs.
+  { name: "forget-history", weight: 0.3, run(world) { world.graph.forgetHistory(); } },
+  { name: "compact", weight: 0.3, run(world, [a, b]) {
+    const node = pickFrom(world.graph.list(ITEM).filter(ref => !ref.id.startsWith("builtin:")), a);
+    if (!node) return;
+    void world.graph.compact(node).catch(stopped);
+    // Sometimes a second compaction of the same node at once: it must be refused as busy.
+    if (b % 3 === 0) void world.graph.compact(node).then(result => {
+      if (result.ok) world.problems.push("compaction: a second compaction of a node already being compacted wasn't refused");
+    }, stopped);
   } },
 ];
 
@@ -190,9 +226,11 @@ async function start(seed: string, restarts: number, carry?: GraphWorld, faults?
   const world: GraphWorld = {
     seed, scheduler, memory, store, graph, other, life, otherLife, recovery: [], accepted: carry?.accepted ?? new Set(),
     rejected: carry?.rejected ?? new Set(), jobs: carry?.jobs ?? new SimJobs(scheduler, (_kind, input) => input, 1, 15),
-    before: new Map(), touched: new Map(), lastWriter: new Map(), problems: [], restarts, faults,
+    before: new Map(), touched: carry?.touched ?? new Map(), lastWriter: new Map(), problems: [], restarts, faults,
+    baseline: { nodes: [0, 0], listeners: [0, 0] }, purged: carry?.purged ?? new Set(), collapsed: carry?.collapsed ?? new Set(),
   };
   watch(world);
+  world.baseline = { nodes: [machinery(graph), machinery(other)], listeners: [listenerCount(life.signal), listenerCount(otherLife.signal)] };
   return world;
 }
 
@@ -222,6 +260,63 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
       }
       return next;
     },
+    async teardown(world) {
+      // Once everything outstanding has been delivered, each window holds no more than it did after setup (setup may end
+      // with store work still running): no store process, result effect or listener left behind.
+      world.store.failNext = 0;
+      world.store.loseNext = 0;
+      // Delivered until nothing is left even after promise chains have had time to ask for more.
+      for (let i = 0, quiet = 0; i < 5000 && quiet < 8; i++) {
+        if (world.scheduler.pending().length) { world.scheduler.deliver(0); quiet = 0; } else quiet++;
+        await settle();
+      }
+      const problems: string[] = [];
+      for (const [index, graph] of [world.graph, world.other].entries()) {
+        const name = index ? "the other window" : "this window";
+        if (graph.storeProcess?.children.length) problems.push(`lifetime: ${name} still runs store work (${graph.storeProcess.children.map(child => child.name).join(", ")})`);
+        const nodes = machinery(graph);
+        if (nodes > world.baseline.nodes[index]) problems.push(`lifetime: ${name} holds ${nodes - world.baseline.nodes[index]} kernel nodes more than after setup`);
+        const listeners = listenerCount((index ? world.otherLife : world.life).signal);
+        if (listeners > world.baseline.listeners[index]) problems.push(`lifetime: ${name}'s lifetime token has ${listeners - world.baseline.listeners[index]} listeners more than after setup`);
+      }
+      // Both windows converge: once each has caught up with the store, it resolves what a graph loaded from it does.
+      const settleAll = async (promise: Promise<unknown>) => {
+        let done = false;
+        promise.then(() => { done = true; }, () => { done = true; });
+        for (let i = 0; i < 5000 && !done; i++) { await settle(); if (!done) world.scheduler.deliver(0); }
+      };
+      for (const graph of [world.graph, world.other]) await settleAll(graph.sync());
+      const fresh = makeGraph(world, `${world.seed}:fresh`, new Aborter());
+      await settleAll(fresh.load());
+      const listed = new Set(fresh.list().map(ref => ref.id));
+      for (const [index, peer] of [world.graph, world.other].entries()) {
+        const name = index ? "the other window" : "this window";
+        // Sync reads entries, and a purge leaves none: a window holding a node another window purged loads again (as
+        // the Studio's host does when the store's index no longer lists a node it holds).
+        let graph = peer;
+        // A collapse is another window's compaction and purge: the same host concern.
+        if (world.collapsed.size || peer.list().some(ref => !ref.id.startsWith("builtin:") && !listed.has(ref.id) && world.purged.has(ref.id))) {
+          graph = makeGraph(world, `${world.seed}:reloaded:${index}`, new Aborter());
+          await settleAll(graph.load());
+        }
+        for (const ref of fresh.list()) if (canonical(graph.resolve(ref) ?? null) !== canonical(fresh.resolve(ref) ?? null))
+          problems.push(`converge: ${name} resolves ${ref.id.slice(0, 8)} as ${canonical(graph.resolve(ref) ?? null)}, the store as ${canonical(fresh.resolve(ref) ?? null)}`);
+        for (const ref of graph.list()) if (!ref.id.startsWith("builtin:") && !listed.has(ref.id))
+          problems.push(`converge: ${name} lists ${ref.id.slice(0, 8)}, which the store doesn't hold`);
+        // Collapsed nodes aren't listed, but read from their host entry exactly as the store's copy does.
+        for (const id of world.collapsed) {
+          const ref = { type: ITEM, id };
+          if (canonical(graph.resolve(ref) ?? null) !== canonical(fresh.resolve(ref) ?? null))
+            problems.push(`converge: ${name} resolves collapsed ${id.slice(0, 8)} as ${canonical(graph.resolve(ref) ?? null)}, the store as ${canonical(fresh.resolve(ref) ?? null)}`);
+        }
+      }
+      world.life.abort("teardown"); world.otherLife.abort("teardown");
+      for (const graph of [world.graph, world.other]) {
+        if (graph.env.root.children.length) problems.push(`leak: a stopped window's root still has ${graph.env.root.children.length} children`);
+        if (graph.env.allNodes().some(node => node.active)) problems.push("leak: a stopped window still has active nodes");
+      }
+      return problems;
+    },
     async check(world, step) {
       const problems = [...world.problems];
       world.problems.length = 0;
@@ -238,6 +333,9 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
         if (stored.has(commit) || pending.has(commit) || world.rejected.has(commit)) continue;
         // A commit whose entries were all compacted away is stored in its rollup.
         if (world.memory.compactions.length) continue;
+        // So is one whose nodes were all purged: deleted for good, on purpose.
+        const nodes = world.touched.get(commit);
+        if (nodes?.length && nodes.every(id => world.purged.has(id))) continue;
         problems.push(`lost-work: commit ${commit.slice(0, 8)} is neither stored, pending nor rejected`);
       }
       // The person's jobs start before background jobs queued earlier.
