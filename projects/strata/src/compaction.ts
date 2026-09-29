@@ -86,7 +86,7 @@ export type KeepOptions = {
  * roots, and every entry any entry references. Returned as `nodeId@seq` keys.
  */
 export function keepSet(streams: readonly Stream[], defs: (type: string) => TypeSpec | undefined, options: KeepOptions = {}): Set<string> {
-  const keep = new Set<string>();
+  const keep = new Set<string>(), points: EventRef[] = [...options.roots ?? []];
   for (const root of options.roots ?? []) keep.add(entryKey(root));
   for (const stream of streams) {
     const def = defs(stream.ref.type);
@@ -99,11 +99,15 @@ export function keepSet(streams: readonly Stream[], defs: (type: string) => Type
       if (options.undoReach?.has(entry.commit)) keep.add(entryKey(entry));
       // An entry holding inlined streams is the only copy of them.
       if (entry.inlined?.length) keep.add(entryKey(entry));
-      for (const ref of entryReferences(entry, def, options.undoReach, defs)) keep.add(entryKey(ref));
+      // Each entry's references are read once: they name points to read, and are kept (with, for a compensation in
+      // undo reach, what it reverses).
+      const refs = entryReferences(entry, def, undefined, defs);
+      for (const ref of refs) { keep.add(entryKey(ref)); points.push(ref); }
+      if (options.undoReach?.size && (entry.op.kind === "compensate" || entry.inlined?.length))
+        for (const ref of entryReferences(entry, def, options.undoReach, defs)) keep.add(entryKey(ref));
     }
   }
   // A referenced entry names a point to read its node at: what that reading needs is kept too.
-  const points = [...options.roots ?? [], ...streams.flatMap(stream => stream.entries.flatMap(entry => entryReferences(entry, defs(stream.ref.type), undefined, defs)))];
   for (const key of readingNeeds(streams, defs, points)) keep.add(key);
   return keep;
 }
@@ -128,6 +132,13 @@ function readingNeeds(streams: readonly Stream[], defs: (type: string) => TypeSp
     for (let i = states.length; i <= index; i++) states.push(fold(i ? states[i - 1] : null, [stream.entries[i]], defs(stream.ref.type)));
     return states[index];
   };
+  // Each stream's entries by seq (a stream's entries are in seq order, and so in position order).
+  const bySeq = new Map<string, Map<number, Entry>>();
+  const entryAt = (ref: EventRef): Entry | undefined => {
+    let index = bySeq.get(ref.node.id);
+    if (!index) bySeq.set(ref.node.id, index = new Map((byId.get(ref.node.id)?.entries ?? []).map(entry => [entry.seq, entry])));
+    return index.get(ref.seq);
+  };
   const out = new Set<string>(), seen = new Set<string>();
   const queue: EventRef[] = [...named];
   const read = (id: string, point: number): void => {
@@ -135,8 +146,10 @@ function readingNeeds(streams: readonly Stream[], defs: (type: string) => TypeSp
     seen.add(`read ${id}@${point}`);
     const stream = byId.get(id);
     if (!stream) return;
-    let index = -1;
-    for (let i = 0; i < stream.entries.length && stream.entries[i].pos <= point; i++) index = i;
+    // The last entry at or before the point (binary search: positions rise along a stream).
+    let low = 0, high = stream.entries.length;
+    while (low < high) { const mid = (low + high) >>> 1; if (stream.entries[mid].pos <= point) low = mid + 1; else high = mid; }
+    const index = low - 1;
     if (index < 0) return;
     out.add(entryKey(stream.entries[index]));
     for (const layer of stateThrough(stream, index)?.layers ?? []) {
@@ -145,7 +158,7 @@ function readingNeeds(streams: readonly Stream[], defs: (type: string) => TypeSp
     }
   };
   for (let ref = queue.pop(); ref; ref = queue.pop()) {
-    const entry = byId.get(ref.node.id)?.entries.find(item => item.seq === ref!.seq);
+    const entry = entryAt(ref);
     if (entry && !seen.has(entryKey(entry))) { seen.add(entryKey(entry)); read(ref.node.id, ends.get(entry.commit)!); }
   }
   return out;
