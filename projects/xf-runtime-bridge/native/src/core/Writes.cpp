@@ -1179,6 +1179,23 @@ json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
     {
         aOps.guard();
     }
+    // Refuse rather than release (RB-83): a save made now would keep what the bridge holds on V (a movement hold, a forced
+    // crouch, a suspended outfit), which the kill switch and player.stop lift but a save would carry into the next load.
+    if (aOps.holds)
+    {
+        const auto held = aOps.holds();
+        if (held.is_array() && !held.empty())
+        {
+            std::string names;
+            for (const auto& item : held)
+            {
+                names += (names.empty() ? "" : ", ") + (item.is_string() ? item.get<std::string>() : item.dump());
+            }
+            throw MethodError("bridge_effects_active", "the bridge still holds something on V that a save would keep (" + names +
+                                                           "); nothing was saved. player_stop lifts the effects and stops behaviours "
+                                                           "(wardrobe_equip {resume: true} puts a suspended outfit back), then save again");
+        }
+    }
     const auto prepared = aOps.prepare();
     const bool released = prepared.value("lock_released", false);
     // From here on, every way out of this function takes the released lock back.
@@ -1505,16 +1522,40 @@ json WardrobeEquip(const params::WardrobeEquipRequest& aRequest, const WardrobeO
         out["undo_note"] = step.contains("note") ? step.value("note", std::string()) : "nothing changed (no outfit was active)";
         return out;
     }
+    // A restore puts back what it still can (RB-84): what the game couldn't find any more is left out of the check and
+    // named in the answer (not_restored), instead of the whole undo failing on one missing item.
+    auto expected = aRequest;
+    json notRestored = json::array();
+    if (aRequest.mode == "restore" && step.contains("not_restored") && step["not_restored"].is_array())
+    {
+        notRestored = step["not_restored"];
+        for (const auto& entry : notRestored)
+        {
+            if (!entry.is_string())
+            {
+                continue;
+            }
+            const auto text = entry.get<std::string>();
+            const auto key = text.substr(0, text.find(':'));
+            std::erase_if(expected.slots, [&](const auto& aSlot) { return aSlot.area == key; });
+            std::erase_if(expected.parts, [&](const auto& aPart) { return aPart.slot == key; });
+        }
+    }
     json state;
     bool shown = false;
     for (int i = 0; i < kInventoryPolls && !shown; ++i)
     {
         aOps.settle();
         state = aOps.state();
-        shown = WardrobeShows(aRequest, state);
+        shown = WardrobeShows(expected, state);
     }
     out["changed"] = true;
     out["shown"] = shown;
+    if (!notRestored.empty())
+    {
+        out["not_restored"] = notRestored;
+        out["not_restored_note"] = "neither the wardrobe nor V's inventory has these any more, so they were left out; everything else was put back";
+    }
     out["state"] = state;
     if (!shown)
     {

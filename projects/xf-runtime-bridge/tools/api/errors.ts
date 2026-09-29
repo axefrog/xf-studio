@@ -101,14 +101,21 @@ const BRIDGE_MESSAGES: Record<string, string> = {
     "V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first.",
   outfit_managed_elsewhere:
     "V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back.",
+  bridge_effects_active:
+    "The bridge still holds something on V that a save would keep (a glide's movement hold, a forced crouch, a running behaviour or an outfit it took off), so nothing was saved. player_stop lifts the effects and stops behaviours, and wardrobe_equip with resume: true puts a suspended outfit back; then save again.",
+  script_outfit_api_changed:
+    "The installed Equipment-EX doesn't offer the outfit functions the bridge calls (a different version changed them), so the bridge won't drive its outfit; nothing was changed. wardrobe_equip with suspend: true still takes the outfit off (the story's own request); wardrobe_state names the version and what differs.",
   handed_over:
     "The session is handed over to the player (session_handover), so the bridge changes nothing until session_resume. Nothing was changed.",
   in_combat: "V is in combat, so the bridge won't move or act for her now. Nothing was changed. Try again once the fight is over.",
   in_vehicle: "V is in a vehicle, so the bridge won't move her or act for her now. Nothing was changed. Get out first.",
   in_scene: "A scene is playing (or V is in a dialogue), where the bridge doesn't move or act for V. Nothing was changed. Wait for the scene to end.",
-  player_busy: "V is busy (jumping, sliding, swimming, in a workspot or a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play.",
+  player_busy:
+    "V is busy (jumping, sliding, falling or landing, swimming, in a workspot, a takedown or grapple, carrying a body, in a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play; player_state's busy_state says which.",
+  user_took_over:
+    "The player moved V (their own movement, jump, crouch, sprint, dodge or camera input), so the glide stopped and gave V back. Nothing more was changed. Start it again once the player has let go.",
   no_ground: "There is no walkable ground near that point, so V wasn't moved there. Pick a point on the floor (or pass ground: exact at your own risk).",
-  not_streamed: "The world around that point isn't loaded yet, so V wasn't moved there. Move closer first, or pass far: true to wait for it.",
+  not_streamed: "The world around that point isn't loaded yet, so V wasn't moved there (with ground: exact too). Move V closer first, then try again.",
   no_path: "The game found no walkable path to that point, so V didn't move. Pick a point on the same floor and within reach.",
   behaviour_limit: "Too many behaviours are running already (at most 4), so this one didn't start. Stop one with behave_stop first.",
   no_such_behaviour: "No behaviour with that id is running. behave_list shows the ones that are.",

@@ -212,7 +212,11 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         {
             state.options.Cancel(); // no render-option request survives the kill switch
         }
-        state.restore.Tick(state.bridge && state.bridge->RestoreReady() && scriptsReady, &RestoreAfterKill,
+        // RB-89: a kill that lands after TickBehaviours checked the kill switch this tick leaves behaviours running; the
+        // restore then waits one tick, so their stop steps (a turntable turning back, a glide's hold lifted) always come
+        // first, as the comment above promises. Once the kill switch is seen every behaviour stops within that next tick.
+        const bool behavioursIdle = !state.behaviours.Active();
+        state.restore.Tick(state.bridge && state.bridge->RestoreReady() && scriptsReady && behavioursIdle, &RestoreAfterKill,
                            [](const std::string& aWhat) { log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore"); });
         // A save lock game.save released and couldn't retake through the queue (RB-52). Runs even after
         // the kill switch: the lock is the one thing the kill switch keeps. Waits for the scripts, like the restore.

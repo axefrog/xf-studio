@@ -9,7 +9,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { BridgeClient } from "../bridge-lib.ts";
 import { planScript, runScript, SCRIPT_SCHEMA, type SessionScript } from "../session.ts";
 import { LOCK_FILE } from "../session-lock.ts";
-import { openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
 const script = (steps: SessionScript["steps"], extra: Partial<SessionScript> = {}): SessionScript => ({ schema: SCRIPT_SCHEMA, name: "t", steps, ...extra });
 
@@ -120,7 +120,7 @@ describe("runScript against the self-test host", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes"], 120);
     synthetic = await openSyntheticWindow(1920, 1080);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     synthetic?.close();
     await host?.stop();

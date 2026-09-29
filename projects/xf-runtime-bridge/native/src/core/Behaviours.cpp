@@ -427,6 +427,12 @@ json Runner::Start(const json& aParams, const std::function<void(Access)>& aRequ
             params::CheckNumber(p["offset"], "right", -50.0, 50.0);
         }
         b->speed = params::CheckNumber(p, "speed_m_s", 0.2, 6.0).value_or(1.4);
+        // Design §4.3: a motion lasts at most 30 s (RB-81; the runner's general cap is 600 s).
+        if (aParams.contains("max_s") && aParams["max_s"].is_number() && aParams["max_s"].get<double>() > kMaxGlideSeconds)
+        {
+            params::CheckFail("a glide runs at most 30 s: give max_s from 0.1 to 30");
+        }
+        b->maxS = std::min(b->maxS, kMaxGlideSeconds);
         b->target = "player";
     }
     else
@@ -762,21 +768,39 @@ void StepGlide(Behaviour& aB, const Ops& aOps, double aDt)
         return;
     }
     aB.t += aDt;
+    const double before = aB.s;
     aB.s = std::min(aB.pathLength, aB.s + aB.speed * aDt);
-    if (aB.ticks % 15 == 0)
+    // V is checked on every tick (RB-79, RB-81): a step's teleport refuses when the player's own input came since the hold
+    // took V (user_took_over) or V is no longer free to move (a fall, a landing, swimming, a workspot, a takedown, a carried
+    // body, combat, a vehicle, a scene); on a tick without a step, her state is read instead.
+    try
     {
-        const auto busy = aOps.player().value("busy", std::string());
-        if (!busy.empty())
+        if (aB.ticks % static_cast<uint64_t>(aB.everyTicks) == 0 || aB.s >= aB.pathLength)
         {
-            Finish(aB, busy, "warn", {{"travelled_m", Round4(aB.s)}});
-            return;
+            double length = 0.0;
+            const auto [at, heading] = AlongPath(aB.path, aB.s, length);
+            aOps.teleportPlayer(at, heading);
+        }
+        else
+        {
+            const auto player = aOps.player();
+            const auto tookOver = player.value("took_over", std::string());
+            if (!tookOver.empty())
+            {
+                throw MethodError("user_took_over", "the player moved V (" + tookOver + "), so the glide gave her back");
+            }
+            const auto busy = player.value("busy", std::string());
+            if (!busy.empty())
+            {
+                throw MethodError(busy, "V is no longer free to move (" + busy + ")");
+            }
         }
     }
-    if (aB.ticks % static_cast<uint64_t>(aB.everyTicks) == 0 || aB.s >= aB.pathLength)
+    catch (const MethodError& e)
     {
-        double length = 0.0;
-        const auto [at, heading] = AlongPath(aB.path, aB.s, length);
-        aOps.teleportPlayer(at, heading);
+        aB.s = before;
+        Finish(aB, e.code, e.code == "user_took_over" ? "info" : "warn", {{"travelled_m", Round4(aB.s)}, {"message", e.what()}});
+        return;
     }
     aB.summary["travelled_m"] = Round4(aB.s);
     if (aB.s >= aB.pathLength - 1e-6)

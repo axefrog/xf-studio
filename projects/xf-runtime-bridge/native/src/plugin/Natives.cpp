@@ -405,6 +405,20 @@ void Hud(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* 
     });
 }
 
+// XFBridge_Live() -> Bool   (0.6.1, RB-86: whether the game's scripts are live now, the script gate's `live` alone, so the ink
+// overlay can check it on every tick before its world queries without pulling and parsing the whole frame). Reads bridge
+// bookkeeping only.
+void Live(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    aFrame->code++; // skip ParamEnd
+    Guarded("XFBridge_Live", [&] {
+        if (aOut)
+        {
+            *aOut = Get().scriptLayer.Ready();
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -447,7 +461,8 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_ScriptLayer", &ScriptLayerEvent, "Bool", {"event"});
         RegisterGlobal(rtti, "XFBridge_Hud", &Hud, "String", {});
         RegisterGlobal(rtti, "XFBridge_Note", &Note, "Bool", {"level", "text"});
-        log::Info("rtti.register_types", "phase=post_register natives=14");
+        RegisterGlobal(rtti, "XFBridge_Live", &Live, "Bool", {});
+        log::Info("rtti.register_types", "phase=post_register natives=15");
     }
     catch (const std::exception& e)
     {

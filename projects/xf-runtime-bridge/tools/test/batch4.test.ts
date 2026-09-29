@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { livePoseParams } from "../api/catalogue.ts";
 import { BridgeClient, readSession } from "../bridge-lib.ts";
-import { sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 const apiFor = (host: Host) =>
   new CommandApi({ runtimeDir: host.dir, captureRoot: join(tempDir("xfb-b4-cap-"), "captures"), auditDir: tempDir("xfb-b4-audit-") });
@@ -26,7 +26,7 @@ describe("cc.open refusals and the kill switch during cc.open (RB-45, RB-49)", (
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--allow-creator-leave", "--rearm-after-ms", "400"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -74,7 +74,7 @@ describe("the CET panel's controls, simulated: pause writes and reconnect after 
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--rearm-after-ms", "300"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -135,7 +135,7 @@ describe("live posing, experiment L0: photo.pose.set, pose.live.read, pose.live.
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--allow-live-pose"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -238,7 +238,7 @@ describe("live posing is off without allow_live_pose", () => {
       api.close();
       await host.stop();
     }
-  });
+  }, HOOK_TIMEOUT_MS);
 });
 
 describe("pose.live.apply's input", () => {

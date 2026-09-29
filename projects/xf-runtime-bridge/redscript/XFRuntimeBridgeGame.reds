@@ -120,6 +120,38 @@ public abstract class XFInventory {
     return TDBID.ToStringDEBUG(ItemID.GetTDBID(id));
   }
 
+  // An item's exact identity (0.6.1, RB-84): its combined hash, as decimal text; "" for no item.
+  public static func Hash(id: ItemID) -> String {
+    return ItemID.IsValid(id) ? ToString(ItemID.GetCombinedHash(id)) : "";
+  }
+
+  // The snapshot JSON's `"id"` field for an item ("" for none), so an undo can find the same copy again.
+  public static func IdField(id: ItemID) -> String {
+    return ItemID.IsValid(id) ? ",\"id\":" + XFJson.Str(XFInventory.Hash(id)) : "";
+  }
+
+  // The item a snapshot named (RB-84): the exact copy by its identity (the wardrobe's stored copy, then V's inventory)
+  // when `hash` is given and one matches; otherwise the first copy of the record (the wardrobe's, then V's inventory).
+  public static func ExactItem(player: ref<PlayerPuppet>, tdbid: TweakDBID, hash: String) -> ItemID {
+    if StrLen(hash) > 0 {
+      let stored = GameInstance.GetWardrobeSystem(GetGameInstance()).GetStoredItemID(tdbid);
+      if ItemID.IsValid(stored) && Equals(XFInventory.Hash(stored), hash) {
+        return stored;
+      }
+      let items: array<wref<gameItemData>>;
+      if GameInstance.GetTransactionSystem(GetGameInstance()).GetItemList(player, items) {
+        let i = 0;
+        while i < ArraySize(items) {
+          if IsDefined(items[i]) && ItemID.GetTDBID(items[i].GetID()) == tdbid && Equals(XFInventory.Hash(items[i].GetID()), hash) {
+            return items[i].GetID();
+          }
+          i += 1;
+        }
+      }
+    }
+    return XFWardrobe.VisualItem(player, tdbid);
+  }
+
   public static func Refusal() -> String {
     let phase = XFBridgeActions.Phase();
     if NotEquals(phase, "gameplay") {
@@ -334,6 +366,21 @@ public abstract class XFGame {
       XFBridgeLog.Warn(cid, "game.save with override_lock: the bridge's save lock is released for one save and taken again when it finishes");
     }
     return "{\"ok\":true,\"lock_released\":" + XFJson.Flag(ownLock) + "}";
+  }
+
+  // What the bridge holds on V that a save would keep (RB-83, game.save refuses while anything is listed): the status
+  // effects it applied (a glide's movement hold, a forced crouch) and an outfit it suspended with the story's request.
+  public static func BridgeHolds(cid: String) -> String {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) {
+      return "{\"ok\":true,\"holds\":[]}";
+    }
+    let effects = registry.PlayerEffectsJson();
+    let out = StrMid(effects, 1, StrLen(effects) - 2);
+    if registry.IsWardrobeSuspended() {
+      out += (StrLen(out) > 0 ? "," : "") + "\"outfit suspended by the bridge\"";
+    }
+    return "{\"ok\":true,\"holds\":[" + out + "]}";
   }
 
   // Whether saving is locked right now (the plugin waits for the released lock before step 2).

@@ -11,7 +11,7 @@ import { captureBurst } from "../capture/capture.ts";
 import type { Pixels } from "../capture/win32.ts";
 import { focusPlan, INPUT_SIZE, isExtendedKey, isGameImage, keyboardInput, keyMessageParam, KeySendError, readPhotoModeBinding, scanCodeFor, sendKeyToWindow, virtualKey } from "../input/photo-key.ts";
 import { runScript, SCRIPT_SCHEMA, type SessionScript } from "../session.ts";
-import { openSyntheticWindow, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, openSyntheticWindow, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
 const DEG = Math.PI / 180;
 
@@ -701,7 +701,7 @@ describe("photo.open and the session runner, against the self-test host", () => 
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes"], 60);
     synthetic = await openSyntheticWindow(640, 360);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     synthetic?.close();
     await host?.stop();
@@ -842,7 +842,7 @@ describe("capture.burst", () => {
   let synthetic: Synthetic;
   beforeAll(async () => {
     synthetic = await openSyntheticWindow(800, 450);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(() => synthetic?.close());
 
   test("takes the frames at the interval, writes each, a contact sheet and one manifest", async () => {

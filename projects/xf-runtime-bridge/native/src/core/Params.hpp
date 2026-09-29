@@ -400,7 +400,8 @@ CameraPlaceRequest ParseCameraPlace(const json& aParams);
 //   {item: record}                               show that item in its area of the active outfit
 //   {area: Head|Face|OuterChest|InnerChest|Legs|Feet, show: "equipped"|"hidden"}
 //                                                an area shows what is equipped there, or nothing
-//   {restore: {set: 0-7, slots: [{area, item, hidden}]}}   the undo: exactly the wardrobe a snapshot recorded
+//   {restore: {set: 0-7, slots: [{area, item, id, hidden}]}}   the undo: exactly the wardrobe a snapshot recorded (0.6.1:
+//                                                id, the item's exact identity, picks the same copy when V still has it)
 //   {suspend: true} / {resume: true}             0.6: the story's own requests take the outfit off (whoever manages it:
 //                                                the wardrobe or a script outfit system) and put it back
 struct WardrobeSlot
@@ -408,12 +409,14 @@ struct WardrobeSlot
     std::string area;
     std::string item; // empty: the area shows no outfit item
     bool hidden = false;
+    std::string id;   // 0.6.1 (RB-84): the item's exact identity (its combined hash, decimal), from a snapshot; may be empty
 };
 // 0.6: one part of a script outfit system's outfit (Equipment-EX): its outfit slot record and the item there.
 struct ScriptOutfitPart
 {
     std::string slot;
     std::string item;
+    std::string id; // 0.6.1 (RB-84): as WardrobeSlot::id
 };
 struct WardrobeEquipRequest
 {

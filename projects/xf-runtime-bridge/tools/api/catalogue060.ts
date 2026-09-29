@@ -8,10 +8,10 @@ import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { captureWindow, checkedCapturePath, CaptureError, DEFAULT_CAPTURE_ROOT } from "../capture/capture.ts";
 import { NAMED_REGIONS } from "../capture/regions.ts";
-import { readCell, renderSheet, writeSheet, type SheetCell } from "../capture/sheet.ts";
+import { maxCellWidth, readCell, renderSheet, shrinkCell, writeSheet, type SheetCell } from "../capture/sheet.ts";
 import { decodePng } from "../capture/image.ts";
 import { runSceneReport } from "../scene/report.ts";
-import { mkdirSync, readdirSync, readFileSync, existsSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { join } from "node:path";
 
 type Json = Record<string, any>;
@@ -56,20 +56,52 @@ export async function withOverlayCleared<T>(context: CommandContext, run: () => 
 
 // --- session ------------------------------------------------------------------------------------
 
+/**
+ * The last `count` non-empty lines of a text file, read backwards in chunks (RB-91: session.log used to read whole command
+ * logs on every call, and follow mode calls it often). A line torn by a concurrent append is skipped by the caller.
+ */
+export function tailLines(path: string, count: number, chunk = 64 * 1024): string[] {
+  if (count <= 0) return [];
+  const fd = openSync(path, "r");
+  try {
+    let position = fstatSync(fd).size;
+    let text = "";
+    let lines: string[] = [];
+    while (position > 0) {
+      const size = Math.min(chunk, position);
+      position -= size;
+      const buffer = Buffer.alloc(size);
+      readSync(fd, buffer, 0, size, position);
+      text = buffer.toString("utf8") + text;
+      lines = text.split(/\r?\n/);
+      // The first piece may be a line cut at the chunk boundary: it counts only once the file's start is reached.
+      if (lines.slice(1).filter((l) => l.trim()).length >= count) break;
+    }
+    const complete = position > 0 ? lines.slice(1) : lines;
+    return complete.filter((l) => l.trim()).slice(-count);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function toolsLog(context: CommandContext, tail: number): Json[] {
   const dir = context.api.auditDir;
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir).filter((f) => /^commands-\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)).sort().slice(-2);
   const lines: Json[] = [];
-  for (const file of files) {
-    for (const line of readFileSync(join(dir, file), "utf8").split(/\r?\n/)) {
-      if (!line.trim()) continue;
+  // Newest file first, and only as many lines as the tail needs.
+  for (const file of files.reverse()) {
+    const wanted = tail - lines.length;
+    if (wanted <= 0) break;
+    const parsed: Json[] = [];
+    for (const line of tailLines(join(dir, file), wanted)) {
       try {
-        lines.push(JSON.parse(line));
+        parsed.push(JSON.parse(line));
       } catch {
         // a torn line
       }
     }
+    lines.unshift(...parsed);
   }
   return lines.slice(-tail).map((entry) => ({
     source: "tools",
@@ -146,7 +178,17 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
     await step("show photo mode's menu and cursor", "photo.hud.hide", { hidden: false, cursor: true });
   }
   if (input.lights === "clear") await step("clear the showroom's rigs", "showroom.clear", { what: "lights" });
+  // bridge.handover also gives V back (RB-82): the effects the bridge put on her lifted and any look ended, as player_stop
+  // does, in the same step that starts refusing writes.
   const handed = await call(context, "bridge.handover", { on: true, ...(input.note ? { note: input.note } : {}) });
+  const released = handed.player_released as Json | null | undefined;
+  if (released !== undefined) {
+    steps.push({
+      step: "give V back (the bridge's effects lifted, any look ended)",
+      ok: released !== null && released.released !== false,
+      ...(released && released.released === false ? { why: released.why } : { removed: released?.removed ?? [] }),
+    });
+  }
   await attempt(context, "ui.message", { text: "Handed over: the game is yours. XF automation is paused until the session resumes.", level: "ask", seconds: 15 });
   return { value: { handed_over: true, was: handed.was, steps, note: input.note ?? null, undo: { method: "session.resume", params: {} } } };
 }
@@ -165,10 +207,12 @@ async function runCaptureSheet(input: Json, context: CommandContext): Promise<Co
   mkdirSync(root, { recursive: true });
   const cells: SheetCell[] = [];
   let overlay: Json | null = null;
+  // Each picture is shrunk to the widest cell this sheet can have as soon as it is decoded (RB-91).
+  const widest = maxCellWidth(cellsIn.length, { columns: input.columns as number | undefined, maxWidth: (input.max_width as number | undefined) ?? 2400 });
   try {
     for (const [i, cell] of cellsIn.entries()) {
       if (cell.path) {
-        cells.push(readCell(checkedCapturePath(root, cell.path), cell.label));
+        cells.push(readCell(checkedCapturePath(root, cell.path), cell.label, widest));
         continue;
       }
       // No path: take the picture now (the XF overlay out of it).
@@ -176,7 +220,7 @@ async function runCaptureSheet(input: Json, context: CommandContext): Promise<Co
         captureWindow({ target: context.api.captureTarget(), region: input.region ? ({ name: input.region } as never) : undefined, name: `${(input.name as string | undefined) ?? "sheet"}-${String(i + 1).padStart(2, "0")}`, outDir: root, route: "auto" }),
       );
       overlay = shot.overlay;
-      cells.push({ label: cell.label, pixels: decodePng(new Uint8Array(readFileSync(shot.value.full.path))), source: shot.value.full.path });
+      cells.push({ label: cell.label, pixels: shrinkCell(decodePng(new Uint8Array(readFileSync(shot.value.full.path))), widest), source: shot.value.full.path });
     }
   } catch (error) {
     if (error instanceof CaptureError) throw planError(error.code === "bad_file" ? "bad_input" : `capture_${error.code}`, error.message);
@@ -277,7 +321,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     name: "session.handover",
     title: "Hand the game to the player",
     description:
-      "Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge: every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.",
+      "Gives the game to the player in one step: stops every behaviour, shows photo mode's menu and cursor again if the bridge hid them, clears the showroom's light rigs if lights is clear (so the player lights the heads with photo mode's own lights), then pauses the bridge and gives V back as player_stop does (every effect the bridge put on her, such as a crouch or a glide's movement hold, lifted; any look it started ended): every change it is asked for is refused until session_resume. A line in the game says so, and the session log records it. Reads, notes and the kill switch still work.",
     permission: "control",
     input: obj({
       lights: oneOf("keep (default) or clear the showroom's rigs.", ["keep", "clear"]),
@@ -324,7 +368,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
 ];
 
 const behaviourLimits: Record<string, JsonSchema> = {
-  max_s: num("Stop after this many seconds, 0.1 to 600. Default 60 (a look: its duration plus 5 s).", 0.1, 600),
+  max_s: num("Stop after this many seconds, 0.1 to 600. Default 60 (a look: its duration plus 5 s; a glide: at most 30).", 0.1, 600),
   every_ticks: int("Act every this many game ticks, 1 to 60 (default 2 for a turntable, 3 for keep_framed, else 1).", 1, 60),
 };
 
@@ -368,7 +412,7 @@ export const BEHAVE_COMMANDS: CommandDef[] = [
     name: "behave.glide.path",
     title: "Glide V along a walkable path",
     description:
-      "A behaviour: V moves along the game's own walkable path (navmesh) to a point (to) or an offset from her (forward, right), at speed_m_s, by a teleport every tick, with her own movement held off meanwhile; it stops when she arrives, when she is no longer free to move (combat, a scene, a fall), at max_s or on behave_stop, and gives her movement back. No walk animation plays (animated: false). At most 50 m of path. Normal play only.",
+      "A behaviour: V moves along the game's own walkable path (navmesh) to a point (to) or an offset from her (forward, right), at speed_m_s, by a teleport every tick, with her own movement held off meanwhile. V is checked every tick: it stops when she arrives, when the player's own input moves her (user_took_over: movement, jump, crouch, sprint, dodge or camera), when she is no longer free to move (combat, a vehicle, a scene, a fall or landing, swimming, a workspot, a takedown, a carried body), at max_s (at most 30 s) or on behave_stop, and gives her movement back. No walk animation plays (animated: false). At most 50 m of path. Normal play only.",
     permission: "write-player",
     input: obj({
       to: point3("The world point to glide to [x, y, z]."),
@@ -418,7 +462,7 @@ export const BEHAVE_COMMANDS: CommandDef[] = [
 ];
 
 const playerBusyNote =
-  "It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, swims or sits in a workspot, or a menu or photo mode is open).";
+  "It checks V first and refuses with the reason (in_combat, in_vehicle, in_scene, player_busy while she jumps, slides, falls or lands, swims, sits in a workspot, takes someone down or carries a body, or a menu or photo mode is open; player_state's busy_state says which).";
 
 export const PLAYER_COMMANDS: CommandDef[] = [
   {
@@ -434,14 +478,14 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.teleport",
     title: "Teleport V",
     description:
-      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground) or the world isn't loaded (not_streamed); ground exact skips that at your own risk. At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). ${playerBusyNote}`,
+      `Moves V to a world point (position) or an offset from her (forward, right, up along her facing), and/or turns her (yaw absolute, turn relative), through the game's own teleport. By default the point snaps to walkable ground within 2 m and is refused where there is none (no_ground); ground exact skips the snap at your own risk. Either way a point more than 0.5 m away is refused where the world isn't loaded (not_streamed). At most 50 m unless far; at most two teleports a second. The answer reads her place back two ticks later (held). ${playerBusyNote}`,
     permission: "write-player",
     input: obj({
       position: point3("The world point [x, y, z]."),
       offset: { ...obj({ forward: num("Metres ahead of V.", -50, 50), right: num("Metres to V's right.", -50, 50), up: num("Metres up.", -10, 10) }), description: "Where to, from V (instead of position)." },
       yaw: num("Face this yaw, degrees (0 along the world's +Y, counter-clockwise).", -360, 360),
       turn: num("Turn by this many degrees (left positive).", -360, 360),
-      ground: oneOf("snap (default: walkable ground within 2 m) or exact.", ["snap", "exact"]),
+      ground: oneOf("snap (default: walkable ground within 2 m) or exact (no snap; the world must still be loaded there).", ["snap", "exact"]),
       far: bool("Allow more than 50 m (the destination must be loaded)."),
     }),
     undo: "The result's undo teleports V back to where she stood, facing the same way; loading the save undoes it too.",

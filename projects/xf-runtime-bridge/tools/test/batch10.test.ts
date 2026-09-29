@@ -11,7 +11,7 @@ import { calibrate, modelFromFov, onRay, poseOf, project } from "../scene/camera
 import { buildReport, frameStats, judgeAfter, judgeBefore, subjectBox } from "../scene/report.ts";
 import { drawLabel, renderSheet } from "../capture/sheet.ts";
 import { decodePng } from "../capture/image.ts";
-import { openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
 const fixture = join(projectDir, "tools", "test", "fixtures", "showroom-manifest.json");
 const near = (a: number, b: number, e = 1e-3) => Math.abs(a - b) <= e;
@@ -81,7 +81,7 @@ describe("0.6 offline pieces: the camera model, the report, the sheet", () => {
       calibration,
       v: { position: [100, 200.5, 10], head: [100, 200.5, 11.62], forward: [0, -1, 0], face: [100, 200.42, 11.665], occlusion: { checked: true, blocked: false } },
       npcs: [{ id: "a", name: "A", position: [104.5, 202, 10], head: [104.5, 202, 11.62], forward: [0, -1, 0], occlusion: { checked: true, blocked: true, hit_distance: 1.5, target_distance: 5 } }],
-      showroom: { pieces: [{ index: 0, label: "Gloss A", position: [100, 200.41, 9.57], yaw: 180, eyes: onRay(calibrate(poseOf(camera)!, calibration), 2.5) }], rigs: [] },
+      showroom: { pieces: [{ index: 0, label: "Gloss A", position: [100, 200.41, 9.57], yaw: 180, eyes: onRay(calibrate(poseOf(camera)!, calibration), 2.5), occlusion: { checked: true, blocked: false } }], rigs: [] },
       lights: { photo: [{ light: 1, found: true, position: [100, 199.5, 12.2], forward: [0, 1, -0.3], to_face: { checked: true, blocked: false } }, { light: 2, found: false, why: "off" }] },
     };
     const report = buildReport(raw, {}, { showroom: null, photoMenu: null }) as Any;
@@ -96,7 +96,7 @@ describe("0.6 offline pieces: the camera model, the report, the sheet", () => {
     const photo = report.lights.each.filter((l: Any) => l.kind === "photo");
     expect(photo.map((l: Any) => l.on)).toEqual([true, false]);
     expect(photo[0].share).toBe(1);
-    expect(judgeBefore(report, { subject: "piece:0", in_frame_margin: 0.05, unoccluded: true, lit_by: "photo" }).every((r) => r.ok)).toBe(true);
+    expect(judgeBefore(report, { subject: "piece:0", in_frame_margin: 0.05, unoccluded: true, lit_by: "photo" }).every((r) => r.ok === true)).toBe(true);
     const failed = judgeBefore(report, { subject: "a", in_frame_margin: 0.45, unoccluded: true, lit_by: "rig" });
     expect(failed.filter((r) => !r.ok).map((r) => r.check)).toEqual(["in_frame_margin", "unoccluded", "lit_by"]);
   });
@@ -129,7 +129,7 @@ describe("0.6 the wardrobe under Equipment-EX and the vanilla wardrobe", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 120);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -201,7 +201,7 @@ describe("0.6 the showroom on the camera ray, the scene report and pre-capture c
     synthetic = await openSyntheticWindow(1920, 1080);
     host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 120);
     api = apiFor(host, { captureTarget: { hwnd: synthetic.hwnd } });
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -293,7 +293,7 @@ describe("0.6 the session event stream, notes and handovers", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -339,7 +339,7 @@ describe("0.6 behaviours at tick rate", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 120);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -425,7 +425,7 @@ describe("0.6 player control, phase 1", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -498,7 +498,7 @@ describe("0.6 player control, phase 1", () => {
     expect((await ok(other, "player.state")).position).toEqual([100, 200, 10]);
     other.close();
     await locked.stop();
-  });
+  }, HOOK_TIMEOUT_MS);
 });
 
 describe("0.6 photo.camera.preset (research: the preset-rewrite route)", () => {
@@ -507,7 +507,7 @@ describe("0.6 photo.camera.preset (research: the preset-rewrite route)", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 60);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();

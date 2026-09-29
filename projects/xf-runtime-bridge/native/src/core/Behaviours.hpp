@@ -6,7 +6,7 @@
 //
 // Safety (design §4): every behaviour stops on the kill switch (DropAll before the restore), is dropped without a script
 // call when the game's scripts detach (a save loading: DropAll), pauses while the script gate is closed, stops on a
-// handover, never outlives its max_s (at most 600 s), and gives back what it held when it ends: a turntable turns its
+// handover, never outlives its max_s (at most 600 s; a glide 30 s), and gives back what it held when it ends: a turntable turns its
 // heads back, a glide lifts the movement restriction it put on V, keep_framed leaves things where they are (its own undo
 // is in its stop event). At most kMaxBehaviours run at once, one per target (a new one on the same target replaces it).
 //
@@ -40,6 +40,8 @@ using Vec3 = std::array<double, 3>;
 
 inline constexpr size_t kMaxBehaviours = 4;
 inline constexpr double kMaxSeconds = 600.0;
+// A glide's own cap (player-control design §4.3: a motion lasts at most 30 s).
+inline constexpr double kMaxGlideSeconds = 30.0;
 
 // The game-side steps a behaviour may take. Each throws MethodError on a refusal (the behaviour stops with that code).
 struct Ops

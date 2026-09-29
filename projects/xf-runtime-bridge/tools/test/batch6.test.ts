@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { findCommand } from "../api/catalogue.ts";
 import { isMatch, matchLabel } from "../api/labels.ts";
-import { startSelftestHost, tempDir, type Host } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 const apiFor = (host: Host) =>
   new CommandApi({ runtimeDir: host.dir, captureRoot: join(tempDir("xfb-b6-cap-"), "captures"), auditDir: tempDir("xfb-b6-audit-"), idleCloseMs: 300 });
@@ -47,7 +47,7 @@ describe("bridge 0.4.2 against the self-test host", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--allow-creator-leave"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();

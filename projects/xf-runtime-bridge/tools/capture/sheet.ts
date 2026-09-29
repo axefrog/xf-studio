@@ -1,6 +1,8 @@
 // capture.sheet (bridge 0.6, session 6's friction: the coordinator hand-built a contact sheet for every comparison): a
 // labelled grid of named captures written to disk, with a manifest saying which file is in which cell. Labels are drawn
 // with a small built-in 5x7 pixel font (upper case, digits and common punctuation), so no font or image library is needed.
+// Memory (RB-91): each cell is shrunk to the widest cell the sheet can have as soon as it is decoded, so a 48-cell sheet of
+// 4K captures holds one full-size picture at a time, not 48 (about 0.9 GB before).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -133,10 +135,23 @@ export function renderSheet(cells: readonly SheetCell[], options: { columns?: nu
   return { pixels, layout, cells: placed };
 }
 
-/** Reads a capture's PNG (a .full.png or a viewing copy) for a sheet cell. */
-export function readCell(path: string, label: string): SheetCell {
+/** The widest a cell can be on a sheet of `count` cells (the layout's bound before the first picture's own width). */
+export function maxCellWidth(count: number, options: { columns?: number; maxWidth?: number } = {}): number {
+  const columns = Math.max(1, Math.min(options.columns ?? Math.min(4, count), Math.max(1, count)));
+  return Math.max(16, Math.floor(((options.maxWidth ?? 2400) - 6 * (columns + 1)) / columns));
+}
+
+/** A cell's picture shrunk (area filter, aspect kept) to at most `maxWidth` wide and four times that high. */
+export function shrinkCell(pixels: Pixels, maxWidth: number): Pixels {
+  const size = fitSize(pixels.width, pixels.height, { maxWidth, maxHeight: maxWidth * 4 });
+  return size.factor >= 1 ? pixels : downscaleArea(pixels, size.width, size.height);
+}
+
+/** Reads a capture's PNG (a .full.png or a viewing copy) for a sheet cell, shrunk to `maxWidth` when given (RB-91). */
+export function readCell(path: string, label: string, maxWidth?: number): SheetCell {
   const bytes = new Uint8Array(readFileSync(path));
-  return { label, pixels: decodePng(bytes), source: path };
+  const pixels = decodePng(bytes);
+  return { label, pixels: maxWidth ? shrinkCell(pixels, maxWidth) : pixels, source: path };
 }
 
 /** Writes the sheet and its manifest beside each other; returns both paths. */

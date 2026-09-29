@@ -968,13 +968,15 @@ json WardrobeEquipMethod(const MethodContext& aContext)
                         RED4ext::CString area(slot.area.c_str());
                         RED4ext::CString item(slot.item.c_str());
                         bool hidden = slot.hidden;
-                        CallScript("XFWardrobe", "RestoreSlot", {"String", "String", "Bool"}, {&area, &item, &hidden}, cid);
+                        RED4ext::CString id(slot.id.c_str());
+                        CallScript("XFWardrobe", "RestoreSlot", {"String", "String", "Bool", "String"}, {&area, &item, &hidden, &id}, cid);
                     }
                     for (const auto& part : request.parts)
                     {
                         RED4ext::CString slot(part.slot.c_str());
                         RED4ext::CString item(part.item.c_str());
-                        CallScript("XFWardrobe", "RestorePart", {"String", "String"}, {&slot, &item}, cid);
+                        RED4ext::CString id(part.id.c_str());
+                        CallScript("XFWardrobe", "RestorePart", {"String", "String", "String"}, {&slot, &item, &id}, cid);
                     }
                     return CallScript("XFWardrobe", "RestoreFinish", {}, {}, cid);
                 }
@@ -1052,6 +1054,25 @@ json GameSaveMethod(const MethodContext& aContext)
         }
     };
     ops.guard = WritesGuard();
+    // RB-83: what the bridge holds on V (its status effects, a suspended outfit) and whether a behaviour runs, read in one
+    // game-thread step.
+    ops.holds = [&queue, cid] {
+        return RunGameTask(
+            queue, Timeout(),
+            [cid] {
+                auto held = CallScript("XFGame", "BridgeHolds", {}, {}, cid).value("holds", json::array());
+                if (!held.is_array())
+                {
+                    held = json::array();
+                }
+                if (Get().behaviours.Active())
+                {
+                    held.push_back("behaviours running (behave_list)");
+                }
+                return held;
+            },
+            "game.save.holds");
+    };
     ops.sleep = [](std::chrono::milliseconds aFor) { std::this_thread::sleep_for(aFor); };
     return writes::GameSave(request, ops);
 }
@@ -1746,6 +1767,17 @@ void RestoreAfterKill()
     }
     const auto result = CallScript("XFBridgeActions", "RestoreAfterKill", {}, {}, "kill-restore");
     log::Info("bridge.kill_restored", SerializeJson(result), "kill-restore");
+    // XF map pins (bridge 0.5.3, temporary test feature) before the showroom (RB-87): a pin bound to a head goes while its
+    // head still exists. Nothing to do when none were placed.
+    try
+    {
+        int32_t all = -1;
+        log::Info("bridge.kill_cleared_pins", SerializeJson(CallScript("XFInkPins", "Clear", {"Int32"}, {&all}, "kill-restore")), "kill-restore");
+    }
+    catch (const std::exception& e)
+    {
+        log::Warn("bridge.kill_clear_pins_failed", std::string("what=") + e.what(), "kill-restore");
+    }
     // XF Finish Showroom's heads and light rigs go too (bridge 0.5); nothing to do when none were spawned.
     try
     {
@@ -1757,15 +1789,15 @@ void RestoreAfterKill()
     {
         log::Warn("bridge.kill_clear_showroom_failed", std::string("what=") + e.what(), "kill-restore");
     }
-    // XF map pins (bridge 0.5.3, temporary test feature): nothing to do when none were placed.
+    // photo.camera.preset's TweakDB rewrites (RB-90): they outlive loads until the game restarts, so the kill switch writes
+    // the first values it saw back.
     try
     {
-        int32_t all = -1;
-        log::Info("bridge.kill_cleared_pins", SerializeJson(CallScript("XFInkPins", "Clear", {"Int32"}, {&all}, "kill-restore")), "kill-restore");
+        RestorePresetsAfterKill();
     }
     catch (const std::exception& e)
     {
-        log::Warn("bridge.kill_clear_pins_failed", std::string("what=") + e.what(), "kill-restore");
+        log::Warn("bridge.kill_restore_presets_failed", std::string("what=") + e.what(), "kill-restore");
     }
 }
 

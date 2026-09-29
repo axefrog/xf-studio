@@ -8,7 +8,7 @@ import { captureWindow, CaptureError, recrop } from "../capture/capture.ts";
 import { decodePng, downscaleArea, encodePng, fitSize } from "../capture/image.ts";
 import { resolveRegion } from "../capture/regions.ts";
 import type { Pixels } from "../capture/win32.ts";
-import { openSyntheticWindow, projectDir, tempDir, type Synthetic } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, openSyntheticWindow, projectDir, tempDir, type Synthetic } from "./helpers.ts";
 
 const at = (p: Pixels, x: number, y: number) => Array.from(p.rgb.subarray((y * p.width + x) * 3, (y * p.width + x) * 3 + 3));
 const close = (actual: number[], expected: number[], tolerance = 2) => actual.every((v, i) => Math.abs(v - expected[i]) <= tolerance);
@@ -93,7 +93,7 @@ for (const [w, h] of [
     beforeAll(async () => {
       window = await openSyntheticWindow(w, h);
       out = tempDir("xfb-capture-");
-    });
+    }, HOOK_TIMEOUT_MS);
     afterAll(() => {
       window?.close();
       rmSync(out, { recursive: true, force: true });
@@ -212,23 +212,46 @@ describe("capture refusals", () => {
   });
 });
 
-// Routes that need the window on screen: a small, non-activating, top-most window shown for about
-// two seconds on the primary monitor.
-describe("on-screen routes", () => {
+// Routes that need the window on screen: a small, non-activating, top-most window shown on the primary monitor. The
+// screen route copies the desktop's pixels, so it reads whatever lies on top there: on a desktop in use another top-most
+// window (the maintainer's own, which share this machine) covers it and the test failed with that window's pixels (the
+// known screen-route failure: [252, 252, 251] instead of red in every run of 29 September 2026). The route itself is fine;
+// the test was environment-bound and put a window on the desktop the maintainer works at, against the standing rule that
+// test windows stay off-screen. So it runs only when asked (XFB_ONSCREEN_TESTS=1, on an idle desktop), and then first
+// checks that nothing covers the sampled points, failing with that reason instead of a colour mismatch.
+const onScreen = process.env.XFB_ONSCREEN_TESTS === "1";
+
+/** Whether the top-level window at each screen point is `hwnd` (WindowFromPoint, then its root). */
+async function uncovered(hwnd: bigint, points: [number, number][]): Promise<boolean> {
+  const { dlopen, FFIType } = await import("bun:ffi");
+  const user32 = dlopen("user32.dll", { WindowFromPoint: { args: [FFIType.i64], returns: FFIType.u64 }, GetAncestor: { args: [FFIType.u64, FFIType.u32], returns: FFIType.u64 } });
+  try {
+    // POINT by value is one 64-bit argument on x64: x in the low half, y in the high half.
+    return points.every(([x, y]) => BigInt(user32.symbols.GetAncestor(user32.symbols.WindowFromPoint((BigInt(y) << 32n) | (BigInt(x) & 0xffffffffn)), 2) as bigint) === hwnd);
+  } finally {
+    user32.close();
+  }
+}
+
+describe.if(onScreen)("on-screen routes (XFB_ONSCREEN_TESTS=1 only)", () => {
   let window: Synthetic;
   let out: string;
   beforeAll(async () => {
     // (780, 420) keeps a 480x270 window inside any primary monitor of at least 1280x720.
     window = await openSyntheticWindow(480, 270, { x: 780, y: 420, topMost: true, seconds: 15 });
     out = tempDir("xfb-onscreen-");
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(() => {
     window?.close();
     rmSync(out, { recursive: true, force: true });
   });
 
   for (const route of ["printwindow", "screen"] as const) {
-    test(`${route} route reads the window's pixels`, () => {
+    test(`${route} route reads the window's pixels`, async () => {
+      if (route === "screen") {
+        // The sampled pixels, in screen coordinates (the window's client area starts at 780, 420).
+        expect(await uncovered(window.hwnd, [[780 + 150, 420 + 100], [780 + 240, 420 + 135], [780 + 479, 420 + 269]]), "another window covers the synthetic window, so the screen route can't see it").toBe(true);
+      }
       const record = captureWindow({ target: { hwnd: window.hwnd }, route, name: route, outDir: out });
       expect(record.source.route).toBe(route);
       const full = decodePng(new Uint8Array(readFileSync(record.full.path)));

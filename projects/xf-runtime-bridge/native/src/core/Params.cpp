@@ -197,6 +197,22 @@ std::string Slot(const json& aParams)
     return *slot;
 }
 
+// A snapshot's exact item identity (0.6.1, RB-84): decimal digits of a 64-bit hash, or empty.
+std::string ItemIdentity(const json& aEntry)
+{
+    const auto id = aEntry.find("id");
+    if (id == aEntry.end() || id->is_null())
+    {
+        return {};
+    }
+    if (!id->is_string() || id->get<std::string>().empty() || id->get<std::string>().size() > 20 ||
+        id->get<std::string>().find_first_not_of("0123456789") != std::string::npos)
+    {
+        Bad("an item's 'id' must be the decimal identity a wardrobe snapshot reported");
+    }
+    return id->get<std::string>();
+}
+
 std::string ItemName(const json& aParams)
 {
     const auto item = Text(aParams, "item", 128);
@@ -468,7 +484,7 @@ WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
                 {
                     Bad("each of 'restore.slots' must be {area, item, hidden}");
                 }
-                RequireOnly(entry, {"area", "item", "hidden"});
+                RequireOnly(entry, {"area", "item", "id", "hidden"});
                 WardrobeSlot slot;
                 slot.area = WardrobeArea(entry, "area");
                 if (slot.area.empty())
@@ -478,6 +494,7 @@ WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
                 if (const auto item = entry.find("item"); item != entry.end() && item->is_string() && !item->get<std::string>().empty())
                 {
                     slot.item = ItemName(entry);
+                    slot.id = ItemIdentity(entry);
                 }
                 slot.hidden = Boolean(entry, "hidden").value_or(false);
                 for (const auto& earlier : request.slots)
@@ -511,7 +528,7 @@ WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
                     {
                         Bad("each of 'restore.script_outfit.parts' must be {slot, item}");
                     }
-                    RequireOnly(entry, {"slot", "item"});
+                    RequireOnly(entry, {"slot", "item", "id"});
                     const auto slot = Text(entry, "slot", 128);
                     if (!slot || !RecordNameOk(*slot))
                     {
@@ -529,7 +546,7 @@ WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
                             Bad("'restore.script_outfit.parts' names " + *slot + " twice");
                         }
                     }
-                    request.parts.push_back({*slot, item});
+                    request.parts.push_back({*slot, item, ItemIdentity(entry)});
                 }
             }
         }

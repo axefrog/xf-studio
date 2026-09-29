@@ -11,11 +11,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
 #include "core/Behaviours.hpp"
 #include "core/Events.hpp"
+#include "core/Log.hpp"
 #include "core/Params.hpp"
 #include "core/Player.hpp"
 #include "core/Scene.hpp"
@@ -93,14 +96,32 @@ json BridgeHandover(const MethodContext& aContext)
     const auto note = params::CheckText(aContext.params, "note", 200).value_or("");
     auto& dispatcher = TheDispatcher();
     const bool was = dispatcher.HandedOver();
+    json released = nullptr;
     if (*on)
     {
         Get().behaviours.StopAll("handed_over");
     }
     dispatcher.SetHandover(*on, note);
-    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on},
+    if (*on)
+    {
+        // RB-82: the player gets V back as well, as player.stop gives her back: every look-at broken and every status effect
+        // the bridge put on her lifted (a forced crouch would otherwise stay on, and player.action stand is refused while
+        // handed over). One game-thread step after the flag is set, so no write can come in between; when the game can't
+        // be called now (a save loading), the effects went with the session and the answer says why.
+        const auto cid = aContext.cid;
+        try
+        {
+            released = Game([cid] { return ScriptCall("XFPlayer", "Stop", {}, {}, cid); }, "bridge.handover.player_stop");
+            released.erase("ok");
+        }
+        catch (const MethodError& e)
+        {
+            released = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
+        }
+    }
+    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
                 {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}},
-                {"undo_note", *on ? "bridge.handover {on: false} (session.resume) gives the bridge its writes back" : "bridge.handover {on: true} hands over again"}};
+                {"undo_note", *on ? "bridge.handover {on: false} (session.resume) gives the bridge its writes back; what the handover lifted from V stays lifted" : "bridge.handover {on: true} hands over again"}};
 }
 
 // --- behaviours ---------------------------------------------------------------------------------
@@ -338,6 +359,25 @@ json PlayerAction(const MethodContext& aContext)
 
 // --- photo.camera.preset (research) ---------------------------------------------------------------
 
+// The first value seen for each camera preset flat photo.camera.preset rewrote, kept in the plugin because TweakDB changes
+// outlive a load (the scripts' own registry doesn't): the kill switch writes them back (RB-90).
+std::mutex g_presetMutex;
+std::map<int32_t, std::map<std::string, float>> g_presetOriginals;
+
+void NotePresetOriginals(int32_t aPreset, const json& aFlats, const std::vector<std::pair<std::string, float>>& aWritten)
+{
+    std::scoped_lock _(g_presetMutex);
+    auto& originals = g_presetOriginals[aPreset];
+    for (const auto& [name, value] : aWritten)
+    {
+        (void)value;
+        if (!originals.contains(name) && aFlats.contains(name) && aFlats[name].is_number())
+        {
+            originals[name] = aFlats[name].get<float>();
+        }
+    }
+}
+
 // Reads the preset's flats (the undo's values), writes the given ones and rebuilds the record, selects the preset (through
 // Customization first, so photo mode applies it again), waits four ticks and reads the camera back.
 json PhotoCameraPreset(const MethodContext& aContext)
@@ -357,6 +397,7 @@ json PhotoCameraPreset(const MethodContext& aContext)
     if (!request.values.empty())
     {
         TheDispatcher().RequireWritesOpen();
+        NotePresetOriginals(preset, before.value("flats", json::object()), request.values);
         Game(
             [cid, preset, values = request.values] {
                 for (const auto& [name, value] : values)
@@ -592,6 +633,33 @@ json InputProbe(const MethodContext& aContext)
     return out;
 }
 } // namespace
+
+void RestorePresetsAfterKill()
+{
+    std::map<int32_t, std::map<std::string, float>> originals;
+    {
+        std::scoped_lock _(g_presetMutex);
+        originals.swap(g_presetOriginals);
+    }
+    for (const auto& [preset, flats] : originals)
+    {
+        if (flats.empty())
+        {
+            continue;
+        }
+        for (const auto& [name, value] : flats)
+        {
+            int32_t p = preset;
+            RED4ext::CString flat(name.c_str());
+            float v = value;
+            ScriptCall("XFPresetRewrite", "Write", {"Int32", "String", "Float"}, {&p, &flat, &v}, "kill-restore");
+        }
+        int32_t p = preset;
+        const auto committed = ScriptCall("XFPresetRewrite", "Commit", {"Int32"}, {&p}, "kill-restore");
+        log::Info("bridge.kill_restored_preset", "preset=" + std::to_string(preset) + " flats=" + std::to_string(flats.size()) + " " + committed.dump(),
+                  "kill-restore");
+    }
+}
 
 void TickBehaviours(double aDt, bool aScriptsReady)
 {
