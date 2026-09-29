@@ -1,5 +1,5 @@
 import type { CharacterDetailHost } from "./character-detail-host";
-import { CHARACTER_REQUEST_SCHEMA, CharacterRequestVersionError, parseCharacterRequest } from "./character-detail-request";
+import { CHARACTER_REQUEST_SCHEMA, CHARACTER_WARM_HEADER, CharacterRequestVersionError, parseCharacterRequest } from "./character-detail-request";
 import { CREATOR_LIMITS } from "./creator-names";
 import { CHARACTER_DETAIL_SCHEMA } from "./render-detail";
 import { BodyTooLargeError, readBodyText } from "./request-body";
@@ -14,7 +14,8 @@ import { BodyTooLargeError, readBodyText } from "./request-body";
  * request limit (creator-names.ts), its declared length checked first (PIPE-79, PIPE-83).
  * `serveCharacterAsset` answers `/assets/character/<content-addressed name>`.
  * A POST names the open page it comes from (`X-XFS-Page`, a random name per page load): a page's request supersedes only that page's
- * earlier one, so two open pages never cancel each other's V (PIPE-103). A missing or malformed name is one anonymous page.
+ * earlier one, so two open pages never cancel each other's V (PIPE-103). A missing or malformed name is one anonymous page. A POST with
+ * `X-XFS-Warm: 1` (a page's warm start) is answered only from what the host already has, and never starts a preparation.
  */
 export const CHARACTER_DETAIL_ENDPOINT = "/api/preview-character";
 export const CHARACTER_ASSET_PREFIX = "/assets/character/";
@@ -48,9 +49,10 @@ export function createCharacterDetailHandler(host: CharacterDetailHost, options:
         request: CHARACTER_REQUEST_SCHEMA, record: CHARACTER_DETAIL_SCHEMA }, 409);
       return json({ code: "invalid", error: "Invalid character request." }, 400);
     }
-    // An answer prepared earlier is reused only while the mod setup it came from is unchanged.
-    await host.refresh();
-    return json(host.request(body as ReturnType<typeof parseCharacterRequest>, pageOf(request)));
+    // An answer prepared earlier (in this process, or kept from an earlier one) is reused only while the mod setup it came from is unchanged.
+    // A page's warm start (character-warm-start.ts) asks only for what the host already has: nothing is prepared for it.
+    if (request.headers.get(CHARACTER_WARM_HEADER) === "1") return json(await host.known(body as ReturnType<typeof parseCharacterRequest>, pageOf(request)));
+    return json(await host.answer(body as ReturnType<typeof parseCharacterRequest>, pageOf(request)));
   };
 }
 

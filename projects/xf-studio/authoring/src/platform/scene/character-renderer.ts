@@ -3,7 +3,7 @@ import { extendSkin, fullSkinDepthMaterial } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
-import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadTexture, type CharacterDetailFetch, type LoadedCharacterComponent,
+import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadTexture, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
   type LoadedCharacterDetails } from "../../character-detail-loader";
 import type { CharacterDetail, DetailSlot } from "../../render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
@@ -46,7 +46,9 @@ void sameSlots;
 
 /** The host's detail loader (§5): a V's resolved components, each chunk through the adapter for its template, drawn by this renderer. */
 export interface DetailLoader {
-  load(record: CharacterDetail, options: { fetcher?: CharacterDetailFetch; signal?: AbortSignal; reuse?: LoadedCharacterDetails | null }): Promise<LoadedCharacterDetails>;
+  load(record: CharacterDetail, options: { fetcher?: CharacterDetailFetch; signal?: AbortSignal; reuse?: LoadedCharacterDetails | null;
+    /** Files read ahead (character-warm-start.ts), taken instead of reading them again. */
+    warmed?: WarmedFiles | null }): Promise<LoadedCharacterDetails>;
 }
 
 export type CharacterRenderer = ReturnType<typeof createCharacterRenderer>;

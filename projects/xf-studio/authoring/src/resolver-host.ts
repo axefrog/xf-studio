@@ -19,7 +19,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat as statAsync, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
@@ -28,9 +28,9 @@ import { depotPathRegex } from "./eye-plate-wolvenkit";
 import { writeFileAtomic } from "./derived-cache";
 import { touchUsed } from "./game-asset-export";
 import { defaultLocalSettings, type LocalSettings } from "./local-settings";
-import { readRdarIndexCount, readRdarIndexHashes } from "./rdar-index-fs";
+import { readRdarIndexCount, readRdarIndexCountAsync, readRdarIndexHashes } from "./rdar-index-fs";
 import { type FetchedResource, type ResourceFetchPort, ResourceGraph } from "./resource-graph";
-import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type WatchedPath } from "./source-discovery";
+import { discoverSources, listingStamp, pathStamp, type SourceCandidate, type SourceDiscovery, type WatchedPath } from "./source-discovery";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
 import { raiseBackgroundWolvenKit, runWolvenKit, type WolvenKitRun, WolvenKitRunError, type WolvenKitRunOptions, wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 import { currentDiagnostics, hostFailure, hostTrace } from "./diagnostics/host-log";
@@ -59,6 +59,11 @@ export interface InstallationOptions {
    * or null: WolvenKit reads everything.
    */
   readonly native?: NativeRoute | null;
+  /**
+   * The route's source discovery, already made and still current (installation-snapshot.ts: kept across restarts and checked against
+   * every stamp it depends on). Absent: the route's folders are walked now.
+   */
+  readonly discovery?: SourceDiscovery;
 }
 
 /** A route's native decoder, or why the route reads with WolvenKit alone. `strict` rethrows reader bugs (benches and tests). */
@@ -118,6 +123,8 @@ export interface Installation {
    * installations, which are never re-checked.
    */
   readonly watch?: readonly WatchedPath[];
+  /** The source discovery the installation was opened from (kept across restarts, installation-snapshot.ts). Absent for synthetic installations. */
+  readonly discovery?: SourceDiscovery;
 }
 
 export interface UnreadIndex { readonly id: string; readonly name: string; readonly providerName: string; readonly rank: number; readonly error: string }
@@ -192,6 +199,42 @@ let indexMemo = new Map<string, BigUint64Array>();
 type XlRead = { document?: unknown; error?: string; excludes: boolean };
 let xlMemo = new Map<string, XlRead>();
 const identity = (path: string, size: number, mtimeMs: number) => `${path}|${size}|${mtimeMs}`;
+/** The scan limits of a route's discovery (part of a kept discovery's key, installation-snapshot.ts). */
+export const DISCOVERY_LIMITS = { maxEntries: 1_000_000, maxDepth: 24 } as const;
+
+/**
+ * Read ahead what opening a route from `discovery` reads (research/backlog/performance.md, warm restart): each archive's cached index and
+ * each `.xl` file, many at once and without blocking, into the memos `openInstallation` consults, so the synchronous open that follows only
+ * assembles the mount plan (on the reference installation the open's reads held the host's thread for about half a second: 1,079 index
+ * files, each checked against its archive's header, and 1,000 `.xl` files). `slice` gives the event loop a turn between parses. Anything
+ * this can't read (no cached index yet, a damaged file) is left to the open, which reads it as before and reports what fails.
+ */
+export async function readInstallationAhead(discovery: SourceDiscovery, cacheDir: string, slice: () => Promise<void> = async () => {}): Promise<void> {
+  const archives = discovery.candidates.filter(c => c.kind === "archive" && !indexMemo.has(identity(c.physicalPath, c.sizeBytes, c.modifiedMs)));
+  const xls = discovery.candidates.filter(c => c.kind === "archive-xl" && !xlMemo.has(identity(c.physicalPath, c.sizeBytes, c.modifiedMs)));
+  const index = async (candidate: SourceCandidate) => {
+    try {
+      const info = await statAsync(candidate.physicalPath);
+      if (info.size !== candidate.sizeBytes || info.mtimeMs !== candidate.modifiedMs) return;
+      const key = createHash("sha256").update(`${candidate.physicalPath}|${info.size}|${info.mtimeMs}`).digest("hex").slice(0, 24);
+      const bytes = await readFile(join(cacheDir, "index", `${key}.u64`));
+      if (bytes.byteLength !== await readRdarIndexCountAsync(candidate.physicalPath, info.size) * 8) return;
+      indexMemo.set(identity(candidate.physicalPath, candidate.sizeBytes, candidate.modifiedMs),
+        new BigUint64Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)));
+    } catch { /* Left to the open. */ }
+  };
+  const texts = new Map<SourceCandidate, string>();
+  const text = async (candidate: SourceCandidate) => { try { texts.set(candidate, await readFile(candidate.physicalPath, "utf8")); } catch { /* Left to the open. */ } };
+  const jobs: (() => Promise<void>)[] = [...archives.map(c => () => index(c)), ...xls.map(c => () => text(c))];
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(32, jobs.length) }, async () => { while (next < jobs.length) await jobs[next++]!(); }));
+  for (const [candidate, body] of texts) {
+    let read: XlRead;
+    try { read = { document: Bun.YAML.parse(body), excludes: /!exclude\b/.test(body) }; } catch { continue; }
+    xlMemo.set(identity(candidate.physicalPath, candidate.sizeBytes, candidate.modifiedMs), read);
+    await slice();
+  }
+}
 
 /**
  * Sorted depot hashes of an archive's index, cached per archive fingerprint. A cache file is written atomically
@@ -816,12 +859,18 @@ export function installationView(core: { depot: DepotIndex; xl: ArchiveXlConfig;
 const UNREADABLE_ISSUES = new Set(["directory_unreadable", "entry_unreadable", "profile_unreadable", "mo2_ini_unreadable"]);
 
 /** Discover the route's sources, mount archives, read indexes and `.xl` files, and open a resource graph. */
+/** Walk a route's folders for its sources (synchronous; `openInstallation` does it unless given a current discovery). */
+export function discoverRoute(options: Pick<InstallationOptions, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot" | "folderStamps">): SourceDiscovery {
+  return discoverSources(routeSettings(options), DISCOVERY_LIMITS, { folderStamps: options.folderStamps ?? folderStampMode });
+}
+const routeSettings = (options: Pick<InstallationOptions, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" | "manualModRoot">): LocalSettings =>
+  ({ ...defaultLocalSettings(), gameRoot: options.gameRoot, launchRoute: options.launchRoute,
+    mo2Root: options.mo2Root ?? null, mo2ProfileId: options.mo2ProfileId ?? null, manualModRoot: options.manualModRoot ?? null });
+
 export function openInstallation(options: InstallationOptions): Installation {
   const log = options.log ?? (() => {});
-  const settings: LocalSettings = { ...defaultLocalSettings(), gameRoot: options.gameRoot, launchRoute: options.launchRoute,
-    mo2Root: options.mo2Root ?? null, mo2ProfileId: options.mo2ProfileId ?? null, manualModRoot: options.manualModRoot ?? null };
   const folderStamps = options.folderStamps ?? folderStampMode;
-  const discovery = discoverSources(settings, { maxEntries: 1_000_000, maxDepth: 24 }, { folderStamps });
+  const discovery = options.discovery ?? discoverRoute(options);
   const watch: WatchedPath[] = [...discovery.watched];
   const candidates = [...discovery.candidates, ...gameBundleFiles(options.gameRoot, watch, folderStamps(options.gameRoot) === "listing")];
   // The game's own version: an update replaces the executable (and usually its archives).
@@ -882,7 +931,7 @@ export function openInstallation(options: InstallationOptions): Installation {
   const tweaks = visibleLoose(candidates.filter(c => c.kind === "tweak")).map(({ virtualPath, physicalPath, providerName, sizeBytes, modifiedMs }) =>
     ({ virtualPath, physicalPath, providerName, sizeBytes, modifiedMs }));
   const vortexMods = new Map(candidates.flatMap(c => c.deployedBy?.state === "deployed" ? [[c.providerName, c.deployedBy.modId] as const] : []));
-  return { plan, depot, xl, graph, fetcher, native, watch, tweaks, vortexMods, summary: { route: options.launchRoute, nativeReader: nativeReaderState(native), scanComplete: discovery.complete,
+  return { plan, depot, xl, graph, fetcher, native, watch, tweaks, vortexMods, discovery, summary: { route: options.launchRoute, nativeReader: nativeReaderState(native), scanComplete: discovery.complete,
     scanIssues: discovery.issues.filter(issue => issue.blocking).map(issue => `${issue.code}: ${issue.detail}`),
     scanGaps: discovery.issues.filter(issue => issue.blocking && issue.mayHideSources !== false).map(issue => `${issue.code}: ${issue.detail}`),
     readErrors: [...indexErrors, ...xlReadErrors, ...discovery.issues.filter(issue => UNREADABLE_ISSUES.has(issue.code)).map(issue => `${issue.code}: ${issue.detail}`)],

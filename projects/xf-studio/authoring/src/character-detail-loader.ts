@@ -3,7 +3,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import { parseDeformationProgram, type DeformationProgram } from "./deformation-rig";
 import { parseDangleSpec, type DangleSpec } from "./dangle-spec";
-import { materialAdapter, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse, type TextureWrap } from "./character-material-adapters";
+import { CPU_READ_SIZE, hasReducedImage, materialAdapter, setReducedImage, textureColourSpace, type AdaptedMaterial, type AdapterContext, type TextureUse,
+  type TextureWrap } from "./character-material-adapters";
 import { CHARACTER_DETAIL_ASSETS, chunkOfMesh, DETAIL_SLOTS, parseCharacterDetail, RECORD_LIMITS, type CharacterDetail, type DetailSlot, type RenderComponent,
   type RenderResource, type RenderTexture, UNCOVERED_BODY, withdrawUncoveredBody } from "./render-detail";
 import { renderTemplate } from "./render-templates";
@@ -85,6 +86,21 @@ export type CharacterDetailLoadOptions = {
    * their decoded bitmaps are released while the rest still loads (PREV-189).
    */
   built?(item: LoadedCharacterComponent): void;
+  /**
+   * Files fetched, verified and decoded before this load asked (character-warm-start.ts: the V's files read while the head loads after a
+   * restart): each is taken once, instead of being fetched and decoded again.
+   */
+  warmed?: WarmedFiles | null;
+};
+/** A texture file decoded for the page: its image element, its bitmap for the first upload, and its reduced copy for CPU reads. */
+export type DecodedTexture = { image: HTMLImageElement; bitmap: ImageBitmap | null; reduced: ImageBitmap | null };
+/** A geometry file parsed: its scene and the skin weights of its skinned meshes as the file stores them, by node name. */
+export type ParsedGeometry = { scene: THREE.Group; weights: Map<string, Float32Array> };
+/** Files a load takes instead of reading them itself (`warmed`); each answer is handed over once. */
+export type WarmedFiles = {
+  bytes(file: string): Promise<ArrayBuffer> | undefined;
+  texture(file: string): Promise<DecodedTexture> | undefined;
+  geometry(file: string): Promise<ParsedGeometry> | undefined;
 };
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
@@ -177,6 +193,83 @@ const geometriesOf = (roots: readonly THREE.Object3D[]) => {
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** A record's file from the host, checked against its content hash. */
+export async function fetchDetailFile(fetcher: CharacterDetailFetch, resource: Pick<RenderResource, "file" | "sha256">): Promise<ArrayBuffer> {
+  const response = await fetcher(`${CHARACTER_DETAIL_ASSETS}${resource.file}`);
+  if (!response.ok) throw Error(`${resource.file} is unavailable.`);
+  const bytes = await response.arrayBuffer();
+  if (await sha256Hex(bytes) !== resource.sha256) throw Error(`${resource.file} does not match its record.`);
+  return bytes;
+}
+
+/** The size a CPU-read map is read at (`CPU_READ_SIZE` on its longer side), or null when it is no larger (read as it is). */
+export function cpuReadSize(texture: Pick<RenderTexture, "width" | "height">): { width: number; height: number } | null {
+  const longer = Math.max(texture.width, texture.height);
+  if (!texture.width || !texture.height || longer <= CPU_READ_SIZE) return null;
+  const scale = CPU_READ_SIZE / longer;
+  return { width: Math.max(1, Math.round(texture.width * scale)), height: Math.max(1, Math.round(texture.height * scale)) };
+}
+const decodeElement = (image: HTMLImageElement) => image.decode?.().catch(() => { /* Decoded on first use instead. */ });
+/**
+ * Decode a map's PNG for the page: its image element (the texture's image), its bitmap for the first upload (PREV-189), decoded off the
+ * main thread, and for a map read on the CPU (`cpuSize`: the skin under a decal) a copy at the size it is read at, decoded and scaled off
+ * the main thread too (character-material-adapters.ts `setReducedImage`). An element without a bitmap, or read on the CPU without its
+ * copy, is decoded now, off the main thread (a 4096² map took a frame of its own).
+ */
+export async function decodeDetailTexture(bytes: ArrayBuffer, cpuSize: { width: number; height: number } | null, cpuRead: boolean): Promise<DecodedTexture> {
+  const blob = new Blob([bytes], { type: "image/png" });
+  const bitmap = typeof createImageBitmap === "function" ? createImageBitmap(blob, UPLOAD_BITMAP_OPTIONS).catch(() => null) : Promise.resolve(null);
+  const small = cpuSize && typeof createImageBitmap === "function"
+    ? createImageBitmap(blob, { resizeWidth: cpuSize.width, resizeHeight: cpuSize.height, resizeQuality: "medium" }).catch(() => null)
+    : Promise.resolve(null);
+  const url = URL.createObjectURL(blob);
+  try {
+    const image = await new THREE.ImageLoader().loadAsync(url);
+    const [decoded, reduced] = await Promise.all([bitmap, small]);
+    if (reduced) setReducedImage(image, reduced);
+    if ((cpuRead && !reduced) || !decoded) await decodeElement(image);
+    return { image, bitmap: decoded, reduced };
+  } finally { URL.revokeObjectURL(url); }
+}
+/** Parse a geometry file (its own skin weights kept as floats, `restoreFirstWeights`), each stage in a task of its own (PREV-189). */
+export async function parseDetailGeometry(buffer: ArrayBuffer): Promise<ParsedGeometry> {
+  await yieldTask();
+  const raw = restoreFirstWeights(buffer);
+  await yieldTask();
+  const gltf = await new GLTFLoader().parseAsync(buffer.slice(0), "");
+  await yieldTask();
+  const weights = new Map<string, Float32Array>();
+  gltf.scene.traverse(object => {
+    if (!(object instanceof THREE.SkinnedMesh)) return;
+    const found = raw.get(gltf.parser.json.meshes[gltf.parser.associations.get(object)?.meshes ?? -1]?.name);
+    if (found) weights.set(object.name, found);
+  });
+  return { scene: gltf.scene, weights };
+}
+/** The maps read on the CPU in a record: the skin's (its toned base and roughness under decals, character-material-adapters.ts). */
+export const cpuReadFiles = (record: CharacterDetail): Set<string> => new Set(record.components.flatMap(component => component.materials
+  .filter(material => renderTemplate(material.template, material.templateName)?.adapter === "skin").flatMap(material => chunkTextureFiles(material).map(texture => texture.file))));
+/**
+ * The components a load of `record` reads, in the order it builds them (the skin first, so decals over it can blend against it), each with
+ * the maps it adds within the record's texture budget; a component past the budget isn't read.
+ */
+export function plannedReads(record: CharacterDetail): { component: RenderComponent; textures: RenderTexture[] }[] {
+  const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
+  const planned = new Set<string>(), out: { component: RenderComponent; textures: RenderTexture[] }[] = [];
+  let texelsPlanned = 0;
+  for (const component of ordered) {
+    const files = new Map<string, RenderTexture>();
+    for (const material of component.materials) for (const texture of chunkTextureFiles(material))
+      if (!planned.has(texture.file)) files.set(texture.file, texture);
+    const adds = [...files.values()].reduce((sum, texture) => sum + texture.width * texture.height, 0);
+    if (texelsPlanned + adds > RECORD_LIMITS.decodedPixels) continue;
+    texelsPlanned += adds;
+    for (const file of files.keys()) planned.add(file);
+    out.push({ component, textures: [...files.values()] });
+  }
+  return out;
 }
 
 /**
@@ -443,21 +536,18 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     }
   };
   const aborted = () => { if (signal?.aborted) throw new DOMException("Loading the details was cancelled.", "AbortError"); };
+  const warmed = options.warmed ?? null;
   const bytesOf = new Map<string, Promise<ArrayBuffer>>();
   const fetchBytes = (resource: Pick<RenderResource, "file" | "sha256">) => {
     let pending = bytesOf.get(resource.file);
     if (!pending) {
-      pending = (async () => {
-        // Not cancelled once asked for: a part whose files are on their way is finished and kept (`pool`), so a superseded change's
-        // work is there for the next one (research/backlog/performance.md, scheduling rule). The files are local and content-addressed.
-        const response = await fetcher(`${CHARACTER_DETAIL_ASSETS}${resource.file}`);
-        if (!response.ok) throw Error(`${resource.file} is unavailable.`);
-        const bytes = await response.arrayBuffer();
+      // Not cancelled once asked for: a part whose files are on their way is finished and kept (`pool`), so a superseded change's
+      // work is there for the next one (research/backlog/performance.md, scheduling rule). The files are local and content-addressed.
+      pending = (warmed?.bytes(resource.file) ?? fetchDetailFile(fetcher, resource)).then(bytes => {
         bytesUsed += bytes.byteLength;
         if (bytesUsed > MAX_BYTES) throw Error("The prepared details are larger than the preview allows.");
-        if (await sha256Hex(bytes) !== resource.sha256) throw Error(`${resource.file} does not match its record.`);
         return bytes;
-      })();
+      });
       bytesOf.set(resource.file, pending);
     }
     return pending;
@@ -465,9 +555,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   // Only the skin's maps are read on the CPU (its toned base and roughness under decals, character-material-adapters.ts): their image
   // elements are decoded ahead as before; every other map's first upload comes from its bitmap, so its element is never decoded
   // unless a restored context uploads it again (PREV-189: two decoded copies of every map took the page past its memory budget).
-  const cpuRead = new Set(record.components.flatMap(component => component.materials
-    .filter(material => renderTemplate(material.template, material.templateName)?.adapter === "skin").flatMap(material => chunkTextureFiles(material).map(texture => texture.file))));
-  const decodeElement = (image: HTMLImageElement) => image.decode?.().catch(() => { /* Decoded on first use instead. */ });
+  const cpuRead = cpuReadFiles(record);
   const decoding = new Map<string, Promise<HTMLImageElement>>();
   /**
    * The bitmaps this load decoded: once its parts are made, the ledger keeps only the image elements (a texture made later decodes its
@@ -486,30 +574,22 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   };
   const imageOf = (texture: RenderTexture): Promise<HTMLImageElement> => {
     const known = ledger.images.get(texture.file);
-    if (known) return cpuRead.has(texture.file) ? Promise.resolve(decodeElement(known)).then(() => known) : Promise.resolve(known);
+    if (known) return cpuRead.has(texture.file) && !hasReducedImage(known) ? Promise.resolve(decodeElement(known)).then(() => known) : Promise.resolve(known);
     let pending = decoding.get(texture.file);
     if (!pending) {
-      pending = fetchBytes(texture).then(async bytes => {
+      // A map decoded before the load asked (a warm start, which fetched it within the same byte budget) is taken as it is.
+      const decoded = warmed?.texture(texture.file) ?? fetchBytes(texture).then(async bytes => {
         const again = ledger.images.get(texture.file);
-        if (again) return again;
-        const blob = new Blob([bytes], { type: "image/png" });
-        // The bitmap its textures' first upload uses (PREV-189), decoded beside the element; without one, the upload decodes the element.
-        const bitmap = typeof createImageBitmap === "function"
-          ? createImageBitmap(blob, UPLOAD_BITMAP_OPTIONS).catch(() => null) : Promise.resolve(null);
-        const url = URL.createObjectURL(blob);
-        try {
-          const image = await new THREE.ImageLoader().loadAsync(url);
-          // A map read on the CPU (the skin under a decal) is decoded now, off the main thread (a 4096² map took a frame of its own); so is
-          // one without a bitmap, whose upload decodes it.
-          const decoded = await bitmap;
-          if (cpuRead.has(texture.file) || !decoded) await decodeElement(image);
-          ledger.images.set(texture.file, image);
-          // A bitmap decoded after this load made its parts (a part that failed first) has no texture to go to.
-          if (decoded && bitmapsDropped) decoded.close();
-          else if (decoded) { ledger.bitmaps.set(texture.file, decoded); decodedHere.add(texture.file); }
-          return image;
-        }
-        finally { URL.revokeObjectURL(url); }
+        return again ? { image: again, bitmap: null, reduced: null } : decodeDetailTexture(bytes, cpuRead.has(texture.file) ? cpuReadSize(texture) : null, cpuRead.has(texture.file));
+      });
+      pending = decoded.then(({ image, bitmap }) => {
+        const again = ledger.images.get(texture.file);
+        if (again && again !== image) { bitmap?.close(); return again; }
+        ledger.images.set(texture.file, image);
+        // A bitmap decoded after this load made its parts (a part that failed first) has no texture to go to.
+        if (bitmap && bitmapsDropped) bitmap.close();
+        else if (bitmap) { ledger.bitmaps.set(texture.file, bitmap); decodedHere.add(texture.file); }
+        return image;
       });
       decoding.set(texture.file, pending);
     }
@@ -520,25 +600,12 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   // taken as parsed. Skin weights are the file's own floats (restoreFirstWeights), keyed by node name for the clones.
   const uses = new Map<string, number>();
   for (const component of record.components) uses.set(component.geometry.file, (uses.get(component.geometry.file) ?? 0) + 1);
-  const parsed = new Map<string, Promise<{ scene: THREE.Group; weights: Map<string, Float32Array> }>>();
+  const parsed = new Map<string, Promise<ParsedGeometry>>();
   const parseOf = (resource: RenderResource) => {
     let pending = parsed.get(resource.file);
     if (!pending) {
-      pending = fetchBytes(resource).then(async buffer => {
-        // Each stage in a task of its own (PREV-189): a hairstyle's 10 MB file read, parsed and built in one took 80 ms of the page.
-        await yieldTask();
-        const raw = restoreFirstWeights(buffer);
-        await yieldTask();
-        const gltf = await new GLTFLoader().parseAsync(buffer.slice(0), "");
-        await yieldTask();
-        const weights = new Map<string, Float32Array>();
-        gltf.scene.traverse(object => {
-          if (!(object instanceof THREE.SkinnedMesh)) return;
-          const found = raw.get(gltf.parser.json.meshes[gltf.parser.associations.get(object)?.meshes ?? -1]?.name);
-          if (found) weights.set(object.name, found);
-        });
-        return { scene: gltf.scene, weights };
-      });
+      // Each stage in a task of its own (PREV-189): a hairstyle's 10 MB file read, parsed and built in one took 80 ms of the page.
+      pending = warmed?.geometry(resource.file) ?? fetchBytes(resource).then(parseDetailGeometry);
       parsed.set(resource.file, pending);
     }
     return pending;
@@ -554,24 +621,13 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
   const ordered = [...record.components].sort((a, b) => DETAIL_SLOTS.indexOf(a.slot) - DETAIL_SLOTS.indexOf(b.slot));
   // Every part this load will build is fetched and decoded at once (PREV-189: one after another, a hairstyle's files took 350 ms), the
   // parts it takes as they are (shown or kept) excepted. The texture budget below is followed, so nothing it skips is fetched.
-  {
-    const planned = new Set<string>();
-    let texelsPlanned = 0;
-    for (const component of ordered) {
-      const files = new Map<string, RenderTexture>();
-      for (const material of component.materials) for (const texture of chunkTextureFiles(material))
-        if (!planned.has(texture.file)) files.set(texture.file, texture);
-      const adds = [...files.values()].reduce((sum, texture) => sum + texture.width * texture.height, 0);
-      if (texelsPlanned + adds > RECORD_LIMITS.decodedPixels) continue;
-      texelsPlanned += adds;
-      for (const file of files.keys()) planned.add(file);
-      const key = keyOf(component);
-      if (lendable.has(key) || pool?.has(key)) continue;
-      // Failures surface where the part is built, as before; these are only started early.
-      for (const texture of files.values()) imageOf(texture).catch(() => { /* Reported by the build. */ });
-      parseOf(component.geometry).catch(() => { /* Reported by the build. */ });
-      if (component.dangle) fetchBytes(component.dangle).catch(() => { /* Reported by the build. */ });
-    }
+  for (const { component, textures } of plannedReads(record)) {
+    const key = keyOf(component);
+    if (lendable.has(key) || pool?.has(key)) continue;
+    // Failures surface where the part is built, as before; these are only started early.
+    for (const texture of textures) imageOf(texture).catch(() => { /* Reported by the build. */ });
+    parseOf(component.geometry).catch(() => { /* Reported by the build. */ });
+    if (component.dangle) fetchBytes(component.dangle).catch(() => { /* Reported by the build. */ });
   }
   let resolvedSkin: AdapterContext["skin"];
   /**

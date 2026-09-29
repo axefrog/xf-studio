@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { freemem } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
@@ -24,6 +25,8 @@ import type { DiagnosticTrace } from "./diagnostics/model";
 import { hostFailure } from "./diagnostics/host-log";
 import { type ChoicePreviewSource, type PreviewKind, previewSourceOf } from "./choice-preview";
 import { ChoicePreviewStore, manifestStamp } from "./choice-preview-host";
+import { hostCodeIdentity } from "./host-code-identity";
+import { PreparedAnswers } from "./prepared-answers";
 
 /**
  * Host application service that owns one character-detail preparation at a time for the preview (both
@@ -112,6 +115,11 @@ export type CharacterDetailHostOptions = {
   nativeDecodeWorker?: string;
   /** Where choice previews and their sources are kept (choice-preview-host.ts; default `cacheRoot/choice-previews`). */
   previewRoot?: string;
+  /**
+   * Answers kept across restarts (prepared-answers.ts: a V prepared before is answered at once while nothing it was prepared from
+   * changed). Default: kept under `cacheRoot/choices/answers/` unless the preparation is a test seam (`prepare`); `false`: never.
+   */
+  keptAnswers?: PreparedAnswers | false;
 };
 /** One question about a row's choice previews (choice-preview-server.ts): the V, the row, the positions to look up, and the one to derive. */
 export type PreviewSourcesInput = { base: CharacterRequest; option: string; kind: PreviewKind; positions: readonly number[]; derive: number | null;
@@ -184,8 +192,28 @@ export function characterRoute(settings: CharacterDetailSettings): CharacterRout
     manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli && existsSync(settings.wolvenKitCli) ? settings.wolvenKitCli : null };
 }
 
+/**
+ * How many texture decode workers a batch uses (native-texture-export.ts lanes): two while the computer has room for a second one's
+ * peak (about 300 MB decoding an 8192² map) with plenty to spare, else one (PREV-190: a cold hairstyle's maps decoded one at a time).
+ */
+export const textureLanes = (): number => freemem() > TWO_LANES_FREE_BYTES ? 2 : 1;
+/** Free memory above which a second texture decode worker is used. */
+export const TWO_LANES_FREE_BYTES = 4 * 1024 ** 3;
+
 /** How long the page must have been quiet (no change asked for, no file of its V read) before work prepared ahead goes on. */
 export const QUIET_MS = 400;
+/**
+ * How long the page must have been quiet before a V answered from a kept answer is resolved in the background after a restart: the page
+ * is still starting (its motion, face data, poses and the creator's options come from the host right after the V).
+ */
+export const WARM_UP_QUIET_MS = 2000;
+/**
+ * How long a kept answer's check (every stamp it depends on read again) vouches for the same V's next request, which then skips the
+ * installation check: the page's own request follows its warm start's (character-warm-start.ts) by a second or two, while the host is at
+ * its busiest starting up, and a check then took 0.5–0.6 s of the V's wait. A mod changed within that moment is noticed by the next
+ * request's check, as ever.
+ */
+export const KEPT_VOUCH_MS = 5000;
 
 export class CharacterDetailHost {
   /** Each open page's latest preparation (`request`'s `page`); they run one at a time, in the order they were asked for (PIPE-103). */
@@ -224,7 +252,17 @@ export class CharacterDetailHost {
   private previewing: { controller: AbortController; promise: Promise<unknown>; passed: boolean } | null = null;
   /** When the page last asked for a preview source to be derived (`PREVIEW_HOLD_MS`). */
   private previewAskedAt = 0;
+  /** Answers kept across restarts (`keptAnswers`), or null. */
+  private readonly answers: PreparedAnswers | null;
+  /**
+   * The V answered from a kept answer, being resolved into the shared cache in the background once the page is quiet, so the person's
+   * first change after a restart only resolves what it changes. A person's own request stops it.
+   */
+  private warmingUp: { controller: AbortController; promise: Promise<void> } | null = null;
   constructor(private readonly options: CharacterDetailHostOptions) {
+    this.answers = options.keptAnswers === false ? null : options.keptAnswers ?? (options.prepare ? null
+      : new PreparedAnswers(join(options.cacheRoot, "choices", "answers"), { code: hostCodeIdentity, recordSchema: CHARACTER_DETAIL_SCHEMA,
+        recordExists: record => this.filePath(record) !== null }));
     this.previews = new ChoicePreviewStore(options.previewRoot ?? join(options.cacheRoot, "choice-previews"));
     this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
       resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
@@ -258,9 +296,11 @@ export class CharacterDetailHost {
     const exports = join(this.options.cacheRoot, "exports");
     const inner = this.options.exporter?.(cli) ?? createWolvenKitGameAssetExporter(exports, cli);
     const decoder = this.options.textureDecoder === false ? null
-      : this.options.textureDecoder ?? (this.options.exporter ? null : (gameRoot: string) => this.textureDecoders.get(gameRoot));
-    // Textures natively first, served from their largest mip within the preview's size, WolvenKit per texture it refuses (PIPE-104).
-    const textured = decoder ? createNativeFirstExporter(inner, { cacheRoot: exports, maxSide: SERVED_TEXTURE_MAX, decoder }) : inner;
+      : this.options.textureDecoder ? ((gameRoot: string, lane: number) => lane ? Promise.resolve(null) : (this.options.textureDecoder as (root: string) => Promise<TextureDecoder | null>)(gameRoot))
+      : this.options.exporter ? null : (gameRoot: string, lane: number) => (lane ? this.textureDecodersExtra : this.textureDecoders).get(gameRoot);
+    // Textures and layer masks natively first, textures served from their largest mip within the preview's size, WolvenKit per resource
+    // the reader refuses (PIPE-104, PREV-190); two workers side by side while memory allows (`textureLanes`).
+    const textured = decoder ? createNativeFirstExporter(inner, { cacheRoot: exports, maxSide: SERVED_TEXTURE_MAX, decoder, lanes: textureLanes }) : inner;
     const geometryDecoder = this.options.geometryDecoder === false ? null
       : this.options.geometryDecoder ?? (this.options.exporter ? null : (gameRoot: string) => this.geometryDecoders.get(gameRoot));
     // Meshes and morph targets natively first, WolvenKit per resource the reader refuses (native reader phase 4).
@@ -270,6 +310,11 @@ export class CharacterDetailHost {
   private decoders: NativeDecoders | null = null;
   private get textureDecoders(): NativeDecoders {
     return this.decoders ??= new NativeDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log });
+  }
+  /** A second texture decode worker per game folder, for a batch's second lane (`textureLanes`). */
+  private decodersExtra: NativeDecoders | null = null;
+  private get textureDecodersExtra(): NativeDecoders {
+    return this.decodersExtra ??= new NativeDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log });
   }
   /** One mesh decode worker per game folder, beside the texture one, so meshes and textures decode side by side. */
   private meshDecoders: NativeDecoders | null = null;
@@ -314,6 +359,9 @@ export class CharacterDetailHost {
     // A different (or a stale, cancelled) preparation: stop it and forget its answer now, so a quick
     // V1 -> V2 -> V1 restarts V1 instead of reporting the cancelled run as still preparing.
     if (active) { active.controller.abort(); this.states.delete(active.key); }
+    // The V resolved in the background after a restart steps aside; what it resolved so far stays in the shared cache.
+    const warmingUp = this.warmingUp;
+    warmingUp?.controller.abort();
     const route = this.route();
     if (!route) return this.set({ key, phase: "failed", message: NEEDS_SETUP, progress: null, record: null });
     // Without WolvenKit nothing can be exported for the 3D view: say so at once, as a need rather than a failure, without resolving the V
@@ -335,10 +383,13 @@ export class CharacterDetailHost {
     // The whole wait is logged, not only the preparation: queued (behind another page's run or a stopped batch), started, done.
     const asked = Date.now();
     let started = 0;
+    // The installation the preparation read: its watch list is what a kept answer names (prepared-answers.ts).
+    let opened: Installation | null = null;
+    const open = async (options: InstallationOptions) => (opened = await acquireInstallation(options));
     const run = () => {
       if (controller.signal.aborted) throw new CharacterDetailError("character_cancelled", "Superseded before it started.");
       started = Date.now();
-      return foregroundExtraction(this.resolverCache, () => (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache,
+      return foregroundExtraction(this.resolverCache, () => (this.options.prepare ?? prepareCharacterDetails)({ request, route, storeRoot: this.storeRoot, cache, open,
         derive: request.choices?.length ? structuralInput : undefined, manifests: this.manifests(route),
         resolverCache: this.resolverCache, exporter, signal: controller.signal,
         progress: (_step, index, total, label) => {
@@ -348,6 +399,7 @@ export class CharacterDetailHost {
     // Start now, or once the earlier runs (a cancelled one still settling on the shared cache, another page's) and a stopped prefetch
     // batch have let go (PREV-102, PIPE-103).
     const waits: Promise<unknown>[] = [...this.running.values()].map(run => run.promise);
+    if (warmingUp) waits.push(warmingUp.promise);
     if (this.prefetch.preparing) waits.push(this.prefetch.idle());
     // A preview source being derived is stopped, unless it is already writing (then it finishes: it takes a moment and is kept).
     if (this.previewing) {
@@ -359,6 +411,9 @@ export class CharacterDetailHost {
       .then(result => {
         this.set({ key, phase: "ready", message: result.note ?? "", progress: null, record: result.recordFile });
         if (result.degraded) this.degraded.add(key); else this.degraded.delete(key);
+        // A complete answer is kept for the next start, named by the installation it was prepared from (prepared-answers.ts).
+        const watch = (opened as Installation | null)?.watch;
+        if (!result.degraded && watch?.length) void this.answers?.remember(installationRouteKey(route), request, { record: result.recordFile, message: result.note ?? "" }, watch);
         this.prefetch.prepared(request, !result.degraded);
         void this.keepWithinBudget();
         const done = Date.now(), seconds = (ms: number) => (ms / 1000).toFixed(1);
@@ -379,6 +434,86 @@ export class CharacterDetailHost {
       .finally(() => { if (this.running.get(page)?.controller === controller) this.running.delete(page); });
     this.running.set(page, { key, controller, promise });
     return this.states.get(key)!;
+  }
+
+  /**
+   * A person's request, answered (character-detail-server.ts): a V this process hasn't answered yet is answered from a kept answer when
+   * nothing it was prepared from changed (prepared-answers.ts; the restart case); otherwise the installation is checked (`refresh`) and
+   * the request goes on as `request` does.
+   */
+  async answer(request: CharacterRequest, page = ""): Promise<CharacterDetailState> {
+    // A kept answer checks every stamp it depends on itself, so it needs no installation check of its own; nor does the same V's request
+    // moments after a kept answer was checked for the page's warm start (`KEPT_VOUCH_MS`).
+    const key = characterRequestKey(request, installationFingerprint(this.options.settings()));
+    const vouched = this.keptAt.get(key), fresh = vouched !== undefined && Date.now() - vouched < KEPT_VOUCH_MS && this.states.get(key)?.phase === "ready";
+    this.keptAt.delete(key);
+    const state = await this.kept(request, page) ?? (fresh ? this.request(request, page) : (await this.refresh(), this.request(request, page)));
+    // The page shows a V answered from a kept answer (now, or for its warm start a moment ago): resolve it in the background later.
+    if (state.phase === "ready" && this.unwarmed.delete(state.key)) this.warmUp(request);
+    return state;
+  }
+  /**
+   * What the host already has for `request` (a page's warm start, character-warm-start.ts): its known state when it is ready, else a kept
+   * answer when nothing it was prepared from changed, else `unknown`. Never starts a preparation.
+   */
+  async known(request: CharacterRequest, page = ""): Promise<CharacterDetailState> {
+    const key = characterRequestKey(request, installationFingerprint(this.options.settings()));
+    const known = this.states.get(key);
+    if (known?.phase === "ready" && !this.degraded.has(key)) return known;
+    return await this.kept(request, page) ?? this.state(key);
+  }
+  /** Keys answered from a kept answer whose V hasn't been resolved into the shared cache yet (`warmUp`). */
+  private readonly unwarmed = new Set<string>();
+  /** When a kept answer was checked, by key: it vouches for that V's next request within `KEPT_VOUCH_MS` (`answer`). */
+  private readonly keptAt = new Map<string, number>();
+  /** A kept answer for `request` as this host's ready state, or null (none, not current, or this process already knows the key). */
+  private async kept(request: CharacterRequest, page: string): Promise<CharacterDetailState | null> {
+    const route = this.route();
+    if (!this.answers || !route?.wolvenKitCli) return null;
+    const keyNow = () => characterRequestKey(request, installationFingerprint(this.options.settings()));
+    if (this.states.has(keyNow())) return null;
+    const started = performance.now();
+    this.asking++;
+    let found;
+    try { found = await this.answers.find(installationRouteKey(route), request); }
+    catch { found = null; }
+    finally { this.asking--; }
+    // Asked, prepared or answered meanwhile (another page, the same page again), or the route changed: the usual path decides.
+    const key = keyNow(), now = this.route();
+    if (!found || this.states.has(key) || !now || installationRouteKey(now) !== installationRouteKey(route)) return null;
+    this.noteAsk();
+    this.prefetch.pause();
+    const active = this.running.get(page);
+    if (active && !active.controller.signal.aborted && active.key !== key) { active.controller.abort(); this.states.delete(active.key); }
+    const state = this.set({ key, phase: "ready", message: found.message, progress: null, record: found.record });
+    this.prefetch.prepared(request, true);
+    this.options.log?.(`Your V was shown as prepared before (nothing it was prepared from changed; checked in ${Math.round(performance.now() - started)} ms).`);
+    this.unwarmed.add(key);
+    this.keptAt.set(key, Date.now());
+    return state;
+  }
+  /**
+   * Resolve a V answered from a kept answer into the shared cache, in the background once the page has been quiet for `WARM_UP_QUIET_MS`
+   * (it reads the V's files and starts everything else first), so the person's first change after a restart only resolves and exports
+   * what it changes. Nothing is written to the store. A person's request stops it (`request`).
+   */
+  private warmUp(request: CharacterRequest): void {
+    this.warmingUp?.controller.abort();
+    const controller = new AbortController();
+    const promise = (async () => {
+      for (;;) {
+        await this.foregroundIdle();
+        const quiet = WARM_UP_QUIET_MS - (Date.now() - this.askedAt);
+        if (quiet <= 0 || controller.signal.aborted) break;
+        await new Promise(done => setTimeout(done, quiet));
+      }
+      if (controller.signal.aborted || this.running.size) return;
+      const started = Date.now();
+      const [outcome] = await this.warm([request], controller.signal);
+      if (!controller.signal.aborted) this.options.log?.(`Your V was resolved in the background in ${((Date.now() - started) / 1000).toFixed(1)} s${outcome?.ready ? "" : " (not complete)"}, so changes to it start from there.`);
+    })().catch(() => { /* Stopped by a person's change, or failed: the change prepares what it needs. */ })
+      .finally(() => { if (this.warmingUp?.controller === controller) this.warmingUp = null; });
+    this.warmingUp = { controller, promise };
   }
 
   /**

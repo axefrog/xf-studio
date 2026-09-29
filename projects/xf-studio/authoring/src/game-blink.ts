@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_DAMAGED, GAME_BLINK_MISSING, GAME_BLINK_NO_JOINTS, GAME_BLINK_OTHER_HEAD } from "./game-blink-messages";
 import { FACE_MOTION_SCHEMA, FACIAL_BLINK_ENDPOINT, type FaceMotionClip, type FaceMotionRest, type FacialBlinkRecord } from "./platform/api/facial";
+import { bytesFromBase64 } from "./base64";
 
 /**
  * The game's own blink on the preview head (knowledge/facial-animation.md). The host solves the player head's facial setup with XF Studio's
@@ -341,7 +342,7 @@ export class GameBlink {
 
 /** Base64 little-endian float32 (the host's face motion records). */
 function floatsOf(text: string): Float32Array {
-  const bytes = Uint8Array.from(atob(text), char => char.charCodeAt(0));
+  const bytes = bytesFromBase64(text);
   if (bytes.byteLength % 4) throw Error(GAME_BLINK_DAMAGED);
   return new Float32Array(bytes.buffer);
 }

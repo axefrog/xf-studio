@@ -16,6 +16,7 @@ import type { Decompress } from "./kark";
 import { DecodeSession, DEFAULT_LIMITS, type NativeLimits } from "./limits";
 import { classifyNativeFailure, type NativeFailureKind } from "./native-errors";
 import { DEFAULT_TEXTURE_LIMITS, mipRows, servedMip, textureLayout, type TextureLimits } from "./xbm-texture";
+import { decodeMaskLayers, maskLayout } from "./mlmask";
 
 /**
  * Version of the texture output rules; part of the texture reader's identity in cache keys. Bump it whenever what a texture decodes to
@@ -71,6 +72,52 @@ export async function decodeTextureFromPool(pool: NativeArchivePool, decompress:
     const png = await encodePngRows(rows.width, rows.height, r => rows.row(r), { alpha: rows.alpha, level: PNG_LEVEL });
     return { ok: true, texture: { png, width: rows.width, height: rows.height, gameWidth: layout.width, gameHeight: layout.height, mip,
       format: layout.format, isGamma: layout.isGamma, extractedSha256: createHash("sha256").update(bytes).digest("hex") } };
+  } catch (error) {
+    const kind = classifyNativeFailure(error);
+    const failure = error as { name?: unknown; message?: unknown; stack?: unknown } | null;
+    return { ok: false, kind, message: String(failure?.message ?? error), errorName: typeof failure?.name === "string" ? failure.name : undefined,
+      stack: kind === "internal" && typeof failure?.stack === "string" ? failure.stack : undefined };
+  }
+}
+
+/**
+ * Version of the layer mask output rules (mlmask.ts); part of the mask reader's identity in cache keys. Bump it whenever what a mask
+ * decodes to changes (layer sizes, channels, PNG encoding).
+ */
+export const NATIVE_MASK_VERSION = 1;
+export interface NativeMaskRequest {
+  readonly archivePath: string;
+  /** Depot hash, decimal. */
+  readonly hash: string;
+  readonly timeoutMs?: number;
+}
+/** A layer mask's layers as PNGs (grey RGB, as WolvenKit's grey RGBA texel for texel), in layer order. */
+export interface NativeMask {
+  readonly layers: readonly { readonly png: Uint8Array; readonly width: number; readonly height: number }[];
+  readonly extractedSha256: string;
+}
+export type NativeMaskOutcome =
+  | { readonly ok: true; readonly mask: NativeMask }
+  | { readonly ok: false; readonly kind: NativeFailureKind; readonly message: string; readonly errorName?: string; readonly stack?: string; readonly lasting?: boolean };
+
+/** Read, check and decode one `.mlmask`'s layers to PNGs (mlmask.ts); every failure is returned with its kind. */
+export async function decodeMaskFromPool(pool: NativeArchivePool, decompress: Decompress, request: NativeMaskRequest,
+  limits: NativeLimits = TEXTURE_READ_LIMITS): Promise<NativeMaskOutcome> {
+  try {
+    const bytes = pool.read(request.archivePath, request.hash);
+    if (!bytes) return { ok: false, kind: "not-indexed", message: "The archive does not list the resource." };
+    const layers = decodeMaskLayers(maskLayout(readCr2w(bytes, decompress, new DecodeSession(limits))));
+    const encoded = [];
+    for (const layer of layers) {
+      // Rows as RGBA (grey, opaque); written as RGB.
+      const row = new Uint8Array(layer.width * 4).fill(255);
+      const png = await encodePngRows(layer.width, layer.height, r => {
+        for (let x = 0, at = r * layer.width; x < layer.width; x++) row[x * 4] = row[x * 4 + 1] = row[x * 4 + 2] = layer.pixels[at + x]!;
+        return row;
+      }, { alpha: false, level: PNG_LEVEL });
+      encoded.push({ png, width: layer.width, height: layer.height });
+    }
+    return { ok: true, mask: { layers: encoded, extractedSha256: createHash("sha256").update(bytes).digest("hex") } };
   } catch (error) {
     const kind = classifyNativeFailure(error);
     const failure = error as { name?: unknown; message?: unknown; stack?: unknown } | null;

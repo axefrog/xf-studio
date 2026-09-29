@@ -88,27 +88,42 @@ const need = (texture: THREE.Texture | undefined, parameter: string, chunk: Rend
   return texture;
 };
 
+/** The largest size an image read on the CPU is read at (the skin under decals: its toned base and roughness). */
+export const CPU_READ_SIZE = 1024;
+/**
+ * Copies of images read on the CPU at `CPU_READ_SIZE`, decoded and scaled off the page's thread when their file loads
+ * (character-detail-loader.ts): drawing a 4096² map onto a small canvas scaled it on the page's thread, 100–150 ms per map and about
+ * half a second for a V's skin (research/backlog/performance.md, warm restart). Keyed by the texture's image; gone with it.
+ */
+const reducedImages = new WeakMap<object, ImageBitmap>();
+/** Keep `bitmap` (the image scaled to `CPU_READ_SIZE` on its longer side) as the copy `texturePixels` reads of `image`. */
+export function setReducedImage(image: object, bitmap: ImageBitmap): void { reducedImages.set(image, bitmap); }
+/** Whether `image` has its reduced copy. */
+export const hasReducedImage = (image: object): boolean => reducedImages.has(image);
+
 /**
  * Pixels of a loaded texture image, scaled to at most `size` on its longer side, or null outside a browser
- * (no canvas) or before the image has loaded.
+ * (no canvas) or before the image has loaded. Read from its reduced copy (`setReducedImage`) when that is large enough.
  */
 export function texturePixels(texture: THREE.Texture | undefined, size: number): SkinImage | null {
   const image = texture?.image as (CanvasImageSource & { width: number; height: number }) | undefined;
   if (!image || !image.width || !image.height || typeof document === "undefined") return null;
   const scale = Math.min(1, size / Math.max(image.width, image.height));
   const width = Math.max(1, Math.round(image.width * scale)), height = Math.max(1, Math.round(image.height * scale));
+  const reduced = reducedImages.get(image);
+  const source = reduced && reduced.width >= width && reduced.height >= height ? reduced : image;
   const canvas = document.createElement("canvas");
   canvas.width = width; canvas.height = height;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) return null;
-  context.drawImage(image, 0, 0, width, height);
+  context.drawImage(source, 0, 0, width, height);
   return { width, height, data: context.getImageData(0, 0, width, height).data };
 }
 
 const FLAT_NORMAL = [128, 128, 255, 255], BLACK = [0, 0, 0, 255], CLEAR = [0, 0, 0, 0], WHITE = [255, 255, 255, 255];
 const srgbByte = (byte: number) => { const c = byte / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 /** Size of the skin colour image decals blend against (enough for per-vertex sampling). */
-const SKIN_BASE_SIZE = 1024;
+const SKIN_BASE_SIZE = CPU_READ_SIZE;
 
 /**
  * `skin.mt`: the head's skin from the resolved chain (skin-material.ts): albedo, RG normal, roughness R/B

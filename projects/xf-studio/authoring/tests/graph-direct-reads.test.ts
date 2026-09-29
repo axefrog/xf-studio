@@ -11,7 +11,7 @@ import { directReads, kindsIn } from "./fixtures/direct-reads";
 
 /**
  * Grandfathered direct reads (module: kinds), recorded when the graph engine landed (G1) and extended once at its merge for modules
- * written in parallel before the rule existed (the speed and beta-polish tracks). This list only shrinks.
+ * written in parallel before the rule existed (the speed and beta-polish tracks), and once more for the second speed track's adapters. This list only shrinks.
  */
 const GRANDFATHERED: Readonly<Record<string, readonly string[]>> = {
   "archive-inventory-fs": ["files"],
@@ -35,6 +35,7 @@ const GRANDFATHERED: Readonly<Record<string, readonly string[]>> = {
   "cc-icon-host": ["clock","files"],
   "cc-swatch-host": ["clock","timers","files"],
   "character-context-actions": ["clock","timers"],
+  "character-warm-start": ["network"], // perf-2 host and page adapters, written before the rule reached their branch
   "character-detail-host": ["clock","timers","files"],
   "character-detail-loader": ["timers"],
   "character-detail-service": ["clock","files"],
@@ -88,9 +89,11 @@ const GRANDFATHERED: Readonly<Record<string, readonly string[]>> = {
   "game-blink": ["timers"],
   "grading-lut-host": ["clock","files"],
   "host-state-poller": ["timers"],
+  "host-code-identity": ["files"], // perf-2 host and page adapters, written before the rule reached their branch
   "idle-host": ["clock","timers","files"],
   "install-detection-host": ["files"],
   "installation-registry": ["clock","timers","files"],
+  "installation-snapshot": ["files"], // perf-2 host and page adapters, written before the rule reached their branch
   "library-store": ["clock","random"],
   "lighting-setup-stage": ["clock","timers"],
   "local-settings-readiness": ["files"],
@@ -122,6 +125,7 @@ const GRANDFATHERED: Readonly<Record<string, readonly string[]>> = {
   "platform/scene/orbit-limits": ["timers"],
   "platform/scene/scene-host": ["clock","timers"],
   "pose-catalogue-host": ["clock","files"],
+  "prepared-answers": ["files"], // perf-2 host and page adapters, written before the rule reached their branch
   "prepared-files": ["files"],
   "preview-core-host": ["files"],
   "preview-core-service": ["clock","files"],

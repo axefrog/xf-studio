@@ -252,9 +252,28 @@ The preview has always been served WolvenKit's PNGs, and the native PNG is the s
 
 A native module was not needed: the slowest map decodes in about half a second. The texture reader's output rules are versioned (`NATIVE_TEXTURE_VERSION`, part of its cache identity).
 
-### 10.4 Not decoded yet
+### 10.4 Layer masks (`.mlmask`)
 
-`.mlmask` layer masks stay with WolvenKit. Their layers sit in a tiled atlas with a tile table and a low-resolution fallback, which WolvenKit's exporter reconstructs [source: WolvenKit's multilayer-mask exporter, studied only]. A layered material has one mask (the default V has one, a cyberware part's), so it costs little beside the maps.
+A `Multilayer_Mask`'s layers are rebuilt by XF Studio's mask reader (`src/native/mlmask.ts`, PREV-190), to the images WolvenKit 9.0.1 exports. The layout is read from the resource [resource] and the reconstruction rules from WolvenKit's exporter at tag 9.0.1 (`WolvenKit.Modkit/RED4/Tools/MlmaskTools.cs`, `DecodeLayerBuffers`; `WolvenKit.Common/DDS/BlockCompression.cs`, `DecodeBC4Inner`) [source: studied, reimplemented]; that the engine samples a mask the same way is not established [hypothesis].
+
+| Where | What | Grade |
+|---|---|---|
+| `renderResourceBlob.renderResourceBlobPC` | a handle to a `rendRenderMultilayerMaskBlobPC`: `header` (`atlasWidth`, `atlasHeight`, `numLayers`, `maskWidth`, `maskHeight`, `maskWidthLow`, `maskHeightLow`, `maskTileSize`, `version`, `flags`), `atlasData` and `tilesData` (deferred buffers) | [resource] |
+| `atlasData` | a BC4 image of padded tiles: each `maskTileSize` texels with one texel of padding on every side, `maskTileSize + 2` apart | [resource, source] |
+| `tilesData` | little-endian 32-bit words: two per tile of the full-size grid (`maskWidth`×`maskHeight` in tiles of `maskTileSize`): the offset of the tile's declarations and a bit set of the layers it holds; then the same for a low-resolution grid (one tile per `maskWidth / maskWidthLow` full-size tiles); then the declarations. A layer's declaration is the word at the offset plus the number of lower layers the tile holds: its atlas tile (bits 0–9 across, 10–19 down) and how far its texels are scaled (bits 20–23 across, 24–27 down, as shifts) | [source, resource: the oracle below] |
+
+- A texel reads the full-size grid first and the low-resolution grid where the full-size one holds nothing for its layer; texels neither holds are 0.
+- A layer without any full-size tile is written at the low-resolution size, sampled nearest from the full-size image; the others at full size. So one mask's layers can differ in size (a hair clip mask: 4×4, then 128×128 twice).
+- The atlas is decoded by WolvenKit's own BC4 routine, not DirectXTex's (which its texture export uses): each level `(e0·(7−i) + e1·i) / 7` of the endpoints over 255 in single precision (or `/ 5`, with 0 and 1 for the last two indices when e0 ≤ e1), then times 255 and truncated.
+- WolvenKit writes each layer as grey RGBA in the stored row order (unlike its texture PNGs, not flipped); XF Studio writes grey RGB, the same texels.
+
+| Check | Result |
+|---|---|
+| Oracle (`tools/native-mask-oracle.ts --route`), every mask WolvenKit 9.0.1 had exported into the reference installation's caches | 15 distinct masks, all **texel-identical**: vanilla hair bands and clips, a CCXL hairstyle's 20-layer mask, a mod hair tie, garments (jeans with 2048² layers, shorts, a torn shirt, racing shoes, goggles, aviators), the personal link, eyes and earrings, including low-resolution-only layers [resource] |
+| Random masks against a per-texel transcription of WolvenKit's exporter (`tests/native-mask.test.ts`) | 300 masks of full, low-resolution and empty layers, identical [source] |
+| Time (one thread, the reader worked a tile at a time) | 0.5–27 ms for most masks; 73 ms for the goggles' 20 layers, 310 ms for the jeans' (six 2048² layers); a per-texel reading took 0.5 s and 2.1 s for those two [resource] |
+
+Masks are cached like textures, under the mask reader's identity (`NATIVE_MASK_IDENTITY`: its output version and the resource reader's).
 
 ## 11. Animation sets and rigs (`.anims`, `.rig`)
 
@@ -330,7 +349,7 @@ The root is `animFacialSetup` (version 8 on 2.31). Its properties decode generic
 3. Does the engine skip drawing a render chunk whose `renderMask` lacks `MCF_RenderInScene`? The resolver assumes so (the vanilla hair `*_shadow` meshes store only `MCF_RenderInShadows`), and an omitted mask is the class default, no flags (§6.5), so it applies there too; no runtime check yet.
 4. The meaning of the index CRC, and whether the engine checks the per-entry SHA-1. It is the extracted file's SHA-1 in game archives but not in most mod archives (§1.2), which suggests the engine does not check it [hypothesis].
 5. `curveData` encoding (needed for `.env` and animation-adjacent resources). Animation sets step around it (§11).
-6. `.mlmask` layers (§10.4), cloth parameters and the `.Material.json` materials file (§12). Does `platformMipBiasPC` alone decide how many mips the PC blob drops (§10.1)? Which LOD does the engine draw for the player at creator distance (the export takes `lodMask` 1 only), and does it read a `rendChunk` count of diffs whose mapping count is zero as none (§12.2, WolvenKit's reading)?
+6. Cloth parameters and the `.Material.json` materials file (§12); whether the engine samples a layer mask's tiles as WolvenKit's exporter rebuilds them (§10.4). Does `platformMipBiasPC` alone decide how many mips the PC blob drops (§10.1)? Which LOD does the engine draw for the player at creator distance (the export takes `lodMask` 1 only), and does it read a `rendChunk` count of diffs whose mapping count is zero as none (§12.2, WolvenKit's reading)?
 
 ## Sources
 

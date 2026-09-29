@@ -12,6 +12,7 @@ import { createBrowserCreatorDevice } from "./browser-cc-catalogue-device";
 import { createBrowserChoicePreviewDevice } from "./browser-choice-preview-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import { CharacterDetailActions } from "./character-detail-actions";
+import type { CharacterWarmStart } from "./character-warm-start";
 import { CharacterContextActions, initialBodyGender, type ContextHistory, type CreatorPort } from "./character-context-actions";
 import type { CoreBody } from "./render-detail";
 import { followCharacter } from "./character-follow";
@@ -86,6 +87,8 @@ export type HeadAttachmentPorts = {
   history?: ContextHistory;
   /** A plain notice for the person (the masculine head couldn't be prepared, so the feminine one shows). */
   notice?(text: string): void;
+  /** The page's warm start (character-warm-start.ts): the V's files read while the head loaded, and the request remembered for next time. */
+  warmStart?: Pick<CharacterWarmStart, "remember" | "files">;
 };
 
 export type AttachedHead = {
@@ -136,7 +139,7 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     // the default V, with the creator choices set on it. A save switch replaces them completely (CharacterDetailActions supersedes the
     // previous V); a changed choice on the same V keeps it on screen. It starts following once the preview services have restored the
     // workspace.
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene));
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     const services = createTrustedPreviewServices(ports.workspace, createBrowserScenePreviewPorts(scene, {
       setSurfaceControls: enabled => surface?.setEnabled(enabled),

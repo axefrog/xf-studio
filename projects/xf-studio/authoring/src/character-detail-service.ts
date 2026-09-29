@@ -596,11 +596,13 @@ type Gathered = { geometryAt: Map<PlannedComponent, Located>; textureAt: Map<str
   toolFailures: Set<string>; toolLabel: string | undefined;
   /** Where the time went, for the preparation's log line (PIPE-103): the first exports, the reads beside them, the layer maps after. */
   stages: string[] };
-type NativeCounts = { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number };
+type NativeCounts = { decoded: number; cached: number; fellBack: number; decodeMs: number; innerMs: number;
+  masks?: { decoded: number; cached: number; fellBack: number } };
 /** The native texture reader's counts of an exporter that has one (native-texture-export.ts), copied. */
 const nativeTextureCounts = (exporter: GameAssetExporter) => {
   const stats = (exporter as { nativeTextures?: NativeCounts }).nativeTextures;
-  return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs } : null;
+  return stats ? { decoded: stats.decoded, cached: stats.cached, fellBack: stats.fellBack, decodeMs: stats.decodeMs, innerMs: stats.innerMs,
+    masks: { decoded: stats.masks?.decoded ?? 0, cached: stats.masks?.cached ?? 0, fellBack: stats.masks?.fellBack ?? 0 } } : null;
 };
 /** The native mesh reader's counts of an exporter that has one (native-geometry-export.ts), copied. */
 const nativeGeometryCounts = (exporter: GameAssetExporter) => {
@@ -790,7 +792,10 @@ async function gatherParts(ctx: GatherContext, fresh: readonly PlannedComponent[
   const textures = nativeTextureCounts(ctx.exporter);
   if (textures && texturesBefore) {
     const decoded = textures.decoded - texturesBefore.decoded, cachedNative = textures.cached - texturesBefore.cached, fellBack = textures.fellBack - texturesBefore.fellBack;
-    if (decoded || cachedNative || fellBack) stages.push(`textures read natively: ${decoded} decoded in ${((textures.decodeMs - texturesBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit; WolvenKit exports ${((textures.innerMs - texturesBefore.innerMs) / 1000).toFixed(2)} s beside them`);
+    const masks = { decoded: textures.masks.decoded - texturesBefore.masks.decoded, cached: textures.masks.cached - texturesBefore.masks.cached,
+      fellBack: textures.masks.fellBack - texturesBefore.masks.fellBack };
+    const maskLine = masks.decoded || masks.cached || masks.fellBack ? `; layer masks: ${masks.decoded} decoded, ${masks.cached} cached, ${masks.fellBack} to WolvenKit` : "";
+    if (decoded || cachedNative || fellBack || maskLine) stages.push(`textures read natively: ${decoded} decoded in ${((textures.decodeMs - texturesBefore.decodeMs) / 1000).toFixed(2)} s, ${cachedNative} cached, ${fellBack} to WolvenKit${maskLine}; WolvenKit exports ${((textures.innerMs - texturesBefore.innerMs) / 1000).toFixed(2)} s beside them`);
   }
   const geometry = nativeGeometryCounts(ctx.exporter);
   if (geometry && geometryBefore) {
