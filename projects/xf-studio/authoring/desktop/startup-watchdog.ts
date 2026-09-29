@@ -42,3 +42,13 @@ export function blankWindowNotice(webView2: WebView2Status, logPath: string,
     buttons: ["Copy diagnostics", "Close"], action: "copy-diagnostics", diagnostics,
   };
 }
+
+/**
+ * Where a disposable UI-trial identity opens its window (agent-driven acceptance and measurement runs). With
+ * `XFS_TRIAL_WINDOW_OFFSCREEN=1` a trial's window is created off the shared screen, so it never appears over the
+ * person's work before a driver could move it; its WebView still renders there. The real app ignores the variable.
+ */
+export function trialWindowPosition(userData: string, env: Record<string, string | undefined>): { x: number; y: number } | null {
+  if (env.XFS_TRIAL_WINDOW_OFFSCREEN !== "1") return null;
+  return /[\\/]dev\.axefrog\.xf-studio-ui-trial-[a-z0-9]+([\\/]|$)/i.test(userData) ? { x: -9000, y: 0 } : null;
+}

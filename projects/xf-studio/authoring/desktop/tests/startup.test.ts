@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "nod
 import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { detectWebView2, parseRegVersion, WEBVIEW2_KEYS } from "../webview2";
-import { blankWindowNotice } from "../startup-watchdog";
+import { blankWindowNotice, trialWindowPosition } from "../startup-watchdog";
 import { createHostLog } from "../host-log";
 import { DesktopWorkspaceClose } from "../workspace-close";
 import { createDesktopServer } from "../server";
@@ -186,4 +186,18 @@ describe("a damaged or newer workspace never bricks the app", () => {
     await Bun.sleep(20);
     expect(closed).toBe(1);
   });
+});
+
+test("only a disposable UI-trial identity opens off-screen, and only when asked", () => {
+  const trial = String.raw`C:\Users\x\AppData\Local\dev.axefrog.xf-studio-ui-trial-abc12345\canary`;
+  const real = String.raw`C:\Users\x\AppData\Local\dev.axefrog.xf-studio\canary`;
+  expect(trialWindowPosition(trial, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toEqual({ x: -9000, y: 0 });
+  expect(trialWindowPosition(trial, {})).toBeNull();
+  expect(trialWindowPosition(real, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toBeNull();
+});
+
+test("the page's hand-written scripts parse (a stray quote in welcome copy once broke every desktop build)", () => {
+  const transpiler = new Bun.Transpiler({ loader: "js" });
+  for (const file of ["bootstrap.js", "boot-watchdog.js"])
+    expect(() => transpiler.transformSync(readFileSync(resolve(import.meta.dir, "..", file), "utf8"))).not.toThrow();
 });

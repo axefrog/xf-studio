@@ -9,7 +9,7 @@ import { DesktopWorkspaceClose, desktopFlushScript } from "./workspace-close";
 import { createHostLog } from "./host-log";
 import { detectWebView2, WEBVIEW2_DOWNLOAD_URL } from "./webview2";
 import { ensureWebView2 } from "./webview2-install";
-import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, MISSING_WEBVIEW2_TIMEOUT_MS } from "./startup-watchdog";
+import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, MISSING_WEBVIEW2_TIMEOUT_MS, trialWindowPosition } from "./startup-watchdog";
 
 // The packaged app has no console: startup facts and failures go to the structured
 // diagnostics log in the app's data folder, and the user never faces a silent blank window.
@@ -74,7 +74,7 @@ const origin = `http://127.0.0.1:${app.port}`;
 const window = new BrowserWindow({
   title: "XF Studio",
   url: app.url,
-  frame: { width: 1440, height: 900 },
+  frame: { width: 1440, height: 900, ...trialWindowPosition(Utils.paths.userData, process.env) },
   // The window only ever shows this app's own loopback page; downloads use its blob: URLs.
   // Electrobun rules: "^" blocks, "*" is a wildcard and the last matching rule wins.
   navigationRules: JSON.stringify(["^*", `${origin}/*`, `blob:${origin}/*`, "about:blank"]),
