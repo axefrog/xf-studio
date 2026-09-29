@@ -5,6 +5,7 @@ import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
+import { EYE_MAKEUP_MOD } from "../../mod-branding";
 
 type Mount = () => HTMLElement;
 const tabs: TabItem[] = [["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]]
@@ -248,9 +249,9 @@ const MOUNTS: Record<string, Mount> = {
     const more = (name: string) => button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
       onClick: event => openMenu([{ kind: "action", label: "Rename…", icon: "rename", run: () => {} }], event.currentTarget as Element, { label: `${name} options` }) });
     const narrow = h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds (narrow)", style: "width:200px" },
-      modLine({ name: "XF Eye Artistry Night Market", kind: "Eye makeup", action: more("XF Eye Artistry Night Market") }));
+      modLine({ name: `${EYE_MAKEUP_MOD.modName} Night Market`, kind: "Eye makeup", action: more(`${EYE_MAKEUP_MOD.modName} Night Market`) }));
     return stack({ gap: "normal" }, h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds" },
-      modLine({ name: "XF Eye Artistry", kind: "Eye makeup", action: more("XF Eye Artistry") })), narrow);
+      modLine({ name: EYE_MAKEUP_MOD.modName, kind: "Eye makeup", action: more(EYE_MAKEUP_MOD.modName) })), narrow);
   },
   "lib-record-list": () => {
     const saved = new RecordList({ label: "Saved collections" });
