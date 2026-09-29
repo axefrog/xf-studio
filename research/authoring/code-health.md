@@ -617,6 +617,8 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
+None since the last deep review.
+
 ## Subsystem register
 
 Subsystems already covered by a deep review, with the focus a later review should keep.
