@@ -38,11 +38,11 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 export async function readCoreDetail(fetcher: CoreDetailFetch = fetch, body: CoreBody = "female"): Promise<CoreDetail> {
   let response: Response;
   try { response = await fetcher(coreDetailUrl(body)); }
-  catch (error) { throw new HeadLoadError("preview_unreachable", "The 3D preview record could not be read.", { cause: error }); }
-  if (response.status === 404) throw new HeadLoadError("preview_unreachable", "The 3D preview hasn't been prepared from your game files yet.");
-  if (!response.ok) throw new HeadLoadError("preview_unreachable", "The 3D preview record could not be read.");
+  catch (error) { throw new HeadLoadError("preview_unreachable", "The 3D view record could not be read.", { cause: error }); }
+  if (response.status === 404) throw new HeadLoadError("preview_unreachable", "The 3D view hasn't been prepared from your game files yet.");
+  if (!response.ok) throw new HeadLoadError("preview_unreachable", "The 3D view record could not be read.");
   try { return parseCoreDetail(await response.json()); }
-  catch (error) { throw new HeadLoadError("preview_damaged", "The 3D preview record is damaged.", { cause: error }); }
+  catch (error) { throw new HeadLoadError("preview_damaged", "The 3D view record is damaged.", { cause: error }); }
 }
 
 async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch, body: CoreBody): Promise<ArrayBuffer> {
@@ -98,6 +98,6 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
     for (const texture of Object.values(textures)) texture?.dispose();
     gltf?.scene.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
     // Anything that fails once the files arrived intact (model parse, missing parts, textures) is a damaged preview.
-    throw error instanceof HeadLoadError ? error : new HeadLoadError("preview_damaged", (error as Error)?.message ?? "The 3D preview could not be read.", { cause: error });
+    throw error instanceof HeadLoadError ? error : new HeadLoadError("preview_damaged", (error as Error)?.message ?? "The 3D view could not be read.", { cause: error });
   }
 }

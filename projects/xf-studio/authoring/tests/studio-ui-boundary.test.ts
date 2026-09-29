@@ -31,7 +31,7 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout"]],
   // Saved layouts' pure reads: the library as shown (the first layout when none is stored), names and the automatic size switch.
   ["layout-library", ["activeLayout", "autoSwitchTarget", "layoutLibraryOf", "layoutNameProblem", "MAX_LAYOUT_NAME", "nextLayoutName"]],
-  ["mod-branding", ["EYE_MAKEUP_MOD"]],
+  ["mod-branding", ["EYE_MAKEUP_MOD", "MOD_NAME_HINT"]],
   // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
   ["character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],
   // A creator choice's maker group, the groups' shown order and the pooled "Other mods" heading (cc-panel.ts, pure over the projection).

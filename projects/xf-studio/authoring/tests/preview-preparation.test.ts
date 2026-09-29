@@ -91,7 +91,7 @@ test("the preparation card offers exactly one next step for each state", () => {
   expect(previewView(state({ phase: "ready" })).visible).toBe(false);
   expect(previewView(state({})).primary?.action).toBe("prepare");
   const preparing = previewView(state({ phase: "preparing", canPrepare: false, canCancel: true, progress: { index: 1, total: 5, label: "Checking" } }));
-  expect(preparing).toMatchObject({ title: "Preparing the 3D preview from your Cyberpunk 2077 files…", primary: { action: "cancel" }, step: "Step 2 of 5: Checking" });
+  expect(preparing).toMatchObject({ title: "Preparing the 3D view from your Cyberpunk 2077 files…", primary: { action: "cancel" }, step: "Step 2 of 5: Checking" });
   expect(preparing.progress).toBeCloseTo(0.3);
   expect(previewView(state({ phase: "needs-setup", needs: ["game", "wolvenkit"] }), "D:\\Games\\Cyberpunk 2077").primary?.action).toBe("use-game");
   expect(previewView(state({ phase: "needs-setup", needs: ["game"] })).primary?.action).toBe("setup");
@@ -104,7 +104,7 @@ test("the preparation card offers exactly one next step for each state", () => {
     phase, message: "WolvenKit message.", code: null, source: null, version: null, offer, runtime: null, progress: null, step: null, detected: null,
     canInstall: phase === "available", canCancel: false, ...patch });
   const needsTool = state({ phase: "needs-setup", needs: ["wolvenkit"], canPrepare: false });
-  expect(previewView(needsTool, null, wk("available"))).toMatchObject({ title: "The 3D preview needs WolvenKit",
+  expect(previewView(needsTool, null, wk("available"))).toMatchObject({ title: "The 3D view needs WolvenKit",
     primary: { action: "wolvenkit-consent" }, secondary: { action: "setup" } });
   expect(previewView(needsTool, null, wk("available", { detected: { path: "C:\\Tools\\WolvenKit.CLI.exe", version: "9.0.1" } })).secondary)
     .toEqual({ label: "Use WolvenKit 9.0.1 from this computer", action: "wolvenkit-use-detected" });

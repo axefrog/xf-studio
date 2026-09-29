@@ -41,7 +41,7 @@ describe("the short garment flags repair (mesh-export-repair.ts)", () => {
     const repair = repairMeshForExport(original)!;
     expect(JSON.stringify(original)).toBe(before);
     expect(garmentChunks(repair.document).map(chunk => chunk.garmentFlags.Bytes.length > 0)).toEqual([false, true, false, false]);
-    expect(repair.detail).toBe("its garment support data is shorter than its vertices in chunks 0, 2, so the exported copy leaves that data out (the preview doesn't read it)");
+    expect(repair.detail).toBe("its garment support data is shorter than its vertices in chunks 0, 2, so the exported copy leaves that data out (the 3D view doesn't read it)");
     // Everything else is the same document.
     const strip = (document: JsonObject) => { const copy = structuredClone(document); for (const chunk of garmentChunks(copy)) chunk.garmentFlags.Bytes = ""; return JSON.stringify(copy); };
     expect(strip(repair.document)).toBe(strip(original));

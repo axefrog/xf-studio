@@ -20,7 +20,7 @@ type Theme = "system" | "light" | "dark";
  * plate head), Saves (where the Save Explorer reads saves), Tools (WolvenKit), Appearance (theme, input hints, research tools) and
  * Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
  * made, through its own typed port (local settings, UI preferences, diagnostics). Opened from the header's Settings button, the command
- * palette ("Settings", "Game & tools", "Where are my saves?"), Help and every "Open Settings" next step (`rt.settings.open`).
+ * palette ("Settings", "Game folder and mod manager", "Where are my saves?"), Help and every "Open Settings" next step (`rt.settings.open`).
  */
 export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelController & { show(section?: SettingsSection): void } {
   const port = rt.port, appearance = context.appearance;

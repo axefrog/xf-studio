@@ -33,6 +33,8 @@ export type SliderWithValueOptions = {
   reset?: boolean;
   /** Keep a note line from the start (a reason or note that comes and goes). Off by default: a list says a shared reason once. */
   reserveNote?: boolean;
+  /** The unavailable reason is information, not a problem: the note line keeps the muted tone (UI-145, as Slider and Toggle). */
+  quietReason?: boolean;
   /** A short unit, used when a typed value carries it ("%", "°"); the readout's words come from `format`. */
   unit?: string;
   /** One line: short label, range, readout, reset (a pair's sides). */
@@ -63,7 +65,7 @@ export class SliderWithValue {
     const name = options.accessibleLabel ?? options.label;
     this.input = h("input", { id, class: "slider", type: "range", min: String(options.min), max: String(options.max), step: String(options.step),
       "aria-label": options.accessibleLabel, "aria-keyshortcuts": "Enter Delete" });
-    this.note = new NoteLine(options.reserveNote);
+    this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.readout = new ReadoutField({ label: name, parse: text => this.parse(text), onCommit: value => this.commitValue(this.snap(value)), returnFocus: () => this.input });
     this.resetButton = options.reset && options.defaultValue !== undefined
       ? iconButton({ label: `Reset ${name}`, icon: "reset", small: true, className: "slider-reset", onClick: () => { this.commitValue(options.defaultValue!); this.input.focus(); } })

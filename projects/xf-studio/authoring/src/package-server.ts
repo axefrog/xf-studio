@@ -95,19 +95,19 @@ export function localBuildIssue(tools: PackageTools): string | null {
     let valid = false;
     try { const stat = statSync(path); valid = kind === "file" ? stat.isFile() : stat.isDirectory(); } catch { /* Missing local tool. */ }
     if (!valid) return name === "WolvenKit"
-      ? "WolvenKit isn't set up yet. Let XF Studio download it (bun tools/setup-wolvenkit.ts), set its path in Local setup, or use the XFS_PACKAGE_WOLVENKIT server override."
-      : "Game input is unavailable. Set its path in Local setup or use the XFS_PACKAGE_GAMEPATH server override.";
+      ? "WolvenKit isn't set up yet. Let XF Studio download it (bun tools/setup-wolvenkit.ts), set its path in Settings › Game, or use the XFS_PACKAGE_WOLVENKIT server override."
+      : "Game input is unavailable. Set its path in Settings › Game or use the XFS_PACKAGE_GAMEPATH server override.";
   }
   for (const [name, path] of [["game executable", join(tools.gamepath, "bin", "x64", "Cyberpunk2077.exe")],
     ["game archive directory", join(tools.gamepath, "archive", "pc")]] as const) {
     try { if (name.endsWith("directory") ? statSync(path).isDirectory() : statSync(path).isFile()) continue; }
     catch { /* Missing game input. */ }
-    return `The configured ${name} is unavailable. Check the Cyberpunk 2077 folder in Local setup.`;
+    return `The configured ${name} is unavailable. Check the Cyberpunk 2077 folder in Settings › Game.`;
   }
   if (tools.bun.includes("/") || tools.bun.includes("\\")) { // A bare host PATH command is checked by spawn.
     let valid = false;
     try { valid = statSync(tools.bun).isFile(); } catch { /* Missing executable. */ }
-    if (!valid) return "The configured Bun executable is unavailable. Check Local setup.";
+    if (!valid) return "The configured Bun executable is unavailable. Check Settings › Game.";
   }
   return null;
 }
@@ -137,7 +137,7 @@ export function localPackageAdapter(options: { exporters: readonly FeatureExport
 }
 
 /** Why a Build can't start when the Local setup and its backup are unreadable (PIPE-94), in plain words. */
-export const SETUP_UNREADABLE_MESSAGE = "XF Studio couldn't read your Local setup, so it can't build mod files. Open Settings › Game, " +
+export const SETUP_UNREADABLE_MESSAGE = "XF Studio couldn't read your settings, so it can't build mod files. Open Settings › Game, " +
   "check your choices and save them again, then try once more. Your collection is unchanged.";
 /**
  * The Local setup a package request uses (PIPE-94), as the desktop host reads it: when the saved settings and their

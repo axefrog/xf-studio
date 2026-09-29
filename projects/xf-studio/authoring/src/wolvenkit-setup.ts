@@ -57,31 +57,31 @@ export type WolvenKitCard = {
 };
 
 /** Pure: the card for one WolvenKit state. Hidden when WolvenKit is ready. `setupPlace` names where paths are set. */
-export function wolvenKitCard(state: WolvenKitSetupState, setupPlace = "Build setup"): WolvenKitCard {
+export function wolvenKitCard(state: WolvenKitSetupState, setupPlace = "Settings"): WolvenKitCard {
   const card = (patch: Partial<WolvenKitCard> & Pick<WolvenKitCard, "title" | "body">): WolvenKitCard =>
-    ({ progress: null, step: null, primary: null, secondary: null, links: [], viewport: "The 3D preview needs WolvenKit.", visible: true, ...patch });
+    ({ progress: null, step: null, primary: null, secondary: null, links: [], viewport: "The 3D view needs WolvenKit.", visible: true, ...patch });
   const own = { label: "I already have WolvenKit", action: "setup" } as const;
   switch (state.phase) {
     case "ready": return card({ title: "", body: "", viewport: "", visible: false });
     case "available":
-      return card({ title: state.code === "wolvenkit_damaged" ? "WolvenKit needs repairing" : "The 3D preview needs WolvenKit", body: state.message,
+      return card({ title: state.code === "wolvenkit_damaged" ? "WolvenKit needs repairing" : "The 3D view needs WolvenKit", body: state.message,
         primary: { label: state.code === "wolvenkit_damaged" ? "Download WolvenKit again…" : "Set up WolvenKit…", action: "wolvenkit-consent" },
         secondary: state.detected ? { label: `Use WolvenKit ${state.detected.version} from this computer`, action: "wolvenkit-use-detected" } : own });
     case "downloading": {
       const progress = state.progress && state.progress.totalBytes > 0 ? Math.min(1, state.progress.receivedBytes / state.progress.totalBytes) : 0;
       return card({ title: `Downloading WolvenKit ${state.offer.version}…`, progress, step: state.step,
         body: `From ${state.offer.from}. You can keep designing on the UV map meanwhile.`,
-        primary: { label: "Cancel", action: "wolvenkit-cancel" }, viewport: "Downloading WolvenKit for the 3D preview…" });
+        primary: { label: "Cancel", action: "wolvenkit-cancel" }, viewport: "Downloading WolvenKit for the 3D view…" });
     }
     case "installing":
       return card({ title: `Setting up WolvenKit ${state.offer.version}…`, body: "Checking the download against the official release and unpacking it.",
-        progress: 1, step: state.step, primary: { label: "Cancel", action: "wolvenkit-cancel" }, viewport: "Setting up WolvenKit for the 3D preview…" });
+        progress: 1, step: state.step, primary: { label: "Cancel", action: "wolvenkit-cancel" }, viewport: "Setting up WolvenKit for the 3D view…" });
     case "needs-runtime": {
       const name = state.runtime?.name ?? "Microsoft .NET";
       return card({ title: `WolvenKit needs Microsoft ${name.replace(/ Runtime$/, "")}`,
         body: `${state.message} Your browser downloads Microsoft's installer (about 30 MB); run it and allow it when Windows asks.`,
         primary: { label: `Get ${name} from Microsoft`, action: "runtime-install" }, secondary: { label: "Check again", action: "runtime-recheck" },
-        links: [{ label: "Microsoft's .NET download page", link: "runtime-page" }], viewport: `The 3D preview needs Microsoft's ${name}.` });
+        links: [{ label: "Microsoft's .NET download page", link: "runtime-page" }], viewport: `The 3D view needs Microsoft's ${name}.` });
     }
     case "failed":
       return card({ title: state.code === "wolvenkit_cancelled" ? "WolvenKit wasn't downloaded" : "WolvenKit couldn't be set up", body: state.message,
@@ -89,7 +89,7 @@ export function wolvenKitCard(state: WolvenKitSetupState, setupPlace = "Build se
     case "custom-missing":
       return card({ title: "WolvenKit can't be found", body: state.message, primary: { label: `Open ${setupPlace}`, action: "setup" } });
     case "unsupported":
-      return card({ title: "The 3D preview needs WolvenKit", body: state.message, primary: { label: `Open ${setupPlace}`, action: "setup" } });
+      return card({ title: "The 3D view needs WolvenKit", body: state.message, primary: { label: `Open ${setupPlace}`, action: "setup" } });
   }
 }
 
@@ -110,8 +110,8 @@ export function wolvenKitConsent(state: WolvenKitSetupState): WolvenKitConsent {
     title: `Download WolvenKit ${offer.version}?`,
     intro: "XF Studio uses WolvenKit to read your Cyberpunk 2077 files. It reads them only; nothing in your game changes.",
     facts: [
-      { label: "What it is", value: `WolvenKit CLI ${offer.version}, the free, open-source modding tool made by ${offer.publisher}. It isn't part of XF Studio.` },
-      { label: "Why", value: `It builds the 3D head preview from your own game files and packs your ${EYE_MAKEUP_MOD.modName} mod files.` },
+      { label: "What it is", value: `WolvenKit ${offer.version}, the free, open-source modding tool made by ${offer.publisher}. It isn't part of XF Studio.` },
+      { label: "Why", value: `It builds the 3D view from your own game files and packs your ${EYE_MAKEUP_MOD.modName} mod files.` },
       { label: "Size", value: `${offer.downloadSize} to download, ${offer.installedSize} once unpacked.` },
       { label: "From", value: `${offer.from}. XF Studio checks the download against the release's published fingerprint before using it.` },
       { label: "Where it goes", value: "XF Studio's own data folder. Nothing is installed in Windows or in your game." },

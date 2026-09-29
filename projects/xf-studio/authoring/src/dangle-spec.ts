@@ -158,7 +158,7 @@ export function compileDangleSpec(rig: JsonObject, graph: JsonObject | null, pat
   const stored = asArray(rig.referencePoseMS);
   const reference = stored.length === names.length ? stored.map(value => transform(value).t) : composed;
   if (reference.some(t => t.slice(0, 3).some(x => Math.abs(x) > MAX_TRANSLATION))) throw new DangleSpecError(`The rig's reference pose reaches more than ${MAX_TRANSLATION} m away.`);
-  if (scaled) notes.push("The rig scales some of its joints; the preview simulates them unscaled.");
+  if (scaled) notes.push("The rig scales some of its joints; the 3D view simulates them unscaled.");
   const spec: DangleSpec = { schema: DANGLE_SPEC, rig: paths.rig, graph: paths.graph, joints, reference, simulation: null, notes };
   if (!graph) { notes.push("Its animation graph couldn't be read, so it hangs still."); return spec; }
   try { spec.simulation = readSimulation(graph, names); }
@@ -215,7 +215,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
   const container = isObject(simulation.particlesContainer) ? simulation.particlesContainer : {};
   const rawParticles = asArray(container.particles).map(item => scope.data(item) ?? (isObject(item) ? item : null));
   if (!rawParticles.length) throw new Unsupported("Its simulation has no particles, so it hangs still.");
-  if (rawParticles.length > DANGLE_LIMITS.particles) throw new Unsupported("Its simulation has more particles than the preview runs, so it hangs still.");
+  if (rawParticles.length > DANGLE_LIMITS.particles) throw new Unsupported("Its simulation has more particles than the 3D view runs, so it hangs still.");
   const particles: DangleParticle[] = rawParticles.map(item => {
     if (!item) throw new Unsupported("Its simulation has a particle XF Studio can't read, so it hangs still.");
     const projection = member(item.projectionType, PARTICLE_PROJECTION, PROJECTIONS, "shortest");
@@ -244,7 +244,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
   const groups = new Set<JsonObject>();
   let visits = 0;
   const visit = (value: Json | undefined, depth: number) => {
-    if (++visits > DANGLE_LIMITS.constraintVisits) throw new Unsupported("Its simulation lists more constraints than the preview runs, so it hangs still.");
+    if (++visits > DANGLE_LIMITS.constraintVisits) throw new Unsupported("Its simulation lists more constraints than the 3D view runs, so it hangs still.");
     const constraint = scope.data(value) ?? (isObject(value) && typeof value.$type === "string" ? value : null);
     if (!constraint) return;
     if (depth > 8) throw new Unsupported("Its simulation nests its constraints too deeply, so it hangs still.");
@@ -255,7 +255,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
       for (const inner of asArray(constraint.innerConstraints)) visit(inner, depth + 1);
       return;
     }
-    if (constraints.length >= DANGLE_LIMITS.constraints) throw new Unsupported("Its simulation has more constraints than the preview runs, so it hangs still.");
+    if (constraints.length >= DANGLE_LIMITS.constraints) throw new Unsupported("Its simulation has more constraints than the 3D view runs, so it hangs still.");
     if (type === "animDyngConstraintLink") {
       const kind = member(constraint.linkType, LINK_TYPES, LINK_KINDS, "fixed");
       if (kind === null) throw new Unsupported("Its simulation names a link type XF Studio doesn't know, so it hangs still.");
@@ -283,7 +283,7 @@ function readSimulation(graph: JsonObject, names: readonly string[]): DangleSimu
   visit(simulation.dyngConstraint, 0);
 
   const rawShapes = asArray(simulation.collisionRoundedShapes).map(item => scope.data(item) ?? (isObject(item) ? item : null));
-  if (rawShapes.length > DANGLE_LIMITS.shapes) throw new Unsupported("Its simulation has more collision shapes than the preview runs, so it hangs still.");
+  if (rawShapes.length > DANGLE_LIMITS.shapes) throw new Unsupported("Its simulation has more collision shapes than the 3D view runs, so it hangs still.");
   const shapes: DangleShape[] = rawShapes.map(shape => {
     if (!shape) throw new Unsupported("Its simulation has a collision shape XF Studio can't read, so it hangs still.");
     const extents: Vec3 = [num(shape.xBoxExtent), num(shape.yBoxExtent), num(shape.zBoxExtent)];

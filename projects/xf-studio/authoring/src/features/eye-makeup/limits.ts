@@ -60,7 +60,7 @@ export const EYE_MAKEUP_LIMITS: Partial<Record<EyeMakeupAction["kind"], Limits>>
   "pigment.edit": withLayer((layer, variant, base) => variant === "strength-blend" && layer.strength.mode !== "smooth-boundary"
     ? { ...base, value: { ...base.value, requires: { reason: "Turn on smooth point gradients first." } } } : base),
   "softness.edit": withLayer((layer, variant, base) => variant === "point-softness" && layer.softness.mode !== "boundary"
-    ? { ...base, value: { ...base.value, requires: { reason: "Enable point edge softness before editing an individual edge." } } } : base),
+    ? { ...base, value: { ...base.value, requires: { reason: "Turn on Per-point edge softness before editing one point's edge." } } } : base),
 };
 
 /** Removing a point, a warp control or a layer, or resetting a layer, takes layer content away (Undo brings it back). */

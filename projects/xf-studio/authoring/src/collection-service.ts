@@ -9,7 +9,7 @@ import { COLLECTION_2, type Look, type LookCollection } from "./platform/api";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction } from "./package-action";
-import { describePackageBuild, describePackageCheck } from "./package-filter";
+import { packageBuildLine, packageCheckLine } from "./package-filter";
 import { refusal, type Capability, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
 import { copyPackagePlan } from "./platform/core/package-plan";
 
@@ -460,11 +460,11 @@ export class CollectionService {
           if (request.action === "check") {
             const checked = response as PackageCheckResult;
             result = { kind: "packageCheck", result: checked };
-            message = describePackageCheck(checked);
+            message = packageCheckLine(checked);
           } else {
             const built = response as PackageBuildResult;
             result = { kind: "packageBuild", result: built };
-            message = describePackageBuild(built);
+            message = packageBuildLine(built);
           }
           break;
         }

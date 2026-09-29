@@ -101,6 +101,6 @@ export function assessPreviewQuality(
   if (!Number.isSafeInteger(budgetBytes) || budgetBytes < 0)
     return { ...result, code: "limit", error: "The generated-texture memory budget is invalid." };
   if (result.estimatedBytes > budgetBytes)
-    return { ...result, code: "limit", error: `This preview needs about ${(result.estimatedBytes / 1024 ** 2).toFixed(0)} MiB of generated textures, above the ${(budgetBytes / 1024 ** 2).toFixed(0)} MiB budget. Choose a smaller preview size or disable layers.` };
+    return { ...result, code: "limit", error: `This size needs about ${Math.ceil(result.estimatedBytes / 1e6)} MB for the makeup textures, more than the ${Math.floor(budgetBytes / 1e6)} MB set aside. Choose a smaller size or hide some layers.` };
   return { ...result, accepted: true };
 }

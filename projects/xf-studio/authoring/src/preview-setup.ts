@@ -112,14 +112,14 @@ export type PreviewSetupPort = {
 };
 
 const HEAD_FAILURES: Record<HeadLoadFailureCode, { message: string; next: "retry" | "prepare-again" }> = {
-  webgl_unavailable: { next: "retry", message: "The 3D preview needs WebGL 2, which isn't available in this window. Update your graphics driver, " +
+  webgl_unavailable: { next: "retry", message: "The 3D view needs WebGL 2, which isn't available in this window. Update your graphics driver, " +
     "or if you're using Remote Desktop, open XF Studio on the computer itself. The UV editor, library and Check keep working." },
-  preview_damaged: { next: "prepare-again", message: "The prepared 3D preview files are damaged. Prepare them again from your Cyberpunk 2077 files; it usually takes under a minute." },
-  preview_unreachable: { next: "retry", message: "The 3D preview files couldn't be loaded just now. Try again." },
+  preview_damaged: { next: "prepare-again", message: "The prepared 3D view files are damaged. Prepare them again from your Cyberpunk 2077 files; it usually takes under a minute." },
+  preview_unreachable: { next: "retry", message: "The 3D view files couldn't be loaded just now. Try again." },
   body_unavailable: { next: "retry", message: "The masculine V's head couldn't be prepared from your Cyberpunk 2077 files. Try again." },
-  head_load_failed: { next: "retry", message: "The 3D preview couldn't be loaded. Try again." },
+  head_load_failed: { next: "retry", message: "The 3D view couldn't be loaded. Try again." },
 };
-const REPEATED_FAILURE = "The 3D preview still couldn't be loaded. Prepare it again from your Cyberpunk 2077 files.";
+const REPEATED_FAILURE = "The 3D view still couldn't be loaded. Prepare it again from your Cyberpunk 2077 files.";
 const BUSY = "XF Studio is still working on the last step.";
 /** Whether two Windows folder paths name the same folder (case, slashes and a trailing separator aside). */
 const folderKey = (path: string) => path.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
@@ -212,13 +212,13 @@ export class PreviewSetupActions {
     switch (action.kind) {
       case "previewSetup.show": {
         const card = this.snapshot().card;
-        if (this.head.phase === "ready") return { available: false, reason: "The 3D preview is ready." };
-        if (card.open) return { available: false, reason: "The 3D preview setup is already showing." };
-        return card.title ? { available: true } : { available: false, reason: "The 3D preview state is still loading." };
+        if (this.head.phase === "ready") return { available: false, reason: "The 3D view is ready." };
+        if (card.open) return { available: false, reason: "The 3D view setup is already showing." };
+        return card.title ? { available: true } : { available: false, reason: "The 3D view state is still loading." };
       }
       case "previewSetup.dismiss": {
         const card = this.snapshot().card;
-        return !card.open ? { available: false, reason: "The 3D preview setup isn't showing." }
+        return !card.open ? { available: false, reason: "The 3D view setup isn't showing." }
           : card.canDismiss ? { available: true } : { available: false, reason: "Cancel the running step first." };
       }
       case "previewSetup.refresh": case "previewSetup.openSetup": case "previewSetup.recheckRuntime": return { available: true };
@@ -230,7 +230,7 @@ export class PreviewSetupActions {
       case "previewSetup.cancel": return preparation.capability({ kind: "preview.cancel" });
       case "previewSetup.prepareAgain":
         // Only for a head that isn't showing: preparing again under a loaded head would load it twice.
-        return this.head.phase === "ready" || this.head.phase === "loading" ? { available: false, reason: "The 3D preview is already showing." }
+        return this.head.phase === "ready" || this.head.phase === "loading" ? { available: false, reason: "The 3D view is already showing." }
           : preparation.capability({ kind: "preview.rebuild" });
       case "previewSetup.useDetectedGame":
         return this.detectedGame ? { available: true } : { available: false, reason: "No Cyberpunk 2077 folder was found on this computer." };
@@ -323,7 +323,7 @@ export class PreviewSetupActions {
   }
   private refreshOutcome(): PreviewSetupOutcome {
     const contact = this.port.preparation.connection();
-    return contact.failures ? { ok: false, message: contact.message ?? "XF Studio couldn't reach its 3D preview service." } : { ok: true };
+    return contact.failures ? { ok: false, message: contact.message ?? "XF Studio couldn't reach its 3D view service." } : { ok: true };
   }
   private async maybeStart() {
     if (!this.started) return;
@@ -469,10 +469,10 @@ export class PreviewSetupActions {
       const contact = this.port.preparation.connection();
       return contact.failures && !contact.retrying
         ? head("unavailable", contact.message ?? NO_3D_PREVIEW_IN_ALPHA, { label: "Try again", action: { kind: "previewSetup.refresh" } })
-        : head("checking", "Checking the 3D preview…");
+        : head("checking", "Checking the 3D view…");
     }
     if (state.phase === "ready") return head("loading", "Loading the 3D head…");
-    const show: PreviewSetupButton = { label: "Set up 3D preview", action: { kind: "previewSetup.show" } };
+    const show: PreviewSetupButton = { label: "Set up 3D view", action: { kind: "previewSetup.show" } };
     if (this.working(state, wolvenKit))
       return head("preparing", view.viewport, card.open ? null : { label: "Show progress", action: { kind: "previewSetup.show" } }, view.progress);
     if (state.phase === "failed" && state.code !== "preview_cancelled")
@@ -514,7 +514,7 @@ function cardAction(action: PreviewCardAction, wolvenKit: WolvenKitSetupState | 
 
 /** Plain wording for lost contact with the host's preview service. */
 export function contactNotice(contact: HostConnection): string {
-  if (!contact.retrying) return contact.message ?? "XF Studio couldn't reach its 3D preview service. Try again.";
-  return contact.failures > 1 ? `XF Studio lost contact with its 3D preview service. Still trying (attempt ${contact.failures})…`
-    : "XF Studio lost contact with its 3D preview service. Trying again…";
+  if (!contact.retrying) return contact.message ?? "XF Studio couldn't reach its 3D view service. Try again.";
+  return contact.failures > 1 ? `XF Studio lost contact with its 3D view service. Still trying (attempt ${contact.failures})…`
+    : "XF Studio lost contact with its 3D view service. Trying again…";
 }

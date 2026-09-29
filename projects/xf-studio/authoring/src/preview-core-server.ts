@@ -15,7 +15,7 @@ export function createPreviewCoreHandler(host: PreviewCoreHost, options: { trust
     const url = new URL(request.url);
     const origin = request.headers.get("Origin");
     if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin))
-      return json({ code: "forbidden", error: "Use the local studio to prepare the 3D preview." }, 403);
+      return json({ code: "forbidden", error: "Use the local studio to prepare the 3D view." }, 403);
     if (request.method === "GET") {
       const body = url.searchParams.get("body") ?? "female";
       if (!isBody(body)) return json({ code: "invalid", error: "Choose the female or male head." }, 400);
@@ -24,7 +24,7 @@ export function createPreviewCoreHandler(host: PreviewCoreHost, options: { trust
     if (request.method !== "POST") return json({ code: "method", error: "Method not allowed." }, 405);
     const trusted = options.trustedOrigin?.(request) ?? origin === url.origin;
     if (!trusted || request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
-      return json({ code: "forbidden", error: "Use the local studio to prepare the 3D preview." }, 403);
+      return json({ code: "forbidden", error: "Use the local studio to prepare the 3D view." }, 403);
     let body: unknown;
     try {
       const text = await request.text();

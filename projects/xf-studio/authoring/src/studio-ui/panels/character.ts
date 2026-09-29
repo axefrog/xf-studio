@@ -666,7 +666,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
   function updateHeadings(frame: Frame) {
     const preview = frame.preview.preview, clothing = frame.preview.character?.clothing;
     const state: CharacterToggleState = { preview: preview ?? null, clothing: clothing ? { state: clothing.state } : null };
-    const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "This works once the 3D preview is ready.";
+    const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "This works once the 3D view is ready.";
     const paint = (heading: Heading) => {
       const help: string[] = [];
       for (const control of heading.toggles) {
@@ -728,7 +728,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       const panel = port.authoring.characterPanel(), view = port.authoring.characterView();
       // The V and its source.
       const origin = context?.origin;
-      setText(source, !context ? "Your V appears once the 3D preview is ready." : origin?.kind === "save" ? "From your save" + (saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : "")
+      setText(source, !context ? "Your V appears once the 3D view is ready." : origin?.kind === "save" ? "From your save" + (saved.gameVersion ? ` · game ${(saved.gameVersion / 1000).toFixed(2)}` : "")
         : origin?.kind === "preset" ? `From the preset “${origin.name ?? "Untitled"}”`
         : `The creator's default ${context.bodyGender === "male" ? "masculine" : "feminine"} V`);
       applyCapability(loadSave, port.files.capability({ kind: "savedV.import" }));
@@ -787,7 +787,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       // Clothing.
       const clothing = context?.clothing;
       clothingState.setOptions(clothing?.states ?? []);
-      clothingState.update(clothing?.state, undefined, clothing ? {} : { disabled: true, reason: "Your V appears once the 3D preview is ready." });
+      clothingState.update(clothing?.state, undefined, clothing ? {} : { disabled: true, reason: "Your V appears once the 3D view is ready." });
       // The switches follow the areas the save dresses (built once per area, so a change never rebuilds them).
       for (const { area, label } of clothing?.areas ?? []) if (!areaToggles.has(area)) {
         const toggle = new Toggle({ label, onChange: shown => dispatch({ kind: "character.setClothingArea", area, shown }) });
@@ -814,12 +814,13 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       // The shown eye shape is the preview's own state; the view keeps no default of its own (UI-93).
       eyeShape.setOptions(shapes.map(choice => ({ value: String(choice.index), label: String(Number(choice.number)), name: shapeLabel(choice.index) })));
       eyeShape.update(preview ? String(preview.eyeShape) : undefined, undefined, !preview || !shapes.length
-        ? { disabled: true, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "Preview is still loading.") } : {});
-      const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "These work once the 3D preview is ready.";
+        ? { disabled: true, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ?? (preview ? "This head has no eye shapes." : "The 3D view is still loading.") } : {});
+      const loading = (frame.viewport.head.error ?? frame.viewport.head.message) ?? "These work once the 3D view is ready.";
       const overriding = saved.suggestedEyeShape !== undefined && preview && saved.suggestedEyeShape !== preview.eyeShape
         ? `Your V's own is ${shapeLabel(saved.suggestedEyeShape)}; this changes the 3D view only.` : "";
-      // Before the preview is ready this line says why the section waits, once (UI-90).
-      setText(eyeNote, !preview ? loading : overriding);
+      // Before the 3D view is ready the panel's Your V line already says why everything waits: the eye shape's reason stays in its
+      // tip, and this line says nothing (one place per panel, release-readiness-audit.md C-17).
+      setText(eyeNote, !preview ? "" : overriding);
       // The game's own nudity setting, as the viewer chooses; off is the game's censored look (knowledge/body-rendering.md §3).
       const uncensoredOn = preview?.uncensored === true, uncensoredAllowed = port.authoring.capability({ kind: "preview.setUncensored", enabled: !uncensoredOn });
       uncensored.update(!!preview && uncensoredOn, { disabled: !preview || !uncensoredAllowed.available, reason: uncensoredAllowed.reason ?? loading });
@@ -841,7 +842,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         setText(detailsCount, notShown ? `${notShown} not shown` : "");
         detailsBody.replaceChildren(propertyList([
           ...detailRows.rows.map(row => ({ term: row.term, value: value(row.value, row.term, row.note) })),
-          ...(detailRows.limits.length ? [{ term: "Limits", value: value(`${detailRows.limits.length} to know`, "the preview's limits", detailRows.limits) }] : []),
+          ...(detailRows.limits.length ? [{ term: "Limits", value: value(`${detailRows.limits.length} to know`, "the 3D view's limits", detailRows.limits) }] : []),
         ], { label: "Your V's details in the 3D view", className: "cc-detail-list" }), ...(detailRows.message ? [note(detailRows.message)] : []));
       }
     },

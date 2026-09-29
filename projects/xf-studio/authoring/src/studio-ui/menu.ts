@@ -208,6 +208,8 @@ export type ValueOption = { label: string; checked: boolean; help?: string };
 export function openValuePopover(field: ValueField, anchor: MenuAnchor, options: {
   title: string; apply: string; validate?(value: string | number): Capability; commit(value: string | number, options: boolean[]): void;
   options?: readonly ValueOption[];
+  /** What the value is used for, muted on the note line while the value is accepted; a refusal takes its place (UI-143). */
+  hint?: string;
 }) {
   closeMenus(false);
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -231,7 +233,8 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   const check = () => {
     const result = options.validate?.(read()) ?? { available: true };
     applyButton.disabled = !result.available;
-    note.textContent = result.available ? "" : result.reason ?? "This value is not accepted.";
+    note.textContent = result.available ? options.hint ?? "" : result.reason ?? "This value is not accepted.";
+    note.classList.toggle("hint", result.available);
     if (readout && field.kind === "range") readout.textContent = field.format(Number(input.value));
     return result.available;
   };

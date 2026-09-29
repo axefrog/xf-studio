@@ -95,7 +95,7 @@ export class CollectionSession {
    * becomes the newest in the queue.
    */
   undoOpen(draft?: string) {
-    if (!this.state.previous) throw Error("No previous collection draft.");
+    if (!this.state.previous) throw Error("No previous draft.");
     const { previous, older, ...current } = this.snapshot();
     if (draft !== undefined) {
       const queue = [previous!, ...(older ?? [])], index = queue.findIndex(entry => entry.collection.id === draft);

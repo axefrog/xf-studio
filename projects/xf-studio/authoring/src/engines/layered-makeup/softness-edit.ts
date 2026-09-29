@@ -23,7 +23,7 @@ export function editSoftness(layer: Layer, command: SoftnessCommand): Layer {
     return next;
   }
   if (command.kind !== "point-softness") throw Error("Unknown edge softness action.");
-  if (layer.softness.mode !== "boundary") throw Error("Enable point edge softness before editing an individual edge.");
+  if (layer.softness.mode !== "boundary") throw Error("Turn on Per-point edge softness before editing one point's edge.");
   if (!Number.isInteger(command.index) || !next.points[command.index]) throw Error("That control point no longer exists.");
   next.points[command.index].feather = command.value;
   return next;

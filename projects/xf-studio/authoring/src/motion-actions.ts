@@ -183,7 +183,7 @@ export class MotionActions {
     if (action.kind === "motion.setIdleClip" && !this.known(action.clip))
       return refusal("invalid_value", "That idle isn't one of the game's idles prepared on this computer.");
     if (action.kind === "motion.setPaused" && !this.snapshot().idle)
-      return refusal("invalid_value", "Enable the game idle before pausing it.");
+      return refusal("invalid_value", "Play the game idle before pausing it.");
     const blinking = action.kind === "motion.setBlink" || action.kind === "motion.playBlink";
     if (blinking && !this.port.blink.available)
       return refusal("asset_unavailable", this.blinkError()!);

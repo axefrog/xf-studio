@@ -15,7 +15,7 @@ export const WHATS_NEW_TOUR_ID = "whats-new-0.1.0-beta.1";
 export const TOURS: readonly Tour[] = [
   {
     id: ONBOARDING_TOUR_ID, audience: "onboarding", title: "Getting started",
-    summary: "A two-minute look at layers, drawing, the head view, colour and finish, your library and making the mod.",
+    summary: "A two-minute look at layers, drawing, the 3D view, colour and finish, your library and making the mod.",
     steps: [
       { anchor: "layers.add", content: { title: "Looks are made of layers",
         body: "Each layer is one shape of makeup with its own colour and finish. Layers stack like real makeup: the top of the list sits in front.\n\nStart by adding a layer, or use one that's already there." },
@@ -25,7 +25,7 @@ export const TOURS: readonly Tour[] = [
         body: "This flat map is where you shape the selected layer.\n\n- Drag a point to reshape it; drag inside the shape to move it.\n- Double-click the outline to add a point.\n- Hold **Shift** and drag to rotate, or Shift-wheel to scale.\n- The wheel zooms and right-drag pans. [[key:uv.fit]] fits the shape.\n\nTry moving a point. [[key:shell.undo]] takes any change back." },
         advanceWhen: { event: "recipe.edited" } },
       { anchor: "head.view", content: { title: "See it on V's head",
-        body: "Your changes appear on the 3D head as you work. Drag to turn the view, use the wheel to zoom and right-drag to pan. [[key:head.front]] returns to the front view.\n\nIf the 3D preview isn't set up yet, this pane shows the one next step. The UV map works without it." },
+        body: "Your changes appear on the 3D head as you work. Drag to turn the view, use the wheel to zoom and right-drag to pan. [[key:head.front]] returns to the front view.\n\nIf the 3D view isn't set up yet, this pane shows the one next step. The UV map works without it." },
         buttons: [{ label: "Show the front view", action: { kind: "studio", action: { kind: "camera.front" } } }] },
       { anchor: "finish.picker", content: { title: "Choose a colour and a finish",
         body: `Pick the layer's colour, then its finish. ${FINISH_MOD_TOKEN}; the picker groups the others by how far they can go.` },

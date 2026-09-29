@@ -72,7 +72,7 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     const state = install.snapshot(), plan = state.plans[product], busy = state.busy?.product === product ? state.busy.kind : null;
     const target = plan?.route === "mo2" ? "Mod Organizer 2" : "your game folder";
     setText(title, plan ? `Add “${plan.modName}” to ${target}?` : "Add your mod");
-    setText(where, plan ? `${plan.replacing ? "Updates" : "Adds"} ${plan.modName} in ${plan.place}. Nothing is added until you choose ${plan.route === "mo2" ? "Add to Mod Organizer 2" : "Add to the game folder"}.`
+    setText(where, plan ? `${plan.replacing ? "Updates" : "Adds"} “${plan.modName}” in ${plan.place}. Nothing is added until you choose ${plan.route === "mo2" ? "Add to Mod Organizer 2" : "Add to the game folder"}.`
       : busy === "modInstall.review" ? "Checking where your mod would go…" : "");
     const key = JSON.stringify([plan?.changes, plan?.notes]);
     if (changes.dataset.key !== key) {

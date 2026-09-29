@@ -70,14 +70,13 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   }
 
   let shape = "", lastSaid = "";
-  const rows = new Map<string, { box: HTMLInputElement; size: HTMLElement; reason: HTMLElement }>();
-  const groupSizes = new Map<string, HTMLElement>();
+  // No byte size on each part or group (release-readiness-audit.md C-13): what a part holds is its preview; the report's total, against
+  // its limit, is said once under the list.
+  const rows = new Map<string, { box: HTMLInputElement; reason: HTMLElement }>();
   let confirm: HTMLInputElement | null = null;
   function build(report: ReportState) {
-    rows.clear(); groupSizes.clear(); confirm = null;
+    rows.clear(); confirm = null;
     groups.replaceChildren(...report.groups.map((group, index) => {
-      const size = h("span", { class: "report-size" });
-      groupSizes.set(group.id, size);
       const optional = group.id === "optional";
       const hasModFiles = group.items.some(item => item.modFiles);
       if (hasModFiles) {
@@ -85,7 +84,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
         confirm.addEventListener("change", () => void dispatch({ kind: "diagnostics.confirmSharing", confirmed: confirm!.checked }));
       }
       return h("details", { class: "report-group", open: index < 2 || optional ? true : undefined },
-        h("summary", {}, h("span", { class: "report-group-title", text: group.label }), size),
+        h("summary", {}, h("span", { class: "report-group-title", text: group.label })),
         h("p", { class: "muted small", text: group.detail }),
         hasModFiles ? h("div", { class: "report-warning", role: "note" }, icon("warning"), h("div", {},
           h("p", { text: SHARING_WARNING }),
@@ -99,8 +98,8 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
       const result = await dispatch({ kind: "diagnostics.setIncluded", item: item.id, included: box.checked });
       if (!result.ok) { box.checked = !box.checked; setText(status, result.message); }
     });
-    const size = h("span", { class: "report-size" }), reason = h("small", { class: "report-reason" });
-    rows.set(item.id, { box, size, reason });
+    const reason = h("small", { class: "report-reason" });
+    rows.set(item.id, { box, reason });
     const text = h("pre", { text: item.preview });
     // A long part shows its start; the whole of it loads on request (DIAG-13).
     const all = item.partial ? button({ label: "Show all of it", small: true, variant: "quiet", onClick: async () => {
@@ -110,7 +109,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
       setText(text, full); all!.remove();
     } }) : null;
     return h("li", { class: "report-item" },
-      h("label", { class: "report-item-head", for: box.id }, box, h("span", { class: "report-item-label", text: item.label }), size),
+      h("label", { class: "report-item-head", for: box.id }, box, h("span", { class: "report-item-label", text: item.label })),
       h("small", { class: "muted", text: item.detail }), reason,
       item.preview ? h("details", { class: "report-preview" }, h("summary", { text: "Show what's in it" }), text, all) : null);
   }
@@ -131,14 +130,12 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
       : report.busy === "copying" ? "Copying…" : report.busy === "opening" ? "Opening the issue page…" : report.message ?? "";
     if (said !== lastSaid) { lastSaid = said; setText(status, said); }
     for (const group of report.groups) {
-      setText(groupSizes.get(group.id)!, group.size);
       for (const item of group.items) {
         const found = rows.get(item.id);
         if (!found) continue;
         found.box.checked = item.included;
         const wanted = port.diagnostics.capability({ kind: "diagnostics.setIncluded", item: item.id, included: !item.included });
         setDisabled(found.box, !item.included && !wanted.available, wanted.reason);
-        setText(found.size, item.size);
         setText(found.reason, !item.included && !wanted.available ? wanted.reason ?? "" : "");
       }
     }

@@ -36,3 +36,28 @@ test("setOptions rebuilds only a changed list, keeps focus on the same choice, a
   expect(buttons().some(b => b.disabled)).toBe(false);
   expect(note.hidden).toBe(false); // reserved: the line keeps its place when empty
 });
+
+test("a quiet reason keeps the note line's muted tone; an ordinary one takes the warning tone (UI-145)", async () => {
+  const { Segmented } = await import("../src/studio-ui/controls");
+  const make = (quietReason: boolean) => new Segmented<string>({ label: "Curve", reserveNote: true, quietReason, options: [{ value: "a", label: "A" }], onSelect: () => {} });
+  const tone = (control: ReturnType<typeof make>) => {
+    control.update("a", undefined, { disabled: true, reason: "Turn on Animate changes to set these." });
+    return (control.element as unknown as LightElement).querySelector(".control-note")!.classList.contains("info");
+  };
+  expect(tone(make(true))).toBe(true);
+  expect(tone(make(false))).toBe(false);
+  const { SliderWithValue } = await import("../src/studio-ui/components");
+  const slider = new SliderWithValue({ label: "Duration", min: 0, max: 3, step: .05, reserveNote: true, quietReason: true, format: v => `${v} s`,
+    transaction: { edit: () => {} } });
+  slider.update(1, { disabled: true, reason: "Turn on Animate changes to set these." });
+  expect((slider.element as unknown as LightElement).querySelector(".control-note")!.classList.contains("info")).toBe(true);
+});
+
+test("a length on the face reads 0–100 between the control's ends, never \"% UV\" (C-12); a finish's other names go in brackets (C-2)", async () => {
+  const { nameWithAliases, scaleText } = await import("../src/studio-ui/dom");
+  const soft = scaleText(.0005, .06);
+  expect([soft(.0005), soft(.006), soft(.06)]).toEqual(["0.0", "9.2", "100"]);
+  expect(soft(.03)).not.toContain("UV");
+  expect(nameWithAliases({ label: "Metallic", aliases: ["foil"] })).toBe("Metallic (also foil)");
+  expect(nameWithAliases({ label: "Matte", aliases: [] })).toBe("Matte");
+});

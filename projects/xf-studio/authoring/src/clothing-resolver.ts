@@ -209,7 +209,7 @@ export async function resolveClothing(graph: ResourceGraph, input: ClothingInput
     if (!records) { out.gap = { code: "records-unreadable", detail: "The game's compiled item records (TweakDB) couldn't be read." }; return out; }
     if (!record) { out.gap = { code: "item-unknown", detail: "The game's compiled item records don't define it (an item a mod adds with TweakXL isn't read yet)." }; return out; }
     out.tags = [...record.visualTags];
-    if (record.appearanceName.includes("!")) { out.gap = { code: "item-dynamic", detail: "It uses an ArchiveXL dynamic appearance, which the preview doesn't read yet." }; return out; }
+    if (record.appearanceName.includes("!")) { out.gap = { code: "item-dynamic", detail: "It uses an ArchiveXL dynamic appearance, which the 3D view doesn't read yet." }; return out; }
     const factory = factories.table.get(record.entityName);
     if (!factory) { out.gap = { code: "item-factory-missing", detail: `No item factory lists its entity (${record.entityName}).` }; return out; }
     const ref = refFromPath(factory.path);
@@ -218,7 +218,7 @@ export async function resolveClothing(graph: ResourceGraph, input: ClothingInput
     const { appearances, tags } = readRootEntity(loaded.root);
     out.root = { ref: loaded.ref, appearances, tags, provenance: loaded.provenance };
     out.tags.push(...tags);
-    if (tags.includes("DynamicAppearance")) out.gap = { code: "item-dynamic", detail: "It uses an ArchiveXL dynamic appearance, which the preview doesn't read yet." };
+    if (tags.includes("DynamicAppearance")) out.gap = { code: "item-dynamic", detail: "It uses an ArchiveXL dynamic appearance, which the 3D view doesn't read yet." };
     return out;
   }));
   const gender = input.bodyGender === "male" ? "Male" : "Female";

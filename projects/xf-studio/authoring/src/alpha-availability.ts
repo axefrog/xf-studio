@@ -9,14 +9,14 @@
  * prepared from the player's own game files (the preview card then reports its progress instead).
  */
 export const NO_3D_PREVIEW_IN_ALPHA =
-  "The 3D head preview appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully.";
+  "The 3D view appears once XF Studio has prepared it from your Cyberpunk 2077 files. The UV editor, library and Check work fully.";
 
 /** Where the local Studio page sets the game folder and WolvenKit CLI (the desktop app calls it Build setup). */
 export const LOCALHOST_SETUP_PLACE = "Settings";
 
 /** Shown for Build when the host's Build setup is incomplete; the setup view lists what is missing. */
 export const BUILD_NEEDS_SETUP =
-  "Building mod files needs your Cyberpunk 2077 game folder and WolvenKit, which XF Studio sets up with the 3D preview. Check works without them.";
+  "Building mod files needs your Cyberpunk 2077 game folder and WolvenKit, which XF Studio sets up with the 3D view. Check works without them.";
 
 /**
  * Developer and evidence vocabulary that must not appear in a reason or label a community user sees,

@@ -114,7 +114,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
       count.title = addable.available ? "Layers in this preset" : addable.reason ?? "";
       list.update([...layers].reverse().map(layer => {
         const descriptor = finishOf(layer.finish);
-        return { id: layer.id, name: layer.name, meta: `${descriptor?.label.split(" /")[0] ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };
+        return { id: layer.id, name: layer.name, meta: `${descriptor?.label ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };
       }), active?.id);
       applyCapability(add, addLayerCapability(ctx));
       applyCapability(duplicate, active ? ctx.facade.contextCapability({ kind: "layer", id: active.id },

@@ -137,12 +137,12 @@ function unsupportedMessage(recipe: EyePlateRecipe): string {
     "This usually means a newer game patch. Update XF Studio to a version that supports your game, then build again. Nothing was changed.";
 }
 const missingMessage = (recipe: EyePlateRecipe) => `Build could not find the ${headNoun(recipe)} in your Cyberpunk 2077 content archives. ` +
-  "Check that the Cyberpunk 2077 folder in Local setup is correct, or verify the game files in your launcher, then build again.";
+  "Check that the Cyberpunk 2077 folder in Settings › Game is correct, or verify the game files in your launcher, then build again.";
 function moddedMessage(providers: string[]): string {
   const names = providers.length ? providers.join(", ") : "an installed mod";
   return `Your installed head mod ${names} changes the head's shape data in a way ${EYE_MAKEUP_MOD.modName} doesn't support yet, so nothing was built. ` +
     `To build anyway, set “${EYE_PLATE_HEAD_SETTING.label}” to “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” in Settings › Game, ` +
-    "then build again (the makeup may then not sit exactly on your modded head). Or disable that mod in the profile chosen in Local setup.";
+    "then build again (the makeup may then not sit exactly on your modded head). Or disable that mod in the profile chosen in Settings › Game.";
 }
 
 /**
@@ -495,7 +495,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     const code = (error as { code?: string }).code;
     if (code === "plate_cancelled" || signal?.aborted) throw new EyePlateError("plate_cancelled", "Eye plate preparation was cancelled.");
     status("failed", "plate_tool_failed", "WolvenKit could not prepare the eye plate.");
-    throw new EyePlateError("plate_tool_failed", "WolvenKit could not prepare the built-in eye plate. Check the WolvenKit CLI in Local setup.",
+    throw new EyePlateError("plate_tool_failed", "WolvenKit could not prepare the built-in eye plate. Check WolvenKit in Settings › Game.",
       `${(error as Error).message}\n${(error as { output?: string }).output ?? ""}`);
   } finally {
     try { cache.remove(work); } catch { /* Best-effort cleanup of private intermediates. */ }

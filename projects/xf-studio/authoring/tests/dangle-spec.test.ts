@@ -121,7 +121,7 @@ describe("hostile and extreme graphs (PREV-129, PREV-130, PREV-139)", () => {
   test("every entry the walk visits counts against a budget, empty ones included; a constraint listed twice is still read twice", () => {
     const empty = compile(graph(simulation({ dyngConstraint: H({ $type: "animDyngConstraintMulti", innerConstraints: Array.from({ length: 9000 }, () => ({})) }) })));
     expect(empty.simulation).toBeNull();
-    expect(empty.notes).toEqual(["Its simulation lists more constraints than the preview runs, so it hangs still."]);
+    expect(empty.notes).toEqual(["Its simulation lists more constraints than the 3D view runs, so it hangs still."]);
     const leaf = H({ $type: "animDyngConstraintLink", bone1: ti("c1"), bone2: ti("c2") });
     const twice = compile(graph(simulation({ dyngConstraint: H({ $type: "animDyngConstraintMulti", innerConstraints: [leaf, { HandleRefId: leaf.HandleId }] }) })));
     expect(twice.simulation!.constraints.map(c => c.kind)).toEqual(["link", "link"]);

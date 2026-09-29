@@ -187,7 +187,7 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
   });
 
   test("the product line says whom the mod is for, and a limit shows once as a warning with its step, above the build note", async () => {
-    const warning = { text: "A head mod changes the masculine V's head; choose “The unmodified game head” for both V's to include him.", next: "settings.game" };
+    const warning = { text: "A head mod changes the masculine V's head; choose “The unmodified game head” for both heads to include him.", next: "settings.game" };
     const feminineOnly = { ...BUILD, result: { ...BUILD.result, products: BUILD.result.products.map(product => ({ ...product,
       features: product.features.map(feature => ({ ...feature, audience: "for a feminine V only", warnings: [warning] })) })) } };
     const h = await packageHarness({ files: { package: feminineOnly } });
@@ -211,6 +211,17 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     b.panel.spec.element.remove();
   });
 
+  test("the same warning from two features shows once, by its words (UI-149)", async () => {
+    const warning = () => ({ text: "A head mod changes the masculine V's head; choose “The unmodified game head” for both heads to include him.", next: "settings.game" });
+    const two = { ...BUILD, result: { ...BUILD.result, products: BUILD.result.products.map(product => ({ ...product,
+      features: [...product.features, { ...product.features[0], feature: "other", label: "Other" }].map(feature => ({ ...feature, warnings: [warning()] })) })) } };
+    const h = await packageHarness({ files: { package: two } });
+    const notes = [...h.root.querySelector(".result-card")!.querySelectorAll(".note")].filter(item => text(item) === warning().text);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.className).toContain("warning");
+    h.panel.spec.element.remove();
+  });
+
   test("Add reviews the plan first, names what changes and where, and adds only on consent", async () => {
     const h = await packageHarness();
     buttonNamed(h.root, "Add to Mod Organizer 2…")!.click();
@@ -231,7 +242,7 @@ describe("after Build: Add to my mod manager and Show in folder (UI-82)", () => 
     expect(h.root.querySelector("[data-build-next]")!.hidden).toBe(true);
     const again = buttonNamed(h.root, "Add to Mod Organizer 2…")!;
     expect(again.getAttribute("aria-disabled")).toBe("true");
-    expect(again.getAttribute("title")).toBe("XF Eye Artistry is already added from this build. Build again to add a newer copy.");
+    expect(again.getAttribute("title")).toBe("“XF Eye Artistry” is already added from this build. Build again to add a newer copy.");
     h.panel.spec.element.remove();
   });
 
@@ -470,10 +481,10 @@ describe("wording helpers", () => {
     const { readinessText } = await import("../src/studio-ui/readiness-text");
     const at = (phase: string, head: string, extra = {}) => readinessText({ readiness: { phase, size: 2048, pending: 2, ...extra } as never,
       viewport: { head: { phase: head } } as never });
-    expect(at("ready", "ready").label).toBe("Preview 2K · ready");
+    expect(at("ready", "ready").label).toBe("3D view 2K · ready");
     expect(at("updating", "loading").label).toBe("UV map 2K · updating");
     expect(at("updating", "ready").detail).toBe("2 textures still to make. Until then, layers show their last finished texture.");
-    expect(at("blocked", "ready", { error: "Out of memory." })).toMatchObject({ label: "Preview couldn't update", detail: "Out of memory." });
+    expect(at("blocked", "ready", { error: "Out of memory." })).toMatchObject({ label: "3D view couldn't update", detail: "Out of memory." });
   });
 
   test("the palette shows each group once, where it first appears (UI-91)", async () => {

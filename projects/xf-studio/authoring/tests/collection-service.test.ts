@@ -65,18 +65,31 @@ test("async collection service preserves an unsaved draft in package snapshots w
   expect(f.service.view().draft!.collection.presets[0].name).toBe("Eye");
 });
 
-test("successful partial check names omitted layers and whole presets in the Studio result", async () => {
+test("a partial Check says so in one status line; the result card names what is left out (C-14)", async () => {
   const f = fixture(); await f.service.execute({ kind: "initialize" });
   f.transport.package = async (_action, input) => { const value = input as PresetCollection; return eyeCheck(value, { originalPresetCount: 2,
     presets: [{ id: value.presets[0].id, revision: 1, appearance: "xfs_test" }],
     omissions: [
       { kind: "layer", presetId: value.presets[0].id, presetName: "Eye", layerId: "sparkle", layerName: "Sparkle",
         finish: "glitter", reason: "Active finish has no supported game-export adapter." },
-      { kind: "preset", presetId: "other", presetName: "Glitter only", reason: "No active exportable layers remain." },
+      { kind: "preset", presetId: "other", presetName: "Glitter only", reason: "None of its shown layers can be built into your mod yet." },
     ] }); };
   expect((await f.service.execute({ kind: "package", action: "check" })).ok).toBe(true);
-  expect(f.service.view().progress?.message).toContain("omitted layer “Sparkle” (Glitter) from preset “Eye”");
-  expect(f.service.view().progress?.message).toContain("omitted whole preset “Glitter only”");
+  const line = f.service.view().progress!.message;
+  expect(line).toBe("Check: 1 of 2 presets can become mod files, some left out.");
+  expect(line.length).toBeLessThanOrEqual(70);
+});
+
+test("a Build's status line names the mod and never a folder path (UI-151)", async () => {
+  const { packageBuildLine } = await import("../src/package-filter");
+  const product = { modName: "XF Eye Artistry", package: "C:\Data\package-candidates\c1", manifest: "C:\Data\package-candidates\c1\manifest.json",
+    features: [{ presets: [{ id: "a" }, { id: "b" }], warnings: [] }] };
+  const line = packageBuildLine({ originalPresetCount: 3, omissions: [], products: [product] } as never);
+  expect(line).toBe("Built XF Eye Artistry for 2 of 3 presets. Not in your game yet.");
+  expect(line).not.toContain("package-candidates");
+  expect(line.length).toBeLessThanOrEqual(70);
+  expect(packageBuildLine({ originalPresetCount: 2, omissions: [], products: [product, { ...product, modName: "XF Two" }] } as never))
+    .toBe("Built 2 mods for 2 of 2 presets. Not in your game yet.");
 });
 
 test("save reconciliation retains edits made while the immutable request is in flight", async () => {

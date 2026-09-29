@@ -70,7 +70,7 @@ test("hardware and memory limits reject explicitly without downgrading the reque
   const exact=assessPreviewQuality(recipe,1024,1024);
   expect(assessPreviewQuality(recipe,1024,1024,exact.estimatedBytes).accepted).toBe(true);
   const oneShort=assessPreviewQuality(recipe,1024,1024,exact.estimatedBytes-1);
-  expect(oneShort.accepted).toBe(false);expect(oneShort.textureSize).toBe(1024);expect(oneShort.error).toContain("budget");
+  expect(oneShort.accepted).toBe(false);expect(oneShort.textureSize).toBe(1024);expect(oneShort.error).toContain("set aside");
   expect(exact.budgetBytes).toBe(DEFAULT_PREVIEW_BUDGET_BYTES);
   recipe.layers[0].finish="glitter";
   expect(assessPreviewQuality(recipe,4096,8192).accepted).toBe(true);

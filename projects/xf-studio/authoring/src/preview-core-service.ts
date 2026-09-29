@@ -84,7 +84,7 @@ const ARCHIVE_DIRECTORY = "archive/pc/content";
 
 export class PreviewCoreCache extends DerivedCache {
   /** One cache holds every body's core; each recipe keeps its own status (the feminine one in the original file). */
-  constructor(root: string, private readonly recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE) { super(root, "3D preview"); }
+  constructor(root: string, private readonly recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE) { super(root, "3D view"); }
   protected override get statusFile() {
     return this.recipe.id === PREVIEW_CORE_RECIPE.id ? super.statusFile : join(this.root, `status-${this.recipe.id}.json`);
   }
@@ -106,18 +106,18 @@ function unsupportedMessage(plate: EyePlateRecipe, recipe: PreviewCoreRecipe): s
 }
 const missingMessage = (recipe: PreviewCoreRecipe) => `XF Studio could not find the ${headWord(recipe)} player head in your Cyberpunk 2077 files. ` +
   "Check that the game folder is correct, or verify the game files in your launcher, then try again.";
-const TOOL_FAILED_MESSAGE = "WolvenKit could not read your game files. Try again; if it keeps happening, check the WolvenKit CLI in Build setup.";
+const TOOL_FAILED_MESSAGE = "WolvenKit could not read your game files. Try again; if it keeps happening, check WolvenKit in Settings › Game.";
 const RUNTIME_MESSAGE = "WolvenKit needs Microsoft's .NET runtime, which isn't installed on this computer. Install it, then try again.";
 const STORAGE_ERRORS = new Set(["EACCES", "EPERM", "ENOSPC", "EROFS", "EBUSY", "EMFILE", "ENFILE", "EDQUOT", "EIO", "ENOENT", "ENOTDIR", "EEXIST"]);
 
 /** Map a failure that is not already a PreviewCoreError: tool failures by their typed code, storage by errno. */
 function classifyFailure(error: unknown, aborted: boolean): PreviewCoreError {
-  if (aborted) return new PreviewCoreError("preview_cancelled", "Preparing the 3D preview was cancelled.");
+  if (aborted) return new PreviewCoreError("preview_cancelled", "Preparing the 3D view was cancelled.");
   if (error instanceof GameAssetExportError) {
     const detail = `${error.message}\n${error.output.slice(-4000)}`;
     switch (error.code) {
-      case "cancelled": return new PreviewCoreError("preview_cancelled", "Preparing the 3D preview was cancelled.");
-      case "tool_missing": return new PreviewCoreError("preview_tool_missing", "XF Studio needs WolvenKit CLI to read your game files, and it isn't set up yet.", detail);
+      case "cancelled": return new PreviewCoreError("preview_cancelled", "Preparing the 3D view was cancelled.");
+      case "tool_missing": return new PreviewCoreError("preview_tool_missing", "XF Studio needs WolvenKit to read your game files, and it isn't set up yet.", detail);
       case "runtime_missing": return new PreviewCoreError("preview_runtime_missing", RUNTIME_MESSAGE, detail);
       case "tool_failed": return new PreviewCoreError("preview_tool_failed", TOOL_FAILED_MESSAGE, detail);
     }
@@ -125,10 +125,10 @@ function classifyFailure(error: unknown, aborted: boolean): PreviewCoreError {
   const errno = (error as { code?: unknown })?.code;
   if (typeof errno === "string" && STORAGE_ERRORS.has(errno))
     return new PreviewCoreError("preview_cache_unavailable", errno === "ENOSPC" || errno === "EDQUOT"
-      ? "XF Studio needs more free disk space for the 3D preview. Free some space on the drive that holds its data folder, then try again."
-      : "XF Studio couldn't write the 3D preview into its data folder. Check that the folder isn't read-only or in use, then try again.",
+      ? "XF Studio needs more free disk space for the 3D view's files. Free some space on the drive that holds its data folder, then try again."
+      : "XF Studio couldn't write the 3D view's files into its data folder. Check that the folder isn't read-only or in use, then try again.",
       `${errno}: ${(error as Error).message}`);
-  return new PreviewCoreError("preview_failed", "Something went wrong while preparing the 3D preview. Try again; if it keeps happening, restart XF Studio.",
+  return new PreviewCoreError("preview_failed", "Something went wrong while preparing the 3D view. Try again; if it keeps happening, restart XF Studio.",
     (error as Error)?.stack ?? String(error));
 }
 
@@ -166,14 +166,14 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
   if (recipe.plateRecipeId !== plate.id) throw new PreviewCoreError("preview_verification_failed", "The preview recipe names a different eye plate recipe.");
   let cache: PreviewCoreCache, work: string;
   try { cache = new PreviewCoreCache(options.cacheRoot, recipe); work = cache.createWork(); }
-  catch (error) { throw new PreviewCoreError("preview_cache_unavailable", "XF Studio could not open its private 3D preview cache.", (error as Error).message); }
+  catch (error) { throw new PreviewCoreError("preview_cache_unavailable", "XF Studio could not open its private 3D view cache.", (error as Error).message); }
   const fingerprint = contentFingerprint(gameRoot, ARCHIVE_DIRECTORY);
   const status = (state: PreviewCoreStatusState, code: string | null, message: string, cacheName: string | null = null) => {
     try { cache.writeStatus({ recipeId: recipe.id, recipeRevision: recipe.revision, deriverVersion: PREVIEW_CORE_DERIVER_VERSION,
       state, code, message, gameRoot, contentFingerprint: fingerprint, cacheName }); }
     catch { /* Status is advisory; the result carries the real outcome. */ }
   };
-  const cancelled = () => { if (signal?.aborted) throw new PreviewCoreError("preview_cancelled", "Preparing the 3D preview was cancelled."); };
+  const cancelled = () => { if (signal?.aborted) throw new PreviewCoreError("preview_cancelled", "Preparing the 3D view was cancelled."); };
   const fail = (code: PreviewCoreErrorCode, message: string, detail = "", state: PreviewCoreStatusState = "failed"): never => {
     status(state, code, message);
     throw new PreviewCoreError(code, message, detail);
@@ -202,7 +202,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     if (!revision) fail("preview_source_unsupported", unsupportedMessage(plate, recipe), `mesh ${hashes.meshSha256}, morph ${hashes.morphSha256}`, "unsupported");
     const eyeMeshSha256 = geometry.get(eyeMesh)!.rawSha256, eyeMorphSha256 = geometry.get(eyeMorph)!.rawSha256;
     const exported = (file: string | null, depot: string, what: string) => {
-      if (!file || !existsSync(file)) fail("preview_tool_failed", `WolvenKit did not export the ${what}. Try again; if it keeps happening, check the WolvenKit CLI in Build setup.`, depot);
+      if (!file || !existsSync(file)) fail("preview_tool_failed", `WolvenKit did not export the ${what}. Try again; if it keeps happening, check WolvenKit in Settings › Game.`, depot);
       return file!;
     };
     const headGlb = exported(geometry.get(headMorph)!.glb, headMorph, "head with its facial shapes");
@@ -226,7 +226,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     cancelled();
     const sources = resolved.map(({ map, resolved: parameter }) => {
       const texture = decoded.get(parameter.depotPath);
-      if (!texture) fail("preview_tool_failed", "WolvenKit did not export a skin or eye texture. Check the WolvenKit CLI in Build setup.", parameter.depotPath);
+      if (!texture) fail("preview_tool_failed", "WolvenKit did not export a skin or eye texture. Check WolvenKit in Settings › Game.", parameter.depotPath);
       const bytes = readFileSync(texture!.png);
       return { map, resolved: parameter, bytes, decodedSha256: sha256Hex(bytes) };
     });
@@ -235,7 +235,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
       ...exportHashes, tool: session.tool.key, textures });
     const name = previewCoreCacheName(recipe, key);
     const cached = loadPreviewCoreEntry(cache, name, key, recipe, plate);
-    if (cached) { status("ready", null, "The 3D preview is ready.", name); return cached; }
+    if (cached) { status("ready", null, "The 3D view is ready.", name); return cached; }
     cancelled();
 
     progress("assembling");
@@ -272,7 +272,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
         if (written.width !== expected.width || written.height !== expected.height || !written.data.every((value, index) => value === expected.data[index]))
           throw Error(`${source.map.file} does not decode to its adapted source pixels.`);
       }
-    } catch (error) { return fail("preview_verification_failed", "The prepared 3D preview failed verification.", (error as Error).message); }
+    } catch (error) { return fail("preview_verification_failed", "The prepared 3D view failed verification.", (error as Error).message); }
     const file = (fileName: string) => { const path = join(assets, fileName); return { name: fileName, sha256: fileSha256(path), bytes: statSync(path).size }; };
     // The render detail record: what the renderer loads, with hashes and game-resource provenance.
     const record: CoreDetail = {
@@ -303,8 +303,8 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     cache.writeJson(join(staging, PREVIEW_CORE_MANIFEST_FILE), manifest);
     cache.publish(staging, name);
     const published = loadPreviewCoreEntry(cache, name, key, recipe, plate);
-    if (!published) fail("preview_cache_unavailable", "The 3D preview cache changed while it was being written.");
-    status("ready", null, "The 3D preview is ready.", name);
+    if (!published) fail("preview_cache_unavailable", "The 3D view cache changed while it was being written.");
+    status("ready", null, "The 3D view is ready.", name);
     return { ...published!, reused: false };
   } catch (error) {
     if (error instanceof PreviewCoreError) {

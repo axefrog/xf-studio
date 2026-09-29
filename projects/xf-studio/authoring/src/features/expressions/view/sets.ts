@@ -19,6 +19,7 @@ import { applyCapability, badge, button, emptyState, GroupSection, hasCommands, 
   section, Segmented, type MenuItem } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
+import { MOD_NAME_HINT } from "../../../mod-branding";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
 import type { GenericFeatureFacade } from "../../../studio-presentation";
@@ -111,6 +112,12 @@ export function expressionSets(ctx: Ctx): PanelController {
   const rebuild = button({ label: "Build mod files…", icon: "package", small: true, onClick: event => confirmBuild(event.currentTarget as Element) });
   const progressText = h("span", { class: "muted small" });
   const progress = h("div", { class: "package-progress idle" }, progressBar({ label: "Set export in progress" }).element, progressText);
+  // A Build takes a minute or two and the host reports no steps of its own yet, so the line says what it is doing and how long it
+  // usually takes, never a bare "Building…" (UI-142; step-by-step progress needs a progress stream from the export host).
+  const paintProgress = (running: string | undefined) => {
+    setText(progressText, running === "build" ? "Making and checking the mod files. This usually takes a minute or two…" : running === "check" ? "Checking…" : "");
+    progressText.title = progressText.textContent ?? "";
+  };
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   const modSection = section({ title: "Mod", help: ["Each set becomes its own mod: its expressions join photo mode's expression list, for female and male V.",
     "Build makes the files and checks them. Nothing is added to your game or mod manager until you add it from the result, or show its folder to copy it by hand or zip it for a mod page."] },
@@ -234,7 +241,7 @@ export function expressionSets(ctx: Ctx): PanelController {
     const set = current();
     if (!set) return;
     openValuePopover({ kind: "text", label: "Mod name", value: setModName(set), maxLength: 80 }, anchor, {
-      title: "Rename mod", apply: "Rename",
+      title: "Rename mod", apply: "Rename", hint: MOD_NAME_HINT,
       validate: value => ctx.presets.capability({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision, modName: String(value) }),
       // The default name goes back to following the set's name.
       commit: value => { const name = String(value).trim();
@@ -380,7 +387,9 @@ export function expressionSets(ctx: Ctx): PanelController {
       if (modLine.dataset.name !== `${name}|${!!set.modName}`) {
         modLine.dataset.name = `${name}|${!!set.modName}`;
         modLine.replaceChildren(h("li", {}, icon("package"), h("span", {}, h("strong", { text: name }), h("span", { class: "muted", text: " · Expressions" })),
-          button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true, onClick: event => modMenu(event.currentTarget as Element) })));
+          // While the name is the default, the menu would hold only Rename…: the button renames directly (UI-143).
+          set.modName ? button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true, onClick: event => modMenu(event.currentTarget as Element) })
+            : button({ label: `Rename ${name}…`, icon: "rename", iconOnly: true, variant: "ghost", small: true, onClick: event => renameModPopover(event.currentTarget as Element) })));
       }
       const running = exports.busy?.id === set.id ? exports.busy.action : undefined;
       table.update(set.table ?? "installed", () => ctx.presets.capability({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision }), {
@@ -391,7 +400,7 @@ export function expressionSets(ctx: Ctx): PanelController {
       const last = exports.results[set.id], builtCurrent = last?.kind === "build" && last.key === setExportKey(set, presets.items);
       build.hidden = builtCurrent; rebuild.hidden = !builtCurrent;
       progress.classList.toggle("idle", !running || running === "reveal");
-      setText(progressText, running === "build" ? "Building…" : running === "check" ? "Checking…" : "");
+      paintProgress(running);
       const next = JSON.stringify([set.id, set.revision, exports.results[set.id], presets.items.map(item => [item.id, item.name, item.revision])]);
       if (next !== signature) {
         signature = next; result.replaceChildren(...renderResult(set, exports.results[set.id], presets.items));

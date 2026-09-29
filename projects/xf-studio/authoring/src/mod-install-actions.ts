@@ -94,7 +94,7 @@ export class ModInstallActions {
     // One build is added once; Build again for a newer copy (Show in folder stays offered).
     const outcome = this.state.outcomes[action.product];
     if (action.kind !== "modInstall.reveal" && outcome?.ok && outcome.candidateId === build.candidateId)
-      return refusal("invalid_value", `${build.modName} is already added from this build. Build again to add a newer copy.`);
+      return refusal("invalid_value", `“${build.modName}” is already added from this build. Build again to add a newer copy.`);
     if (action.kind === "modInstall.apply") {
       const plan = this.state.plans[action.product];
       if (!plan || plan.candidateId !== build.candidateId) return refusal("needs_input", "Review what will be added first.");

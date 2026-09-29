@@ -42,7 +42,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -677,7 +677,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -3406,7 +3406,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -4048,7 +4048,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -6784,7 +6784,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -7427,7 +7427,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -10164,7 +10164,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -10806,7 +10806,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -16923,7 +16923,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },
@@ -17568,7 +17568,7 @@
       "max": 0.06,
       "unit": "uv",
       "requires": {
-       "reason": "Enable point edge softness before editing an individual edge."
+       "reason": "Turn on Per-point edge softness before editing one point's edge."
       }
      }
     },

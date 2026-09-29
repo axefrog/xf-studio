@@ -97,9 +97,9 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
     cacheIssues.push(issue("source_cache_unavailable", "XF Studio can't write to the folder chosen for its game-file cache. Choose another folder."));
   const previewIssues: ReadinessIssue[] = [];
   if (settings.preview.cacheDirectory && !writableDirectory(settings.preview.cacheDirectory))
-    previewIssues.push(issue("preview_cache_unavailable", "XF Studio can't write to the folder chosen for its 3D preview files. Choose another folder."));
+    previewIssues.push(issue("preview_cache_unavailable", "XF Studio can't write to the folder chosen for its 3D view files. Choose another folder."));
   if (settings.preview.outputDirectory && !writableDirectory(settings.preview.outputDirectory))
-    previewIssues.push(issue("preview_output_unavailable", "XF Studio can't write to the folder chosen for its 3D preview output. Choose another folder."));
+    previewIssues.push(issue("preview_output_unavailable", "XF Studio can't write to the folder chosen for its 3D view output. Choose another folder."));
 
   // "Add to my mod manager" installs on the route the person launches with (UI-82), with their consent to each plan.
   const installIssues: ReadinessIssue[] = [];

@@ -78,7 +78,7 @@ export const raiseBackgroundWolvenKit = (): void => raiseLowPriority();
 
 /** Run one WolvenKit command; abort or timeout stops the whole process tree. */
 export async function runWolvenKit(cli: string | null, args: readonly string[], options: WolvenKitRunOptions): Promise<WolvenKitRun> {
-  if (!isFile(cli)) throw new WolvenKitRunError("tool_missing", "WolvenKit CLI isn't available.");
+  if (!isFile(cli)) throw new WolvenKitRunError("tool_missing", "WolvenKit isn't available.");
   const label = runLabel(cli, args);
   if (options.signal?.aborted) throw new WolvenKitRunError("cancelled", `${label} was cancelled.`);
   const started = performance.now();
@@ -97,7 +97,7 @@ export async function runWolvenKit(cli: string | null, args: readonly string[], 
  * which WolvenKit CLI does not start).
  */
 export function runWolvenKitSync(cli: string | null, args: readonly string[], options: Omit<WolvenKitRunOptions, "signal">): WolvenKitRun {
-  if (!isFile(cli)) throw new WolvenKitRunError("tool_missing", "WolvenKit CLI isn't available.");
+  if (!isFile(cli)) throw new WolvenKitRunError("tool_missing", "WolvenKit isn't available.");
   const keep = options.keep ?? 64_000;
   const result = spawnSync(cli, [...args], { cwd: options.cwd, env: options.env ? { ...process.env, ...options.env } : undefined,
     encoding: "utf8", timeout: options.timeoutMs, windowsHide: true, maxBuffer: 256 << 20 });
@@ -158,10 +158,10 @@ function judgeProbe(version: ProbeOutput, help: () => ProbeOutput | Promise<Prob
   if (isRuntimeMissing(version.status, version.text))
     return { ok: false, code: "runtime_missing", issue: WOLVENKIT_RUNTIME_MISSING_MESSAGE };
   if (version.failed || version.status !== 0 || !found)
-    return { ok: false, code: "unsupported", issue: `WolvenKit CLI must be a verified ${SUPPORTED_WOLVENKIT_VERSIONS.join(" or ")} installation.` };
+    return { ok: false, code: "unsupported", issue: `WolvenKit must be a verified ${SUPPORTED_WOLVENKIT_VERSIONS.join(" or ")} installation.` };
   const judge = (output: ProbeOutput): WolvenKitProbeResult => output.failed || output.status !== 0 ||
       !["import", "export", "convert", "pack", "extract", "uncook", "unbundle"].every(name => new RegExp(`\\b${name}\\b`, "i").test(output.text))
-    ? { ok: false, code: "commands", issue: "WolvenKit CLI does not offer the commands XF Studio needs." }
+    ? { ok: false, code: "commands", issue: "This WolvenKit doesn't offer the commands XF Studio needs." }
     : { ok: true, version: found[1]! };
   const output = help();
   return output instanceof Promise ? output.then(judge) : judge(output);
@@ -173,7 +173,7 @@ const remember = (key: string, result: WolvenKitProbeResult, now: number) => {
 
 /** The cached probe result for this exact file, or null when it has not been checked recently. */
 export function cachedWolvenKitProbeResult(cli: string, now = Date.now()): WolvenKitProbeResult | null {
-  if (!isFile(cli)) return { ok: false, code: "tool_missing", issue: "WolvenKit CLI isn't available." };
+  if (!isFile(cli)) return { ok: false, code: "tool_missing", issue: "WolvenKit isn't available." };
   const cached = probeMemo.get(`${cli}|${stamp(cli)}`);
   return cached && now < cached.until ? cached.result : null;
 }

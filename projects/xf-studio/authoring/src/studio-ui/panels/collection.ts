@@ -1,5 +1,5 @@
 import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
-import { EYE_MAKEUP_MOD } from "../../mod-branding";
+import { EYE_MAKEUP_MOD, MOD_NAME_HINT } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
 import { applyCapability, badge, button, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
@@ -74,7 +74,6 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   nameInput.addEventListener("change", commitName);
   nameInput.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); commitName(); nameInput.blur(); }
     if (event.key === "Escape") { nameInput.value = port.library.summary().draft?.name ?? ""; nameInput.blur(); } });
-  const libraryChip = h("span", { class: "chip" });
   const collectionMore = button({ label: "Collection actions", icon: "more", iconOnly: true, variant: "ghost", menu: true,
     onClick: event => collectionMenu(rt, event.currentTarget as Element, event.currentTarget as Element) });
   const addButton = button({ label: "Add preset", icon: "plus", small: true,
@@ -122,8 +121,8 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   const empty = emptyState("No presets yet", "A preset is one complete look — one choice in the in-game selector.",
     button({ label: "Add preset", icon: "plus", variant: "primary", onClick: () => rt.dispatch({ kind: "preset.edit", command: { kind: "add" } }) }));
   const element = h("div", { class: "panel-content" },
-    h("div", { class: "panel-head" }, h("label", { class: "eyebrow", text: "Collection" }), h("div", { class: "row" }, nameInput, collectionMore),
-      h("div", { class: "row wrap gap-s" }, libraryChip)),
+    // The library chip is the header's alone (one place per state, release-readiness-audit.md C-18).
+    h("div", { class: "panel-head" }, h("label", { class: "eyebrow", text: "Collection" }), h("div", { class: "row" }, nameInput, collectionMore)),
     h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, "Presets ", count),
       helpTip("presets", "Each preset becomes one choice in the game's single eye-makeup selector, alongside Off.")), addButton),
     failed, empty, list.element,
@@ -135,8 +134,6 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       const library = frame.library, draft = library.draft, busy = library.busy;
       if (draft) setValue(nameInput, draft.name);
       nameInput.disabled = busy || !draft;
-      const state = libraryState(frame);
-      setText(libraryChip, state.label); libraryChip.className = `chip ${state.tone}`; libraryChip.title = state.detail;
       const presets = draft?.presets ?? [];
       setText(count, String(presets.length));
       failed.hidden = !!draft || library.busy || library.progress?.phase !== "error";
@@ -294,7 +291,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const setupLine = h("p", { class: "setup-status", role: "status" });
   // When the line says WolvenKit is needed, its one next step is the button beside it (release-readiness-audit.md item 14).
   const wolvenKitStep = wolvenKitStepButton(rt);
-  const setup = section({ title: "Game & tools", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game and Settings › Tools." },
+  // Named after the Settings group it mirrors (release-readiness-audit.md C-6).
+  const setup = section({ title: "Game", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game." },
     setupLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
   const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
@@ -311,11 +309,12 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   let modsSignature = "";
   const renameMod = (product: PackageProductSummary, anchor: Element) => {
     const make = (modName: string) => ({ kind: "package.rename" as const, productId: product.id, modName });
-    openValuePopover({ kind: "text", label: "Mod name (as it appears in your mod manager)", value: product.modName, maxLength: 80 }, anchor,
-      { title: "Rename mod", apply: "Rename", validate: value => port.authoring.capability(make(String(value))),
+    openValuePopover({ kind: "text", label: "Mod name", value: product.modName, maxLength: 80 }, anchor,
+      { title: "Rename mod", apply: "Rename", hint: MOD_NAME_HINT, validate: value => port.authoring.capability(make(String(value))),
         commit: value => { if (rt.dispatch(make(String(value)))) rt.feedback.announce(`Mod renamed to ${String(value).trim() || "its default name"}`); } });
   };
-  const modMenu = (product: PackageProductSummary, products: readonly PackageProductSummary[], anchor: Element) => {
+  /** The mod's menu; while it would hold only Rename… (a default name, one feature, one mod), its button renames directly (UI-143). */
+  const modItems = (product: PackageProductSummary, products: readonly PackageProductSummary[], anchor: Element) => {
     const items: MenuItem[] = [{ kind: "action", label: "Rename…", icon: "rename", run: () => renameMod(product, anchor) }];
     if (product.nameSource === "plan") items.push({ kind: "action", label: "Use the default name", icon: "reset",
       capability: port.authoring.capability({ kind: "package.rename", productId: product.id, modName: "" }),
@@ -327,8 +326,10 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     for (const other of products) if (other.id !== product.id) items.push({ kind: "action", label: `Merge into “${other.modName}”`, icon: "import",
       capability: port.authoring.capability({ kind: "package.merge", productId: product.id, intoId: other.id }),
       run: () => { rt.dispatch({ kind: "package.merge", productId: product.id, intoId: other.id }); } });
-    openMenu(items, anchor, { label: `${product.modName} options`, invoker: anchor });
+    return items;
   };
+  const onlyRename = (product: PackageProductSummary, products: readonly PackageProductSummary[]) =>
+    product.nameSource !== "plan" && product.features.length < 2 && products.length < 2;
   const renderMods = (products: readonly PackageProductSummary[], planIssue?: string) => {
     const signature = JSON.stringify([products, planIssue ?? null]);
     if (signature === modsSignature) return;
@@ -337,8 +338,11 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     if (planIssue) mods.replaceChildren(h("li", {}, icon("warning"), h("span", { text: planIssue })));
     else mods.replaceChildren(...products.map(product => h("li", {}, icon("package"),
       h("span", {}, h("strong", { text: product.modName }), h("span", { class: "muted", text: ` · ${product.features.map(feature => feature.label).join(", ")}` })),
-      button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
-        onClick: event => modMenu(product, products, event.currentTarget as Element) }))));
+      onlyRename(product, products)
+        ? button({ label: `Rename ${product.modName}…`, icon: "rename", iconOnly: true, variant: "ghost", small: true,
+          onClick: event => renameMod(product, event.currentTarget as Element) })
+        : button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
+          onClick: event => { const anchor = event.currentTarget as Element; openMenu(modItems(product, products, anchor), anchor, { label: `${product.modName} options`, invoker: anchor }); } }))));
     mods.hidden = !products.length && !planIssue;
   };
   // After Build, each mod offers "Add to my mod manager…" (a reviewed plan, then consent) and "Show in folder" (UI-82). The rows
@@ -477,7 +481,8 @@ function renderResult(pkg: PackageResultView, presets: readonly { id: string; na
     card.append(block);
     // What the mod falls short of (eye makeup: not for a masculine V this time): one warning each, the reason and the step,
     // directly under its product and above the build note, with the button that takes the step.
-    for (const warning of new Set(product.features.flatMap(feature => feature.warnings ?? []))) {
+    // Once per wording: the same warning from two features shows once (UI-149).
+    for (const warning of new Map(product.features.flatMap(feature => feature.warnings ?? []).map(item => [item.text, item] as const)).values()) {
       card.append(note(warning.text, "warning"));
       if (warning.next === "settings.game") card.append(h("div", { class: "row wrap gap-s" },
         button({ label: "Open Settings", icon: "settings", small: true, onClick: openSetup })));

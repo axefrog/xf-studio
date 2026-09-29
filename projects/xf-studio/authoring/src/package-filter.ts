@@ -9,7 +9,7 @@ import { plateUvRecord, presetReachesPlate, type PlateReachInput } from "./plate
 import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 
 /** Why a whole preset is omitted: nothing exportable is left, or its makeup never reaches the eye plate. */
-export const NO_EXPORTABLE_LAYERS_REASON = "No active exportable layers remain.";
+export const NO_EXPORTABLE_LAYERS_REASON = "None of its shown layers can be built into your mod yet.";
 export const OFF_PLATE_REASON = "Its makeup doesn't reach the eye plate, so it wouldn't show in game.";
 /**
  * Said by a Check that had no plate to plan on (`plateUv: null`): no plate prepared yet for this game, route and head
@@ -46,7 +46,7 @@ export function describePackageOmissions(omissions: readonly (ExportOmission | {
     : item.reason === OFF_PLATE_REASON ? `omitted whole preset “${item.presetName}” because its makeup doesn't reach the eye plate`
     : item.reason === NO_EYE_MAKEUP_REASON ? `omitted whole preset “${item.presetName}” because it has no eye makeup`
     : item.reason === NEWER_LOOK_REASON ? `omitted whole preset “${item.presetName}” because it was made with a newer version of XF Studio`
-    : `omitted whole preset “${item.presetName}” because no exportable active layers remain`).join("; ")}. The authored collection is unchanged.`;
+    : `omitted whole preset “${item.presetName}” because none of its shown layers can be built into your mod yet`).join("; ")}. The authored collection is unchanged.`;
 }
 
 export function describePackageExperimental(experimental: readonly ExportExperimental[] | undefined): string {
@@ -62,19 +62,34 @@ const allExperimental = (result: Pick<PackageCheckResult, "products">) =>
 const mods = (products: readonly { modName: string }[]) => products.length === 1 ? products[0].modName
   : `${products.length} mods (${products.map(product => product.modName).join(", ")})`;
 
-/** A Check's result in plain words: how many looks can become mod files and in which mod, then notes, omissions and experimental finishes. */
+const presetCount = (count: number) => `${count} preset${count === 1 ? "" : "s"}`;
+/**
+ * A Check's outcome as one status line, about 70 characters at most (release-readiness-audit.md C-14): the toast, the status bar and
+ * the Activity log say this; the result card in Mod package holds the looks, the notes and what is left out.
+ */
+export function packageCheckLine(result: PackageCheckResult): string {
+  const left = allOmissions(result).length > 0;
+  return `Check: ${packagedLookCount(result)} of ${presetCount(result.originalPresetCount)} can become mod files${left ? ", some left out" : ""}.`;
+}
+/** A Build's outcome as one status line: what was built, never a folder path (UI-151); the result card holds the rest. */
+export function packageBuildLine(result: PackageBuildResult): string {
+  const what = result.products.length === 1 ? result.products[0].modName : `${result.products.length} mods`;
+  return `Built ${what} for ${packagedLookCount(result)} of ${presetCount(result.originalPresetCount)}. Not in your game yet.`;
+}
+
+/** A Check's result in full plain words (for scripts and tests): how many looks can become mod files and in which mod, then notes, omissions and experimental finishes. */
 export function describePackageCheck(result: PackageCheckResult): string {
   const notes = [...new Set(result.products.flatMap(product => product.features.flatMap(feature => [...feature.notes,
     ...(feature.warnings ?? []).map(warning => warning.text)])))];
-  return `${packagedLookCount(result)} of ${result.originalPresetCount} preset(s) can become mod files in ${mods(result.products)}. ` +
+  return `${packagedLookCount(result)} of ${presetCount(result.originalPresetCount)} can become mod files in ${mods(result.products)}. ` +
     `This check created no files.${notes.map(note => ` ${note}`).join("")}${describePackageOmissions(allOmissions(result))}` +
     describePackageExperimental(allExperimental(result));
 }
 
-/** A Build's result in plain words: each verified mod and where its files are, never claiming install or game tests. */
+/** A Build's result in full plain words (for scripts and tests): each verified mod and where its files are, never claiming install or game tests. */
 export function describePackageBuild(result: PackageBuildResult): string {
   const built = result.products.map(product => `${product.modName} mod files for ${new Set(product.features.flatMap(feature =>
-    feature.presets.map(look => look.id))).size} of ${result.originalPresetCount} preset(s): ${product.package} · Manifest: ${product.manifest}`);
+    feature.presets.map(look => look.id))).size} of ${presetCount(result.originalPresetCount)}: ${product.package} · Manifest: ${product.manifest}`);
   const warnings = [...new Set(result.products.flatMap(product => product.features.flatMap(feature => (feature.warnings ?? []).map(warning => warning.text))))];
   return `Verified local ${built.join("; ")}. Not installed or game-tested.${warnings.map(text => ` ${text}`).join("")}${describePackageOmissions(allOmissions(result))}` +
     describePackageExperimental(allExperimental(result));
@@ -134,8 +149,8 @@ export function preparePackageCollection(value: unknown, region: Pick<LayeredMak
     presets.push({ ...preset, recipe: { ...preset.recipe, layers } });
   }
   if (!presets.length && plate && omissions.some(item => item.kind === "preset" && item.reason === OFF_PLATE_REASON))
-    throw Error("No mod files can be made: none of the presets' makeup reaches the eye plate around the eyes, so nothing would show in game. Move the shapes onto the eyelids in the UV view and try again. Your collection is unchanged.");
-  if (!presets.length) throw Error("No mod files can be made: no preset has an active layer with an exportable finish (Matte, Satin, Metallic, or a game-matched Glossy, Shimmer or Colour-shifting layer). Your collection is unchanged.");
+    throw Error("No mod files can be made: none of the presets' makeup reaches the eye plate around the eyes, so nothing would show in game. Move the shapes onto the eyelids in the UV map and try again. Your collection is unchanged.");
+  if (!presets.length) throw Error("No mod files can be made: no preset has a shown layer with a finish that can be built (Matte, Satin, Metallic, or a game-matched Glossy, Shimmer or Colour-shifting layer). Your collection is unchanged.");
   // Diagnostic knobs of a prepared test candidate stay with the packaged copy for the presets it keeps.
   const diagnostics = parseExportDiagnostics((value as { diagnostics?: unknown } | null)?.diagnostics, presets.map(p => p.id));
   // The omitted list is a report, not content: the packaged copy (and its hash) never carries it.

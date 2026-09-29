@@ -629,7 +629,7 @@ async function resolveDefinition(ctx: Context, appRef: DepotRef, definitionName:
     if (overrideMode === "report") {
       const masked = overriddenMask(model.name, model.chunkMask, ctx.overrides);
       if (masked && masked.mask !== model.chunkMask) ctx.gaps.push({ code: "worn-item-hides-head", subject: model.name,
-        detail: `A worn item hides this head part in game (${masked.by.join(", ")}); the preview keeps it shown.` });
+        detail: `A worn item hides this head part in game (${masked.by.join(", ")}); the 3D view keeps it shown.` });
       continue;
     }
     const appearance = ctx.overrides.appearances.get(model.name);

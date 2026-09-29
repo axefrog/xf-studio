@@ -169,7 +169,7 @@ export class CollectionActions {
   check(action: CollectionAction): CodedCapability {
     const state = this.session.state;
     if (action.kind === "collection.undoOpen" && !state.previous)
-      return refusal("invalid_value", "No previous collection draft.");
+      return refusal("invalid_value", "No previous draft.");
     if (action.kind === "collection.undoOpen" && action.draft !== undefined && !this.recoveryCollection(action.draft))
       return refusal("missing_target", "That earlier draft is no longer in the recovery list.");
     if (action.kind === "preset.edit") {

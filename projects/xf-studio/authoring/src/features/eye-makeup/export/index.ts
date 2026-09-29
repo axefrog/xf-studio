@@ -54,7 +54,7 @@ export const CHECK_MASCULINE_NOTE = "Build checks whether the mod can also fit a
 export const MASCULINE_NOT_PREPARED: ExportWarning = { text: "No masculine V plate was given to this build; pass --plate-masculine to include him." };
 /** His plate's texture window differs from hers: only a head mod can move the head's eye UVs (the 2.31 heads share them). */
 export const MASCULINE_WINDOW: ExportWarning = { next: "settings.game",
-  text: "A head mod moves the masculine V's eye area, so these looks can't fit him; choose “The unmodified game head” for both V's to include him." };
+  text: "A head mod moves the masculine V's eye area, so these looks can't fit him; choose “The unmodified game head” for both heads to include him." };
 type MasculineDecision = { include: boolean; unchecked?: true; warning?: ExportWarning; plate?: PlateReachInput & { record?: PackagePlate } };
 function masculineDecision(value: unknown, feminine: (PlateReachInput & { record?: PackagePlate }) | null): MasculineDecision {
   const unavailable = unavailablePlate(value);
@@ -105,7 +105,8 @@ function plan(input: { collection: unknown; prerequisites: Readonly<Record<strin
     // Before any plate was prepared for this route, Check cannot tell which looks reach the eye area; Build does (PIPE-36).
     // One note at most: what Build still decides (plate reach before any plate was prepared, and whether he fits).
     notes: !prepared.plateUv ? [masculine.unchecked ? CHECK_BUILD_DECIDES_NOTE : PLATE_REACH_UNCHECKED_NOTE] : masculine.unchecked ? [CHECK_MASCULINE_NOTE] : [],
-    audience: masculine.include ? AUDIENCE_BOTH : AUDIENCE_FEMININE,
+    // Before a Build has checked him, the product line names no one: its note says Build decides whether he fits (UI-148).
+    ...(masculine.unchecked ? {} : { audience: masculine.include ? AUDIENCE_BOTH : AUDIENCE_FEMININE }),
     ...(masculine.warning ? { warnings: [masculine.warning] } : {}),
     requirements: planned.requirements,
     packagedSha256: sha256(packaged),

@@ -192,11 +192,13 @@ export class Segmented<T extends string | number> {
   private signature = "";
   private selected: T | undefined;
   constructor(private readonly options: { label: string; options: SegmentOption<T>[]; onSelect(value: T): void; compact?: boolean; showLabel?: boolean;
-    reserveNote?: boolean; help?: HelpText; iconOnly?: boolean; frameless?: boolean; readout?(value: T): string; readoutGutter?: boolean }) {
+    reserveNote?: boolean; help?: HelpText; iconOnly?: boolean; frameless?: boolean; readout?(value: T): string; readoutGutter?: boolean;
+    /** The unavailable reason is information (a dependency on a switch above), not a problem: the note line keeps the muted tone (UI-145). */
+    quietReason?: boolean }) {
     const labelId = uid("seg");
     this.group = h("div", { class: `segmented${options.iconOnly ? " icon-only" : ""}${options.frameless ? " frameless" : ""}`, role: "group",
       "aria-label": options.showLabel === false ? options.label : undefined, "aria-labelledby": options.showLabel === false ? undefined : labelId });
-    this.note = new NoteLine(options.reserveNote);
+    this.note = new NoteLine(options.reserveNote, options.quietReason);
     this.tip = options.help !== undefined && options.showLabel !== false ? helpTip(options.label, options.help) : null;
     this.readout = options.readout && options.showLabel !== false ? h("span", { class: "readout segmented-readout", "aria-hidden": "true" }) : null;
     const text = h("span", { text: options.label });

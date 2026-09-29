@@ -123,13 +123,13 @@ export class StudioFileOperations {
       case "mask.export": return this.sources.selectedLayer() ? { available: true } :
         { available: false, reason: "Select a layer before exporting a mask." };
       case "savedV.import": return this.sources.savedVReady() ? { available: true } :
-        { available: false, reason: this.sources.savedVUnavailableReason?.() ?? "Wait for the preview assets to finish loading." };
+        { available: false, reason: this.sources.savedVUnavailableReason?.() ?? "Wait for the 3D view to finish loading." };
       case "savedV.export": return this.sources.hasSavedV() ? { available: true } :
         { available: false, reason: this.sources.savedVUnavailableReason?.() ??
           "Load a saved V before exporting its appearance." };
       case "characterPreset.import": case "characterPreset.export": {
         const reason = this.sources.characterPreset ? this.sources.characterPreset.unavailable(action.kind === "characterPreset.import" ? "import" : "export")
-          : "Character presets need the 3D preview.";
+          : "Character presets need the 3D view.";
         return reason ? { available: false, reason } : { available: true };
       }
       case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen", ...(action.draft !== undefined ? { draft: action.draft } : {}) }) ??

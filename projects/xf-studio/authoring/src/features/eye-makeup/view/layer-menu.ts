@@ -18,9 +18,9 @@ export function layerMenu(ctx: EyeMakeupViewContext, layerId: string): FeatureTa
   if (!layer) return undefined;
   const target = { kind: "layer" as const, id: layerId }, { finishes, finishOf } = catalogues(ctx);
   const items: FeatureMenuItem<EyeMakeupAction>[] = [
-    { kind: "action", label: "Bring forward", icon: "arrowUp", action: { kind: "layer.edit", command: { kind: "move", id: layerId, to: index + 1 } },
+    { kind: "action", label: "Move up", icon: "arrowUp", action: { kind: "layer.edit", command: { kind: "move", id: layerId, to: index + 1 } },
       shortcut: reorderKey(0) },
-    { kind: "action", label: "Send backward", icon: "arrowDown", action: { kind: "layer.edit", command: { kind: "move", id: layerId, to: index - 1 } },
+    { kind: "action", label: "Move down", icon: "arrowDown", action: { kind: "layer.edit", command: { kind: "move", id: layerId, to: index - 1 } },
       shortcut: reorderKey(1) },
     { kind: "action", label: "Mirror across the face", icon: "mirror", action: { kind: "layer.setSymmetry", layerId, symmetry: !layer.symmetry },
       checked: layer.symmetry },

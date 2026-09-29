@@ -64,7 +64,7 @@ export const CHARACTER_DETAIL_STEPS: readonly { step: CharacterDetailStep; label
   { step: "reading", label: "Reading your installed mods" },
   { step: "resolving", label: "Working out your V's skin, face details, eyes, brows, lashes, hair, piercings, body and clothes" },
   { step: "exporting", label: "Reading their shapes and textures from your game files" },
-  { step: "writing", label: "Getting them ready for the preview" },
+  { step: "writing", label: "Getting them ready for the 3D view" },
 ];
 export type CharacterRoute = Omit<InstallationOptions, "cacheDir" | "log">;
 export type PrepareCharacterOptions = {
@@ -1008,7 +1008,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
       const copy = scaled.get(png);
       if (!copy) return { why: "too large to prepare" };
       if ("why" in copy) return { why: `too large to prepare (${copy.why})` };
-      note(`${refLabel(ref)}: ${exported.width}×${exported.height} in the game files; the preview uses it at ${copy.size.width}×${copy.size.height}.`);
+      note(`${refLabel(ref)}: ${exported.width}×${exported.height} in the game files; the 3D view uses it at ${copy.size.width}×${copy.size.height}.`);
       stored = copy;
     } else stored = store(options.storeRoot, png, "png");
     const size = stored.size;
@@ -1016,8 +1016,8 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     // XF Studio's texture reader serves a large map's own smaller mip (PIPE-104).
     const game = exportedTexture?.gameSize;
     if (game && (game.width > size.width || game.height > size.height))
-      note(`${refLabel(ref)}: ${game.width}×${game.height} in the game files; the preview uses its ${size.width}×${size.height} mip.`);
-    if (!spend(stored.file, size.width * size.height)) return { why: "over the preview's texture budget" };
+      note(`${refLabel(ref)}: ${game.width}×${game.height} in the game files; the 3D view uses its ${size.width}×${size.height} mip.`);
+    if (!spend(stored.file, size.width * size.height)) return { why: "too large for the 3D view to load for one V" };
     componentTextures.set(stored.file, size.width * size.height);
     const gamma = cache.gamma.get(key);
     if (gamma === null || gamma === undefined) note(`${refLabel(ref)}: colour flag unreadable; treated as linear.`);
@@ -1161,16 +1161,16 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
     // Placeholder chunks alone draw nothing: the component needs one chunk the renderer really draws. A face detail made only of
     // decal templates the preview can't draw yet is kept, hidden, so the renderer reports it (limit `decal-template`).
     if (!materials.length) {
-      dropped(component, `none of its ${component.materials.length} chunk(s) could be drawn, because an input they need couldn't be read.`);
+      dropped(component, `none of its ${component.materials.length === 1 ? "parts" : `${component.materials.length} parts`} could be drawn, because an input they need couldn't be read.`);
       return "export";
     }
     if (!decalFamilySlot(component.slot) && !materials.some(material => !renderTemplate(material.template, material.templateName)?.placeholder)) {
-      dropped(component, "its chunks use only materials the preview can't draw yet.");
+      dropped(component, "its parts use only materials the 3D view can't draw yet.");
       return "export";
     }
     const glb = storeChunkGeometry(options.storeRoot, exported.glb, materials.map(material => material.chunk));
     if (!glb.trimmed) note(`${component.component}: the exported geometry is served whole.`);
-    if (component.skippedChunks) note(`${component.component}: ${component.skippedChunks} chunk(s) use materials the preview doesn't draw yet.`);
+    if (component.skippedChunks) note(`${component.component}: ${component.skippedChunks === 1 ? "1 part uses a material" : `${component.skippedChunks} parts use materials`} the 3D view doesn't draw yet.`);
     for (const line of component.readerNotes ?? []) note(`${component.component}: ${line}`);
     const hash = component.drawnFrom.ref.hash;
     // Two choices can draw the same mesh (face cyberware reuses the freckle mesh), so the option is part of the identity.
@@ -1228,7 +1228,7 @@ async function prepareOnce(options: PrepareCharacterOptions, beginReads: (graph:
   if (cache.components.size > 2048) for (const key of [...cache.components.keys()].slice(0, 512)) cache.components.delete(key);
   // What the whole V is shown without comes before any one part's notes, so many parts' reader notes can't crowd it out (NATIVE-45).
   const whole: string[] = [];
-  if (overBudget) whole.push(`${overBudget} texture(s) are over what the preview can load for one V, so the parts that need them are drawn without them.`);
+  if (overBudget) whole.push(`${overBudget === 1 ? "1 texture is" : `${overBudget} textures are`} over what the 3D view can load for one V, so the parts that need ${overBudget === 1 ? "it are" : "them are"} drawn without ${overBudget === 1 ? "it" : "them"}.`);
   for (const [slot, why] of partial) {
     const current = slots.get(slot)!, { noun, pronoun } = SLOT_WORDS[slot];
     const all = pronoun === "it" ? "not all of it is" : "not all of them are";
