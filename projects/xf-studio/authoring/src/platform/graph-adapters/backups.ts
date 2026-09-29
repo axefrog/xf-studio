@@ -65,7 +65,7 @@ export class LibraryBackups {
 
   /**
    * A copy taken before a migration, one per migration (CORE-144): a copy already taken today for the same migration is kept as it is (a
-   * window opened while another migrated, or an open whose migration failed after its copy, would otherwise replace it, perhaps with an
+   * Studio opened while another migrated, or an open whose migration failed after its copy, would otherwise replace it, perhaps with an
    * already migrated library), and a new day's copy for a migration that still hasn't run replaces the older ones. Pre-migration copies
    * of other migrations are kept until removed. Returns the copy.
    */
@@ -164,7 +164,7 @@ export class LibraryBackups {
       } finally { db.close(); }
       if (busy()) throw refuse();
     }
-    // The restored copy is made beside the library, pending purges applied to it, and renamed over it in one step (CORE-145): a window
+    // The restored copy is made beside the library, pending purges applied to it, and renamed over it in one step (CORE-145): a Studio
     // that opened the library meanwhile made its write-ahead log (checked again just before), and on Windows the rename itself is refused
     // while any connection has the file open, so nobody's open library is replaced under them.
     const staged = `${this.library}.${process.pid}.restoring`;
