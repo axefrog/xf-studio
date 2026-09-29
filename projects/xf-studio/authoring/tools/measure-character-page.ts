@@ -55,7 +55,7 @@ try {
   })()`);
   /** Dispatch actions (several: back to back, a burst) and wait until the V shows the last with a drawn frame. */
   const measure = (label: string, actions: object[]) => page.evaluate(`(async () => {
-    const stages = ["ask", "answer", "record", "loaded", "placed", "frame"];
+    const stages = ["ask", "answer", "record", "loaded", "prepared", "placed", "frame"];
     for (const s of stages) performance.clearMarks("xfs:character:" + s);
     performance.clearResourceTimings();
     const a = window.xfStudioPresentation.authoring;
