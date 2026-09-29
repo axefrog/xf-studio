@@ -18,14 +18,14 @@ XF Strata (Strata for short) is a standalone graph engine. Every node is a strea
 
 | Area | Main exports |
 |---|---|
-| Kernel | `createEnvironment`, `Environment` (`seed`, `combinator`, `effect`, `driver`, `transaction`, `observe`, `setInputs`, `read`, `connect`, `spawn`, `processTree`), `KNode`, `Driver` (`start(signal)` returns a `Process`), `Process`, `UNCHANGED`, `ErrorValue`, `LATEST` |
+| Kernel | `createEnvironment`, `Environment` (`seed`, `combinator`, `effect`, `driver` (each ended by an optional signal), `transaction`, `observe`, `setInputs`, `read`, `connect`, `spawn`, `processTree`), `KNode`, `Driver` (`start(signal)` returns a `Process`), `Process`, `UNCHANGED`, `ErrorValue`, `LATEST` |
 | Streams and operators | `map`, `filter`, `scan`, `combine`, `flatMap`, `catalogue`, `standardOperators`, `erector`, `GRAPH_MODEL_SCHEMA` |
 | Cancellation | `Aborter`, `StrataSignal`, `anySignal`, `AbortSignalLike` |
 | Entity layer | `defineType`, `defineRule`, `defineSource`, `defineSink`, `createGraph` → `commit`, `read`, `resolve`, `origin`, `subscribe`, `subscribeAll`, `subscribePending` (all ended by a signal), `undo`, `redo`, `at`, `history`, `conflicts`, `fix`, `compact`, `collapseInline`, `purge`, `sync`, `recover`, `inspect`, `inspectNode` |
 | Storage | `GraphStore` (the interface a host implements), `MemoryStore` |
 | Actors | `resolveClaims`, `trustSelf`, `trustTable`, `TrustPolicy`, `FramePolicies` |
 | Utilities | `seededRandom`, `canonical`, `equal`, `pathKey`, `fold`, `kindAt`, compaction primitives |
-| `strata/testing` | `simulate`, `shrink`, `replay`, `graphScenario`, `kernelScenario`, `referenceModel`, the invariant checks, `Scheduler`, `simClock`, `SimStore`, `SimJobs`, `STORE_CASES`, `runKernelVector`, `runEntityVector`, `STRATA_FAULTS` |
+| `strata/testing` | `simulate`, `shrink`, `replay`, `graphScenario`, `kernelScenario`, `referenceModel`, the invariant checks, `Scheduler`, `simClock`, `SimStore`, `SimJobs`, `STORE_CASES`, `runKernelVector`, `runEntityVector`, `runCanonicalVector`, `STRATA_FAULTS`, `STRATA_DEBUG` |
 
 ## Guarantees
 
@@ -34,7 +34,7 @@ XF Strata (Strata for short) is a standalone graph engine. Every node is a strea
 - **Exact undo:** undoing a commit folds each node back to its state before it while the stream only grows.
 - **No lost work:** an accepted commit is stored, pending (the host's recovery copy) or rejected, across crashes.
 - **Consistent cuts:** a view at a point equals replaying every stream from empty to that point; snapshot plus tail equals the full fold.
-- **Budgets:** 10,000 nodes over one million entries fold from snapshots in about 50 ms (budget 300); a commit on a node shared by 20 subscribed forks takes about 0.8 ms (budget 2).
+- **Budgets:** 10,000 nodes over one million entries load from their snapshots and short tails (about 55,000 entries folded) in about 50 ms of folding (budget 300), and fold from empty, all million entries, in about 175 ms (budget 1,000); a commit on a node shared by 20 subscribed forks returns in about 0.7 ms (budget 2) and is acknowledged by an in-memory store in about 0.8 ms (budget 3).
 - **Boundary:** the engine compiles against ES2022 alone and imports nothing outside this folder.
 
 ## Minimal example

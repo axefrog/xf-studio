@@ -8,7 +8,7 @@
 import { expect, test } from "bun:test";
 import { Aborter, createEnvironment, LATEST, MemoryStore } from "strata";
 import type { DemandSpec, KNode } from "strata";
-import { Scheduler, settle, simClock } from "strata/testing";
+import { Scheduler, settle, simClock, STRATA_DEBUG } from "strata/testing";
 import { ITEM } from "../src/testing/synthetic";
 import { create, drive, harness, ok } from "./helpers";
 
@@ -78,7 +78,7 @@ test("a commit refused as busy takes no commit ID, position or actor counter", (
   expect(new Set(refusals)).toEqual(new Set(["busy"]));
   expect(graph.position).toBe(position);
   ok(graph.commit([{ op: "set", node, path: ["title"], value: "b" }]));
-  const history = graph.debugState().records.find(rec => rec.ref.id === node.id)!.entries;
+  const history = graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === node.id)!.entries;
   expect(history.map(entry => entry.actorSeq)).toEqual([1, 2]);
   token.abort();
 });

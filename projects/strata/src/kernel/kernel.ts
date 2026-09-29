@@ -63,29 +63,47 @@ type Edge = { spec: DemandSpec; source?: KNode<DemandSpec>; follower?: KNode };
 
 /** A node: its identity, kind and stream. */
 export class KNode<T = unknown> {
-  /** Retained entries, oldest first. */
-  entries: KEntry<T>[] = [];
+  /** @internal The retained entries, oldest first (the kernel appends and trims them). */
+  held: KEntry<T>[] = [];
+  /** @internal */
   nextSeq = 1;
-  inputs: { node: KNode; demand: Demand }[] = [];
-  /** Demand edges on this node, by consumer. */
+  /** @internal The inputs (the kernel rewires them). */
+  wiring: { node: KNode; demand: Demand }[] = [];
+  /** @internal Demand edges on this node, by consumer. */
   readonly demands = new Map<Consumer, Edge>();
-  active = false;
-  // Cycle state.
+  /** @internal */
+  live = false;
+  /** @internal Cycle state. */
   counter = 0;
+  /** @internal */
   dirty = false;
+  /** @internal */
   startedTo: KNode[] = [];
+  /** @internal */
   appendedIn = 0;
-  computes = 0;
-  /** Seeds: their activation and its controller. */
+  /** @internal */
+  runs = 0;
+  /** @internal Seeds: their activation. */
   activation?: (context: { readonly signal: AbortSignalLike; readonly observe: (value: T) => void }) => void;
+  /** @internal */
   activationAborter?: Aborter;
+  /** @internal */
   compute?: Compute<T>;
+  /** @internal */
   run?: Run;
-  /** Effects: the run scope connecting them. */
+  /** @internal Effects: the run scope connecting them. */
   scope?: Scope;
-  /** Keep every entry (conformance, entity streams managed elsewhere). */
+  /** @internal Keep every entry (debugging, entity streams managed elsewhere). */
   retainAll = false;
   constructor(readonly env: Environment, readonly id: string, readonly kind: NodeKind, readonly name: string) {}
+  /** The retained entries, oldest first (SPEC §4.5). */
+  get entries(): readonly KEntry<T>[] { return this.held; }
+  /** The node's inputs, in order, with the demand each is read with. */
+  get inputs(): readonly { readonly node: KNode; readonly demand: Demand }[] { return this.wiring; }
+  /** Whether the node is active (SPEC §4.4). */
+  get active(): boolean { return this.live; }
+  /** How many times the node has computed (a combinator) or run (an effect). */
+  get computes(): number { return this.runs; }
   latest(): KEntry<T> | undefined { return this.entries[this.entries.length - 1]; }
   /** The latest value (undefined when there is none or it is an error). */
   value(): T | undefined { return this.latest()?.value; }
@@ -271,7 +289,7 @@ export class Environment {
   combinator<T>(spec: { readonly id?: string; readonly name?: string; readonly inputs: readonly Input[]; readonly compute: Compute<T>; readonly signal?: AbortSignalLike }): KNode<T> {
     const node = this.register(new KNode<T>(this, this.newId("combinator", spec.id), "combinator", spec.name ?? spec.id ?? "combinator"));
     node.compute = spec.compute;
-    node.inputs = spec.inputs.map(normaliseInput);
+    node.wiring = spec.inputs.map(normaliseInput);
     return this.until(node, spec.signal);
   }
 
@@ -279,7 +297,7 @@ export class Environment {
   effect(spec: { readonly id?: string; readonly name?: string; readonly inputs: readonly Input[]; readonly run: Run; readonly signal?: AbortSignalLike }): KNode {
     const node = this.register(new KNode(this, this.newId("effect", spec.id), "effect", spec.name ?? spec.id ?? "effect"));
     node.run = spec.run;
-    node.inputs = spec.inputs.map(normaliseInput);
+    node.wiring = spec.inputs.map(normaliseInput);
     return this.until(node, spec.signal);
   }
 
@@ -387,7 +405,7 @@ export class Environment {
   private append<T>(node: KNode<T>, value: T | undefined, error?: ErrorRecord): void {
     const entry: KEntry<T> = freeze({ seq: node.nextSeq++, cycle: this.cycles, at: this.now(),
       ...(error ? { error } : { value: value as T }) });
-    node.entries.push(entry);
+    node.held.push(entry);
     node.appendedIn = this.cycle;
     this.onAppend?.(node as KNode, entry);
   }
@@ -473,7 +491,7 @@ export class Environment {
 
   /** A combinator computes (appending only a changed value) or an effect runs; failures are values (SPEC §7). */
   private work(node: KNode): void {
-    node.computes++;
+    node.runs++;
     const context = this.context(node);
     if (node.kind === "effect") {
       try { node.run!(context); }
@@ -552,7 +570,7 @@ export class Environment {
   }
 
   private activate(node: KNode): void {
-    node.active = true;
+    node.live = true;
     if (node.kind === "combinator" || node.kind === "effect") {
       for (const input of node.inputs) this.addDemand(input.node, node, input.demand);
       this.primed.add(node);
@@ -567,11 +585,11 @@ export class Environment {
   }
 
   private deactivate(node: KNode): void {
-    node.active = false;
+    node.live = false;
     this.primed.delete(node);
     if (node.kind === "combinator" || node.kind === "effect") for (const input of node.inputs) this.releaseDemand(input.node, node);
     if (node.activationAborter) { node.activationAborter.abort("dormant"); node.activationAborter = undefined; }
-    if (!node.retainAll && node.kind !== "seed" && node.kind !== "process") node.entries = node.entries.slice(-1);
+    if (!node.retainAll && node.kind !== "seed" && node.kind !== "process") node.held = node.held.slice(-1);
   }
 
   /** The host demands a node until `signal` aborts. */
@@ -595,7 +613,7 @@ export class Environment {
       return;
     }
     const previous = node.inputs;
-    node.inputs = next;
+    node.wiring = next;
     if (!node.active) return;
     const kept = new Set<KNode>();
     for (const input of next) {
@@ -670,7 +688,7 @@ export class Environment {
     const now = this.now();
     const specs = [...node.demands.values()].map(edge => edge.spec);
     const last = node.entries[node.entries.length - 1];
-    node.entries = node.entries.filter(entry => entry === last || specs.some(spec => keeps(spec, entry, node, now)));
+    node.held = node.held.filter(entry => entry === last || specs.some(spec => keeps(spec, entry, node, now)));
   }
 
   // ---------------------------------------------------------------------------------------------------------------

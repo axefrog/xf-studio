@@ -34,6 +34,8 @@ import type {
 /** Test-only fault injection (exported from `strata/testing`): proves the harness finds and shrinks a propagation bug. */
 export const STRATA_FAULTS: unique symbol = Symbol.for("strata.faults");
 export type Faults = { readonly skipInvalidation?: (ref: NodeRef) => boolean };
+/** Test-only access to internal state (exported from `strata/testing`): the standard invariants read it. */
+export const STRATA_DEBUG: unique symbol = Symbol.for("strata.debug");
 
 export interface GraphOptions {
   readonly types: readonly TypeDef[];
@@ -2112,8 +2114,8 @@ export class StrataGraph implements GraphView {
     return freeze({ row, uses, usedBy, basedOn, feedsFrom, fedInto, conflicts: this.conflicts(ref, { acknowledged: true }), own: state.own, layers: state.layers });
   }
 
-  /** Internal state for the standard invariants (`strata/testing`): the head memo and stored structure. */
-  debugState() {
+  /** Internal state for the standard invariants (`strata/testing`, through `STRATA_DEBUG`): the head memo and stored structure. */
+  [STRATA_DEBUG]() {
     return {
       records: [...this.records.values()].map(rec => ({ ref: rec.ref, constant: rec.constant, session: rec.session, base: rec.base,
         entries: rec.entries, head: rec.head, headSeq: rec.headSeq, ackedSeq: rec.ackedSeq })),

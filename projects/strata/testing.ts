@@ -10,7 +10,7 @@ export { SimStore } from "./src/testing/sim-store";
 export { referenceModel, replayTo } from "./src/testing/reference";
 export { simulate, runSteps, generateSteps, shrink, replay } from "./src/testing/simulate";
 export type { Step, Scenario, SimAction, SimFailure, SimResult, Regression } from "./src/testing/simulate";
-export { STRATA_FAULTS } from "./src/graph";
+export { STRATA_FAULTS, STRATA_DEBUG } from "./src/graph";
 export { STORE_CASES, sampleEntry } from "./src/testing/store-conformance";
 export type { StoreCase } from "./src/testing/store-conformance";
 export { SYNTHETIC_TYPES, SYNTHETIC_RULES, itemType, groupType, ITEM, GROUP } from "./src/testing/synthetic";
