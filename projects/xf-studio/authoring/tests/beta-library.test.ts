@@ -166,3 +166,38 @@ test("a fresh workspace beside a non-empty library never names two presets alike
     expect(new Set(names).size).toBe(2);
   } finally { first.close(); }
 });
+test("Save as new collection reads the names now: a collection saved from another window meanwhile counts (CORE-141)", async () => {
+  const lib = library();
+  try {
+    await lib.service.execute({ kind: "initialize" });
+    await lib.service.execute({ kind: "save" });
+    // Another window saves "My collection 2"; this window's list isn't refreshed.
+    const other = lib.service.view().draft!.collection;
+    lib.db.save({ collection: { ...structuredClone(other), id: crypto.randomUUID(), name: "My collection 2" } });
+    expect(lib.service.summary().summaries.map(item => item.name)).not.toContain("My collection 2");
+    expect(await lib.service.execute({ kind: "saveCopy" })).toMatchObject({ ok: true });
+    expect(lib.service.summary().draft).toMatchObject({ name: "My collection 3" });
+  } finally { lib.close(); }
+});
+
+test("a recent draft's verdict is judged again once its saved version is loaded, without waiting for an edit (CORE-140)", async () => {
+  const lib = library();
+  try {
+    await lib.service.execute({ kind: "initialize" });
+    await lib.service.execute({ kind: "save" });
+    lib.service.dispatch({ kind: "collection.rename", name: "Edited draft" });
+    const [saved] = lib.db.list();
+    // Opening the saved version queues the edited draft among the recent drafts.
+    await lib.service.execute({ kind: "open", id: saved!.id });
+    expect(lib.service.summary().draft!.recovery[0]).toMatchObject({ id: saved!.id, saved: "edited" });
+    // After a reload (no saved version known yet), the draft is unknown until the restored draft's version loads.
+    const transport: CollectionTransport = { list: async () => lib.db.list(), get: async id => lib.db.get(id),
+      save: async (collection, revision) => lib.db.save({ collection, revision }), package: async () => { throw Error("not used"); } };
+    const reloaded = new CollectionService(STUDIO_DOCUMENTS, lib.service.snapshot(), lib.fixture.workspace.library, () => lib.fixture.document.export(),
+      editor => lib.fixture.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), transport,
+      () => ({ recipe: lib.fixture.document.recipe, revision: lib.fixture.document.geometryVersion.revision }));
+    expect(reloaded.summary().draft!.recovery[0]).toMatchObject({ saved: "unknown" });
+    await reloaded.execute({ kind: "initialize" });
+    expect(reloaded.summary().draft!.recovery[0]).toMatchObject({ saved: "edited" });
+  } finally { lib.close(); }
+});

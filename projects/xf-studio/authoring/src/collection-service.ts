@@ -121,6 +121,8 @@ export class CollectionService {
         canonical: this.model.parts.canonicalParts(preset.parts) }]));
     } catch { return; }
     this.persistenceCache = undefined;
+    // A recent draft's verdict against its saved version may change with this baseline (a version now known): judged again (CORE-140).
+    this.recoveryVerdicts = { content: -1, byId: new Map() };
     this.baselines.delete(`${parsed.id}@${revision}`);
     this.baselines.set(`${parsed.id}@${revision}`, { name: parsed.name, order: parsed.presets.map(preset => preset.id), presets,
       plan: JSON.stringify(parsed.packagePlan ?? null) });
@@ -319,8 +321,11 @@ export class CollectionService {
     if (copy) {
       snapshot.collection.id = crypto.randomUUID(); snapshot.revision = undefined;
       // A copy never takes a name already in the library: "My collection" becomes "My collection 2" (release-readiness-audit.md
-      // item 12, the CORE-124 pattern for collections), and the draft (now the copy) takes it too.
-      const unique = uniqueCollectionName(snapshot.collection.name, this.summaries.map(item => item.name));
+      // item 12, the CORE-124 pattern for collections), and the draft (now the copy) takes it too. The names are read now, not from the
+      // list as last shown, so a collection saved from another window meanwhile counts (CORE-141); if they can't be read, the list shown.
+      let names = this.summaries.map(item => item.name);
+      try { names = (await this.list()).map(item => item.name); } catch { /* The list as last read. */ }
+      const unique = uniqueCollectionName(snapshot.collection.name, names);
       if (unique !== snapshot.collection.name) { renamedFrom = snapshot.collection.name; snapshot.collection.name = unique; }
       // The copy's mods are the copy's own: its default mod's archive name follows the new collection ID, and every
       // split-off mod gets a fresh ID, so no archive of the copy hides one of the original's (PIPE-89).

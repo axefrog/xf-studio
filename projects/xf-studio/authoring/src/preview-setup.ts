@@ -121,6 +121,11 @@ const HEAD_FAILURES: Record<HeadLoadFailureCode, { message: string; next: "retry
 };
 const REPEATED_FAILURE = "The 3D preview still couldn't be loaded. Prepare it again from your Cyberpunk 2077 files.";
 const BUSY = "XF Studio is still working on the last step.";
+/** Whether two Windows folder paths name the same folder (case, slashes and a trailing separator aside). */
+const folderKey = (path: string) => path.replaceAll("/", "\\").replace(/\\+$/, "").toLowerCase();
+const sameFolder = (a: string, b: string) => folderKey(a) === folderKey(b);
+/** A folder's own name (the last part of its path). */
+const folderName = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
 
 /** Views and host requests that are effects: they wait for (and block) each other. */
 const EFFECTS = new Set<PreviewSetupAction["kind"]>(["previewSetup.refresh", "previewSetup.prepare", "previewSetup.cancel",
@@ -278,10 +283,9 @@ export class PreviewSetupActions {
       case "previewSetup.useDetectedGame": {
         // The folder, and how mods are installed when the card asked (the MO2 instance and profile it found, unless Settings already
         // names them), in one change, so the route and the framework check are right from the first run.
-        const folder = this.detectedGame!, route = this.snapshot().card.route, settings = localSetup.snapshot().view?.fields;
+        const folder = this.detectedGame!, route = this.snapshot().card.route;
         const fields = !route ? { gameRoot: folder } : route.chosen === "direct" ? { gameRoot: folder, launchRoute: "direct" as const }
-          : { gameRoot: folder, launchRoute: "mo2" as const, mo2Root: settings?.mo2Root ?? this.detectedMo2!.root,
-            mo2ProfileId: settings?.mo2ProfileId ?? this.detectedMo2!.profile };
+          : { gameRoot: folder, launchRoute: "mo2" as const, ...this.mo2Instance() };
         return this.run(async () => this.saved(await localSetup.dispatch({ kind: "setup.update", fields })));
       }
       case "previewSetup.installWolvenKit":
@@ -393,13 +397,26 @@ export class PreviewSetupActions {
     } catch { this.detectedGame = null; this.gameNote = null; this.detectedMo2 = null; }
     finally { this.detection = "done"; this.notify(); }
   }
+  /**
+   * The Mod Organizer 2 instance **Use this folder** saves with the MO2 route: the one Settings names, else the one found. A profile
+   * belongs to its instance (CORE-142): the found instance's profile fills in only for that instance, never for another root in Settings.
+   */
+  private mo2Instance(): { mo2Root: string; mo2ProfileId: string | null } {
+    const found = this.detectedMo2!, fields = this.port.localSetup.snapshot().view?.fields;
+    const own = fields?.mo2Root || null, profile = fields?.mo2ProfileId ?? null;
+    if (own && !sameFolder(own, found.root)) return { mo2Root: own, mo2ProfileId: profile };
+    return { mo2Root: own ?? found.root, mo2ProfileId: profile ?? found.profile };
+  }
   /** The card's route question, while Mod Organizer 2 was found and the saved settings don't already name how mods are installed. */
   private routeQuestion(): PreviewSetupRouteQuestion | null {
     const mo2 = this.detectedMo2, fields = this.port.localSetup.snapshot().view?.fields;
     if (!mo2 || (fields?.launchRoute === "mo2" && fields.mo2Root)) return null;
+    // It names the instance and profile **Use this folder** would save (Settings' own MO2 folder, when it names another one).
+    const saved = this.mo2Instance(), other = !sameFolder(saved.mo2Root, mo2.root);
+    const name = other ? folderName(saved.mo2Root) : mo2.name;
     return { label: "How do you install mods?", chosen: this.routeChoice ?? "mo2",
-      detail: `${mo2.name}${mo2.profile ? ` · profile ${mo2.profile}` : ""}`,
-      options: [{ value: "mo2", label: "Mod Organizer 2", title: `Your mods are managed in Mod Organizer 2 (${mo2.name})` },
+      detail: `${name}${saved.mo2ProfileId ? ` · profile ${saved.mo2ProfileId}` : ""}`,
+      options: [{ value: "mo2", label: "Mod Organizer 2", title: `Your mods are managed in Mod Organizer 2 (${name})` },
         { value: "direct", label: "Vortex or by hand", title: "Your mods go into the game's own folder" }] };
   }
   /** Record the person's Not now (or taking it back), in the workspace when the host keeps it. */
