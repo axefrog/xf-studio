@@ -1,7 +1,7 @@
 /**
  * The update check's host side: what was found, kept in a small file beside the settings, and the endpoint the page asks.
  * `POST {action: "startup"}` is the check at start (the service decides whether it runs), `POST {action: "check"}` the person's
- * own check, `POST {action: "skip", version}` stops announcing a version, and `GET` returns the last answer without asking GitHub.
+ * own check, and `POST {action: "skip", version}` stops announcing a version.
  * The request's own signal cancels a check the page no longer waits for.
  */
 import { readBodyText } from "./request-body";
@@ -37,7 +37,6 @@ export function createUpdateCheckHandler(service: UpdateCheckService) {
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url), origin = request.headers.get("Origin");
     if (origin && origin !== url.origin) return json({ code: "forbidden", error: "Use XF Studio itself to check for updates." }, 403);
-    if (request.method === "GET") return json(service.status());
     if (request.method !== "POST") return json({ code: "method", error: "Method not allowed." }, 405);
     if (origin !== url.origin || request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
       return json({ code: "forbidden", error: "Use XF Studio itself to check for updates." }, 403);

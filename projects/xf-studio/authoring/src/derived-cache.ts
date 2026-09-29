@@ -35,6 +35,12 @@ export function writeFileAtomic(path: string, data: string | Uint8Array): void {
   catch (error) { rmSync(staging, { force: true }); throw error; }
 }
 
+/** One small text file the host keeps (e.g. the update check's memory): read whole, null while it doesn't exist, and written atomically. */
+export function textFileAt(path: string): { read(): string | null; write(text: string): void } {
+  return { read: () => existsSync(path) ? readFileSync(path, "utf8") : null,
+    write: text => { mkdirSync(dirname(path), { recursive: true }); writeFileAtomic(path, text); } };
+}
+
 export const samePath = (left: string, right: string) => process.platform === "win32"
   ? resolve(left).toLowerCase() === resolve(right).toLowerCase() : resolve(left) === resolve(right);
 

@@ -48,8 +48,30 @@ export const CAPABILITIES: Readonly<Record<string, string>> = {
   "environment-changes": "Environment facts (pixel ratio, colour scheme, free memory, GPU limits, context loss) as sources whose changes re-demand.",
 };
 
-/** Every model file, read and parsed, with where it came from. */
+/** The files the catalogue keeps beside its kind folders and `schema/`. */
+export const CATALOGUE_FILES: readonly string[] = ["README.md", "INDEX.md", "OPEN-QUESTIONS.md", "coverage-exclusions.json"];
+
+/**
+ * What doesn't belong in the catalogue (paths relative to it): a folder that isn't a kind or `schema`, a file that isn't one of
+ * `CATALOGUE_FILES`, anything in a kind folder but `<id>.json` files, and anything in `schema/` but `<name>.schema.json` files.
+ * A misspelled folder or a stray file would otherwise be skipped without a word.
+ */
+export function catalogueStrays(dir = MODELS_DIR): string[] {
+  const strays: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory() && ((KINDS as readonly string[]).includes(entry.name) || entry.name === "schema")) {
+      const suffix = entry.name === "schema" ? ".schema.json" : ".json";
+      for (const inner of readdirSync(join(dir, entry.name), { withFileTypes: true }))
+        if (!inner.isFile() || !inner.name.endsWith(suffix)) strays.push(`${entry.name}/${inner.name}`);
+    } else if (!entry.isFile() || !CATALOGUE_FILES.includes(entry.name)) strays.push(entry.name);
+  }
+  return strays.sort();
+}
+
+/** Every model file, read and parsed, with where it came from. Refuses a catalogue with anything in it that isn't a model or one of its files. */
 export function loadModels(dir = MODELS_DIR): { file: string; model: Model }[] {
+  const strays = catalogueStrays(dir);
+  if (strays.length) throw Error(`The model catalogue has files or folders it doesn't know: ${strays.join(", ")}`);
   const out: { file: string; model: Model }[] = [];
   for (const kind of KINDS) {
     let names: string[] = [];

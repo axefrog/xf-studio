@@ -110,10 +110,16 @@ export type UpdateCheckOptions = {
   recheckMs?: number;
 };
 
+/** One request to the source, shared by every check that joins it while it runs. */
+type SharedRun = { outcome: Promise<RunOutcome>; controller: AbortController; waiting: number };
+/** What a run found: the memory after it, and why it failed (null when it read the releases). */
+type RunOutcome = { memory: UpdateCheckMemory; failure: CheckFailure | null };
+
 export class UpdateCheckService {
   private announced = false;
+  /** Whether a check at start has finished this run (an aborted or failed one leaves the next start free to ask). */
   private startedThisRun = false;
-  private running: Promise<UpdateCheckAnswer> | null = null;
+  private running: SharedRun | null = null;
   constructor(private readonly options: UpdateCheckOptions) {}
 
   private memory(): UpdateCheckMemory {
@@ -132,16 +138,12 @@ export class UpdateCheckService {
       reason: found === "failed" ? reason ?? "unavailable" : null, announce, automatic: this.options.automatic(), checkedAt: memory.checkedAt };
   }
 
-  /** The last answer, without asking GitHub (About and Help show it). */
-  status(): UpdateCheckAnswer { return this.answer(this.memory(), null, null, false); }
-
   /** The check at start: skipped when turned off, once per run, and from memory while it's fresh. Never throws. */
   async startup(signal: AbortSignal): Promise<UpdateCheckAnswer> {
     if (!this.options.automatic()) return this.answer(this.memory(), "skipped", null, false);
     const memory = this.memory(), recheck = this.options.recheckMs ?? UPDATE_RECHECK_MS;
     const fresh = memory.checkedAt !== null && this.options.now() - memory.checkedAt < recheck && this.options.now() >= memory.checkedAt;
     if (this.startedThisRun || fresh) return this.answer(memory, null, null, true);
-    this.startedThisRun = true;
     return this.ask(signal, true);
   }
 
@@ -157,23 +159,43 @@ export class UpdateCheckService {
     return this.answer(memory, null, null, false);
   }
 
-  private ask(signal: AbortSignal, startup: boolean): Promise<UpdateCheckAnswer> {
-    if (!parseVersion(this.options.installed)) return Promise.resolve(this.answer(this.memory(), "failed", "unavailable", startup));
-    if (this.running) return this.running.then(answer => startup ? this.answer(this.memory(), answer.result === "failed" ? "failed" : null, answer.reason, true) : answer);
-    const run = (async () => {
+  /** The request every check joins: it has its own signal, aborted only once every check waiting on it has been aborted. */
+  private shared(): SharedRun {
+    if (this.running) return this.running;
+    const controller = new AbortController();
+    const outcome = (async (): Promise<RunOutcome> => {
       let list: ReleaseList;
-      try { list = await this.options.releases(signal); } catch { list = { ok: false, reason: signal.aborted ? "unavailable" : "offline" }; }
+      try { list = await this.options.releases(controller.signal); } catch { list = { ok: false, reason: controller.signal.aborted ? "unavailable" : "offline" }; }
       const memory = this.memory();
       if (!list.ok) {
         // GitHub asked us to wait: the check at start leaves it for a few hours. Offline is tried again next start.
         if (list.reason === "rate_limited") this.remember({ ...memory, checkedAt: this.options.now() });
-        return this.answer(memory, "failed", list.reason, startup);
+        return { memory, failure: list.reason };
       }
       const next = { ...memory, checkedAt: this.options.now(), latest: newestRelease(list.releases) };
       this.remember(next);
-      return this.answer(next, null, null, startup);
+      return { memory: next, failure: null };
     })();
+    const run: SharedRun = { outcome, controller, waiting: 0 };
     this.running = run;
-    return run.finally(() => { if (this.running === run) this.running = null; });
+    void outcome.finally(() => { if (this.running === run) this.running = null; });
+    return run;
+  }
+
+  private async ask(signal: AbortSignal, startup: boolean): Promise<UpdateCheckAnswer> {
+    if (!parseVersion(this.options.installed)) return this.answer(this.memory(), "failed", "unavailable", startup);
+    const run = this.shared();
+    // This check stops waiting when its own signal aborts; the request stops only when no check is left waiting on it.
+    let leave: () => void = () => {};
+    const left = new Promise<null>(resolve => {
+      leave = () => { signal.removeEventListener("abort", leave); if (--run.waiting === 0) run.controller.abort(); resolve(null); };
+    });
+    run.waiting++;
+    if (signal.aborted) leave(); else signal.addEventListener("abort", leave, { once: true });
+    const outcome = await Promise.race([run.outcome, left]);
+    signal.removeEventListener("abort", leave);
+    if (!outcome) return this.answer(this.memory(), "failed", "unavailable", startup);
+    if (startup && !outcome.failure) this.startedThisRun = true;
+    return this.answer(outcome.memory, outcome.failure ? "failed" : null, outcome.failure, startup);
   }
 }
