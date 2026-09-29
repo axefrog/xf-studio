@@ -1,0 +1,26 @@
+{
+  "kind": "driver",
+  "id": "folder-picker",
+  "owner": "setup",
+  "summary": "Opens the native folder picker for a settings field and returns the folder the person chose.",
+  "status": "both",
+  "replaces": [
+    "browser-local-setup-device",
+    "local-setup-actions",
+    "studio-ui/components/folder-setting"
+  ],
+  "environment": "desktop",
+  "serves": [
+    "request:pick-folder"
+  ],
+  "demands": [
+    "source:native-dialogs"
+  ],
+  "creates": [],
+  "starts": [
+    "process:folder-pick"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "Per pick."
+}

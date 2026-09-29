@@ -1,0 +1,35 @@
+{
+  "kind": "driver",
+  "id": "prefetch",
+  "owner": "character",
+  "summary": "Prepares an open row's choices ahead, one state per choice, pausing while a person's own request runs and resuming after a quiet period.",
+  "status": "both",
+  "replaces": [
+    "choice-prefetch"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:prefetch-row"
+  ],
+  "demands": [
+    "operator:quiet-period",
+    "operator:request-for-choice"
+  ],
+  "creates": [],
+  "starts": [
+    "process:prefetch-batch"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:prepare-v-on-host"
+  ],
+  "faults": [],
+  "lifetime": "Per open row per page.",
+  "x-friction": [
+    {
+      "gap": "Background prefetch pauses (not aborts) when the person's request arrives.",
+      "capability": "pause-and-resume",
+      "closes": "Suspending and resuming background work for priority."
+    }
+  ]
+}

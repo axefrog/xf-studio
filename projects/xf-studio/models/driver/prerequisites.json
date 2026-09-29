@@ -1,0 +1,35 @@
+{
+  "kind": "driver",
+  "id": "prerequisites",
+  "owner": "export",
+  "summary": "Prepares what a Build needs from the game (the eye plate cut per body, the expression table) and supplies Check with what each last left.",
+  "status": "both",
+  "replaces": [
+    "expressions-game-prerequisite",
+    "eye-plate-cache",
+    "eye-plate-cut",
+    "eye-plate-prerequisite",
+    "eye-plate-recipe",
+    "eye-plate-service",
+    "eye-plate-verify"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:prepare-prerequisites"
+  ],
+  "demands": [
+    "source:host-files"
+  ],
+  "creates": [],
+  "starts": [
+    "process:eye-plate-cut",
+    "process:expression-table-read"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:run-wolvenkit",
+    "request:open-installation"
+  ],
+  "faults": [],
+  "lifetime": "Per prerequisite and installation, while a Check or Build needs it."
+}

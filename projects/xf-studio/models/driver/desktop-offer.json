@@ -1,0 +1,29 @@
+{
+  "kind": "driver",
+  "id": "desktop-offer",
+  "owner": "setup",
+  "summary": "On localhost, says whether the desktop app is installed, built or published, and opens it or runs the built setup after the person confirms.",
+  "status": "both",
+  "replaces": [
+    "browser-desktop-app-device",
+    "desktop-app",
+    "desktop-app-host"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:offer-desktop-app"
+  ],
+  "demands": [
+    "type:consent",
+    "source:host-processes",
+    "source:network"
+  ],
+  "creates": [],
+  "starts": [
+    "process:desktop-app-detect",
+    "process:desktop-app-launch"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "While Help is open on localhost."
+}

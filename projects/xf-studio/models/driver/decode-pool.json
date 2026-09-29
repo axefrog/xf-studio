@@ -1,0 +1,60 @@
+{
+  "kind": "driver",
+  "id": "decode-pool",
+  "owner": "host",
+  "summary": "Decodes game resources natively in worker threads: lanes by free memory, a time budget per decode, idle exit and trimming.",
+  "status": "both",
+  "replaces": [
+    "native-geometry-export",
+    "native-texture-export",
+    "native/native-decode",
+    "native/native-decode-serve",
+    "native/native-decode-worker",
+    "native/oodle"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:decode-resource"
+  ],
+  "demands": [
+    "source:host-workers",
+    "source:host-environment",
+    "operator:decode-lanes"
+  ],
+  "creates": [],
+  "starts": [
+    "process:native-decode"
+  ],
+  "runtimes": [
+    "runtime:native-decoders"
+  ],
+  "faults": [
+    {
+      "code": "over-time-budget",
+      "when": "A decode took longer than its budget; the worker is terminated and WolvenKit is tried next.",
+      "fault": "owner",
+      "goesTo": "request:decode-resource",
+      "then": "fallback"
+    },
+    {
+      "code": "unsupported-resource",
+      "when": "The native reader doesn't read this resource kind.",
+      "fault": "owner",
+      "goesTo": "request:decode-resource",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "Per route, while decodes are asked for; workers exit after 15 s idle.",
+  "x-friction": [
+    {
+      "gap": "Lanes follow free memory, workers exit idle and trim; a time-budget kill falls back to WolvenKit.",
+      "capability": "worker-pools",
+      "closes": "Worker pools sized from free memory, with a declared fallback approach."
+    },
+    {
+      "gap": "Falling back to WolvenKit after a native failure is a declared alternative approach, written by hand today.",
+      "capability": "fault-owners",
+      "closes": "Failures that select a declared fallback."
+    }
+  ]
+}

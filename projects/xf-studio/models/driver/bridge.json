@@ -1,0 +1,62 @@
+{
+  "kind": "driver",
+  "id": "bridge",
+  "owner": "bridge",
+  "summary": "Connects to the running game's XF bridge while something demands game facts or a scripted session runs; paces commands, reconnects on a new session and closes when idle.",
+  "status": "target",
+  "environment": "bridge",
+  "serves": [
+    "request:bridge-command"
+  ],
+  "demands": [
+    "source:bridge",
+    "type:bridge-session",
+    "operator:game-disagreement",
+    "sink:game-writes"
+  ],
+  "creates": [],
+  "starts": [
+    "process:bridge-command",
+    "process:bridge-capture",
+    "process:game-wait"
+  ],
+  "runtimes": [
+    "runtime:bridge-pipe"
+  ],
+  "faults": [
+    {
+      "code": "no-bridge",
+      "when": "No game with XF's bridge is running.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "rate-limited",
+      "when": "The bridge refused a command for pacing; retried within 4 s.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    },
+    {
+      "code": "command-refused",
+      "when": "The game refused the command.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "While a consumer of game facts or a scripted session is active; the pipe lingers after the last.",
+  "x-friction": [
+    {
+      "gap": "Pacing at 18 requests a second with bursts, retries after refusal and reconnection on a new session.",
+      "capability": "paced-requests",
+      "closes": "Paced request sources with retries and reconnection."
+    },
+    {
+      "gap": "The pipe stays open briefly after its last consumer.",
+      "capability": "keep-after-use",
+      "closes": "Demand that lingers after its last consumer."
+    }
+  ]
+}

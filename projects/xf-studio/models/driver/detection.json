@@ -1,0 +1,34 @@
+{
+  "kind": "driver",
+  "id": "detection",
+  "owner": "setup",
+  "summary": "Finds Cyberpunk 2077 installs and MO2 instances, and checks the frameworks on the configured route.",
+  "status": "both",
+  "replaces": [
+    "browser-install-detection-device",
+    "framework-versions",
+    "install-detection",
+    "install-detection-actions",
+    "install-detection-host",
+    "install-detection-server",
+    "pe-version"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:detect-installs"
+  ],
+  "demands": [
+    "source:host-processes",
+    "source:host-files",
+    "source:host-environment",
+    "operator:frameworks"
+  ],
+  "creates": [],
+  "starts": [
+    "process:detection-scan",
+    "process:framework-check"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "While the setup card or Settings › Game is shown."
+}

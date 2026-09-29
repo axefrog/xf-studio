@@ -1,0 +1,25 @@
+{
+  "kind": "driver",
+  "id": "warming",
+  "owner": "character",
+  "summary": "Resolves the shown V into the shared cache after two seconds of quiet, so a later session starts warm.",
+  "status": "both",
+  "replaces": [
+    "character-detail-host"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:warm-shown-v"
+  ],
+  "demands": [
+    "operator:quiet-period"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:prepare-v-on-host"
+  ],
+  "faults": [],
+  "lifetime": "While the host is quiet and a V was shown."
+}

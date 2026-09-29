@@ -1,0 +1,69 @@
+{
+  "kind": "driver",
+  "id": "desktop-shell",
+  "owner": "desktop",
+  "summary": "The desktop app's windows: creation with a per-launch session token, the blank-window watchdog, and the close handshake per window.",
+  "status": "both",
+  "replaces": [
+    "../desktop/bootstrap",
+    "../desktop/main",
+    "../desktop/server",
+    "../desktop/startup-watchdog",
+    "../desktop/work-activity",
+    "../desktop/workspace-close",
+    "../desktop/workspace-store",
+    "desktop-app-host"
+  ],
+  "environment": "desktop",
+  "serves": [
+    "request:run-desktop-shell",
+    "request:close-window"
+  ],
+  "demands": [
+    "source:desktop-window",
+    "source:native-dialogs",
+    "operator:can-close",
+    "operator:can-restart"
+  ],
+  "creates": [],
+  "starts": [
+    "process:close-handshake"
+  ],
+  "runtimes": [
+    "runtime:native-window"
+  ],
+  "raises": [
+    "request:install-webview2",
+    "request:run-host",
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "flush-timed-out",
+      "when": "A window didn't confirm its changes were safe in time; the person is asked.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "blank-window",
+      "when": "The page never bootstrapped; the watchdog reloads once, then shows help.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "The app process; the close handshake per window close.",
+  "x-friction": [
+    {
+      "gap": "The close handshake needs the store's pending state as a value it can wait on, with a deadline and a fallback.",
+      "capability": "durable-pending",
+      "closes": "Pending changes observable and kept durably until acknowledged."
+    },
+    {
+      "gap": "A restart waits for package and install work, and new work is refused while a restart is reserved.",
+      "capability": "scheduling-rules",
+      "closes": "Leases between drivers."
+    }
+  ]
+}

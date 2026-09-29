@@ -1,0 +1,60 @@
+{
+  "kind": "driver",
+  "id": "core",
+  "owner": "preview",
+  "summary": "Derives the core preview (head, eye plate, eyes, maps) per body from the player's game files, one derivation at a time.",
+  "status": "both",
+  "replaces": [
+    "preview-core-assemble",
+    "preview-core-host",
+    "preview-core-maps",
+    "preview-core-materials",
+    "preview-core-recipe",
+    "preview-core-server",
+    "preview-core-service"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:prepare-core"
+  ],
+  "demands": [
+    "operator:core-ready",
+    "operator:setup-readiness",
+    "type:host-settings"
+  ],
+  "creates": [],
+  "starts": [
+    "process:core-derive",
+    "process:core-rebuild"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:open-installation",
+    "request:export-asset",
+    "request:run-wolvenkit"
+  ],
+  "faults": [
+    {
+      "code": "needs-wolvenkit",
+      "when": "Preparation needs WolvenKit.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "derivation-failed",
+      "when": "The core couldn't be derived from the game files; a plain code and message.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per body and installation, while a scene of that body is shown or Settings asks to prepare.",
+  "x-friction": [
+    {
+      "gap": "One preparation at a time across bodies is a hand-written limit per kind of work.",
+      "capability": "scheduling-rules",
+      "closes": "Limits per kind of work as data."
+    }
+  ]
+}

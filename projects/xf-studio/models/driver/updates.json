@@ -1,0 +1,31 @@
+{
+  "kind": "driver",
+  "id": "updates",
+  "owner": "desktop",
+  "summary": "Checks for, downloads and applies desktop app updates (switched off today).",
+  "status": "both",
+  "replaces": [
+    "../desktop/update-apply-guard",
+    "../desktop/update-service"
+  ],
+  "environment": "desktop",
+  "serves": [
+    "request:update-app"
+  ],
+  "demands": [
+    "source:network",
+    "type:host-settings",
+    "operator:can-restart"
+  ],
+  "creates": [],
+  "starts": [
+    "process:update-check",
+    "process:update-download",
+    "process:update-apply"
+  ],
+  "runtimes": [
+    "runtime:app-updater"
+  ],
+  "faults": [],
+  "lifetime": "Per session: when About is open or a scheduled check is due."
+}

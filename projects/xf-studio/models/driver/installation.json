@@ -1,0 +1,84 @@
+{
+  "kind": "driver",
+  "id": "installation",
+  "owner": "host",
+  "summary": "Opens the game installation on the configured launch route, and reuses it while every watched file stamp is unchanged.",
+  "status": "both",
+  "replaces": [
+    "archive-inventory-fs",
+    "archive-precedence",
+    "archivexl-config",
+    "character-resolver",
+    "clothing-resolver",
+    "host-code-identity",
+    "installation-registry",
+    "installation-snapshot",
+    "leveldb-read",
+    "mo2-instance",
+    "mo2-modlist-text",
+    "mod-makers",
+    "native/archive-reader",
+    "native/native-fetch-port",
+    "rdar-index-fs",
+    "resolver-host",
+    "resource-graph",
+    "route-fingerprint",
+    "source-discovery",
+    "tweakdb-flats",
+    "tweakxl-overlay",
+    "tweakxl-yaml",
+    "volume-info",
+    "vortex-host",
+    "vortex-state"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:open-installation"
+  ],
+  "demands": [
+    "type:host-settings",
+    "source:host-files",
+    "operator:route-key",
+    "operator:installation-valid"
+  ],
+  "creates": [],
+  "starts": [
+    "process:discovery",
+    "process:stamp-check"
+  ],
+  "runtimes": [
+    "runtime:opened-installation"
+  ],
+  "raises": [
+    "request:decode-resource"
+  ],
+  "faults": [
+    {
+      "code": "game-root-missing",
+      "when": "No game folder is set or found.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "discovery-failed",
+      "when": "A mod list or archive index couldn't be read; a discovery with read failures is never kept.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per route key, while any host consumer demands it.",
+  "x-friction": [
+    {
+      "gap": "Validity is a check over 10,209 file stamps that must be re-read; a change the person asks for pays 55–90 ms.",
+      "capability": "stamped-files",
+      "closes": "A stamped-files source with a freshness window and caches keyed by stamp sets."
+    },
+    {
+      "gap": "Discovery blocks the host for 1.6–2.0 s before snapshots; long synchronous work must yield to the person's requests.",
+      "capability": "scheduling-rules",
+      "closes": "Cooperative slicing under a scheduler that lets the person's requests in between."
+    }
+  ]
+}

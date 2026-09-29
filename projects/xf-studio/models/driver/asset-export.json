@@ -1,0 +1,44 @@
+{
+  "kind": "driver",
+  "id": "asset-export",
+  "owner": "host",
+  "summary": "Exports a game resource as GLB, PNG or mask once per export key, shared by every consumer that asks, into the prepared-files cache.",
+  "status": "both",
+  "replaces": [
+    "derived-cache",
+    "game-asset-export",
+    "glb",
+    "mesh-export-repair",
+    "png",
+    "zip-extract"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:export-asset"
+  ],
+  "demands": [
+    "operator:export-key",
+    "source:host-files",
+    "sink:cache-touch",
+    "sink:host-files-write"
+  ],
+  "creates": [],
+  "starts": [
+    "process:asset-export"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:decode-resource",
+    "request:fit-prepared"
+  ],
+  "faults": [
+    {
+      "code": "export-failed",
+      "when": "Neither the native reader nor WolvenKit could export the resource.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per export key, while any consumer awaits it."
+}

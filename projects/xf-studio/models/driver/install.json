@@ -1,0 +1,86 @@
+{
+  "kind": "driver",
+  "id": "install",
+  "owner": "install",
+  "summary": "Places one verified build into MO2 or the game folder only after the person accepted its plan, one install at a time, with a receipt.",
+  "status": "both",
+  "replaces": [
+    "browser-mod-install-device",
+    "mo2-placement",
+    "mod-install-actions",
+    "mod-install-host",
+    "mod-install-transport",
+    "runtime-diagnostic-promotion",
+    "runtime-diagnostic-stage",
+    "studio-ui/panels/mod-install-sheet",
+    "vortex-deployment"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:plan-install",
+    "request:apply-install"
+  ],
+  "demands": [
+    "type:build",
+    "type:consent",
+    "operator:plan-valid",
+    "operator:installable",
+    "source:host-processes",
+    "sink:mod-manager-folders",
+    "sink:reveal-in-folder"
+  ],
+  "creates": [],
+  "starts": [
+    "process:install-plan",
+    "process:install-apply",
+    "process:running-apps-check",
+    "process:reveal-build"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "manager-running",
+      "when": "Mod Organizer 2 is running; the step is to close it.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "plan-changed",
+      "when": "The plan changed since the person reviewed it; review again.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "copy-failed",
+      "when": "A copy failed its hash check; the receipt says what was placed.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "verification-library",
+      "when": "The verification library never installs.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per request; one at a time per host, never while an app restart is reserved.",
+  "x-friction": [
+    {
+      "gap": "No install while an app restart is reserved, and no restart while an install runs: a lease between drivers.",
+      "capability": "scheduling-rules",
+      "closes": "Leases between drivers as data."
+    },
+    {
+      "gap": "Placing files happens once, even across a crash.",
+      "capability": "once-only-effects",
+      "closes": "Outside effects with an idempotency key and recorded outcome."
+    }
+  ]
+}

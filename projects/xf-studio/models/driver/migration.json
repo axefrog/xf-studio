@@ -1,0 +1,65 @@
+{
+  "kind": "driver",
+  "id": "migration",
+  "owner": "library",
+  "summary": "Moves a library onto the graph once: a pre-migration copy, a dry run whose counts must match, then every legacy row and workspace value as entries.",
+  "status": "both",
+  "replaces": [
+    "collection-store",
+    "collection-workspace",
+    "library-store",
+    "part-preset-store"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:migrate-library"
+  ],
+  "demands": [
+    "source:host-database",
+    "source:host-files",
+    "type:mod",
+    "type:preset-eye-makeup",
+    "type:preset-expression",
+    "type:v",
+    "type:layout",
+    "type:view"
+  ],
+  "creates": [],
+  "starts": [
+    "process:library-migration"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:back-up-library",
+    "request:store-operation"
+  ],
+  "faults": [
+    {
+      "code": "counts-mismatch",
+      "when": "The dry run's planned counts differ from what was read; nothing is written and the legacy panels stay.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    },
+    {
+      "code": "round-trip-differs",
+      "when": "A migrated preset doesn't serialise to its source row's bytes.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "Once per library, at the first start of a build that has the graph.",
+  "x-friction": [
+    {
+      "gap": "Legacy revisions must keep their saved times.",
+      "capability": "original-times",
+      "closes": "Import entries with an original time."
+    },
+    {
+      "gap": "Workspace data from newer builds (otherFeatures) must be carried unchanged.",
+      "capability": "unknown-data-kept",
+      "closes": "Unknown data kept verbatim."
+    }
+  ]
+}

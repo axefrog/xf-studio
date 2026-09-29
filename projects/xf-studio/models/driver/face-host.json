@@ -1,0 +1,35 @@
+{
+  "kind": "driver",
+  "id": "face-host",
+  "owner": "expressions",
+  "summary": "Prepares the player's face rig from the winning files, solves expressions newest first per page, bakes the blink and solves idle faces.",
+  "status": "both",
+  "replaces": [
+    "facial-catalogue",
+    "facial-host",
+    "facial-native"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:prepare-face"
+  ],
+  "demands": [
+    "source:host-files",
+    "source:host-processes"
+  ],
+  "creates": [],
+  "starts": [
+    "process:face-prepare",
+    "process:blink-bake",
+    "process:idle-face-solve"
+  ],
+  "runtimes": [
+    "runtime:face-solver",
+    "runtime:python-oracle"
+  ],
+  "raises": [
+    "request:open-installation"
+  ],
+  "faults": [],
+  "lifetime": "Per installation, while any face is shown or prefetched."
+}

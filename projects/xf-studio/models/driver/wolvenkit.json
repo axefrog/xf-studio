@@ -1,0 +1,52 @@
+{
+  "kind": "driver",
+  "id": "wolvenkit",
+  "owner": "host",
+  "summary": "Runs the WolvenKit CLI one run at a time, batching resource fetches, and kills the process tree when a run is aborted.",
+  "status": "both",
+  "replaces": [
+    "eye-plate-wolvenkit",
+    "game-asset-export-wolvenkit",
+    "package-build-wolvenkit",
+    "process-tree",
+    "verifier-wolvenkit",
+    "wolvenkit-cli"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:decode-resource",
+    "request:run-wolvenkit"
+  ],
+  "demands": [
+    "source:host-processes",
+    "type:host-settings"
+  ],
+  "creates": [],
+  "starts": [
+    "process:wolvenkit-run",
+    "process:wolvenkit-batch-fetch"
+  ],
+  "runtimes": [
+    "runtime:wolvenkit-queue"
+  ],
+  "raises": [
+    "request:set-up-wolvenkit"
+  ],
+  "faults": [
+    {
+      "code": "wolvenkit-missing",
+      "when": "No usable WolvenKit CLI; work is suspended until it is set up.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "run-failed",
+      "when": "WolvenKit exited with an error.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per host, while runs are asked for."
+}

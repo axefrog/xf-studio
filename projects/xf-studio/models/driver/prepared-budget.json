@@ -1,0 +1,28 @@
+{
+  "kind": "driver",
+  "id": "prepared-budget",
+  "owner": "host",
+  "summary": "Keeps the prepared game files within their disk budget by evicting the least recently used, and clears them when the person asks.",
+  "status": "both",
+  "replaces": [
+    "prepared-files"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:fit-prepared",
+    "request:clear-prepared"
+  ],
+  "demands": [
+    "operator:budget-state",
+    "source:host-files",
+    "source:host-environment"
+  ],
+  "creates": [],
+  "starts": [
+    "process:prepared-eviction",
+    "process:prepared-clear"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "Per host; runs when prepared files are written or a Clear is asked for."
+}

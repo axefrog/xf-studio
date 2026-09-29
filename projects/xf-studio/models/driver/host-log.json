@@ -1,0 +1,32 @@
+{
+  "kind": "driver",
+  "id": "host-log",
+  "owner": "diagnostics",
+  "summary": "Writes the host's rotating JSON Lines log and its rolling 30-minute trace window.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/host-endpoint",
+    "diagnostics/host-log",
+    "diagnostics/host-report",
+    "diagnostics/host-roots",
+    "diagnostics/mod-identity",
+    "diagnostics/trace-window"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:write-log"
+  ],
+  "demands": [
+    "sink:host-log",
+    "type:host-settings"
+  ],
+  "creates": [],
+  "starts": [
+    "process:trace-flush"
+  ],
+  "runtimes": [
+    "runtime:log-files"
+  ],
+  "faults": [],
+  "lifetime": "The host process."
+}
