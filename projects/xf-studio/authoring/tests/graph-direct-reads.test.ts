@@ -1,193 +1,201 @@
 /**
  * The direct-read ratchet (profiles and graph design §5.1, boundary rule 3): every source of non-determinism enters as
- * a source node, so only adapter modules read the wall clock, timers, randomness, the file system, the network,
- * browser storage or the game bridge directly. Today's code reads them in many places; each is listed below with what
- * it reads, and the list may only shrink: a new read fails, and a listed read that is gone fails until its row is
- * removed (each slice empties the rows it touches, §5.3). New graph code is held to the rule from its first line.
- * Regenerate the rows with `bun tests/fixtures/direct-reads.ts` only when removing them.
+ * a source node, so only adapter modules read the wall clock, timers, randomness, the file system, processes, the
+ * network, browser storage or the game bridge directly. Today's code reads them in many places; each is listed below
+ * with what it reads and how many times, and the list may only shrink: a new read (or one more of a kind already
+ * listed) fails, and a read that is gone fails until its row is lowered or removed (each slice empties the rows it
+ * touches, §5.3). New graph code is held to the rule from its first line. Regenerate the rows with
+ * `bun tests/fixtures/direct-reads.ts` only when lowering or removing them.
  */
 import { expect, test } from "bun:test";
-import { directReads, kindsIn } from "./fixtures/direct-reads";
+import { directReads, kindsIn, readsIn } from "./fixtures/direct-reads";
 
 /**
- * Grandfathered direct reads (module: kinds), recorded when the graph engine landed (G1) and extended once at its merge for modules
- * written in parallel before the rule existed (the speed and beta-polish tracks), and once more for the second speed track's adapters. This list only shrinks.
+ * Grandfathered direct reads (module: kind: how many), recorded when the graph engine landed (G1), extended once at its
+ * merge for modules written in parallel before the rule existed (the speed and beta-polish tracks), and counted per
+ * kind when the patterns were widened (deep review 6, CORE-132): reads the narrower patterns missed in modules that
+ * already existed were added then, once, each marked "previously undetected"; the second speed track's adapters were
+ * added at its merge, each marked "speed 2". This list only shrinks: a count may
+ * only fall (and its row must then be lowered), never rise, and no module or kind may be added.
  */
-const GRANDFATHERED: Readonly<Record<string, readonly string[]>> = {
-  "archive-inventory-fs": ["files"],
-  "authoring-eye-makeup": ["random"],
-  "brow-study-fixture": ["network"],
-  "browser-cc-catalogue-device": ["timers","network"],
-  "browser-character-detail-device": ["timers","random","network"],
-  "browser-choice-preview-device": ["network"],
-  "browser-desktop-app-device": ["network"],
-  "browser-facial-device": ["network"],
-  "browser-file-device": ["timers"],
-  "browser-grading-lut-device": ["timers","network"],
-  "browser-head-attachment": ["timers"],
-  "browser-install-detection-device": ["network"],
-  "browser-local-setup-device": ["network"],
-  "browser-mod-install-device": ["network"],
-  "browser-pose-device": ["network"],
-  "browser-save-explorer-device": ["network"],
-  "cc-catalogue-host": ["files"],
-  "cc-catalogue-service": ["clock","timers"],
-  "cc-icon-host": ["clock","files"],
-  "cc-swatch-host": ["clock","timers","files"],
-  "character-context-actions": ["clock","timers"],
-  "character-warm-start": ["network"], // perf-2 host and page adapters, written before the rule reached their branch
-  "character-detail-host": ["clock","timers","files"],
-  "character-detail-loader": ["timers"],
-  "character-detail-service": ["clock","files"],
-  "choice-manifest": ["files"],
-  "choice-prefetch": ["clock","timers"],
-  "choice-preview-host": ["files"],
-  "choice-preview-render": ["clock"],
-  "choice-preview-service": ["clock","timers"],
-  "choice-preview-worker": ["clock","network"],
-  "clothing-host": ["clock","files"],
-  "collection-service": ["clock","random"],
-  "collection-session": ["random"],
-  "collection-store": ["clock","random"],
-  "collection-transport": ["network"],
-  "dangle-host": ["files"],
-  "derived-cache": ["files"],
-  "desktop-app-host": ["timers","files"],
-  "diagnostics/actions": ["timers"],
-  "diagnostics/browser-device": ["clock","timers"],
-  "diagnostics/host-endpoint": ["files"],
-  "diagnostics/host-log": ["clock","files"],
-  "diagnostics/host-report": ["clock","files"],
-  "diagnostics/mod-identity": ["files"],
-  "diagnostics/model": ["clock","random"],
-  "diagnostics/trace-window": ["timers","files"],
-  "diagnostics/zip": ["clock"],
-  "dotnet-runtime": ["clock","files"],
-  "engines/layered-makeup/raster-processor": ["clock","timers"],
-  "event-loop": ["clock"],
-  "expressions-game-prerequisite": ["network","files"],
-  "eye-plate-cache": ["clock"],
-  "eye-plate-prerequisite": ["files"],
-  "eye-plate-service": ["files"],
-  "eye-plate-wolvenkit": ["files"],
-  "facial-host": ["clock","timers","files"],
-  "facial-prefetch": ["timers"],
-  "facial-preview": ["clock","timers"],
-  "features/expressions/export/index": ["files"],
-  "features/expressions/verify/index": ["files"],
-  "features/eye-makeup/export/plate-input": ["files"],
-  "features/eye-makeup/render/index": ["timers"],
-  "features/eye-makeup/verify/verify-build": ["files"],
-  "features/eye-makeup/view/uv": ["timers"],
-  "features/poses/actions": ["timers"],
-  "features/poses/host/preferences-store": ["files"],
-  "features/save-explorer/actions": ["clock","timers"],
-  "features/save-explorer/host/saves-server": ["files"],
-  "features/save-explorer/view/panel": ["timers"],
-  "game-asset-export": ["clock","files"],
-  "game-asset-export-wolvenkit": ["files"],
-  "game-blink": ["timers"],
-  "grading-lut-host": ["clock","files"],
-  "host-state-poller": ["timers"],
-  "host-code-identity": ["files"], // perf-2 host and page adapters, written before the rule reached their branch
-  "idle-host": ["clock","timers","files"],
-  "install-detection-host": ["files"],
-  "installation-registry": ["clock","timers","files"],
-  "installation-snapshot": ["files"], // perf-2 host and page adapters, written before the rule reached their branch
-  "library-store": ["clock","random"],
-  "lighting-setup-stage": ["clock","timers"],
-  "local-settings-readiness": ["files"],
-  "local-settings-server": ["files"],
-  "local-settings-store": ["files"],
-  "mod-install-host": ["files"],
-  "mod-install-transport": ["clock","files"],
-  "native-geometry-export": ["clock","files"],
-  "native-texture-export": ["clock","files"],
-  "native/archive-reader": ["files"],
-  "native/native-decode": ["clock","timers"],
-  "native/native-fetch-port": ["network"],
-  "native/oodle": ["files"],
-  "package-action": ["network"],
-  "package-bake": ["files"],
-  "package-resource-builder": ["files"],
-  "package-server": ["files"],
-  "part-preset-store": ["clock","random"],
-  "part-presets": ["timers","network"],
-  "plate-uv-footprint-io": ["files"],
-  "platform/core/look-history": ["clock"],
-  "platform/export/check-runner": ["timers"],
-  "platform/export/product-builder": ["clock","files"],
-  "platform/export/product-host": ["clock","timers","files"],
-  "platform/export/product-verifier": ["files"],
-  "platform/scene/character-renderer": ["clock","timers"],
-  "platform/scene/face-driver": ["timers"],
-  "platform/scene/idle-source": ["clock","timers","network"],
-  "platform/scene/orbit-limits": ["timers"],
-  "platform/scene/scene-host": ["clock","timers"],
-  "pose-catalogue-host": ["clock","files"],
-  "prepared-answers": ["files"], // perf-2 host and page adapters, written before the rule reached their branch
-  "prepared-files": ["files"],
-  "preview-core-host": ["files"],
-  "preview-core-service": ["clock","files"],
-  "preview-preparation": ["timers","network"],
-  "process-tree": ["timers"],
-  "raster-task-yield": ["timers"],
-  "raster-worker": ["timers"],
-  "rdar-index-fs": ["files"],
-  "render-fidelity-study": ["network"],
-  "resolver-host": ["clock","timers","network","files"],
-  "resource-graph": ["network"],
-  "route-fingerprint": ["files"],
-  "runtime-diagnostic-promotion": ["files"],
-  "runtime-diagnostic-stage": ["files"],
-  "saves-host-sources": ["files"],
-  "showroom/build": ["files"],
-  "showroom/verify": ["files"],
-  "source-discovery": ["clock","files"],
-  "studio-application": ["random"],
-  "studio-file-operations": ["clock"],
-  "studio-main": ["storage"],
-  "studio-startup": ["clock","timers"],
-  "studio-ui/app": ["clock","timers"],
-  "studio-ui/components/choice-preview": ["clock","timers"],
-  "studio-ui/components/direction-dial": ["timers"],
-  "studio-ui/components/listbox-keys": ["clock"],
-  "studio-ui/components/search-field": ["timers"],
-  "studio-ui/components/swatch-card": ["timers"],
-  "studio-ui/components/tree-view": ["timers"],
-  "studio-ui/controls": ["timers"],
-  "studio-ui/dock/dock-view": ["timers"],
-  "studio-ui/feedback": ["clock","timers"],
-  "studio-ui/guidance/controller": ["clock","timers"],
-  "studio-ui/guidance/desktop-app-sheet": ["clock"],
-  "studio-ui/guidance/overlay": ["timers"],
-  "studio-ui/input-hints": ["timers"],
-  "studio-ui/item-list": ["timers"],
-  "studio-ui/menu": ["timers"],
-  "studio-ui/panels/character": ["timers"],
-  "studio-ui/panels/game-setup": ["timers"],
-  "studio-ui/panels/history": ["timers"],
-  "studio-ui/panels/settings": ["timers"],
-  "studio-ui/panels/viewports": ["timers"],
-  "studio-ui/preview-setup-card": ["timers"],
-  "studio-ui/reason-tip": ["timers"],
-  "studio-ui/scroll-anchor": ["clock","timers"],
-  "studio-ui/style-guide/demo": ["timers"],
-  "studio-ui/style-guide/library-demo": ["timers"],
-  "surface-editor": ["timers"],
-  "tool-download": ["timers","files"],
-  "uv-editor": ["timers"],
-  "verifier-wolvenkit": ["files"],
-  "vortex-host": ["files"],
-  "wolvenkit-cli": ["clock","files"],
-  "wolvenkit-setup": ["network"],
-  "wolvenkit-setup-host": ["timers","files"],
-  "workspace-persistence": ["timers"],
-  "zip-extract": ["files"],
+const GRANDFATHERED: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  "archive-inventory-fs": { files: 1 },
+  "authoring-eye-makeup": { random: 1 },
+  "brow-study-fixture": { network: 2 },
+  "browser-cc-catalogue-device": { timers: 1, network: 1 },
+  "browser-character-detail-device": { timers: 4, random: 1, network: 1 },
+  "browser-choice-preview-device": { network: 1 },
+  "browser-desktop-app-device": { network: 1 },
+  "browser-facial-device": { clock: 1, random: 2, network: 1 }, // previously undetected: clock, random
+  "browser-file-device": { timers: 1 },
+  "browser-grading-lut-device": { timers: 1, network: 1 },
+  "browser-head-attachment": { timers: 1 },
+  "browser-install-detection-device": { network: 1 },
+  "browser-local-setup-device": { network: 2 },
+  "browser-mod-install-device": { network: 1 },
+  "browser-pose-device": { network: 4 },
+  "browser-save-explorer-device": { network: 1 },
+  "cc-catalogue-host": { files: 2 },
+  "cc-catalogue-service": { clock: 3, timers: 1 },
+  "cc-icon-host": { clock: 2, files: 1 },
+  "cc-swatch-host": { clock: 8, timers: 1, files: 1 },
+  "character-context-actions": { clock: 3, timers: 1 },
+  "character-detail-host": { clock: 23, timers: 3, files: 1 }, // speed 2 (warm restart), merged with the widened patterns
+  "character-detail-loader": { timers: 1 },
+  "character-warm-start": { network: 1 }, // speed 2 adapter, written before the rule reached its branch
+  "character-detail-server": { files: 1 }, // previously undetected: files
+  "character-detail-service": { clock: 6, files: 2 },
+  "choice-manifest": { files: 1 },
+  "choice-prefetch": { clock: 1, timers: 1 },
+  "choice-preview-host": { files: 1 },
+  "choice-preview-render": { clock: 1 },
+  "choice-preview-server": { files: 1 }, // previously undetected: files
+  "choice-preview-service": { clock: 1, timers: 2 },
+  "choice-preview-worker": { clock: 3, network: 1 },
+  "clothing-host": { clock: 2, files: 1 },
+  "collection-service": { clock: 1, random: 4 },
+  "collection-session": { random: 1 },
+  "collection-store": { clock: 2, random: 1, files: 1 }, // previously undetected: files
+  "collection-transport": { network: 1 },
+  "dangle-host": { files: 1 },
+  "derived-cache": { random: 3, files: 1 }, // previously undetected: random
+  "desktop-app-host": { timers: 1, files: 1, processes: 1 }, // previously undetected: processes
+  "diagnostics/actions": { timers: 1 },
+  "diagnostics/browser-device": { clock: 3, timers: 1 },
+  "diagnostics/host-endpoint": { random: 1, files: 1 }, // previously undetected: random
+  "diagnostics/host-log": { clock: 3, files: 1 },
+  "diagnostics/host-report": { clock: 1, files: 1 },
+  "diagnostics/mod-identity": { files: 4 },
+  "diagnostics/model": { clock: 1, random: 1 },
+  "diagnostics/trace-window": { timers: 1, files: 1 },
+  "diagnostics/zip": { clock: 1 },
+  "dotnet-runtime": { clock: 4, files: 1, processes: 1 }, // previously undetected: processes
+  "engines/layered-makeup/raster-processor": { clock: 1, timers: 1 },
+  "event-loop": { clock: 1, timers: 1 }, // previously undetected: timers
+  "expressions-game-prerequisite": { network: 3, files: 1 },
+  "eye-plate-cache": { clock: 1 },
+  "eye-plate-prerequisite": { files: 1 },
+  "eye-plate-service": { files: 1 },
+  "eye-plate-wolvenkit": { files: 1 },
+  "facial-host": { clock: 8, timers: 1, files: 1, processes: 1 }, // previously undetected: processes
+  "facial-prefetch": { timers: 1 },
+  "facial-preview": { clock: 1, timers: 1 },
+  "features/expressions/export/index": { files: 1 },
+  "features/expressions/verify/index": { files: 1 },
+  "features/eye-makeup/export/plate-input": { files: 1 },
+  "features/eye-makeup/render/index": { timers: 1 },
+  "features/eye-makeup/verify/verify-build": { files: 1 },
+  "features/eye-makeup/view/uv": { timers: 1 },
+  "features/poses/actions": { timers: 2 },
+  "features/poses/host/preferences-store": { files: 1 },
+  "features/save-explorer/actions": { clock: 1, timers: 2 },
+  "features/save-explorer/host/saves-server": { files: 1 },
+  "features/save-explorer/view/panel": { timers: 1 },
+  "game-asset-export": { clock: 3, files: 1 },
+  "game-asset-export-wolvenkit": { files: 1 },
+  "game-blink": { timers: 1 },
+  "grading-lut-host": { clock: 1, files: 2 },
+  "host-code-identity": { files: 1 }, // speed 2 adapter, written before the rule reached its branch
+  "host-state-poller": { timers: 1 },
+  "idle-host": { clock: 5, timers: 1, files: 1 },
+  "install-detection-host": { files: 1, processes: 1 }, // previously undetected: processes
+  "installation-registry": { clock: 1, timers: 1, files: 1 },
+  "installation-snapshot": { files: 2 }, // speed 2 adapter, written before the rule reached its branch
+  "library-store": { clock: 1, random: 1, files: 1 }, // previously undetected: files
+  "lighting-setup-stage": { clock: 2, timers: 1 },
+  "local-settings-readiness": { files: 1 },
+  "local-settings-server": { files: 1 },
+  "local-settings-store": { random: 2, files: 1 }, // previously undetected: random
+  "mod-install-host": { clock: 1, random: 1, files: 1, processes: 2 }, // previously undetected: clock, random, processes
+  "mod-install-transport": { clock: 4, random: 5, files: 1 }, // previously undetected: random
+  "native-geometry-export": { clock: 4, files: 1 },
+  "native-texture-export": { clock: 7, files: 1 }, // speed 2 (decode lanes)
+  "native/archive-reader": { files: 1 },
+  "native/native-decode": { clock: 3, timers: 5 },
+  "native/native-fetch-port": { network: 1 },
+  "native/oodle": { files: 1, processes: 1 }, // previously undetected: processes
+  "package-action": { network: 1 },
+  "package-bake": { files: 1 },
+  "package-resource-builder": { timers: 2, files: 1 }, // previously undetected: timers
+  "package-server": { random: 1, files: 1 }, // previously undetected: random
+  "part-preset-store": { clock: 6, random: 1, files: 1 }, // previously undetected: files
+  "part-presets": { timers: 1, network: 2 },
+  "plate-uv-footprint-io": { files: 1 },
+  "platform/core/look-history": { clock: 1 },
+  "platform/export/check-runner": { timers: 1 },
+  "platform/export/product-builder": { clock: 2, timers: 1, files: 1 }, // previously undetected: timers
+  "platform/export/product-host": { clock: 4, timers: 1, files: 1 },
+  "platform/export/product-verifier": { files: 1 },
+  "platform/scene/character-renderer": { clock: 6, timers: 3 },
+  "platform/scene/face-driver": { timers: 1 },
+  "platform/scene/idle-source": { clock: 2, timers: 1, network: 1 },
+  "platform/scene/orbit-limits": { timers: 1 },
+  "platform/scene/scene-host": { clock: 1, timers: 2 },
+  "pose-catalogue-host": { clock: 5, files: 1 },
+  "prepared-answers": { files: 2 }, // speed 2 adapter, written before the rule reached its branch
+  "prepared-files": { files: 2 },
+  "preview-core-host": { files: 1 },
+  "preview-core-service": { clock: 1, files: 1 },
+  "preview-preparation": { timers: 1, network: 2 },
+  "process-tree": { timers: 1, processes: 1 }, // previously undetected: processes
+  "raster-task-yield": { timers: 2 },
+  "raster-worker": { timers: 1 },
+  "rdar-index-fs": { files: 2 }, // speed 2 (kept discovery)
+  "render-fidelity-study": { network: 4 },
+  "resolver-host": { clock: 3, timers: 1, network: 2, files: 2 },
+  "resource-graph": { network: 1 },
+  "route-fingerprint": { files: 1 },
+  "runtime-diagnostic-promotion": { random: 2, files: 1 }, // previously undetected: random
+  "runtime-diagnostic-stage": { files: 1 },
+  "saves-host-sources": { files: 1 },
+  "showroom/build": { clock: 2, files: 1 }, // previously undetected: clock
+  "showroom/verify": { files: 1 },
+  "source-discovery": { clock: 1, files: 2 },
+  "studio-application": { random: 1 },
+  "studio-file-operations": { clock: 3 },
+  "studio-main": { storage: 1 },
+  "studio-startup": { clock: 4, timers: 1 },
+  "studio-ui/app": { clock: 1, timers: 8 },
+  "studio-ui/components/choice-preview": { clock: 7, timers: 5 },
+  "studio-ui/components/direction-dial": { timers: 1 },
+  "studio-ui/components/listbox-keys": { clock: 1 },
+  "studio-ui/components/search-field": { timers: 1 },
+  "studio-ui/components/swatch-card": { timers: 1 },
+  "studio-ui/components/tree-view": { timers: 1 },
+  "studio-ui/controls": { timers: 2 },
+  "studio-ui/dock/dock-view": { timers: 3 },
+  "studio-ui/dock/layout": { clock: 1 }, // previously undetected: clock
+  "studio-ui/feedback": { clock: 1, timers: 4 },
+  "studio-ui/guidance/controller": { clock: 2, timers: 1 },
+  "studio-ui/guidance/desktop-app-sheet": { clock: 1 },
+  "studio-ui/guidance/overlay": { timers: 2 },
+  "studio-ui/input-hints": { timers: 1 },
+  "studio-ui/item-list": { timers: 1 },
+  "studio-ui/menu": { timers: 5 },
+  "studio-ui/panels/character": { timers: 1 },
+  "studio-ui/panels/game-setup": { timers: 3 },
+  "studio-ui/panels/history": { timers: 2 },
+  "studio-ui/panels/settings": { timers: 2 },
+  "studio-ui/panels/viewports": { timers: 1 },
+  "studio-ui/preview-setup-card": { timers: 2 },
+  "studio-ui/reason-tip": { timers: 1 },
+  "studio-ui/scroll-anchor": { clock: 6, timers: 2 },
+  "studio-ui/style-guide/demo": { timers: 1 },
+  "studio-ui/style-guide/library-demo": { timers: 2 },
+  "surface-editor": { timers: 1 },
+  "tool-download": { timers: 1, files: 1 },
+  "uv-editor": { timers: 2 },
+  "verifier-wolvenkit": { files: 1 },
+  "vortex-host": { files: 2 },
+  "wolvenkit-cli": { clock: 5, files: 1, processes: 1 }, // previously undetected: processes
+  "wolvenkit-setup": { network: 2 },
+  "wolvenkit-setup-host": { timers: 1, random: 4, files: 1 }, // previously undetected: random
+  "workspace-persistence": { timers: 1 },
+  "zip-extract": { files: 1 },
 };
 
-test("no module reads the clock, timers, randomness, files, the network, storage or the bridge directly beyond the recorded list", () => {
-  expect(directReads()).toEqual(GRANDFATHERED as Record<string, string[]>);
+test("no module reads the clock, timers, randomness, files, processes, the network, storage or the bridge directly beyond the recorded list", () => {
+  expect(directReads()).toEqual(GRANDFATHERED as Record<string, Record<string, number>>);
 });
 
 test("the graph's own code (its types, the composition) reads nothing directly; its adapters are the only exception", () => {
@@ -195,8 +203,18 @@ test("the graph's own code (its types, the composition) reads nothing directly; 
 });
 
 test("the ratchet's patterns see each kind of read, and not prose", () => {
-  const probes: Record<string, string> = { clock: "const t = Date.now();", timers: "setTimeout(run, 5);", random: "const id = crypto.randomUUID();",
-    network: "await fetch(url);", storage: "localStorage.getItem(key);", files: `import { readFileSync } from "node:fs";`, bridge: "new RuntimeBridgeClient();" };
-  for (const [kind, text] of Object.entries(probes)) expect(kindsIn(text)).toEqual([kind]);
-  expect(kindsIn(["// Date.now() and fetch(x) in a comment", "const a = new Date(when); clock.after(5, run);"].join(String.fromCharCode(10)))).toEqual([]);
+  const probes: Record<string, readonly string[]> = {
+    clock: ["const t = Date.now();", "const d = new Date;", "const d = new Date();", "const t = performance.now();", "const t = process.hrtime.bigint();"],
+    timers: ["setTimeout(run, 5);", "window.setTimeout(run, 5);", "globalThis.setInterval(run, 5);", "setImmediate(done);", "await Bun.sleep(5);"],
+    random: ["const id = crypto.randomUUID();", `import { randomUUID } from "node:crypto"; const id = randomUUID();`, "const id = `x-${randomUUID()}`;", "Math.random();"],
+    network: ["await fetch(url);", "await window.fetch(url);", "new WebSocket(url);"],
+    storage: ["localStorage.getItem(key);", "indexedDB.open(name);"],
+    files: [`import { readFileSync } from "node:fs";`, `import { Database } from "bun:sqlite";`, "await Bun.file(path).text();", "await Bun.write(path, text);"],
+    processes: [`import { spawn } from "node:child_process";`, "Bun.spawn(command);"],
+    bridge: ["new RuntimeBridgeClient();"],
+  };
+  for (const [kind, texts] of Object.entries(probes)) for (const text of texts) expect(kindsIn(text)).toEqual([kind]);
+  expect(kindsIn(["// Date.now() and fetch(x) in a comment", "const a = new Date(when); clock.after(5, run); const s = \"fetch(\";"].join(String.fromCharCode(10)))).toEqual([]);
+  // Reads are counted: a listed module adding one more of a kind it already reads is caught.
+  expect(readsIn("setTimeout(a, 1); setTimeout(b, 2); Date.now();")).toEqual({ clock: 1, timers: 2 });
 });

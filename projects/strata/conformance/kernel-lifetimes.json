@@ -1,0 +1,151 @@
+{
+  "suite": "kernel-lifetimes",
+  "vectors": [
+    {
+      "name": "retention-follows-the-demand",
+      "kind": "kernel",
+      "rules": ["4.5", "4.6"],
+      "description": "a is demanded as a rolling window of two entries, b for its entry 2 alone. Each keeps what its demand covers and its latest entry; the consumers see exactly those entries.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "c", "kind": "combinator", "op": "collect", "inputs": ["a"], "demand": { "rolling": { "entries": 2 } } },
+        { "id": "b", "kind": "seed", "initial": 1 },
+        { "id": "e", "kind": "combinator", "op": "collect", "inputs": ["b"], "demand": { "entry": 2 } },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["c", "e"] }
+      ] },
+      "script": [ { "observe": { "a": 2, "b": 2 } }, { "observe": { "a": 3, "b": 3 } }, { "observe": { "a": 4, "b": 4 } }, { "observe": { "a": 5 } } ],
+      "expect": {
+        "streams": { "c": [[1], [1, 2], [2, 3], [3, 4], [4, 5]], "e": [[], [2]] },
+        "retains": { "a": [4, 5], "b": [2, 4] }
+      }
+    },
+    {
+      "name": "a-one-shot-read-of-a-dormant-node-answers-as-if-active",
+      "kind": "kernel",
+      "rules": ["4.8"],
+      "description": "sq has no consumer. Reading it once activates, primes and releases it (or computes the same answer otherwise); it is dormant again after each read.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 3 },
+        { "id": "sq", "kind": "combinator", "op": "product", "inputs": ["a", "a"] }
+      ] },
+      "script": [ { "read": "sq", "log": "r" }, { "observe": { "a": 4 } }, { "read": "sq", "log": "r" } ],
+      "expect": { "logs": { "r": [9, 16] }, "active": { "sq": false } }
+    },
+    {
+      "name": "a-seed-activates-with-demand-and-a-dormant-observation-starts-nothing",
+      "kind": "kernel",
+      "rules": ["5.2", "4.4"],
+      "description": "a's activation runs when a driver's effect demands it through b, and is released when the run ends. Observations while a is dormant append to its stream but nothing computes.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "op": "probe", "initial": 1 },
+        { "id": "b", "kind": "combinator", "op": "sum", "inputs": ["a"] },
+        { "id": "conn", "kind": "driver", "op": "connect", "params": { "pairs": [["b", "seen"]] } }
+      ] },
+      "script": [ { "observe": { "a": 2 } }, { "start": "conn", "as": "run" }, { "observe": { "a": 3 } }, { "abort": "run" }, { "observe": { "a": 4 } } ],
+      "expect": {
+        "logs": { "a": ["activate", "release"], "seen": [[2], [3]] },
+        "streams": { "a": [1, 2, 3, 4] }, "computes": { "b": 2 }, "active": { "a": false, "b": false }
+      }
+    },
+    {
+      "name": "an-input-kept-across-a-rewiring-never-goes-dormant",
+      "kind": "kernel",
+      "rules": ["5.1", "6.8", "6.9", "4.4"],
+      "description": "out reads a; a rewiring adds b and keeps a. a's activation runs once and is never released: a kept input keeps its demand edge. out is primed from its new inputs.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "op": "probe", "initial": 1 },
+        { "id": "b", "kind": "seed", "initial": 2 },
+        { "id": "sel", "kind": "seed", "initial": 0 },
+        { "id": "out", "kind": "combinator", "op": "sum", "inputs": ["a"] },
+        { "id": "rw", "kind": "effect", "op": "rewire", "inputs": ["sel"], "params": { "node": "out", "inputs": { "1": ["a", "b"] } } },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["out"] }
+      ] },
+      "script": [ { "observe": { "sel": 1 } }, { "observe": { "a": 10 } } ],
+      "expect": { "logs": { "a": ["activate"], "log": [[1], [3], [12]] }, "active": { "a": true } }
+    },
+    {
+      "name": "a-spec-change-never-releases-the-producer",
+      "kind": "kernel",
+      "rules": ["4.3"],
+      "description": "c demands a through a spec node. Changing the spec changes the edge in place: a's activation runs once and is never released.",
+      "graph": { "nodes": [
+        { "id": "spec", "kind": "seed", "initial": { "rolling": { "entries": 3 } } },
+        { "id": "a", "kind": "seed", "op": "probe", "initial": 1 },
+        { "id": "c", "kind": "combinator", "op": "collect", "inputs": ["a"], "demand": "spec" },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["c"] }
+      ] },
+      "script": [ { "observe": { "a": 2 } }, { "observe": { "spec": { "latest": true } } }, { "observe": { "spec": { "range": { "from": 1 } } } }, { "observe": { "a": 3 } } ],
+      "expect": { "logs": { "a": ["activate"] }, "streams": { "c": [[1], [1, 2], [2], [2, 3]] } }
+    },
+    {
+      "name": "wiring-that-never-settles-stops-at-the-activation-bound",
+      "kind": "kernel",
+      "rules": ["6.11", "7.4"],
+      "description": "Each time out is primed, rw rewires it to the other seed, which primes it again. The environment stops after its activation bound (at least 64), reports activation-bound once, and later cycles run normally.",
+      "graph": { "nodes": [
+        { "id": "x", "kind": "seed", "initial": 1 },
+        { "id": "y", "kind": "seed", "initial": 2 },
+        { "id": "out", "kind": "combinator", "op": "identity", "inputs": ["x"] },
+        { "id": "rw", "kind": "effect", "op": "rewire", "inputs": ["out"], "params": { "node": "out", "inputs": { "1": ["y"], "2": ["x"] } } },
+        { "id": "z", "kind": "seed", "initial": 0 },
+        { "id": "zz", "kind": "combinator", "op": "sum", "inputs": ["z"], "params": { "add": 1 } },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["zz"] }
+      ] },
+      "script": [ { "observe": { "z": 1 } } ],
+      "expect": { "errorCodes": ["activation-bound"], "logs": { "log": [[1], [2]] } }
+    },
+    {
+      "name": "tokens-abort-once-in-order-and-chain-to-children",
+      "kind": "kernel",
+      "rules": ["8.1", "8.2", "8.3"],
+      "description": "t2 is chained to t1. Aborting t1 calls its listeners once each, in registration order, with the first reason; t2 is aborted with the same reason; a second abort is ignored. t3, created with an already aborted parent, is aborted at creation.",
+      "graph": { "nodes": [] },
+      "script": [
+        { "token": "t1" }, { "token": "t2", "parents": ["t1"] },
+        { "listen": "t1", "log": "one", "value": "first" }, { "listen": "t2", "log": "two", "value": "child" }, { "listen": "t1", "log": "one", "value": "second" },
+        { "abort": "t1", "reason": "stop" }, { "abort": "t1", "reason": "again" },
+        { "token": "t3", "parents": ["t1"] }, { "listen": "t3", "log": "three", "value": "never" }
+      ],
+      "expect": { "logs": {
+        "one": [ { "value": "first", "reason": "stop" }, { "value": "second", "reason": "stop" } ],
+        "two": [ { "value": "child", "reason": "stop" } ],
+        "three": []
+      } }
+    },
+    {
+      "name": "the-process-tree-shows-running-work-under-its-actor",
+      "kind": "kernel",
+      "rules": ["9.7", "9.8", "9.5"],
+      "description": "Driver drv (an actor) runs p, whose child q runs longer, and r, which finishes at 50 ms. At 60 ms the running tree is drv's run with p and its child q; r has finished (a finished process may be forgotten).",
+      "graph": { "nodes": [
+        { "id": "drv", "kind": "driver", "op": "work", "params": { "processes": [
+          { "id": "p", "ms": 100, "children": [ { "id": "q", "ms": 80 } ] },
+          { "id": "r", "ms": 50, "result": "r-done" }
+        ] } }
+      ] },
+      "script": [ { "start": "drv", "as": "run" }, { "advance": 60 } ],
+      "expect": {
+        "tree": [ { "actor": "drv", "status": "running", "children": [ { "id": "p", "status": "running", "children": [ { "id": "q", "status": "running" } ] } ] } ],
+        "processes": { "r": [ { "status": "running" }, { "status": "done", "result": "r-done" } ] }
+      }
+    },
+    {
+      "name": "an-invalid-model-is-refused-whole",
+      "kind": "kernel",
+      "rules": ["10.2", "10.3", "7.4"],
+      "description": "A model whose node IDs repeat is refused with code model and changes nothing; the graph erected before it keeps working. A state machine ignores events that are only inherited object members.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "ev", "kind": "seed" },
+        { "id": "sm", "kind": "combinator", "op": "state-machine", "inputs": ["ev"],
+          "params": { "initial": "idle", "inputs": ["toString"], "states": { "idle": { "on": {} } } } },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["a", "sm"] }
+      ] },
+      "script": [
+        { "model": { "nodes": [ { "id": "a", "kind": "seed" }, { "id": "a", "kind": "seed" } ] } },
+        { "observe": { "a": 2, "ev": "go" } }
+      ],
+      "expect": { "errorCodes": ["model"], "logs": { "log": [[1, { "state": "idle" }], [2, { "state": "idle" }]] }, "streams": { "sm": [{ "state": "idle" }] } }
+    }
+  ]
+}

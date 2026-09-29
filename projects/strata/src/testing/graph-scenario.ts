@@ -5,7 +5,7 @@
  */
 import { canonical, equal } from "../json";
 import { Aborter } from "../kernel/abort";
-import { createGraph, STRATA_FAULTS } from "../graph";
+import { createGraph, STRATA_DEBUG, STRATA_FAULTS } from "../graph";
 import type { Faults, Graph, GraphOptions, PendingCommit } from "../graph";
 import { MemoryStore } from "../store";
 import type { Edit, NodeRef, NodeState } from "../types";
@@ -33,7 +33,9 @@ export type GraphWorld = {
 
 const MAX_NODES = 24;
 const pickFrom = <T>(items: readonly T[], n: number): T | undefined => items.length ? items[n % items.length] : undefined;
-const stateOf = (graph: Graph, id: string) => graph.debugState().records.find(rec => rec.ref.id === id)?.head ?? null;
+/** A graph stopped by a crash fails the store work still asked of it (SPEC §9.4): expected here, and ignored. */
+const stopped = (): undefined => undefined;
+const stateOf = (graph: Graph, id: string) => graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === id)?.head ?? null;
 const visible = (state: NodeState | null) => state && !state.retracted ? canonical([state.own, state.layers, state.name, state.trashed]) : null;
 
 function makeGraph(world: Pick<GraphWorld, "scheduler" | "store">, seed: string, signal: Aborter, faults?: Faults): Graph {
@@ -61,8 +63,8 @@ function watch(world: GraphWorld): void {
 /** Runs something that may commit on the main window, recording what undo must restore. */
 function track(world: GraphWorld, run: () => import("../types").CommitResult): import("../types").CommitResult {
   const graph = world.graph;
-  const before = new Map(graph.debugState().records.map(rec => [rec.ref.id, rec.head]));
-  const seqs = new Map(graph.debugState().records.map(rec => [rec.ref.id, rec.headSeq]));
+  const before = new Map(graph[STRATA_DEBUG]().records.map(rec => [rec.ref.id, rec.head]));
+  const seqs = new Map(graph[STRATA_DEBUG]().records.map(rec => [rec.ref.id, rec.headSeq]));
   const result = run();
   if (!result.ok) {
     if (!result.reason) world.problems.push(`refusal: a refusal without a reason code`);
@@ -70,7 +72,7 @@ function track(world: GraphWorld, run: () => import("../types").CommitResult): i
   }
   world.accepted.add(result.commit);
   world.before.set(result.commit, before);
-  world.touched.set(result.commit, graph.debugState().records.filter(rec => rec.headSeq !== (seqs.get(rec.ref.id) ?? 0)).map(rec => rec.ref.id));
+  world.touched.set(result.commit, graph[STRATA_DEBUG]().records.filter(rec => rec.headSeq !== (seqs.get(rec.ref.id) ?? 0)).map(rec => rec.ref.id));
   for (const id of world.touched.get(result.commit)!) world.lastWriter.set(id, result.commit);
   return result;
 }
@@ -85,11 +87,11 @@ function checkUndo(world: GraphWorld, scope = "default"): void {
   if (!top) return;
   const before = world.before.get(top), touched = world.touched.get(top) ?? [];
   const exact = touched.every(id => world.lastWriter.get(id) === top);
-  const seqs = touched.map(id => graph.debugState().records.find(rec => rec.ref.id === id)?.headSeq ?? 0);
+  const seqs = touched.map(id => graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === id)?.headSeq ?? 0);
   const result = track(world, () => graph.undo(scope));
   if (!result.ok) { if (result.reason !== "empty" && result.reason !== "unloaded") world.problems.push(`undo: refused ${result.reason}`); return; }
   touched.forEach((id, i) => {
-    const seq = graph.debugState().records.find(rec => rec.ref.id === id)?.headSeq ?? 0;
+    const seq = graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === id)?.headSeq ?? 0;
     if (seq < seqs[i]) world.problems.push(`undo: the stream of ${id.slice(0, 8)} shrank`);
     if (exact && before && visible(stateOf(graph, id)) !== visible(before.get(id) ?? null))
       world.problems.push(`undo: ${id.slice(0, 8)} didn't fold back to its state before the commit`);
@@ -166,13 +168,13 @@ const actions: SimAction<GraphWorld>[] = [
     if (node) world.other.commit([{ op: "set", node, path: ["tags", `o${b % 2}`], value: b % 5 }]);
     else world.other.commit([{ op: "create", type: ITEM, fields: { title: "from the other window" } }]);
   } },
-  { name: "sync", weight: 2, run(world) { void world.graph.sync(); } },
-  { name: "other-sync", run(world) { void world.other.sync(); } },
+  { name: "sync", weight: 2, run(world) { void world.graph.sync().catch(stopped); } },
+  { name: "other-sync", run(world) { void world.other.sync().catch(stopped); } },
   { name: "store-fault", run(world, [a]) { if (a % 2) world.store.failNext++; else world.store.loseNext++; } },
   { name: "jobs", run(world, [a]) { void world.jobs.run({ kind: `job${a % 3}`, input: a, priority: a % 3 === 0 ? "user" : "background" }).catch(() => undefined); } },
   { name: "compact", weight: 0.3, run(world, [a]) {
     const node = pickFrom(world.graph.list(ITEM).filter(ref => !ref.id.startsWith("builtin:")), a);
-    if (node) void world.graph.compact(node);
+    if (node) void world.graph.compact(node).catch(stopped);
   } },
 ];
 
@@ -212,7 +214,7 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
       next.graph.recover(recovery);
       for (const item of next.graph.rejected()) next.rejected.add(item.commit);
       // After a restart the effective state is the stored one plus the recovered pending work.
-      for (const rec of next.graph.debugState().records) {
+      for (const rec of next.graph[STRATA_DEBUG]().records) {
         if (rec.constant) continue;
         const stored = world.memory.readStreamNow(rec.ref);
         if (stored.length && rec.base.seq === 0 && !equal(rec.entries.slice(0, stored.length).map(entry => entry.seq), stored.map(entry => entry.seq)))
@@ -242,9 +244,9 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
       for (const started of world.jobs.starts) if (started.priority === "background" && started.waitingUser > 0)
         problems.push(`preempt: a background job started while one of the person's jobs waited`);
       // A consistent cut, when the main window has everything the store has (no pending work, nothing unsynced).
-      if (step % 5 === 0 && !graph.pending().length && graph.debugState().records.every(rec => rec.base.seq === 0)) {
+      if (step % 5 === 0 && !graph.pending().length && graph[STRATA_DEBUG]().records.every(rec => rec.base.seq === 0)) {
         const entries = world.memory.allEntries();
-        const known = new Set(graph.debugState().records.flatMap(rec => rec.entries.map(entry => entry.commit)));
+        const known = new Set(graph[STRATA_DEBUG]().records.flatMap(rec => rec.entries.map(entry => entry.commit)));
         if (entries.length && entries.every(entry => known.has(entry.commit))) {
           const pos = entries[(step * 7) % entries.length].pos;
           problems.push(...await checkConsistentCut(graph, SYNTHETIC_TYPES, entries, pos));

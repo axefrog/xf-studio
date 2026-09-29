@@ -2,16 +2,27 @@
  * The Studio's graph store: XF Strata's `GraphStore` over the library's SQLite file (profiles and graph design §7.3).
  * Its tables are new and additive (`CREATE TABLE IF NOT EXISTS`): no released table is altered and `user_version` is
  * left as it is, so every earlier XF Studio opens the same library. It passes the engine's store conformance suite.
+ *
+ * Positions are never reissued (SPEC §19.3): `events.pos` is `AUTOINCREMENT`, so SQLite remembers the greatest
+ * position ever assigned (in `sqlite_sequence`) and a purge of the newest rows can't hand their positions out again.
+ * A library made before that (G1) is migrated in place when it opens (`migratePositions`), after a backup.
  */
 import { Database } from "bun:sqlite";
 import type { AppendRequest, AppendResult, Entry, GraphStore, NodeIndexRow, NodeRef, Op, Snapshot, StoredNode } from "strata";
 
-/** The graph's tables. `events.extra` holds an entry's commit metadata, provenance and inlined streams. */
+/** The graph's `events` table. */
+const EVENTS_TABLE = `(pos INTEGER PRIMARY KEY AUTOINCREMENT, node TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL,
+    commit_id TEXT NOT NULL, actor TEXT NOT NULL, actor_seq INTEGER NOT NULL, at INTEGER NOT NULL, schema TEXT NOT NULL,
+    op TEXT NOT NULL, extra TEXT, UNIQUE (node, seq))`;
+const EVENTS_COLUMNS = "pos, node, type, seq, commit_id, actor, actor_seq, at, schema, op, extra";
+
+/**
+ * The graph's tables. `events.extra` holds an entry's commit metadata, provenance and inlined streams;
+ * `purge_pending` lists purges whose follow-up (the log checkpoint and the backups) hasn't finished yet.
+ */
 export const GRAPH_TABLES = `
   CREATE TABLE IF NOT EXISTS library_info (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS events (pos INTEGER PRIMARY KEY, node TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL,
-    commit_id TEXT NOT NULL, actor TEXT NOT NULL, actor_seq INTEGER NOT NULL, at INTEGER NOT NULL, schema TEXT NOT NULL,
-    op TEXT NOT NULL, extra TEXT, UNIQUE (node, seq));
+  CREATE TABLE IF NOT EXISTS events ${EVENTS_TABLE};
   CREATE INDEX IF NOT EXISTS events_commit ON events (commit_id);
   CREATE TABLE IF NOT EXISTS snapshots (node TEXT PRIMARY KEY, type TEXT NOT NULL, seq INTEGER NOT NULL, pos INTEGER NOT NULL,
     schema TEXT NOT NULL, value TEXT NOT NULL, made_at INTEGER NOT NULL);
@@ -19,10 +30,40 @@ export const GRAPH_TABLES = `
   CREATE TABLE IF NOT EXISTS node_index (node TEXT PRIMARY KEY, type TEXT NOT NULL, head_seq INTEGER NOT NULL, name TEXT NOT NULL,
     trashed INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS export_ids (id TEXT PRIMARY KEY, kind TEXT NOT NULL, node TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS save_backups (save TEXT NOT NULL, taken_at INTEGER NOT NULL, sha256 TEXT NOT NULL, file TEXT NOT NULL);`;
+  CREATE TABLE IF NOT EXISTS save_backups (save TEXT NOT NULL, taken_at INTEGER NOT NULL, sha256 TEXT NOT NULL, file TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS purge_pending (node TEXT PRIMARY KEY, at INTEGER NOT NULL);`;
 
 /** The rows that name a node, in every graph table (purge removes them all, here and in backups). */
 export const NODE_ROWS = ["events", "snapshots", "compactions", "node_index", "export_ids"] as const;
+
+/** Whether the library's `events` table still reuses positions (G1's `pos INTEGER PRIMARY KEY`). */
+function reusesPositions(db: Database): boolean {
+  const row = db.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'events'").get() as { sql: string } | null;
+  return !!row && !/\bAUTOINCREMENT\b/i.test(row.sql);
+}
+
+/**
+ * Rebuilds a G1 `events` table with `AUTOINCREMENT` positions, keeping every row and its position, in one immediate
+ * transaction (a failure or crash leaves the old table as it was). `sqlite_sequence` starts at the greatest stored
+ * position: positions a G1 purge already freed can't be recovered, but none is reissued from then on. `before` runs
+ * first, once a migration is known to be needed (the host takes a backup). Returns whether it migrated.
+ */
+export function migratePositions(db: Database, before?: () => void): boolean {
+  if (!reusesPositions(db)) return false;
+  before?.();
+  return db.transaction((): boolean => {
+    if (!reusesPositions(db)) return false;   // another connection migrated it meanwhile
+    const count = (table: string) => (db.query(`SELECT COUNT(*) AS n, COALESCE(MAX(pos), 0) AS top FROM ${table}`).get() as { n: number; top: number });
+    const old = count("events");
+    db.exec(`DROP TABLE IF EXISTS events_migrating; CREATE TABLE events_migrating ${EVENTS_TABLE};
+      INSERT INTO events_migrating (${EVENTS_COLUMNS}) SELECT ${EVENTS_COLUMNS} FROM events ORDER BY pos;`);
+    const copied = count("events_migrating");
+    if (copied.n !== old.n || copied.top !== old.top) throw new Error(`The graph's entries couldn't be migrated (${copied.n} of ${old.n} copied).`);
+    db.exec(`DROP TABLE events; ALTER TABLE events_migrating RENAME TO events;
+      CREATE INDEX IF NOT EXISTS events_commit ON events (commit_id);`);
+    return true;
+  }).immediate();
+}
 
 type EventRow = { pos: number; node: string; type: string; seq: number; commit_id: string; actor: string; actor_seq: number; at: number;
   schema: string; op: string; extra: string | null };
@@ -51,19 +92,31 @@ function indexAfter(previous: { name: string; trashed: boolean }, op: Op): { nam
 }
 
 export type SqliteGraphStoreOptions = {
-  /** Called after a purge with the node's ID, to remove it from the backups as well (decision Q7). */
+  /**
+   * Removes a purged node from the backups as well (decision Q7). A throw leaves that purge pending: it is retried by
+   * `retryPurges`, on the next purge and when the store next opens, until it succeeds.
+   */
   readonly onPurge?: (node: string) => void;
-  /** Wall time for the snapshots' `made_at` (the host clock by default). */
+  /** Called once a migration of the graph's tables is needed, before it changes the file (the host takes a backup). */
+  readonly beforeMigration?: (label: string) => void;
+  /** Wall time for the snapshots' `made_at` and pending purges (the host clock by default). */
   readonly now?: () => number;
 };
 
 export class SqliteGraphStore implements GraphStore {
   private readonly db: Database;
+  /** Why the positions migration couldn't run when the store opened, if it couldn't (diagnostics). */
+  readonly migrationError?: string;
   constructor(readonly path: string, private readonly options: SqliteGraphStoreOptions = {}) {
     this.db = new Database(path, { create: true, strict: true });
     // Purged rows are overwritten on disk, not merely unlinked (removal, not hiding).
     this.db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON;");
+    // A migration that can't run now (no backup could be taken, the file is busy) never stops the Studio: the
+    // library keeps working as it is and the migration is tried again the next time it opens.
+    try { migratePositions(this.db, () => options.beforeMigration?.("graph-positions")); }
+    catch (error) { this.migrationError = error instanceof Error ? error.message : String(error); }
     this.db.exec(GRAPH_TABLES);
+    this.retryPurges();
   }
   close(): void { this.db.close(); }
 
@@ -98,8 +151,10 @@ export class SqliteGraphStore implements GraphStore {
     return { head: this.head(), nodes };
   }
 
+  /** The greatest position ever assigned: it never decreases, even when the newest entries are purged (SPEC §19.3). */
   private head(): number {
-    return (this.db.query("SELECT COALESCE(MAX(pos), 0) AS head FROM events").get() as { head: number }).head;
+    return (this.db.query(`SELECT MAX(COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'events'), 0),
+      COALESCE((SELECT MAX(pos) FROM events), 0)) AS head`).get() as { head: number }).head;
   }
 
   async readStream(node: NodeRef, afterSeq = 0): Promise<readonly Entry[]> {
@@ -135,8 +190,10 @@ export class SqliteGraphStore implements GraphStore {
   }
 
   async changesSince(pos: number): Promise<{ readonly head: number; readonly entries: readonly Entry[] }> {
-    const entries = (this.db.query("SELECT * FROM events WHERE pos > ? ORDER BY pos").all(pos) as EventRow[]).map(toEntry);
-    return { head: this.head(), entries };
+    return this.db.transaction(() => {
+      const entries = (this.db.query("SELECT * FROM events WHERE pos > ? ORDER BY pos").all(pos) as EventRow[]).map(toEntry);
+      return { head: this.head(), entries };
+    }).deferred();
   }
 
   /** A counter every append, compaction and purge bumps, from every connection sharing the library. */
@@ -146,7 +203,9 @@ export class SqliteGraphStore implements GraphStore {
   }
 
   async putSnapshot(snapshot: Snapshot): Promise<void> {
-    this.db.query(`INSERT INTO snapshots VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(node) DO UPDATE SET seq = excluded.seq, pos = excluded.pos,
+    // A snapshot of a node that is no longer indexed (purged meanwhile) is not written: it would bring its data back.
+    this.db.query(`INSERT INTO snapshots SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM node_index WHERE node = ?1)
+      ON CONFLICT(node) DO UPDATE SET seq = excluded.seq, pos = excluded.pos,
       schema = excluded.schema, value = excluded.value, made_at = excluded.made_at WHERE excluded.seq >= snapshots.seq`)
       .run(snapshot.node.id, snapshot.node.type, snapshot.seq, snapshot.pos, snapshot.schema, JSON.stringify(snapshot.state),
         (this.options.now ?? Date.now)());
@@ -168,13 +227,42 @@ export class SqliteGraphStore implements GraphStore {
     }).immediate();
   }
 
+  /**
+   * Removes the node's rows, then finishes the purge: the write-ahead log is folded into the (securely deleted) file
+   * and the backups are purged. The removal commits with a pending record; a follow-up that can't finish now (a
+   * reader holding the log, a locked backup) stays pending and is retried, and never fails the purge itself.
+   */
   async purge(node: NodeRef): Promise<void> {
     this.db.transaction(() => {
       for (const table of NODE_ROWS) this.db.query(`DELETE FROM ${table} WHERE node = ?`).run(node.id);
+      this.db.query("INSERT INTO purge_pending VALUES (?, ?) ON CONFLICT(node) DO NOTHING").run(node.id, (this.options.now ?? Date.now)());
       this.bump();
     }).immediate();
-    // The write-ahead log may still hold the removed pages: fold it into the (securely deleted) file now.
-    this.db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
-    this.options.onPurge?.(node.id);
+    this.retryPurges();
+  }
+
+  /** Purges whose log checkpoint or backups haven't finished yet. */
+  pendingPurges(): readonly string[] {
+    return (this.db.query("SELECT node FROM purge_pending ORDER BY at, node").all() as { node: string }[]).map(row => row.node);
+  }
+
+  /**
+   * Finishes pending purges: checkpoints the write-ahead log into the file (a checkpoint another reader blocks leaves
+   * them pending) and removes each node from the backups. Returns the nodes still pending.
+   */
+  retryPurges(): readonly string[] {
+    const pending = this.pendingPurges();
+    if (!pending.length) return pending;
+    const checkpoint = this.db.query("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: number } | null;
+    if (checkpoint && checkpoint.busy !== 0) return pending;
+    const finished: string[] = [];
+    for (const node of pending) {
+      try { this.options.onPurge?.(node); finished.push(node); } catch { /* a locked backup: retried later */ }
+    }
+    if (finished.length) {
+      const remove = this.db.query("DELETE FROM purge_pending WHERE node = ?");
+      this.db.transaction(() => { for (const node of finished) remove.run(node); })();
+    }
+    return this.pendingPurges();
   }
 }

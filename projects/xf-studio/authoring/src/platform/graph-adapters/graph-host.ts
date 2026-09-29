@@ -19,24 +19,56 @@ export class GraphLibrary {
   readonly store: SqliteGraphStore;
   readonly backups: LibraryBackups;
   private view?: { counter: number; graph: Graph; life: Aborter };
+  private loading?: Promise<Graph>;
+  private readonly life = new Aborter();
+  private backupsScheduled = false;
   constructor(readonly path: string, private readonly options: GraphLibraryOptions) {
     this.backups = new LibraryBackups(path, () => options.clock.now());
-    this.store = new SqliteGraphStore(path, { onPurge: node => this.backups.purge(node), now: () => options.clock.now() });
+    this.store = new SqliteGraphStore(path, { onPurge: node => this.backups.purge(node), beforeMigration: label => this.backups.beforeMigration(label),
+      now: () => options.clock.now() });
   }
 
-  /** Today's daily backup, if not taken yet (hosts call it soon after starting). A failure never stops the Studio. */
+  /**
+   * Today's daily backup, if not taken yet, and pending purges retried (hosts call it soon after starting). It then
+   * checks again every hour for as long as the library is open, so a Studio left running takes a copy each day. A
+   * failure never stops the Studio.
+   */
   dailyBackup(): string | undefined {
+    if (!this.backupsScheduled && !this.life.signal.aborted) {
+      this.backupsScheduled = true;
+      const again = () => this.options.clock.after(BACKUP_CHECK_MS, () => { this.dailyBackup(); again(); }, this.life.signal);
+      again();
+    }
+    try { this.store.retryPurges(); } catch { /* retried at the next check */ }
     try { return this.backups.daily(); } catch { return undefined; }
   }
 
-  /** A graph loaded from the store for reading (the inspector), reloaded when the store's counter has moved. */
+  /**
+   * A graph loaded from the store for reading (the inspector). It never writes to the store (no snapshots); when the
+   * store's counter moves it catches up with the new entries, and loads again only when a node it holds was purged.
+   */
   async graph(): Promise<Graph> {
     const counter = await this.store.counter();
     if (this.view && this.view.counter === counter) return this.view.graph;
-    this.view?.life.abort("reloaded");
-    const life = new Aborter();
+    this.loading ??= this.refresh(counter).finally(() => { this.loading = undefined; });
+    return this.loading;
+  }
+
+  private async refresh(counter: number): Promise<Graph> {
+    const view = this.view;
+    if (view) {
+      const stored = new Set((await this.store.list()).map(row => row.ref.id));
+      const purged = view.graph.list().some(ref => !ref.id.startsWith("builtin:") && !stored.has(ref.id));
+      if (!purged) {
+        await view.graph.sync();
+        view.counter = counter;
+        return view.graph;
+      }
+      view.life.abort("reloaded");
+    }
+    const life = new Aborter(this.life.signal);
     const graph = createGraph({ types: this.options.types, rules: this.options.rules, store: this.store, actor: "host-inspector",
-      sources: { clock: this.options.clock, random: this.options.random }, signal: life.signal });
+      sources: { clock: this.options.clock, random: this.options.random }, signal: life.signal, writeSnapshots: false });
     await graph.load();
     this.view = { counter, graph, life };
     return graph;
@@ -50,9 +82,14 @@ export class GraphLibrary {
     return ref ? graph.inspectNode(ref) : undefined;
   }
 
-  close(): void { this.view?.life.abort("closed"); this.store.close(); }
+  close(): void { this.life.abort("closed"); this.store.close(); }
 }
 
+/** How often a running host checks whether today's backup has been taken. */
+const BACKUP_CHECK_MS = 60 * 60 * 1000;
+
+/** The hosts a local Studio page is served from. */
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /**
  * The graph endpoints under `prefix`: `GET inspect?q=&offset=`, `GET node?id=`, `GET backups` (the inspector's
@@ -62,7 +99,7 @@ export function createGraphHandler(library: GraphLibrary, prefix: string): (requ
   const json = (value: unknown, status = 200) => Response.json(value ?? null, { status, headers: { "Cache-Control": "no-store" } });
   return async request => {
     const url = new URL(request.url), origin = request.headers.get("Origin"), route = url.pathname.slice(prefix.length);
-    if (url.hostname !== "127.0.0.1" || (origin && origin !== url.origin)) return json({ error: "Local studio requests only." }, 403);
+    if (!LOCAL_HOSTS.has(url.hostname) || (origin && origin !== url.origin)) return json({ error: "Local studio requests only." }, 403);
     try {
       if (request.method === "GET" && route === "/inspect") {
         const offset = Number(url.searchParams.get("offset") ?? 0);

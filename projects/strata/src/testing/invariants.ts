@@ -5,6 +5,7 @@
 import { canonical, equal } from "../json";
 import type { TypeSpec } from "../define";
 import { fold } from "../fold";
+import { STRATA_DEBUG } from "../graph";
 import type { Graph } from "../graph";
 import type { MemoryStore } from "../store";
 import type { Entry, FieldKind, Layer, NodeRef, NodeState } from "../types";
@@ -16,14 +17,14 @@ const short = (value: unknown) => { const text = canonical(value); return text.l
 /** Head states as the graph holds them (for the reference model). */
 export function headStates(graph: Graph): StatesAt {
   const states = new Map<string, { ref: NodeRef; head: NodeState | null }>();
-  for (const rec of graph.debugState().records) states.set(rec.ref.id, { ref: rec.ref, head: rec.head });
+  for (const rec of graph[STRATA_DEBUG]().records) states.set(rec.ref.id, { ref: rec.ref, head: rec.head });
   return ref => { const item = states.get(ref.id); return item && item.ref.type === ref.type && item.head && !item.head.retracted ? item.head : null; };
 }
 
 /** States at a pinned layer's point, replayed from the graph's in-memory entries. */
 function pinnedFrom(graph: Graph, types: readonly TypeSpec[]): (layer: Layer) => StatesAt | null {
   const cache = new Map<number, StatesAt>();
-  const entries = graph.debugState().records.flatMap(rec => rec.base.seq > 0 ? [] : rec.entries);
+  const entries = graph[STRATA_DEBUG]().records.flatMap(rec => rec.base.seq > 0 ? [] : rec.entries);
   return layer => {
     const pos = layer.at ? graph.posOf(layer.at) : undefined;
     if (pos === undefined) return null;
@@ -59,7 +60,7 @@ export function checkConflictIndex(graph: Graph): string[] {
 /** Invariant 6: structure. Layer edges acyclic; unique fields unique; stored streams gap-free (unless compacted) and monotonic; references typed. */
 export function checkStructure(graph: Graph, types: readonly TypeSpec[], store?: MemoryStore): string[] {
   const problems: string[] = [];
-  const records = graph.debugState().records.filter(rec => rec.head && !rec.head.retracted);
+  const records = graph[STRATA_DEBUG]().records.filter(rec => rec.head && !rec.head.retracted);
   const byId = new Map(records.map(rec => [rec.ref.id, rec]));
   for (const rec of records) {
     const seen = new Set<string>(), stack = rec.head!.layers.map(layer => layer.from.id);
@@ -133,7 +134,7 @@ export async function checkConsistentCut(graph: Graph, types: readonly TypeSpec[
   const replayed = replayTo(types, entries, pos);
   const positions = new Map(entries.map(entry => [`${entry.node.id}@${entry.seq}`, entry.pos]));
   // Constants have no stream: they are the same at every point.
-  const constants = new Map(graph.debugState().records.filter(rec => rec.constant).map(rec => [rec.ref.id, rec.head]));
+  const constants = new Map(graph[STRATA_DEBUG]().records.filter(rec => rec.constant).map(rec => [rec.ref.id, rec.head]));
   const cache = new Map<number, StatesAt>();
   const statesAt = (at: number): StatesAt => {
     let states = cache.get(at);

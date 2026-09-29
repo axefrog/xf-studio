@@ -1,0 +1,122 @@
+{
+  "suite": "entity-rules",
+  "vectors": [
+    {
+      "name": "refused-commits-name-their-reason-and-change-nothing",
+      "kind": "entity",
+      "rules": ["11.8", "13.10"],
+      "description": "Each refused commit names its reason and changes nothing: a path the type lacks, a reference to a type the field doesn't accept, a unique value already held, an edit that changes nothing, a node that doesn't exist, an unregistered type, an ID already used. A later edit names a node created earlier in the same commit by its label.",
+      "types": [
+        { "type": "swatch", "owner": "vectors", "schema": "1", "fields": {
+          "title": { "kind": "value" }, "code": { "kind": "value", "unique": true },
+          "link": { "kind": "ref", "to": "swatch", "clone": "share" } } },
+        { "type": "other", "owner": "vectors", "schema": "1", "fields": { "title": { "kind": "value" } } }
+      ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "title": "a", "code": "A" } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["nope"], "value": 1 } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["link"], "value": { "type": "other", "id": "00000000-0000-4000-8000-000000000001" } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "b", "fields": { "code": "A" } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "a" } ] },
+        { "commit": [ { "op": "set", "node": { "type": "swatch", "id": "00000000-0000-4000-8000-0000000000ff" }, "path": ["title"], "value": "x" } ] },
+        { "commit": [ { "op": "create", "type": "nosuch", "as": "n" } ] },
+        { "commit": [ { "op": "import", "type": "other", "id": "00000000-0000-4000-8000-000000000002", "name": "i", "source": "vectors" } ] },
+        { "commit": [ { "op": "import", "type": "other", "id": "00000000-0000-4000-8000-000000000002", "name": "i", "source": "vectors" } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "c", "fields": { "title": "c" } },
+                      { "op": "create", "type": "swatch", "as": "d", "fields": { "title": "d", "link": { "created": "c" } } } ] }
+      ],
+      "expect": {
+        "refusals": [null, "path", "value", "unique", "empty", "missing", "type", null, "exists", null],
+        "effective": { "a": { "title": "a", "code": "A" }, "d": { "title": "d", "link": { "$label": "c" } } },
+        "streams": { "a": [[1, "create"]] }
+      }
+    },
+    {
+      "name": "undo-stacks-are-per-scope-and-end-with-the-session",
+      "kind": "entity",
+      "rules": ["14.5", "15.1"],
+      "description": "Commits in scopes x and y each join their own stack; undoing x leaves y's edit; a new commit in x clears x's redo stack. After the session ends (the graph reloads from snapshots and tails) the stacks are empty and the values read the same.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1", "fields": { "title": { "kind": "value" }, "note": { "kind": "value" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "title": "t0", "note": "n0" } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "t1" } ], "options": { "scope": "x" } },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["note"], "value": "n1" } ], "options": { "scope": "y" } },
+        { "undo": "x" },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "t2" } ], "options": { "scope": "x" } },
+        { "redo": "x" },
+        { "reload": true },
+        { "undo": "y" }
+      ],
+      "expect": {
+        "refusals": [null, null, null, null, null, "nothing-to-undo", "nothing-to-undo"],
+        "effective": { "a": { "title": "t2", "note": "n1" } },
+        "streams": { "a": [[1, "create"], [2, "set"], [3, "set"], [4, "compensate"], [5, "set"]] }
+      }
+    },
+    {
+      "name": "a-value-stream-compacts-to-its-latest-and-referenced-entries",
+      "kind": "entity",
+      "rules": ["16.2", "16.3", "16.8"],
+      "description": "A value stream keeps only whole states. With its undo history forgotten, compaction keeps the latest entry and the root the host names (entry 2), and removes the rest; the value is unchanged.",
+      "types": [ { "type": "light", "owner": "vectors", "schema": "1", "stream": "value", "fields": { "level": { "kind": "value" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "light", "as": "a", "fields": { "level": 1 } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["level"], "value": 2 } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["level"], "value": 3 } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["level"], "value": 4 } ] },
+        { "forget": "*" },
+        { "compact": "a", "roots": [ { "node": { "$label": "a" }, "seq": 2 } ] }
+      ],
+      "expect": { "effective": { "a": { "level": 4 } }, "streams": { "a": [[2, "state"], [4, "state"]] } }
+    },
+    {
+      "name": "an-inlined-stream-reads-as-before-and-its-purge-removes-it",
+      "kind": "entity",
+      "rules": ["16.6", "16.7"],
+      "description": "Exactly one entry (h's creation) references p, and nothing references p's entries: p's stream moves into that entry and p reads exactly as before. Purging p then removes it: it reads as missing, and h's reference to it remains.",
+      "types": [
+        { "type": "part", "owner": "vectors", "schema": "1", "fields": { "title": { "kind": "value" } } },
+        { "type": "holder", "owner": "vectors", "schema": "1", "fields": { "part": { "kind": "ref", "to": "part", "clone": "follow" } } }
+      ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "part", "as": "p", "fields": { "title": "inner" } } ] },
+        { "commit": [ { "op": "create", "type": "holder", "as": "h", "fields": { "part": { "$label": "p" } } } ] },
+        { "forget": "*" },
+        { "collapse": "p" },
+        { "purge": "p" }
+      ],
+      "expect": { "refusals": [null, null, null, null], "effective": { "p": null, "h": { "part": { "$label": "p" } } } }
+    },
+    {
+      "name": "an-inlined-stream-still-resolves",
+      "kind": "entity",
+      "rules": ["16.6"],
+      "description": "After inline collapse the collapsed node still resolves exactly as before.",
+      "types": [
+        { "type": "part", "owner": "vectors", "schema": "1", "fields": { "title": { "kind": "value" } } },
+        { "type": "holder", "owner": "vectors", "schema": "1", "fields": { "part": { "kind": "ref", "to": "part", "clone": "follow" } } }
+      ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "part", "as": "p", "fields": { "title": "inner" } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "p" }, "path": ["title"], "value": "inner 2" } ] },
+        { "commit": [ { "op": "create", "type": "holder", "as": "h", "fields": { "part": { "$label": "p" } } } ] },
+        { "forget": "*" },
+        { "collapse": "p" }
+      ],
+      "expect": { "refusals": [null, null, null, null], "effective": { "p": { "title": "inner 2" } } }
+    },
+    {
+      "name": "beliefs-carry-another-actors-provenance",
+      "kind": "entity",
+      "rules": ["17.1", "17.2", "11.3"],
+      "description": "The local actor's counter rises by one per entry it writes; a belief records the other actor, its counter and its time, and doesn't use the local counter.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1", "fields": { "title": { "kind": "value" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "title": "mine" } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "the game's" } ], "options": { "provenance": { "actor": "game", "actorSeq": 7, "at": 5 } } },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "mine again" } ] }
+      ],
+      "expect": { "actors": { "a": [[1, "local", 1], [2, "game", 7], [3, "local", 2]] }, "effective": { "a": { "title": "mine again" } } }
+    }
+  ]
+}

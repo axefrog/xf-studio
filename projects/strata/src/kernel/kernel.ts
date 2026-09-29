@@ -59,35 +59,51 @@ export type Input = KNode | { readonly node: KNode; readonly demand?: Demand };
 
 type Consumer = KNode | HostDemand;
 class HostDemand { constructor(readonly label: string) {} }
-type Edge = { spec: DemandSpec; source?: KNode<DemandSpec> };
-
-let anonymous = 0;
+type Edge = { spec: DemandSpec; source?: KNode<DemandSpec>; follower?: KNode };
 
 /** A node: its identity, kind and stream. */
 export class KNode<T = unknown> {
-  /** Retained entries, oldest first. */
-  entries: KEntry<T>[] = [];
+  /** @internal The retained entries, oldest first (the kernel appends and trims them). */
+  held: KEntry<T>[] = [];
+  /** @internal */
   nextSeq = 1;
-  inputs: { node: KNode; demand: Demand }[] = [];
-  /** Demand edges on this node, by consumer. */
+  /** @internal The inputs (the kernel rewires them). */
+  wiring: { node: KNode; demand: Demand }[] = [];
+  /** @internal Demand edges on this node, by consumer. */
   readonly demands = new Map<Consumer, Edge>();
-  active = false;
-  // Cycle state.
+  /** @internal */
+  live = false;
+  /** @internal Cycle state. */
   counter = 0;
+  /** @internal */
   dirty = false;
+  /** @internal */
   startedTo: KNode[] = [];
+  /** @internal */
   appendedIn = 0;
-  computes = 0;
-  /** Seeds: their activation and its controller. */
+  /** @internal */
+  runs = 0;
+  /** @internal Seeds: their activation. */
   activation?: (context: { readonly signal: AbortSignalLike; readonly observe: (value: T) => void }) => void;
+  /** @internal */
   activationAborter?: Aborter;
+  /** @internal */
   compute?: Compute<T>;
+  /** @internal */
   run?: Run;
-  /** Effects: the run scope connecting them. */
+  /** @internal Effects: the run scope connecting them. */
   scope?: Scope;
-  /** Keep every entry (conformance, entity streams managed elsewhere). */
+  /** @internal Keep every entry (debugging, entity streams managed elsewhere). */
   retainAll = false;
   constructor(readonly env: Environment, readonly id: string, readonly kind: NodeKind, readonly name: string) {}
+  /** The retained entries, oldest first (SPEC §4.5). */
+  get entries(): readonly KEntry<T>[] { return this.held; }
+  /** The node's inputs, in order, with the demand each is read with. */
+  get inputs(): readonly { readonly node: KNode; readonly demand: Demand }[] { return this.wiring; }
+  /** Whether the node is active (SPEC §4.4). */
+  get active(): boolean { return this.live; }
+  /** How many times the node has computed (a combinator) or run (an effect). */
+  get computes(): number { return this.runs; }
   latest(): KEntry<T> | undefined { return this.entries[this.entries.length - 1]; }
   /** The latest value (undefined when there is none or it is an error). */
   value(): T | undefined { return this.latest()?.value; }
@@ -167,7 +183,7 @@ export type DriverDefinition = {
 export class Driver extends KNode<string> {
   constructor(env: Environment, id: string, readonly definition: DriverDefinition) { super(env, id, "driver", definition.name); }
   /** Starts a run with a token; the run ends when it aborts (SPEC §9.1). */
-  start(signal?: AbortSignalLike, params?: Json): Process { return this.env.startDriver(this, { signal, params }); }
+  start(signal?: AbortSignalLike, params?: Json): Process { return kernelInternals.startDriver(this.env, this, { signal, params }); }
 }
 
 export interface EnvironmentOptions {
@@ -178,6 +194,8 @@ export interface EnvironmentOptions {
   readonly activationBound?: number;
   /** Called after each cycle (the simulation harness checks invariants here). */
   readonly onCycle?: (report: CycleReport) => void;
+  /** Called with every entry any node appends, as it is appended (conformance runners record whole streams here). */
+  readonly onAppend?: (node: KNode, entry: KEntry) => void;
 }
 export type CycleReport = {
   readonly cycle: number; readonly kind: "observe" | "activate";
@@ -194,10 +212,15 @@ export const createEnvironment = (options: EnvironmentOptions): Environment => n
 export class Environment {
   readonly clock: Clock;
   private readonly nodes = new Map<string, KNode>();
-  cycle = 0;
-  inCycle = false;
+  private cycles = 0;
+  private cycling = false;
+  /** The clock's time when the running cycle started: every entry and computation in it sees this time (SPEC §3.2). */
+  private cycleAt = 0;
+  /** Anonymous node IDs, per environment (so IDs don't depend on what else ran in the process). */
+  private anonymous = 0;
   private applying = false;
-  private pendingChanges: (() => void)[] = [];
+  /** Queued changes, in request order; a release (ending demand, disconnecting, forgetting) is never dropped (§6.11). */
+  private pendingChanges: { readonly run: () => void; readonly release: boolean }[] = [];
   private pendingObservations: [KNode, unknown][][] = [];
   private transactionDepth = 0;
   private transactionBuffer: [KNode, unknown][] = [];
@@ -205,6 +228,7 @@ export class Environment {
   private readonly retainAll: boolean;
   private readonly activationBound: number;
   private readonly onCycle?: (report: CycleReport) => void;
+  private readonly onAppend?: (node: KNode, entry: KEntry) => void;
   /** The error seed (SPEC §7.3–7.4). */
   readonly errors: KNode<ErrorRecord>;
   /** The root run: the scope of nodes created outside any driver run. */
@@ -212,11 +236,17 @@ export class Environment {
   private rootScope: Scope;
   private readonly scopes = new Map<Process, Scope>();
 
+  /** The number of the latest cycle (0 before the first). */
+  get cycle(): number { return this.cycles; }
+  /** Whether a cycle is running now (changes and observations made now are queued, SPEC §6.8). */
+  get inCycle(): boolean { return this.cycling; }
+
   constructor(options: EnvironmentOptions) {
     this.clock = options.clock;
     this.retainAll = !!options.retainAll;
     this.activationBound = options.activationBound ?? 64;
     this.onCycle = options.onCycle;
+    this.onAppend = options.onAppend;
     this.errors = this.seed<ErrorRecord>({ id: "$errors", name: "errors" });
     this.root = new Process(this, "$root", "root", undefined);
     this.register(this.root);
@@ -235,49 +265,61 @@ export class Environment {
     node.retainAll = this.retainAll;
     return node;
   }
-  private newId(prefix: string, id?: string) { return id ?? `${prefix}#${++anonymous}`; }
+  private newId(prefix: string, id?: string) { return id ?? `${prefix}#${++this.anonymous}`; }
+  /** The time a new entry or computation sees: the cycle's start time within a cycle, else the clock's now. */
+  private now(): number { return this.cycling ? this.cycleAt : this.clock.now(); }
   node(id: string): KNode | undefined { return this.nodes.get(id); }
   /** Every node, for inspection. */
   allNodes(): readonly KNode[] { return [...this.nodes.values()]; }
 
-  /** A seed: content from outside, through observations. `initial` is appended at once (SPEC §10.2). */
-  seed<T>(spec: { readonly id?: string; readonly name?: string; readonly initial?: T; readonly activate?: KNode<T>["activation"]; readonly retainAll?: boolean } = {}): KNode<T> {
+  /**
+   * A seed: content from outside, through observations. `initial` is appended at once (SPEC §10.2). Every node lives
+   * until its `signal` (if given) aborts: then it is forgotten (a queued release), its host demand released and, for
+   * an effect, disconnected. There is no remove function (SPEC §8.4).
+   */
+  seed<T>(spec: { readonly id?: string; readonly name?: string; readonly initial?: T; readonly activate?: KNode<T>["activation"]; readonly retainAll?: boolean; readonly signal?: AbortSignalLike } = {}): KNode<T> {
     const node = this.register(new KNode<T>(this, this.newId("seed", spec.id), "seed", spec.name ?? spec.id ?? "seed"));
     node.activation = spec.activate;
     if (spec.retainAll) node.retainAll = true;
     if (spec.initial !== undefined) this.append(node, spec.initial);
-    return node;
+    return this.until(node, spec.signal);
   }
 
-  /** A combinator: inputs and a computation. Dormant until demanded. */
-  combinator<T>(spec: { readonly id?: string; readonly name?: string; readonly inputs: readonly Input[]; readonly compute: Compute<T> }): KNode<T> {
+  /** A combinator: inputs and a computation. Dormant until demanded. Forgotten when `signal` aborts. */
+  combinator<T>(spec: { readonly id?: string; readonly name?: string; readonly inputs: readonly Input[]; readonly compute: Compute<T>; readonly signal?: AbortSignalLike }): KNode<T> {
     const node = this.register(new KNode<T>(this, this.newId("combinator", spec.id), "combinator", spec.name ?? spec.id ?? "combinator"));
     node.compute = spec.compute;
-    node.inputs = spec.inputs.map(normaliseInput);
-    return node;
+    node.wiring = spec.inputs.map(normaliseInput);
+    return this.until(node, spec.signal);
   }
 
-  /** An effect, not yet connected. Connect it within a driver's run (`run.effect`) or with `connect`. */
-  effect(spec: { readonly id?: string; readonly name?: string; readonly inputs: readonly Input[]; readonly run: Run }): KNode {
+  /** An effect, not yet connected: connect it within a driver's run (`run.effect`) or with `connect`. Forgotten when `signal` aborts. */
+  effect(spec: { readonly id?: string; readonly name?: string; readonly inputs: readonly Input[]; readonly run: Run; readonly signal?: AbortSignalLike }): KNode {
     const node = this.register(new KNode(this, this.newId("effect", spec.id), "effect", spec.name ?? spec.id ?? "effect"));
     node.run = spec.run;
-    node.inputs = spec.inputs.map(normaliseInput);
+    node.wiring = spec.inputs.map(normaliseInput);
+    return this.until(node, spec.signal);
+  }
+
+  /** A driver: starting it runs its definition and returns the run's process node. Forgotten when `signal` aborts. */
+  driver(definition: DriverDefinition, id?: string, signal?: AbortSignalLike): Driver {
+    return this.until(this.register(new Driver(this, this.newId("driver", id), definition)), signal);
+  }
+
+  /** Forgets `node` when `signal` aborts (a queued release). */
+  private until<N extends KNode>(node: N, signal: AbortSignalLike | undefined): N {
+    if (!signal) return node;
+    if (signal.aborted) this.release(() => this.removeNow(node));
+    else onAbort(signal, () => this.release(() => this.removeNow(node)));
     return node;
   }
 
-  /** A driver: starting it runs its definition and returns the run's process node. */
-  driver(definition: DriverDefinition, id?: string): Driver {
-    return this.register(new Driver(this, this.newId("driver", id), definition));
-  }
-
-  /** Forgets a node (a queued change): an effect is disconnected, host demand on it released. */
-  remove(node: KNode): void { this.change(() => this.removeNow(node)); }
-  /** @internal Within a change: removes a node at once. */
-  removeNow(node: KNode): void {
+  /** Within a change: forgets a node at once (an effect is disconnected, host demand on it released). */
+  private removeNow(node: KNode): void {
     if (node.kind === "effect") this.disconnect(node);
     for (const consumer of [...node.demands.keys()]) if (consumer instanceof HostDemand) this.releaseDemand(node, consumer);
     if (node.active && node.kind !== "effect") this.deactivate(node);
-    this.nodes.delete(node.id);
+    if (this.nodes.get(node.id) === node) this.nodes.delete(node.id);
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -307,7 +349,12 @@ export class Environment {
 
   /** Applies a wiring change now (outside a cycle, followed by an activation cycle) or queues it (SPEC §6.8). */
   change(fn: () => void): void {
-    this.pendingChanges.push(fn);
+    this.pendingChanges.push({ run: fn, release: false });
+    this.drain();
+  }
+  /** A change that only ends things (releases demand, disconnects, forgets): never dropped at the activation bound. */
+  private release(fn: () => void): void {
+    this.pendingChanges.push({ run: fn, release: true });
     this.drain();
   }
 
@@ -322,14 +369,15 @@ export class Environment {
           const changes = this.pendingChanges;
           this.pendingChanges = [];
           for (const change of changes) {
-            try { change(); } catch (error) { this.fail(`A wiring change failed: ${messageOf(error)}`); }
+            try { change.run(); } catch (error) { this.fail(`A wiring change failed: ${messageOf(error)}`, "wiring"); }
           }
           continue;
         }
         if (this.primed.size) {
           if (++activations > this.activationBound) {
+            // Dropped: the activations and wiring still queued. Releases are applied: dropping them would leak activity.
             this.primed.clear();
-            this.pendingChanges = [];
+            this.pendingChanges = this.pendingChanges.filter(change => change.release);
             this.fail("Wiring kept changing: stopped after the activation bound.", "activation-bound");
             continue;
           }
@@ -355,10 +403,11 @@ export class Environment {
   // ---------------------------------------------------------------------------------------------------------------
 
   private append<T>(node: KNode<T>, value: T | undefined, error?: ErrorRecord): void {
-    const entry: KEntry<T> = freeze({ seq: node.nextSeq++, cycle: this.cycle, at: this.clock.now(),
+    const entry: KEntry<T> = freeze({ seq: node.nextSeq++, cycle: this.cycles, at: this.now(),
       ...(error ? { error } : { value: value as T }) });
-    node.entries.push(entry);
+    node.held.push(entry);
     node.appendedIn = this.cycle;
+    this.onAppend?.(node as KNode, entry);
   }
 
   private consumersOf(node: KNode): KNode[] {
@@ -368,8 +417,9 @@ export class Environment {
   }
 
   private runCycle(observations: readonly [KNode, unknown][], primed: readonly KNode[]): void {
-    this.inCycle = true;
-    this.cycle++;
+    this.cycling = true;
+    this.cycles++;
+    this.cycleAt = this.clock.now();
     const participants: KNode[] = [];
     const finished: { node: KNode; computed: boolean; appended: boolean }[] = [];
     const start = (node: KNode) => {
@@ -422,26 +472,26 @@ export class Environment {
       const unbalanced = participants.filter(node => node.counter !== 0);
       for (const node of unbalanced) { node.counter = 0; node.startedTo = []; node.dirty = false; }
       for (const node of participants) this.trim(node);
-      this.inCycle = false;
+      this.cycling = false;
       this.onCycle?.({ cycle: this.cycle, kind: observations.length ? "observe" : "activate", finished, unbalanced });
     }
   }
 
   private view(input: { node: KNode; demand: Demand }): InputView {
     const node = input.node, latest = node.latest();
-    const changed = node.appendedIn === this.cycle && this.inCycle;
+    const changed = node.appendedIn === this.cycles && this.cycling;
     const fresh = changed ? node.entries.filter(entry => entry.cycle === this.cycle) : [];
     const spec = specOf(input.demand);
-    return { node, latest, value: latest?.value, error: latest?.error, changed, fresh, window: covered(node, spec, this.clock.now()) };
+    return { node, latest, value: latest?.value, error: latest?.error, changed, fresh, window: covered(node, spec, this.now()) };
   }
 
   private context(node: KNode): ComputeContext {
-    return { inputs: node.inputs.map(input => this.view(input)), previous: node.latest(), cycle: this.cycle, at: this.clock.now(), env: this };
+    return { inputs: node.inputs.map(input => this.view(input)), previous: node.latest(), cycle: this.cycles, at: this.now(), env: this };
   }
 
   /** A combinator computes (appending only a changed value) or an effect runs; failures are values (SPEC §7). */
   private work(node: KNode): void {
-    node.computes++;
+    node.runs++;
     const context = this.context(node);
     if (node.kind === "effect") {
       try { node.run!(context); }
@@ -468,30 +518,59 @@ export class Environment {
 
   private addDemand(producer: KNode, consumer: Consumer, demand: Demand): void {
     const edge: Edge = { spec: specOf(demand) };
-    if (demand instanceof KNode) {
-      edge.source = demand;
-      // Demand as a source: follow the spec node without releasing the edge.
-      const follower = this.effect({ name: `demand of ${producer.name}`, inputs: [demand], run: context => {
-        const next = validSpec(context.inputs[0].value);
-        this.change(() => { const current = producer.demands.get(consumer); if (current) { current.spec = next; this.trim(producer); } });
-      } });
-      this.connectEffect(follower, this.rootScope);
-      (edge as Edge & { follower?: KNode }).follower = follower;
-    }
+    this.followSpec(producer, consumer, edge, demand);
     producer.demands.set(consumer, edge);
     if (!producer.active) this.activate(producer);
   }
 
+  /** Demand as a source (SPEC §4.3): an effect follows the spec node and changes the edge's spec without releasing it. */
+  private followSpec(producer: KNode, consumer: Consumer, edge: Edge, demand: Demand): void {
+    if (!(demand instanceof KNode)) return;
+    edge.source = demand;
+    const follower = this.effect({ name: `demand of ${producer.name}`, inputs: [demand], run: context => {
+      const next = validSpec(context.inputs[0].value);
+      // A new spec is a demand change (§6.8): applied at completion, and the consumer is primed with its new window.
+      this.change(() => {
+        const current = producer.demands.get(consumer);
+        if (!current || equal(current.spec, next)) return;
+        current.spec = next;
+        this.trim(producer);
+        if (consumer instanceof KNode && consumer.active) this.primed.add(consumer);
+      });
+    } });
+    this.connectEffect(follower, this.rootScope);
+    edge.follower = follower;
+  }
+
+  /** Changes an existing demand edge's spec in place: the producer never passes through dormancy on its account. */
+  private updateDemand(producer: KNode, consumer: Consumer, demand: Demand): void {
+    const edge = producer.demands.get(consumer);
+    if (!edge) { this.addDemand(producer, consumer, demand); return; }
+    if (demand instanceof KNode ? edge.source === demand : !edge.source && equal(edge.spec, specOf(demand))) return;
+    this.dropFollower(edge);
+    edge.source = undefined;
+    edge.spec = specOf(demand);
+    this.followSpec(producer, consumer, edge, demand);
+    this.trim(producer);
+  }
+
+  private dropFollower(edge: Edge): void {
+    if (!edge.follower) return;
+    this.disconnect(edge.follower);
+    if (this.nodes.get(edge.follower.id) === edge.follower) this.nodes.delete(edge.follower.id);
+    edge.follower = undefined;
+  }
+
   private releaseDemand(producer: KNode, consumer: Consumer): void {
-    const edge = producer.demands.get(consumer) as (Edge & { follower?: KNode }) | undefined;
+    const edge = producer.demands.get(consumer);
     if (!edge) return;
     producer.demands.delete(consumer);
-    if (edge.follower) this.disconnect(edge.follower);
+    this.dropFollower(edge);
     if (producer.active && producer.demands.size === 0 && producer.kind !== "effect") this.deactivate(producer);
   }
 
   private activate(node: KNode): void {
-    node.active = true;
+    node.live = true;
     if (node.kind === "combinator" || node.kind === "effect") {
       for (const input of node.inputs) this.addDemand(input.node, node, input.demand);
       this.primed.add(node);
@@ -506,11 +585,11 @@ export class Environment {
   }
 
   private deactivate(node: KNode): void {
-    node.active = false;
+    node.live = false;
     this.primed.delete(node);
     if (node.kind === "combinator" || node.kind === "effect") for (const input of node.inputs) this.releaseDemand(input.node, node);
     if (node.activationAborter) { node.activationAborter.abort("dormant"); node.activationAborter = undefined; }
-    if (!node.retainAll && node.kind !== "seed" && node.kind !== "process") node.entries = node.entries.slice(-1);
+    if (!node.retainAll && node.kind !== "seed" && node.kind !== "process") node.held = node.held.slice(-1);
   }
 
   /** The host demands a node until `signal` aborts. */
@@ -518,24 +597,32 @@ export class Environment {
     if (signal.aborted) return;
     const consumer = new HostDemand(label);
     this.change(() => { if (!signal.aborted) this.addDemand(node, consumer, demand); });
-    onAbort(signal, () => this.change(() => this.releaseDemand(node, consumer)));
+    onAbort(signal, () => this.release(() => this.releaseDemand(node, consumer)));
   }
 
   /** Changes a node's inputs (a queued wiring change); refuses an input that would close a cycle (SPEC §5.1). */
   setInputs(node: KNode, inputs: readonly Input[]): void { this.change(() => this.setInputsNow(node, inputs)); }
-  /** @internal Within a change: rewires at once. */
-  setInputsNow(node: KNode, inputs: readonly Input[]): void {
-    {
-      const next = inputs.map(normaliseInput);
-      for (const input of next) if (this.reaches(input.node, node)) {
-        this.fail(`${node.name} can't take ${input.node.name} as an input: that would close a cycle.`, "cycle");
-        return;
-      }
-      const wasActive = node.active;
-      if (wasActive) for (const input of node.inputs) this.releaseDemand(input.node, node);
-      node.inputs = next;
-      if (wasActive) { for (const input of next) this.addDemand(input.node, node, input.demand); this.primed.add(node); }
+  /**
+   * Within a change: rewires at once. An input kept across the rewiring keeps its demand edge (its spec updated in
+   * place), so it never passes through dormancy; new inputs are demanded before dropped ones are released.
+   */
+  private setInputsNow(node: KNode, inputs: readonly Input[]): void {
+    const next = inputs.map(normaliseInput);
+    for (const input of next) if (this.reaches(input.node, node)) {
+      this.fail(`${node.name} can't take ${input.node.name} as an input: that would close a cycle.`, "cycle");
+      return;
     }
+    const previous = node.inputs;
+    node.wiring = next;
+    if (!node.active) return;
+    const kept = new Set<KNode>();
+    for (const input of next) {
+      if (kept.has(input.node)) continue;
+      kept.add(input.node);
+      this.updateDemand(input.node, node, input.demand);
+    }
+    for (const input of previous) if (!kept.has(input.node)) this.releaseDemand(input.node, node);
+    this.primed.add(node);
   }
 
   /** Whether `from` depends (through inputs) on `target`, or is it. */
@@ -567,11 +654,19 @@ export class Environment {
     if (effect.active) this.deactivate(effect);
   }
 
+  /** Forgets a run's own effect: disconnected, and removed from its run's scope and from the environment. */
+  private forgetEffect(effect: KNode, scope: Scope): void {
+    this.disconnect(effect);
+    const index = scope.nodes.indexOf(effect);
+    if (index >= 0) scope.nodes.splice(index, 1);
+    if (this.nodes.get(effect.id) === effect) this.nodes.delete(effect.id);
+  }
+
   /** Connects an effect in the root scope (for the host); ended by `signal`. */
   connect(effect: KNode, signal: AbortSignalLike): void {
     if (signal.aborted) return;
     this.change(() => { if (!signal.aborted) this.connectEffect(effect, this.rootScope); });
-    onAbort(signal, () => this.change(() => this.disconnect(effect)));
+    onAbort(signal, () => this.release(() => this.disconnect(effect)));
   }
 
   /** A one-shot read (SPEC §4.8): activates a dormant node, primes it, reads, and releases it. */
@@ -590,18 +685,18 @@ export class Environment {
 
   private trim(node: KNode): void {
     if (node.retainAll || node.entries.length <= 1) return;
-    const now = this.clock.now();
+    const now = this.now();
     const specs = [...node.demands.values()].map(edge => edge.spec);
     const last = node.entries[node.entries.length - 1];
-    node.entries = node.entries.filter(entry => entry === last || specs.some(spec => keeps(spec, entry, node, now)));
+    node.held = node.held.filter(entry => entry === last || specs.some(spec => keeps(spec, entry, node, now)));
   }
 
   // ---------------------------------------------------------------------------------------------------------------
   // Drivers and processes (SPEC §9)
   // ---------------------------------------------------------------------------------------------------------------
 
-  /** @internal Starts a driver's run: a queued change; returns the run's process node at once. */
-  startDriver(driver: Driver, options: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json; readonly role?: string }): Process {
+  /** Starts a driver's run (`Driver.start`, `RunContext.start`): a queued change; returns the run's process node at once. */
+  private startDriver(driver: Driver, options: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json; readonly role?: string }): Process {
     const parent = options.parent ?? this.root;
     const process = this.register(new Process(this, this.newId(`run:${driver.id}`), `${driver.name} run`, parent, options.signal));
     process.driver = driver;
@@ -609,6 +704,7 @@ export class Environment {
     parent.children.push(process);
     this.change(() => {
       this.append(driver, process.id);
+      this.trim(driver);
       this.begin(process, signal => {
         const scope = new Scope(this, process, signal);
         this.scopes.set(process, scope);
@@ -625,11 +721,11 @@ export class Environment {
     return {
       env: this, signal: scope.signal, process: scope.process,
       effect: spec => {
-        const effect = this.effect(spec);
+        const effect = this.effect({ id: spec.id, name: spec.name, inputs: spec.inputs, run: spec.run });
         scope.nodes.push(effect);
-        this.change(() => { if (!scope.signal.aborted && !spec.signal?.aborted) this.connectEffect(effect, scope); });
-        // An effect may end before its run, by its own token.
-        onAbort(spec.signal, () => this.change(() => { this.disconnect(effect); this.nodes.delete(effect.id); }));
+        this.change(() => { if (!scope.signal.aborted && !spec.signal?.aborted) this.connectEffect(effect, scope); else this.forgetEffect(effect, scope); });
+        // An effect may end before its run, by its own token; either way it is forgotten.
+        onAbort(spec.signal, () => this.release(() => this.forgetEffect(effect, scope)));
         return effect;
       },
       spawn: (name, work, options = {}) => this.spawn(name, work, options.parent ?? scope.process, options.id),
@@ -652,13 +748,18 @@ export class Environment {
       process.terminal = true;
       // Children end with their parent (SPEC §9.5), before its terminal entry is observed. An aborted parent's children
       // are aborted through their chained tokens, with the parent's reason (§8.3).
-      if (state.status !== "aborted") for (const child of process.children) if (!child.terminal) child.abort({ parent: state.status });
+      if (state.status !== "aborted") for (const child of [...process.children]) if (!child.terminal) child.abort({ parent: state.status });
       const scope = this.scopes.get(process);
       if (scope) {
         this.scopes.delete(process);
-        this.change(() => { for (const effect of [...scope.effects]) this.disconnect(effect); });
+        // The run's effects are disconnected and its own effects forgotten with it (SPEC §9.3).
+        this.release(() => {
+          for (const effect of [...scope.nodes]) this.forgetEffect(effect, scope);
+          for (const effect of [...scope.effects]) this.disconnect(effect);
+        });
       }
       this.observe(process, state);
+      this.forgetProcess(process);
     };
     if (signal.aborted) { this.observe(process, { status: "running" }); finish({ status: "aborted", reason: toJson(signal.reason) }); return; }
     this.observe(process, { status: "running" });
@@ -669,6 +770,20 @@ export class Environment {
     promise.then(
       result => { if (!signal.aborted) finish({ status: "done", result: toJson(result) }); },
       error => { if (!signal.aborted) finish({ status: "failed", error: { message: messageOf(error) } }); });
+  }
+
+  /**
+   * A finished process is forgotten once its terminal entry is observed (SPEC §9.8): it leaves its parent's children
+   * and the environment, and its token stops listening to its parents'. Whoever holds the node still reads its
+   * stream. An environment that retains everything (debugging) keeps finished processes in the tree.
+   */
+  private forgetProcess(process: Process): void {
+    if (this.retainAll || process === this.root) return;
+    process.aborter.release();
+    const siblings = process.parent?.children;
+    const index = siblings ? siblings.indexOf(process) : -1;
+    if (siblings && index >= 0) siblings.splice(index, 1);
+    if (this.nodes.get(process.id) === process) this.nodes.delete(process.id);
   }
 
   /**
@@ -691,6 +806,17 @@ export class Environment {
     return node;
   }
 }
+
+/**
+ * Package-internal operations (the erector and the entity layer), not part of the public API: within a queued change,
+ * forget a node or rewire it at once; start a driver's run.
+ */
+export const kernelInternals = {
+  removeNow: (env: Environment, node: KNode): void => env["removeNow"](node),
+  setInputsNow: (env: Environment, node: KNode, inputs: readonly Input[]): void => env["setInputsNow"](node, inputs),
+  startDriver: (env: Environment, driver: Driver, options: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json; readonly role?: string }): Process =>
+    env["startDriver"](driver, options),
+};
 
 // -------------------------------------------------------------------------------------------------------------------
 // Helpers

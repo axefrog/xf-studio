@@ -57,9 +57,16 @@ export class Aborter {
   }
   abort(reason: unknown = "aborted"): void {
     if (this.signal.aborted) return;
+    this.release();
+    this.signal.fire(reason);
+  }
+  /**
+   * Unlinks this controller from its parents without aborting it: for work that has finished, so a long-lived parent
+   * doesn't keep a listener for every child it ever had.
+   */
+  release(): void {
     for (const unlink of this.unlink) unlink();
     this.unlink = [];
-    this.signal.fire(reason);
   }
 }
 

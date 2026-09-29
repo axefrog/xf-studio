@@ -38,8 +38,10 @@ export type Disagreement = {
 };
 
 /**
- * The value to use for a fact from several actors' claims: the most trusted actor's latest claim. When trusted claims
- * differ from another actor's latest claim, the result also carries the disagreement.
+ * The value to use for a fact from several actors' claims: the most trusted actor's latest claim. `asOf` is compared
+ * only within one actor's claims (actors' clocks differ); among equally ranked actors the one whose ID sorts first
+ * (by UTF-16 code units, as canonical JSON sorts names) is trusted. When trusted claims differ from another actor's
+ * latest claim, the result also carries the disagreement (SPEC §17.5).
  */
 export function resolveClaims(factKind: string, claims: readonly Claim[], policy: TrustPolicy, frame?: string):
   { readonly value?: Json; readonly from?: Claim; readonly disagreement?: Disagreement } {
@@ -49,7 +51,7 @@ export function resolveClaims(factKind: string, claims: readonly Claim[], policy
     if (!current || claim.asOf >= current.asOf) latest.set(claim.actor, claim);
   }
   const ranked = [...latest.values()].map(claim => ({ claim, rank: policy.rank(factKind, claim.actor, frame) }))
-    .sort((a, b) => b.rank - a.rank || b.claim.asOf - a.claim.asOf || (a.claim.actor < b.claim.actor ? -1 : 1));
+    .sort((a, b) => b.rank - a.rank || (a.claim.actor < b.claim.actor ? -1 : a.claim.actor > b.claim.actor ? 1 : 0));
   const trusted = ranked.find(item => item.rank > 0)?.claim;
   const differing = [...latest.values()].some(claim => trusted && !equal(claim.value, trusted.value));
   const all = [...latest.values()].sort((a, b) => a.actor < b.actor ? -1 : 1);

@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Aborter, createGraph } from "strata";
-import type { GraphStore } from "strata";
+import type { Entry, GraphStore } from "strata";
 import { STORE_CASES, Scheduler, seededRandom, settle, simClock } from "strata/testing";
 import { SqliteGraphStore } from "../src/platform/graph-adapters/sqlite-store";
 import { LibraryBackups } from "../src/platform/graph-adapters/backups";
@@ -105,6 +105,127 @@ test("daily backups: one a day, seven daily and four weekly kept, purged nodes r
     expect(existsSync(kept)).toBe(true);
     expect(readdirSync(join(dir, "backups")).some(name => name.includes("pre-restore"))).toBe(true);
   } finally { cleanup(); }
+});
+
+/** G1's `events` table, as libraries made before the positions migration have it (CORE-128). */
+const G1_EVENTS = `CREATE TABLE events (pos INTEGER PRIMARY KEY, node TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL,
+    commit_id TEXT NOT NULL, actor TEXT NOT NULL, actor_seq INTEGER NOT NULL, at INTEGER NOT NULL, schema TEXT NOT NULL,
+    op TEXT NOT NULL, extra TEXT, UNIQUE (node, seq)); CREATE INDEX events_commit ON events (commit_id);`;
+
+test("a G1 library migrates to never-reissued positions in place, keeping every entry, after a pre-migration backup", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  try {
+    new LookLibrary(path).close();
+    const g1 = new Database(path);
+    g1.exec(`PRAGMA journal_mode=WAL; ${G1_EVENTS}`);
+    g1.close();
+    // The G1 store's rows: two nodes, A's entries the newest.
+    const legacy = new Database(path);
+    const insert = legacy.query("INSERT INTO events (node, type, seq, commit_id, actor, actor_seq, at, schema, op, extra) VALUES (?, 'pointer', ?, ?, 'local', ?, 1, '1', ?, NULL)");
+    const create = JSON.stringify({ kind: "create", state: { name: "n", own: {}, layers: [], trashed: false, retracted: false } });
+    insert.run("b", 1, "c1", 1, create); insert.run("a", 1, "c2", 2, create); insert.run("a", 2, "c2", 3, JSON.stringify({ kind: "rename", name: "m" }));
+    legacy.exec(`CREATE TABLE node_index (node TEXT PRIMARY KEY, type TEXT NOT NULL, head_seq INTEGER NOT NULL, name TEXT NOT NULL, trashed INTEGER NOT NULL);
+      INSERT INTO node_index VALUES ('b', 'pointer', 1, 'n', 0), ('a', 'pointer', 2, 'm', 0);`);
+    const before = legacy.query("SELECT * FROM events ORDER BY pos").all();
+    const version = (legacy.query("PRAGMA user_version").get() as { user_version: number }).user_version;
+    legacy.close();
+    const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: simClock(new Scheduler()), random: seededRandom("m") });
+    try {
+      expect(library.store.migrationError).toBeUndefined();
+      expect(library.backups.list().map(item => item.kind)).toEqual(["pre-migration"]);
+      expect(library.backups.list()[0].entries).toBe(3);
+      const db = new Database(path, { readonly: true });
+      try {
+        expect((db.query("SELECT sql FROM sqlite_master WHERE name = 'events'").get() as { sql: string }).sql).toContain("AUTOINCREMENT");
+        expect(db.query("SELECT * FROM events ORDER BY pos").all()).toEqual(before);
+        expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(version);
+      } finally { db.close(); }
+      // The purge-then-append case that reissued a position before.
+      await library.store.purge({ type: POINTER, id: "a" });
+      const result = await library.store.append({ commit: "c3", expect: [["b", 1]], entries: [{ node: { type: POINTER, id: "b" }, seq: 2, pos: 0, commit: "c3",
+        actor: "local", actorSeq: 4, at: 2, schema: "1", op: { kind: "rename", name: "o" } }] });
+      expect(result.ok && result.positions).toEqual([4]);
+      expect((await library.store.changesSince(3)).entries.map(entry => entry.commit)).toEqual(["c3"]);
+    } finally { library.close(); }
+    // Opening again doesn't migrate (or back up) twice.
+    const again = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: simClock(new Scheduler()), random: seededRandom("m") });
+    expect(again.backups.list().length).toBe(1);
+    again.close();
+  } finally { cleanup(); }
+});
+
+test("a purge whose backups are locked stays pending and finishes later; the purge itself succeeds", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  let now = START;
+  const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: { ...simClock(new Scheduler()), now: () => now }, random: seededRandom("p") });
+  try {
+    const node = { type: POINTER, id: "n1" };
+    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
+      actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } }] });
+    library.dailyBackup();
+    now += DAY;
+    library.dailyBackup();
+    const copies = library.backups.list();
+    expect(copies.length).toBe(2);
+    // Hold a write lock on one copy: purging it fails for now.
+    const lock = new Database(copies[0].file);
+    lock.exec("BEGIN EXCLUSIVE");
+    try {
+      await library.store.purge(node);
+      expect(library.store.pendingPurges()).toEqual(["n1"]);
+      expect((await library.store.readStream(node)).length).toBe(0);
+      expect(library.backups.list().find(item => item.file === copies[1].file)!.nodes).toBe(0);
+    } finally { lock.exec("ROLLBACK"); lock.close(); }
+    expect(library.store.retryPurges()).toEqual([]);
+    expect(library.backups.list().every(item => item.nodes === 0)).toBe(true);
+  } finally { library.close(); cleanup(); }
+});
+
+test("restore is refused while another connection has the library open", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  try {
+    const store = new SqliteGraphStore(path);
+    const backups = new LibraryBackups(path, () => START);
+    const copy = backups.daily()!;
+    expect(() => backups.restore(copy)).toThrow("other windows");
+    store.close();
+    expect(existsSync(backups.restore(copy))).toBe(true);
+  } finally { cleanup(); }
+});
+
+test("a running host keeps taking a daily backup, checking every hour", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  const scheduler = new Scheduler();
+  const clock = simClock(scheduler);
+  const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock, random: seededRandom("d") });
+  try {
+    const started = clock.now();
+    library.dailyBackup();
+    expect(library.backups.list().length).toBe(1);
+    for (let hour = 0; hour < 50; hour++) scheduler.advance(60 * 60 * 1000);
+    const days = new Set(Array.from({ length: 51 }, (_, hour) => new Date(started + hour * 3_600_000).toISOString().slice(0, 10)));
+    expect(library.backups.list().filter(item => item.kind === "daily").length).toBe(days.size);
+  } finally { library.close(); cleanup(); }
+});
+
+test("the inspector's read graph never writes to the library, catches up without reloading, and answers a page opened at localhost", async () => {
+  const dir = folder(), path = join(dir, "library.sqlite");
+  const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: simClock(new Scheduler()), random: seededRandom("i") });
+  try {
+    const node = { type: POINTER, id: "00000000-0000-4000-8000-000000000001" };
+    const entry = (seq: number): Entry => ({ node, seq, pos: 0, commit: `c${seq}`, actor: "local", actorSeq: seq, at: seq, schema: "1",
+      op: seq === 1 ? { kind: "create", state: { name: "p", own: {}, layers: [], trashed: false, retracted: false } } : { kind: "rename", name: `p${seq}` } });
+    for (let seq = 1; seq <= 210; seq++) await library.store.append({ commit: `c${seq}`, entries: [entry(seq)], expect: [[node.id, seq - 1]] });
+    const handler = createGraphHandler(library, "/api/graph");
+    const page = await (await handler(new Request("http://localhost:4317/api/graph/inspect?q=", { headers: { Origin: "http://localhost:4317" } }))).json() as { rows: { name: string }[] };
+    expect(page.rows.map(row => row.name)).toEqual(["p210"]);
+    const first = await library.graph();
+    await library.store.append({ commit: "c211", entries: [entry(211)], expect: [[node.id, 210]] });
+    expect(await library.graph()).toBe(first);
+    expect(first.read(node)?.name).toBe("p211");
+    const db = new Database(path, { readonly: true });
+    try { expect((db.query("SELECT COUNT(*) AS n FROM snapshots").get() as { n: number }).n).toBe(0); } finally { db.close(); }
+  } finally { library.close(); cleanup(); }
 });
 
 test("a library with the graph tables still opens in earlier XF Studio stores, user_version stays 2, and collections list as before", async () => {

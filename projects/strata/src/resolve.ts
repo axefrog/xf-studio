@@ -34,6 +34,8 @@ export class Resolver {
   private leaves = new Map<string, Map<string, Resolved>>();
   private keys = new Map<string, Map<string, readonly string[]>>();
   private visiting = new Set<string>();
+  /** How many times resolution has met a layer cycle: a result that met one depends on where it started. */
+  private cycleHits = 0;
   constructor(readonly reader: StateReader) {}
 
   /** Drops what is memoised for a node. */
@@ -51,10 +53,15 @@ export class Resolver {
     const hit = memo?.get(key);
     if (hit) return hit;
     const guard = `${ref.id}\u0000${key}`;
-    if (this.visiting.has(guard)) return ABSENT;   // a layer cycle that reached memory (another window's commit): absent
+    // A layer cycle that reached memory (another window's commit): the repeated layer yields nothing (SPEC §12.5).
+    if (this.visiting.has(guard)) { this.cycleHits++; return ABSENT; }
     this.visiting.add(guard);
+    const hits = this.cycleHits;
     let result: Resolved;
     try { result = this.compute(ref, path, key); } finally { this.visiting.delete(guard); }
+    // A result that met a cycle is not memoised: read from another node of the cycle, the answer differs, and the
+    // order of reads must never change an answer.
+    if (this.cycleHits !== hits) return result;
     if (!memo) this.leaves.set(ref.id, memo = new Map());
     memo.set(key, result);
     return result;
@@ -85,10 +92,12 @@ export class Resolver {
     const hit = memo?.get(key);
     if (hit) return hit;
     const guard = `${ref.id}\u0001${key}`;
-    if (this.visiting.has(guard)) return [];
+    if (this.visiting.has(guard)) { this.cycleHits++; return []; }
     this.visiting.add(guard);
+    const hits = this.cycleHits;
     let result: readonly string[];
     try { result = this.computeKeys(ref, path); } finally { this.visiting.delete(guard); }
+    if (this.cycleHits !== hits) return result;
     if (!memo) this.keys.set(ref.id, memo = new Map());
     memo.set(key, result);
     return result;
