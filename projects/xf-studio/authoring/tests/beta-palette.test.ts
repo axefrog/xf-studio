@@ -37,3 +37,19 @@ test("once the 3D view is ready, or nothing waits for it, the palette is unchang
   expect(withPreviewSetup(palette({ phase: "ready" }).rt, list)).toBe(list);
   expect(withPreviewSetup(palette({ phase: "unavailable", message: HEAD }).rt, list)).toBe(list);
 });
+
+test("the setup entry asks and runs the setup's next step as it is then, not as it was when the palette opened (UI-164)", () => {
+  const dispatched: string[] = [];
+  let setup = { card: { open: false }, head: { next: { label: "Set up 3D preview", action: { kind: "previewSetup.show" } } } };
+  const rt = { port: {
+    viewport: { snapshot: () => ({ head: { phase: "unavailable", message: HEAD } }) },
+    previewSetup: { snapshot: () => setup, capability: (action: { kind: string }) => ({ available: action.kind !== "previewSetup.show" }),
+      dispatch: async (action: { kind: string }) => { dispatched.push(action.kind); return { ok: true }; } },
+  }, feedback: { toast: () => {} }, changed: () => {} } as never;
+  const [entry] = withPreviewSetup(rt, [command("idle", { available: false, reason: HEAD })]);
+  // While the palette is open the setup moves on: the next step is now to choose the folder found.
+  setup = { card: { open: true }, head: { next: { label: "Use this folder", action: { kind: "previewSetup.useDetectedGame" } } } };
+  expect(entry!.capability()).toEqual({ available: true });
+  entry!.run();
+  expect(dispatched).toEqual(["previewSetup.useDetectedGame"]);
+});

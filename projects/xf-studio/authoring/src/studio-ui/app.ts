@@ -116,6 +116,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     panel.spec.visibility?.(visible);
     if (visible) panel.update(new Frame(port));
   } });
+  /** Put the 3D preview setup card where it belongs now (set below, once the card exists): after every dock layout too (UI-164). */
+  let placeSetupCard = () => {};
   const dock = new DockView({
     // A hidden module's panels are not in the dock: they come back when it is shown (design §4.3).
     panels: panels.filter(panel => !parkedAtStart.includes(panel.spec.id)).map(specOf),
@@ -134,7 +136,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     },
     announce: message => feedback.announce(message),
     beforeLayout: () => port.viewport.cancelInput(),
-    afterLayout: () => requestAnimationFrame(() => port.viewport.resize()),
+    // A layout change (a tab switched, a pane hidden or resized) may leave the setup card in a pane that is no longer shown or roomy:
+    // it is placed again then, not only on the next paint (UI-164).
+    afterLayout: () => requestAnimationFrame(() => { port.viewport.resize(); placeSetupCard(); }),
   });
   rt.dock = dock;
   /**
@@ -224,8 +228,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
    * squeezed below the card's reading size. Placed only while the card shows (its size is read then); moving it keeps focus.
    */
   const headPane = byId.get("head")?.spec.element;
-  const dockSetupCard = (frame: Frame) => {
-    const open = frame.previewSetup.card.open;
+  const dockSetupCard = (open: boolean) => {
     if (open) {
       const pane = headPane && dock.isVisible("head") ? headPane.getBoundingClientRect() : undefined;
       // A pane not laid out yet (0 × 0, the first paint) counts as roomy; the card scrolls inside a pane down to 280 × 220.
@@ -242,6 +245,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     // The card says what the pane needs, so the pane doesn't say it a second time while the card shows (docked or floating).
     headPane?.classList.toggle("setup-card-open", open);
   };
+  placeSetupCard = () => dockSetupCard(port.previewSetup.snapshot().card.open);
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
@@ -263,7 +267,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
     const notice = port.diagnostics.snapshot().notice;
     if (notice && notice.id !== lastNotice) { lastNotice = notice.id; feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref }); }
-    header.update(frame); status.update(frame); setupCard.update(frame); dockSetupCard(frame); guidance.update(frame);
+    header.update(frame); status.update(frame); setupCard.update(frame); dockSetupCard(frame.previewSetup.card.open); guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
     for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form: Settings › Game.
@@ -617,13 +621,18 @@ export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "
   };
   const waiting = new Set(commands.filter(waits));
   if (!waiting.size) return commands;
-  const setup = port.previewSetup.snapshot(), next = setup.head.next?.action ?? { kind: "previewSetup.show" as const };
+  // The setup's state as it is when the entry is asked or run, not when the palette opened (UI-164): the step may have moved on.
+  const now = () => {
+    const setup = port.previewSetup.snapshot();
+    return { open: setup.card.open, next: setup.head.next?.action ?? { kind: "previewSetup.show" as const } };
+  };
   const entry: Command = { id: "preview.setup", title: "Set up the 3D preview…", group: "View", icon: "head",
     keywords: `3d preview view head game folder wolvenkit ${[...waiting].map(command => `${command.title} ${command.keywords ?? ""}`).join(" ").toLowerCase()}`,
     // Showing the card while it already shows is refused as "already showing": the card is the answer, so the entry stays available.
-    capability: () => setup.card.open && next.kind === "previewSetup.show" ? { available: true } : port.previewSetup.capability(next),
+    capability: () => { const { open, next } = now(); return open && next.kind === "previewSetup.show" ? { available: true } : port.previewSetup.capability(next); },
     run: () => {
-      if (setup.card.open && next.kind === "previewSetup.show") { document.getElementById("preview-card-title")?.focus(); return; }
+      const { open, next } = now();
+      if (open && next.kind === "previewSetup.show") { document.getElementById("preview-card-title")?.focus(); return; }
       void port.previewSetup.dispatch(next).then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "3D preview", outcome.message); rt.changed(); });
     } };
   const first = commands.findIndex(command => waiting.has(command));
