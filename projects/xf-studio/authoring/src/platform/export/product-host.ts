@@ -13,7 +13,7 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, re
   statSync, writeFileSync } from "node:fs";
 import { basename, relative, resolve, sep } from "node:path";
 import {
-  ExportRefusal, PACKAGE_BUILD_2, type ExportOmission, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
+  ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, PACKAGE_PROGRESS_PREFIX, type ExportOmission, type PackageBuildProgress, type PackageBuildStage, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
 } from "../api/export";
 import { checkProducts, type ProductsCheck } from "./product-check";
 import { runWorkerCheck, type CheckOutcome, type CheckRequest } from "./check-runner";
@@ -59,8 +59,11 @@ export interface PackageHostAdapter {
   buildSetup(): { snapshot: string; work: string; stage: string; candidates: string; wolvenkit: string; gamepath: string;
     /** Makes a writable private root (and checks it is still private) before it is used. */
     ensurePrivate?(path: string): void };
-  /** Run the builder once as a bounded process tree with these arguments (after the host's own builder entry). */
-  runBuilder(args: readonly string[], options: { cwd: string; signal: AbortSignal; timeoutMs: number }): Promise<BuilderRun>;
+  /**
+   * Run the builder once as a bounded process tree with these arguments (after the host's own builder entry), passing each
+   * line of its stdout to `onLine` as it arrives (the stage lines, PIPE-131).
+   */
+  runBuilder(args: readonly string[], options: { cwd: string; signal: AbortSignal; timeoutMs: number; onLine?: (line: string) => void }): Promise<BuilderRun>;
   /** Where failure details go (the host log); never shown raw in the page. */
   log(scope: "check" | "build", code: string, message: string, detail?: unknown): void;
 }
@@ -191,9 +194,10 @@ export function verifyProductBuildResult(built: PackageBuildResult, planned: Pro
 export class PackageHostService {
   private checking = false;
   private building = false;
+  private progress: PackageBuildProgress | null = null;
 
-
-  busy(action: PackageAction): boolean { return action === "check" ? this.checking : this.building; }
+  /** The running Build's stage (PIPE-131), or null while none runs. A read-only snapshot for the page's progress line. */
+  buildProgress(): PackageBuildProgress | null { return this.building ? this.progress : null; }  busy(action: PackageAction): boolean { return action === "check" ? this.checking : this.building; }
 
   /** Run one request with the host's adapter for it (made per request, so setup changes apply to the next one). */
   async run(adapter: PackageHostAdapter, action: PackageAction, value: unknown, signal: AbortSignal,
@@ -206,7 +210,9 @@ export class PackageHostService {
     }
     if (this.building) return failure("package_build_busy", "A package Build is already running. Wait for its result before starting another.");
     this.building = true;
-    try { return await runProductBuild(adapter, value, signal, timeoutMs ?? PACKAGE_BUILD_DEADLINE_MS); } finally { this.building = false; }
+    this.progress = null;
+    try { return await runProductBuild(adapter, value, signal, timeoutMs ?? PACKAGE_BUILD_DEADLINE_MS, progress => { this.progress = progress; }); }
+    finally { this.building = false; this.progress = null; }
   }
 
   private async check(adapter: PackageHostAdapter, value: unknown, signal: AbortSignal, timeoutMs: number): Promise<PackageHostOutcome> {
@@ -249,20 +255,30 @@ export class PackageHostService {
  * prerequisite stale (PIPE-37). Never throws; never installs.
  */
 export async function runProductBuild(adapter: PackageHostAdapter, value: unknown, signal: AbortSignal,
-  timeoutMs = PACKAGE_BUILD_DEADLINE_MS): Promise<PackageHostOutcome> {
+  timeoutMs = PACKAGE_BUILD_DEADLINE_MS, onProgress: (progress: PackageBuildProgress) => void = () => {}): Promise<PackageHostOutcome> {
   const started = Date.now();
-  const first = await attempt(adapter, value, signal, timeoutMs, false);
+  const first = await attempt(adapter, value, signal, timeoutMs, false, onProgress);
   if (first !== RETRY) return first;
-  const second = await attempt(adapter, value, signal, Math.max(1, timeoutMs - (Date.now() - started)), true);
+  const second = await attempt(adapter, value, signal, Math.max(1, timeoutMs - (Date.now() - started)), true, onProgress);
   return second === RETRY ? failure("package_build_failed", "Package Build failed. No candidate was published.") : second;
 }
 
 /** The builder found a prerequisite stale and it was discarded: build once more. */
 const RETRY = Symbol("retry");
-
+/** A builder stdout line's stage, or null for any other line. */
+export function builderStage(line: string): PackageBuildStage | null {
+  if (!line.startsWith(PACKAGE_PROGRESS_PREFIX)) return null;
+  try {
+    const stage = (JSON.parse(line.slice(PACKAGE_PROGRESS_PREFIX.length)) as { stage?: unknown }).stage;
+    return (PACKAGE_BUILD_STAGES as readonly unknown[]).includes(stage) ? stage as PackageBuildStage : null;
+  } catch { return null; }
+}
 async function attempt(adapter: PackageHostAdapter, value: unknown, signal: AbortSignal, timeoutMs: number,
-  retried: boolean): Promise<PackageHostOutcome | typeof RETRY> {
+  retried: boolean, onProgress: (progress: PackageBuildProgress) => void): Promise<PackageHostOutcome | typeof RETRY> {
   const started = Date.now();
+  let looks: number | undefined;
+  const report = (stage: PackageBuildStage) => onProgress({ stage, step: PACKAGE_BUILD_STAGES.indexOf(stage) + 1, steps: PACKAGE_BUILD_STAGES.length,
+    ...looks !== undefined ? { looks } : {} });
   let issue: string | null;
   try { issue = await adapter.buildIssue(); }
   catch (error) { adapter.log("build", "package_build_unavailable", "Build readiness could not be checked.", error); issue = "Package Build could not check its setup. Restart XF Studio and try again."; }
@@ -286,6 +302,7 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   const needed = [...new Set([...required, ...present.flatMap(entry => entry.exporter.optionalPrerequisites ?? [])
     .filter(id => adapter.prerequisites[id])])];
   if (missing.length) return failure("package_build_unavailable", "This host can't prepare everything these mod files need.");
+  report("prepare");
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), timeoutMs);
   const stop = () => deadline.abort();
@@ -317,6 +334,7 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
       adapter.log("build", "package_build_failed", (error as Error).message, error);
       return failure("package_build_failed", "Package Build could not plan these mod files. No candidate was published.");
     }
+    looks = expected.products.reduce((sum, product) => sum + product.features.reduce((n, { outcome }) => n + outcome.check.presets.length, 0), 0);
     setup = adapter.buildSetup();
     for (const path of [setup.snapshot, setup.work, setup.stage, setup.candidates]) setup.ensurePrivate?.(path);
     mkdirSync(setup.snapshot, { recursive: true, mode: 0o700 });
@@ -326,7 +344,8 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
       { mode: 0o600, flag: "wx" });
     const run = await adapter.runBuilder(["--collection", snapshot, "--prerequisites", prerequisites, "--wolvenkit", setup.wolvenkit,
       "--gamepath", setup.gamepath, "--build-root", setup.work, "--dist-root", setup.stage, "--machine-result"],
-    { cwd: setup.snapshot, signal: deadline.signal, timeoutMs: Math.max(1, timeoutMs - (Date.now() - started)) });
+    { cwd: setup.snapshot, signal: deadline.signal, timeoutMs: Math.max(1, timeoutMs - (Date.now() - started)),
+      onLine: line => { const stage = builderStage(line); if (stage) report(stage); } });
     if (run.stopped || deadline.signal.aborted) return stopped();
     if (run.exitCode !== 0) {
       const reported = builderError(run.stderr);

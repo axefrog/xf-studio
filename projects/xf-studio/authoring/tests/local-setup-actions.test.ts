@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { LocalSetupFields, LocalSetupView } from "../src/local-settings-server";
-import { BUILD_TOOLS_CHECKING, BUILD_TOOLS_RECHECK_MS, buildToolsChecking, LocalSetupActions } from "../src/local-setup-actions";
+import { BUILD_TOOLS_CHECKING } from "../src/local-readiness-codes";
+import { BUILD_TOOLS_RECHECK_MS, buildToolsChecking, LocalSetupActions } from "../src/local-setup-actions";
 
 // The settings port owns field merges and queued refreshes, so views never re-implement them (UI-26).
 function fixture() {
@@ -45,7 +46,7 @@ test("a refresh asked for while busy runs once the request in flight finishes", 
 test("while the host is still checking its build tools, the page asks again until Build's answer is final", async () => {
   let gets = 0;
   const build = (checking: boolean) => ({ ready: !checking, limits: [],
-    issues: checking ? [{ code: BUILD_TOOLS_CHECKING, reason: "XF Studio is still checking your build tools. Try again in a moment." }] : [] });
+    issues: checking ? [{ code: BUILD_TOOLS_CHECKING, reason: "XF Studio is checking its build tools…" }] : [] });
   const actions = new LocalSetupActions(async () => {
     gets++;
     return { ok: true, status: 200, data: { revision: 1, source: "primary", overridden: [], fields: {} as LocalSetupFields,

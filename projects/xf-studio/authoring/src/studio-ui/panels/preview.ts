@@ -1,5 +1,5 @@
 import type { PreviewTextureSize } from "../../preview-quality";
-import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
+import { applyCapability, badge, button, setButtonLabel, ColorField, emptyState, note, section, Segmented, Slider, Toggle } from "../controls";
 import { h, setText } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
 import { ChoiceList, DirectionDial, GroupSection, LightList, SliderWithValue } from "../components";
@@ -305,7 +305,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
         title: entry.builtIn ? `${entry.title}. Built in: changing it makes your own copy.` : entry.title })));
       setupList.update(view?.active, setup => capability({ kind: "preview.selectLightingSetup", setup }), ready ? {} : loading);
       const current = view?.shown;
-      setText(newSetup.querySelector("span")!, "New setup");
+      setButtonLabel(newSetup, "New setup");
       newSetup.title = current ? `A new setup of your own, starting from ${current.label}` : "";
       applyCapability(newSetup, ready ? capability({ kind: "preview.createLightingSetup", from: shownId }) : { available: false, reason: loading.reason });
       applyCapability(renameSetup, ready ? capability({ kind: "preview.renameLightingSetup", setup: shownId, name: current?.label ?? "" }) : { available: false, reason: loading.reason });
@@ -423,14 +423,14 @@ export function motionPanel(rt: StudioRuntime): PanelController {
       head.update(motion?.idleBody ?? true, unavailable);
       face.update(faceMissing ? false : motion?.idleFace ?? true, faceMissing ? { disabled: true, reason: motion!.faceError, note: motion!.faceError } : unavailable);
       applyCapability(pause, port.authoring.capability({ kind: "motion.setPaused", paused: !motion?.idlePaused }));
-      setText(pause.querySelector("span")!, motion?.idlePaused ? "Resume idle" : "Pause idle");
+      setButtonLabel(pause, motion?.idlePaused ? "Resume idle" : "Pause idle");
       pause.replaceChild(icon(motion?.idlePaused ? "play" : "pause"), pause.querySelector("svg")!);
       const blinkAllowed = port.authoring.capability({ kind: "motion.setBlink", value: 0 });
       // Before motion is ready its reason is said once, on the Body line; Blink and Hair physics carry it only as their description.
       const saidOnce = !motion?.available;
       blink.update(motion?.blink, { disabled: !blinkAllowed.available, reason: blinkAllowed.reason, reasonOnLine: !saidOnce });
       applyCapability(play, port.authoring.capability({ kind: "motion.playBlink", playing: !motion?.blinkPlaying }));
-      setText(play.querySelector("span")!, motion?.blinkPlaying ? "Stop blink" : "Play blink");
+      setButtonLabel(play, motion?.blinkPlaying ? "Stop blink" : "Play blink");
       blinkControls.hidden = !!motion && !motion.blinkAvailable;
       setText(blinkNote, blinkNoteLine(motion));
       blinkNote.hidden = !blinkNote.textContent;

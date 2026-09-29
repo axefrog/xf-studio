@@ -1098,3 +1098,27 @@ test("record list (C-30, UI-162): the name keeps its line with its badge, the me
   // The time is the date and the minute, never the seconds.
   expect(row.querySelectorAll(".record-fact")[2]!.textContent).not.toContain(":49");
 });
+
+test("button label and weight change in place (UI-173): same element and icon, one variant at a time, icon-only renames its name and tip", async () => {
+  const { button, setButtonLabel, setButtonVariant } = await lib();
+  let runs = 0;
+  const check = button({ label: "Check now", icon: "refresh", small: true, onClick: () => runs++ });
+  document.body.append(check);
+  const icon = check.firstElementChild;
+  setButtonLabel(check, "Checking…");
+  expect([check.textContent, check.firstElementChild === icon, check.children.length]).toEqual(["Checking…", true, 2]);
+  setButtonVariant(check, "quiet");
+  expect(check.className).toBe("btn small quiet");
+  setButtonVariant(check, "primary");
+  expect(check.className).toBe("btn small primary");
+  setButtonVariant(check, undefined);
+  expect(check.className).toBe("btn small");
+  check.click();
+  expect(runs).toBe(1);
+  const more = button({ label: "More actions", icon: "more", iconOnly: true, onClick: () => {} });
+  setButtonLabel(more, "More actions for Petal wash");
+  expect([more.getAttribute("aria-label"), more.title, more.dataset.title, more.querySelector("span")]).toEqual(["More actions for Petal wash", "More actions for Petal wash", "More actions for Petal wash", null]);
+  const tipped = button({ label: "Undo", icon: "undo", iconOnly: true, title: "Undo (Ctrl+Z)", onClick: () => {} });
+  setButtonLabel(tipped, "Undo Move point");
+  expect([tipped.getAttribute("aria-label"), tipped.title]).toEqual(["Undo Move point", "Undo (Ctrl+Z)"]);
+});

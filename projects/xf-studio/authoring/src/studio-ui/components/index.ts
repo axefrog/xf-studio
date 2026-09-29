@@ -7,7 +7,7 @@
  * The established primitives predate this folder and stay where they are for now (moving them would break parallel branches); this
  * entry point is where new code imports them from.
  */
-export { applyCapability, badge, bindRangeTransaction, button, ColorField, EmptyState, emptyState, fillRange, note, NoteLine, section, Segmented,
+export { applyCapability, badge, bindRangeTransaction, button, ColorField, setButtonLabel, setButtonVariant, type ButtonVariant, EmptyState, emptyState, fillRange, note, NoteLine, section, Segmented,
   SelectField, Slider, Toggle, type SegmentOption, type Transaction } from "../controls";
 export { ExpandAll, expander, expanderLabel, isExpanded, setExpanded, type ExpanderLevel } from "../expander";
 export { helpTip, installHelpTips, setHelp, type HelpText } from "../help-tip";

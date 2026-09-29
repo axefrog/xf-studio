@@ -18,6 +18,11 @@ export type DesktopBuildHost = { dataRoot: string; toolsRoot: string; settings: 
   log?: (message: string) => void;
   /** XF Studio's own downloaded WolvenKit, used when the settings name none. */
   managedWolvenKit?: () => string | null };
+/** `GET /api/package/progress`: the running Build's stage (PIPE-131); codes and counts only, no paths. */
+export function desktopPackageProgress(request: Request): Response {
+  return request.method !== "GET" ? json({ error: "Method not allowed." }, 405) : json({ build: service.buildProgress() });
+}
+
 /** Browser requests contain only action and collection; all build paths are host owned. */
 export async function desktopPackageRequest(request: Request, workerPath = resolve(import.meta.dir, "check-worker.ts"),
   timeoutMs?: number, buildHost?: DesktopBuildHost, activity?: DesktopWorkActivity): Promise<Response> {

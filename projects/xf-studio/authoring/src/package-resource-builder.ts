@@ -10,9 +10,10 @@
 // Python verifier read them; and it no longer round-trips the resources or exports the
 // textures, because the independent verifier converts the unbundled archive members itself.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { generatedFiles } from "./archive-inventory-fs";
+import { readKeptJson } from "./derived-cache";
 import { expectedPaths, inventoryFromFiles } from "./archive-inventory";
 import type { LayeredMakeupRegion } from "./engines/layered-makeup/region";
 import { bakeCollection, type BakedRecord, type CollectionPlan } from "./package-bake";
@@ -58,6 +59,11 @@ export interface ResourceBuildOptions {
   readonly staging: string;
   /** Directory holding exactly one plate mesh/morphtarget pair. */
   readonly plate: string;
+  /**
+   * The plate's kept WolvenKit JSON (eye-plate-json.ts), read instead of serializing the plate when its record matches the
+   * plate's bytes and this build's WolvenKit (`tools.identity`); otherwise the plate is serialized as before.
+   */
+  readonly plateJson?: string;
   /** Eye makeup's layered-makeup region: its models, mirror and texture grids. */
   readonly region: LayeredMakeupRegion;
   readonly tools: PackageResourceTools;
@@ -71,9 +77,11 @@ export interface ResourceBuildOptions {
    * on. Given when the plan includes him (`plan.masculine`); his plate must give exactly that footprint and the
    * feminine plate's texture window, so every texture serves both.
    */
-  readonly masculine?: { readonly plate: string; readonly plateUv: PlateUvFootprint };
+  readonly masculine?: { readonly plate: string; readonly plateUv: PlateUvFootprint; readonly plateJson?: string };
   readonly signal?: AbortSignal;
   readonly log?: (line: string) => void;
+  /** Told when the looks are composed and their conversion into game resources starts (PIPE-131). */
+  readonly converting?: () => void;
 }
 
 export interface BuildRecord {
@@ -120,7 +128,7 @@ function chainLevels(data: Uint8Array, width: number, height: number, levels: nu
   return out;
 }
 const TEXEL_BYTES: Record<TextureChannel, number> = { diffuse: 4, gradient: 4, normal: 2, roughness: 1, metalness: 1, mask: 1, flakes: 1, accent: 1 };
-const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json",
+const FOLDERS = ["logs", "baked", "source-json", "models-json", "app-json", "cc-json", "resources",
   "input/dds-colour", "input/dds-scalar", "input/dds-normal"];
 
 const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
@@ -160,11 +168,47 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
       throw error;
     }
   };
+  // Independent WolvenKit steps run side by side (the tools bound how many at once). Each is logged and recorded in the
+  // order it was started, and all have finished before the first failure is thrown, so none outlives the build.
+  const started: { name: string; run: Promise<ToolStep> }[] = [];
+  const start = (name: string, run: () => Promise<ToolStep>) => {
+    checkCancelled(options.signal);
+    const promise = run();
+    promise.catch(() => {}); // Observed in `finish`; never an unhandled rejection while other work runs.
+    started.push({ name, run: promise });
+  };
+  const finish = async () => {
+    const running = started.splice(0), settled = await Promise.allSettled(running.map(item => item.run));
+    let failure: unknown = null;
+    settled.forEach((result, i) => {
+      const name = running[i]!.name;
+      if (result.status === "fulfilled") {
+        writeFileSync(join(out, "logs", `${name}.log`), result.value.log, "utf8");
+        steps.push({ name, exitCode: result.value.exitCode });
+        log(`${name} complete`);
+      } else {
+        if (result.reason instanceof PackageToolError) writeFileSync(join(out, "logs", `${name}.log`), result.reason.log, "utf8");
+        failure ??= result.reason;
+      }
+    });
+    if (failure) throw failure;
+  };
+  // The plate's JSON: its kept copy when it matches (no WolvenKit launch), else WolvenKit's serialize of the plate folder.
+  const plateJson = async (name: string, kept: string | undefined, directory: string, plateStemName: string, into: string) => {
+    checkCancelled(options.signal);
+    const found = kept && options.tools.identity
+      ? readKeptJson(kept, options.tools.identity, [".mesh", ".morphtarget"].map(suffix => join(directory, plateStemName + suffix))) : null;
+    if (!found) return step(name, () => options.tools.serialize(directory, into));
+    for (const [resource, json] of Object.entries(found)) copyFileSync(json, join(into, resource + ".json"));
+    writeFileSync(join(out, "logs", `${name}.log`), `Read the plate's kept WolvenKit JSON (${options.tools.identity}): ${kept}\n`, "utf8");
+    steps.push({ name, exitCode: 0 });
+    log(`${name} complete (kept JSON)`);
+  };
 
   // 1. The plate's own UVs decide the texture window, so serialize it before compiling (after one yield, so an
   //    immediate cancel stops before any conversion).
   await new Promise(done => setImmediate(done));
-  await step("serialize-owned-models", () => options.tools.serialize(plate, join(out, "source-json")));
+  await plateJson("serialize-owned-models", options.plateJson, plate, stem, join(out, "source-json"));
   const sourceMesh = readJson(join(out, "source-json", stem + ".mesh.json"));
   const footprint = plateUvFootprint(sourceMesh.Data.RootChunk), { bounds, window } = footprint;
   const footprintSha256 = sha256(JSON.stringify(footprint));
@@ -177,7 +221,7 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
   // texture set (and each window entry's UV transform) serves both plates.
   let masculineSource: { mesh: any; morph: any; plateUv: NonNullable<BuildRecord["masculine"]>["plateUv"] } | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (masculinePlate && masculineStem && options.masculine) {
-    await step("serialize-masculine-models", () => options.tools.serialize(masculinePlate, join(out, "source-json-pma")));
+    await plateJson("serialize-masculine-models", options.masculine.plateJson, masculinePlate, masculineStem, join(out, "source-json-pma"));
     const mesh = readJson(join(out, "source-json-pma", masculineStem + ".mesh.json"));
     const his = plateUvFootprint(mesh.Data.RootChunk), hisSha256 = sha256(JSON.stringify(his));
     if (sha256(JSON.stringify(options.masculine.plateUv)) !== hisSha256)
@@ -242,45 +286,65 @@ export async function buildEyeMakeupResources(options: ResourceBuildOptions): Pr
       groupsUsed.add(group);
     }
   });
+  options.converting?.();
+  // The imports start now and run while the plate and resources are written below (one launch per group: a group's
+  // import settings are process-wide environment values).
   for (const [group, settings] of TEXTURE_GROUPS)
-    if (groupsUsed.has(group)) await step("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
-
-  // 4. Lift the plate off the skin like the vanilla face decals (positions only; one chunk per planned lift),
-  //    then rewrite its appearances/materials (window entries carry the UV transform) and the morph's base mesh.
-  const handles = new HandleCounter();
-  const lifted = liftPlate(sourceMesh, readJson(join(out, "source-json", stem + ".morphtarget.json")), plan.plate.liftsMm);
-  writeFileSync(join(out, "logs", "plate-lift.log"), JSON.stringify(lifted.report) + "\n", "utf8");
-  const mesh = rewritePlateMesh(lifted.mesh, plan, handles, plateUv.transform);
-  writeFileSync(join(out, "models-json", plan.mesh.slice(plan.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(mesh), "utf8");
-  const morph = rewritePlateMorph(lifted.morph, plan);
-  writeFileSync(join(out, "models-json", plan.morph.slice(plan.morph.lastIndexOf("/") + 1) + ".json"), resourceJson(morph), "utf8");
-  // His plate gets the same lift, appearances and materials (one texture set), bound to his own mesh. Its handles are
-  // counted apart, so every feminine resource keeps exactly the bytes a feminine-only build writes.
-  const [, male] = selectorBodies(plan);
-  if (!!male !== !!masculineSource) throw Error("The plan and the prepared plates disagree on the masculine V.");
-  let masculineLift: PlateLiftReport | undefined;
-  const maleHandles = new HandleCounter();
-  if (male && masculineSource) {
-    const hisLift = liftPlate(masculineSource.mesh, masculineSource.morph, plan.plate.liftsMm);
-    masculineLift = hisLift.report;
-    writeFileSync(join(out, "logs", "plate-lift-pma.log"), JSON.stringify(hisLift.report) + "\n", "utf8");
-    const hisMesh = rewritePlateMesh(hisLift.mesh, plan, maleHandles, masculineSource.plateUv.transform);
-    writeFileSync(join(out, "models-json", male.mesh.slice(male.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(hisMesh), "utf8");
-    writeFileSync(join(out, "models-json", male.morph.slice(male.morph.lastIndexOf("/") + 1) + ".json"),
-      resourceJson(rewritePlateMorph(hisLift.morph, plan, male)), "utf8");
-  }
-  await step("deserialize-models", () => options.tools.deserialize(join(out, "models-json"), modelDir));
-
-  // 5. The .app template and the character-customization selector (one of each per body).
+    if (groupsUsed.has(group)) start("import-" + group, () => options.tools.importTextures(join(out, "input", group), textureDir, settings));
   const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-  writeFileSync(join(out, "app-json", fileName(plan.app) + ".json"), resourceJson(appearanceResource(plan, handles)), "utf8");
-  writeFileSync(join(out, "cc-json", fileName(plan.customization) + ".json"), resourceJson(customizationResource(plan, handles)), "utf8");
-  if (male) {
-    writeFileSync(join(out, "app-json", fileName(male.app) + ".json"), resourceJson(appearanceResource(plan, maleHandles, male)), "utf8");
-    writeFileSync(join(out, "cc-json", fileName(male.customization) + ".json"), resourceJson(customizationResource(plan, maleHandles, male)), "utf8");
-  }
-  await step("deserialize-app", () => options.tools.deserialize(join(out, "app-json"), appDir));
-  await step("deserialize-customization", () => options.tools.deserialize(join(out, "cc-json"), appDir));
+  const documents = () => {
+    // 4. Lift the plate off the skin like the vanilla face decals (positions only; one chunk per planned lift),
+    //    then rewrite its appearances/materials (window entries carry the UV transform) and the morph's base mesh.
+    const handles = new HandleCounter();
+    const lifted = liftPlate(sourceMesh, readJson(join(out, "source-json", stem + ".morphtarget.json")), plan.plate.liftsMm);
+    writeFileSync(join(out, "logs", "plate-lift.log"), JSON.stringify(lifted.report) + "\n", "utf8");
+    const mesh = rewritePlateMesh(lifted.mesh, plan, handles, plateUv.transform);
+    writeFileSync(join(out, "models-json", plan.mesh.slice(plan.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(mesh), "utf8");
+    const morph = rewritePlateMorph(lifted.morph, plan);
+    writeFileSync(join(out, "models-json", plan.morph.slice(plan.morph.lastIndexOf("/") + 1) + ".json"), resourceJson(morph), "utf8");
+    // His plate gets the same lift, appearances and materials (one texture set), bound to his own mesh. Its handles are
+    // counted apart, so every feminine resource keeps exactly the bytes a feminine-only build writes.
+    const [, male] = selectorBodies(plan);
+    if (!!male !== !!masculineSource) throw Error("The plan and the prepared plates disagree on the masculine V.");
+    let masculineLift: PlateLiftReport | undefined;
+    const maleHandles = new HandleCounter();
+    if (male && masculineSource) {
+      const hisLift = liftPlate(masculineSource.mesh, masculineSource.morph, plan.plate.liftsMm);
+      masculineLift = hisLift.report;
+      writeFileSync(join(out, "logs", "plate-lift-pma.log"), JSON.stringify(hisLift.report) + "\n", "utf8");
+      const hisMesh = rewritePlateMesh(hisLift.mesh, plan, maleHandles, masculineSource.plateUv.transform);
+      writeFileSync(join(out, "models-json", male.mesh.slice(male.mesh.lastIndexOf("/") + 1) + ".json"), resourceJson(hisMesh), "utf8");
+      writeFileSync(join(out, "models-json", male.morph.slice(male.morph.lastIndexOf("/") + 1) + ".json"),
+        resourceJson(rewritePlateMorph(hisLift.morph, plan, male)), "utf8");
+    }
+
+    // 5. The .app template and the character-customization selector (one of each per body).
+    writeFileSync(join(out, "app-json", fileName(plan.app) + ".json"), resourceJson(appearanceResource(plan, handles)), "utf8");
+    writeFileSync(join(out, "cc-json", fileName(plan.customization) + ".json"), resourceJson(customizationResource(plan, handles)), "utf8");
+    if (male) {
+      writeFileSync(join(out, "app-json", fileName(male.app) + ".json"), resourceJson(appearanceResource(plan, maleHandles, male)), "utf8");
+      writeFileSync(join(out, "cc-json", fileName(male.customization) + ".json"), resourceJson(customizationResource(plan, maleHandles, male)), "utf8");
+    }
+    return { lifted, male, masculineLift };
+  };
+  let written: ReturnType<typeof documents>;
+  try { written = documents(); }
+  catch (error) { await finish().catch(() => {}); throw error; }
+  const { lifted, male, masculineLift } = written;
+  // Every resource document converts in one WolvenKit launch (its output is flat), then moves to its depot folder.
+  const targets = new Map<string, string>([
+    ...[plan.mesh, plan.morph, ...male ? [male.mesh, male.morph] : []].map(path => [fileName(path), modelDir] as const),
+    ...[plan.app, plan.customization, ...male ? [male.app, male.customization] : []].map(path => [fileName(path), appDir] as const)]);
+  const converted = join(out, "resources");
+  start("deserialize-resources", async () => {
+    const result = await options.tools.deserialize([join(out, "models-json"), join(out, "app-json"), join(out, "cc-json")], converted);
+    for (const [name, dir] of targets) {
+      if (!isFile(join(converted, name))) throw new PackageToolError("package_tool_failed", `WolvenKit did not convert ${name}.`, result.log);
+      renameSync(join(converted, name), join(dir, name));
+    }
+    return result;
+  });
+  await finish();
 
   // 6. Pre-pack gate for this feature: its files in the staging tree must be exactly its planned canonical
   //    resource paths (the export host then requires the whole tree to be the union of every feature's files).

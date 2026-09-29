@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { dirname, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
@@ -19,7 +19,7 @@ import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInsta
 import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
-import { desktopPackageRequest } from "./package";
+import { desktopPackageProgress, desktopPackageRequest } from "./package";
 import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, PROBE_PENDING, probeBun, type WolvenKitProbe } from "./build";
 import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
@@ -52,6 +52,7 @@ import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
 import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
 import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "../src/update-check-host";
+import { textFileAt } from "../src/derived-cache";
 import { gitHubReleases } from "../src/update-check-github";
 import type { LocalSettings } from "../src/local-settings";
 import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host-log";
@@ -178,9 +179,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     updateGuard || null);
   // Checking for a newer XF Studio against its GitHub releases (the check at start follows Settings › Updates). A copy whose version
   // metadata is missing answers that it couldn't check.
-  const textFileAt = (path: string) => ({ read: () => existsSync(path) ? readFileSync(path, "utf8") : null,
-    write: (text: string) => { mkdirSync(dirname(path), { recursive: true }); const temporary = `${path}.${process.pid}.tmp`;
-      writeFileSync(temporary, text); renameSync(temporary, path); } });
   const updateCheckRequests = updateCheckEndpoints({ installed: version.version, now: () => Date.now(),
     releases: gitHubReleases(fetch, { userAgent: `XF-Studio/${version.version}` }),
     settings: { file: textFileAt(resolve(dataRoot, UPDATE_CHECK_FILE)), checkOnStart: () => settingsStore.load().settings.updates.checkOnStart },
@@ -409,6 +407,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         report(message);
         return new Response(null, { status: 204 });
       }
+      if (url.pathname === "/api/package/progress") return desktopPackageProgress(routedRequest);
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
         undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: logTo("package"),
           managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);

@@ -1,5 +1,6 @@
 import type { UpdateCheckState } from "../update-check-actions";
 import type { StudioRuntime } from "./runtime";
+import { h } from "./dom";
 
 /**
  * Checking for a newer XF Studio, in the Studio's words (release-readiness-audit.md item 22). The host decides whether the check at start
@@ -26,6 +27,25 @@ export function updateCheckLine(state: Readonly<UpdateCheckState>, options: { re
       : `XF Studio ${answer.latest.version} is available. You have ${answer.installed}.`, releases: true };
   if (state.checkedByPerson && answer?.result === "current") return { text: `You have the newest version, ${answer.installed}.`, releases: false };
   return null;
+}
+
+/** A version number in an update line (0.1.0-alpha.2), without a sentence's closing full stop. */
+const VERSION = /\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?/g;
+/**
+ * Writes an update line into its element, each version number in a span that never breaks (`.update-version`), so a narrow panel never
+ * splits "0.1.0-" from "alpha.2". Changes nothing when the text is already there.
+ */
+export function setUpdateLine(element: HTMLElement, text: string) {
+  if (element.textContent === text) return;
+  const parts: (string | HTMLElement)[] = [];
+  let at = 0;
+  for (const match of text.matchAll(VERSION)) {
+    if (match.index! > at) parts.push(text.slice(at, match.index));
+    parts.push(h("span", { class: "update-version", text: match[0] }));
+    at = match.index! + match[0].length;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  element.replaceChildren(...parts);
 }
 
 export async function openReleasesPage(rt: Runtime) {

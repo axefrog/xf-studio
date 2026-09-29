@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import { contentFingerprint, EyePlateCache, fileSha256 } from "./eye-plate-cache";
-import { samePath } from "./derived-cache";
+import { keptJsonDirectory, publishKeptJson, readKeptJson, samePath } from "./derived-cache";
 import { derivePlateDocuments } from "./eye-plate-cut";
 import {
   applyHeadPatches, type AppliedHeadPatch, type EyePlateHeadRecord, type HeadArchive, type HeadPatchSource, type HeadResourceSource,
@@ -42,6 +42,8 @@ export interface EyePlateTools {
   extract(input: { archive: string; depotPaths: string[]; outDir: string; signal?: AbortSignal }): Promise<void>;
   /** Serialize one CR2W resource to `<outDir>/<name>.json` and return that path. */
   serialize(input: { file: string; outDir: string; signal?: AbortSignal }): Promise<string>;
+  /** Serialize several CR2W resources (distinct file names) in one WolvenKit launch; the JSON paths in order. Optional: one `serialize` each without it. */
+  serializeFiles?(input: { files: readonly string[]; outDir: string; signal?: AbortSignal }): Promise<string[]>;
   /** Convert every JSON document in `jsonDir` to CR2W resources in `outDir`. */
   deserialize(input: { jsonDir: string; outDir: string; names: string[]; signal?: AbortSignal }): Promise<void>;
 }
@@ -76,7 +78,9 @@ export type EyePlateManifest = {
   verification: EyePlateVerification;
   limits: string[];
 };
-export type EyePlateResult = { directory: string; meshFile: string; morphFile: string; manifestFile: string; manifest: EyePlateManifest; reused: boolean };
+export type EyePlateResult = { directory: string; meshFile: string; morphFile: string; manifestFile: string; manifest: EyePlateManifest; reused: boolean;
+  /** The plate's WolvenKit JSON (eye-plate-json.ts), when `serializer` was given and it could be kept. */
+  json?: string };
 export type EnsureEyePlateOptions = { gameRoot: string; cacheRoot: string; tools: EyePlateTools; recipe?: EyePlateRecipe;
   /** Route resolution; without it the plate is cut from the base game's content archives. */
   headSource?: EyePlateHeadSourcePort;
@@ -87,6 +91,11 @@ export type EnsureEyePlateOptions = { gameRoot: string; cacheRoot: string; tools
    * only on a plate prepared for the same route, head choice and game files (PIPE-36).
    */
   routeKey?: string;
+  /**
+   * The WolvenKit identity (`wolvenKitIdentityKey`) whose JSON of the plate is kept beside it, so a Build reads the plate
+   * without starting WolvenKit (PIPE-130). Absent: none is kept.
+   */
+  serializer?: string;
   signal?: AbortSignal; progress?: (message: string) => void };
 
 /** The package manifest's record of a derived plate; hosts and the builder compare exactly this value. */
@@ -279,6 +288,37 @@ export function discardCachedPlate(cacheRoot: string, manifestFile: string): voi
   cache.remove(entry);
 }
 
+/** Serialize several resources with one WolvenKit launch when the tools can, else one launch each. */
+async function serializeAll(tools: EyePlateTools, files: readonly string[], outDir: string, signal?: AbortSignal): Promise<string[]> {
+  if (tools.serializeFiles) return tools.serializeFiles({ files, outDir, signal });
+  const out: string[] = [];
+  for (const file of files) out.push(await tools.serialize({ file, outDir, signal }));
+  return out;
+}
+
+/**
+ * The plate's WolvenKit JSON beside a published plate: the kept one when its record matches the plate's resources and this
+ * WolvenKit, else serialized now (both files in one launch) and kept. Advisory: a failure leaves the Build to serialize the
+ * plate itself; only cancellation stops.
+ */
+async function withPlateJson(plate: EyePlateResult, tools: EyePlateTools, serializer: string | undefined, work: string,
+  signal?: AbortSignal): Promise<EyePlateResult> {
+  if (!serializer) return plate;
+  const directory = keptJsonDirectory(dirname(plate.directory), serializer);
+  const hashes = { [plate.meshFile]: plate.manifest.files.mesh.sha256, [plate.morphFile]: plate.manifest.files.morph.sha256 };
+  if (readKeptJson(directory, serializer, [plate.meshFile, plate.morphFile], hashes, false)) return { ...plate, json: directory };
+  try {
+    const out = join(work, "plate-json");
+    mkdirSync(out, { recursive: true });
+    const [mesh, morph] = await serializeAll(tools, [plate.meshFile, plate.morphFile], out, signal);
+    publishKeptJson(directory, serializer, new Map([[plate.meshFile, mesh!], [plate.morphFile, morph!]]), hashes);
+    return { ...plate, json: directory };
+  } catch (error) {
+    if (signal?.aborted || (error as { code?: unknown })?.code === "plate_cancelled") throw error;
+    return plate;
+  }
+}
+
 export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<EyePlateResult> {
   const recipe = options.recipe ?? EYE_PLATE_RECIPE;
   const { tools, signal, gameRoot } = options;
@@ -330,7 +370,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
       try {
         const known = cache.readJson(inputsFile) as InputsRecord;
         const reused = loadCached(cache, cache.entry(known.name), known.key, recipe);
-        if (reused) { status("ready", null, "The built-in eye plate is ready.", known.name); return reused; }
+        if (reused) { status("ready", null, "The built-in eye plate is ready.", known.name); return await withPlateJson(reused, tools, options.serializer, work, signal); }
       } catch { /* A damaged record is a miss. */ }
     }
 
@@ -373,7 +413,14 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     };
     // Serializing the head costs seconds, so an unpatched head is read only on a cache miss.
     let head: { mesh: any; morph: any } | null = null;
-    const readHead = async () => head ??= { mesh: await serialize(meshSource, 0), morph: await serialize(morphSource, 1) };
+    const readHead = async () => {
+      if (head) return head;
+      // Both in one WolvenKit launch when their names differ (they always do: .mesh and .morphtarget).
+      const dir = join(sourceJson, "head");
+      mkdirSync(dir);
+      const [meshJson, morphJson] = await serializeAll(tools, [meshSource, morphSource], dir, signal);
+      return head = { mesh: readDocument(cache, meshJson!), morph: readDocument(cache, morphJson!) };
+    };
     const patchDocuments: { patch: HeadPatchSource; document: unknown }[] = [];
     let patchedMesh = { applied: [] as AppliedHeadPatch[], document: null as any }, patchedMorph = { ...patchedMesh };
     if (patches.length) {
@@ -425,7 +472,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     const key = eyePlateCacheKey(recipe, hashes, provenance);
     const name = eyePlateCacheName(recipe, key);
     const cached = loadCached(cache, cache.entry(name), key, recipe);
-    if (cached) { remember({ key, name }); status("ready", null, "The built-in eye plate is ready.", name); return cached; }
+    if (cached) { remember({ key, name }); status("ready", null, "The built-in eye plate is ready.", name); return await withPlateJson(cached, tools, options.serializer, work, signal); }
 
     // 5. Cut, convert and verify against the head actually used.
     progress("Cutting the expanded eye plate from the head");
@@ -458,8 +505,7 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
     progress("Verifying the eye plate against the installed head");
     const readback = join(work, "readback-json");
     mkdirSync(readback);
-    const meshReadback = await tools.serialize({ file: join(resources, meshName), outDir: readback, signal });
-    const morphReadback = await tools.serialize({ file: join(resources, morphName), outDir: readback, signal });
+    const [meshReadback, morphReadback] = await serializeAll(tools, [join(resources, meshName), join(resources, morphName)], readback, signal) as [string, string];
     cancelled();
     let verification: EyePlateVerification;
     try { verification = verifyEyePlate(recipe, headMesh, headMorph, readDocument(cache, meshReadback), readDocument(cache, morphReadback)); }
@@ -484,12 +530,21 @@ export async function ensureEyePlate(options: EnsureEyePlateOptions): Promise<Ey
       limits: [...LIMITS, ...(kind === "installed-mods" ? [MODDED_LIMIT] : kind === "base-game-override" ? [OVERRIDE_LIMIT] : [])],
     };
     cache.writeJson(join(staging, EYE_PLATE_MANIFEST_FILE), manifest);
+    // The readback is WolvenKit's JSON of exactly the published resources: kept beside them, a Build reads the plate from it.
+    let keptJson = false;
+    if (options.serializer) {
+      try {
+        publishKeptJson(keptJsonDirectory(staging, options.serializer), options.serializer, new Map([[join(resources, meshName), meshReadback],
+          [join(resources, morphName), morphReadback]]), { [join(resources, meshName)]: manifest.files.mesh.sha256, [join(resources, morphName)]: manifest.files.morph.sha256 });
+        keptJson = true;
+      } catch { /* Advisory: the next Build keeps it, or the builder serializes the plate itself. */ }
+    }
     const directory = cache.publish(staging, name);
     status("ready", null, "The built-in eye plate is ready.", name);
     const published = loadCached(cache, directory, key, recipe);
     if (!published) throw new EyePlateError("plate_cache_unavailable", "The eye plate cache changed while it was being written.");
     remember({ key, name });
-    return { ...published, reused: false };
+    return { ...published, reused: false, ...keptJson && options.serializer ? { json: keptJsonDirectory(directory, options.serializer) } : {} };
   } catch (error) {
     if (error instanceof EyePlateError) throw error;
     const code = (error as { code?: string }).code;

@@ -1,7 +1,7 @@
 import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
 import { EYE_MAKEUP_MOD, MOD_NAME_HINT } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
-import { applyCapability, badge, button, emptyState, note, section } from "../controls";
+import { applyCapability, badge, button, setButtonLabel, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
@@ -146,7 +146,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       applyCapability(addButton, port.library.capability({ kind: "preset.edit", command: { kind: "add" } }));
       const removed = draft?.removed.at(-1);
       restore.hidden = !removed;
-      if (removed) setText(restore.querySelector("span")!, `Restore “${removed.name}”`);
+      if (removed) setButtonLabel(restore, `Restore “${removed.name}”`);
       applyCapability(restore, port.library.capability({ kind: "preset.edit", command: { kind: "restore" } }));
       applyCapability(importRecipe, port.files.capability({ kind: "recipe.import" }));
       // A "…" whose menu would hold nothing to act on is unavailable with its reason, never a button that does nothing (UI-139). Asked
@@ -307,7 +307,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   const rebuild = button({ label: "Build mod files…", icon: "package", onClick: event => confirmBuild(event.currentTarget as Element) });
   // The progress line keeps its place while nothing runs, so starting or finishing work never moves the panel (UI-90).
   const progressText = h("p", { class: "progress-text" });
-  const progress = h("div", { class: "package-progress idle" }, progressBar({ label: "Package request in progress" }).element, progressText);
+  const progressLine = progressBar({ label: "Package request in progress" });
+  const progress = h("div", { class: "package-progress idle" }, progressLine.element, progressText);
   const result = h("div", { class: "package-result", "aria-live": "polite" });
   let resultSignature = "";
   // Which XF mods the draft builds: one by default, named after its feature; the person may rename a mod and, once the
@@ -376,7 +377,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     await rt.request({ kind: "package", action }, { quietSuccess: false });
   }
   function confirmBuild(anchor: Element) {
-    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses the current draft, including unsaved edits. Takes a few minutes and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
+    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses the current draft, including unsaved edits. Can take a minute or two, and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
       { kind: "action", label: "Build now", icon: "package", capability: buildCapability(), run: () => void runPackage("build") },
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });
@@ -410,6 +411,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? library.progress!.message : "");
+      // A Build that says which stage it has reached fills the bar that far (PIPE-131); otherwise it sweeps.
+      progressLine.set(working && typeof library.progress?.fraction === "number" ? library.progress.fraction : null);
       progressText.title = progressText.textContent ?? "";
       const lastError = files.last && !files.last.ok && (files.last.kind === "package.check" || files.last.kind === "package.build") ? files.last : undefined;
       const signature = JSON.stringify([files.package, lastError, library.draft?.presets.map(p => [p.id, p.name])]);
@@ -422,7 +425,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       // The install rows follow every paint: availability, and what happened last.
       const installs = frame.modInstall, route = frame.localSetup.view?.fields.launchRoute;
       for (const [product, row] of installRows) {
-        setText(row.add.querySelector("span")!, modInstallLabel(route));
+        setButtonLabel(row.add, modInstallLabel(route));
         applyCapability(row.add, port.modInstall.capability({ kind: "modInstall.review", product }));
         applyCapability(row.show, port.modInstall.capability({ kind: "modInstall.reveal", product }));
         const outcome = installs.outcomes[product];
@@ -456,7 +459,7 @@ function failureCard(rt: StudioRuntime, failed: ReadonlyDeep<{ kind: string; cod
 function technicalDetails(rows: [string, string][], footnote?: string) {
   const text = rows.map(([label, value]) => `${label}: ${value}`).join("\n");
   const copy = button({ label: "Copy details", icon: "duplicate", small: true, variant: "quiet", onClick: () => {
-    void navigator.clipboard?.writeText(text).then(() => setText(copy.querySelector("span")!, "Copied"), () => {});
+    void navigator.clipboard?.writeText(text).then(() => setButtonLabel(copy, "Copied"), () => {});
   } });
   return h("details", { class: "result-details" }, h("summary", { text: "Details" }),
     h("dl", { class: "facts" }, ...rows.flatMap(([label, value]) => [h("dt", { text: label }), h("dd", {}, h("code", { class: "hash", text: value }))])),

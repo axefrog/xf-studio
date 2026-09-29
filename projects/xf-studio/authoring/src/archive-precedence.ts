@@ -190,6 +190,15 @@ export class DepotIndex {
     return !!index && contains(index, BigInt(hash));
   }
 
+  /** Does any mounted archive's index list the hash? `lookup(hash).winner !== null` without gathering every provider. */
+  has(hash: string): boolean {
+    const value = BigInt(hash);
+    return this.plan.archives.some(archive => {
+      const index = this.indexes.get(archive.id);
+      return !!index && contains(index, value);
+    });
+  }
+
   lookup(hash: string): DepotLookup {
     const value = BigInt(hash);
     const candidates = this.plan.archives.filter(archive => {

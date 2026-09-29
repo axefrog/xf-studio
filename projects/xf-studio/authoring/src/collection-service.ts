@@ -10,7 +10,10 @@ import type { CollectionSummary, StoredCollection } from "./collection-store";
 import type { LibraryState } from "./workspace-state";
 import type { PackageAction } from "./package-action";
 import { packageBuildLine, packageCheckLine } from "./package-filter";
-import { refusal, type Capability, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
+import { packageBuildStageLine } from "./package-action";
+import { hostClock } from "./platform/graph-adapters/host-sources";
+import type { Clock } from "strata";
+import { refusal, type Capability, type PackageBuildProgress, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
 import { copyPackagePlan } from "./platform/core/package-plan";
 
 /** The plain reasons a collection has nothing to put in a mod because of looks made with a newer version (PIPE-44). */
@@ -35,6 +38,8 @@ export type CollectionResult =
   | { kind: "packageCheck"; result: PackageCheckResult }
   | { kind: "packageBuild"; result: PackageBuildResult };
 export type CollectionProgress = { phase: "working" | "success" | "error"; code: string; message: string;
+  /** How far the work has got (0–1), while it can say (a Build's stage, PIPE-131); absent while it can't. */
+  fraction?: number;
   /** The request this progress belongs to (audit A-9). */
   requestId?: number };
 /** One accepted async request in flight. Library and package requests cannot be cancelled. */
@@ -73,7 +78,12 @@ export type CollectionTransport = {
   save(collection: LookCollection, revision?: number): Promise<StoredCollection>;
   /** Sends the draft's stored form (with its package plan); the host plans every product and answers them all. */
   package(action: PackageAction, collection: unknown): Promise<PackageCheckResult | PackageBuildResult>;
+  /** The running Build's stage (PIPE-131); null when none runs or the host can't say. Optional. */
+  packageProgress?(): Promise<PackageBuildProgress | null>;
 };
+
+/** How often a running Build's stage is asked for. */
+export const BUILD_PROGRESS_INTERVAL_MS = 400;
 
 export class CollectionServiceError extends Error {
   constructor(readonly code: string, message: string) { super(message); }
@@ -312,7 +322,33 @@ export class CollectionService {
       if (stored.revision === draft.revision && stored.collection.id === draft.id) this.remember(stored.collection, stored.revision);
     } catch { /* Baseline stays unknown; the draft itself is unaffected. */ }
   }
+  /** Timers come from the host's clock source (profiles and graph design §5.1). */
+  private readonly clock: Clock = hostClock();
   private setProgress(progress: CollectionProgress) { this.progress = progress; this.notify(); }
+  /**
+   * While Build `requestId` runs, ask the host which stage it has reached and show it in place of the starting line
+   * (PIPE-131): one question at a time, and only a change repaints. Returns the stop.
+   */
+  private followBuild(requestId: number): () => void {
+    const ask = this.transport.packageProgress?.bind(this.transport);
+    if (!ask) return () => {};
+    const stop = new AbortController();
+    const poll = async () => {
+      try {
+        const stage = await ask();
+        if (!stop.signal.aborted && stage && this.running?.requestId === requestId && this.progress?.requestId === requestId &&
+            this.progress.phase === "working") {
+          const message = packageBuildStageLine(stage), fraction = (stage.step - .5) / stage.steps;
+          if (message !== this.progress.message || fraction !== this.progress.fraction)
+            this.setProgress({ phase: "working", code: "package", requestId, message, fraction });
+        }
+      } catch { /* The line stays as it was; the Build's own answer decides the outcome. */ }
+      // The next question after this answer, so they never overlap.
+      this.clock.after(BUILD_PROGRESS_INTERVAL_MS, () => void poll(), stop.signal);
+    };
+    void poll();
+    return () => stop.abort();
+  }
   private async list() { const seq = ++this.listSeq; const summaries = await this.transport.list();
     if (seq === this.listSeq) { this.summaries = summaries; this.notify(); } return this.summaries; }
   private async save(copy: boolean): Promise<StoredCollection> {
@@ -364,7 +400,7 @@ export class CollectionService {
     this.setProgress({ phase: "working", code: request.kind, requestId,
       message: request.kind === "package" ? request.action === "check"
         ? "Checking which layers in the current collection can become Cyberpunk mod files…"
-        : "Building and verifying Cyberpunk mod files from the current collection. This can take several minutes…"
+        : "Starting the build…"
         : "Working with the local collection library…" });
     try {
       let result: CollectionResult, message: string;
@@ -455,7 +491,9 @@ export class CollectionService {
           // Snapshot the unsaved editor state once; this request never writes SQLite or changes revision.
           const key = this.draftKey(), snapshot = this.packageCollection();
           const source = key === undefined ? JSON.stringify(snapshot) : undefined;
-          const response = await this.transport.package(request.action, snapshot);
+          const stopFollowing = request.action === "build" ? this.followBuild(requestId) : () => {};
+          let response: PackageCheckResult | PackageBuildResult;
+          try { response = await this.transport.package(request.action, snapshot); } finally { stopFollowing(); }
           this.packageKey = key; this.packageSource = source;
           if (request.action === "check") {
             const checked = response as PackageCheckResult;

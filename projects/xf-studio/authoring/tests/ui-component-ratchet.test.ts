@@ -151,3 +151,29 @@ test("the scan sees every way of writing a control (UI-121), and nothing that on
   };
   expect(Object.entries(ignores).filter(([, text]) => adHoc(text).length).map(([name, text]) => `${name}: ${JSON.stringify(adHoc(text))}`)).toEqual([]);
 });
+
+/**
+ * A library button edited by hand (UI-173): its label `span` looked up to relabel it, or its variant classes toggled. The button's own
+ * `setButtonLabel` and `setButtonVariant` do both in place; no composition file may reach inside a button again (no allowance).
+ */
+const BUTTON_INTERNALS = [
+  new RegExp(String.raw`\.querySelector(?:All)?(?:<[^>]*>)?\(\s*${Q}[^"'${"`"}]*\bspan\b[^"'${"`"}]*${Q}`, "g"),
+  new RegExp(String.raw`\.classList\.(?:add|remove|toggle|replace)\(\s*(?:${Q}[^"'${"`"}]*${Q}\s*,\s*)*${Q}(?:primary|quiet|danger|ghost)${Q}`, "g"),
+];
+function buttonInternals(text: string): string[] {
+  const code = codeOnly(text);
+  return BUTTON_INTERNALS.flatMap(pattern => [...text.matchAll(pattern)].filter(match => code[match.index!] === text[match.index!]).map(match => match[0]));
+}
+
+test("no panel or feature view relabels a button through its span or re-weights it by class: setButtonLabel and setButtonVariant do (UI-173)", () => {
+  const edits = composition().flatMap(({ file, text }) => buttonInternals(text).map(found => `${file}: ${found}`));
+  expect(edits).toEqual([]);
+});
+
+test("the button-internals scan sees span edits and variant toggles, and ignores prose and other classes", () => {
+  expect(buttonInternals(`setText(add.querySelector("span")!, "Add");`)).toEqual([`.querySelector("span"`]);
+  expect(buttonInternals(`const label = go.querySelector<HTMLElement>(':scope > span');`)).toEqual([`.querySelector<HTMLElement>(':scope > span'`]);
+  expect(buttonInternals(`releases.classList.toggle("primary", newer);`)).toEqual([`.classList.toggle("primary"`]);
+  expect(buttonInternals(`b.classList.remove("small", "quiet");`)).toEqual([`.classList.remove("small", "quiet"`]);
+  expect(buttonInternals(`// a.querySelector("span")\nrow.classList.toggle("selected", on); const note = "classList.add(\\"quiet\\")";`)).toEqual([]);
+});

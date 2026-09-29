@@ -5,7 +5,7 @@
  * TreeView, favouriteToggle); it acts only through its context's facade.
  */
 import { keyBinding } from "../../../input-bindings";
-import { applyCapability, button, emptyState, favouriteToggle, note, SearchField, TreeView, type TreeGroupData, type TreeRowData } from "../../../studio-ui/components";
+import { applyCapability, button, setButtonLabel, emptyState, favouriteToggle, note, SearchField, TreeView, type TreeGroupData, type TreeRowData } from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
@@ -117,7 +117,7 @@ export function posesPanel(ctx: Ctx): PanelController {
       outfit.hidden = !hidden;
       setText(outfitText, snapshot.showFiltered ? `${plural(hidden, "pose")} the game hides while V wears ${tagWords(poseTree.hidingTags)} ${hidden === 1 ? "is" : "are"} shown.`
         : `${plural(hidden, "pose")} ${hidden === 1 ? "is" : "are"} hidden while V wears ${tagWords(poseTree.hidingTags)}, as in the game.`);
-      setText(outfitToggle.querySelector("span") ?? outfitToggle, snapshot.showFiltered ? "Hide them" : "Show them");
+      setButtonLabel(outfitToggle, snapshot.showFiltered ? "Hide them" : "Show them");
       const passing = held?.loading ? `Loading ${held.label}…` : !playable ? snapshot.playable.reason ?? "" : "";
       const listed = catalogue.phase !== "ready" ? "" : query ? `${plural(poseTree.shown, "pose")} match`
         : `${plural(catalogue.listed, "pose")} in ${plural(catalogue.categories, "category", "categories")}`;

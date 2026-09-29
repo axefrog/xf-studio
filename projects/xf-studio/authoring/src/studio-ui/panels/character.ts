@@ -37,7 +37,7 @@
  */
 import { shortcutLabel } from "../../input-bindings";
 import type { CcPanel, CcPanelOption, CcPanelRow, CreatorView } from "../../cc-panel";
-import { applyCapability, button, note, section, Segmented, SelectField, Toggle } from "../controls";
+import { applyCapability, button, setButtonLabel, note, section, Segmented, SelectField, Toggle } from "../controls";
 import type { ChoiceLayout, ChoiceSize } from "../../ui-preferences";
 import { h, isTextInput, setAttr, setText, setUnavailable, uid } from "../dom";
 import { ExpandAll, expander, expanderLabel, isExpanded, setExpanded } from "../expander";
@@ -774,11 +774,11 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       applyCapability(retry, port.authoring.capability({ kind: "character.retry" }));
       setupWolvenKit.update(frame, (!!detailsNeed && line === detailsNeed) || (context?.phase === "ready" && context.next === "wolvenkit" && line === labels));
       keep.classList.toggle("cc-unoffered", !context?.keepable);
-      setText(keep.querySelector("span")!, context?.keepable ? `Keep my ${context.keepable === 1 ? "change" : `${context.keepable} changes`}` : "Keep my changes");
+      setButtonLabel(keep, context?.keepable ? `Keep my ${context.keepable === 1 ? "change" : `${context.keepable} changes`}` : "Keep my changes");
       applyCapability(keep, port.authoring.capability({ kind: "character.keepChanges" }));
       keep.title = context?.keepable ? "Put the changes you made on the previous V back on this one" : "";
       detailsToggle.classList.toggle("cc-unoffered", !lines.length);
-      setText(detailsToggle.querySelector("span")!, lines.length > 1 ? `Details (${lines.length})` : "Details");
+      setButtonLabel(detailsToggle, lines.length > 1 ? `Details (${lines.length})` : "Details");
       setAttr(detailsToggle, "aria-expanded", String(showMessages && !!lines.length));
       messages.hidden = !showMessages || !lines.length;
       // The quick actions.

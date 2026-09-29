@@ -1,5 +1,5 @@
 import { h, setAttr, setText, uid } from "../dom";
-import { applyCapability, button } from "../controls";
+import { applyCapability, button, setButtonLabel } from "../controls";
 import { helpTip, type HelpText } from "../help-tip";
 import type { Capability } from "../menu";
 
@@ -157,7 +157,7 @@ export class FolderSetting {
     const unset = this.options.unset ?? "Not chosen yet";
     setText(this.using, listed.length ? (chosen ? "" : unset) : chosen ? `Using: ${chosen}` : detected ? `Detected: ${detected}` : unset);
     // "another" only when there is one to choose instead of (C-29).
-    setText(this.choose.querySelector("span")!, `Choose ${chosen || detected || listed.length ? "another" : "a"} ${this.noun}…`);
+    setButtonLabel(this.choose, `Choose ${chosen || detected || listed.length ? "another" : "a"} ${this.noun}…`);
     this.using.hidden = !this.using.textContent;
     this.using.classList.toggle("muted", !chosen && !detected);
     const blocked = disabled ? { available: false, reason: reason ?? "Not available right now." } : this.busy ? { available: false, reason: "Saving…" } : undefined;

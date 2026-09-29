@@ -1,4 +1,4 @@
-import { applyCapability, button, note } from "../controls";
+import { applyCapability, button, setButtonLabel, note } from "../controls";
 import { iconButton } from "../components/icon-button";
 import { h, setText, uid } from "../dom";
 import { icon } from "../icons";
@@ -91,7 +91,7 @@ export function openModInstallSheet(rt: StudioRuntime, product: string, options:
     rename.hidden = next !== "rename" || !options.rename;
     again.hidden = next !== "retry" && !(next === "rename" && !options.rename);
     applyCapability(again, busy ? { available: false, reason: "Wait a moment." } : { available: true });
-    setText(add.querySelector("span")!, plan ? plan.route === "mo2" ? "Add to Mod Organizer 2" : "Add to the game folder" : "Add");
+    setButtonLabel(add, plan ? plan.route === "mo2" ? "Add to Mod Organizer 2" : "Add to the game folder" : "Add");
     applyCapability(add, install.capability({ kind: "modInstall.apply", product }));
     const revealing = plan?.next === "reveal" && !!blocked;
     add.hidden = revealing; show.hidden = !revealing;

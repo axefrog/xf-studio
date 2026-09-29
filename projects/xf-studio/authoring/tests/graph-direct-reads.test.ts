@@ -27,11 +27,11 @@ const GRANDFATHERED: Readonly<Record<string, Readonly<Record<string, number>>>> 
   "browser-cc-catalogue-device": { timers: 1, network: 1 },
   "browser-character-detail-device": { timers: 4, random: 1, network: 1 },
   "browser-choice-preview-device": { network: 1, processes: 1 }, // previously undetected (review 7): processes
-  "browser-desktop-app-device": { network: 1 },
   "browser-facial-device": { clock: 1, random: 2, network: 1 }, // previously undetected: clock, random
   "browser-file-device": { timers: 1, processes: 1 }, // previously undetected (review 7): processes
   "browser-grading-lut-device": { timers: 1, network: 1 },
   "browser-head-attachment": { timers: 1 },
+  "browser-host-request": { network: 1 }, // moved from browser-desktop-app-device (UPD-03): the one fetch the page's host devices share
   "browser-install-detection-device": { network: 1 },
   "browser-local-setup-device": { network: 2 },
   "browser-mod-install-device": { network: 1 },

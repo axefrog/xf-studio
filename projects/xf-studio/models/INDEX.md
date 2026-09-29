@@ -96,6 +96,7 @@ Paths under `projects/xf-studio/authoring/src/`. Modules the ratchets list but n
 | `browser-file-device` | `driver:files`, `runtime:file-inputs`, `sink:download`, `source:file-pick`, `source:page-clock`, `source:page-workers` |
 | `browser-grading-lut-device` | `driver:lut`, `runtime:lut-texture`, `source:host-answers`, `source:page-clock` |
 | `browser-head-attachment` | `driver:scene`, `runtime:scene-runtime`, `source:page-clock` |
+| `browser-host-request` | `source:host-answers` |
 | `browser-install-detection-device` | `driver:detection`, `source:host-answers` |
 | `browser-local-setup-device` | `driver:folder-picker`, `source:host-answers` |
 | `browser-mod-install-device` | `driver:install`, `source:host-answers` |

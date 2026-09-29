@@ -40,7 +40,8 @@ export function fakeTools(calls: string[], packed: Map<string, string>): Resourc
       return step("serialize");
     },
     async deserialize(input, output) {
-      for (const file of readdirSync(input)) writeFileSync(join(output, file.replace(/\.json$/, "")), readFileSync(join(input, file)));
+      for (const folder of [input].flat())
+        for (const file of readdirSync(folder)) writeFileSync(join(output, file.replace(/\.json$/, "")), readFileSync(join(folder, file)));
       return step("deserialize");
     },
     async pack(input, output) {

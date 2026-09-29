@@ -20,7 +20,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runProductCommand } from "../src/platform/export/product-builder";
-import { ExportRefusal, PrerequisiteStale } from "../src/platform/api";
+import { ExportRefusal, PACKAGE_PROGRESS_PREFIX, PrerequisiteStale } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { createWolvenKitPackageTools } from "../src/package-build-wolvenkit";
@@ -78,6 +78,8 @@ try {
     outputRoot: values["--output-root"],
     signal: controller.signal,
     log: line => console.log(line),
+    // The host reads these lines as the Build runs to show which stage it has reached (PIPE-131).
+    progress: stage => { if (machine) console.log(PACKAGE_PROGRESS_PREFIX + JSON.stringify({ stage })); },
     tools: (wolvenkit, cwd, signal) => createWolvenKitPackageTools(wolvenkit, { cwd, signal }),
     verifierTools: createWolvenKitVerifierTools,
   });

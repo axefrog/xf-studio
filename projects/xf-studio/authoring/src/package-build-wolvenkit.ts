@@ -1,6 +1,6 @@
 // Process adapter: the package builder's WolvenKit command lines and how WolvenKit reports success
 // for them; the shared WolvenKit runner owns the process. The builder decides what to convert.
-import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, WolvenKitRunError } from "./wolvenkit-cli";
+import { runWolvenKit, WOLVENKIT_RUNTIME_MISSING_MESSAGE, wolvenKitIdentity, wolvenKitIdentityKey, WolvenKitRunError } from "./wolvenkit-cli";
 import type { ResourceTools, ToolStep } from "./platform/api";
 export type { TextureImportSettings, ToolStep } from "./platform/api";
 
@@ -37,13 +37,35 @@ async function runStep(cli: string, args: string[], options: { signal?: AbortSig
   }
 }
 
-export function createWolvenKitPackageTools(cli: string, options: { signal?: AbortSignal; stepTimeoutMs?: number; cwd?: string } = {}): PackageResourceTools {
+/**
+ * How many WolvenKit processes one Build runs at once. Each takes about 1.2 GB of private memory whatever its input
+ * (PIPE-130, measured with WolvenKit 9.0.1), so two keeps a Build's tree near 3.5 GB while independent steps overlap.
+ */
+export const DEFAULT_WOLVENKIT_CONCURRENCY = 2;
+
+/** A counting gate: at most `limit` of the tasks run at once, the rest start in the order they were queued. */
+export function concurrencyGate(limit: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  return async task => {
+    if (running >= limit) await new Promise<void>(go => waiting.push(go));
+    running++;
+    try { return await task(); }
+    finally { running--; waiting.shift()?.(); }
+  };
+}
+
+export function createWolvenKitPackageTools(cli: string, options: { signal?: AbortSignal; stepTimeoutMs?: number; cwd?: string;
+  concurrency?: number } = {}): PackageResourceTools {
   const base = { signal: options.signal, timeoutMs: options.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS, cwd: options.cwd };
+  const gate = concurrencyGate(Math.max(1, options.concurrency ?? DEFAULT_WOLVENKIT_CONCURRENCY));
+  const identity = wolvenKitIdentity(cli);
   return {
-    importTextures: (input, output, settings) => runStep(cli, ["import", input, "-o", output], { ...base, folderImport: true,
-      env: Object.fromEntries(Object.entries(settings).map(([key, value]) => ["XbmImportArgs__" + key, String(value)])) }),
-    serialize: (input, output) => runStep(cli, ["convert", "serialize", input, "-o", output], base),
-    deserialize: (input, output) => runStep(cli, ["convert", "deserialize", input, "-o", output], base),
-    pack: (input, output) => runStep(cli, ["pack", input, "-o", output], base),
+    importTextures: (input, output, settings) => gate(() => runStep(cli, ["import", input, "-o", output], { ...base, folderImport: true,
+      env: Object.fromEntries(Object.entries(settings).map(([key, value]) => ["XbmImportArgs__" + key, String(value)])) })),
+    serialize: (input, output) => gate(() => runStep(cli, ["convert", "serialize", input, "-o", output], base)),
+    deserialize: (input, output) => gate(() => runStep(cli, ["convert", "deserialize", ...[input].flat(), "-o", output], base)),
+    pack: (input, output) => gate(() => runStep(cli, ["pack", input, "-o", output], base)),
+    ...identity ? { identity: wolvenKitIdentityKey(identity) } : {},
   };
 }

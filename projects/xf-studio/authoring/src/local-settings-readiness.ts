@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import type { FrameworkVersionCheck } from "./framework-versions";
 import type { LocalSettings } from "./local-settings";
 import { readConfiguredMo2Instance } from "./install-detection-host";
-import { BUILD_TOOLS_CHECKING } from "./local-setup-actions";
+import { BUILD_TOOLS_CHECKING } from "./local-readiness-codes";
 
 export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCache" | "previewStorage" | "build" |
   "frameworks" | "install" | "updates";

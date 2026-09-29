@@ -90,7 +90,9 @@ type HarnessOptions = { plan?: ModInstallPlan; files?: Record<string, unknown>; 
   /** The host's answer to a save, in place of accepting it (a refused saves folder). */
   refuse?: (fields: Record<string, unknown>) => { code: string; error: string } | null;
   /** The host's update check (Settings › Updates); without it checking isn't available. */
-  updates?: UpdateCheckTransport };
+  updates?: UpdateCheckTransport;
+  /** The update service itself, when a test drives it before the panel opens (a check already running). */
+  updateActions?: UpdateCheckActions };
 async function packageHarness(options: HarnessOptions = {}) {
   const { packagePanel } = await import("../src/studio-ui/panels/collection");
   return panelHarness(options, rt => packagePanel(rt as never));
@@ -124,7 +126,7 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
     return { ok: true, status: 200, data: { ok: true } };
   }, () => [{ product: "p1", candidateId: "c1", modName: "XF Eye Artistry" }]);
   const listeners = new Set<() => void>();
-  const updates = new UpdateCheckActions(options.updates ?? null);
+  const updates = options.updateActions ?? new UpdateCheckActions(options.updates ?? null);
   const files = options.files ?? { package: BUILD };
   const port = {
     files: { capability: () => ({ available: true }), snapshot: () => files },
@@ -509,6 +511,32 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     expect(releases.hidden).toBe(true);
     expect(checkNow.className).not.toContain("quiet");
     h.panel.spec.element.remove();
+  });
+
+  test("Updates opened mid-check: no releases button without its line; a last result shows at once, versions unbroken", async () => {
+    // The first check still running when Settings opens: nothing found yet, so no releases button and no line.
+    const first = heldHost(), fresh = new UpdateCheckActions(first.transport);
+    first.holdNext(); const running = fresh.dispatch({ kind: "updates.check" });
+    const h = await settingsHarness({ updateActions: fresh });
+    let updates = h.root.querySelector("[data-settings-section=updates]")!;
+    expect(text(buttonNamed(updates, "Checking…")!)).toBe("Checking…");
+    expect(buttonNamed(updates, "Open the releases page")!.hidden).toBe(true);
+    first.release(); await running; await settle(); h.paint();
+    expect(buttonNamed(updates, "Open the releases page")!.hidden).toBe(false);
+    expect(text(updates)).toContain("XF Studio couldn't check for updates just now.");
+    h.panel.spec.element.remove();
+    // A re-check running when Settings opens: the last result's line shows at once beside its button, each version in one piece.
+    const again = heldHost(), known = new UpdateCheckActions(again.transport);
+    again.answer = releasesService("newer"); await known.dispatch({ kind: "updates.check" });
+    again.holdNext(); const recheck = known.dispatch({ kind: "updates.check" });
+    const h2 = await settingsHarness({ updateActions: known });
+    updates = h2.root.querySelector("[data-settings-section=updates]")!;
+    expect(buttonNamed(updates, "Checking…")!.getAttribute("aria-disabled")).toBe("true");
+    expect(text(updates)).toContain("XF Studio 0.2.0-beta.1 is available. You have 0.1.0-alpha.2.");
+    expect(buttonNamed(updates, "Open the releases page")!.hidden).toBe(false);
+    expect([...updates.querySelectorAll(".update-version")].map(span => text(span))).toEqual(["0.2.0-beta.1", "0.1.0-alpha.2"]);
+    again.release(); await recheck; await settle();
+    h2.panel.spec.element.remove();
   });
 
   test("Help's Check for updates: while it checks, the button says so and is unavailable, and the last detail stays", async () => {

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { defaultLocalSettings, migrateLocalSettings, parseLocalSettings } from "../src/local-settings";
 import { evaluateLocalReadiness, packageToolPaths } from "../src/local-settings-readiness";
 import { LocalSettingsStore } from "../src/local-settings-store";
-import { BUILD_TOOLS_CHECKING } from "../src/local-setup-actions";
+import { BUILD_TOOLS_CHECKING } from "../src/local-readiness-codes";
 
 const withDirectory = (run: (dir: string) => void) => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-settings-test-"));
@@ -129,7 +129,7 @@ test("readiness distinguishes Check, build and route evidence without exposing p
   expect(blocked.build.limits).toContain("Built in.");
   // The host's gate still checking its tools is its own, provisional code; a final refusal keeps the host's code.
   const checking = evaluateLocalReadiness(configured, { installer: true, updater: false, packageBuild: false,
-    packageBuildIssue: "XF Studio is still checking your build tools. Try again in a moment.", packageBuildPending: true });
+    packageBuildIssue: "XF Studio is checking its build tools…", packageBuildPending: true });
   expect(checking.build.issues.map(x => x.code)).toEqual([BUILD_TOOLS_CHECKING]);
   expect(evaluateLocalReadiness(configured, { installer: true, updater: false, packageBuild: false, packageBuildIssue: "Reinstall." })
     .build.issues.map(x => x.code)).toEqual(["package_host_unavailable"]);

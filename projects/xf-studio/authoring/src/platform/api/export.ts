@@ -357,6 +357,18 @@ export class PrerequisiteStale extends Error {
   constructor(readonly prerequisite: string, message: string) { super(message); this.name = "PrerequisiteStale"; }
 }
 
+/**
+ * The stages of a package Build in order, as the host reports them while it runs (PIPE-131): the host prepares what the
+ * features need from the game (`prepare`), the features compose their looks (`compose`) and convert them into game
+ * resources (`convert`), the host packs the mod (`pack`) and verifies it independently (`verify`).
+ */
+export const PACKAGE_BUILD_STAGES = ["prepare", "compose", "convert", "pack", "verify"] as const;
+export type PackageBuildStage = typeof PACKAGE_BUILD_STAGES[number];
+/** A running Build's progress: its stage, that stage's place among `steps` (1-based), and how many looks it builds. */
+export type PackageBuildProgress = { readonly stage: PackageBuildStage; readonly step: number; readonly steps: number; readonly looks?: number };
+/** The builder's stdout line announcing a stage: this prefix, then `{"stage": …}`. */
+export const PACKAGE_PROGRESS_PREFIX = "XFS_PACKAGE_PROGRESS=";
+
 /** One step of a WolvenKit conversion: its exit code and log. */
 export interface ToolStep { readonly exitCode: number; readonly log: string }
 /** WolvenKit's XBM import settings, passed as `XbmImportArgs__*` environment values. */
@@ -368,8 +380,14 @@ export interface TextureImportSettings {
 export interface ResourceTools {
   importTextures(input: string, output: string, settings: TextureImportSettings): Promise<ToolStep>;
   serialize(input: string, output: string): Promise<ToolStep>;
-  deserialize(input: string, output: string): Promise<ToolStep>;
+  /** Convert every JSON document below `input` (one folder, or several in one launch) into `output`, flat. */
+  deserialize(input: string | readonly string[], output: string): Promise<ToolStep>;
   pack(input: string, output: string): Promise<ToolStep>;
+  /**
+   * The converter's identity (`wolvenKitIdentityKey`), when known: conversions it made earlier and kept (the eye plate's
+   * JSON) are read instead of repeated only when they name this identity.
+   */
+  readonly identity?: string;
 }
 /** A generated file of the staging tree: slash-separated depot path, length and SHA-256. */
 export type GeneratedFile = { readonly path: string; readonly bytes: number; readonly sha256: string };
@@ -390,6 +408,8 @@ export type FeatureBuildContext = {
   readonly prerequisites: Readonly<Record<string, unknown>>;
   readonly signal?: AbortSignal;
   readonly log: (line: string) => void;
+  /** Say that the feature's build reached a later stage (eye makeup: `convert` once its looks are composed). Optional. */
+  readonly stage?: (stage: PackageBuildStage) => void;
 };
 /** What a feature's build wrote: exactly its outcome's inventory, hashed, and its extras (paths below the extras folder). */
 export type FeatureBuildRecord = { readonly files: readonly GeneratedFile[]; readonly extras?: readonly GeneratedFile[] };
@@ -447,7 +467,8 @@ export interface ToolResult { readonly exitCode: number | null; readonly stdout:
 /** The WolvenKit operations the verifiers run themselves; each writes only into `output`. */
 export interface VerifierTools {
   unbundle(archive: string, output: string): ToolResult;
-  serialize(input: string, output: string): ToolResult;
+  /** Serialize every resource below `input` (one folder, or several in one launch) into `output`, flat. */
+  serialize(input: string | readonly string[], output: string): ToolResult;
   exportTextures(input: string, output: string): ToolResult;
 }
 /**
