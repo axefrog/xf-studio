@@ -1,0 +1,50 @@
+{
+  "kind": "source",
+  "id": "wheel-input",
+  "owner": "platform",
+  "summary": "Wheel and trackpad scrolls over a view or a panel.",
+  "status": "target",
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "target": {
+        "type": "string"
+      },
+      "dx": {
+        "type": "number"
+      },
+      "dy": {
+        "type": "number"
+      },
+      "mode": {
+        "enum": [
+          "pixel",
+          "line",
+          "page"
+        ]
+      },
+      "x": {
+        "type": "number"
+      },
+      "y": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "window",
+      "target",
+      "dx",
+      "dy",
+      "mode",
+      "x",
+      "y"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "Bursts of tens per second; a burst closes 250 ms after its last notch."
+}

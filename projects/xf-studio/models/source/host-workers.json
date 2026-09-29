@@ -1,0 +1,37 @@
+{
+  "kind": "source",
+  "id": "host-workers",
+  "owner": "host",
+  "summary": "The host's worker threads (native decoders, the Check worker): results, progress, crashes and idle exits.",
+  "status": "both",
+  "replaces": [
+    "native/native-decode",
+    "platform/export/check-runner"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "worker": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "progress",
+          "done",
+          "failed",
+          "crashed",
+          "idle-exit"
+        ]
+      },
+      "result": {}
+    },
+    "required": [
+      "worker",
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "One per job state change."
+}

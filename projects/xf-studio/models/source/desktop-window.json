@@ -1,0 +1,38 @@
+{
+  "kind": "source",
+  "id": "desktop-window",
+  "owner": "desktop",
+  "summary": "Native window events: will-close, before-quit, page served and bootstrapped, script results.",
+  "status": "both",
+  "replaces": [
+    "../desktop/main",
+    "../desktop/startup-watchdog",
+    "../desktop/workspace-close"
+  ],
+  "environment": "desktop",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "will-close",
+          "before-quit",
+          "page-served",
+          "bootstrapped",
+          "script-result",
+          "blank"
+        ]
+      }
+    },
+    "required": [
+      "window",
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "A few per window lifetime."
+}

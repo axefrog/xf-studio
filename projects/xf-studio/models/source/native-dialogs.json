@@ -1,0 +1,35 @@
+{
+  "kind": "source",
+  "id": "native-dialogs",
+  "owner": "desktop",
+  "summary": "The desktop app's native dialogs: message boxes and the folder picker, and their answers.",
+  "status": "both",
+  "replaces": [
+    "../desktop/main"
+  ],
+  "environment": "desktop",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "dialog": {
+        "enum": [
+          "message",
+          "folder"
+        ]
+      },
+      "answer": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "dialog",
+      "answer"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "One per dialog."
+}

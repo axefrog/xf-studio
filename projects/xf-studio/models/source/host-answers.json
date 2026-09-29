@@ -1,0 +1,68 @@
+{
+  "kind": "source",
+  "id": "host-answers",
+  "owner": "platform",
+  "summary": "Answers from the host's endpoints to the page's requests, each with the request it answers and its age.",
+  "status": "both",
+  "replaces": [
+    "browser-cc-catalogue-device",
+    "browser-character-detail-device",
+    "browser-choice-preview-device",
+    "browser-desktop-app-device",
+    "browser-facial-device",
+    "browser-grading-lut-device",
+    "browser-install-detection-device",
+    "browser-local-setup-device",
+    "browser-mod-install-device",
+    "browser-pose-device",
+    "browser-save-explorer-device",
+    "character-warm-start",
+    "choice-preview-worker",
+    "collection-transport",
+    "host-state-poller",
+    "package-action",
+    "part-presets",
+    "platform/scene/idle-source",
+    "preview-core-server",
+    "preview-preparation",
+    "wolvenkit-setup"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "request": {
+        "type": "string"
+      },
+      "endpoint": {
+        "type": "string"
+      },
+      "status": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 599
+      },
+      "body": {},
+      "asOf": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "request",
+      "endpoint",
+      "status",
+      "body",
+      "asOf"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "One per request; polls today, pushed once the host can push.",
+  "x-friction": [
+    {
+      "gap": "Long host work (V preparation, core preparation, Build) is followed by polling with backoff and re-asking after the host restarts; the answers are observations of work running elsewhere.",
+      "capability": "cross-process-work",
+      "closes": "Work in another process observed here as a process, resumed after the other side restarts, cancelled by asking."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "sink",
+  "id": "reveal-in-folder",
+  "owner": "platform",
+  "summary": "A folder or file shown in the system's file browser (a build, an install).",
+  "status": "target",
+  "environment": "host",
+  "input": {
+    "type": "object",
+    "properties": {
+      "what": {
+        "enum": [
+          "build",
+          "install",
+          "data-folder"
+        ]
+      },
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "what",
+      "id"
+    ]
+  },
+  "adapter": "planned",
+  "idempotency": "none"
+}

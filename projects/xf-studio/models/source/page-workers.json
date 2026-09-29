@@ -1,0 +1,53 @@
+{
+  "kind": "source",
+  "id": "page-workers",
+  "owner": "platform",
+  "summary": "Results, progress and crashes of the page's workers (the raster worker, the choice preview worker, the save decoder).",
+  "status": "both",
+  "replaces": [
+    "browser-choice-preview-device",
+    "browser-file-device",
+    "browser-preview-device",
+    "raster-client",
+    "studio-startup"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "worker": {
+        "enum": [
+          "raster",
+          "choice-preview",
+          "save-decode"
+        ]
+      },
+      "job": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "progress",
+          "done",
+          "failed",
+          "crashed"
+        ]
+      },
+      "result": {}
+    },
+    "required": [
+      "worker",
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "One per job state change; a live turn streams up to 30 per second.",
+  "x-friction": [
+    {
+      "gap": "A worker job source today returns one promise: no cancel into the worker, no latest-wins per key, no progress, no transfer, no crash policy.",
+      "capability": "worker-pools",
+      "closes": "Worker pools with keyed latest-wins queues, cancellation into the worker and a crash policy."
+    }
+  ]
+}

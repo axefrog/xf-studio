@@ -1,0 +1,110 @@
+{
+  "kind": "source",
+  "id": "page-clock",
+  "owner": "platform",
+  "summary": "The page's wall and monotonic time and its timers: every Date.now, performance.now and setTimeout on the page moves here.",
+  "status": "both",
+  "replaces": [
+    "browser-cc-catalogue-device",
+    "browser-character-detail-device",
+    "browser-facial-device",
+    "browser-file-device",
+    "browser-grading-lut-device",
+    "browser-head-attachment",
+    "character-context-actions",
+    "character-detail-loader",
+    "choice-preview-service",
+    "collection-service",
+    "diagnostics/actions",
+    "diagnostics/browser-device",
+    "diagnostics/model",
+    "facial-prefetch",
+    "facial-preview",
+    "features/eye-makeup/render/index",
+    "features/eye-makeup/view/uv",
+    "features/poses/actions",
+    "features/save-explorer/actions",
+    "features/save-explorer/view/panel",
+    "game-blink",
+    "host-state-poller",
+    "lighting-setup-stage",
+    "part-presets",
+    "platform/core/look-history",
+    "platform/scene/character-renderer",
+    "platform/scene/face-driver",
+    "platform/scene/idle-source",
+    "platform/scene/orbit-limits",
+    "platform/scene/scene-host",
+    "preview-preparation",
+    "studio-file-operations",
+    "studio-startup",
+    "studio-ui/app",
+    "studio-ui/components/choice-preview",
+    "studio-ui/components/direction-dial",
+    "studio-ui/components/listbox-keys",
+    "studio-ui/components/search-field",
+    "studio-ui/components/swatch-card",
+    "studio-ui/components/tree-view",
+    "studio-ui/controls",
+    "studio-ui/dock/dock-view",
+    "studio-ui/dock/layout",
+    "studio-ui/feedback",
+    "studio-ui/guidance/controller",
+    "studio-ui/guidance/desktop-app-sheet",
+    "studio-ui/guidance/overlay",
+    "studio-ui/input-hints",
+    "studio-ui/item-list",
+    "studio-ui/menu",
+    "studio-ui/panels/character",
+    "studio-ui/panels/game-setup",
+    "studio-ui/panels/history",
+    "studio-ui/panels/settings",
+    "studio-ui/panels/viewports",
+    "studio-ui/preview-setup-card",
+    "studio-ui/reason-tip",
+    "studio-ui/scroll-anchor",
+    "surface-editor",
+    "uv-editor",
+    "workspace-persistence"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "wall": {
+        "type": "number"
+      },
+      "monotonic": {
+        "type": "number"
+      },
+      "after": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "ms"
+        ]
+      }
+    },
+    "required": [],
+    "description": "Either a reading (wall and monotonic time in ms) or a timer's firing, named by the id it was asked for."
+  },
+  "adapter": "platform/graph-adapters/host-sources",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "Read on demand; a timer fires once per request, never free-running.",
+  "x-friction": [
+    {
+      "gap": "Debounces, wheel-burst windows, hover rests and quiet periods are today timers inside services; as data they need standard operators over this clock.",
+      "capability": "scheduling-rules",
+      "closes": "Standard operators for debounce, quiet periods and single-flight, declared in models over the clock source."
+    }
+  ]
+}

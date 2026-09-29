@@ -1,0 +1,47 @@
+{
+  "kind": "source",
+  "id": "host-processes",
+  "owner": "host",
+  "summary": "Child processes the host runs (WolvenKit, the builder, the Python oracle, registry and task queries, the file browser, the WebView2 installer, Oodle) and their output and exit.",
+  "status": "both",
+  "replaces": [
+    "desktop-app-host",
+    "dotnet-runtime",
+    "facial-host",
+    "install-detection-host",
+    "mod-install-host",
+    "native/oodle",
+    "process-tree",
+    "wolvenkit-cli"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "process": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "stdout",
+          "stderr",
+          "exit",
+          "spawned"
+        ]
+      },
+      "text": {
+        "type": "string"
+      },
+      "code": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "process",
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "One per run; output streamed while it runs."
+}

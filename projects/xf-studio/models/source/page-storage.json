@@ -1,0 +1,33 @@
+{
+  "kind": "source",
+  "id": "page-storage",
+  "owner": "platform",
+  "summary": "The page's own storage, read for per-viewer conveniences and, once, for migrating the legacy workspace.",
+  "status": "both",
+  "replaces": [
+    "browser-workspace-device",
+    "studio-main"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "text": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "key",
+      "text"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "At start, and on each convenience read."
+}

@@ -1,0 +1,40 @@
+{
+  "kind": "source",
+  "id": "page-random",
+  "owner": "platform",
+  "summary": "Named random streams on the page: new node and layer IDs, export IDs, the window's actor ID, temporary names.",
+  "status": "both",
+  "replaces": [
+    "authoring-eye-makeup",
+    "browser-character-detail-device",
+    "browser-facial-device",
+    "collection-service",
+    "collection-session",
+    "diagnostics/model",
+    "studio-application"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "stream": {
+        "enum": [
+          "ids",
+          "export-ids",
+          "actor",
+          "temp-names"
+        ]
+      },
+      "value": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "stream",
+      "value"
+    ]
+  },
+  "adapter": "platform/graph-adapters/host-sources",
+  "simulated": "../../../strata/src/random",
+  "rate": "One value per new ID."
+}

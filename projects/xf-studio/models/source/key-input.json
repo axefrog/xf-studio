@@ -1,0 +1,61 @@
+{
+  "kind": "source",
+  "id": "key-input",
+  "owner": "platform",
+  "summary": "Key presses and releases with modifiers, routed to the focused element.",
+  "status": "both",
+  "replaces": [
+    "input-bindings",
+    "studio-ui/shortcuts"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "down",
+          "up"
+        ]
+      },
+      "key": {
+        "type": "string"
+      },
+      "code": {
+        "type": "string"
+      },
+      "shift": {
+        "type": "boolean"
+      },
+      "ctrl": {
+        "type": "boolean"
+      },
+      "alt": {
+        "type": "boolean"
+      },
+      "meta": {
+        "type": "boolean"
+      },
+      "target": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window",
+      "kind",
+      "key",
+      "code",
+      "shift",
+      "ctrl",
+      "alt",
+      "meta",
+      "target"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "A few per second; bursts while typing."
+}

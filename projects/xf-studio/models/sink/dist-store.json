@@ -1,0 +1,37 @@
+{
+  "kind": "sink",
+  "id": "dist-store",
+  "owner": "export",
+  "summary": "A verified candidate promoted into the releasable output folder with its manifest.",
+  "status": "both",
+  "replaces": [
+    "platform/export/product-builder"
+  ],
+  "environment": "host",
+  "input": {
+    "type": "object",
+    "properties": {
+      "candidate": {
+        "type": "string"
+      },
+      "manifest": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "candidate",
+      "manifest"
+    ]
+  },
+  "adapter": "platform/export/product-builder",
+  "idempotency": "The candidate ID: promoted exactly once.",
+  "x-friction": [
+    {
+      "gap": "Promotion happens once after every gate, even across a crash.",
+      "capability": "once-only-effects",
+      "closes": "Outside effects with an idempotency key and a recorded outcome."
+    }
+  ]
+}

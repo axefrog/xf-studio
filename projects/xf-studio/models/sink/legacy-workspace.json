@@ -1,0 +1,41 @@
+{
+  "kind": "sink",
+  "id": "legacy-workspace",
+  "owner": "platform",
+  "summary": "The legacy workspace document, written as a projection of the focused profile so the older release still opens the same V, layout and looks.",
+  "status": "both",
+  "replaces": [
+    "workspace-persistence",
+    "workspace-state",
+    "workspace-budget",
+    "workspace-composer",
+    "browser-workspace-device",
+    "../desktop/workspace-store"
+  ],
+  "environment": "page",
+  "input": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string"
+      },
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "text",
+      "bytes"
+    ]
+  },
+  "adapter": "workspace-persistence",
+  "idempotency": "The text's hash: unchanged text is never rewritten.",
+  "x-friction": [
+    {
+      "gap": "The mirror is a derived value written out debounced, only when changed, trimmed to a size budget, with quota refusals coming back as observations; engine sinks take committed entries by type.",
+      "capability": "derived-outputs",
+      "closes": "Outputs fed by derived values, debounced, within a size budget, with refusals observed."
+    }
+  ]
+}

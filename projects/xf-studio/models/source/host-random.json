@@ -1,0 +1,44 @@
+{
+  "kind": "source",
+  "id": "host-random",
+  "owner": "host",
+  "summary": "Named random streams on the host: store IDs, temporary folder names, install and plan tokens, diagnostic references.",
+  "status": "both",
+  "replaces": [
+    "collection-store",
+    "derived-cache",
+    "diagnostics/host-endpoint",
+    "library-store",
+    "local-settings-store",
+    "mod-install-host",
+    "mod-install-transport",
+    "package-server",
+    "part-preset-store",
+    "runtime-diagnostic-promotion",
+    "wolvenkit-setup-host"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "stream": {
+        "enum": [
+          "ids",
+          "temp-names",
+          "tokens",
+          "references"
+        ]
+      },
+      "value": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "stream",
+      "value"
+    ]
+  },
+  "adapter": "platform/graph-adapters/host-sources",
+  "simulated": "../../../strata/src/random",
+  "rate": "One value per new ID or token."
+}

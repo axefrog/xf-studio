@@ -1,0 +1,27 @@
+{
+  "kind": "sink",
+  "id": "page-conveniences",
+  "owner": "shell",
+  "summary": "Per-viewer conveniences written to the page's own storage: expanded sections, scroll positions, region sizes, the UV view.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/view-state",
+    "studio-ui/scroll-anchor"
+  ],
+  "environment": "page",
+  "input": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "value": {}
+    },
+    "required": [
+      "key",
+      "value"
+    ]
+  },
+  "adapter": "planned",
+  "idempotency": "The key: the latest value wins."
+}

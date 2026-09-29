@@ -1,0 +1,55 @@
+{
+  "kind": "sink",
+  "id": "mod-manager-folders",
+  "owner": "install",
+  "summary": "Files placed into a mod manager's mods folder or the game folder, and the manager's mod list.",
+  "status": "both",
+  "replaces": [
+    "mod-install-transport",
+    "mo2-placement"
+  ],
+  "environment": "host",
+  "input": {
+    "type": "object",
+    "properties": {
+      "plan": {
+        "type": "string"
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "sha256"
+          ]
+        }
+      },
+      "modlist": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "plan",
+      "files",
+      "modlist"
+    ]
+  },
+  "adapter": "mod-install-transport",
+  "idempotency": "The plan token and each file's hash: a replayed install finds its receipt and copies nothing again.",
+  "x-friction": [
+    {
+      "gap": "Placing files isn't repeatable; a crash mid-copy must resume from the recorded outcome.",
+      "capability": "once-only-effects",
+      "closes": "Outside effects with an idempotency key and an outcome recorded before and after."
+    }
+  ]
+}

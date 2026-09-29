@@ -1,0 +1,44 @@
+{
+  "kind": "source",
+  "id": "host-push",
+  "owner": "platform",
+  "summary": "What the host tells the page without being asked: the store's change counter and the states of host work.",
+  "status": "target",
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "enum": [
+          "store-changed",
+          "process-state"
+        ]
+      },
+      "counter": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "process": {
+        "type": "string"
+      },
+      "state": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "On each host commit or state change.",
+  "x-friction": [
+    {
+      "gap": "Nothing tells a page that another window or the host committed; the store is pulled on a counter and host work is polled.",
+      "capability": "live-sync",
+      "closes": "A push transport from the loopback host to every page, feeding this source."
+    }
+  ]
+}

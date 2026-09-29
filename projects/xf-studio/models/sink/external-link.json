@@ -1,0 +1,22 @@
+{
+  "kind": "sink",
+  "id": "external-link",
+  "owner": "platform",
+  "summary": "A link opened in the person's browser (licences, release pages, the issue tracker).",
+  "status": "target",
+  "environment": "page",
+  "input": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string",
+        "pattern": "^https://"
+      }
+    },
+    "required": [
+      "url"
+    ]
+  },
+  "adapter": "planned",
+  "idempotency": "none"
+}

@@ -1,0 +1,61 @@
+{
+  "kind": "source",
+  "id": "frames",
+  "owner": "platform",
+  "summary": "Animation frames of one window, with each frame's time and the time since the last, while something demands the next frame.",
+  "status": "both",
+  "replaces": [
+    "browser-character-detail-device",
+    "features/eye-makeup/view/uv",
+    "features/save-explorer/view/panel",
+    "platform/scene/character-renderer",
+    "platform/scene/scene-host",
+    "studio-startup",
+    "studio-ui/app",
+    "studio-ui/components/choice-preview",
+    "studio-ui/components/tree-view",
+    "studio-ui/dock/dock-view",
+    "studio-ui/feedback",
+    "studio-ui/guidance/controller",
+    "studio-ui/guidance/overlay",
+    "studio-ui/item-list",
+    "studio-ui/menu",
+    "studio-ui/panels/character",
+    "studio-ui/panels/game-setup",
+    "studio-ui/panels/history",
+    "studio-ui/panels/settings",
+    "studio-ui/panels/viewports",
+    "studio-ui/preview-setup-card"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "time": {
+        "type": "number"
+      },
+      "dt": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "window",
+      "time",
+      "dt"
+    ]
+  },
+  "adapter": "platform/graph-adapters/host-sources",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "Up to the display's refresh rate (60–144 per second), only while demanded.",
+  "x-friction": [
+    {
+      "gap": "Many consumers ask to draw next frame, idle time and dangles integrate over frame time, and non-focused views run at half rate; the clock's single frame callback covers none of this.",
+      "capability": "frame-timing",
+      "closes": "A frame driver that coalesces next-frame demands, holds demand while anything animates, budgets work by focus and feeds dt to integrated state."
+    }
+  ]
+}

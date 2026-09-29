@@ -1,0 +1,40 @@
+{
+  "kind": "source",
+  "id": "page-errors",
+  "owner": "diagnostics",
+  "summary": "Uncaught errors and unhandled rejections on the page, and host error references in replies.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/browser-device"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "enum": [
+          "error",
+          "rejection",
+          "host-reference"
+        ]
+      },
+      "message": {
+        "type": "string"
+      },
+      "ref": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "kind",
+      "message",
+      "ref"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "Rare; rate-limited."
+}
