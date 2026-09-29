@@ -148,7 +148,8 @@ export function lightsAt(face: Vec3, raw: Json, showroom: Showroom | null, photo
     const blocked = light.to_face?.checked ? Boolean(light.to_face.blocked) : null;
     const cone = Math.max(0.1, Math.min(1, (cos + 0.2) / 1.2));
     const strength = blocked ? 0 : cone / (dist * dist);
-    const menuOn = selected === light.light && typeof photoMenu?.on === "number" ? photoMenu.on > 0.5 : null;
+    const isSelected = light.selected === true || selected === light.light;
+    const menuOn = isSelected && typeof photoMenu?.on === "number" ? photoMenu.on > 0.5 : null;
     out.push({ kind: "photo", id: `photo:${light.light}`, on: menuOn ?? true, position, reaches_face: blocked === true ? false : dist < 12 ? true : "unknown", blocked, strength: r4(strength), share: null,
       note: "photo-mode light: units unknown, strength is relative (1/d² with a soft cone)" });
   }

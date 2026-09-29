@@ -110,7 +110,7 @@ public abstract class XFScene {
       }
       out += ",\"v\":{\"source\":" + XFJson.Str(source) + "," + XFScene.Subject(subject, camPos, occlusion && hasCamera && photo) + "}";
     }
-    if XFScene.Has(parts, "npcs") && IsDefined(player) && maxNpcs > 0 {
+    if XFScene.Has(parts, "npcs") && IsDefined(player) && maxNpcs > 0 && radius > 0.0 {
       let npcs = player.GetNPCsAroundObject(radius);
       out += ",\"npcs\":[";
       let written = 0;
@@ -204,16 +204,25 @@ public abstract class XFScene {
         if i > 1 {
           out += ",";
         }
-        let why: String;
-        let entity = XFPhoto.LightEntity(i, why);
-        out += "{\"light\":" + IntToString(i) + ",\"found\":" + XFJson.Flag(IsDefined(entity));
-        if IsDefined(entity) {
-          out += ",\"position\":" + XFScene.Arr(entity.GetWorldPosition()) + ",\"forward\":" + XFScene.Arr(entity.GetWorldForward());
+        // A read needs less certainty than a move (XFPhoto.LightEntity also wants the menu to show this light): the light
+        // indicator's projection for the light, if it follows a photo-mode light object.
+        let controller = XFPhoto.Controller();
+        let entity: ref<Entity>;
+        if IsDefined(controller) {
+          entity = controller.XFBridgeLightEntity(i - 1);
+        }
+        let light = IsDefined(entity) && entity.IsA(n"gamePhotomodeLightObject") ? entity as GameObject : null;
+        out += "{\"light\":" + IntToString(i) + ",\"found\":" + XFJson.Flag(IsDefined(light));
+        if IsDefined(light) {
+          out += ",\"position\":" + XFScene.Arr(light.GetWorldPosition()) + ",\"forward\":" + XFScene.Arr(light.GetWorldForward());
+          if IsDefined(controller) {
+            out += ",\"selected\":" + XFJson.Flag(controller.XFBridgeLightIndicatorIndex() == i - 1);
+          }
           if hasHead {
-            out += ",\"to_face\":" + XFScene.Ray(entity.GetWorldPosition(), face);
+            out += ",\"to_face\":" + XFScene.Ray(light.GetWorldPosition(), face);
           }
         } else {
-          out += ",\"why\":" + XFJson.Str(why);
+          out += ",\"why\":" + XFJson.Str(IsDefined(entity) ? "the light indicator follows something that isn't a photo-mode light" : "no light entity for it (off, or not placed yet)");
         }
         out += "}";
         i += 1;

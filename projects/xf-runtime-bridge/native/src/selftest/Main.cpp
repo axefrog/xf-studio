@@ -555,6 +555,7 @@ int wmain(int argc, wchar_t** argv)
         return json{{"simulated", true},
                                          {"allow_writes", config.allowWrites},
                                          {"writes_paused", dispatcher.WritesPaused()},
+                                         {"handed_over", dispatcher.HandedOver()},
                                          {"write_classes", xfb::WriteClassList(config)},
                                          {"phase", sim.phase},
                                          {"player_present", sim.phase == "gameplay" || sim.phase == "photo_mode"},
@@ -577,6 +578,7 @@ int wmain(int argc, wchar_t** argv)
                                  out["simulated"] = true;
                                  out["allow_writes"] = config.allowWrites;
                                  out["writes_paused"] = dispatcher.WritesPaused();
+                                 out["handed_over"] = dispatcher.HandedOver();
                                  out["write_classes"] = xfb::WriteClassList(config);
                                  return out;
                              };

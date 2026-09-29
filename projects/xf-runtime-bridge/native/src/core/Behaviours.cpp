@@ -929,7 +929,9 @@ void StepKeepV(Behaviour& aB, const Ops& aOps, double aDt)
         s0 *= aB.maxStep / n;
         s1 *= aB.maxStep / n;
     }
-    const double lrWanted = std::clamp(aB.lr + s0, -5.0, 5.0), udWanted = std::clamp(aB.ud + s1, -5.0, 5.0);
+    // Within the sliders' range, to the 4 decimals the script layer reports (session 6's frame took left/right -0.002).
+    const auto step = [](double aValue) { return std::round(std::clamp(aValue, -5.0, 5.0) * 10000.0) / 10000.0; };
+    const double lrWanted = step(aB.lr + s0), udWanted = step(aB.ud + s1);
     const double lrBefore = aB.lr, udBefore = aB.ud;
     aB.lr = aOps.setAttribute(8, static_cast<float>(lrWanted));
     aB.ud = aOps.setAttribute(37, static_cast<float>(udWanted));

@@ -85,7 +85,7 @@ Recommendation: try the ink interact layer first (it also answers the demos' ope
 
 ## Session-7 proofs
 
-The checks are on the [test card](runtime-bridge-test-card.md#session-7-checks-bridge-053). What they settle: the HUD root's units and the panel's look against the game's HUD (captures), whether the tick runs while hidden, which layers show in photo mode, ProjectPoint's space and the nameplates' lag, which pin controller draws each view and where the badge sits, and that load and the kill switch leave nothing.
+The checks are on the [test card](runtime-bridge-test-card.md#ink-demo-rows-bridge-053). What they settle: the HUD root's units and the panel's look against the game's HUD (captures), whether the tick runs while hidden, which layers show in photo mode, ProjectPoint's space and the nameplates' lag, which pin controller draws each view and where the badge sits, and that load and the kill switch leave nothing.
 
 ## Order after the session
 

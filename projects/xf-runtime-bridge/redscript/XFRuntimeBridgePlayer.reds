@@ -147,6 +147,19 @@ public abstract class XFPlayer {
     return "{\"ok\":true,\"before\":{\"position\":" + XFScene.Arr(before) + ",\"yaw\":" + XFJson.Num(beforeYaw) + "},\"target\":" + XFScene.Arr(target) + ",\"yaw\":" + XFJson.Num(angles.Yaw) + ",\"snapped\":" + XFJson.Flag(ground == 0) + "}";
   }
 
+  // A glide's step (behave.glide.path, every tick): V to the next point on her path, facing along it. No checks and no log
+  // line here: the behaviour checked V when it started, holds her movement off, and checks her state every 15 ticks.
+  public static func Step(cid: String, x: Float, y: Float, z: Float, yaw: Float) -> String {
+    let player = XFPlayer.Player();
+    if !IsDefined(player) || !Equals(XFBridgeActions.Phase(), "gameplay") {
+      return XFJson.Fail("player_busy", "V left normal play");
+    }
+    let angles: EulerAngles;
+    angles.Yaw = yaw;
+    GameInstance.GetTeleportationFacility(GetGameInstance()).Teleport(player, new Vector4(x, y, z, 1.0), angles);
+    return "{\"ok\":true}";
+  }
+
   // Where V is now (the teleport's read-back two ticks later).
   public static func Where(cid: String) -> String {
     let player = XFPlayer.Player();
@@ -344,6 +357,10 @@ public abstract class XFPlayer {
 
   public static func RestoreAfterKill(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
+    let player = XFPlayer.Player();
+    if IsDefined(player) {
+      GameInstance.GetTargetingSystem(GetGameInstance()).BreakLookAt(player); // harmless when no look-at runs
+    }
     if !IsDefined(registry) || !registry.HasAnyPlayerEffect() {
       return "";
     }

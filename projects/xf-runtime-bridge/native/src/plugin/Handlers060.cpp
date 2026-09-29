@@ -144,12 +144,11 @@ behave::Ops BehaviourOps()
         return where;
     };
     ops.teleportPlayer = [cid](const Vec3& aPosition, double aYaw) {
+        // A glide's per-tick step: no checks or log line per tick (the behaviour checks V every 15 ticks); the path already
+        // keeps to walkable ground.
         float x = static_cast<float>(aPosition[0]), y = static_cast<float>(aPosition[1]), z = static_cast<float>(aPosition[2]);
         float yaw = static_cast<float>(aYaw);
-        bool hasYaw = true;
-        int32_t ground = 1; // exact: the path already keeps to walkable ground
-        bool farOk = false;
-        ScriptCall("XFPlayer", "Teleport", {"Float", "Float", "Float", "Float", "Bool", "Int32", "Bool"}, {&x, &y, &z, &yaw, &hasYaw, &ground, &farOk}, cid);
+        ScriptCall("XFPlayer", "Step", {"Float", "Float", "Float", "Float"}, {&x, &y, &z, &yaw}, cid);
     };
     ops.lookAt = [cid](const Vec3& aPoint, double aDuration) {
         float x = static_cast<float>(aPoint[0]), y = static_cast<float>(aPoint[1]), z = static_cast<float>(aPoint[2]);

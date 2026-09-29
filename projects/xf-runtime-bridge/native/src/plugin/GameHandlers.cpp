@@ -513,6 +513,7 @@ json GameStatus(const MethodContext& aContext)
              {"allow_writes", state.config.allowWrites},
              {"write_classes", WriteClassList(state.config)},
              {"writes_paused", state.bridge && state.bridge->GetDispatcher().WritesPaused()},
+             {"handed_over", state.bridge && state.bridge->GetDispatcher().HandedOver()},
              {"allow_live_pose", state.config.allowLivePose}};
     if (!state.queue.IsPumping())
     {

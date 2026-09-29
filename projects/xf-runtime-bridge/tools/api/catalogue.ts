@@ -284,6 +284,8 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   if (status.allow_writes !== true || !classes.includes("photo")) throw Object.assign(new Error("writes"), { plain: plainBridgeError(status.allow_writes === true ? "write_class_disabled" : "writes_disabled") });
   // The in-game panel can pause writes; the key press is a write too.
   if (status.writes_paused === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("writes_paused") });
+  // 0.6: a session handed over to the player is the player's; the key is a change too.
+  if (status.handed_over === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("handed_over") });
   const phase = String(status.phase);
   if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
   if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);
