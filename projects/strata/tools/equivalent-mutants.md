@@ -221,10 +221,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   An abort signal fires once; the listener runs once either way.
 - ``projects/strata/src/graph.ts|StrataGraph.defaultsOf|test → true|!this.defaultsMemo.has(type)|true|0``
   A memo: a type's defaults are computed afresh as an equal, frozen value.
-- ``projects/strata/src/graph.ts|StrataGraph.load|statement removed|this.loaded = !0;|;|0``
-  A graph without a store is loaded from construction; the flag is already set.
-- ``projects/strata/src/graph.ts|StrataGraph.load|boolean flip|!0|!1|0``
-  As above: the constructor has already set the flag, and nothing clears it.
 - ``projects/strata/src/graph.ts|StrataGraph.load|push → unshift|push|unshift|0``
   Only the order the stale-snapshot streams are read in changes; each is installed whole.
 - ``projects/strata/src/graph.ts|StrataGraph.load|statement removed|this.storeHead = Math.max(this.storeHead, stored.head);|;|0``
@@ -345,26 +341,12 @@ A key is the file (from the repository root), the function, the kind of change, 
   Only whether a clash exists is used.
 - ``projects/strata/src/graph.ts|at|every → some|every|some|0``
   A path with a part that isn't text names no field: `kindAt` finds nothing for it either.
-- ``projects/strata/src/graph.ts|StrataGraph.buildEdit|test → true|state.own[pathKey(edit.path)] !== void 0|true|0``
-  An op that changes nothing is dropped when it is pushed (no entry, nothing to undo), so the early test only saves work.
-- ``projects/strata/src/graph.ts|StrataGraph.buildEdit|test → true|edit.name !== state.name|true|0``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.buildEdit|test → false|!state.layers.length|false|0``
-  As above: detaching a node without layers pushes nothing that changes it.
-- ``projects/strata/src/graph.ts|StrataGraph.buildEdit|early return removed|return;|;|9``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.buildCreate|statement removed|work.refs.set(id, ref);|;|0``
-  Pushing the create op records the reference as well; before it, the layer checks never look the new node up by its reference.
-- ``projects/strata/src/graph.ts|checked|test → true|layers.length|true|0``
-  Checking an empty list of layers gives an empty list.
 - ``projects/strata/src/graph.ts|visit|test → false|!state|false|0``
   Unreachable: the clone's root is checked when the edit names it, and a followed target only when it has a state (see `uncovered-branches.md`).
 - ``projects/strata/src/graph.ts|visit|statement removed|refuse("missing", "Something to clone no longer exists.");|;|0``
   As above.
 - ``projects/strata/src/graph.ts|visit|push → unshift|push|unshift|0``
   The reference paths are only remapped one by one; their order doesn't matter.
-- ``projects/strata/src/graph.ts|StrataGraph.buildClone|statement removed|work.refs.set(plan.ref.id, plan.ref);|;|0``
-  Pushing the create op records the reference as well.
 - ``projects/strata/src/graph.ts|StrataGraph.checkLayers||| → &&||||&&|3``
   An empty path or one that isn't a list names no field: `kindAt` finds nothing for it either, and the path is refused the same way.
 - ``projects/strata/src/graph.ts|StrataGraph.checkLayers|push → unshift|push|unshift|1``
@@ -461,10 +443,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   Unreachable: every change runs its cycle at once, so the assembled change set is always there (see `uncovered-branches.md`).
 - ``projects/strata/src/graph.ts|StrataGraph.emit|test → false|label|false|0``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle||| → &&||||&&|0``
-  Each of the two guards alone keeps a batch from being assembled twice: `onCycle` runs once per cycle, and a batch's entry names the cycle it was observed in.
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle|statement removed|this.lastBatchSeq = batchEntry.seq;|;|0``
-  As above: the cycle check alone stops a second assembly.
 - ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|0``
   The change set's nodes are sorted by ID after they are assembled.
 - ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|1``
@@ -571,41 +549,17 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above: the first input is always the node itself, so the test is always true and the same inputs are set again.
 - ``projects/strata/src/graph.ts|effect.run|test → true|context.inputs[0].changed|true|0``
   The effect has one input and runs only when it changed.
-- ``projects/strata/src/graph.ts|StrataGraph.storeTask|test → false|!run|false|0``
-  Unreachable: every caller checks for a store first, and a graph with a store has its store run from construction (see `uncovered-branches.md`).
 - ``projects/strata/src/graph.ts|StrataGraph.storeTask|test → false|run.signal.aborted|false|0``
   A task started under a stopped run is aborted at once, and settles with the same "stopped" failure.
 - ``projects/strata/src/graph.ts|StrataGraph.storeTask|&& → |||&&||||0``
   Only a done task has a result: an abort settles the task synchronously, before the work's result could be recorded (a microtask later), and a failed task never records one.
-- ``projects/strata/src/graph.ts|StrataGraph.pump||| → &&||||&&|3``
-  A graph has a store run exactly when it has a store, so either test alone decides.
 - ``projects/strata/src/graph.ts|token|++/-- swapped|++this.token|--this.token|0``
   The append token is only compared with itself; counting down gives distinct tokens as well.
-- ``projects/strata/src/graph.ts|StrataGraph.pump|test → false|this.inflight !== token|false|0``
-  Unreachable: one append is in flight at a time, and only its own settlement clears it.
-- ``projects/strata/src/graph.ts|StrataGraph.pump|early return removed|return;|;|1``
-  As above.
-- ``projects/strata/src/graph.ts|settle|test → false|settled|false|0``
-  A second settlement is stopped three ways (the flag, the removed abort listener and the ended result effect); each alone suffices.
-- ``projects/strata/src/graph.ts|settle|early return removed|return;|;|0``
-  As above.
-- ``projects/strata/src/graph.ts|settle|statement removed|settled = !0;|;|0``
-  As above.
-- ``projects/strata/src/graph.ts|settle|boolean flip|!0|!1|0``
-  As above.
-- ``projects/strata/src/graph.ts|settle|statement removed|run.signal.removeEventListener("abort", stopped);|;|0``
-  As above.
 - ``projects/strata/src/graph.ts|StrataGraph.whenSettled|test → false|run.signal.aborted|false|0``
   A process spawned under a stopped run is already aborted, and its result effect settles it with that state, which every caller treats as it treats "stopped".
 - ``projects/strata/src/graph.ts|StrataGraph.whenSettled|statement removed|stopped();|;|0``
   As above.
 - ``projects/strata/src/graph.ts|StrataGraph.whenSettled|early return removed|return;|;|0``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.scheduleRetry|test → false|this.retrying || !this.storeRun|false|0``
-  Unreachable: only a failed append schedules a retry, and nothing is sent while one waits (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.scheduleRetry||| → &&||||&&|0``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.scheduleRetry|early return removed|return;|;|0``
   As above.
 - ``projects/strata/src/graph.ts|moved|boolean flip|!1|!0|0``
   Only refreshes pins more often; a pin read again at an unchanged point reads the same.
@@ -721,10 +675,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above.
 - ``projects/strata/src/graph.ts|StrataGraph.compensate.kind|test → false|before.retracted|false|0``
   Unreachable true branch: this line runs only when the state before the step wasn't retracted.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|statement removed|work.refs.set(ref.id, rec.ref);|;|0``
-  Pushing the op records the reference as well.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|boolean flip|!0|!1|0``
-  For a recorded node the working state starts from its head either way, and a compensation isn't a primitive op that pushing can drop.
 - ``projects/strata/src/graph.ts|sorted|< → <=|<|<=|0``
   Subject IDs of one conflict are distinct.
 - ``projects/strata/src/graph.ts|sorted|< → >=|<|>=|0``
@@ -777,8 +727,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   Route IDs of one conflict are distinct.
 - ``projects/strata/src/graph.ts|StrataGraph.fix|test → false|!edits.length|false|0``
   A commit of no edits is refused as empty the same way.
-- ``projects/strata/src/graph.ts|StrataGraph.record|statement removed|work.refs.set(ref.id, ref);|;|0``
-  Pushing the op records the reference as well.
 - ``projects/strata/src/graph.ts|StrataGraph.record|test → false|exists|false|0``
   A source is a value stream: every op becomes a whole-state entry (create for a new node, state after), and a create for an existing source holds the same name and value.
 - ``projects/strata/src/graph.ts|StrataGraph.compactingConflict|test → false|!this.compacting.size|false|0``
@@ -839,12 +787,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above.
 - ``projects/strata/src/graph.ts|StrataGraph.purgeNow|statement removed|this.forgetTimes();|;|0``
   The refresh just before, for a purge, forgets cached points and views itself.
-- ``projects/strata/src/graph.ts|StrataGraph.depthOf|test → false|seen.has(id)|false|0``
-  Unreachable: layers never form a cycle (see `uncovered-branches.md`), so a node is never met again on its own chain.
-- ``projects/strata/src/graph.ts|StrataGraph.depthOf|number changed|0|1|0``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.depthOf|statement removed|seen.add(id);|;|0``
-  As above: without cycles the guard never fires.
 - ``projects/strata/src/graph.ts|StrataGraph.inspectorRow|> → >=|>|>=|0``
   Replacing the worst severity by an equal one changes nothing.
 - ``projects/strata/src/graph.ts|StrataGraph.inspect|number changed|1|0|0``
@@ -879,18 +821,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   The equal case returns just before.
 - ``projects/strata/src/graph.ts|entryAt|early return removed|return;|;|0``
   The function's last statement: it returns undefined either way.
-- ``projects/strata/src/graph.ts|Working.push|boolean flip|!1|!0|0``
-  For a live node the record's head is its head state; edits of a node that isn't live are refused before they are pushed.
-- ``projects/strata/src/graph.ts|Working.push|test → true|raw|true|0``
-  As above.
-- ``projects/strata/src/graph.ts|Working.push|test → false|raw|false|0``
-  A compensation's working state is read only by the layer-cycle check, and a node coming back from retraction can't close a cycle: nothing live could take it as a source meanwhile.
-- ``projects/strata/src/graph.ts|Working.drop|statement removed|this.refs.delete(id);|;|0``
-  A dropped node's reference is only looked up for nodes with ops, and the next push records it again.
-- ``projects/strata/src/graph.ts|Working.drop|statement removed|this.seqs.delete(id);|;|0``
-  A dropped node has no seq recorded: seqs are set only after an op is kept.
-- ``projects/strata/src/graph.ts|Working.drop|test → true|index >= 0|true|0``
-  Unreachable: only a node in the order is dropped.
 
 ## projects/strata/src/fold.ts
 

@@ -201,7 +201,6 @@ export class StrataGraph implements GraphView {
   private readonly pendingSeed: KNode;
   private reports: NodeChange[] = [];
   private readonly assembled = new Map<string, ChangeSet>();
-  private lastBatchSeq = 0;
   private allDemand: Aborter | null = null;
   private allSubscribers = 0;
   /** The store driver's run: appends, loads and snapshots are its child processes (SPEC §19.5). */
@@ -358,7 +357,7 @@ export class StrataGraph implements GraphView {
 
   /** Loads every node from its latest snapshot plus tail. */
   async load(): Promise<{ readonly nodes: number; readonly entries: number; readonly foldMs: number }> {
-    if (!this.store) { this.loaded = true; return { nodes: 0, entries: 0, foldMs: 0 }; }
+    if (!this.store) return { nodes: 0, entries: 0, foldMs: 0 };
     const clock = this.sources.clock;
     const store = this.store;
     const stored = await this.storeTask("load", () => store.load());
@@ -812,9 +811,9 @@ export class StrataGraph implements GraphView {
         return;
       }
       case "reset": {
-        const { ref, def, state } = this.editable(work, edit.node);
+        const { ref, def } = this.editable(work, edit.node);
         this.leafPath(def, edit.path, "field");
-        if (state.own[pathKey(edit.path)] !== undefined) work.push(ref, { kind: "reset", path: [...edit.path] });
+        work.push(ref, { kind: "reset", path: [...edit.path] });
         return;
       }
       case "tombstone": {
@@ -843,9 +842,9 @@ export class StrataGraph implements GraphView {
         return;
       }
       case "rename": {
-        const { ref, state } = this.editable(work, edit.node);
+        const { ref } = this.editable(work, edit.node);
         if (typeof edit.name !== "string") refuse("value", "A name is text.");
-        if (edit.name !== state.name) work.push(ref, { kind: "rename", name: edit.name });
+        work.push(ref, { kind: "rename", name: edit.name });
         return;
       }
       case "trash": case "restore": {
@@ -854,8 +853,7 @@ export class StrataGraph implements GraphView {
         return;
       }
       case "detach": {
-        const { ref, state } = this.editable(work, edit.node);
-        if (!state.layers.length) return;
+        const { ref } = this.editable(work, edit.node);
         const resolver = work.resolver();
         for (const path of resolver.leafPaths(ref)) {
           const found = resolver.leaf(ref, path);
@@ -964,8 +962,7 @@ export class StrataGraph implements GraphView {
       layers = [{ from: source, role: "base", paths: "*", ...(edit.from.at ? { at: { node: source, seq: edit.from.at } } : {}) }, ...layers];
     }
     const own = { ...this.identityOf(def), ...this.ownOf(def, this.withCreated(work, edit.fields ?? {}) as Record<string, unknown>) };
-    work.refs.set(id, ref);   // so layer checks can name it
-    const checked = layers.length ? this.checkLayers(work, ref, def, layers) : [];
+    const checked = this.checkLayers(work, ref, def, layers);
     work.push(ref, { kind: "create", state: freeze({ ...EMPTY_STATE, name: name ?? "", own, layers: checked }) });
     if (edit.as !== undefined) work.created.set(edit.as, ref);
   }
@@ -1012,7 +1009,6 @@ export class StrataGraph implements GraphView {
     for (const plan of plans) {
       const own = { ...plan.state.own };
       for (const path of plan.refPaths) own[pathKey(path)] = remap(own[pathKey(path)]);
-      work.refs.set(plan.ref.id, plan.ref);
       work.push(plan.ref, { kind: "create", state: freeze({ ...plan.state, own }) });
     }
     return cloned;
@@ -1287,8 +1283,7 @@ export class StrataGraph implements GraphView {
   /** After each kernel cycle: a cycle carrying a batch assembles its change set from the combinators' reports. */
   private onCycle(): void {
     const batchEntry = this.batchSeed.latest();
-    if (!batchEntry || batchEntry.cycle !== this.env.cycle || batchEntry.seq === this.lastBatchSeq) return;
-    this.lastBatchSeq = batchEntry.seq;
+    if (!batchEntry || batchEntry.cycle !== this.env.cycle) return;
     const batch = batchEntry.value as unknown as { commit: string; cause: ChangeSet["cause"]; label?: string; meta: NodeChange[] };
     const reported = new Map<string, NodeChange>();
     for (const change of this.reports) reported.set(change.node.id, change);
@@ -1506,8 +1501,7 @@ export class StrataGraph implements GraphView {
    * and a task asked for after the store driver stopped fails at once instead of waiting for ever.
    */
   private storeTask<T>(name: string, work: (signal: AbortSignalLike) => Promise<T>): Promise<T> {
-    const run = this.storeRun;
-    if (!run) return Promise.reject(new Error("The graph has no store."));
+    const run = this.storeRun!;
     if (run.signal.aborted) return Promise.reject(new Error("The graph's store has stopped."));
     return new Promise<T>((resolve, reject) => {
       let result: { value: T } | undefined;
@@ -1525,11 +1519,11 @@ export class StrataGraph implements GraphView {
    * retried after a `retry` process (a timer) completes.
    */
   private pump(): void {
-    if (!this.store || !this.storeRun || this.inflight !== null || this.retrying || !this.outbox.length) {
+    if (!this.storeRun || this.inflight !== null || this.retrying || !this.outbox.length) {
       if (!this.outbox.length) this.resolveFlush();
       return;
     }
-    const run = this.storeRun, store = this.store, item = this.outbox[0], token = ++this.token;
+    const run = this.storeRun, store = this.store!, item = this.outbox[0], token = ++this.token;
     this.inflight = token;
     const process = run.spawn("append", signal => new Promise<Json>((resolve, reject) => {
       // The wait for a reply ends with the reply (or the process): no timer outlives the append.
@@ -1540,7 +1534,6 @@ export class StrataGraph implements GraphView {
         error => { waiting.abort("answered"); reject(error); });
     }));
     this.whenSettled(process, state => {
-      if (this.inflight !== token) return;
       this.inflight = null;
       if (state.status === "done") this.onReply(item, state.result as unknown as AppendResult);
       else if (state.status === "failed") this.scheduleRetry();
@@ -1553,10 +1546,8 @@ export class StrataGraph implements GraphView {
    */
   private whenSettled(process: Process, then: (state: ProcessState) => void): void {
     const run = this.storeRun!, done = new Aborter();
-    let settled = false;
+    // Settles once: whichever of the abort listener and the result effect comes first ends the other.
     const settle = (state: ProcessState) => {
-      if (settled) return;
-      settled = true;
       run.signal.removeEventListener("abort", stopped);
       done.abort("settled");
       this.env.change(() => then(state));
@@ -1572,9 +1563,8 @@ export class StrataGraph implements GraphView {
   }
 
   private scheduleRetry(): void {
-    if (this.retrying || !this.storeRun) return;
     this.retrying = true;
-    const timer = this.storeRun.spawn("retry", signal => new Promise<Json>(resolve => this.sources.clock.after(this.retryMs, () => resolve(null), signal)));
+    const timer = this.storeRun!.spawn("retry", signal => new Promise<Json>(resolve => this.sources.clock.after(this.retryMs, () => resolve(null), signal)));
     this.whenSettled(timer, () => { this.retrying = false; this.pump(); });
   }
 
@@ -1902,8 +1892,7 @@ export class StrataGraph implements GraphView {
       if (!ops.length) continue;
       const reverses: EventRef[] = [];
       for (let seq = first; seq <= last; seq++) reverses.push({ node: rec.ref, seq });
-      work.refs.set(ref.id, rec.ref);
-      work.push(rec.ref, { kind: "compensate", reverses, ops }, true);
+      work.push(rec.ref, { kind: "compensate", reverses, ops });
     }
     if (!work.order.length) return refusal("empty", "That step no longer changes anything.");
     return this.applyWork(work, { label: record.label, scope: record.scope }, cause);
@@ -2056,7 +2045,6 @@ export class StrataGraph implements GraphView {
     this.sourceRings.set(ref.id, def.ring);
     const exists = this.records.has(ref.id);
     const work = new Working(this);
-    work.refs.set(ref.id, ref);
     work.push(ref, exists ? { kind: "set", path: ["value"], value } : { kind: "create", state: freeze({ ...EMPTY_STATE, name: def.name, own: { [pathKey(["value"])]: value } }) });
     this.applyWork(work, { scope: `source:${def.name}` }, "commit", undefined, false);
   }
@@ -2294,13 +2282,10 @@ export class StrataGraph implements GraphView {
   // The inspector's data
   // -------------------------------------------------------------------------------------------------------------
 
-  private depthOf(id: string, seen = new Set<string>()): number {
-    if (seen.has(id)) return 0;
-    seen.add(id);
+  private depthOf(id: string): number {
     const state = this.records.get(id)?.head;
     let depth = 0;
-    for (const layer of state?.layers ?? []) depth = Math.max(depth, 1 + this.depthOf(layer.from.id, seen));
-    seen.delete(id);
+    for (const layer of state?.layers ?? []) depth = Math.max(depth, 1 + this.depthOf(layer.from.id));
     return depth;
   }
 
@@ -2403,28 +2388,20 @@ class Working {
     return this.base(ref);
   }
   seqOf(ref: NodeRef): number { return this.seqs.get(ref.id) ?? this.graph.seqOf(ref); }
-  push(ref: NodeRef, op: Op, raw = false): void {
-    if (!this.ops.has(ref.id)) {
-      this.ops.set(ref.id, []);
-      this.order.push(ref.id);
-      this.refs.set(ref.id, ref);
-      this.states.set(ref.id, raw ? (this.graph as unknown as { records: Map<string, Rec> }).records.get(ref.id)?.head ?? null : this.base(ref));
-    }
-    const before = this.states.get(ref.id) ?? null;
+  push(ref: NodeRef, op: Op): void {
+    const fresh = !this.ops.has(ref.id);
+    const before = fresh ? this.base(ref) : this.states.get(ref.id) ?? null;
     const after = fold(before, [{ op } as Entry]);
     // An edit that changes nothing is not recorded: no entry, nothing to undo.
     const primitive = op.kind === "set" || op.kind === "reset" || op.kind === "tombstone" || op.kind === "layers" || op.kind === "rename";
-    if (primitive && before && equal(before, after)) { if (!this.ops.get(ref.id)!.length) this.drop(ref.id); return; }
+    if (primitive && before && equal(before, after)) return;
+    if (fresh) { this.ops.set(ref.id, []); this.order.push(ref.id); this.refs.set(ref.id, ref); }
     this.ops.get(ref.id)!.push(op);
     this.states.set(ref.id, after);
     this.seqs.set(ref.id, this.seqOf(ref) + 1);
     this.temp?.clear();
   }
-  private drop(id: string): void {
-    this.ops.delete(id); this.states.delete(id); this.refs.delete(id); this.seqs.delete(id);
-    const index = this.order.indexOf(id);
-    if (index >= 0) this.order.splice(index, 1);
-  }
+
   /** A resolver over this change's working states (for detach, clone and apply-to-source). */
   resolver(): Resolver {
     const graph = this.graph as unknown as { headReader: StateReader };
