@@ -200,7 +200,7 @@ test("PIPE-131: while a Build runs, its progress line and bar follow the host's 
   f.transport.package = () => new Promise((_resolve, reject) => { finish = reject; });
   const running = f.service.execute({ kind: "package", action: "build" });
   await Bun.sleep(30);
-  expect(f.service.view().progress).toMatchObject({ phase: "working", code: "package", message: "Step 3 of 5: Converting 2 looks into game files…", fraction: .5 });
+  expect(f.service.view().progress).toMatchObject({ phase: "working", code: "package", message: "Step 3 of 5: Converting 2 looks…", fraction: .5 });
   current = { stage: "verify", step: 5, steps: 5, looks: 2 };
   await Bun.sleep(BUILD_PROGRESS_INTERVAL_MS + 100);
   expect(f.service.view().progress).toMatchObject({ message: "Step 5 of 5: Checking the packed mod…", fraction: .9 });

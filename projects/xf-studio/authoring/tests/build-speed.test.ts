@@ -152,8 +152,11 @@ test("the builder's stage lines become the host's progress snapshot while the Bu
 });
 
 test("each stage reads as its step and plain words", () => {
-  expect(packageBuildStageLine({ stage: "prepare", step: 1, steps: 5 })).toBe("Step 1 of 5: Reading what the mod needs from your game files…");
-  expect(packageBuildStageLine({ stage: "compose", step: 2, steps: 5, looks: 2 })).toBe("Step 2 of 5: Making the textures for 2 looks…");
-  expect(packageBuildStageLine({ stage: "convert", step: 3, steps: 5, looks: 1 })).toBe("Step 3 of 5: Converting 1 look into game files…");
+  expect(packageBuildStageLine({ stage: "prepare", step: 1, steps: 5 })).toBe("Step 1 of 5: Reading your game files…");
+  expect(packageBuildStageLine({ stage: "compose", step: 2, steps: 5, looks: 2 })).toBe("Step 2 of 5: Painting 2 looks…");
+  expect(packageBuildStageLine({ stage: "convert", step: 3, steps: 5, looks: 1 })).toBe("Step 3 of 5: Converting 1 look…");
   expect(packageBuildStageLine({ stage: "verify", step: 5, steps: 5 })).toBe("Step 5 of 5: Checking the packed mod…");
+  // Every line fits the panel's one line at its narrowest (UI gate: about 37 characters), up to 99 looks.
+  for (const stage of ["prepare", "compose", "convert", "pack", "verify"] as const)
+    expect(packageBuildStageLine({ stage, step: 5, steps: 5, looks: 99 }).length).toBeLessThanOrEqual(37);
 });

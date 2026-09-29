@@ -30,13 +30,16 @@ export async function requestPackageProgress(): Promise<PackageBuildProgress | n
     ? { stage: build.stage!, step: build.step!, steps: build.steps!, ...Number.isInteger(build.looks) ? { looks: build.looks! } : {} } : null;
 }
 
-/** The progress line for a Build's stage: which step of how many, and what it is doing, in plain words. */
+/**
+ * The progress line for a Build's stage: which step of how many, and what it is doing, in plain words. Each fits the Mod
+ * package panel's one line at its narrowest (about 37 characters beside the buttons of a wide panel) for up to 99 looks.
+ */
 export function packageBuildStageLine(progress: PackageBuildProgress): string {
   const looks = progress.looks === undefined ? "the looks" : progress.looks === 1 ? "1 look" : `${progress.looks} looks`;
   const doing: Record<PackageBuildProgress["stage"], string> = {
-    prepare: "Reading what the mod needs from your game files…",
-    compose: `Making the textures for ${looks}…`,
-    convert: `Converting ${looks} into game files…`,
+    prepare: "Reading your game files…",
+    compose: `Painting ${looks}…`,
+    convert: `Converting ${looks}…`,
     pack: "Packing the mod…",
     verify: "Checking the packed mod…",
   };

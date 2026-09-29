@@ -21,7 +21,13 @@ const report: Record<string, unknown> = { date: new Date().toISOString() };
 const passes = (["light", "dark"] as const).flatMap(scheme => ([300, 480] as const).map(width => ({ scheme, width })));
 
 const sizeGroup = (page: Session, width: number) => page.evaluate(`(() => { const t = [...document.querySelectorAll('[role=tab]')].find(t => t.textContent.trim() === "Mod package");
-  t?.click(); const g = t?.closest('.dock-group'); if (!g) return false; g.style.width = "${width}px"; g.style.flex = "none"; g.style.maxWidth = "${width}px"; return true; })()`);
+  t?.click(); const g = t?.closest('.dock-group'); if (!g) return false;
+  // A group in a column takes its column's width: size the column too (the nearest ancestor laid out in a row).
+  for (let e = g; e?.parentElement && e.parentElement !== document.body; e = e.parentElement)
+    if (getComputedStyle(e.parentElement).flexDirection === "row") { if (e !== g) Object.assign(e.style, { width: "${width}px", flex: "none", maxWidth: "${width}px", minWidth: "${width}px" }); break; }
+  // Floated (see below), the floating window takes the width too.
+  const w = g.parentElement?.closest('[class*="float"]'); if (w) { w.style.width = "${width}px"; w.style.height = "700px"; }
+  g.style.width = "${width}px"; g.style.flex = "none"; g.style.maxWidth = "${width}px"; return true; })()`);
 const click = (page: Session, text: string) => page.evaluate(`(() => { const b = [...document.querySelectorAll('button, [role=menuitem]')]
   .find(e => (e.textContent.trim() === ${JSON.stringify(text)} || e.textContent.trim() === ${JSON.stringify(text + "…")}) && e.offsetParent);
   if (!b) throw Error("no " + ${JSON.stringify(text)}); b.click(); return true; })()`);
@@ -37,10 +43,10 @@ async function capture(page: Session, name: string) {
   for (const { scheme, width } of passes) {
     await page.colorScheme(scheme);
     await sizeGroup(page, width);
-    await page.evaluate(`document.querySelector('.package-progress')?.scrollIntoView({ block: 'center' })`);
     await page.wait(400);
     const rects = await page.evaluate(`(() => { const p = document.querySelector('.package-progress'), g = p?.closest('.dock-group');
-      if (!p || !g) return null; const box = e => { const r = e.getBoundingClientRect(); return { x: Math.max(0, r.left), y: Math.max(0, r.top), width: r.width, height: Math.min(innerHeight - Math.max(0, r.top), r.height) }; };
+      if (!p || !g) return null; const box = e => { const r = e.getBoundingClientRect(), x = Math.max(0, r.left), y = Math.max(0, r.top);
+        return { x, y, width: Math.min(innerWidth, r.right) - x, height: Math.min(innerHeight, r.bottom) - y }; };
       const row = p.parentElement; return { group: box(g), row: box(row) }; })()`);
     if (!rects) throw Error(`No progress line for ${name}`);
     const tag = `${name}-${scheme}-${width}`;
@@ -64,6 +70,8 @@ try {
     await page.evaluate(`(() => { document.querySelector('button[title="Skip tour"]')?.click(); return true; })()`);
     await page.wait(500);
     await page.evaluate(MASK_VIEWPORTS);
+    // Floated, so the panel is seen at each pass's width whatever column it docks in (as mod-manager-extras-look.ts does).
+    await page.evaluate(`window.xfStudioShell.dock.float("package")`); await page.wait(400);
     await sizeGroup(page, 480);
     await page.waitFor(`[...document.querySelectorAll('button')].some(b => b.textContent.trim() === "Check" && b.offsetParent && !b.getAttribute('aria-disabled'))`, 60000);
     await page.wait(3000);
