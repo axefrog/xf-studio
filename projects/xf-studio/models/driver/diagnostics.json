@@ -1,0 +1,49 @@
+{
+  "kind": "driver",
+  "id": "diagnostics",
+  "owner": "diagnostics",
+  "summary": "Turns every fault that reaches the top into a notice and a batched, rate-limited forward to the host log; prepares Report a problem.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions",
+    "diagnostics/browser-device",
+    "diagnostics/model",
+    "diagnostics/page-sink",
+    "diagnostics/redact",
+    "diagnostics/report",
+    "diagnostics/zip",
+    "studio-ui/diagnostics/report-dialog",
+    "studio-ui/feedback"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:report-failure",
+    "request:prepare-report"
+  ],
+  "demands": [
+    "source:page-errors",
+    "type:notice",
+    "type:problem-report",
+    "operator:notice-for",
+    "operator:report-manifest",
+    "operator:redact"
+  ],
+  "creates": [],
+  "starts": [
+    "process:diagnostics-forward",
+    "process:report-prepare"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:write-log"
+  ],
+  "faults": [],
+  "lifetime": "Per window, while it runs.",
+  "x-friction": [
+    {
+      "gap": "Today every failure becomes one generic page failure; faults need owners and a route along the chain of requests, ending here.",
+      "capability": "fault-owners",
+      "closes": "Failures as values naming who must act."
+    }
+  ]
+}

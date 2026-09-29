@@ -1,0 +1,65 @@
+{
+  "kind": "driver",
+  "id": "motion-data",
+  "owner": "motion",
+  "summary": "Loads what a scene's motion needs while the idle is on or a pose is held: the idle catalogue and clip, its face, the blink.",
+  "status": "both",
+  "replaces": [
+    "dangle-motion",
+    "dangle-solver",
+    "dangle-spec",
+    "deformation-rig",
+    "game-blink",
+    "idle-animation",
+    "idle-body",
+    "idle-catalogue",
+    "motion-actions",
+    "platform/scene/face-driver",
+    "platform/scene/idle-source",
+    "pose-clip",
+    "pose-sample",
+    "preview-motion"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:load-motion"
+  ],
+  "demands": [
+    "type:scene",
+    "source:frames",
+    "operator:idle-clip",
+    "operator:motion-available"
+  ],
+  "creates": [],
+  "starts": [
+    "process:idle-catalogue-load",
+    "process:idle-clip-load",
+    "process:idle-face-wait",
+    "process:blink-load"
+  ],
+  "runtimes": [
+    "runtime:motion-rig"
+  ],
+  "raises": [
+    "request:load-idles",
+    "request:load-pose-sample",
+    "request:prepare-face"
+  ],
+  "faults": [
+    {
+      "code": "idle-unavailable",
+      "when": "The installation has no creator idle for this body.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per scene, while its idle is on or a pose is held.",
+  "x-friction": [
+    {
+      "gap": "Idle time, dangles and the blink advance on their own timers; exact replay needs them integrated over the frame source's dt only.",
+      "capability": "frame-timing",
+      "closes": "State integrated over frame time inside a runtime whose inputs are all sources."
+    }
+  ]
+}

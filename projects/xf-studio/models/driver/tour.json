@@ -1,0 +1,28 @@
+{
+  "kind": "driver",
+  "id": "tour",
+  "owner": "shell",
+  "summary": "Runs a guided tour in one window: its steps, anchors and the record of how it ended.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/guidance/controller",
+    "studio-ui/guidance/engine",
+    "studio-ui/guidance/overlay"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:run-tour"
+  ],
+  "demands": [
+    "type:tour-run",
+    "type:preferences"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:store-commits"
+  ],
+  "faults": [],
+  "lifetime": "From a tour's start to its finish or skip."
+}

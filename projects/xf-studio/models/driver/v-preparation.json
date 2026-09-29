@@ -1,0 +1,63 @@
+{
+  "kind": "driver",
+  "id": "v-preparation",
+  "owner": "character",
+  "summary": "Asks the host to prepare every V shown anywhere, once per distinct request, superseding only its own older request, and follows the work.",
+  "status": "both",
+  "replaces": [
+    "character-detail-actions",
+    "character-follow"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:prepare-v"
+  ],
+  "demands": [
+    "type:v",
+    "type:scene",
+    "operator:character-request",
+    "operator:detail-status",
+    "source:host-answers"
+  ],
+  "creates": [],
+  "starts": [
+    "process:v-prepare"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:prepare-v-on-host",
+    "request:load-v-details",
+    "request:set-up-wolvenkit"
+  ],
+  "faults": [
+    {
+      "code": "needs-wolvenkit",
+      "when": "The host needs WolvenKit to prepare this V; work is suspended until it is set up.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "preparation-failed",
+      "when": "Preparation failed; the V stays as shown, with Try again.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "host-unreachable",
+      "when": "The host doesn't answer; retries with a contact-lost state.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per V shown in a visible view; a newer request for the same V supersedes the older.",
+  "x-friction": [
+    {
+      "gap": "The preparation runs on the host; the page follows it by polling and re-asks after the host forgets it.",
+      "capability": "cross-process-work",
+      "closes": "Work in another process observed as a process here."
+    }
+  ]
+}

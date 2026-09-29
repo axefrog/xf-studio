@@ -1,0 +1,28 @@
+{
+  "kind": "driver",
+  "id": "choice-row",
+  "owner": "character",
+  "summary": "For an open row: asks the host to prepare the visible choices ahead and asks for their pictures, nearest first.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/components/swatch-card"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:open-choice-row"
+  ],
+  "demands": [
+    "type:choice-row",
+    "operator:preview-priority"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:prefetch-row",
+    "request:choice-pictures",
+    "request:preload-choice"
+  ],
+  "faults": [],
+  "lifetime": "Per open row."
+}

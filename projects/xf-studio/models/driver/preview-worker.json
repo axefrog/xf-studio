@@ -1,0 +1,46 @@
+{
+  "kind": "driver",
+  "id": "preview-worker",
+  "owner": "character",
+  "summary": "Runs the choice preview worker: a subject head per body drawn offscreen, recreated once after a crash, then off for the session.",
+  "status": "both",
+  "replaces": [
+    "browser-choice-preview-device",
+    "choice-preview-render",
+    "choice-preview-worker"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:draw-choice-picture"
+  ],
+  "demands": [
+    "source:page-workers",
+    "source:worker-clock"
+  ],
+  "creates": [],
+  "starts": [
+    "process:picture-draw",
+    "process:turntable-strip",
+    "process:live-turn"
+  ],
+  "runtimes": [
+    "runtime:choice-preview-worker"
+  ],
+  "faults": [
+    {
+      "code": "worker-crashed-twice",
+      "when": "The worker crashed again after one recreation; previews are off for the session.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per window, while any row wants pictures; lingers briefly.",
+  "x-friction": [
+    {
+      "gap": "A live turn is a stream of frames produced by the worker while a drag steers it.",
+      "capability": "streamed-results",
+      "closes": "Work that yields a stream of results with one frame requested at a time."
+    }
+  ]
+}

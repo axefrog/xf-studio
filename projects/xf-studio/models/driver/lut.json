@@ -1,0 +1,39 @@
+{
+  "kind": "driver",
+  "id": "lut",
+  "owner": "views",
+  "summary": "Shows the creator's colour grade on views whose light rig uses the game display: asks the host for the cube and loads it into the context.",
+  "status": "both",
+  "replaces": [
+    "browser-grading-lut-device",
+    "grading-lut"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:show-grade"
+  ],
+  "demands": [
+    "type:light-rig",
+    "operator:lut-needed"
+  ],
+  "creates": [],
+  "starts": [
+    "process:lut-load"
+  ],
+  "runtimes": [
+    "runtime:lut-texture"
+  ],
+  "raises": [
+    "request:extract-lut"
+  ],
+  "faults": [
+    {
+      "code": "lut-unavailable",
+      "when": "The grade couldn't be extracted; the neutral grade is shown.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "Per GL context and installation, while a shown view's rig uses the game display."
+}

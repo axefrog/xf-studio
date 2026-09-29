@@ -1,0 +1,58 @@
+{
+  "kind": "driver",
+  "id": "open-save",
+  "owner": "save-explorer",
+  "summary": "Reads and decodes a save in slices off the main thread: the whole tree for the Save Explorer, or the creator node for a V.",
+  "status": "both",
+  "replaces": [
+    "browser-save-explorer-device",
+    "engines/save/container",
+    "engines/save/lz4",
+    "engines/save/reader",
+    "face-morphs",
+    "features/save-explorer/actions",
+    "features/save-explorer/explorer",
+    "features/save-explorer/facade",
+    "features/save-explorer/listing",
+    "features/save-explorer/view/panel",
+    "save-loadout",
+    "save-reader",
+    "saved-v"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:open-save",
+    "request:decode-saved-v"
+  ],
+  "demands": [
+    "type:open-save",
+    "source:host-answers",
+    "operator:save-tree"
+  ],
+  "creates": [],
+  "starts": [
+    "process:save-read",
+    "process:save-open-decode",
+    "process:saved-v-decode"
+  ],
+  "runtimes": [
+    "runtime:decoded-save"
+  ],
+  "faults": [
+    {
+      "code": "unreadable-save",
+      "when": "The file isn't a save this build reads.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per open save, until closed; per decode for a V.",
+  "x-friction": [
+    {
+      "gap": "Saves up to 128 MB are decoded synchronously today; the bytes must travel by reference into a worker.",
+      "capability": "binary-by-reference",
+      "closes": "Blob references transferred across worker boundaries."
+    }
+  ]
+}

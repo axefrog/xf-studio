@@ -1,0 +1,55 @@
+{
+  "kind": "driver",
+  "id": "face-solve",
+  "owner": "expressions",
+  "summary": "Keeps a scene's face showing its held expression: one solve in flight, the newest state solved next, eased between held expressions.",
+  "status": "both",
+  "replaces": [
+    "browser-facial-device",
+    "facial-preview",
+    "platform/api/easing",
+    "platform/api/facial",
+    "platform/core/value-transition"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:solve-face"
+  ],
+  "demands": [
+    "type:scene",
+    "type:look",
+    "type:preset-expression",
+    "operator:held-face-pose",
+    "operator:face-pose-ease",
+    "source:frames"
+  ],
+  "creates": [],
+  "starts": [
+    "process:face-solve",
+    "process:face-data-load",
+    "process:installed-expressions-read"
+  ],
+  "runtimes": [
+    "runtime:motion-rig"
+  ],
+  "raises": [
+    "request:prepare-face"
+  ],
+  "faults": [
+    {
+      "code": "face-unavailable",
+      "when": "The installation's face rig couldn't be prepared.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per scene, while it shows a V wearing an expression or an expression is being edited.",
+  "x-friction": [
+    {
+      "gap": "At most one solve in flight, the newest state next, an older answer shown only if nothing newer is ready: not latest-wins cancellation.",
+      "capability": "scheduling-rules",
+      "closes": "A standard single-flight policy with the newest queued."
+    }
+  ]
+}

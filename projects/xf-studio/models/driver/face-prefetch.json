@@ -1,0 +1,32 @@
+{
+  "kind": "driver",
+  "id": "face-prefetch",
+  "owner": "expressions",
+  "summary": "Warms the face data once the window has been quiet with a V shown, and stops the moment the person acts.",
+  "status": "both",
+  "replaces": [
+    "facial-prefetch"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:prefetch-face"
+  ],
+  "demands": [
+    "operator:quiet-period"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:prepare-face"
+  ],
+  "faults": [],
+  "lifetime": "While the window is quiet and a V is shown.",
+  "x-friction": [
+    {
+      "gap": "Demand conditioned on the absence of recent activity across many streams.",
+      "capability": "scheduling-rules",
+      "closes": "A quiet-period source derived from input and the person's own work, ending background work when it ends."
+    }
+  ]
+}

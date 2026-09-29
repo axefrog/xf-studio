@@ -1,0 +1,34 @@
+{
+  "kind": "driver",
+  "id": "library-listing",
+  "owner": "library",
+  "summary": "Lists and searches the library's presets, looks and mods while the Library panel or a chooser is open.",
+  "status": "both",
+  "replaces": [
+    "collection-actions",
+    "collection-application",
+    "collection-service",
+    "collection-transport",
+    "library-store",
+    "studio-ui/panels/collection"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:list-library"
+  ],
+  "demands": [
+    "type:mod",
+    "type:look",
+    "type:preset-eye-makeup",
+    "type:preset-expression",
+    "operator:mod-summary"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:load-nodes"
+  ],
+  "faults": [],
+  "lifetime": "While a Library panel or a chooser is shown."
+}

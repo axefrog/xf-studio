@@ -1,0 +1,94 @@
+{
+  "kind": "driver",
+  "id": "scene",
+  "owner": "views",
+  "summary": "Creates and ends one scene's GPU content while a visible view references it: the body's core head, the V's details, motion and feature renderers.",
+  "status": "both",
+  "replaces": [
+    "browser-head-attachment",
+    "browser-scene-preview-ports",
+    "character-follow",
+    "decal-underlay",
+    "features/eye-makeup/render/index",
+    "head-skin-placement",
+    "lighting-setup-stage",
+    "linear-display",
+    "platform/api/scene",
+    "platform/scene/contact-shadow",
+    "platform/scene/feature-renderers",
+    "platform/scene/head-rig",
+    "platform/scene/pass-variants",
+    "platform/scene/shadow-casters",
+    "platform/scene/skin-scatter",
+    "stage-backdrop",
+    "stage-theme-binding",
+    "studio-environment",
+    "viewport-backdrop"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:show-scene"
+  ],
+  "demands": [
+    "type:scene",
+    "type:v",
+    "operator:shown-body",
+    "operator:plate-composite-input",
+    "operator:finish-program",
+    "source:gpu-context"
+  ],
+  "creates": [],
+  "starts": [
+    "process:head-load",
+    "process:finish-compile"
+  ],
+  "runtimes": [
+    "runtime:scene-runtime",
+    "runtime:plate-composite",
+    "runtime:environment-map"
+  ],
+  "raises": [
+    "request:prepare-core",
+    "request:load-v-details",
+    "request:load-motion",
+    "request:raster-layer",
+    "request:solve-face",
+    "request:show-grade"
+  ],
+  "faults": [
+    {
+      "code": "masculine-core-unavailable",
+      "when": "The masculine core can't be prepared; the feminine head is shown with a notice.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fallback"
+    },
+    {
+      "code": "head-load-failed",
+      "when": "The head couldn't load; a plain reason and Try again.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "context-lost",
+      "when": "The GL context was lost; the runtime is recreated when it is restored.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per scene node and body, while a visible view references the scene; a body change re-keys it.",
+  "x-friction": [
+    {
+      "gap": "Today one head attachment holds about 25 hand-built releases, and the V's own services live and die with the GPU scene.",
+      "capability": "host-objects-per-node",
+      "closes": "Host objects per scene and body, released whole on failure, with the V's state outside them."
+    },
+    {
+      "gap": "Finish programs are compiled ahead while idle: the runtime's own background work must yield to frames.",
+      "capability": "frame-timing",
+      "closes": "Runtime background work scheduled under the frame budget."
+    }
+  ]
+}

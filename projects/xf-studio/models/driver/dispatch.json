@@ -1,0 +1,83 @@
+{
+  "kind": "driver",
+  "id": "dispatch",
+  "owner": "platform",
+  "summary": "Checks each intent a person, a palette, a tour or a script sends against the target's capability in the same cycle, then turns it into a commit, a session entry or a request.",
+  "status": "both",
+  "replaces": [
+    "action-consequences",
+    "action-descriptor-kit",
+    "context-menu",
+    "eye-makeup-descriptors",
+    "platform/api/actions",
+    "platform/api/capability",
+    "platform/core/registry",
+    "studio-action-descriptors",
+    "studio-application",
+    "studio-context-targets"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:apply-intent"
+  ],
+  "demands": [
+    "source:pointer-input",
+    "source:key-input",
+    "operator:capability",
+    "operator:actions-for",
+    "operator:context-for",
+    "operator:limits-for",
+    "operator:consequence",
+    "operator:commit-intent"
+  ],
+  "creates": [
+    "a keyed family of capability nodes, one per target and action kind shown, collected when no panel shows them"
+  ],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:undo",
+    "request:edit-transaction",
+    "request:pick-file",
+    "request:export-file",
+    "request:check-mod",
+    "request:build-mod",
+    "request:plan-install",
+    "request:apply-install",
+    "request:prepare-v",
+    "request:set-up-wolvenkit",
+    "request:prepare-core",
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "unavailable",
+      "when": "The intent's capability is off; the refusal carries its plain reason.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "stale",
+      "when": "The target changed in another window since the intent was made.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "outside-limits",
+      "when": "An input outside the action's declared limits.",
+      "fault": "requester",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per window, while the window runs.",
+  "x-friction": [
+    {
+      "gap": "Capabilities are a large sparse family (about 200 kinds by every target shown), some costing 30 ms, re-read on every paint; today the heavy panels are throttled by hand.",
+      "capability": "per-key-nodes",
+      "closes": "Nodes made per key on first demand and collected when undemanded, with recomputation throttled and never during a gesture."
+    }
+  ]
+}

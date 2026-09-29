@@ -1,0 +1,83 @@
+{
+  "kind": "driver",
+  "id": "window",
+  "owner": "platform",
+  "summary": "The root of one window: its run is the window's lifetime, and it starts every other page driver as a child for as long as they are needed.",
+  "status": "both",
+  "replaces": [
+    "compose/exporters",
+    "compose/graph",
+    "compose/module-services",
+    "compose/modules",
+    "compose/renderers",
+    "compose/studio-registry",
+    "compose/system-families",
+    "compose/view-panels",
+    "compose/views",
+    "presentation-status",
+    "studio-main",
+    "studio-presentation",
+    "studio-startup",
+    "trusted-authoring-core",
+    "trusted-studio-bootstrap"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:open-window"
+  ],
+  "demands": [
+    "source:page-location",
+    "source:page-random",
+    "source:page-storage",
+    "source:display-environment",
+    "type:window",
+    "type:profile",
+    "type:preferences",
+    "operator:effective-theme"
+  ],
+  "creates": [
+    "the window node, with an actor ID from the random source and its library from the page address",
+    "the composition's catalogues (types, rules, operators, modules, renderers) as constant model nodes",
+    "one child run each of store, layout, paint, dispatch, views, preview setup, diagnostics and the legacy mirror"
+  ],
+  "starts": [
+    "process:window-run"
+  ],
+  "runtimes": [
+    "runtime:dom-root"
+  ],
+  "raises": [
+    "request:load-nodes",
+    "request:lay-out-window",
+    "request:paint-window",
+    "request:maintain-views",
+    "request:set-up-preview",
+    "request:mirror-workspace",
+    "request:migrate-library",
+    "request:warm-v"
+  ],
+  "faults": [
+    {
+      "code": "library-unreadable",
+      "when": "The store can't load the window's profile or library.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "migration-refused",
+      "when": "The one-time migration's dry run doesn't match; nothing is written.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "From the page loading until the window closes; aborting its token ends everything in the window.",
+  "x-friction": [
+    {
+      "gap": "Which library a window works in (the person's own or the verification copy) is chosen by the page address, and the host keeps two hand-made copies of every service.",
+      "capability": "separate-libraries",
+      "closes": "Several graphs side by side, chosen per window."
+    }
+  ]
+}

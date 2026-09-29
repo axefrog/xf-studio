@@ -1,0 +1,48 @@
+{
+  "kind": "driver",
+  "id": "view",
+  "owner": "views",
+  "summary": "Creates one visible view's runtime: its camera at the view's aspect, controls on its canvas, its presentation canvas and its editors.",
+  "status": "both",
+  "replaces": [
+    "canvas-resolution",
+    "device-pixel-ratio",
+    "platform/scene/camera-settle",
+    "platform/scene/orbit-limits",
+    "studio-ui/panels/viewports",
+    "viewport-adapter",
+    "viewport-size"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:show-view"
+  ],
+  "demands": [
+    "type:view",
+    "type:camera",
+    "type:tools",
+    "type:display",
+    "source:element-size",
+    "source:display-environment"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [
+    "runtime:view-runtime",
+    "runtime:light-rig-runtime"
+  ],
+  "raises": [
+    "request:show-scene",
+    "request:bind-view-input",
+    "request:draw-frame"
+  ],
+  "faults": [],
+  "lifetime": "Per view node, while its panel is visible.",
+  "x-friction": [
+    {
+      "gap": "Orbiting writes the camera every frame without history; only the settled pose is stored.",
+      "capability": "uncommitted-edits",
+      "closes": "Uncommitted edits collapsed into one stored entry when the camera settles."
+    }
+  ]
+}

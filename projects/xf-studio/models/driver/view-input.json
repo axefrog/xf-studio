@@ -1,0 +1,64 @@
+{
+  "kind": "driver",
+  "id": "view-input",
+  "owner": "platform",
+  "summary": "Binds pointer, wheel and key input for one visible view or flat editor, hit-tests through the view's runtime and feeds gestures, hints and cursors.",
+  "status": "both",
+  "replaces": [
+    "browser-viewport-device",
+    "features/eye-makeup/view/uv",
+    "head-camera-input",
+    "input-bindings",
+    "studio-ui/input-hints",
+    "surface-editor",
+    "surface-map",
+    "surface-occlusion",
+    "surface-tangent",
+    "uv-editor",
+    "uv-view",
+    "viewport-attachment"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:bind-view-input"
+  ],
+  "demands": [
+    "source:pointer-input",
+    "source:wheel-input",
+    "source:key-input",
+    "source:focus-input",
+    "source:element-size",
+    "type:editor-session",
+    "type:tools",
+    "operator:hit-target",
+    "operator:input-hints",
+    "operator:cursor"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [
+    "runtime:head-editor",
+    "runtime:uv-canvas"
+  ],
+  "raises": [
+    "request:edit-transaction",
+    "request:apply-intent"
+  ],
+  "faults": [
+    {
+      "code": "no-surface",
+      "when": "The head's surface isn't ready, so nothing can be picked on it.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per visible view or flat editor; its demand is the view panel being shown.",
+  "x-friction": [
+    {
+      "gap": "Picking on the head needs the scene's skinned, morphed plate and occlusion (host objects), answered synchronously inside the input's cycle.",
+      "capability": "host-objects-per-node",
+      "closes": "Host objects per node with a synchronous query port for plain answers."
+    }
+  ]
+}

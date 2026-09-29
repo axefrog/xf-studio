@@ -1,0 +1,53 @@
+{
+  "kind": "driver",
+  "id": "files",
+  "owner": "platform",
+  "summary": "The window's file workflows: one picker at a time, imports read into nodes and exports handed to the person.",
+  "status": "both",
+  "replaces": [
+    "browser-file-device",
+    "studio-file-operations"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:pick-file",
+    "request:export-file"
+  ],
+  "demands": [
+    "source:file-pick",
+    "operator:exportable",
+    "sink:download"
+  ],
+  "creates": [],
+  "starts": [
+    "process:file-pick-read",
+    "process:file-export",
+    "process:collection-import",
+    "process:collection-export",
+    "process:character-preset-transfer"
+  ],
+  "runtimes": [
+    "runtime:file-inputs"
+  ],
+  "raises": [
+    "request:decode-saved-v",
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "unreadable-file",
+      "when": "The picked file isn't a recipe, collection, save or preset this build reads.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "picker-busy",
+      "when": "Another picker is open in the window.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per window; a workflow lives from the pick to its commit, or from the request to the download."
+}

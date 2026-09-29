@@ -1,0 +1,68 @@
+{
+  "kind": "driver",
+  "id": "history",
+  "owner": "platform",
+  "summary": "Undo, Redo and jumps for one history scope, as compensating commits, with Redo valid only while the scope is exactly what the last Undo left.",
+  "status": "both",
+  "replaces": [
+    "authoring-history",
+    "history-labels",
+    "platform/api/history",
+    "platform/core/chunk-store",
+    "platform/core/look-history",
+    "studio-ui/panels/history"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:undo"
+  ],
+  "demands": [
+    "type:history-scope",
+    "type:preset-eye-makeup",
+    "type:preset-expression",
+    "type:v",
+    "type:view",
+    "type:light-rig",
+    "type:display",
+    "type:camera"
+  ],
+  "creates": [
+    "compensating commits for the scope's top step (a look step may span several presets)"
+  ],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "nothing-to-undo",
+      "when": "The scope has no step left.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "transaction-open",
+      "when": "A gesture or control edit is open in this window.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "compensation-conflicts",
+      "when": "Another window changed a field the step touched after it.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per history scope, while any window shows something in it.",
+  "x-friction": [
+    {
+      "gap": "Three separate histories exist today (look, view and lighting, character); each needs steps over sets of nodes and fields and redo cleared by any other commit in the set.",
+      "capability": "undo-groups",
+      "closes": "Undo over named sets of nodes and fields as an engine capability."
+    }
+  ]
+}

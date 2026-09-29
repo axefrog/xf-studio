@@ -1,0 +1,53 @@
+{
+  "kind": "driver",
+  "id": "views",
+  "owner": "views",
+  "summary": "Keeps a window's view graph consistent: collects nodes no view references, and performs New view, Duplicate, Compare lighting, Link and Unlink as layering.",
+  "status": "both",
+  "replaces": [
+    "camera-framing",
+    "camera-navigation",
+    "platform/api/view-graph",
+    "platform/core/view-graph",
+    "platform/core/view-tools",
+    "preview-actions",
+    "preview-view-graph",
+    "trusted-preview-services",
+    "view-actions"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:maintain-views"
+  ],
+  "demands": [
+    "type:view",
+    "type:scene",
+    "type:camera",
+    "type:light-rig",
+    "type:display",
+    "type:tools",
+    "type:camera-trail",
+    "operator:view-tools",
+    "operator:view-titles",
+    "operator:shared-slots"
+  ],
+  "creates": [
+    "references for Link, forks for Unlink, clones for Duplicate"
+  ],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:show-view",
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "main-view",
+      "when": "Closing the main view.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per window, while the window runs."
+}

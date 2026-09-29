@@ -1,0 +1,58 @@
+{
+  "kind": "driver",
+  "id": "store",
+  "owner": "platform",
+  "summary": "The window's connection to the library: loads what is demanded, appends commits, tracks acknowledgements and pulls others' commits.",
+  "status": "both",
+  "replaces": [
+    "platform/graph-adapters/browser-graph-store"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:store-commits",
+    "request:load-nodes"
+  ],
+  "demands": [
+    "source:graph-store",
+    "source:host-push"
+  ],
+  "creates": [],
+  "starts": [
+    "process:store-append",
+    "process:store-sync",
+    "process:store-load"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:store-operation"
+  ],
+  "faults": [
+    {
+      "code": "store-refused",
+      "when": "The store refused an append (stale, conflict).",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "store-unreachable",
+      "when": "The host doesn't answer; commits wait as pending.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per window and library.",
+  "x-friction": [
+    {
+      "gap": "Unacknowledged commits need a copy that survives a crash of the page and the host; today the workspace blob plays that role.",
+      "capability": "durable-pending",
+      "closes": "Pending changes kept durably until the store acknowledges them."
+    },
+    {
+      "gap": "Nothing pushes other windows' commits.",
+      "capability": "live-sync",
+      "closes": "A push transport feeding the store's change counter."
+    }
+  ]
+}

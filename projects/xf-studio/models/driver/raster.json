@@ -1,0 +1,62 @@
+{
+  "kind": "driver",
+  "id": "raster",
+  "owner": "eye-makeup",
+  "summary": "Keeps every shown layer's raster current: one job per changed layer at the current tier, the edited layer first, shared by every V wearing the preset.",
+  "status": "both",
+  "replaces": [
+    "authoring-preview-coordinator",
+    "authoring-preview-policy",
+    "authoring-render-scheduler",
+    "glitter-measurements",
+    "layer-render-queue",
+    "preview-layer-change"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:raster-layer"
+  ],
+  "demands": [
+    "type:preset-eye-makeup",
+    "type:preferences",
+    "source:display-environment",
+    "operator:raster-tier",
+    "operator:raster-readiness",
+    "operator:optical-key",
+    "operator:glitter-measurement"
+  ],
+  "creates": [
+    "a keyed family of raster nodes, one per raster key"
+  ],
+  "starts": [],
+  "runtimes": [
+    "runtime:layer-textures"
+  ],
+  "raises": [
+    "request:run-raster-job"
+  ],
+  "faults": [
+    {
+      "code": "fine-glitter-outside-region",
+      "when": "A layer's fine glitter lies outside the eye region; its readiness is blocked with a plain reason.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "worker-lost",
+      "when": "The raster worker crashed; readiness shows updating while it is recreated.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per preset revision and tier, while any visible view or flat editor shows the preset.",
+  "x-friction": [
+    {
+      "gap": "Today's raster slots are indices into the live recipe and are remapped by hand after a reorder.",
+      "capability": "ordered-maps",
+      "closes": "Change reports per map key, so rasters are keyed by layer ID."
+    }
+  ]
+}
