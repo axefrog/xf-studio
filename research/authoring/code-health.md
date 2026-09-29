@@ -634,6 +634,7 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 ## New subsystems since last review
 
+None since the last deep review.
 
 ## Subsystem register
 
