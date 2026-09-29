@@ -70,8 +70,8 @@
     ]
   },
   "redactedNameHashes": {
-    "about": "SHA-256 of names people asked us not to use, lower-cased with spaces, underscores and hyphens removed. The repository check refuses any tracked text that contains one as a word or two adjacent words. Only hashes are stored, so the names never enter the repository.",
-    "hashes": ["0f6974d5f287835d9e2fac7a8cbb0ac76f9d2169366a8713218c81e865b42e63"]
+    "about": "SHA-256 of names that must never appear in the public repository (people who asked not to be named, and private projects), lower-cased with spaces, underscores and hyphens removed. The repository check refuses any tracked text that contains one as a word or two adjacent words. Only hashes are stored, so the names never enter the repository.",
+    "hashes": ["0f6974d5f287835d9e2fac7a8cbb0ac76f9d2169366a8713218c81e865b42e63", "8b76c21be0fdd0364a38db195165b4bb3e72b957e257377506a50ca5bd68a5c5", "21e5c703b0b5e174bf633800cb09b83b392ea0cb7d0843766eea28894a8ace68"]
   },
   "vectors": {
     "userPath": [

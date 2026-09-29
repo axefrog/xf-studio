@@ -30,7 +30,7 @@ ROLE_LOCAL = _compile(DATA['emailExemptions']['local'])
 NOT_ADDRESS_DOMAINS = [_compile(spec) for spec in DATA['emailExemptions']['domains']]
 
 USER_FOLDER, MEDIA_FOLDER, EMAIL_ADDRESS = 'user folder', 'personal media folder', 'e-mail address'
-REDACTED_NAME = 'a name someone asked us not to use (tools/private-data.json redactedNameHashes)'
+REDACTED_NAME = 'a name that must not appear in the public repository (tools/private-data.json redactedNameHashes)'
 KINDS = frozenset({USER_FOLDER, MEDIA_FOLDER, EMAIL_ADDRESS, REDACTED_NAME})
 WORD = re.compile(r'[A-Za-z0-9]+')
 # A repository-only rule: the reference collection's private media folder.

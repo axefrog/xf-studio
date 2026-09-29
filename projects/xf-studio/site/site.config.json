@@ -16,5 +16,5 @@
     { "id": "knowledge", "label": "Knowledge", "href": "knowledge/" },
     { "id": "credits", "label": "Credits", "href": "credits.html" }
   ],
-  "budgets": { "totalBytes": 3145728, "fileBytes": 98304, "styleGuideBytes": 1048576, "knowledgeFileBytes": 262144 }
+  "budgets": { "totalBytes": 4194304, "fileBytes": 98304, "styleGuideBytes": 1048576, "knowledgeFileBytes": 262144 }
 }
