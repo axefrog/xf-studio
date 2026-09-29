@@ -1,4 +1,5 @@
 import type { DesktopAppActions } from "./desktop-app";
+import type { UpdateCheckActions } from "./update-check-actions";
 import { CollectionApplication } from "./collection-application";
 import type { AuthoringPreviewCoordinator } from "./authoring-preview-coordinator";
 import type { CollectionTransport } from "./collection-service";
@@ -40,6 +41,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   previewSetup?: PreviewSetupActions;
   /** "Get the desktop app" (localhost only). */
   desktopApp?: DesktopAppActions;
+  /** Checking for a newer XF Studio, through the host. */
+  updates?: UpdateCheckActions;
   /** Opens XF Studio's own public pages for the Help view. */
   links?: ProjectLinkPort;
   /** The host's About view (the desktop app's). */
@@ -96,7 +99,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, modInstall: options.modInstall, previewSetup: options.previewSetup,
-    desktopApp: options.desktopApp, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules });
+    desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection,

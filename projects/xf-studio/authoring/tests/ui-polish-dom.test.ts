@@ -5,6 +5,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { InstallDetectionActions } from "../src/install-detection-actions";
 import { LocalSetupActions, type LocalSetupTransport } from "../src/local-setup-actions";
 import { ModInstallActions, type ModInstallPlan } from "../src/mod-install-actions";
+import { UpdateCheckActions, type UpdateCheckTransport } from "../src/update-check-actions";
+import { emptyUpdateCheckMemory, UpdateCheckService } from "../src/update-check";
+import { simulatedReleases } from "../src/update-check-github";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());
@@ -68,7 +71,7 @@ const PLAN = (over: Partial<ModInstallPlan> = {}): ModInstallPlan => ({ schema: 
     "Nothing else in your mod list changes."], ...over });
 const VIEW = (fields: Record<string, unknown> = {}) => ({ revision: 1, source: "primary", overridden: [],
   fields: { gameRoot: null, launchRoute: "mo2", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: null, eyePlateHead: "installed",
-    savesDirectory: null, ...fields },
+    savesDirectory: null, checkForUpdates: true, ...fields },
   saves: { source: "detected", detected: { display: "Saved Games\\CD Projekt Red\\Cyberpunk 2077", found: true }, chosenFound: null },
   readiness: { build: { ready: false, issues: [{ code: "game_root_unset", reason: "Choose your Cyberpunk 2077 folder." }], limits: [] },
     sourceDiscovery: { ready: false, issues: [], limits: [] } },
@@ -85,7 +88,9 @@ type HarnessOptions = { plan?: ModInstallPlan; files?: Record<string, unknown>; 
   /** The prepared game files the character context reports (Settings › Tools shows them). */
   prepared?: { bytes: number | null; clearing?: boolean; freed?: number };
   /** The host's answer to a save, in place of accepting it (a refused saves folder). */
-  refuse?: (fields: Record<string, unknown>) => { code: string; error: string } | null };
+  refuse?: (fields: Record<string, unknown>) => { code: string; error: string } | null;
+  /** The host's update check (Settings › Updates); without it checking isn't available. */
+  updates?: UpdateCheckTransport };
 async function packageHarness(options: HarnessOptions = {}) {
   const { packagePanel } = await import("../src/studio-ui/panels/collection");
   return panelHarness(options, rt => packagePanel(rt as never));
@@ -119,6 +124,7 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
     return { ok: true, status: 200, data: { ok: true } };
   }, () => [{ product: "p1", candidateId: "c1", modName: "XF Eye Artistry" }]);
   const listeners = new Set<() => void>();
+  const updates = new UpdateCheckActions(options.updates ?? null);
   const files = options.files ?? { package: BUILD };
   const port = {
     files: { capability: () => ({ available: true }), snapshot: () => files },
@@ -134,9 +140,10 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
     diagnostics: { expected: (code?: string) => code === "package_build_unavailable", capability: () => ({ available: true }), snapshot: () => ({ mode: null }),
       dispatch: async () => ({ ok: true, message: "" }) },
     preferences: { snapshot: () => ({ researchTools: false }) },
+    updates: { snapshot: () => updates.snapshot(), capability: (a: never) => updates.capability(a), dispatch: (a: never) => updates.dispatch(a) },
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
-  for (const service of [setup, detection, install]) service.subscribe(() => { for (const listener of listeners) listener(); });
+  for (const service of [setup, detection, install, updates]) service.subscribe(() => { for (const listener of listeners) listener(); });
   const feedback = new Feedback();
   const dispatched: unknown[] = [];
   const rt = { port, feedback, finishes: [], anchors: { register() {} }, dock: { reveal() {} }, request: async () => {}, dispatch: (action: unknown) => { dispatched.push(action); return true; },
@@ -361,7 +368,7 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Steam\\Cyberpunk 2077" });
     // The groups are plain, in order.
     expect(h.root.querySelectorAll("[data-settings-section]").map(section => section.getAttribute("data-settings-section")))
-      .toEqual(["game", "saves", "tools", "appearance", "privacy"]);
+      .toEqual(["game", "saves", "tools", "appearance", "updates", "privacy"]);
     h.panel.spec.element.remove();
   });
 
@@ -431,6 +438,30 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     expect(text(tools)).toContain("Prepared game files: 1.5 GB");
     buttonNamed(tools, "Clear prepared game files")!.click();
     expect(h.dispatched.at(-1)).toEqual({ kind: "character.clearPreparedFiles" });
+    h.panel.spec.element.remove();
+  });
+
+  test("Updates: the check at start is a saved switch, on by default, and Check now says what it found in place (readiness item 22)", async () => {
+    const service = (kind: "newer" | "current" | "offline") => new UpdateCheckService({ installed: "0.1.0-alpha.2", now: () => 1, automatic: () => true,
+      store: { load: emptyUpdateCheckMemory, save: () => {} }, releases: simulatedReleases(kind, "0.1.0-alpha.2") });
+    let answer = service("current");
+    const h = await settingsHarness({ updates: async body => ({ ok: true, status: 200, data: body.action === "check" ? await answer.check(new AbortController().signal) : null }) });
+    const updates = h.root.querySelector("[data-settings-section=updates]")!;
+    const toggle = updates.querySelector("input[role=switch]") as unknown as LightElement & { checked: boolean };
+    expect(text(updates)).toContain("Check for updates when XF Studio starts");
+    expect(toggle.checked).toBe(true);
+    toggle.checked = false;
+    toggle.dispatchEvent(lightEvent("change"));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(h.saved.at(-1)).toEqual({ ...h.setup.snapshot().view!.fields, checkForUpdates: false });
+    const read = async () => { buttonNamed(updates, "Check now")!.click(); await new Promise(resolve => setTimeout(resolve, 0)); h.paint(); return text(updates); };
+    expect(await read()).toContain("You have the newest version, 0.1.0-alpha.2.");
+    expect(buttonNamed(updates, "Open the releases page")!.hidden).toBe(true);
+    answer = service("newer");
+    expect(await read()).toContain("XF Studio 0.2.0-beta.1 is available. You have 0.1.0-alpha.2.");
+    expect(buttonNamed(updates, "Open the releases page")!.hidden).toBe(false);
+    answer = service("offline");
+    expect(await read()).toContain("XF Studio couldn't check for updates just now. New versions are always on the releases page.");
     h.panel.spec.element.remove();
   });
 

@@ -52,6 +52,7 @@ import { UIPreferenceActions } from "./ui-preferences";
 import { storedViewGraph } from "./preview-view-graph";
 import { DiagnosticsActions } from "./diagnostics/actions";
 import { createBrowserDiagnostics } from "./diagnostics/browser-device";
+import { createBrowserUpdateCheck } from "./browser-update-check-device";
 import { pageFailure, setPageDiagnostics } from "./diagnostics/page-sink";
 
 export type StudioHost = {
@@ -270,6 +271,8 @@ async function start(host: StudioHost, root: HTMLElement) {
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }
     } },
     previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about, desktopApp: host.desktopApp,
+    // Both hosts serve the update check; a verification workspace keeps what it found apart (UI-98).
+    updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check"),
     transport: collectionTransport(verification ? "/api/verification/collections" : "/api/collections"),
     onEditorRestored: () => { previewDevice.coordinator.resetStack(); drawUV(); },
     onRecipeImported: persist,

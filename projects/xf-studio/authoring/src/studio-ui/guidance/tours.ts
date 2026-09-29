@@ -73,7 +73,7 @@ export const TOURS: readonly Tour[] = [
         body: "**Build** makes your mod for a feminine and a masculine V: the masculine character creator gets its own row with the same looks. The masculine row hasn't been tried in the game yet; **What's not in this version yet** in Help lists what's still to check." },
         buttons: [{ label: "Open Mod package", action: { kind: "panel", panel: "package" } }] },
       { anchor: "header.help", content: { title: "Tell us what doesn't work",
-        body: "This is a beta, and your reports make it work on more setups. **Report a problem…** in Help prepares a report you review first; nothing is sent by itself. **Check for updates** in Help opens the releases page.\n\nEvery tour, including this one, is in **Help** ([[key:shell.help]])." } },
+        body: "This is a beta, and your reports make it work on more setups. **Report a problem…** in Help prepares a report you review first; nothing is sent by itself. XF Studio tells you when a newer version is out; **Check for updates** in Help looks now.\n\nEvery tour, including this one, is in **Help** ([[key:shell.help]])." } },
     ],
   },
 ];

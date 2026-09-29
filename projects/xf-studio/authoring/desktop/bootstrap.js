@@ -164,7 +164,7 @@ async function refreshUpdate() {
 function updateLine(state) {
   const next = state.available?.version;
   switch (state.phase) {
-    case "unavailable": return state.reason || "Automatic updates are off. Download new versions from the XF Studio releases page on GitHub.";
+    case "unavailable": return state.reason || "XF Studio tells you when a newer version is out (Settings › Updates), but doesn't install it itself yet. Download new versions from the XF Studio releases page on GitHub.";
     case "idle": return `You have XF Studio ${state.installed.version}. Check for an update whenever you like.`;
     case "checking": return "Checking for an update…";
     case "available": return `XF Studio ${next} is available. Download it when you're ready; nothing changes until you restart.`;

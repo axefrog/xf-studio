@@ -20,7 +20,11 @@ export interface LocalSettings {
   sourceCache: { directory: string | null; maxBytes: number };
   preview: { cacheDirectory: string | null; outputDirectory: string | null };
   installMode: InstallMode;
-  updates: { channel: UpdateChannel; checkAutomatically: boolean };
+  /**
+   * `checkOnStart`: whether XF Studio looks for a newer version when it starts (on by default; Settings › Updates). It replaced
+   * `checkAutomatically`, which earlier versions saved as off without anyone choosing it, so that value is dropped rather than kept.
+   */
+  updates: { channel: UpdateChannel; checkOnStart: boolean };
   /** "base-game" builds with the unmodified head when an installed head mod isn't supported yet. */
   eyePlateHead: EyePlateHead;
   /** Where the game's saves are, when the person chose a folder; null uses the detected Saved Games folder. */
@@ -40,7 +44,7 @@ export const defaultLocalSettings = (): LocalSettings => ({
   sourceCache: { directory: null, maxBytes: 2 * 1024 ** 3 },
   preview: { cacheDirectory: null, outputDirectory: null },
   installMode: "none",
-  updates: { channel: "stable", checkAutomatically: false },
+  updates: { channel: "stable", checkOnStart: true },
   eyePlateHead: "installed",
   savesDirectory: null,
 });
@@ -79,6 +83,8 @@ const profile = (value: unknown): string | null => {
  * still point the localhost server at another with `XFS_PACKAGE_BUN`).
  */
 const RETIRED_FIELDS = ["plateInput", "pythonExecutable", "bunExecutable"] as const;
+/** `updates.checkAutomatically` was saved as off by default while nothing used it or let anyone change it; `checkOnStart` replaced it. */
+const RETIRED_UPDATE_FIELDS = ["checkAutomatically"] as const;
 
 /** Strict parsing is intentional: unknown fields could accidentally persist secrets. */
 export function parseLocalSettings(value: unknown): LocalSettings {
@@ -94,8 +100,8 @@ export function parseLocalSettings(value: unknown): LocalSettings {
   const preview = object(root.preview, "Preview");
   keys(preview, ["cacheDirectory", "outputDirectory"], "Preview");
   const updates = object(root.updates, "Updates");
-  keys(updates, ["channel", "checkAutomatically"], "Updates");
-  if (typeof updates.checkAutomatically !== "boolean") throw Error("Automatic update check preference is invalid.");
+  keys(updates, ["channel", "checkOnStart", ...RETIRED_UPDATE_FIELDS], "Updates");
+  if (updates.checkOnStart !== undefined && typeof updates.checkOnStart !== "boolean") throw Error("Automatic update check preference is invalid.");
   return {
     schema: LOCAL_SETTINGS_SCHEMA,
     revision: root.revision as number,
@@ -110,7 +116,8 @@ export function parseLocalSettings(value: unknown): LocalSettings {
       outputDirectory: path(preview.outputDirectory, "Preview output directory") },
     installMode: choice(root.installMode, ["none", "direct", "mo2"], "Install mode"),
     updates: { channel: choice(updates.channel, ["stable", "canary"], "Update channel"),
-      checkAutomatically: updates.checkAutomatically as boolean },
+      // Settings saved before this choice existed check at start.
+      checkOnStart: updates.checkOnStart === undefined ? true : updates.checkOnStart as boolean },
     // Settings saved before this choice existed use the head the game loads.
     eyePlateHead: root.eyePlateHead === undefined ? "installed" : choice(root.eyePlateHead, EYE_PLATE_HEAD_CHOICES, "Eye plate head"),
     // Settings saved before this choice existed use the detected saves folder.
@@ -125,7 +132,8 @@ export function parseLocalSettings(value: unknown): LocalSettings {
 export function migrateLocalSettings(value: unknown): { settings: LocalSettings; migrated: boolean } {
   const input = object(value, "Settings");
   if (input.schema === LOCAL_SETTINGS_SCHEMA) {
-    const retired = RETIRED_FIELDS.filter(key => key in input);
+    const updates = input.updates && typeof input.updates === "object" ? input.updates as Record<string, unknown> : null;
+    const retired = [...RETIRED_FIELDS.filter(key => key in input), ...(updates ? RETIRED_UPDATE_FIELDS.filter(key => key in updates) : [])];
     const current = Object.fromEntries(Object.entries(input).filter(([key]) => !(RETIRED_FIELDS as readonly string[]).includes(key)));
     return { settings: parseLocalSettings(current), migrated: retired.length > 0 };
   }

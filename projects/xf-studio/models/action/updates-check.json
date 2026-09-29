@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "updates-check",
+  "owner": "setup",
+  "summary": "Check for updates (Help, the palette, Settings › Updates): raises the check-for-release request and says what it found.",
+  "status": "both",
+  "replaces": [
+    "update-check-actions"
+  ],
+  "name": "updates.check",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A host answers the update check and the person's own check isn't already running; it pre-empts a check at start.",
+    "refusals": [
+      {
+        "code": "busy",
+        "reason": "Checking for updates…"
+      },
+      {
+        "code": "unavailable",
+        "reason": "This copy of XF Studio can't check for updates."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:check-for-release"
+  },
+  "undo": "none"
+}

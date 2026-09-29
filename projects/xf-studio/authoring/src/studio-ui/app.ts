@@ -1,4 +1,5 @@
 import { allowsNativeTextMenu } from "../context-menu";
+import { checkForUpdatesNow, scheduleStartupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
 import type { StudioAction } from "../studio-application";
 import type { StudioFileAction } from "../studio-file-operations";
@@ -344,6 +345,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     else view.openReference();
   });
   header.bindPalette(() => openPalette(commands));
+  // The check at start (the host skips it when Settings › Updates turns it off): after first paint, once the page is idle.
+  scheduleStartupUpdateCheck(rt, run => requestAnimationFrame(() => setTimeout(() =>
+    typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout: 10_000 }) : run(), 2000)));
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, layouts, preferences: () => port.preferences.snapshot(),
     guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port)) } } });
   return { dock, runtime: rt };
@@ -822,9 +826,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
         ...always, run: () => { if (entry.opens) void openDesktopApp(rt); else openDesktopAppSheet(rt); } }; })()] : []),
     { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
       keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
-    // A way to learn about updates (release-readiness-audit.md item 22): the releases page, opened by the host; nothing is checked by itself.
-    { id: "help.updates", title: "Check for updates", group: "Help", icon: "link", keywords: "update new version release download latest beta github",
-      ...always, run: () => void port.links.open("project-releases").then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Help", outcome.message); }) },
+    // A way to learn about updates (release-readiness-audit.md item 22): checks now and says what it found, with the releases page.
+    { id: "help.updates", title: "Check for updates", group: "Help", icon: "refresh", keywords: "update new version release download latest beta github",
+      capability: () => port.updates.capability({ kind: "updates.check" }), run: () => void checkForUpdatesNow(rt, true) },
     { id: "help.report", title: "Report a problem…", group: "Help", icon: "warning", keywords: "bug issue error crash diagnostics log github",
       capability: () => port.diagnostics.capability({ kind: "diagnostics.prepareReport" }), run: () => { openReportDialog(rt, null); } },
     ...(["deep", "normal"] as const).filter(mode => (port.diagnostics.snapshot().mode?.mode ?? "normal") !== mode).map(mode => ({

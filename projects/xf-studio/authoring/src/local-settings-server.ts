@@ -6,7 +6,10 @@ import { LocalSettingsStore } from "./local-settings-store";
 import { EYE_PLATE_HEAD_CHOICES, EYE_PLATE_HEAD_SETTING, type EyePlateHead } from "./eye-plate-head-choice";
 
 export type LocalSetupFields = Pick<LocalSettings, "gameRoot" | "launchRoute" | "mo2Root" | "mo2ProfileId" |
-  "manualModRoot" | "wolvenKitCli" | "eyePlateHead" | "savesDirectory">;
+  "manualModRoot" | "wolvenKitCli" | "eyePlateHead" | "savesDirectory"> & {
+  /** Settings › Updates: whether XF Studio looks for a newer version when it starts (`updates.checkOnStart`). */
+  checkForUpdates: boolean;
+};
 /**
  * Where the game's saves are read from (the Save Explorer and its endpoints): the folder the person chose, else the one the host
  * detected, unless a developer override (`XFS_SAVES_DIR`, localhost only) names another. The detected folder is only ever described
@@ -36,7 +39,17 @@ export type LocalSetupView = {
   saves: LocalSavesView;
 };
 const fieldNames = ["gameRoot", "launchRoute", "mo2Root", "mo2ProfileId", "manualModRoot",
-  "wolvenKitCli", "eyePlateHead", "savesDirectory"] as const;
+  "wolvenKitCli", "eyePlateHead", "savesDirectory", "checkForUpdates"] as const;
+/** The view's fields from the saved settings, and back: every field is a setting of the same name except `checkForUpdates`. */
+const viewFields = (settings: LocalSettings): LocalSetupFields => ({
+  ...Object.fromEntries(fieldNames.filter(key => key !== "checkForUpdates").map(key => [key, settings[key]])) as Omit<LocalSetupFields, "checkForUpdates">,
+  checkForUpdates: settings.updates.checkOnStart });
+const settingsFields = (settings: LocalSettings, fields: Partial<LocalSetupFields>): LocalSettingsDraft => {
+  const { checkForUpdates, ...rest } = fields;
+  if (checkForUpdates !== undefined && typeof checkForUpdates !== "boolean") throw Error("Invalid local setup fields.");
+  return { ...defaultLocalSettings(), ...settings, ...rest,
+    updates: { ...settings.updates, ...(checkForUpdates === undefined ? {} : { checkOnStart: checkForUpdates }) } };
+};
 const overrideNames = ["XFS_PACKAGE_GAMEPATH", "XFS_PACKAGE_PLATE", "XFS_PACKAGE_WOLVENKIT", "XFS_PACKAGE_BUN"] as const;
 const isDirectory = (path: string) => { try { return statSync(path).isDirectory(); } catch { return false; } };
 /**
@@ -73,7 +86,7 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
     const effective = { ...loaded.settings, gameRoot: paths.gamepath,
       wolvenKitCli: paths.wolvenkit };
     return { revision: loaded.settings.revision, source: loaded.source,
-      fields: Object.fromEntries(fieldNames.map(key => [key, loaded.settings[key]])) as unknown as LocalSetupFields,
+      fields: viewFields(loaded.settings),
       readiness: evaluateLocalReadiness(effective, typeof host === "function" ? host(effective) : host),
       overridden: overrideNames.filter(name => !!env[name]),
       eyePlateHead: { label: EYE_PLATE_HEAD_SETTING.label,
@@ -117,7 +130,7 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
         if (refusal) return json(refusal, 400);
         if (typeof input.fields.savesDirectory === "string") input.fields.savesDirectory = input.fields.savesDirectory.trim();
       }
-      const draft: LocalSettingsDraft = { ...defaultLocalSettings(), ...current.settings, ...input.fields };
+      const draft = settingsFields(current.settings, input.fields);
       store.save(draft, input.revision);
       return json(await view());
     } catch (error) {

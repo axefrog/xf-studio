@@ -51,6 +51,8 @@ import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions
 import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
 import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
+import { updateCheckEndpoints } from "../src/update-check-host";
+import { gitHubReleases } from "../src/update-check-github";
 import type { LocalSettings } from "../src/local-settings";
 import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host-log";
 import { createDiagnosticsHandler, DIAGNOSTICS_PREFIX, withRequestDiagnostics } from "../src/diagnostics/host-endpoint";
@@ -174,6 +176,12 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     buildHash: version.buildHash }, updateTrial?.native ?? null,
     updateTrial?.trust ?? { verifiedPrivateFeed: false, signedRelease: false, twoVersionTrialAccepted: false },
     updateGuard || null);
+  // Checking for a newer XF Studio against its GitHub releases (the check at start follows Settings › Updates). A copy whose version
+  // metadata is missing answers that it couldn't check.
+  const updateCheckRequests = updateCheckEndpoints({ installed: version.version, now: () => Date.now(),
+    releases: gitHubReleases(fetch, { userAgent: `XF-Studio/${version.version}` }),
+    settings: { directory: dataRoot, checkOnStart: () => settingsStore.load().settings.updates.checkOnStart },
+    verification: { directory: verificationSettingsDirectory(dataRoot), checkOnStart: () => verificationSettings.load().settings.updates.checkOnStart } });
   const savedSettings = () => { try { return settingsStore.load().settings; } catch { return null; } };
   // WolvenKit: a CLI path in Build setup wins; otherwise XF Studio's own copy, downloaded with consent.
   const wolvenKit = new WolvenKitSetupHost({ root: desktopToolsRoot(dataRoot), configured: () => savedSettings()?.wolvenKitCli ?? null,
@@ -402,6 +410,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: logTo("package"),
           managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);
       if (url.pathname === "/api/local-settings") return localSettings(routedRequest);
+      if (url.pathname === "/api/update-check" || url.pathname === "/api/verification/update-check") return updateCheckRequests[url.pathname](routedRequest);
       if (url.pathname === "/api/verification/local-settings") return verificationLocalSettings(routedRequest);
       if (url.pathname === "/api/mod-install") return modInstallRequest(routedRequest);
       if (url.pathname === "/api/verification/mod-install") return verificationModInstallRequest(routedRequest);

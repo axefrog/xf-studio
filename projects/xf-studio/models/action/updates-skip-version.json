@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "updates-skip-version",
+  "owner": "setup",
+  "summary": "Skip this version (the notice at start): the check at start stops announcing that version; a newer one is announced again.",
+  "status": "both",
+  "replaces": [
+    "update-check-actions"
+  ],
+  "name": "updates.skipVersion",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "version"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A host answers the update check and a version is named.",
+    "refusals": [
+      {
+        "code": "invalid-value",
+        "reason": "No version to skip."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:check-for-release"
+  },
+  "undo": "none"
+}

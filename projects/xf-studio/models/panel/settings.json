@@ -14,7 +14,8 @@
     "operator:setup-readiness",
     "operator:frameworks",
     "operator:effective-cli",
-    "operator:saves-folder"
+    "operator:saves-folder",
+    "request:check-for-release"
   ],
   "actions": [
     "action:setup-pick-folder",
@@ -35,6 +36,7 @@
     "action:wolvenkit-cancel",
     "action:wolvenkit-install",
     "action:wolvenkit-recheck",
-    "action:wolvenkit-refresh"
+    "action:wolvenkit-refresh",
+    "action:updates-check"
   ]
 }

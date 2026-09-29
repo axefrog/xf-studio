@@ -1,0 +1,53 @@
+{
+  "kind": "process",
+  "id": "release-check-fetch",
+  "owner": "setup",
+  "summary": "Reading XF Studio's published releases from GitHub.",
+  "status": "target",
+  "driver": "driver:release-check",
+  "work": "Lists the releases (pre-releases included, drafts left out) and compares the newest with the running version by SemVer precedence.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "latest": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "newer": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "latest",
+      "newer"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "offline",
+              "rate-limited",
+              "unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The request's signal is aborted (the page stopped waiting, or the person's check pre-empted the check at start); the fetch stops.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host, background"
+}

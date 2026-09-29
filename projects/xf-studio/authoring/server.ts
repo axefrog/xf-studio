@@ -24,6 +24,9 @@ import { createLocalSettingsHandler } from "./src/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/install-detection-server";
 import { createSavesHandler } from "./src/features/save-explorer/host/saves-server";
 import { savesFolderProbe, savesHostSources } from "./src/saves-host-sources";
+import { updateCheckEndpoints } from "./src/update-check-host";
+import { gitHubReleases, simulatedReleases } from "./src/update-check-github";
+import desktopPackage from "./desktop/package.json";
 import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/desktop-app-host";
 import { packageToolPaths } from "./src/local-settings-readiness";
 import { LocalSettingsStore } from "./src/local-settings-store";
@@ -98,6 +101,14 @@ const detectionRequest = createInstallDetectionHandler(undefined, { settings: ()
 // Starts that setup or the app only on the person's confirmed click; a test copy or a verification workspace never starts anything.
 const detectDesktop = () => detectDesktopApp(createDesktopAppHostPort(), { desktopRoot: resolve(import.meta.dir, "desktop"),
   siteConfig: resolve(import.meta.dir, "..", "site", "site.config.json") });
+// Checking for a newer XF Studio against its GitHub releases. The version is the desktop app's (desktop/package.json is the single source).
+// An isolated server may simulate the answer (XFS_UPDATE_CHECK_FIXTURE=newer|current|offline) for tests and interface reviews.
+const updateFixture = state.isolated ? process.env.XFS_UPDATE_CHECK_FIXTURE : undefined;
+const updateCheckRequests = updateCheckEndpoints({ installed: desktopPackage.version, now: () => Date.now(),
+  releases: updateFixture === "newer" || updateFixture === "current" || updateFixture === "offline"
+    ? simulatedReleases(updateFixture, desktopPackage.version) : gitHubReleases(fetch, { userAgent: `XF-Studio/${desktopPackage.version}` }),
+  settings: { directory: state.settingsDirectory, checkOnStart: () => localSettings.load().settings.updates.checkOnStart },
+  verification: { directory: verificationSettingsDirectory(dataRoot), checkOnStart: () => verificationSettings.load().settings.updates.checkOnStart } });
 const desktopAppRequest = createDesktopAppHandler({ detect: detectDesktop, readOnly: state.isolated ? DESKTOP_APP_READ_ONLY_TEST_SERVER : undefined });
 const verificationDesktopAppRequest = createDesktopAppHandler({ detect: detectDesktop, readOnly: DESKTOP_APP_READ_ONLY_VERIFICATION });
 // Mod export: the shared package host service with localhost's adapter; each exporting feature's host prerequisites
@@ -253,6 +264,7 @@ const server = Bun.serve({
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(request);
     if (url.pathname === "/api/verification/saves" || url.pathname.startsWith("/api/verification/saves/")) return verificationSavesRequest(request);
+    if (url.pathname === "/api/update-check" || url.pathname === "/api/verification/update-check") return updateCheckRequests[url.pathname](request);
     if (url.pathname === "/api/desktop-app") return desktopAppRequest(request);
     if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);
     if (url.pathname === "/api/preview-core") return previewCoreRequest(request);

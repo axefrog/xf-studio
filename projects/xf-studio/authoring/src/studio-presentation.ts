@@ -19,6 +19,7 @@ import type { LocalSetupActions } from "./local-setup-actions";
 import { InstallDetectionActions } from "./install-detection-actions";
 import { ModInstallActions } from "./mod-install-actions";
 import { DesktopAppActions, type DesktopAppState } from "./desktop-app";
+import { UpdateCheckActions, type UpdateCheckState } from "./update-check-actions";
 import type { PreviewSetupActions, PreviewSetupSnapshot } from "./preview-setup";
 import type { ProjectLink } from "./project-links";
 import { DIAGNOSTICS_DESCRIPTORS, type DiagnosticsActions, type DiagnosticsSnapshot } from "./diagnostics/actions";
@@ -219,6 +220,11 @@ export type StudioPresentationPort<Slot> = {
   readonly desktopApp: Pick<DesktopAppActions, "offered" | "capability" | "dispatch" | "descriptors"> & {
     snapshot(): ReadonlyDeep<DesktopAppState>;
   };
+  /**
+   * Checking for a newer XF Studio (release-readiness-audit.md item 22): the check at start, which the host skips when Settings turns it
+   * off, the person's own check, and skipping a version. A fixture port without a host refuses each one.
+   */
+  readonly updates: Pick<UpdateCheckActions, "capability" | "dispatch" | "descriptors"> & { snapshot(): ReadonlyDeep<UpdateCheckState> };
   /** XF Studio's public pages (knowledge pages, issue tracker) for the Help view. */
   readonly links: ProjectLinkPort;
   /** The host's About view, where it has one. */
@@ -238,6 +244,7 @@ export type StudioPresentationPort<Slot> = {
     modInstall: ReturnType<ModInstallActions["snapshot"]>;
     previewSetup: PreviewSetupSnapshot;
     desktopApp: DesktopAppState;
+    updates: UpdateCheckState;
   }>;
   subscribe(listener: () => void): () => void;
 };
@@ -267,6 +274,8 @@ export function createStudioPresentation<Slot>(sources: {
   previewSetup?: PreviewSetupActions;
   /** The localhost host's desktop-app offer; without it (the desktop app, fixtures) nothing about the desktop app is offered. */
   desktopApp?: DesktopAppActions;
+  /** The host's update check; without it (fixtures) checking says it isn't available here. */
+  updates?: UpdateCheckActions;
   /** Optional for fixtures; without it the Help view says the page can't be opened here. */
   links?: ProjectLinkPort;
   /** The host's About view; without it About is refused as not part of this host. */
@@ -416,6 +425,10 @@ export function createStudioPresentation<Slot>(sources: {
   const desktopApp: StudioPresentationPort<Slot>["desktopApp"] = Object.freeze({
     offered: () => desktopSource.offered(), snapshot: () => desktopSource.snapshot(), capability: (action: Parameters<DesktopAppActions["capability"]>[0]) => desktopSource.capability(action),
     dispatch: (action: Parameters<DesktopAppActions["dispatch"]>[0]) => desktopSource.dispatch(action), descriptors: () => desktopSource.descriptors() });
+  const updateSource = sources.updates ?? new UpdateCheckActions(null);
+  const updates: StudioPresentationPort<Slot>["updates"] = Object.freeze({
+    snapshot: () => updateSource.snapshot(), capability: (action: Parameters<UpdateCheckActions["capability"]>[0]) => updateSource.capability(action),
+    dispatch: (action: Parameters<UpdateCheckActions["dispatch"]>[0]) => updateSource.dispatch(action), descriptors: () => updateSource.descriptors() });
   const setup = sources.previewSetup;
   const previewSetup: StudioPresentationPort<Slot>["previewSetup"] = setup ? {
     snapshot: () => setup.snapshot(), capability: action => setup.capability(action),
@@ -457,13 +470,13 @@ export function createStudioPresentation<Slot>(sources: {
     // A save without a part saves the feature's live part, serialized with its own codec.
     presets: Object.freeze({ list: (feature: string) => a.presetList(feature), sets: (feature: string) => a.presetSets(feature), exports: () => a.presetExports(),
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
-    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp,
+    installDetection: Object.freeze(installDetection), modInstall: Object.freeze(modInstall), previewSetup: Object.freeze(previewSetup), desktopApp, updates,
     status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
       status: s.snapshot(), localSetup: localSetup.snapshot(),
       installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot(),
-      desktopApp: desktopApp.snapshot() }),
+      desktopApp: desktopApp.snapshot(), updates: updates.snapshot() }),
     subscribe(listener: () => void) {
       const unsubs = [a.subscribe(listener), l.subscribe(listener), f.subscribe(listener),
         v.subscribe(listener), p.subscribe(listener), r.subscribe(listener), s.subscribe(listener),
@@ -471,6 +484,7 @@ export function createStudioPresentation<Slot>(sources: {
         ...(sources.installDetection ? [sources.installDetection.subscribe(listener)] : []),
         ...(sources.modInstall ? [sources.modInstall.subscribe(listener)] : []),
         ...(sources.desktopApp ? [sources.desktopApp.subscribe(listener)] : []),
+        ...(sources.updates ? [sources.updates.subscribe(listener)] : []),
         ...(setup ? [setup.subscribe(listener)] : []), ...(d ? [d.subscribe(listener)] : []),
         ...[...moduleServices.values()].map(service => service.subscribe(listener))];
       return () => { for (const unsubscribe of unsubs) unsubscribe(); };

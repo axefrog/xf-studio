@@ -57,7 +57,7 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
     return { ok: true, data: host.wolvenKit };
   }, 5);
   let fields: LocalSetupFields = { gameRoot: null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null,
-    wolvenKitCli: null, eyePlateHead: "installed", savesDirectory: null, ...options.fields };
+    wolvenKitCli: null, eyePlateHead: "installed", savesDirectory: null, checkForUpdates: true, ...options.fields } as LocalSetupFields;
   let revision = 0;
   const saved: Partial<LocalSetupFields>[] = [];
   const view = (): LocalSetupView => ({ revision, source: "primary", fields, overridden: [],

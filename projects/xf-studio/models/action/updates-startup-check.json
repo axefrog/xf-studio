@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "updates-startup-check",
+  "owner": "setup",
+  "summary": "The check at start (after first paint): raises the check-for-release request, which the host skips when Settings turns it off.",
+  "status": "both",
+  "replaces": [
+    "update-check-actions",
+    "studio-ui/update-check"
+  ],
+  "name": "updates.startupCheck",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A host answers the update check and no check is running.",
+    "refusals": [
+      {
+        "code": "busy",
+        "reason": "Checking for updates…"
+      },
+      {
+        "code": "unavailable",
+        "reason": "This copy of XF Studio can't check for updates."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:check-for-release"
+  },
+  "undo": "none"
+}

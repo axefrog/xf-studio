@@ -11,6 +11,7 @@ import type { Tour } from "./types";
 import type { TourRecord } from "../../ui-preferences";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./desktop-app-sheet";
+import { checkForUpdatesNow, openReleasesPage, updateCheckLine } from "../update-check";
 
 export type HelpGuidance = { tours(): readonly Tour[]; status(tourId: string): TourRecord | undefined; start(tourId: string): boolean };
 /**
@@ -46,10 +47,23 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     return { element: h("li", {}, label, detail), render() { const entry = desktopAppEntry(rt.port.desktopApp.snapshot()); setText(label, entry.label); setText(detail, entry.detail); } };
   })() : null;
   desktop?.render();
+  // Check for updates (release-readiness-audit.md item 22): checks in place and says what it found, with the releases page when useful.
+  const updates = (() => {
+    const check = h("button", { class: "link-button help-updates", type: "button", text: "Check for updates", onclick: () => void checkForUpdatesNow(rt, false) });
+    const detail = h("small", { class: "muted", role: "status" });
+    const releases = h("button", { class: "link-button help-releases", type: "button", text: "Open the releases page", onclick: () => void openReleasesPage(rt) });
+    return { element: h("li", {}, check, detail, releases), render() {
+      const line = updateCheckLine(rt.port.updates.snapshot());
+      setText(detail, line?.text ?? "Looks for a newer XF Studio on GitHub, where each new version is published.");
+      releases.hidden = !line?.releases;
+      check.disabled = !rt.port.updates.capability({ kind: "updates.check" }).available;
+    } };
+  })();
+  updates.render();
   // Settings, where everything about this computer is chosen (UI-109).
   const settings = h("li", {}, h("button", { class: "link-button help-settings", type: "button", text: "Settings", onclick: () => rt.settings.open() }),
     h("small", { class: "muted", text: "Your game, mod manager, saves, tools, appearance and diagnostics." }));
-  const links = h("ul", { class: "help-links" }, settings, about, desktop?.element ?? null, h("li", {},
+  const links = h("ul", { class: "help-links" }, settings, about, desktop?.element ?? null, updates.element, h("li", {},
     h("button", { class: "link-button", type: "button", text: "Report a problem…", onclick: () => { openReportDialog(rt, null); } }),
     h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), HELP_LINKS.map(item => h("li", {},
     h("button", { class: "link-button", type: "button", text: item.label, onclick: () => void open(item.link) }),
@@ -114,6 +128,7 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
         if (app.offered() && !app.snapshot().status && app.capability({ kind: "desktopApp.refresh" }).available) void app.dispatch({ kind: "desktopApp.refresh" });
       } else renderTours(search.value.trim());
       desktop?.render();
+      updates.render();
     },
     focusSearch() { if (!rendered) { rendered = true; render(); } search.focus(); search.select(); },
   };

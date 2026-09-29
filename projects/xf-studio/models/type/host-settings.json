@@ -156,7 +156,7 @@
     },
     "updates": {
       "kind": "value",
-      "doc": "The update channel and whether to check automatically.",
+      "doc": "The update channel and whether XF Studio checks for a newer version when it starts (on by default).",
       "shape": {
         "type": "object",
         "properties": {
@@ -166,13 +166,13 @@
               "canary"
             ]
           },
-          "checkAutomatically": {
+          "checkOnStart": {
             "type": "boolean"
           }
         },
         "required": [
           "channel",
-          "checkAutomatically"
+          "checkOnStart"
         ]
       }
     },

@@ -16,7 +16,12 @@ test("local settings are path-free by default, strict and separate from portable
   const defaults = defaultLocalSettings();
   expect(defaults.gameRoot).toBeNull();
   expect("plateInput" in defaults).toBe(false);
-  expect(defaults.updates.checkAutomatically).toBe(false);
+  // The check at start is on by default; the retired `checkAutomatically` (saved as off while nothing used it) is dropped, not kept.
+  expect(defaults.updates.checkOnStart).toBe(true);
+  const earlier = { ...defaults, updates: { channel: "stable", checkAutomatically: false } };
+  expect(migrateLocalSettings(earlier)).toEqual({ settings: defaults, migrated: true });
+  expect(parseLocalSettings({ ...defaults, updates: { channel: "stable", checkOnStart: false } }).updates.checkOnStart).toBe(false);
+  expect(() => parseLocalSettings({ ...defaults, updates: { channel: "stable", checkOnStart: "yes" } })).toThrow("Automatic update check");
   expect(parseLocalSettings(defaults)).toEqual(defaults);
   expect(() => parseLocalSettings({ ...defaults, token: "private" })).toThrow("unsupported field");
   expect(() => parseLocalSettings({ ...defaults, gameRoot: "../game" })).toThrow("absolute path");
