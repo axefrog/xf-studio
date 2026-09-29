@@ -46,8 +46,11 @@ export function observe(state: WorkspaceState) {
     history: state.history, ...(state.historyTrimmed ? { historyTrimmed: true } : {}) };
   const editor = () => ({ ...structuredClone(shown!), history: historyRecipes(shown!.history),
     historyTrimmed: shown!.historyTrimmed ?? false });
+  // The summary's recent-drafts list came after these goldens (release-readiness-audit.md item 13): it restates the recovery queue the
+  // drafts below walk through, so it is not a difference.
+  const summaryOf = () => { const { recovery: _recovery, ...summary } = actions.summary(); return summary; };
   const presets = (label: string) => {
-    const summary = actions.summary();
+    const summary = summaryOf();
     return { label, summary, presets: summary.presets.map(preset => {
       actions.dispatch({ kind: "preset.select", id: preset.id });
       return { id: preset.id, editor: editor() };
@@ -57,7 +60,7 @@ export function observe(state: WorkspaceState) {
   const restored: unknown[] = [];
   while (actions.summary().removed.length) {
     actions.dispatch({ kind: "preset.edit", command: { kind: "restore" } });
-    restored.push({ summary: actions.summary(), editor: editor() });
+    restored.push({ summary: summaryOf(), editor: editor() });
   }
   const recovery = actions.summary().recoveryCount;
   for (let i = 0; i < recovery; i++) {

@@ -92,6 +92,8 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   readonly links: ProjectLinkPort;
   /** Presentation-local changes that need a repaint. */
   changed(): void;
+  /** Whether research tools show (Settings › Appearance, UI-85): research-only choices and commands are offered only then. */
+  research(): boolean;
   /** The easing curve remembered for a multi-control operation (`scope`, e.g. `expression-intensity`): a UI preference, never Undo. */
   readonly easing: { get(scope: string): EasingId | undefined; set(scope: string, easing: EasingId): void };
   /** Open a target's menu: the application-bound entries for the target, then the feature's items. */

@@ -89,9 +89,22 @@ export class CollectionSession {
     this.state = { ...collectionDraft(collection, this.model, revision), previous: recovery[0], older: recovery.slice(1) };
     this.display();
   }
-  undoOpen() {
+  /**
+   * Bring back an earlier draft. Without `draft`, the previous one, and the current draft goes to the back of the queue, so repeating
+   * walks through them all. With `draft` (its collection ID, picked from the recent-drafts list), that one, and the current draft
+   * becomes the newest in the queue.
+   */
+  undoOpen(draft?: string) {
     if (!this.state.previous) throw Error("No previous collection draft.");
     const { previous, older, ...current } = this.snapshot();
+    if (draft !== undefined) {
+      const queue = [previous!, ...(older ?? [])], index = queue.findIndex(entry => entry.collection.id === draft);
+      if (index < 0) throw Error("That earlier draft is no longer in the recovery list.");
+      const [chosen] = queue.splice(index, 1), recovery = [current, ...queue];
+      this.state = { ...chosen!, previous: recovery[0], older: recovery.slice(1) };
+      this.display();
+      return;
+    }
     const recovery = [...(older ?? []), current];
     this.state = { ...previous!, previous: recovery[0], older: recovery.slice(1) };
     this.display();
@@ -102,10 +115,11 @@ export class CollectionSession {
     preset.name = name.trim().slice(0, 120) || "Imported preset";
     preset.parts = withLivePart(preset, recipe, this.model); this.display();
   }
-  saved(result: StoredCollection, sourceId: string) {
-    // In-flight edits survive: only reconcile persisted identity/revision metadata.
+  saved(result: StoredCollection, sourceId: string, renamedFrom?: string) {
+    // In-flight edits survive: only reconcile persisted identity/revision metadata (and a copy's unique name, unless renamed meanwhile).
     if (this.state.collection.id !== sourceId) throw Error("Saved another collection snapshot; current draft kept.");
     this.state.collection.id = result.collection.id; this.state.revision = result.revision;
+    if (renamedFrom !== undefined && this.state.collection.name === renamedFrom) this.state.collection.name = result.collection.name;
     const revisions = new Map(result.collection.presets.map(p => [p.id, p.revision]));
     for (const preset of this.state.collection.presets) preset.revision = revisions.get(preset.id) ?? preset.revision;
   }

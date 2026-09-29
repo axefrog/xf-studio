@@ -1314,6 +1314,13 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
   width: min(480px, calc(100vw - 32px)); display: grid; gap: var(--sp-4); padding: var(--sp-6) var(--sp-6) var(--sp-5);
   color: var(--text); background: var(--bg-panel); border: 1px solid var(--line-strong); border-left: 3px solid var(--signal);
   box-shadow: var(--shadow); border-radius: 0 var(--bevel) 0 0; }
+/* Docked in the 3D view pane, its subject (release-readiness-audit.md item 10): centred over the pane's own state, which it replaces,
+   so it never covers the inspectors. It floats (above) only while the 3D view is hidden or smaller than 280 × 220 px. */
+.viewport-panel > .setup-card { position: absolute; z-index: 6; top: 50%; bottom: auto; translate: -50% -50%;
+  width: min(440px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; gap: var(--sp-3); padding: var(--sp-5); }
+/* While the card shows (docked or floating) it says what the pane needs; the pane doesn't say it again. */
+.viewport-panel.setup-card-open > .viewport-state > * { visibility: hidden; }
+.setup-card-route .segmented { flex-wrap: wrap; }
 .setup-card-title, .consent-sheet h2 { margin: 0; font: 600 var(--fs-lg)/1.3 var(--font-display); letter-spacing: .02em; text-transform: none; }
 .setup-card-title:focus, .consent-sheet h2:focus { outline: none; }
 .setup-card-title:focus-visible, .consent-sheet h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

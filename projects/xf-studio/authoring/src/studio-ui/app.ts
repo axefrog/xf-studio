@@ -6,7 +6,7 @@ import { effectiveTheme, type ThemePreference } from "../ui-preferences";
 import { shortcutLabel } from "../input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
-import { applyCapability, button } from "./controls";
+import { applyCapability, badge, button } from "./controls";
 import { installReasonTips } from "./reason-tip";
 import { installHelpTips } from "./help-tip";
 import { DockView } from "./dock/dock-view";
@@ -18,7 +18,7 @@ import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
 import { layoutController, type LayoutController } from "./layouts";
-import { closeMenus, openMenu, type MenuItem } from "./menu";
+import { closeMenus, openMenu, type Capability, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
@@ -216,6 +216,30 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   // A window that opens in another size class than last time counts as crossing into it.
   requestAnimationFrame(() => layouts.sizeClass(dock.sizeClass, false));
 
+  /**
+   * The 3D preview setup card sits in the 3D view pane, its subject, whenever that pane is shown and has room for it
+   * (release-readiness-audit.md item 10), so it never covers an inspector; it floats over the window only while the pane is hidden or
+   * squeezed below the card's reading size. Placed only while the card shows (its size is read then); moving it keeps focus.
+   */
+  const headPane = byId.get("head")?.spec.element;
+  const dockSetupCard = (frame: Frame) => {
+    const open = frame.previewSetup.card.open;
+    if (open) {
+      const pane = headPane && dock.isVisible("head") ? headPane.getBoundingClientRect() : undefined;
+      // A pane not laid out yet (0 × 0, the first paint) counts as roomy; the card scrolls inside a pane down to 280 × 220.
+      const roomy = !!pane && ((pane.width === 0 && pane.height === 0) || (pane.width >= 280 && pane.height >= 220));
+      const host = roomy ? headPane! : root;
+      if (setupCard.element.parentElement !== host) {
+        const focused = setupCard.element.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+        if (host === root) root.insertBefore(setupCard.element, setupCard.consent); else host.append(setupCard.element);
+        focused?.focus({ preventScroll: true });
+      }
+    }
+    // While a tour runs, a floating card would sit over what the tour points at: it waits, and comes back when the tour ends.
+    if (open && setupCard.element.parentElement === root && guidance.service.snapshot().active) setupCard.element.hidden = true;
+    // The card says what the pane needs, so the pane doesn't say it a second time while the card shows (docked or floating).
+    headPane?.classList.toggle("setup-card-open", open);
+  };
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
@@ -237,7 +261,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
     const notice = port.diagnostics.snapshot().notice;
     if (notice && notice.id !== lastNotice) { lastNotice = notice.id; feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref }); }
-    header.update(frame); status.update(frame); setupCard.update(frame); guidance.update(frame);
+    header.update(frame); status.update(frame); setupCard.update(frame); dockSetupCard(frame); guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
     for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form: Settings › Game.
@@ -281,8 +305,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     }, 120);
   });
 
-  const commands = () => [...buildCommands(rt, theme, view, byId,
-    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx)), layouts), ...panels.flatMap(panel => panel.commands?.() ?? []), ...guidance.commands()];
+  const commands = () => withPreviewSetup(rt, [...buildCommands(rt, theme, view, byId,
+    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx)), layouts), ...panels.flatMap(panel => panel.commands?.() ?? []), ...guidance.commands()]);
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
@@ -362,7 +386,7 @@ function viewPreferences(port: Port, feedback: Feedback) {
         { kind: "action", label: "Keyboard & mouse…", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: openReference },
         { kind: "separator" },
         { kind: "action", label: "Show research tools", icon: "activity", checked: research(),
-          hint: "Lighting calibration, glitter model studies, compiler plans, developer IDs and planned features", run: () => setResearch(!research()) }];
+          hint: "Finishes still waiting for a game check, rendering and lighting studies, raw exports, developer IDs and planned features", run: () => setResearch(!research()) }];
     },
   };
 }
@@ -419,7 +443,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       { label: "View preferences", invoker: event.currentTarget as Element }) });
   const verify = h("span", { class: "verify-flag", title: "Isolated verification draft and library. Your normal work is untouched.", hidden: true }, "Verification workspace");
   const element = h("header", { class: "shell-header" },
-    h("div", { class: "brand", "aria-label": "XF Studio" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, "XF"), h("span", { class: "brand-name" }, "Studio")),
+    // The release stage beside the name (release-readiness-audit.md item 22): the first public release is a beta.
+    h("div", { class: "brand", "aria-label": "XF Studio beta" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, "XF"), h("span", { class: "brand-name" }, "Studio"),
+      Object.assign(badge("Beta", "accent"), { title: "XF Studio is in beta: it may not work on every setup yet. Help › Report a problem… tells us what doesn't." })),
     category,
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
     verify,
@@ -573,6 +599,35 @@ function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   return items;
 }
 
+/**
+ * Palette hygiene (release-readiness-audit.md item 8): while the 3D view isn't ready, the commands that wait for it (refused as
+ * `asset_unavailable`, or with the head's own words) are not listed one by one with the same reason; one "Set up the 3D preview…"
+ * entry takes their place, at the first one's position, and runs the head's next step (or opens the setup card). Their keywords go
+ * with it, so searching for "idle" or "lighting" still finds the way there.
+ */
+export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "changed">, commands: Command[]): Command[] {
+  const port = rt.port, head = port.viewport.snapshot().head;
+  if (head.phase === "ready") return commands;
+  const reasons = new Set([head.message, head.error].filter((text): text is string => !!text));
+  const waits = (command: Command) => {
+    const capability = command.capability() as Capability & { code?: string };
+    return !capability.available && (capability.code === "asset_unavailable" || (!!capability.reason && reasons.has(capability.reason)));
+  };
+  const waiting = new Set(commands.filter(waits));
+  if (!waiting.size) return commands;
+  const setup = port.previewSetup.snapshot(), next = setup.head.next?.action ?? { kind: "previewSetup.show" as const };
+  const entry: Command = { id: "preview.setup", title: "Set up the 3D preview…", group: "View", icon: "head",
+    keywords: `3d preview view head game folder wolvenkit ${[...waiting].map(command => `${command.title} ${command.keywords ?? ""}`).join(" ").toLowerCase()}`,
+    // Showing the card while it already shows is refused as "already showing": the card is the answer, so the entry stays available.
+    capability: () => setup.card.open && next.kind === "previewSetup.show" ? { available: true } : port.previewSetup.capability(next),
+    run: () => {
+      if (setup.card.open && next.kind === "previewSetup.show") { document.getElementById("preview-card-title")?.focus(); return; }
+      void port.previewSetup.dispatch(next).then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "3D preview", outcome.message); rt.changed(); });
+    } };
+  const first = commands.findIndex(command => waiting.has(command));
+  return [...commands.slice(0, first).filter(command => !waiting.has(command)), entry, ...commands.slice(first).filter(command => !waiting.has(command))];
+}
+
 /** The palette's commands: the platform's own, with each feature view's commands after the platform's Edit entries. */
 function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels: Map<PanelId, PanelController>, features: Command[], layouts: LayoutController): Command[] {
   const port = rt.port;
@@ -602,7 +657,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     ...features,
     request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
-    request("library.refresh", "Refresh saved collections", "Library", { kind: "refresh" }, { icon: "refresh" }),
+    // The saved list updates itself (release-readiness-audit.md item 13), so there is no Refresh command.
     file("library.recover", "Recover previous collection draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
@@ -610,7 +665,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     ...research([file("collection.plan", "Export compiler plan (saves first; not a mod)", "Research", { kind: "collection.plan" }, { icon: "export", keywords: "build plan" })]),
     file("recipe.import", "Import recipe as preset…", "Files", { kind: "recipe.import" }, { icon: "import" }),
     file("recipe.export", "Export preset recipe", "Files", { kind: "recipe.export" }, { icon: "export" }),
-    file("mask.export", "Export selected layer mask (2048²)", "Files", { kind: "mask.export" }, { icon: "export" }),
+    // A raw layer texture and the saved appearance record are research outputs (release-readiness-audit.md item 6).
+    ...research([file("mask.export", "Export selected layer mask (2048²)", "Research", { kind: "mask.export" }, { icon: "export" }),
+      file("savedV.export", "Export appearance data", "Research", { kind: "savedV.export" }, { icon: "export" })]),
     file("package.check", "Check mod export", "Mod package", { kind: "package.check" }, { icon: "check" }),
     file("package.build", "Build mod files", "Mod package", { kind: "package.build" }, { icon: "package", keywords: "archive build" }),
     file("savedV.import", "Load V from a save…", "Character", { kind: "savedV.import" }, { icon: "character" }),
@@ -620,7 +677,6 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       { icon: "character", keywords: "default v creator female woman feminine" }),
     act("character.useDefault.male", "Show the default masculine V", "Character", { kind: "character.useDefault", bodyGender: "male" },
       { icon: "character", keywords: "default v creator male man masculine" }),
-    file("savedV.export", "Export appearance data", "Character", { kind: "savedV.export" }, { icon: "export" }),
     act("character.setOwnMakeup", character?.ownMakeup === false ? "Show my V's own makeup" : "Hide my V's own makeup", "Character",
       { kind: "character.setOwnMakeup", shown: character?.ownMakeup === false }, { icon: "eye", keywords: "makeup off on show hide creator options" }),
     act("character.resetAll", "Reset every creator change", "Character", { kind: "character.resetAll" }, { icon: "reset", keywords: "creator options undo back to my v" }),
@@ -681,13 +737,13 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       { kind: "preview.setCreatorShadows", enabled }, { icon: "lighting", keywords: "creator calibration shadow nose rim" })),
     act("lighting.creator.reset", "Creator lighting calibration: restore defaults", "Research",
       { kind: "preview.resetCreatorLighting" }, { icon: "lighting", keywords: "creator calibration reset default exposure" })]),
-    // Rendering options (the Preview quality panel's Rendering group): each switch both ways, and the Hair look's two ends.
-    ...([true, false] as const).map(enabled => act(`rendering.scatter.${enabled ? "on" : "off"}`, `Rendering: skin scattering ${enabled ? "on" : "off"}`, "View",
+    // Rendering options (the Preview quality panel's Rendering group, a research study): each switch both ways, and the Hair look's two ends.
+    ...research([...([true, false] as const).map(enabled => act(`rendering.scatter.${enabled ? "on" : "off"}`, `Rendering: skin scattering ${enabled ? "on" : "off"}`, "Research",
       { kind: "preview.setSkinScatter", enabled }, { icon: "quality", keywords: "skin scatter subsurface sss soft shadow warm" })),
-    ...([true, false] as const).map(enabled => act(`rendering.shadows.${enabled ? "on" : "off"}`, `Rendering: face shadows ${enabled ? "on" : "off"}`, "View",
+    ...([true, false] as const).map(enabled => act(`rendering.shadows.${enabled ? "on" : "off"}`, `Rendering: face shadows ${enabled ? "on" : "off"}`, "Research",
       { kind: "preview.setFaceShadows", enabled }, { icon: "quality", keywords: "shadow maps nose face lights" })),
     ...([[0, "crisp"], [1, "game-like"]] as const).map(([value, label]) => act(`rendering.hairLook.${value ? "game" : "crisp"}`,
-      `Rendering: hair look ${label}`, "View", { kind: "preview.setHairLook", value }, { icon: "quality", keywords: "hair strands soft thick taa dlss coverage" })),
+      `Rendering: hair look ${label}`, "Research", { kind: "preview.setHairLook", value }, { icon: "quality", keywords: "hair strands soft thick taa dlss coverage" }))]),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
     act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
     act("idle", motion?.idle ? "Stop the game idle" : "Play the game idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),
@@ -700,8 +756,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       keywords: "game folder cyberpunk install mod organizer mo2 vortex profile mod manager eye plate head setup", ...always, run: () => rt.settings.open("game") },
     { id: "settings.saves", title: "Where are my saves? (Settings › Saves)", group: "Settings", icon: "folder",
       keywords: "saves folder save files saved games location explorer choose", ...always, run: () => rt.settings.open("saves") },
-    { id: "settings.tools", title: "WolvenKit (Settings › Tools)", group: "Settings", icon: "settings",
-      keywords: "wolvenkit cli tools download path", ...always, run: () => rt.settings.open("tools") },
+    // WolvenKit's setup step sits beside the Game line that says it's needed (UI-161); your own copy is named in Tools.
+    { id: "settings.tools", title: "WolvenKit (Settings › Game)", group: "Settings", icon: "settings",
+      keywords: "wolvenkit cli tools download path set up", ...always, run: () => rt.settings.open("game") },
     ...[...panels.values()].filter(panel => panel.spec.id !== SETTINGS_PANEL).map(panel => ({ id: `panel.${panel.spec.id}`, title: `${rt.dock.isOpen(panel.spec.id) ? "Go to" : "Open"} ${panel.spec.title}`, group: "Panels",
       icon: panel.spec.icon, keywords: panel.spec.description, ...always, run: () => rt.dock.reveal(panel.spec.id) })),
     ...[...panels.values()].filter(panel => rt.dock.isOpen(panel.spec.id)).map(panel => ({ id: `panel.float.${panel.spec.id}`, title: `Float ${panel.spec.title}`,
@@ -719,7 +776,8 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     { id: "view.hints", title: view.hints() ? "Hide viewport input hints" : "Show viewport input hints", group: "View", icon: "keyboard",
       keywords: "shortcut hints tooltips status", ...always, run: () => view.setHints(!view.hints()) },
     { id: "view.research", title: view.research() ? "Hide research tools" : "Show research tools", group: "View", icon: "activity",
-      keywords: "research calibration glitter model study compiler plan developer ids advanced", ...always, run: () => view.setResearch(!view.research()) },
+      keywords: "research calibration glitter shimmer finish rendering scattering shadows hair look normal map mask appearance data model study compiler plan developer ids advanced",
+      ...always, run: () => view.setResearch(!view.research()) },
     { id: "help.about", title: "About XF Studio", group: "Help", icon: "info", keywords: "version licence license update data folder",
       capability: () => port.about.capability(), run: () => port.about.open() },
     // Localhost only (the desktop app leaves it out): open the installed desktop app, or how to get it.
@@ -728,6 +786,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
         ...always, run: () => { if (entry.opens) void openDesktopApp(rt); else openDesktopAppSheet(rt); } }; })()] : []),
     { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
       keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
+    // A way to learn about updates (release-readiness-audit.md item 22): the releases page, opened by the host; nothing is checked by itself.
+    { id: "help.updates", title: "Check for updates", group: "Help", icon: "link", keywords: "update new version release download latest beta github",
+      ...always, run: () => void port.links.open("project-releases").then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Help", outcome.message); }) },
     { id: "help.report", title: "Report a problem…", group: "Help", icon: "warning", keywords: "bug issue error crash diagnostics log github",
       capability: () => port.diagnostics.capability({ kind: "diagnostics.prepareReport" }), run: () => { openReportDialog(rt, null); } },
     ...(["deep", "normal"] as const).filter(mode => (port.diagnostics.snapshot().mode?.mode ?? "normal") !== mode).map(mode => ({

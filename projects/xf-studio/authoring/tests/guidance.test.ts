@@ -74,7 +74,7 @@ test("tour data names only registered anchors, catalogued actions and real key b
   expect(onboarding.steps.length).toBeGreaterThanOrEqual(6);
   expect(onboarding.steps.length).toBeLessThanOrEqual(8);
   const whatsNew = TOURS.find(tour => tour.audience === "whats-new")!;
-  expect(whatsNew.version).toBe("0.1.0-alpha.1");
+  expect(whatsNew.version).toBe("0.1.0-beta.1");
   expect(whatsNew.steps.length).toBeGreaterThanOrEqual(3);
   expect(whatsNew.steps.length).toBeLessThanOrEqual(4);
 });
@@ -340,7 +340,7 @@ test("help topics are data: valid key tokens, known tours, searchable; links are
   expect(searchTopics("preview only", helpTopicsFor(finishCatalogue())).map(topic => topic.id)).toContain("finishes");
   expect(searchTopics("undo history")[0].id).toBe("undo");
   expect(searchTopics("zzzz nothing")).toEqual([]);
-  expect(searchTours("new", TOURS).map(item => item.id)).toContain("whats-new-0.1.0-alpha.1");
+  expect(searchTours("new", TOURS).map(item => item.id)).toContain("whats-new-0.1.0-beta.1");
   for (const item of HELP_LINKS) expect(isProjectLink(item.link)).toBe(true);
   // Markdown-lite: bold, bullets and key tokens become structure, never markup.
   expect(parseHelp("Hi **there** [[key:shell.undo]]\n\n- one\n- two <b>")).toEqual([
@@ -359,19 +359,21 @@ test("help and tour text about which finishes export is built from the finish ca
   for (const text of [...topics.map(topic => topic.body), ...tours.flatMap(item => item.steps.map(step => step.content.body))]) expect(text).not.toContain("{{");
   const finishes = topics.find(topic => topic.id === "finishes")!;
   expect(finishes.body).toContain(finishExportHelp(catalogue));
-  // Each finish is named once, in the sentence of its export status.
+  // Each finish is named once, in the sentence of its export status; one still waiting for a game check (behind research tools) in
+  // the sentence that says so (release-readiness-audit.md item 5).
   const sentences = plainText(finishes.body).split(/(?<=\.) /);
   for (const finish of catalogue) {
     const sentence = sentences.filter(text => text.includes(finish.shortLabel));
     expect(sentence).toHaveLength(1);
-    expect(sentence[0]).toContain({ "flat-provisional": "can go into your mod", experimental: "can be built as experiments", none: "preview only" }[finish.exportAdapter]);
+    expect(sentence[0]).toContain(finish.research ? "wait for a check in the game"
+      : { "flat-provisional": "can go into your mod", experimental: "can be built as experiments", none: "preview only" }[finish.exportAdapter]);
   }
   const step = tours.find(item => item.id === ONBOARDING_TOUR_ID)!.steps.find(item => item.anchor === "finish.picker")!;
   expect(step.content.body).toContain(exportableFinishClause(catalogue));
   for (const name of named("flat-provisional")) expect(step.content.body).toContain(name);
   for (const name of [...named("experimental"), ...named("none")]) expect(step.content.body).not.toContain(name);
   // A change in the route policy changes the words.
-  const moved = catalogue.map(finish => finish.id === "glitter" ? { ...finish, exportAdapter: "experimental" as const } : finish);
+  const moved = catalogue.map(finish => finish.id === "glitter" ? { ...finish, exportAdapter: "experimental" as const, research: undefined } : finish);
   expect(finishExportHelp(moved)).not.toContain("preview only");
   expect(finishExportHelp(moved).split(". ").find(text => text.includes("**Glitter**"))).toContain("can be built as experiments");
   expect(exportableFinishClause([{ shortLabel: "Matte", exportAdapter: "flat-provisional" }])).toBe("Matte goes into your mod today");

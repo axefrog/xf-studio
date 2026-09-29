@@ -37,6 +37,9 @@ export class CollectionLibrary {
         collection_json TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(collection_id, revision));
         CREATE TABLE collection_preset_versions (collection_id TEXT NOT NULL REFERENCES collections(id), preset_id TEXT NOT NULL,
         revision INTEGER NOT NULL, preset_json TEXT NOT NULL, PRIMARY KEY(collection_id, preset_id, revision)); PRAGMA user_version=2;`);
+      // A fresh library has no looks to carry over: it starts empty, so a first run shows the starter draft as "Not saved yet"
+      // rather than a phantom saved "Makeup collection" with no presets (release-readiness-audit.md item 11).
+      if (!looks.length) return;
       const now = new Date().toISOString();
       this.db.query("INSERT INTO collections VALUES (?, ?)").run(collection.id, now);
       this.db.query("INSERT INTO collection_revisions VALUES (?, 1, ?, ?)").run(collection.id, JSON.stringify(collection), now);

@@ -16,10 +16,19 @@ import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 import { openReportDialog } from "../diagnostics/report-dialog";
-import { setupStatus } from "./game-setup";
+import { setupStatus, wantsWolvenKitStep } from "./game-setup";
+import { wolvenKitStepButton } from "../wolvenkit-step";
 import { modInstallLabel, openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
+
+/** How a recent draft stands against the library, in words (its row's meta line). */
+const DRAFT_STATE: Record<"never" | "same" | "edited" | "unknown", (revision?: number) => string> = {
+  never: () => "Draft · never saved",
+  same: revision => `Draft · same as saved version ${revision}`,
+  edited: revision => `Draft · edited since version ${revision}, not saved`,
+  unknown: revision => `Draft · started from version ${revision}`,
+};
 
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
   /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */
@@ -174,7 +183,7 @@ export function undoReplaceAction(rt: StudioRuntime, label: string): FeedbackAct
   const before = rt.port.library.summary().draft?.id;
   return { label, run: () => {
     if (!before || rt.port.library.summary().draft?.previous?.id !== before) {
-      rt.feedback.toast("warning", "Library", "The draft from before that change is no longer the recoverable draft. Use Recover previous draft in the Library panel if it is listed there.");
+      rt.feedback.toast("warning", "Library", "The draft from before that change is no longer the first one to recover. Find it under Recent drafts in the Library panel.");
       return;
     }
     void rt.file({ kind: "collection.recover" });
@@ -193,10 +202,16 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   const stateLine = h("p", { class: "state-line" });
   const progress = progressBar({ label: "Library request in progress" }).element;
   progress.hidden = true;
-  const refresh = button({ label: "Refresh", icon: "refresh", small: true, variant: "quiet", onClick: () => void rt.request({ kind: "refresh" }, { quietSuccess: true }) });
-  const recover = button({ label: "Recover previous draft", icon: "undo", small: true,
-    onClick: () => void rt.file({ kind: "collection.recover" }) });
-  const recoverNote = note("", "info");
+  // The saved list updates itself (release-readiness-audit.md item 13): read quietly whenever this panel is shown or the window comes
+  // back (another window of XF Studio may have saved), so there is no Refresh button.
+  const syncList = () => { if (port.authoring.requestCapability({ kind: "refresh" }).available) void port.library.execute({ kind: "refresh" }); };
+  window.addEventListener("focus", syncList);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); });
+  // Earlier drafts, newest first, each brought back with its own Recover (item 13): the draft you had open joins the list.
+  const drafts = h("ul", { class: "saved-list", "aria-label": "Recent drafts" });
+  const draftsSection = section({ title: "Recent drafts", help: ["Opening a saved collection keeps the draft you had open here, unsaved edits included; Recover brings it back.",
+    "Each line says how the draft stands against its saved version, so a draft is never mistaken for the saved collection of the same name."] }, drafts);
+  let draftsSignature = "";
   const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
   const savedEmpty = emptyState("Nothing saved yet", "Save to library keeps the first version of this collection. Drafts still autosave on this computer.");
   const fileButtons = {
@@ -209,8 +224,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   };
   let savedSignature = "";
   // What the files are, in the Files heading's help tip; with research tools (UI-85) it adds what a compiler plan is.
-  const filesHelp = "Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first. A layer mask is a picture of the selected layer's shape.";
-  const researchHelp = "Research: a compiler plan is input for the offline compiler, not a mod. Exporting one saves a version first.";
+  const filesHelp = "Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first.";
+  const researchHelp = "Research: a compiler plan is input for the offline compiler, not a mod; exporting one saves a version first. A layer mask is a picture of the selected layer's shape.";
   const filesSection = section({ title: "Files", help: filesHelp }, h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection,
     fileButtons.exportPlan, fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask));
   const filesTip = filesSection.querySelector<HTMLElement>(".help-tip")!;
@@ -218,11 +233,11 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     section({ title: "Local library", help: ["Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.",
       "Your draft also saves itself on this computer as you work."] },
       stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy)),
-    section({ title: "Saved collections", help: "Opening one keeps your current draft: Recover previous draft brings it back." }, h("div", { class: "row between" }, h("span"), refresh),
-      savedEmpty, saved, h("div", { class: "row wrap gap-s" }, recover), recoverNote),
+    section({ title: "Saved collections", help: "The versions saved in your library on this computer. Open one to work on it." }, savedEmpty, saved),
+    draftsSection,
     filesSection);
   return {
-    spec: { id: "library", ...PANEL_META["library"], element },
+    spec: { id: "library", ...PANEL_META["library"], element, visibility: visible => { if (visible) syncList(); } },
     update(frame) {
       const library = frame.library, draft = library.draft;
       const state = libraryState(frame);
@@ -231,11 +246,19 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       progress.hidden = !library.busy;
       applyCapability(save, port.authoring.requestCapability({ kind: "save" }));
       applyCapability(saveCopy, port.authoring.requestCapability({ kind: "saveCopy" }));
-      applyCapability(refresh, port.authoring.requestCapability({ kind: "refresh" }));
-      const recovery = frame.files.recovery;
-      applyCapability(recover, recovery);
-      setText(recoverNote, draft?.previous ? `Next draft: “${draft.previous.name}”${draft.previous.revision ? ` (version ${draft.previous.revision})` : ""}. ${draft.recoveryCount} of ${draft.recoveryLimit} drafts recoverable; recover again to walk through them.` : "");
-      recoverNote.hidden = !draft?.previous;
+      const queue = draft?.recovery ?? [], draftsKey = JSON.stringify([queue, library.busy]);
+      draftsSection.hidden = !queue.length;
+      if (draftsKey !== draftsSignature) {
+        draftsSignature = draftsKey;
+        drafts.replaceChildren(...queue.map(entry => {
+          const recover = button({ label: "Recover", icon: "undo", small: true, title: `Bring back “${entry.name}”; the draft you have open joins this list`,
+            onClick: () => void rt.file({ kind: "collection.recover", draft: entry.id }) });
+          applyCapability(recover, port.files.capability({ kind: "collection.recover", draft: entry.id }));
+          return h("li", { class: "saved-row" }, h("div", { class: "saved-main" }, h("strong", { text: entry.name }),
+            h("span", { class: "muted small", text: `${DRAFT_STATE[entry.saved](entry.revision)} · ${plural(entry.presets, "preset")}` })),
+            recover);
+        }));
+      }
       const signature = JSON.stringify([library.summaries, draft?.id, library.busy]);
       if (signature !== savedSignature) {
         savedSignature = signature;
@@ -254,7 +277,9 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       }
       savedEmpty.hidden = library.summaries.length > 0;
       const research = !!frame.preferences?.researchTools;
-      fileButtons.exportPlan.hidden = !research; setHelp(filesTip, research ? [filesHelp, researchHelp] : filesHelp);
+      // The compiler plan and the raw layer mask are research outputs (release-readiness-audit.md item 6).
+      fileButtons.exportPlan.hidden = !research; fileButtons.exportMask.hidden = !research;
+      setHelp(filesTip, research ? [filesHelp, researchHelp] : filesHelp);
       for (const [key, action] of [["importCollection", "collection.import"], ["exportCollection", "collection.export"], ["exportPlan", "collection.plan"],
         ["importRecipe", "recipe.import"], ["exportRecipe", "recipe.export"], ["exportMask", "mask.export"]] as const)
         applyCapability(fileButtons[key], port.files.capability({ kind: action }));
@@ -267,8 +292,10 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // The game and mod manager are chosen in Settings (UI-109); here, one line says whether Build and Add are ready, with the way there.
   const showSetup = () => rt.settings.open("game");
   const setupLine = h("p", { class: "setup-status", role: "status" });
+  // When the line says WolvenKit is needed, its one next step is the button beside it (release-readiness-audit.md item 14).
+  const wolvenKitStep = wolvenKitStepButton(rt);
   const setup = section({ title: "Game & tools", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game and Settings › Tools." },
-    setupLine, h("div", { class: "row wrap gap-s" }, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
+    setupLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
   const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // While the latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
@@ -345,18 +372,16 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   }
   // Build readiness (including the host's Build setup) is part of the file capability.
   const buildCapability = () => port.files.capability({ kind: "package.build" });
-  const finishList = h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
-    h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
-      finish.exportAdapter === "flat-provisional" ? "success" : "warning"))));
+  // No list of finishes here (release-readiness-audit.md item 7): the finish picker groups them by what can be built, and Check
+  // names every layer it leaves out.
   const element = h("div", { class: "panel-content" },
     section({ title: "Mod package", help: [`Builds your own copy of your XF mods from your current draft, unsaved edits included.`,
-      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`] },
+      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`,
+      "Check names any layer it would leave out, and why. The finish picker groups finishes by what can be built."] },
       // Check, then the primary Build last; the progress takes the rest of the same row (one line, reserved), so it adds no band.
       mods, h("div", { class: "row gap-s package-actions" }, check, build, rebuild, progress)),
     result,
-    setup,
-    section({ title: "What can be packaged", help: ["Check decides what is built; this list is a guide.",
-      "Preview-only layers are left out and named in the result. Experimental finishes may look different in game."] }, finishList));
+    setup);
   rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
@@ -370,6 +395,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
       const line = setupStatus(frame);
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
+      wolvenKitStep.update(frame, wantsWolvenKitStep(frame));
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? library.progress!.message : "");

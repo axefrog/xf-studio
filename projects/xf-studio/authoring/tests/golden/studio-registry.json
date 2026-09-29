@@ -1572,7 +1572,13 @@
    ],
    "effect": "library",
    "undo": "recovery",
-   "payload": {}
+   "payload": {
+    "draft": {
+     "type": "string",
+     "from": "target",
+     "required": false
+    }
+   }
   },
   "collection.importRecipe": {
    "scope": [

@@ -2,7 +2,7 @@ import type { EyeMakeupAction } from "../../../eye-makeup-model";
 import { chordLabel, keyBindingById, shortcutLabel } from "../../../input-bindings";
 import type { MenuAnchor, MenuSection } from "../../../studio-ui/menu";
 import type { FeatureMenuItem, FeatureTargetMenu } from "../../../studio-ui/views/feature-view";
-import { catalogues, type EyeMakeupViewContext } from "./actions";
+import { catalogues, finishOffered, type EyeMakeupViewContext } from "./actions";
 
 /** Row reorder chords from the catalogue ("Alt+↑", "Alt+↓"). */
 const reorderKey = (index: 0 | 1) => chordLabel(keyBindingById("rows.reorder").chords[index]);
@@ -25,8 +25,9 @@ export function layerMenu(ctx: EyeMakeupViewContext, layerId: string): FeatureTa
     { kind: "action", label: "Mirror across the face", icon: "mirror", action: { kind: "layer.setSymmetry", layerId, symmetry: !layer.symmetry },
       checked: layer.symmetry },
     { kind: "submenu", label: "Finish", icon: "finish", items: () => ctx.facade.choicesFor(target, "layer.setFinish", "finish")
-      // Only the catalogue's finishes are offered; legacy stored names stay accepted but hidden.
-      .filter(choice => finishes.some(item => item.id === choice.value))
+      // Only the catalogue's finishes are offered; legacy stored names stay accepted but hidden, and a finish that hasn't passed in
+      // game only with research tools on (or while this layer uses it).
+      .filter(choice => finishes.some(item => item.id === choice.value && finishOffered(ctx, item, finishOf(layer.finish)?.id ?? layer.finish)))
       .map(choice => {
         const descriptor = finishes.find(item => item.id === choice.value);
         return { kind: "action", label: descriptor?.label ?? String(choice.value), action: choice.action as EyeMakeupAction, capability: choice.capability,

@@ -82,6 +82,8 @@ const BUILD = { kind: "packageBuild", freshness: "current", result: { schema: "x
     archiveSha256: "b".repeat(64), xlSha256: "c".repeat(64), verifiedUnpackedFiles: 3, installed: false, gameRenderingVerified: false }] } };
 
 type HarnessOptions = { plan?: ModInstallPlan; files?: Record<string, unknown>; picker?: boolean; view?: ReturnType<typeof VIEW>;
+  /** The prepared game files the character context reports (Settings › Tools shows them). */
+  prepared?: { bytes: number | null; clearing?: boolean; freed?: number };
   /** The host's answer to a save, in place of accepting it (a refused saves folder). */
   refuse?: (fields: Record<string, unknown>) => { code: string; error: string } | null };
 async function packageHarness(options: HarnessOptions = {}) {
@@ -121,7 +123,11 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   const port = {
     files: { capability: () => ({ available: true }), snapshot: () => files },
     library: { capability: () => ({ available: true }), summary: () => ({ busy: false, products: [], draft: { presets: [{ id: "look1", name: "Night market" }] } }) },
-    authoring: { capability: () => ({ available: true }), requestCapability: () => ({ available: true }) },
+    authoring: { capability: () => ({ available: true }), requestCapability: () => ({ available: true }),
+      previewState: () => (options.prepared ? { character: { prepared: options.prepared } } : {}) },
+    // WolvenKit's next step beside a setup line that needs it (release-readiness-audit.md item 14).
+    previewSetup: { snapshot: () => ({ wolvenKitStep: { label: "Set up WolvenKit…", action: { kind: "previewSetup.consent" } } }),
+      capability: () => ({ available: true }), dispatch: async () => ({ ok: true }) },
     localSetup: { snapshot: () => setup.snapshot(), capability: (a: never) => setup.capability(a), dispatch: (a: never) => setup.dispatch(a) },
     installDetection: { snapshot: () => detection.snapshot(), capability: (a: never) => detection.capability(a), dispatch: (a: never) => detection.dispatch(a) },
     modInstall: { snapshot: () => install.snapshot(), capability: (a: never) => install.capability(a), dispatch: (a: never) => install.dispatch(a) },
@@ -132,13 +138,14 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   };
   for (const service of [setup, detection, install]) service.subscribe(() => { for (const listener of listeners) listener(); });
   const feedback = new Feedback();
-  const rt = { port, feedback, finishes: [], anchors: { register() {} }, dock: { reveal() {} }, request: async () => {}, dispatch: () => true,
+  const dispatched: unknown[] = [];
+  const rt = { port, feedback, finishes: [], anchors: { register() {} }, dock: { reveal() {} }, request: async () => {}, dispatch: (action: unknown) => { dispatched.push(action); return true; },
     changed: () => paint(), report: () => true, settings: { open: (section?: string) => { opened.push(section); } } };
   const panel = make(rt);
   lightDocument.body.append(panel.spec.element as never);
   const paint = () => panel.update(new Frame(port as never) as never);
   paint();
-  return { panel, root: panel.spec.element as unknown as LightElement, paint, saved, sentInstall, setup, detection, feedback, opened };
+  return { panel, root: panel.spec.element as unknown as LightElement, paint, saved, sentInstall, setup, detection, feedback, opened, dispatched };
 }
 /** The Settings panel over the same services, with appearance preferences kept in memory. */
 async function settingsHarness(options: HarnessOptions = {}) {
@@ -403,6 +410,15 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     await settle(); h.paint();
     expect(h.saved.at(-1)).toMatchObject({ savesDirectory: "E:\\Saves" });
     expect(saves.querySelector(".setup-typed-block")!.hidden).toBe(true);
+    h.panel.spec.element.remove();
+  });
+
+  test("Settings › Tools shows the prepared game files and clears them (moved from Character, readiness item 6)", async () => {
+    const h = await settingsHarness({ prepared: { bytes: 1.5 * 1024 ** 3 } });
+    const tools = h.root.querySelector("[data-settings-section=tools]")!;
+    expect(text(tools)).toContain("Prepared game files: 1.5 GB");
+    buttonNamed(tools, "Clear prepared game files")!.click();
+    expect(h.dispatched.at(-1)).toEqual({ kind: "character.clearPreparedFiles" });
     h.panel.spec.element.remove();
   });
 

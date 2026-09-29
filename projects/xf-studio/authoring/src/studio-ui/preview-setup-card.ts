@@ -1,8 +1,8 @@
-import type { PreviewSetupAction, PreviewSetupButton } from "../preview-setup";
+import type { InstallRoute, PreviewSetupAction, PreviewSetupButton } from "../preview-setup";
 import type { ReadonlyDeep } from "../read-only";
 import type { WolvenKitLink } from "../wolvenkit-setup";
 import { progressBar } from "./components/progress";
-import { applyCapability, button } from "./controls";
+import { applyCapability, button, Segmented } from "./controls";
 import { h, setText, uid } from "./dom";
 import type { Frame, StudioRuntime } from "./runtime";
 
@@ -31,8 +31,14 @@ export function previewSetupCard(rt: StudioRuntime) {
   const secondary = button({ label: "", onClick: () => { if (secondaryAction) void run(secondaryAction); } });
   const primary = button({ label: "", variant: "primary", onClick: () => { if (primaryAction) void run(primaryAction); } });
   primary.id = "preview-card-primary"; secondary.id = "preview-card-secondary";
+  // How mods are installed, asked beside Use this folder when Mod Organizer 2 was found (release-readiness-audit.md item 9): the
+  // library's segmented choice, both options shown; the answer is saved with the folder. Its note names the instance and profile.
+  const route = new Segmented<InstallRoute>({ label: "How do you install mods?", reserveNote: true, options: [
+    { value: "mo2", label: "Mod Organizer 2" }, { value: "direct", label: "Vortex or by hand" }],
+  onSelect: value => void run({ kind: "previewSetup.chooseRoute", route: value }) });
+  route.element.classList.add("setup-card-route");
   const element = h("section", { class: "setup-card", id: "preview-card", "aria-labelledby": titleId, hidden: true },
-    title, body, bar, step, notice, links, h("div", { class: "setup-card-actions" }, later, secondary, primary));
+    title, body, bar, step, route.element, notice, links, h("div", { class: "setup-card-actions" }, later, secondary, primary));
 
   // The consent dialog: what will be downloaded, why, from where and under which licence.
   const consentTitleId = uid("consent-title");
@@ -98,6 +104,13 @@ export function previewSetupCard(rt: StudioRuntime) {
         step.hidden = !card.step;
         setText(notice, card.notice ?? "");
         notice.hidden = !card.notice;
+        const question = card.route;
+        route.element.hidden = !question;
+        if (question) {
+          route.setOptions(question.options);
+          route.update(question.chosen, value => port.previewSetup.capability({ kind: "previewSetup.chooseRoute", route: value }),
+            { note: question.chosen === "mo2" ? `Uses ${question.detail}. You can change it in Settings › Game.` : "Mods go into your game folder. You can change it in Settings › Game." });
+        }
         linkKey = paintLinks(links, card.links, linkKey);
         later.hidden = !card.canDismiss;
         primaryAction = paintButton(primary, card.primary);

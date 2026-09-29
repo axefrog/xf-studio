@@ -82,7 +82,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       save: () => core.app.characterPresetFile(),
     },
     executeCollection: request => core.app.execute(request),
-    recoverCollection: () => collection.recover(),
+    recoverCollection: draft => collection.recover(draft),
     buildReadiness: options.localSetup && (() => {
       const setup = options.localSetup!.snapshot();
       if (!setup.view) return setup.error ? "needs-setup" : "loading";

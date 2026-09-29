@@ -108,7 +108,7 @@ export function wolvenKitConsent(state: WolvenKitSetupState): WolvenKitConsent {
   const offer = state.offer;
   return {
     title: `Download WolvenKit ${offer.version}?`,
-    intro: "XF Studio uses WolvenKit CLI to read your Cyberpunk 2077 files. It reads them only; nothing in your game changes.",
+    intro: "XF Studio uses WolvenKit to read your Cyberpunk 2077 files. It reads them only; nothing in your game changes.",
     facts: [
       { label: "What it is", value: `WolvenKit CLI ${offer.version}, the free, open-source modding tool made by ${offer.publisher}. It isn't part of XF Studio.` },
       { label: "Why", value: `It builds the 3D head preview from your own game files and packs your ${EYE_MAKEUP_MOD.modName} mod files.` },

@@ -277,12 +277,15 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const toggles = new Map<string, Toggle>();
   const optics = new Toggle({ label: "Eye's own roughness", onChange: enabled => rt.dispatch({ kind: "preview.setEyeOptics", enabled }) });
   const opticsNote = note("");
+  // The normal-map preview is a research study (release-readiness-audit.md item 6), like the eye optics comparison; the section shows
+  // only when it has something to offer.
+  const display = section("Display", toolToggles, h("div", { class: "research-only" }, normals.element, optics.element, opticsNote));
   const element = h("div", { class: "panel-content" },
     section({ title: "Camera", help: ["Camera and light are saved with your workspace; they never change your looks or your mod.",
       "Ctrl+Z in this panel undoes view and lighting changes, which have their own history."] }, fov.element, h("div", { class: "row wrap gap-s" }, front, bodyView, creatorFace, creatorHair)),
     section({ title: "Light", help: LIGHT_HELP }, setupList.element, setupActions, surroundings.element, lightsGroup.element),
     diagnostics,
-    section("Display", toolToggles, normals.element, h("div", { class: "research-only" }, optics.element, opticsNote)));
+    display);
   return {
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
@@ -343,6 +346,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       const wanted = tools.map(tool => toggles.get(tool.id)!.element);
       if (wanted.length !== toolToggles.children.length || wanted.some((node, index) => toolToggles.children[index] !== node)) toolToggles.replaceChildren(...wanted);
       for (const tool of tools) toggles.get(tool.id)!.update(!!tool.on, ready ? { disabled: !tool.capability.available, reason: tool.capability.reason } : loading);
+      display.hidden = !research && !tools.length;
       optics.update(preview?.eyeOwnRoughness ?? true, loading);
       const eye = assets.eyeOptics;
       setText(opticsNote, !eye ? "Uses the shown eye's own roughness from your game files instead of the preview's even gloss." : eye.active
@@ -494,11 +498,15 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
     defaultValue: 0, reset: true, transaction: {
       edit: value => { const action = { kind: "preview.setHairLook" as const, value: value / 100 }; rt.report(action.kind, port.authoring.dispatch(action)); },
       commit: endEdit, cancel: endEdit } });
+  // Rebuild is a recovery step, offered only when the textures are in trouble (release-readiness-audit.md item 6); the palette keeps it.
+  const rebuildRow = h("div", { class: "row" }, rebuild);
+  // Rendering is a set of fidelity studies (research tools, UI-85): everyone else keeps its defaults.
+  const rendering = section({ title: "Rendering", help: ["Research: how the 3D view draws your V. Saved with your workspace; your looks and your mod are unchanged.",
+    "Ctrl+Z in this panel undoes these with the other view and lighting changes."] }, scatter.element, shadows.element, hairLook.element);
   const element = h("div", { class: "panel-content" },
     section({ title: "Makeup preview textures", help: ["The size of the makeup textures in the 3D view. The head and eyes keep their own detail.",
-      "Saved on this computer; your looks and your mod are unchanged."] }, tiers.element, stateLine, h("div", { class: "row" }, rebuild)),
-    section({ title: "Rendering", help: ["How the 3D view draws your V. Saved with your workspace; your looks and your mod are unchanged.",
-      "Ctrl+Z in this panel undoes these with the other view and lighting changes."] }, scatter.element, shadows.element, hairLook.element));
+      "Saved on this computer; your looks and your mod are unchanged."] }, tiers.element, stateLine, rebuildRow),
+    rendering);
   return {
     spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
@@ -516,6 +524,8 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
           h("span", { class: "muted small", text: `About ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB of memory at this size.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));
+      rebuildRow.hidden = readiness.phase !== "blocked";
+      rendering.hidden = !frame.preferences?.researchTools;
       const preview = frame.preview.preview;
       const gate = (action: Parameters<typeof port.authoring.capability>[0]) => {
         const allowed = port.authoring.capability(action);

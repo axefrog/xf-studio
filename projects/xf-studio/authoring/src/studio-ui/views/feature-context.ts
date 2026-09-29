@@ -58,6 +58,7 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     openSettings: section => rt.settings.open(section),
     links: Object.freeze({ open: (link: Parameters<typeof port.links.open>[0]) => port.links.open(link) }),
     changed: () => rt.changed(),
+    research: () => !!port.preferences.snapshot().researchTools,
     easing: Object.freeze({
       get: (scope: string) => port.preferences.snapshot().easings?.[scope],
       set: (scope: string, easing: EasingId) => {

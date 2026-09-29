@@ -140,6 +140,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     verification ? "/api/verification/mod-install" : "/api/mod-install");
   // Whether the 3D preview may start preparing by itself; a workspace preference (per verification scope).
   let autostart = workspace.previewSetup?.autostart ?? legacyAutostart(storage, verification);
+  // Whether the person chose Not now on the 3D preview card; a workspace preference too, so it stays declined.
+  let declined = workspace.previewSetup?.declined === true;
   let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
   let savedAppearance: SavedAppearanceActions | undefined;
   let previewActions: PreviewActions | undefined;
@@ -191,7 +193,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       preview: () => previewActions?.snapshot(), motion: () => motionActions?.snapshot(), views: () => storedViewGraph(views),
       character: () => head ? head.characterContext.stored() ?? null : undefined,
       uiPreferences: () => preferences.snapshot(),
-      previewSetup: () => ({ autostart }),
+      previewSetup: () => ({ autostart, ...(declined ? { declined: true as const } : {}) }),
       transitions: () => transitions.stored(),
     },
     sources: [core.document, preferences], window, document,
@@ -253,6 +255,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     openLink: host.openLink ?? (link => openInNewTab(host.wolvenKitSetup, link)),
     openHostSetup: host.openSetup, setupPlace: host.setupPlace,
     autostart: { get: () => autostart, set: on => { if (autostart !== on) { autostart = on; persist(); } } },
+    declined: { get: () => declined, set: on => { if (declined !== on) { declined = on; persist(); } } },
     loadHead: () => attachHead(),
   });
   bootstrap = createTrustedStudioBootstrap({

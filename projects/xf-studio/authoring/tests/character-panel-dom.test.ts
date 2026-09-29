@@ -451,17 +451,10 @@ describe("the choice list", () => {
     expect(h.stops.length).toBe(1);
   });
 
-  test("the prepared game files' size and Clear prepared game files", async () => {
+  test("the prepared game files live in Settings › Tools, not in the Character panel (readiness item 6)", async () => {
     const h = await harness();
     for (let i = 0; i < 3; i++) { h.paint(); await settle(); }
-    const text = () => h.root.querySelector(".cc-prepared-text")!.textContent;
-    expect(text()).toBe("Prepared game files: 1.5 GB");
-    const clear = h.root.querySelectorAll("button").find(button => button.textContent?.includes("Clear prepared game files"))!;
-    clear.click();
-    expect(h.dispatched.at(-1)).toEqual({ kind: "character.clearPreparedFiles" });
-    h.paint();
-    expect(text()).toBe("Clearing the prepared game files…");
-    for (let i = 0; i < 3; i++) { await settle(); h.paint(); }
-    expect(text()).toBe("Prepared game files: 1.5 GB · cleared 1.5 GB");
+    expect(h.root.querySelector(".cc-prepared-text")).toBeNull();
+    expect(h.root.querySelectorAll("button").some(button => button.textContent?.includes("Clear prepared game files"))).toBe(false);
   });
 });

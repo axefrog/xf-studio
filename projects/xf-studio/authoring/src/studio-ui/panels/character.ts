@@ -73,7 +73,6 @@ const STOPPED: Record<"time" | "disk" | "setup", string> = {
   disk: "Preparing ahead paused: this session's disk space is used.",
   setup: "Choices are prepared once WolvenKit is set up.",
 };
-const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
 /** The part of the page a list scrolls in (its nearest scrolling ancestor, clipped to the window), or null without layout. */
 function scrollView(from: HTMLElement): { top: number; bottom: number } | null {
   if (typeof getComputedStyle !== "function" || typeof from.getBoundingClientRect !== "function") return null;
@@ -193,6 +192,8 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const uncensored = new Toggle({ label: "Show my V uncensored", onChange: enabled => dispatch({ kind: "preview.setUncensored", enabled }),
     help: ["Off: the game's censored look, with its underwear.", "On: your V as the game shows it when nudity is allowed: nipples and genitals as you chose them, with no underwear."] });
   const exportV = button({ label: "Export appearance data", icon: "export", small: true, variant: "quiet", onClick: () => void rt.file({ kind: "savedV.export" }) });
+  const filesSection = section({ title: "Files", help: "Research: the shown V's appearance record as read from the save. A save is read on this computer and never changed or uploaded." },
+    h("div", { class: "row wrap gap-s" }, exportV));
   const detailNote = note("");
   // The V's details as the 3D view draws them (ui-copy-and-layout-review.md §3.10): a folded list, one row per part of V, the reason for
   // anything not shown in that row's help tip, and the renderer's limits in one row of their own.
@@ -208,11 +209,6 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     helpTip("what the 3D view shows", "Your V's details as the 3D view draws them. Shading and lighting are approximate."));
   const detailsBlock = h("div", { class: "cc-details", hidden: true }, detailsBody);
   status.insertBefore(detailsHead, statusText);
-  // The game files prepared for the 3D view on this computer, and clearing them.
-  const preparedText = h("span", { class: "cc-prepared-text" });
-  const clearPrepared = button({ label: "Clear prepared game files", icon: "trash", small: true, variant: "quiet",
-    title: "Removes the files XF Studio prepared from your game for the 3D view. They are read from your game again when needed; your makeup, presets and settings stay.",
-    onClick: () => dispatch({ kind: "character.clearPreparedFiles" }) });
 
   const controls_: CharacterControls = {
     eyeShape: h("div", { class: "cc-control" }, eyeShape.element, eyeNote),
@@ -229,8 +225,9 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     h("section", { class: "section cc-quick" }, ownMakeup.element),
     h("div", { class: "cc-find" }, searchField.element, legend, noMatch),
     groupsHost,
-    section({ title: "Files", help: "A save is read on this computer and never changed or uploaded." }, h("div", { class: "row wrap gap-s" }, exportV),
-      h("div", { class: "row wrap gap-s cc-prepared" }, preparedText, clearPrepared)));
+    // The appearance record is a research export (release-readiness-audit.md item 6); clearing the prepared game files is kept
+    // in Settings › Tools and the palette, where cache upkeep belongs.
+    filesSection);
 
   // One rule (UI-81): inside this panel the Undo keys step through the panel's own changes (creator choices and Clothing), whatever has
   // focus (a switch, a list, a button), never the makeup's history. Only a text box keeps its own text Undo.
@@ -826,12 +823,8 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       // The game's own nudity setting, as the viewer chooses; off is the game's censored look (knowledge/body-rendering.md §3).
       const uncensoredOn = preview?.uncensored === true, uncensoredAllowed = port.authoring.capability({ kind: "preview.setUncensored", enabled: !uncensoredOn });
       uncensored.update(!!preview && uncensoredOn, { disabled: !preview || !uncensoredAllowed.available, reason: uncensoredAllowed.reason ?? loading });
+      filesSection.hidden = !research;
       applyCapability(exportV, port.files.capability({ kind: "savedV.export" }));
-      const prepared = context?.prepared;
-      setText(preparedText, !prepared ? "" : prepared.clearing ? "Clearing the prepared game files…"
-        : prepared.bytes === null ? "Prepared game files: checking their size…"
-          : `Prepared game files: ${prepared.bytes ? size(prepared.bytes) : "none"}${prepared.freed ? ` · cleared ${size(prepared.freed)}` : ""}`);
-      applyCapability(clearPrepared, port.authoring.capability({ kind: "character.clearPreparedFiles" }));
       // While the details are on their way (or failed) one line says so; the WolvenKit need is said once, by the status line.
       const detailLine = characterDetailLine(details);
       setText(detailNote, detailsNeed && detailLine.text === detailsNeed ? "" : detailLine.text);

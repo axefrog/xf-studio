@@ -34,7 +34,9 @@ const wolvenKitState = (phase: WolvenKitSetupState["phase"], patch: Partial<Wolv
 
 /** A scripted host: preparation and WolvenKit states, a switch to drop contact, and the settings it saved. */
 function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupState; autostart?: boolean; hostSetup?: boolean;
-  games?: string[]; unsupported?: string[]; issues?: { source: string; code: string; detail: string }[]; loadHead?: () => Promise<void> } = {}) {
+  games?: string[]; unsupported?: string[]; issues?: { source: string; code: string; detail: string }[]; loadHead?: () => Promise<void>;
+  /** Mod Organizer 2 instances detection finds (the route question), and a kept Not now (the workspace's). */
+  mo2?: { root: string; name: string; managesCyberpunk: boolean; selectedProfile: string | null; profiles: string[] }[]; declined?: { value: boolean } } = {}) {
   const host = { preview: options.preview ?? previewState({}), wolvenKit: options.wolvenKit ?? wolvenKitState("ready"),
     down: false, requests: [] as string[], preparing: 0, head: options.loadHead ?? (async () => {}) };
   const preparation = new PreviewPreparationActions(async action => {
@@ -69,13 +71,14 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
   const detection = { dispatch: async () => ({ ok: true as const }),
     snapshot: () => ({ games: { candidates: (options.games ?? []).map(root => ({ root })),
       unsupported: (options.unsupported ?? []).map(message => ({ source: "xbox", root: null, detail: "", message })),
-      issues: options.issues ?? [] } }) } as unknown as Pick<InstallDetectionActions, "dispatch" | "snapshot">;
+      issues: options.issues ?? [] }, mo2: { instances: options.mo2 ?? [] } }) } as unknown as Pick<InstallDetectionActions, "dispatch" | "snapshot">;
   let autostart = options.autostart ?? true, hostSetupOpened = 0;
   const links: string[] = [];
   const setup = new PreviewSetupActions({ preparation, wolvenKit, detection, localSetup, setupPlace: "Settings",
     openLink: async link => { links.push(link); },
     ...(options.hostSetup ? { openHostSetup: () => { hostSetupOpened++; } } : {}),
     autostart: { get: () => autostart, set: on => { autostart = on; } },
+    ...(options.declined ? { declined: { get: () => options.declined!.value, set: (on: boolean) => { options.declined!.value = on; } } } : {}),
     loadHead: () => host.head() });
   return { host, setup, preparation, localSetup, saved, links, get autostart() { return autostart; }, get hostSetupOpened() { return hostSetupOpened; },
     ready() { host.preview = previewState({ phase: "ready", canPrepare: false, message: "The 3D preview is ready." }); } };
@@ -295,7 +298,7 @@ test("the WolvenKit consent is a port state, and closing it downloads nothing", 
 
 test("every setup action is catalogued, and every state speaks plainly", async () => {
   const kinds = Object.keys(PREVIEW_SETUP_DESCRIPTORS).sort();
-  expect(kinds).toEqual(["previewSetup.cancel", "previewSetup.cancelDownload", "previewSetup.consent", "previewSetup.consentClose",
+  expect(kinds).toEqual(["previewSetup.cancel", "previewSetup.cancelDownload", "previewSetup.chooseRoute", "previewSetup.consent", "previewSetup.consentClose",
     "previewSetup.dismiss", "previewSetup.installWolvenKit", "previewSetup.openLink", "previewSetup.openSetup", "previewSetup.prepare",
     "previewSetup.prepareAgain", "previewSetup.recheckRuntime", "previewSetup.refresh", "previewSetup.retryHead", "previewSetup.show",
     "previewSetup.useDetectedGame", "previewSetup.useDetectedWolvenKit"]);
@@ -500,4 +503,50 @@ test("the WolvenKit step follows WolvenKit's own state: its runtime, its downloa
   expect(await step(wolvenKitState("downloading", { canCancel: true, progress: { receivedBytes: 1, totalBytes: 4 } }))).toBeNull();
   expect(await step(wolvenKitState("ready"))).toEqual({ label: "Open Settings", action: { kind: "previewSetup.openSetup" } });
   expect(await step(wolvenKitState("custom-missing", { message: "WolvenKit isn't where it was set." }))).toEqual({ label: "Open Settings", action: { kind: "previewSetup.openSetup" } });
+});
+
+test("with Mod Organizer 2 found, the first-run card asks how mods are installed and saves the answer with the folder (readiness item 9)", async () => {
+  const needsGame = () => previewState({ phase: "needs-setup", needs: ["game"], canPrepare: false, code: "preview_game_missing",
+    message: "Choose your Cyberpunk 2077 game folder." });
+  const mo2 = [{ root: "D:\\MO2", name: "Cyberpunk MO2", managesCyberpunk: true, selectedProfile: "Main", profiles: ["Main", "Testing"] }];
+  // Defaults first: the instance found is the answer until the person picks otherwise; it goes with Use this folder.
+  const h = harness({ preview: needsGame(), games: ["D:\\Games\\Cyberpunk 2077"], mo2 });
+  await h.setup.start();
+  await until(() => !!h.setup.snapshot().card.route);
+  expect(h.setup.snapshot().card.route).toMatchObject({ label: "How do you install mods?", chosen: "mo2", detail: "Cyberpunk MO2 · profile Main",
+    options: [{ value: "mo2", label: "Mod Organizer 2" }, { value: "direct", label: "Vortex or by hand" }] });
+  for (const text of spoken(h.setup.snapshot())) expect(USER_FACING_JARGON.test(text), text).toBe(false);
+  expect(await h.setup.dispatch({ kind: "previewSetup.useDetectedGame" })).toEqual({ ok: true });
+  expect(h.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Games\\Cyberpunk 2077", launchRoute: "mo2", mo2Root: "D:\\MO2", mo2ProfileId: "Main" });
+  // Vortex or by hand: the game folder route.
+  const direct = harness({ preview: needsGame(), games: ["D:\\Games\\Cyberpunk 2077"], mo2 });
+  await direct.setup.start();
+  await until(() => !!direct.setup.snapshot().card.route);
+  expect(await direct.setup.dispatch({ kind: "previewSetup.chooseRoute", route: "direct" })).toEqual({ ok: true });
+  expect(direct.setup.snapshot().card.route?.chosen).toBe("direct");
+  await direct.setup.dispatch({ kind: "previewSetup.useDetectedGame" });
+  expect(direct.saved.at(-1)).toMatchObject({ gameRoot: "D:\\Games\\Cyberpunk 2077", launchRoute: "direct" });
+  expect(direct.saved.at(-1)!.mo2Root).toBeNull();
+  // Without Mod Organizer 2 (or one that doesn't manage the game) nothing is asked, and only the folder is saved.
+  const plain = harness({ preview: needsGame(), games: ["D:\\Games\\Cyberpunk 2077"], mo2: [{ ...mo2[0]!, managesCyberpunk: false }] });
+  await plain.setup.start();
+  await until(() => plain.setup.snapshot().card.primary?.action.kind === "previewSetup.useDetectedGame");
+  expect(plain.setup.snapshot().card.route).toBeNull();
+  expect(plain.setup.capability({ kind: "previewSetup.chooseRoute", route: "mo2" }).available).toBe(false);
+});
+
+test("Not now is kept: a declined card stays closed after a restart until the person asks for it (readiness item 10)", async () => {
+  const declined = { value: false };
+  const first = harness({ autostart: false, declined });
+  await first.setup.start();
+  expect(first.setup.snapshot().card.open).toBe(true);
+  await first.setup.dispatch({ kind: "previewSetup.dismiss" });
+  expect(declined.value).toBe(true);
+  const again = harness({ autostart: false, declined });
+  await again.setup.start();
+  expect(again.setup.snapshot().card.open).toBe(false);
+  expect(again.setup.snapshot().head.next).toEqual({ label: "Set up 3D preview", action: { kind: "previewSetup.show" } });
+  await again.setup.dispatch({ kind: "previewSetup.show" });
+  expect(again.setup.snapshot().card.open).toBe(true);
+  expect(declined.value).toBe(false);
 });

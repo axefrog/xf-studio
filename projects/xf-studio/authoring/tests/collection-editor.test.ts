@@ -128,7 +128,9 @@ test("collection API preserves legacy looks and rejects foreign, stale and destr
   const request = (suffix: string, method = "GET", value?: unknown, source = origin) => new Request(origin + prefix + suffix,
     { method, headers: { Origin: source, "Content-Type": "application/json" }, body: value ? JSON.stringify(value) : undefined });
   try {
-    const initial = db.get(db.list()[0].id);
+    // A fresh library starts empty (no phantom collection, release-readiness-audit.md item 11); the first save makes version 1.
+    expect(db.list()).toEqual([]);
+    const initial = db.save({ collection: { schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Makeup collection", presets: [] } });
     const value = { collection: initial.collection, revision: initial.revision };
     expect((await collectionRequest(request("", "POST", value, "https://example.com"), db, prefix)).status).toBe(403);
     expect((await collectionRequest(request("", "POST", value), db, prefix)).status).toBe(200);

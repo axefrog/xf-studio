@@ -19,8 +19,9 @@ export type StudioFileAction =
   | { kind: "recipe.import" | "recipe.export" | "mask.export" | "savedV.import" | "savedV.export" }
   /** A portable character preset (`xfs/cc-preset-1`): load it as the shown V, or save the choices set on the shown V. */
   | { kind: "characterPreset.import" | "characterPreset.export" }
-  | { kind: "collection.import" | "collection.export" | "collection.plan" |
-      "package.check" | "package.build" | "collection.recover" };
+  | { kind: "collection.import" | "collection.export" | "collection.plan" | "package.check" | "package.build" }
+  /** Bring back an earlier draft: `draft` (its collection ID, from the recent-drafts list) names one, else the previous one. */
+  | { kind: "collection.recover"; draft?: string };
 export type StudioFileOutcome = { ok: true; code: string; message: string;
   result?: CollectionResult;
   savedAppearance?: Readonly<SavedAppearanceState> } |
@@ -52,7 +53,7 @@ type FileSources = {
   savedVReady(): boolean;
   savedVUnavailableReason?(): string | undefined;
   executeCollection(request: CollectionRequest): Promise<CollectionOutcome>;
-  recoverCollection(): void;
+  recoverCollection(draft?: string): void;
   /** The character context's preset workflows (character-context-actions.ts); absent where there is no 3D preview. */
   characterPreset?: {
     /** Why a preset can't be loaded or saved now, or undefined. */
@@ -131,7 +132,7 @@ export class StudioFileOperations {
           : "Character presets need the 3D preview.";
         return reason ? { available: false, reason } : { available: true };
       }
-      case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen" }) ??
+      case "collection.recover": return this.collection?.actionCapability({ kind: "collection.undoOpen", ...(action.draft !== undefined ? { draft: action.draft } : {}) }) ??
         { available: false, reason: "Collection is still loading." };
       case "package.build": {
         const base = this.collection?.capability(collectionRequest(action.kind)) ??
@@ -207,8 +208,9 @@ export class StudioFileOperations {
           outcome = { ok: true, code: "exported", message: [`Character preset saved with ${saved.values} choice${saved.values === 1 ? "" : "s"}.`, ...notes].join(" ") }; break;
         }
         case "collection.recover":
-          this.sources.recoverCollection();
-          outcome = { ok: true, code: "recovered", message: "Previous collection draft restored." }; break;
+          this.sources.recoverCollection(action.draft);
+          outcome = { ok: true, code: "recovered", message: action.draft !== undefined
+            ? "That draft is back. The one you had open is first under Recent drafts." : "Previous collection draft restored." }; break;
         default: {
           let request: CollectionRequest;
           if (action.kind === "collection.import") {

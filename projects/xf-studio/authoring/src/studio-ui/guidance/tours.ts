@@ -1,4 +1,4 @@
-import { FINISH_MOD_TOKEN, withFinishText, type FinishSummary } from "./finish-text";
+import { FINISH_EXPORT_TOKEN, FINISH_MOD_TOKEN, withFinishText, type FinishSummary } from "./finish-text";
 import type { Tour } from "./types";
 
 /**
@@ -9,6 +9,8 @@ import type { Tour } from "./types";
 export const ONBOARDING_TOUR_ID = "onboarding";
 /** The tour of the Studio's other stable parts: your V, Camera & light, and Settings. */
 export const STUDIO_TOUR_ID = "your-v-and-view";
+/** This version's "What's new" tour: one per release, replaced when the next one ships. */
+export const WHATS_NEW_TOUR_ID = "whats-new-0.1.0-beta.1";
 
 export const TOURS: readonly Tour[] = [
   {
@@ -26,7 +28,7 @@ export const TOURS: readonly Tour[] = [
         body: "Your changes appear on the 3D head as you work. Drag to turn the view, use the wheel to zoom and right-drag to pan. [[key:head.front]] returns to the front view.\n\nIf the 3D preview isn't set up yet, this pane shows the one next step. The UV map works without it." },
         buttons: [{ label: "Show the front view", action: { kind: "studio", action: { kind: "camera.front" } } }] },
       { anchor: "finish.picker", content: { title: "Choose a colour and a finish",
-        body: `Pick the layer's colour, then its finish. ${FINISH_MOD_TOKEN}; the picker groups the others by how far they can go, and preview-only finishes are marked.` },
+        body: `Pick the layer's colour, then its finish. ${FINISH_MOD_TOKEN}; the picker groups the others by how far they can go.` },
         buttons: [{ label: "Try Metallic", action: { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: "metallic" } } }],
         advanceWhen: { any: [{ event: "finish.changed" }, { event: "color.changed" }] } },
       { anchor: "presets.list", content: { title: "Presets are complete looks",
@@ -58,19 +60,20 @@ export const TOURS: readonly Tour[] = [
     ],
   },
   {
-    id: "whats-new-0.1.0-alpha.1", audience: "whats-new", version: "0.1.0-alpha.1", title: "What's new in 0.1.0-alpha.1",
-    summary: "The History panel, your V's own brows, lashes and hair, and the character-creator lighting added since.",
+    // The beta's tour (release-readiness-audit.md items 21 and 23): what changed since 0.1.0-alpha.2, in the order a person meets it.
+    id: WHATS_NEW_TOUR_ID, audience: "whats-new", version: "0.1.0-beta.1", title: "What's new in the beta",
+    summary: "Finishes that go into your mod first, presets that start ready, a masculine V, and where to report a problem.",
     steps: [
-      { anchor: "history.list", content: { title: "Every change, listed",
-        body: "The **History** panel lists your recent changes to this preset. Click any step to go back to it, or a dimmed step to go forward again. [[key:shell.undo]] and [[key:shell.redo]] still work as usual." } },
-      { anchor: "panel.character", content: { title: "Your V's brows, lashes and hair",
-        body: "Load a save and the 3D preview shows that V's own eyebrows, eyelashes and hair, read from your game and mods the way the game picks them. Without a save you see the character creator's default V." },
-        buttons: [{ label: "Load V from a save…", action: { kind: "file", action: { kind: "savedV.import" } } }] },
-      { anchor: "panel.lighting", content: { title: "Character-creator lighting",
-        body: "New since this version: under **Camera & light**, choose the **Character creator** lighting setup to see your V under the game's own creator lights, to compare with what you see in the game. Choose **Soft studio** to go back at any time." },
-        buttons: [{ label: "Use creator lighting", action: { kind: "studio", action: { kind: "preview.selectLightingSetup", setup: "creator" } } }] },
-      { anchor: "header.help", content: { title: "Replay tours any time",
-        body: "Every tour, including this one, is in **Help** ([[key:shell.help]])." } },
+      { anchor: "finish.picker", content: { title: "Finishes that go into your mod",
+        body: `The finish picker now shows the finishes that go into your mod first. ${FINISH_EXPORT_TOKEN}` },
+        buttons: [{ label: "Try Metallic", action: { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: "metallic" } } }] },
+      { anchor: "presets.list", content: { title: "New presets start ready",
+        body: "**Add preset** now starts with a layer, like your first preset, so there's something to shape straight away. **Save as new collection** gives the copy its own name, and the Library panel lists your **Recent drafts** to bring any of them back." } },
+      { anchor: "header.package", content: { title: "For a masculine V too",
+        body: "**Build** makes your mod for a feminine and a masculine V: the masculine character creator gets its own row with the same looks. The masculine row hasn't been tried in the game yet; **What's not in this version yet** in Help lists what's still to check." },
+        buttons: [{ label: "Open Mod package", action: { kind: "panel", panel: "package" } }] },
+      { anchor: "header.help", content: { title: "Tell us what doesn't work",
+        body: "This is a beta, and your reports make it work on more setups. **Report a problem…** in Help prepares a report you review first; nothing is sent by itself. **Check for updates** in Help opens the releases page.\n\nEvery tour, including this one, is in **Help** ([[key:shell.help]])." } },
     ],
   },
 ];

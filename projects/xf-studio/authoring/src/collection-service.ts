@@ -1,6 +1,6 @@
 import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type PackageProductSummary, type ReadonlyDeep } from "./collection-actions";
 import type { EditorSnapshot } from "./collection-session";
-import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
+import { collectionDraft, newLook, newPresetName, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
   type DocumentModel } from "./collection-workspace";
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, planCollection } from "./preset-collection";
@@ -100,6 +100,8 @@ export class CollectionService {
   private baselines = new Map<string, Baseline>();
   private persistenceCache?: { key: string; value: DraftPersistence };
   private requestSeq = 0;
+  /** Each saved-list read in order; only the newest one's reply is kept. */
+  private listSeq = 0;
   private running?: CollectionActivity;
   constructor(private model: DocumentModel, restored: CollectionWorkspace | undefined, private legacy: LibraryState,
     private read: () => EditorSnapshot, private show: (editor: EditorSnapshot) => void,
@@ -163,10 +165,34 @@ export class CollectionService {
       draft: this.actions?.view() });
   }
   summary(): CollectionServiceSummary {
+    const draft = this.actions?.summary();
+    // Each recent draft says how it stands against its saved version (from the baselines this session loaded or saved).
+    if (draft) for (const entry of draft.recovery) if (entry.saved === "unknown") entry.saved = this.draftAgainstSaved(entry.id, entry.revision!);
     return { busy: this.busy, progress: this.progress && { ...this.progress },
-      summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary(),
+      summaries: this.summaries.map(item => ({ ...item })), draft,
       ...(this.actions ? { products: this.actions.productSummary() } : {}),
       ...(this.actions?.packagePlanIssue() ? { packagePlanIssue: this.actions.packagePlanIssue()!.message } : {}) };
+  }
+  private recoveryVerdicts = { content: -1, byId: new Map<string, "same" | "edited" | "unknown">() };
+  /** A queued draft against its saved version: the same, edited since, or unknown when that version isn't loaded. Cached per content. */
+  private draftAgainstSaved(id: string, revision: number): "same" | "edited" | "unknown" {
+    if (this.recoveryVerdicts.content !== this.content) this.recoveryVerdicts = { content: this.content, byId: new Map() };
+    const key = `${id}@${revision}`, known = this.recoveryVerdicts.byId.get(key);
+    if (known) return known;
+    const base = this.baselines.get(key), collection = this.actions?.recoveryCollection(id);
+    let verdict: "same" | "edited" | "unknown" = "unknown";
+    if (base && collection) {
+      const edited = base.name !== collection.name || base.order.join() !== collection.presets.map(look => look.id).join() ||
+        base.plan !== JSON.stringify(collection.packagePlan ?? null) || collection.presets.some(look => {
+          const saved = base.presets.get(look.id);
+          if (!saved || saved.name !== look.name) return true;
+          if (JSON.stringify(look.parts) === saved.raw) return false;
+          try { return this.model.parts.canonicalParts(look.parts) !== saved.canonical; } catch { return true; }
+        });
+      verdict = edited ? "edited" : "same";
+    }
+    this.recoveryVerdicts.byId.set(key, verdict);
+    return verdict;
   }
   snapshot() { return this.actions?.snapshot(); }
   /** The accepted request in flight, if any (requests are serialized). */
@@ -285,11 +311,17 @@ export class CollectionService {
     } catch { /* Baseline stays unknown; the draft itself is unaffected. */ }
   }
   private setProgress(progress: CollectionProgress) { this.progress = progress; this.notify(); }
-  private async list() { this.summaries = await this.transport.list(); this.notify(); return this.summaries; }
+  private async list() { const seq = ++this.listSeq; const summaries = await this.transport.list();
+    if (seq === this.listSeq) { this.summaries = summaries; this.notify(); } return this.summaries; }
   private async save(copy: boolean): Promise<StoredCollection> {
     const snapshot = this.actions!.snapshot(), sourceId = snapshot.collection.id;
+    let renamedFrom: string | undefined;
     if (copy) {
       snapshot.collection.id = crypto.randomUUID(); snapshot.revision = undefined;
+      // A copy never takes a name already in the library: "My collection" becomes "My collection 2" (release-readiness-audit.md
+      // item 12, the CORE-124 pattern for collections), and the draft (now the copy) takes it too.
+      const unique = uniqueCollectionName(snapshot.collection.name, this.summaries.map(item => item.name));
+      if (unique !== snapshot.collection.name) { renamedFrom = snapshot.collection.name; snapshot.collection.name = unique; }
       // The copy's mods are the copy's own: its default mod's archive name follows the new collection ID, and every
       // split-off mod gets a fresh ID, so no archive of the copy hides one of the original's (PIPE-89).
       const plan = copyPackagePlan(snapshot.collection.packagePlan, sourceId, snapshot.collection.id, () => crypto.randomUUID());
@@ -299,7 +331,7 @@ export class CollectionService {
     // An in-flight request may finish after a different draft has been opened via another adapter.
     if (this.actions!.view().collection.id !== sourceId)
       throw new CollectionServiceError("stale_result", "Saved snapshot belongs to another draft. Current draft kept; refresh saved collections to find it.");
-    this.actions!.dispatch({ kind: "collection.saved", result: saved, sourceId });
+    this.actions!.dispatch({ kind: "collection.saved", result: saved, sourceId, ...(renamedFrom !== undefined ? { renamedFrom } : {}) });
     this.remember(saved.collection, saved.revision);
     await this.list();
     return saved;
@@ -307,6 +339,19 @@ export class CollectionService {
   async execute(request: CollectionRequest): Promise<CollectionOutcome> {
     const allowed = this.capability(request);
     if (!allowed.available) return { ok: false, code: "unavailable", message: allowed.reason! };
+    // Reading the saved list is quiet: the library panel asks whenever the window comes back or the panel is shown, so the list
+    // updates itself (release-readiness-audit.md item 13). It never marks the library busy or replaces the progress line, and a
+    // reply that arrives after a newer list (a Save's) is dropped.
+    if (request.kind === "refresh") {
+      const requestId = ++this.requestSeq, seq = ++this.listSeq;
+      try {
+        const summaries = await this.transport.list();
+        if (seq === this.listSeq && JSON.stringify(summaries) !== JSON.stringify(this.summaries)) { this.summaries = summaries; this.notify(); }
+        return { ok: true, result: { kind: "list", summaries: this.summaries }, requestId };
+      } catch (error) {
+        return { ok: false, code: "request_failed", message: (error as Error).message, requestId };
+      }
+    }
     this.busy = true;
     const requestId = ++this.requestSeq;
     this.running = { requestId, kind: request.kind, ...(request.kind === "package" ? { action: request.action } : {}),
@@ -335,7 +380,10 @@ export class CollectionService {
               const existing = draft.collection.presets.find(p => p.id === id);
               if (existing) { existing.parts = withLivePart(existing, current.recipe, model); existing.name = this.legacy.name.trim() || existing.name; }
               else {
-                const look = newLook(id, this.legacy.name.trim() || "Unsaved preset", model);
+                // The live look joins the stored collection under a name none of its looks has (CORE-126): the workspace's own name, or
+                // the next "Preset N".
+                const wanted = this.legacy.name.trim(), names = draft.collection.presets;
+                const look = newLook(id, wanted && !names.some(item => item.name === wanted) ? wanted : newPresetName(names), model);
                 draft.collection.presets.push({ ...look, parts: withLivePart(look, current.recipe, model) });
               }
             }
@@ -355,8 +403,6 @@ export class CollectionService {
           }
           result = { kind: "list", summaries }; break;
         }
-        case "refresh": result = { kind: "list", summaries: await this.list() };
-          message = "Saved collection list refreshed; draft retained."; break;
         case "open": {
           const stored = await this.transport.get(request.id);
           // Opening is the only draft switch in this async operation. Existing changes are stashed first.
@@ -438,6 +484,20 @@ export class CollectionService {
       this.setProgress({ phase: "error", code, message, requestId });
       return { ok: false, code, message, requestId };
     } finally { this.busy = false; this.running = undefined; this.notify(); }
+  }
+}
+
+/**
+ * A collection name no other saved collection has: the name itself when free, else the next "Name N" (a trailing number is
+ * counted on from, so "Looks 2" becomes "Looks 3"), kept within the 120-character limit.
+ */
+export function uniqueCollectionName(name: string, taken: readonly string[]): string {
+  const names = new Set(taken.map(item => item.trim().toLowerCase()));
+  if (!names.has(name.trim().toLowerCase())) return name;
+  const match = /^(.*?)\s+(\d+)$/.exec(name.trim()), base = (match ? match[1]! : name.trim()).slice(0, 110);
+  for (let n = match ? Number(match[2]) + 1 : 2; ; n++) {
+    const next = `${base} ${n}`;
+    if (!names.has(next.toLowerCase())) return next;
   }
 }
 

@@ -23,6 +23,17 @@ export function setupStatus(frame: Frame): { text: string; tone: "warning" | "re
 }
 
 /**
+ * Whether the one setup line's first issue is WolvenKit's (not set up, missing, or waiting for .NET), so the line offers its next step
+ * as a button beside it ("Set up WolvenKit…", the setup service's `wolvenKitStep`; release-readiness-audit.md item 14). Not while it
+ * downloads or installs: the line then says so and there is nothing to do.
+ */
+export function wantsWolvenKitStep(frame: Frame): boolean {
+  const readiness = frame.localSetup.view?.readiness;
+  const first = readiness && [...readiness.build.issues, ...readiness.sourceDiscovery.issues][0];
+  return !!first && first.code.startsWith("wolvenkit_") && first.code !== "wolvenkit_installing";
+}
+
+/**
  * The game, saves and tools settings (UI-83, UI-03, UI-109): the one setup form both hosts use, shown in the Settings panel's Game, Saves
  * and Tools groups (the desktop's Build setup and every "Open Settings" opens it). Every choice is saved the moment it is made
  * (`setup.update` merges only that field over the saved settings), so there is no second copy of the settings to go stale and no Save

@@ -172,7 +172,8 @@ test("SQLite library initializes in the supplied user-data root", async () => {
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
   const response = await fetch(base + "/api/collections", { headers: { Cookie: cookie } });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject([{ name: "Makeup collection", revision: 1, count: 0 }]);
+  // A fresh library starts empty: no phantom collection before the first Save (release-readiness-audit.md item 11).
+  expect(await response.json()).toEqual([]);
   const denied = await fetch(base + "/api/collections", { method: "POST", headers: { Cookie: cookie,
     "Content-Type": "application/json", Origin: "http://attacker.example" }, body: "{}" });
   expect(denied.status).toBe(403);
@@ -182,6 +183,10 @@ test("SQLite library initializes in the supplied user-data root", async () => {
   const unproven = await fetch(base + "/api/looks", { method: "POST", headers: { Cookie: cookie,
     "Content-Type": "application/json" }, body: "{}" });
   expect(unproven.status).toBe(403);
+  const created = await fetch(base + "/api/collections", { method: "POST", headers: { Cookie: cookie,
+    "Content-Type": "application/json", "Sec-Fetch-Site": "same-origin", Referer: base + "/" },
+    body: JSON.stringify({ collection: { schema: "xfas/collection-1", id: crypto.randomUUID(), name: "Makeup collection", presets: [] } }) });
+  expect(created.status).toBe(200);
   const [summary] = await (await fetch(base + "/api/collections", { headers: { Cookie: cookie } })).json();
   const stored = await (await fetch(base + `/api/collections/${summary.id}`, { headers: { Cookie: cookie } })).json();
   const saved = await fetch(base + "/api/collections", { method: "POST", headers: { Cookie: cookie,
