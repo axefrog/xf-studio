@@ -1,7 +1,10 @@
 /**
- * Captures for the design gate of the Glitter model choice (experiment 032): the Colour & finish panel's Glitter section
- * on a layer that has just become Glitter, floated at 300 and 480 px, with research tools off and on, in one scheme. It runs
- * an isolated `?verify=1` workspace with disposable data and a throwaway headless Chrome profile, on its own port (never 4317).
+ * Captures for the design gate of the Glitter style choice (experiment 032), in one scheme:
+ * - the Colour & finish panel on a layer that has just become Glitter, floated at 300 and 480 px, research tools off and on;
+ * - a legacy Classic glitter layer with research tools off at 300 px: it keeps its style listed; after switching to Scattered
+ *   sparkle Classic is no longer offered; Undo brings it back.
+ * It runs an isolated `?verify=1` workspace with disposable data and a throwaway headless Chrome profile, on its own port
+ * (never 4317), and stops the server afterwards.
  *
  *   bun tools/glitter-model-look.ts <out dir> [port] [light|dark]
  */
@@ -9,7 +12,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { launch, startServer } from "./cdp";
 
-const [outArg, portArg = "4493", schemeArg = "dark"] = process.argv.slice(2);
+const [outArg, portArg = "4327", schemeArg = "dark"] = process.argv.slice(2);
 if (!outArg || (schemeArg !== "light" && schemeArg !== "dark")) throw Error("Usage: bun tools/glitter-model-look.ts <out dir> [port] [light|dark]");
 const out = resolve(outArg), port = +portArg, scheme = schemeArg;
 mkdirSync(out, { recursive: true });
@@ -46,5 +49,26 @@ try {
     }
   }
   const model = await page.evaluate(`${EM}.view().layer()?.flakes?.model ?? "classic"`);
-  console.log(JSON.stringify({ model, shots: 4, out }));
+  // A legacy Classic glitter layer (as older looks store it), research tools off.
+  const shoot = async (id: string) => {
+    await floatAt("finish", 300); await page.wait(700);
+    await page.evaluate(`[...document.querySelectorAll('.section-title')].find(e => e.textContent === 'Glitter')?.scrollIntoView({ block: 'start' })`);
+    await page.wait(300);
+    const clip = await windowRect("finish") as { x: number; y: number; width: number; height: number } | null;
+    await page.screenshot(resolve(out, `${scheme}-300-legacy-${id}.png`), clip ?? undefined);
+  };
+  const styles = () => page.evaluate(`[...document.querySelectorAll('.section-title')].find(e => e.textContent === 'Glitter')?.closest('section, .section')
+    ?.querySelectorAll('[role=radio], .choice') .length ?? null`);
+  const layerId = `${EM}.view().layer().id`;
+  await page.evaluate(`${EM}.dispatch({ kind: 'glitter.selectModel', layerId: ${layerId}, model: 'classic' })`);
+  await page.evaluate(`window.xfStudioShell.runtime.port.preferences.dispatch({ kind: "researchTools.set", enabled: false })`);
+  await shoot("classic");
+  const withClassic = await styles();
+  await page.evaluate(`${EM}.dispatch({ kind: 'glitter.selectModel', layerId: ${layerId}, model: 'direct' })`);
+  await shoot("switched");
+  const afterSwitch = await styles();
+  const undo = await page.evaluate(`${P}.authoring.dispatch({ kind: 'history.undo' }).ok`);
+  await shoot("undo");
+  const afterUndo = await page.evaluate(`${EM}.view().layer()?.flakes?.model ?? "classic"`);
+  console.log(JSON.stringify({ model, withClassic, afterSwitch, undo, afterUndo, shots: 7, out }));
 } finally { await page.close(); server.kill(); }

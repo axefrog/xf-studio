@@ -84,15 +84,15 @@ const classicDefaults = () => { const { cells, density, tilt } = defaultFlakes()
  */
 export function glitterModelCatalogue(wording: RegionWording): GlitterModelDescriptor[] {
   return [
-    { id: "direct", label: "Direct-light glints", stored: ["uv-cell-direct-1"], controlMax: GLINT_CONTROL_MAX,
-      summary: "Fine facets and occasional larger flashes respond to the preview light." },
-    { id: "clustered", label: "Clustered fine glints", stored: ["uv-cell-direct-2"], controlMax: GLINT_CONTROL_MAX,
-      summary: "Fine facets gather in soft clusters over a continuous sheen." },
-    { id: "fine", label: "Dense fine speckles", stored: ["uv-cell-direct-3"], controlMax: GLINT_CONTROL_MAX,
-      summary: "Denser tiny speckles with a sparse population of larger flashes; can look frosty." },
-    { id: "classic", label: "Classic reflective flakes", stored: [], defaults: classicDefaults(), research: true,
-      summary: "Original reflective flake map; existing classic recipes retain this look." },
-    { id: "irregular", label: "Irregular raster flakes", stored: ["irregular-planar-1"], research: true,
-      summary: `Irregular flakes are baked into a texture. Dense settings cover ${wording.area} and can lose sparkle at face distance.` },
+    { id: "direct", label: "Scattered sparkle", stored: ["uv-cell-direct-1"], controlMax: GLINT_CONTROL_MAX,
+      summary: "Tiny sparkles with an occasional bigger flash as the head turns." },
+    { id: "clustered", label: "Clustered sparkle", stored: ["uv-cell-direct-2"], controlMax: GLINT_CONTROL_MAX,
+      summary: "Sparkles gather in soft patches over a gentle sheen." },
+    { id: "fine", label: "Fine frost", stored: ["uv-cell-direct-3"], controlMax: GLINT_CONTROL_MAX,
+      summary: "A dense frost of tiny sparkles, with a few bigger flashes." },
+    { id: "classic", label: "Classic dots", stored: [], defaults: classicDefaults(), research: true,
+      summary: "Evenly spaced reflective dots, the original glitter look; older layers keep it." },
+    { id: "irregular", label: "Irregular flakes", stored: ["irregular-planar-1"], research: true,
+      summary: `Flakes of varied shape and size. Dense settings cover ${wording.area} and can lose their sparkle from further away.` },
   ];
 }

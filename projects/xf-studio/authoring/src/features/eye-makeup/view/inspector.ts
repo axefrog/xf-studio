@@ -101,10 +101,10 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   const shiftSection = section({ title: "Colour shift", help: ["The shift colour shows toward the lid's edges as the view angle grows.",
     "One shift colour per preset is built into your mod."] }, h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element));
 
-  // Glitter preview models: the three glint models with long names, all shown (ChoiceList `rows`); the classic and irregular
-  // flake studies join them only with research tools on (or on a layer already using one).
-  // The chosen model's description is its help tip (UI-131): what it is, not something to do.
-  const model = new ChoiceList<GlitterModel>({ label: "Glitter preview model", layout: "rows", help: "", onSelect: value => {
+  // Glitter styles: the three sparkle models, all shown (ChoiceList `rows`); the classic and irregular flake studies join them
+  // only with research tools on (or on a layer already using one). The chosen style's description goes in the Glitter
+  // heading's one help tip (UI-131), so the list has no tip of its own.
+  const model = new ChoiceList<GlitterModel>({ label: "Glitter style", layout: "rows", onSelect: value => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
   } });
   const classic = {
@@ -136,25 +136,29 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
     { term: "Covered pixels", value: measured.pixels, mono: true }], { label: "Flake measurement", className: "flake-measurement" });
   // The glint-strength control's usable top comes from the Glitter model catalogue (UI-93).
   const glintMax = catalogues(ctx).glitterModels.find(item => item.controlMax?.strength)?.controlMax?.strength;
+  // Shown as a percentage of the control's top, beside the other percentage sliders.
+  const strengthMax = Math.min(glintMax ?? Infinity, ctx.range("glitter.setDirect", "value", "strength").max);
   const direct = {
-    density: new Slider({ label: "Facet density", ...ctx.range("glitter.setDirect", "value", "density"), step: .01, format: pct,
+    density: new Slider({ label: "Flake density", ...ctx.range("glitter.setDirect", "value", "density"), step: .01, format: pct,
       transaction: recipeTransaction<number>(ctx, "direct-density", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "density", value })) }),
-    fineShare: new Slider({ label: "Fine-facet share", ...ctx.range("glitter.setDirect", "value", "fineShare"), step: .01, format: pct,
+    fineShare: new Slider({ label: "Small-flake share", ...ctx.range("glitter.setDirect", "value", "fineShare"), step: .01, format: pct,
       transaction: recipeTransaction<number>(ctx, "direct-fineShare", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "fineShare", value })) }),
-    strength: new Slider({ label: "Glint strength", min: 0, max: Math.min(glintMax ?? Infinity, ctx.range("glitter.setDirect", "value", "strength").max), step: .5, format: value => value.toFixed(1),
+    strength: new Slider({ label: "Sparkle strength", min: 0, max: strengthMax, step: .5, format: value => `${Math.round(value / strengthMax * 100)}%`,
       transaction: recipeTransaction<number>(ctx, "direct-strength", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "strength", value })) }),
-    color: new ColorField({ label: "Facet colour", transaction: recipeTransaction<string>(ctx, "direct-color", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "color", value })) }),
+    color: new ColorField({ label: "Flake colour", transaction: recipeTransaction<string>(ctx, "direct-color", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "color", value })) }),
   };
   // Everyone chooses among the glint models; the classic and irregular studies are research tools (UI-85).
   const modelChoice = h("div", {}, model.element);
   // That Glitter isn't built into mods is said once, by the finish's export line; the section says only how its colours work.
-  const glitterSection = section({ title: "Glitter", help: "Layer colour is the base; the flakes have their own colour." }, modelChoice);
+  const GLITTER_BASE = "Layer colour is the base; the flakes have their own colour.";
+  const glitterSection = section({ title: "Glitter", help: GLITTER_BASE }, modelChoice);
   const classicSection = section({ title: "Flakes", help: ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."] },
     classic.cells.element, classic.density.element, classic.tilt.element);
   const irregularSection = section({ title: "Irregular flakes", help: ["Field density is not a visible flake count.",
     "The counts measure the painted shape's texture: flake centres in the shape, the field they come from, and texture pixels with flake coverage. They are not glints seen on screen."] },
   irregular.count.element, measurement, irregular.radius.element, irregular.spread.element, irregular.tilt.element, irregular.color.element);
-  const directSection = section("Glint facets", direct.density.element, direct.fineShare.element, direct.strength.element, direct.color.element);
+  const directSection = section({ title: "Glitter flakes", help: ["Turn the head or move the light to see the flakes sparkle.", "Preview only: Glitter isn't built into mods yet."] },
+    direct.density.element, direct.fineShare.element, direct.strength.element, direct.color.element);
   const body = h("div", { class: "stack" },
     section("Pigment", h("div", { class: "row gap-m align-end" }, color.element, opacity.element)),
     section("Finish", finishGroup, description, exportLine),
@@ -208,10 +212,12 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         model.setOptions(catalogues(ctx).glitterModels.filter(item => !item.research || research || item.id === modelId)
           .map(item => ({ value: item.id, label: item.label })));
         model.update(modelId, value => modelChoices.find(choice => choice.value === value)?.capability ?? { available: true });
-        model.setHelp(catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
+        // One tip for the section: what the chosen style looks like, then how its colours work.
+        const summary = catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary;
+        setHelp(glitterSection.querySelector<HTMLElement>(".help-tip")!, summary ? [summary, GLITTER_BASE] : GLITTER_BASE);
       }
       if (!classicSection.hidden) {
-        const flakesTitle = glitter ? "Classic reflective flakes" : "Shimmer sparkles";
+        const flakesTitle = glitter ? "Classic dots" : "Shimmer sparkles";
         setText(classicSection.querySelector(".section-title")!, flakesTitle);
         setAttr(classicSection.querySelector(".help-tip")!, "aria-label", `About ${flakesTitle}`);
         // Shimmer is an experimental export; classic Glitter is preview only, so its tip doesn't call it experimental.
@@ -242,7 +248,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       }
       if (!directSection.hidden && flakes && "model" in flakes && flakes.model !== "irregular-planar-1") {
         const f = flakes as ReadonlyDeep<DirectGlintFlakes>;
-        setText(direct.density.element.querySelector(".control-label-text > span")!, f.model === "uv-cell-direct-1" ? "Facet density" : "Maximum facet density");
+        setText(direct.density.element.querySelector(".control-label-text > span")!, f.model === "uv-cell-direct-1" ? "Flake density" : "Maximum flake density");
         direct.density.update(f.density); direct.fineShare.update(f.fineShare); direct.strength.update(f.strength); direct.color.update(f.color);
       }
     },
