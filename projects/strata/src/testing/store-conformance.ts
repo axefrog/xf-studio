@@ -120,6 +120,14 @@ export const STORE_CASES: readonly StoreCase[] = [
     same((await store.changesSince(a2)).entries.map(entry => entry.commit), ["c3"], "changes since the purged head");
     same((await store.changesSince(a1)).entries.map(entry => entry.commit), ["c3"], "changes since a purged position");
   } },
+  { name: "a snapshot written after a purge is ignored: it never brings the node back", async run(make) {
+    const store = await make();
+    const [p1] = await appendOk(store, "c1", [sampleEntry(A, 1, "c1")], [[A.id, 0]]);
+    await store.purge(A);
+    await store.putSnapshot({ node: A, seq: 1, pos: p1, schema: "2", state: state("a1") });
+    same((await store.load()).nodes.map(node => node.ref.id), [], "nodes after a late snapshot");
+    same((await store.list()).length, 0, "index after a late snapshot");
+  } },
   { name: "the index lists each node's head seq, name and trash state", async run(make) {
     const store = await make();
     await appendOk(store, "c1", [sampleEntry(A, 1, "c1")], [[A.id, 0]]);

@@ -14,7 +14,7 @@ import { layerOrder, Resolver } from "./resolve";
 import type { StateReader } from "./resolve";
 import { ReadModel, hasRefs } from "./model";
 import type { DeriveResult, NodeSnapshot, Reference, Referrer } from "./model";
-import { collapseInline as collapsePrimitive, keepSet, rollupDeltaStream, rollupValueStream } from "./compaction";
+import { collapseInline as collapsePrimitive, entryReferences, keepSet, rollupDeltaStream, rollupValueStream } from "./compaction";
 import type { KeepOptions, Stream } from "./compaction";
 import { page as inspectorPage } from "./inspect";
 import type { InspectorDetail, InspectorEdge, InspectorPage, InspectorRow } from "./inspect";
@@ -24,7 +24,7 @@ import { resolveClaims, trustSelf } from "./trust";
 import type { Claim, FramePolicies, TrustPolicy } from "./trust";
 import { Aborter } from "./kernel/abort";
 import type { AbortSignalLike } from "./kernel/abort";
-import { Environment, KNode, LATEST, UNCHANGED } from "./kernel/kernel";
+import { Environment, kernelInternals, KNode, LATEST, UNCHANGED } from "./kernel/kernel";
 import type { Process, ProcessState, RunContext } from "./kernel/kernel";
 import type {
   ChangeSet, CommitMeta, CommitResult, Conflict, Edit, Entry, EventRef, Layer, NodeChange, NodeId, NodeRef, NodeState, NodeType, Op,
@@ -122,6 +122,7 @@ type EffectiveOut = {
 
 const SOURCE_TYPE = "strata:source";
 const refusal = (reason: RefusalCode, message: string, extra: Partial<Refusal> = {}): Refusal => ({ ok: false, reason, message, ...extra });
+const BUSY = () => refusal("busy", "A change can't be committed while a cycle runs; commit it from a queued change instead.");
 const refOf = (ref: NodeRef): NodeRef => ({ type: ref.type, id: ref.id });
 const severityRank: Record<Severity, number> = { blocking: 3, warning: 2, notice: 1 };
 
@@ -251,7 +252,11 @@ export class StrataGraph implements GraphView {
     let storeProcess: Process | undefined;
     const actor = this.env.driver({ name: `actor ${this.actor}`, ...(options.members ? { members: options.members } : {}), start: run => {
       if (!this.store) return;
-      const store = this.env.driver({ name: "store", start: storeRun => { this.storeRun = storeRun; } }, `${this.actor}/store`);
+      const store = this.env.driver({ name: "store", start: storeRun => {
+        this.storeRun = storeRun;
+        // A stopped graph answers no more: whoever waits for a flush is released.
+        storeRun.signal.addEventListener("abort", () => this.resolveFlush(), { once: true });
+      } }, `${this.actor}/store`);
       storeProcess = run.start(store, { role: "store" });
     } }, this.actor);
     this.actorProcess = actor.start(options.signal);
@@ -555,6 +560,7 @@ export class StrataGraph implements GraphView {
   private commitInternal(edits: readonly Edit[], options: CommitOptions, cause: ChangeSet["cause"],
     check?: () => Refusal | null): CommitResult {
     if (!this.loaded) return refusal("unloaded", "The graph hasn't loaded yet.");
+    if (this.env.inCycle) return BUSY();
     if (!edits.length) return refusal("empty", "Nothing to change.");
     let work: Working;
     try { work = this.build(edits, options); }
@@ -564,6 +570,10 @@ export class StrataGraph implements GraphView {
   }
 
   private applyWork(work: Working, options: CommitOptions, cause: ChangeSet["cause"], check?: () => Refusal | null, track = true): CommitResult {
+    // Refused before anything is taken: no commit ID, position or actor counter is used by a refused commit (§17.1).
+    if (this.env.inCycle) return BUSY();
+    const compacting = this.compactingConflict(work);
+    if (compacting) return compacting;
     const commitId = this.sources.random.stream("commits").uuid(), at = this.sources.clock.now();
     const groups = new Map<string, { ref: NodeRef; def: TypeDef; entries: Entry[] }>();
     const basis: [NodeId, number][] = [];
@@ -594,7 +604,6 @@ export class StrataGraph implements GraphView {
     const meta: CommitMeta = { ...firstGroup.entries[0].meta, basis };
     firstGroup.entries[0] = freeze({ ...firstGroup.entries[0], meta });
 
-    if (this.env.inCycle) return refusal("busy", "A change can't be committed while a cycle runs; commit it from a queued change instead.");
     const saved = this.saveRecords(groups.keys());
     const conflictsBefore = check ? new Set([...this.blockingConflicts()].map(item => item.id)) : null;
     const before = this.applyGroups(groups, cause);
@@ -1088,7 +1097,7 @@ export class StrataGraph implements GraphView {
       }
     }
     const before = new Map<string, NodeState | null>();
-    for (const id of touched.keys()) { const rec = this.records.get(id); before.set(id, rec ? this.headState(rec.ref) : null); }
+    for (const id of touched.keys()) { const ref = this.records.get(id)?.ref ?? this.inlined.get(id)?.ref; before.set(id, ref ? this.headState(ref) : null); }
     // 2. Mutate.
     mutate();
     // 3. Invalidate the memo along the layer index, for every candidate (demanded or not: reads are never stale).
@@ -1208,7 +1217,7 @@ export class StrataGraph implements GraphView {
     node = this.env.combinator<EffectiveOut>({ id: `effective:${ref.id}`, name: `effective ${ref.id}`, inputs: [],
       compute: context => this.computeEffective(target, context.previous?.value as EffectiveOut | undefined) });
     this.effectiveNodes.set(ref.id, node);
-    this.env.setInputsNow(node, this.effectiveInputs(target));
+    kernelInternals.setInputsNow(this.env, node, this.effectiveInputs(target));
     return node;
   }
 
@@ -1380,12 +1389,22 @@ export class StrataGraph implements GraphView {
   /** Whether the store has acknowledged a commit. */
   acknowledged(commit: string): boolean { return this.ackedCommits.has(commit); }
 
-  /** Long-running store work as a child process of the store driver's run; the promise is for the host API. */
+  /**
+   * Long-running store work as a child process of the store driver's run; the promise is for the host API. It settles
+   * from the process's terminal state, never from the raw work: an aborted task's result reaches no one (SPEC §9.4),
+   * and a task asked for after the store driver stopped fails at once instead of waiting for ever.
+   */
   private storeTask<T>(name: string, work: (signal: AbortSignalLike) => Promise<T>): Promise<T> {
     const run = this.storeRun;
     if (!run) return Promise.reject(new Error("The graph has no store."));
+    if (run.signal.aborted) return Promise.reject(new Error("The graph's store has stopped."));
     return new Promise<T>((resolve, reject) => {
-      run.spawn(name, signal => { const promise = work(signal); promise.then(resolve, reject); return promise.then(() => null); });
+      let result: { value: T } | undefined;
+      const process = run.spawn(name, signal => work(signal).then(value => { result = { value }; return null; }));
+      this.whenSettled(process, state => {
+        if (state.status === "done" && result) resolve(result.value);
+        else reject(new Error(state.status === "failed" ? state.error.message : "The graph's store has stopped."));
+      });
     });
   }
 
@@ -1413,14 +1432,27 @@ export class StrataGraph implements GraphView {
     });
   }
 
-  /** Runs `then` (between cycles) once a process reaches a terminal state. */
+  /**
+   * Runs `then` (between cycles) once a process reaches a terminal state. If the store driver stops first, the
+   * process was aborted with it: `then` runs with that state.
+   */
   private whenSettled(process: Process, then: (state: ProcessState) => void): void {
-    const run = this.storeRun!, done = new Aborter(run.signal);
+    const run = this.storeRun!, done = new Aborter();
+    let settled = false;
+    const settle = (state: ProcessState) => {
+      if (settled) return;
+      settled = true;
+      run.signal.removeEventListener("abort", stopped);
+      done.abort("settled");
+      this.env.change(() => then(state));
+    };
+    const stopped = () => settle({ status: "aborted", reason: "stopped" });
+    if (run.signal.aborted) { stopped(); return; }
+    run.signal.addEventListener("abort", stopped);
     run.effect({ name: `${process.name} result`, inputs: [process], signal: done.signal, run: context => {
       const state = context.inputs[0].value as ProcessState | undefined;
       if (!state || state.status === "running" || state.status === "progress") return;
-      done.abort("settled");
-      this.env.change(() => then(state));
+      settle(state);
     } });
   }
 
@@ -1506,9 +1538,12 @@ export class StrataGraph implements GraphView {
     this.emit(beforeStates, "rollback", `rollback:${dropped[0].commit}`);
   }
 
-  /** Resolves when every pending commit has been acknowledged or rejected. */
+  /**
+   * Resolves when every pending commit has been acknowledged or rejected, or the graph has stopped (its pending
+   * commits then stay pending: the host's recovery copy).
+   */
   flush(): Promise<void> {
-    if (!this.outbox.length || !this.store) return Promise.resolve();
+    if (!this.outbox.length || !this.store || !this.storeRun || this.storeRun.signal.aborted) return Promise.resolve();
     return new Promise(resolve => this.flushWaiters.push(resolve));
   }
   private resolveFlush(): void { const waiters = this.flushWaiters; this.flushWaiters = []; for (const resolve of waiters) resolve(); }
@@ -1849,6 +1884,24 @@ export class StrataGraph implements GraphView {
   // Compaction and purge
   // -------------------------------------------------------------------------------------------------------------
 
+  /** Streams being compacted, with the seqs being rolled up: commits referencing those are refused while it runs. */
+  private readonly compacting = new Map<string, ReadonlySet<number>>();
+
+  /** A refusal when a commit's entries would reference an entry a running compaction is removing. */
+  private compactingConflict(work: Working): Refusal | null {
+    if (!this.compacting.size) return null;
+    for (const id of work.order) {
+      const def = this.types.get(work.refs.get(id)!.type);
+      for (const op of work.ops.get(id) ?? []) {
+        for (const target of entryReferences({ op, commit: "" } as Entry, def)) {
+          if (this.compacting.get(target.node.id)?.has(target.seq))
+            return refusal("busy", "That history is being tidied up right now; try again in a moment.");
+        }
+      }
+    }
+    return null;
+  }
+
   private undoReach(): Set<string> {
     const reach = new Set<string>();
     for (const stacks of [this.undoStacks, this.redoStacks]) for (const stack of stacks.values()) for (const id of stack) reach.add(id);
@@ -1869,18 +1922,28 @@ export class StrataGraph implements GraphView {
     Promise<{ readonly ok: true; readonly before: number; readonly after: number } | Refusal> {
     const rec = this.records.get(ref.id);
     if (!rec || rec.constant) return refusal("missing", "That can't be compacted.");
+    if (this.compacting.has(ref.id)) return refusal("busy", "That is already being compacted.");
     await this.flush();
-    const streams = await this.allStreams();
-    const keep = keepSet(streams, type => this.types.get(type), { roots: options.roots, undoReach: this.undoReach() });
+    // Other windows' tags and pins count too: read what they committed first.
+    if (this.store && !rec.session) await this.sync();
+    await this.allStreams();
+    // From here to the store call nothing awaits: the keep set sees every entry committed until now (SPEC §16.1).
     const current = this.records.get(ref.id);
     if (!current || current.base.seq > 0) return refusal("missing", "That changed while it was being compacted.");
+    const streams = [...this.records.values()].filter(item => !item.constant).map(item => ({ ref: item.ref, entries: item.entries }));
+    const keep = keepSet(streams, type => this.types.get(type), { roots: options.roots, undoReach: this.undoReach() });
     const through = current.ackedSeq;
     const acked = current.entries.filter(entry => entry.seq <= through);
     if (!acked.length) return { ok: true, before: 0, after: 0 };
     const rolled = current.def.stream === "value" ? rollupValueStream(acked, keep) : rollupDeltaStream(current.def, acked, keep, options.bucketMs ?? 1000);
+    // While the store compacts, this graph refuses (busy) a commit referencing an entry being rolled up.
+    const surviving = new Set(rolled.map(entry => entry.seq));
+    this.compacting.set(ref.id, new Set(acked.filter(entry => !surviving.has(entry.seq)).map(entry => entry.seq)));
     // The store keeps anything appended after `through` meanwhile; so does memory.
     const store = this.store;
-    if (store && !current.session) await this.storeTask("compact", () => store.compact(ref, rolled, this.sources.clock.now()));
+    try {
+      if (store && !current.session) await this.storeTask("compact", () => store.compact(ref, rolled, this.sources.clock.now()));
+    } finally { this.compacting.delete(ref.id); }
     const after = this.records.get(ref.id);
     if (after) {
       after.entries = [...rolled, ...after.entries.filter(entry => entry.seq > through)];
@@ -1921,6 +1984,42 @@ export class StrataGraph implements GraphView {
   /** Where a collapsed stream now lives. */
   inlinedIn(ref: NodeRef): EventRef | undefined { return this.inlined.get(ref.id)?.host; }
 
+  /**
+   * Purges a node whose stream was collapsed into another entry (SPEC §16.6, §16.7): the host entry is rewritten
+   * without it (a compaction of the host's stream, same seq and position), so its data leaves the store. The host's
+   * reference to it remains and reads as missing.
+   */
+  private async purgeInlined(ref: NodeRef, options: { readonly force?: boolean }): Promise<{ readonly ok: true } | Refusal> {
+    const item = this.inlined.get(ref.id)!;
+    const dependents = this.layerDependents(ref);
+    if (dependents.length && !options.force)
+      return refusal("dependents", "Other nodes take values from this one: detach them or point them elsewhere first.", { dependents });
+    await this.flush();
+    await this.loadHistory(item.host.node);
+    const host = this.records.get(item.host.node.id);
+    const strip = (entry: Entry): Entry => {
+      if (entry.seq !== item.host.seq || !entry.inlined) return entry;
+      const { inlined, ...rest } = entry;
+      const kept = inlined.filter(inner => inner.node.id !== ref.id);
+      return freeze(kept.length ? { ...rest, inlined: kept } : rest) as Entry;
+    };
+    if (host) {
+      const store = this.store;
+      if (store && !host.session) {
+        const upto = host.entries.filter(entry => entry.seq <= item.host.seq).map(strip);
+        await this.storeTask("compact", () => store.compact(host.ref, upto, this.sources.clock.now()));
+      }
+      host.entries = host.entries.map(strip);
+      host.snapshotSeq = 0;
+    }
+    const touched = new Map<string, Touch>([[ref.id, "all"]]);
+    this.purgedRefs.set(ref.id, item.ref);
+    const beforeStates = this.refresh(touched, () => { this.inlined.delete(ref.id); }, "purge");
+    this.timeModels.clear();
+    this.emit(beforeStates, "purge", `purge:${ref.id}`);
+    return { ok: true };
+  }
+
   /** Nodes that layer from `ref` (live or pinned). */
   layerDependents(ref: NodeRef): readonly NodeRef[] {
     return [...this.layerIndex.get(ref.id)?.keys() ?? []].map(id => this.records.get(id)?.ref).filter((item): item is NodeRef => !!item);
@@ -1933,11 +2032,14 @@ export class StrataGraph implements GraphView {
    */
   async purge(ref: NodeRef, options: { readonly force?: boolean } = {}): Promise<{ readonly ok: true } | Refusal> {
     const rec = this.records.get(ref.id);
+    if (!rec && this.inlined.has(ref.id)) return this.purgeInlined(ref, options);
     if (!rec || rec.constant) return refusal("missing", "That can't be deleted permanently.");
     const dependents = this.layerDependents(ref);
     if (dependents.length && !options.force)
       return refusal("dependents", "Other nodes take values from this one: detach them or point them elsewhere first.", { dependents });
     await this.flush();
+    // A snapshot queued before the purge must not land after it and bring the node's data back.
+    await this.snapshotQueue;
     const store = this.store;
     if (store && !rec.session) await this.storeTask("purge", () => store.purge(ref));
     const touched = new Map<string, Touch>([[ref.id, "all"]]);

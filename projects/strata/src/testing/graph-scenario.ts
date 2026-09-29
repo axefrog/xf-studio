@@ -33,6 +33,8 @@ export type GraphWorld = {
 
 const MAX_NODES = 24;
 const pickFrom = <T>(items: readonly T[], n: number): T | undefined => items.length ? items[n % items.length] : undefined;
+/** A graph stopped by a crash fails the store work still asked of it (SPEC §9.4): expected here, and ignored. */
+const stopped = (): undefined => undefined;
 const stateOf = (graph: Graph, id: string) => graph.debugState().records.find(rec => rec.ref.id === id)?.head ?? null;
 const visible = (state: NodeState | null) => state && !state.retracted ? canonical([state.own, state.layers, state.name, state.trashed]) : null;
 
@@ -166,13 +168,13 @@ const actions: SimAction<GraphWorld>[] = [
     if (node) world.other.commit([{ op: "set", node, path: ["tags", `o${b % 2}`], value: b % 5 }]);
     else world.other.commit([{ op: "create", type: ITEM, fields: { title: "from the other window" } }]);
   } },
-  { name: "sync", weight: 2, run(world) { void world.graph.sync(); } },
-  { name: "other-sync", run(world) { void world.other.sync(); } },
+  { name: "sync", weight: 2, run(world) { void world.graph.sync().catch(stopped); } },
+  { name: "other-sync", run(world) { void world.other.sync().catch(stopped); } },
   { name: "store-fault", run(world, [a]) { if (a % 2) world.store.failNext++; else world.store.loseNext++; } },
   { name: "jobs", run(world, [a]) { void world.jobs.run({ kind: `job${a % 3}`, input: a, priority: a % 3 === 0 ? "user" : "background" }).catch(() => undefined); } },
   { name: "compact", weight: 0.3, run(world, [a]) {
     const node = pickFrom(world.graph.list(ITEM).filter(ref => !ref.id.startsWith("builtin:")), a);
-    if (node) void world.graph.compact(node);
+    if (node) void world.graph.compact(node).catch(stopped);
   } },
 ];
 

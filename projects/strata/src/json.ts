@@ -6,8 +6,15 @@
 /** A JSON value. */
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 
-/** Canonical JSON: object keys sorted, no whitespace. Two values are equal exactly when their canonical forms are. */
+/**
+ * Canonical JSON (SPEC §2.2): the JSON Canonicalization Scheme of RFC 8785. Member names are sorted by their UTF-16
+ * code units (JavaScript's default string order), there is no whitespace, numbers take ECMAScript's shortest
+ * round-trip form (which JSON.stringify gives, -0 as 0) and strings JSON.stringify's escapes. Members whose value is
+ * undefined are not members. A number that isn't finite has no canonical form. Two values are equal exactly when
+ * their canonical forms are.
+ */
 export function canonical(value: unknown): string {
+  if (typeof value === "number" && !Number.isFinite(value)) throw new TypeError(`${value} has no canonical form: numbers must be finite.`);
   if (value === null || typeof value !== "object") return value === undefined ? "null" : JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   const object = value as Record<string, unknown>;
@@ -51,10 +58,14 @@ export function copy<T>(value: T): T {
   return out as T;
 }
 
-/** Whether a value is plain JSON data (finite numbers, no functions, no cycles through the given depth). */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** Whether a value is plain JSON data (finite numbers, well-formed strings, no functions, no cycles through the given depth). */
 export function isJson(value: unknown, depth = 0): value is Json {
   if (depth > 64) return false;
-  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (value === null || typeof value === "boolean") return true;
+  // Strings are valid Unicode: no unpaired surrogates (I-JSON, which RFC 8785 requires).
+  if (typeof value === "string") return !LONE_SURROGATE.test(value);
   if (typeof value === "number") return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(item => isJson(item, depth + 1));
   if (typeof value === "object") {

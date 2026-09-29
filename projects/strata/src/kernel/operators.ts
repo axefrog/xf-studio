@@ -91,6 +91,9 @@ export type Operators = Readonly<Record<string, Operator>>;
 const numberOf = (value: unknown) => typeof value === "number" ? value : 0;
 const record = (params: Json | undefined) => (params && typeof params === "object" && !Array.isArray(params) ? params : {}) as Record<string, Json>;
 const guard = (compute: Compute<unknown>): Compute<unknown> => context => inputError(context) ?? compute(context);
+/** A member of a plain-data object, only if it is the object's own. */
+const own = (object: unknown, key: string): unknown =>
+  object && typeof object === "object" && Object.hasOwn(object, key) ? (object as Record<string, unknown>)[key] : undefined;
 
 /**
  * A catalogue of operators: the one registry models are erected from. Built-ins are registered through it exactly as a
@@ -121,8 +124,10 @@ function stateMachine(params: Json | undefined): Compute<unknown> {
     context.inputs.forEach((input, index) => {
       if (!input.changed) return;
       const event = names[index];
-      const transition = event ? spec.states?.[state]?.on?.[event] : undefined;
-      if (!transition) return;
+      // Only a machine's own states and events count (never inherited object members such as "toString").
+      const states = own(spec.states, state) as { on?: Record<string, Transition> } | undefined;
+      const transition = event ? own(states?.on, event) as Transition | undefined : undefined;
+      if (!transition || typeof transition.target !== "string") return;
       if (transition.guard !== undefined && context.inputs[names.indexOf(transition.guard)]?.value !== true) return;
       fired = { from: state, event, ...(transition.effects ? { effects: transition.effects } : {}) };
       state = transition.target;
@@ -138,7 +143,8 @@ export const standardOperators: Operators = {
   identity: { kind: "combinator", create: () => guard(context => context.inputs[0]?.latest ? context.inputs[0].value : UNCHANGED) },
   sum: { kind: "combinator", create: params => guard(context =>
     context.inputs.reduce((total, input) => total + numberOf(input.value), numberOf(record(params).add))) },
-  product: { kind: "combinator", create: () => guard(context => context.inputs.reduce((total, input) => total * numberOf(input.value), 1)) },
+  // An absent input (or one that isn't a number) counts as the operation's identity: 0 for sum, 1 for product (SPEC §10.5).
+  product: { kind: "combinator", create: () => guard(context => context.inputs.reduce((total, input) => total * (typeof input.value === "number" ? input.value : 1), 1)) },
   pick: { kind: "combinator", create: params => guard(context => {
     let value: unknown = context.inputs[0]?.value;
     for (const key of (record(params).path ?? []) as string[]) value = value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined;

@@ -2,8 +2,8 @@
  * XF Strata's testing entry point: the simulation harness, simulated sources, the reference model, the standard
  * invariants and the conformance runner. For tests only.
  */
-export { runKernelVector, conformanceOperators } from "./src/testing/conformance";
-export type { KernelVector, KernelStep, VectorSuite } from "./src/testing/conformance";
+export { runKernelVector, runCanonicalVector, conformanceOperators } from "./src/testing/conformance";
+export type { KernelVector, KernelStep, CanonicalVector, TreeExpectation, VectorSuite } from "./src/testing/conformance";
 export { Scheduler, simClock, settle, SimJobs, SimFiles, SimInput, SimRequests } from "./src/testing/sim-sources";
 export { seededRandom, prng } from "./src/random";
 export { SimStore } from "./src/testing/sim-store";

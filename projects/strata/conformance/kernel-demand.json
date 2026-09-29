@@ -30,8 +30,8 @@
     {
       "name": "a-demand-spec-node-resizes-the-window-without-releasing-demand",
       "kind": "kernel",
-      "rules": ["4.3"],
-      "description": "c's demand on a is the latest entry of the spec node. Shrinking the window from three entries to one is a new spec entry; a stays demanded throughout.",
+      "rules": ["4.3", "4.6"],
+      "description": "c's demand on a is the latest entry of the spec node. Shrinking the window from three entries to one is a new spec entry: c is primed with its new window at once, and a stays demanded throughout.",
       "graph": { "nodes": [
         { "id": "spec", "kind": "seed", "initial": { "rolling": { "entries": 3 } } },
         { "id": "a", "kind": "seed", "initial": 1 },
@@ -39,7 +39,7 @@
         { "id": "log", "kind": "effect", "op": "record", "inputs": ["c"] }
       ] },
       "script": [ { "observe": { "a": 2 } }, { "observe": { "a": 3 } }, { "observe": { "spec": { "rolling": { "entries": 1 } } } }, { "observe": { "a": 4 } } ],
-      "expect": { "streams": { "c": [[1], [1, 2], [1, 2, 3], [4]] }, "active": { "a": true } }
+      "expect": { "streams": { "c": [[1], [1, 2], [1, 2, 3], [3], [4]] }, "active": { "a": true } }
     }
   ]
 }

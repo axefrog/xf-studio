@@ -27,6 +27,7 @@ export type EntityStep =
   | { readonly collapse: string }
   | { readonly advance: number }
   | { readonly forget: string }
+  | { readonly reload: true }
   | { readonly entries: readonly Json[] };
 export type EntityVector = {
   readonly name: string; readonly kind: "entity"; readonly rules?: readonly string[]; readonly description?: string;
@@ -37,6 +38,8 @@ export type EntityVector = {
     readonly streams?: Readonly<Record<string, readonly (readonly [number, string])[]>>;
     readonly origins?: Readonly<Record<string, Readonly<Record<string, string>>>>;
     readonly changes?: readonly (readonly string[])[];
+    /** Per node, its entries' `[seq, actor, actorSeq]` (SPEC §17.1, §17.2). */
+    readonly actors?: Readonly<Record<string, readonly (readonly [number, string, number])[]>>;
   };
 };
 
@@ -84,10 +87,16 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
     }
     at++;
   }
-  const graph = createGraph({ types, store: memory, signal: life.signal, sources: { clock: simClock(scheduler), random: seededRandom(vector.seed ?? vector.name) } });
-  await graph.load();
+  let session = new Aborter(life.signal), sessions = 0;
+  const open = async () => {
+    const opened = createGraph({ types, store: memory, signal: session.signal,
+      sources: { clock: simClock(scheduler), random: seededRandom(`${vector.seed ?? vector.name}${sessions ? `:${sessions}` : ""}`) } });
+    await opened.load();
+    opened.subscribeAll(set => sets.push(set), { signal: session.signal });
+    return opened;
+  };
   const sets: ChangeSet[] = [];
-  graph.subscribeAll(set => sets.push(set), { signal: life.signal });
+  let graph = await open();
   const refusals: (string | null)[] = [];
   const changes: string[][] = [];
   for (const step of vector.script.slice(at)) {
@@ -107,6 +116,15 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
     } else if ("purge" in step) result = await graph.purge(labels.get(step.purge)!, { force: !!step.force });
     else if ("advance" in step) scheduler.now += step.advance;
     else if ("forget" in step) graph.forgetHistory(step.forget === "*" ? undefined : step.forget);
+    else if ("collapse" in step) result = await graph.collapseInline(labels.get(step.collapse)!);
+    else if ("reload" in step) {
+      // A new session over the same store: snapshots written at close, then loaded from them and their tails.
+      await graph.snapshotAll();
+      session.abort("closed");
+      session = new Aborter(life.signal);
+      sessions++;
+      graph = await open();
+    }
     if (result) refusals.push(result.ok ? null : result.reason ?? "unknown");
     await settle();
     changes.push(sets.flatMap(set => set.nodes.flatMap(change => change.paths.map(path => `${names.get(change.node.id) ?? change.node.id} ${pathKey(path)}`))).sort());
@@ -118,7 +136,8 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
   for (const [label, expected] of Object.entries(expect.effective ?? {})) {
     const ref = labels.get(label);
     const actual = ref ? graph.resolve(ref) ?? null : null;
-    if (!equal(actual, expected)) problems.push(`${vector.name}: ${label} is ${show(actual)}, expected ${show(expected)}`);
+    const want = resolveLabels(expected);   // references in expectations may name nodes by label too
+    if (!equal(actual, want)) problems.push(`${vector.name}: ${label} is ${show(actual)}, expected ${show(want)}`);
   }
   if (expect.refusals && !equal(refusals, expect.refusals)) problems.push(`${vector.name}: refusals ${show(refusals)}, expected ${show(expect.refusals)}`);
   for (const [label, expected] of Object.entries(expect.streams ?? {})) {
@@ -135,6 +154,11 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
     }
   }
   if (expect.changes && !equal(changes, expect.changes.map(list => [...list].sort()))) problems.push(`${vector.name}: changes ${show(changes)}, expected ${show(expect.changes)}`);
+  for (const [label, expected] of Object.entries(expect.actors ?? {})) {
+    const ref = labels.get(label);
+    const actual = ref ? (await graph.history(ref)).map(entry => [entry.seq, entry.actor, entry.actorSeq]) : [];
+    if (!equal(actual, expected)) problems.push(`${vector.name}: actors of ${label} are ${show(actual)}, expected ${show(expected)}`);
+  }
   life.abort();
   return problems;
 }
