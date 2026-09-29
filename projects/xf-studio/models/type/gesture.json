@@ -1,0 +1,102 @@
+{
+  "kind": "type",
+  "id": "gesture",
+  "owner": "platform",
+  "summary": "One pointer drag or wheel burst in one view: where it started, what it edits, its frames, and whether it is open, committed or cancelled.",
+  "status": "both",
+  "replaces": [
+    "authoring-gestures",
+    "gesture-cancel",
+    "platform/core/history-transaction"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window the gesture belongs to; one open gesture per window.",
+      "inherit": false
+    },
+    "view": {
+      "kind": "value",
+      "doc": "The view or flat editor it started in.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "target": {
+      "kind": "ref",
+      "to": [
+        "type:preset-eye-makeup",
+        "type:preset-expression"
+      ],
+      "clone": "share",
+      "doc": "The preset it edits."
+    },
+    "layer": {
+      "kind": "value",
+      "doc": "The layer it edits.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "kind": {
+      "kind": "value",
+      "doc": "What it does: move a point, shape transform, warp, tangent, path points.",
+      "shape": {
+        "enum": [
+          "point",
+          "shape",
+          "field",
+          "tangent",
+          "path"
+        ]
+      }
+    },
+    "frames": {
+      "kind": "value",
+      "doc": "The latest frame's proposal (the stream keeps one per animation frame, never a ring).",
+      "shape": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "label": {
+      "kind": "value",
+      "doc": "The Undo label, from the first frame that changed anything.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "status": {
+      "kind": "value",
+      "doc": "Open, committed or cancelled.",
+      "shape": {
+        "enum": [
+          "open",
+          "committed",
+          "cancelled"
+        ]
+      }
+    }
+  },
+  "x-friction": [
+    {
+      "gap": "Each frame of a drag is an edit the raster and every view show at once, but one commit results; Escape restores the start with no trace, and a frame back at the start still counts as a change.",
+      "capability": "uncommitted-edits",
+      "closes": "Uncommitted edits layered over the preset at frame rate, collapsed into one commit or dropped, with a per-kind rule for when an edit is empty."
+    },
+    {
+      "gap": "Pointer frames arrive hundreds of times a second and must collapse to one per animation frame without being kept.",
+      "capability": "frame-timing",
+      "closes": "Input sources coalesced to the latest per frame, with no retained history."
+    }
+  ]
+}

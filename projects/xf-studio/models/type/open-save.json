@@ -1,0 +1,80 @@
+{
+  "kind": "type",
+  "id": "open-save",
+  "owner": "save-explorer",
+  "summary": "A save opened read-only in the Save Explorer: which file, its decoding progress and the selected node; several may be open.",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/actions",
+    "features/save-explorer/explorer"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "folder": {
+      "kind": "value",
+      "doc": "The save's folder name.",
+      "shape": {
+        "type": "string"
+      },
+      "inherit": false
+    },
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window that opened it.",
+      "inherit": false
+    },
+    "bytes": {
+      "kind": "value",
+      "doc": "The save's bytes, by reference.",
+      "shape": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "phase": {
+      "kind": "value",
+      "doc": "Reading, decoding, open or failed.",
+      "shape": {
+        "enum": [
+          "reading",
+          "decoding",
+          "open",
+          "failed"
+        ]
+      }
+    },
+    "selected": {
+      "kind": "value",
+      "doc": "The selected node's path in the tree.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "view": {
+      "kind": "value",
+      "doc": "The explorer's view mode.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "save": {
+      "kind": "ref",
+      "to": "type:save",
+      "clone": "share",
+      "doc": "The save node, once the save is used for something."
+    }
+  },
+  "x-friction": [
+    {
+      "gap": "A save is up to 128 MB and its decoded model is large; neither may enter an entry.",
+      "capability": "binary-by-reference",
+      "closes": "Blob references with a residence and a lifetime tied to demand."
+    }
+  ]
+}

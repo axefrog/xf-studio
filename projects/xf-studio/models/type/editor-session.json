@@ -1,0 +1,97 @@
+{
+  "kind": "type",
+  "id": "editor-session",
+  "owner": "eye-makeup",
+  "summary": "What one window is doing to one preset: the active layer, the selection, the selected warp field, the UV view and the redo list.",
+  "status": "both",
+  "replaces": [
+    "collection-workspace",
+    "authoring-document",
+    "editor-actions",
+    "uv-view"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "preset": {
+      "kind": "ref",
+      "to": [
+        "type:preset-eye-makeup",
+        "type:preset-expression"
+      ],
+      "clone": "share",
+      "doc": "The preset being edited.",
+      "inherit": false
+    },
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window editing it.",
+      "inherit": false
+    },
+    "active": {
+      "kind": "value",
+      "doc": "The active layer ID.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "selected": {
+      "kind": "value",
+      "doc": "Selected point indices on the active layer.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "fieldSelection": {
+      "kind": "value",
+      "doc": "The selected warp field ID.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "uvView": {
+      "kind": "value",
+      "doc": "The flat editor's pan and zoom.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "zoom": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 64
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "zoom"
+        ]
+      }
+    }
+  },
+  "migration": {
+    "from": [
+      "the workspace's active, selected, fieldSelection and uvView"
+    ],
+    "how": "Opened for the migrated preset in the first window; the UV view stays a per-viewer convenience in page storage as well."
+  }
+}

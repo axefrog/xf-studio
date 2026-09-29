@@ -1,0 +1,60 @@
+{
+  "kind": "type",
+  "id": "control-edit",
+  "owner": "platform",
+  "summary": "One run of a form control (a slider drag, a number typed) on one target: one Undo step when it ends, nothing when it changed nothing.",
+  "status": "both",
+  "replaces": [
+    "authoring-control-edits"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window.",
+      "inherit": false
+    },
+    "control": {
+      "kind": "value",
+      "doc": "The control's ID.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "target": {
+      "kind": "ref",
+      "to": "*",
+      "clone": "share",
+      "doc": "The node it edits."
+    },
+    "feature": {
+      "kind": "value",
+      "doc": "The feature whose action it applies.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "kind": "value",
+      "doc": "Open, committed or cancelled.",
+      "shape": {
+        "enum": [
+          "open",
+          "committed",
+          "cancelled"
+        ]
+      }
+    }
+  },
+  "x-friction": [
+    {
+      "gap": "A slider drag must show every value at once and leave one step, and returning to the start value leaves none (unlike a gesture).",
+      "capability": "uncommitted-edits",
+      "closes": "Uncommitted edits with a per-kind emptiness rule."
+    }
+  ]
+}

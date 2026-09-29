@@ -1,0 +1,67 @@
+{
+  "kind": "type",
+  "id": "consent",
+  "owner": "platform",
+  "summary": "The person's consent to exactly one thing they were shown: a download, a reviewed install plan, a setup program; invalid once that thing changes.",
+  "status": "both",
+  "replaces": [
+    "preview-setup",
+    "mod-install-actions",
+    "desktop-app"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window where it was given.",
+      "inherit": false
+    },
+    "subject": {
+      "kind": "value",
+      "doc": "What was agreed to.",
+      "shape": {
+        "enum": [
+          "wolvenkit-download",
+          "install-plan",
+          "desktop-setup",
+          "overwrite-save",
+          "webview2-install"
+        ]
+      }
+    },
+    "token": {
+      "kind": "value",
+      "doc": "The token naming exactly what was shown (a release and hash, a plan hash, an installer ID).",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "shown": {
+      "kind": "value",
+      "doc": "What the person was shown, in plain data.",
+      "shape": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "granted": {
+      "kind": "value",
+      "doc": "Whether it was granted.",
+      "shape": {
+        "type": "boolean"
+      }
+    }
+  },
+  "x-friction": [
+    {
+      "gap": "A download, an install or a setup run starts only with the person's consent to exactly what they saw; the consent must travel with the request and lapse when its subject changes.",
+      "capability": "reasons-for-work",
+      "closes": "Requests that carry consent as their reason, invalidated when the thing consented to changes."
+    }
+  ]
+}

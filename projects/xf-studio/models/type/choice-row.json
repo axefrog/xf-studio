@@ -1,0 +1,92 @@
+{
+  "kind": "type",
+  "id": "choice-row",
+  "owner": "character",
+  "summary": "An open Character panel row for one V: which option, which choices are visible, hovered and focused.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/character-choices",
+    "studio-ui/panels/character",
+    "cc-panel"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "v": {
+      "kind": "ref",
+      "to": "type:v",
+      "clone": "share",
+      "doc": "The V the row belongs to.",
+      "inherit": false
+    },
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window showing it.",
+      "inherit": false
+    },
+    "option": {
+      "kind": "value",
+      "doc": "The creator option.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "visible": {
+      "kind": "value",
+      "doc": "The positions of the choices in view, nearest first.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "hover": {
+      "kind": "value",
+      "doc": "The hovered choice and since when it rested.",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "choice": {
+                "type": "string"
+              },
+              "restSince": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "choice",
+              "restSince"
+            ]
+          }
+        ]
+      }
+    },
+    "focus": {
+      "kind": "value",
+      "doc": "The focused choice.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "search": {
+      "kind": "value",
+      "doc": "The row's search text.",
+      "shape": {
+        "type": "string"
+      }
+    }
+  }
+}

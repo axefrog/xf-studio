@@ -1,0 +1,113 @@
+{
+  "kind": "type",
+  "id": "notice",
+  "owner": "shell",
+  "summary": "Something the Studio tells the person: a plain message, its severity, what it is about, a diagnostics reference and an Undo if there is one.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/feedback",
+    "diagnostics/page-sink"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window showing it.",
+      "inherit": false
+    },
+    "code": {
+      "kind": "value",
+      "doc": "A stable code.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "message": {
+      "kind": "value",
+      "doc": "The plain message.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "severity": {
+      "kind": "value",
+      "doc": "How it is shown.",
+      "shape": {
+        "enum": [
+          "info",
+          "success",
+          "warning",
+          "error"
+        ]
+      }
+    },
+    "about": {
+      "kind": "ref",
+      "to": "*",
+      "clone": "share",
+      "doc": "The node or process it is about."
+    },
+    "ref": {
+      "kind": "value",
+      "doc": "The diagnostics reference the person can quote.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "undo": {
+      "kind": "value",
+      "doc": "The action that undoes what it reports, if any.",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        ]
+      }
+    },
+    "step": {
+      "kind": "value",
+      "doc": "The one next step, as an action the person can take.",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "label"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

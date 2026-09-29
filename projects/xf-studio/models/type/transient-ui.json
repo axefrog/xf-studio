@@ -1,0 +1,119 @@
+{
+  "kind": "type",
+  "id": "transient-ui",
+  "owner": "shell",
+  "summary": "A window's short-lived interface state: the open menu or popover, the hover target, the tooltip and the command palette's query.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/menu",
+    "studio-ui/commands",
+    "studio-ui/reason-tip",
+    "studio-ui/help-tip",
+    "studio-ui/components/search-field",
+    "studio-ui/components/listbox-keys",
+    "studio-ui/components/tree-view",
+    "studio-ui/item-list",
+    "studio-ui/dock/dock-view"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window.",
+      "inherit": false
+    },
+    "menu": {
+      "kind": "value",
+      "doc": "The open menu or popover and what it is for.",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "for": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "for"
+            ]
+          }
+        ]
+      }
+    },
+    "hover": {
+      "kind": "value",
+      "doc": "The hovered target.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "tooltip": {
+      "kind": "value",
+      "doc": "The shown tooltip.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "palette": {
+      "kind": "value",
+      "doc": "The command palette's query, or null when closed.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "drag": {
+      "kind": "value",
+      "doc": "A panel being dragged in the dock, and where it would land.",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "panel": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "panel",
+              "target"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "x-friction": [
+    {
+      "gap": "Menus, popovers, hover and tooltips change constantly, are never stored and are often owned by the DOM; a full node each is heavy, yet leaving them out would leave the interface undeclared.",
+      "capability": "short-lived-ui",
+      "closes": "Cheap per-window state that takes part in cycles but has no store, history or ring and is collected with its element."
+    }
+  ]
+}
