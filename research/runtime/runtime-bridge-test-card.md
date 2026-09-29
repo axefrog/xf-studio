@@ -484,7 +484,17 @@ Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unve
 
 ## Build record (bridge 0.6.1, branch build, not staged)
 
-Deep review 6's bridge fixes (RB-79..92) on top of 0.6.0, built by `bun tools/package.ts` and `bun tools/package.ts --allow-inventory` from a clean tree on `claude/cleanup-bridge-r6`; the commit, the checks run on it and the zips' SHA-256 are recorded here once packaged. The plugin registers fifteen natives (`XFBridge_Live` is new). A rebuild after merging gives new hashes.
+Built 29 September 2026 on `claude/cleanup-bridge-r6` at `4a604aecf0a1`, clean tree (manifest `"commit": "4a604aecf0a160a0ce050247c08839c66fd67a87"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed): version 0.6.1, deep review 6's bridge fixes (RB-79..92) on top of 0.6.0. On that commit: `xfb_selftest --unit` UNIT OK, self-test 464 of 464, `bun test tools` 277 of 277 in each of three runs (the two on-screen capture tests are opt-in, `XFB_ONSCREEN_TESTS=1`, and bun lists them as 4 skipped entries), typecheck, the Lua lint, and the redscript lint without Codeware, with Codeware `v1.20.4`'s scripts, and with Codeware, the Equipment-EX stub and TweakXL `v1.11.4`'s scripts, each against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…`). The plugin registers fifteen natives (`XFBridge_Live` is new); no new script files. A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.6.1-writes.zip` (with inventory) | `0a789d1ce22abb4d7b9d1855d5d153d4b0fecd0fb477e24ae8c4c863df325e72` |
+| `xf-runtime-bridge-0.6.1-writes-no-inventory.zip` | `cf9714008a1939e83a4d5bb2810ad730019893756c47a4032e79873ab53eeb8c` |
+| `xf-runtime-bridge-0.6.1-diagnostic.zip` | `7fc6ea072e39195997fcaf1ead5678701f0a6639c5b67015cfc3e92e7144e07e` |
+| `xf-runtime-bridge-0.6.1.zip` (default) | `b5ed863d775525cbf0375cfab7e589fae9f648c8a1017a25f7ab5a47e89de67c` |
+| (`XFRuntimeBridge.dll` inside each) | `c3bdb655f6add02f33968391b580405c00bbb48947e18e5713af995af5117ef6` |
+
+**Watch in the session:** `rtti.register_types … natives=15` at load; `behave.stopped … reason=user_took_over` (G2); `bridge.handover` with `player_released` (G1); `game.save` refusals `bridge_effects_active` (G4); `bridge.kill_restored_preset` (G7) and "wardrobe restored after the resume" (G6). The [0.6.1 rows](#061-additions-to-the-session-7-checks) cover each.
 
 ## Build record (bridge 0.6.0, branch build, not staged)
 
