@@ -273,7 +273,7 @@ A `Multilayer_Mask`'s layers are rebuilt by XF Studio's mask reader (`src/native
 | Random masks against a per-texel transcription of WolvenKit's exporter (`tests/native-mask.test.ts`) | 300 masks of full, low-resolution and empty layers, identical [source] |
 | Time (one thread, the reader worked a tile at a time) | 0.5–27 ms for most masks; 73 ms for the goggles' 20 layers, 310 ms for the jeans' (six 2048² layers); a per-texel reading took 0.5 s and 2.1 s for those two [resource] |
 
-Masks are cached like textures, under the mask reader's identity (`NATIVE_MASK_IDENTITY`: its output version and the resource reader's).
+Masks are cached like textures, under the mask reader's identity (`NATIVE_MASK_IDENTITY`: its output version and the resource reader's). The reader's limits bound what a header can make it allocate (NATIVE-71): at most 8192² a side, 32 layers and, all layers counted at the full size, 20×4096² texels together (the reference installation's largest, the CCXL hairstyle's 20 layers); a mask over them is refused as over budget before any layer is made, and WolvenKit exports it. Layers are rebuilt and encoded one at a time, so a decode lane holds one layer's texels (a 5 KB file asking for 2048²×32 once took 1 s and 165 MB with every layer held).
 
 ## 11. Animation sets and rigs (`.anims`, `.rig`)
 
