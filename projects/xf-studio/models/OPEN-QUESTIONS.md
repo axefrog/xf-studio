@@ -41,3 +41,22 @@ Design decisions made while writing the catalogue, or left open, each with a rec
 
 21. **Synchronous runtime queries.** Picking on the head (`operator:hit-target`) asks a runtime synchronously inside the input's cycle. *Recommendation:* sanction a query port on runtimes that returns plain data only, with a budget per query.
 22. **Faults to `person` and `diagnostics`** end at the window's `diagnostics` driver through the `report-failure` request. *Recommendation:* keep until the engine routes faults along the request chain itself.
+
+## Model review decisions (29 September 2026)
+
+The coordinator's model review accepted the catalogue with these decisions. Each is a coordinator default that the maintainer may reverse.
+
+| # | Decision |
+|---|---|
+| 1–3 | Accepted as recommended. Root requests extend to processes once the engine records reasons. |
+| 4 | The 27 capability keys are accepted as the catalogue's plain vocabulary. |
+| 5 | Variant schemas are generated from the action descriptors when the models-to-code check arrives. |
+| 6 | Accepted. Each slice checks that the modules it empties are named by a non-source model. |
+| 7 | Narrow the direct-read ratchet's network pattern to the global `fetch` (a small fix of its own). |
+| 8 | Agreed. The render-fidelity study moves out of `src/` when it is next touched. |
+| 9–13 | Accepted as recommended. Order lists stay until the engine has ordered maps. Settings stay a host file until the host runs a graph. |
+| 14 | Eye shape, material studies and uncensored mode go into View and lighting. **Motion settings (idle, blink, physics, pause) join View and lighting too**, because they change what a view shows. Transitions, view tools, poses and the texture tier stay without Undo. |
+| 15 | No Undo for library edits in 1.0; a `library` scope comes with presets in the database. |
+| 16–20 | Accepted as recommended. The recovery queue stays until pending changes are durable. |
+| 21 | Sanctioned: runtimes offer a synchronous query port returning plain data only, with a per-query time budget. It is part of the engine library's runtime families. |
+| 22 | Accepted until the engine routes faults along the request chain. |
