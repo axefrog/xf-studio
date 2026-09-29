@@ -3,12 +3,12 @@
  * input stays active across a rewiring (STRATA-02), a refused busy commit takes no counters (STRATA-04), store tasks
  * settle from their process state and never hang after the graph stops (STRATA-05), a compaction refuses commits that
  * would reference what it is rolling up (STRATA-06), and a purge leaves no snapshot behind and reaches inlined streams
- * (STRATA-07).
+ * (STRATA-07). From deep review 7: a model whose parameters aren't plain data is refused before anything is released (STRATA-16).
  */
 import { expect, test } from "bun:test";
-import { Aborter, createEnvironment, LATEST, MemoryStore } from "strata";
-import type { DemandSpec, KNode } from "strata";
-import { Scheduler, settle, simClock, STRATA_DEBUG } from "strata/testing";
+import { Aborter, createEnvironment, erector, LATEST, MemoryStore } from "strata";
+import type { DemandSpec, GraphModel, Json, KNode } from "strata";
+import { conformanceOperators, Scheduler, settle, simClock, STRATA_DEBUG } from "strata/testing";
 import { ITEM } from "../src/testing/synthetic";
 import { create, drive, harness, ok } from "./helpers";
 
@@ -217,4 +217,32 @@ test("trust: equally ranked actors break ties by ID, never by comparing their cl
   const again = resolveClaims("hair", [{ actor: "studio", value: "ash", asOf: 99999 }, { actor: "game", value: "cool", asOf: 1 }], policy);
   expect(again.from?.actor).toBe("game");
   expect(resolveClaims("hair", [{ actor: "b", value: 1, asOf: 1 }, { actor: "a", value: 2, asOf: 1 }], trustTable({ hair: ["b", "a"] })).value).toBe(1);
+});
+
+test("a model with a number that isn't finite in a node's parameters is refused whole with code model; nothing is released (STRATA-16)", async () => {
+  const scheduler = new Scheduler();
+  const codes: (string | undefined)[] = [];
+  const env = createEnvironment({ clock: simClock(scheduler), onAppend: (node, entry) => {
+    if (node.id === "$errors") codes.push((entry.value as { code?: string }).code);
+  } });
+  const logs = new Map<string, Json[]>();
+  const model = env.seed<GraphModel>({ id: "$model", initial: { nodes: [
+    { id: "a", kind: "seed", initial: 1 },
+    { id: "b", kind: "combinator", op: "sum", inputs: ["a"], params: { add: 1 } },
+  ] } });
+  const erected = erector(env, model, conformanceOperators(logs));
+  erected.driver.start(new Aborter().signal);
+  await settle();
+  const a = erected.live("a"), b = erected.live("b");
+  expect(a && b).toBeTruthy();
+  // `a` would be replaced (its first entry changed) and `b` holds NaN: before, `a` was released and never made again, and the error was `wiring`.
+  env.observe(model, { nodes: [
+    { id: "a", kind: "seed", initial: 5 },
+    { id: "b", kind: "combinator", op: "sum", inputs: ["a"], params: { add: Number.NaN } as unknown as Json },
+  ] });
+  await settle();
+  expect(codes).toEqual(["model"]);
+  expect(erected.live("a")).toBe(a);
+  expect(erected.live("b")).toBe(b);
+  expect(env.node(a!.id)).toBe(a);
 });
