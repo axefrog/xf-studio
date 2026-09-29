@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/axefrog/xf-studio/projects/strata/schema/graph-model-1.schema.json",
+  "title": "XF Strata graph model, format 1",
+  "description": "A subsystem declared as data (SPEC section 10.2): the nodes the erector builds, their operators from the catalogue, their inputs and demand. Scripts, AI models and tests declare subsystems in this format.",
+  "type": "object",
+  "required": ["nodes"],
+  "properties": {
+    "schema": { "const": "xf-strata/graph-model/1", "description": "The format version. Absent means format 1." },
+    "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+  },
+  "patternProperties": { "^x-": true },
+  "additionalProperties": false,
+  "$defs": {
+    "nodeRef": {
+      "description": "A model ID, or a live node outside the model.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "object", "required": ["$node"], "properties": { "$node": { "type": "string", "minLength": 1 } }, "additionalProperties": false }
+      ]
+    },
+    "demandSpec": {
+      "oneOf": [
+        { "type": "object", "required": ["latest"], "properties": { "latest": { "const": true } }, "additionalProperties": false },
+        { "type": "object", "required": ["entry"], "properties": { "entry": { "type": "integer", "minimum": 1 } }, "additionalProperties": false },
+        { "type": "object", "required": ["range"], "properties": { "range": {
+          "type": "object", "required": ["from"], "additionalProperties": false,
+          "properties": { "from": { "type": "integer", "minimum": 1 }, "to": { "type": "integer", "minimum": 1 } } } }, "additionalProperties": false },
+        { "type": "object", "required": ["rolling"], "properties": { "rolling": {
+          "type": "object", "minProperties": 1, "additionalProperties": false,
+          "properties": { "entries": { "type": "integer", "minimum": 1 }, "ms": { "type": "number", "minimum": 0 } } } }, "additionalProperties": false },
+        { "type": "object", "required": ["query"], "properties": { "query": true }, "additionalProperties": false }
+      ]
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["seed", "combinator", "effect", "driver"] },
+        "op": { "type": "string", "pattern": "^[A-Za-z][\\w:.-]*$", "description": "The operator's name in the catalogue. A seed without one uses the catalogue's seed operator." },
+        "inputs": { "type": "array", "items": { "$ref": "#/$defs/nodeRef" } },
+        "params": { "description": "Data given to the operator." },
+        "initial": { "description": "A seed's first entry, appended when it is created." },
+        "demand": { "description": "The spec the node demands of its inputs, or the model ID of a node whose latest entry is the spec.",
+          "oneOf": [ { "$ref": "#/$defs/demandSpec" }, { "type": "string", "minLength": 1 } ] }
+      },
+      "patternProperties": { "^x-": true },
+      "additionalProperties": false,
+      "allOf": [
+        { "if": { "properties": { "kind": { "enum": ["combinator", "effect", "driver"] } } }, "then": { "required": ["op"] } },
+        { "if": { "properties": { "kind": { "const": "combinator" } } }, "then": { "required": ["inputs"] } },
+        { "if": { "properties": { "kind": { "const": "effect" } } }, "then": { "required": ["inputs"] } }
+      ]
+    },
+    "stateMachineParams": {
+      "description": "The params of the standard state-machine operator (SPEC section 10.6).",
+      "type": "object",
+      "required": ["initial", "states"],
+      "properties": {
+        "initial": { "type": "string" },
+        "inputs": { "type": "array", "items": { "type": "string" }, "description": "A name for each input, in order: events and guards." },
+        "states": { "type": "object", "additionalProperties": {
+          "type": "object", "additionalProperties": false,
+          "properties": { "on": { "type": "object", "additionalProperties": {
+            "type": "object", "required": ["target"], "additionalProperties": false,
+            "properties": {
+              "target": { "type": "string" },
+              "guard": { "type": "string", "description": "The name of an input whose latest value must be true." },
+              "effects": { "type": "array", "items": { "type": "string" }, "description": "Model IDs of the effects this transition names." }
+            } } } } } }
+      }
+    }
+  }
+}

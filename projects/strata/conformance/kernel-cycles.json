@@ -21,9 +21,31 @@
       }
     },
     {
+      "name": "nested-diamonds-compute-each-join-once",
+      "kind": "kernel",
+      "rules": ["6.4", "6.5"],
+      "description": "Two diamonds in series (a to b and c to d; d to e and f to g) with an extra edge from a to g. One observation of a computes every node exactly once.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "b", "kind": "combinator", "op": "sum", "inputs": ["a"], "params": { "add": 1 } },
+        { "id": "c", "kind": "combinator", "op": "product", "inputs": ["a", "a"] },
+        { "id": "d", "kind": "combinator", "op": "sum", "inputs": ["b", "c"] },
+        { "id": "e", "kind": "combinator", "op": "sum", "inputs": ["d"], "params": { "add": 10 } },
+        { "id": "f", "kind": "combinator", "op": "product", "inputs": ["d", "d"] },
+        { "id": "g", "kind": "combinator", "op": "sum", "inputs": ["e", "f", "a"] },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["g"] }
+      ] },
+      "script": [ { "observe": { "a": 2 } }, { "observe": { "a": 3 } } ],
+      "expect": {
+        "streams": { "d": [3, 7, 13], "g": [23, 68, 195] },
+        "computes": { "b": 3, "c": 3, "d": 3, "e": 3, "f": 3, "g": 3, "log": 3 },
+        "logs": { "log": [[23], [68], [195]] }
+      }
+    },
+    {
       "name": "end-on-unchanged-skips-downstream",
       "kind": "kernel",
-      "rules": ["5.3", "6.4.6", "6.5"],
+      "rules": ["5.3", "6.4", "6.5"],
       "description": "B's output doesn't change when A goes from 3 to 4, so B sends END(unchanged) and D and the effect do no work.",
       "graph": { "nodes": [
         { "id": "a", "kind": "seed", "initial": 1 },
@@ -37,6 +59,86 @@
         "computes": { "b": 4, "d": 2, "log": 2 },
         "logs": { "log": [[false], [true]] }
       }
+    },
+    {
+      "name": "an-unchanged-branch-of-a-diamond-costs-nothing",
+      "kind": "kernel",
+      "rules": ["6.4", "6.5"],
+      "description": "In a diamond whose left branch doesn't change, the join still computes once (the right branch changed) and the left branch's consumers see its old value as final.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "left", "kind": "combinator", "op": "threshold", "inputs": ["a"], "params": { "at": 100 } },
+        { "id": "right", "kind": "combinator", "op": "sum", "inputs": ["a"] },
+        { "id": "join", "kind": "combinator", "op": "combine", "inputs": ["left", "right"] },
+        { "id": "leftonly", "kind": "combinator", "op": "identity", "inputs": ["left"] },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["join"] },
+        { "id": "log2", "kind": "effect", "op": "record", "inputs": ["leftonly"] }
+      ] },
+      "script": [ { "observe": { "a": 2 } } ],
+      "expect": {
+        "computes": { "left": 2, "right": 2, "join": 2, "leftonly": 1, "log2": 1 },
+        "logs": { "log": [[[false, 1]], [[false, 2]]], "log2": [[false]] }
+      }
+    },
+    {
+      "name": "a-transaction-is-one-cycle",
+      "kind": "kernel",
+      "rules": ["6.2", "6.4"],
+      "description": "Observing two seeds in one transaction computes their join once, with both new values.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "b", "kind": "seed", "initial": 1 },
+        { "id": "s", "kind": "combinator", "op": "combine", "inputs": ["a", "b"] },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["s"] }
+      ] },
+      "script": [ { "observe": { "a": 2, "b": 3 } } ],
+      "expect": { "computes": { "s": 2 }, "logs": { "log": [[[1, 1]], [[2, 3]]] } }
+    },
+    {
+      "name": "errors-are-values",
+      "kind": "kernel",
+      "rules": ["7.1", "7.2"],
+      "description": "f fails when a is 3: it appends an error entry, which flows on as a value; the same failure again is unchanged, so g does no work; a later good value recovers.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "f", "kind": "combinator", "op": "fail-when", "inputs": ["a"], "params": { "equals": 3, "message": "three" } },
+        { "id": "g", "kind": "combinator", "op": "sum", "inputs": ["f"], "params": { "add": 10 } },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["g"] }
+      ] },
+      "script": [ { "observe": { "a": 3 } }, { "observe": { "a": 3 } }, { "observe": { "a": 4 } } ],
+      "expect": {
+        "streams": { "f": [1, { "error": "three" }, 4], "g": [11, { "error": "three" }, 14] },
+        "computes": { "f": 4, "g": 3 },
+        "logs": { "log": [[11], [{ "error": "three" }], [14]] }
+      }
+    },
+    {
+      "name": "an-effect-failure-never-escapes-the-cycle",
+      "kind": "kernel",
+      "rules": ["6.5", "7.3"],
+      "description": "An effect that throws doesn't stop the cycle: the other effect still runs, and the failure is observed on the error seed with code effect.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "boom", "kind": "effect", "op": "explode", "inputs": ["a"], "params": { "equals": 2, "message": "bang" } },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["a"] }
+      ] },
+      "script": [ { "observe": { "a": 2 } }, { "observe": { "a": 3 } } ],
+      "expect": { "logs": { "log": [[1], [2], [3]] }, "errorCodes": ["effect"] }
+    },
+    {
+      "name": "an-observation-made-during-a-cycle-starts-the-next",
+      "kind": "kernel",
+      "rules": ["6.7", "6.8"],
+      "description": "An effect observes b whenever a changes. The observation doesn't join the running cycle: combine sees a's new value first, and b's in the next cycle.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 0 },
+        { "id": "b", "kind": "seed", "initial": 0 },
+        { "id": "echo", "kind": "effect", "op": "observe", "inputs": ["a"], "params": { "seed": "b" } },
+        { "id": "both", "kind": "combinator", "op": "combine", "inputs": ["a", "b"] },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["both"] }
+      ] },
+      "script": [ { "observe": { "a": 5 } } ],
+      "expect": { "logs": { "log": [[[0, 0]], [[5, 0]], [[5, 5]]] }, "streams": { "b": [0, 0, 5] } }
     }
   ]
 }
