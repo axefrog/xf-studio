@@ -1,4 +1,5 @@
 import { closeSync, openSync, readdirSync, readSync, statSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { join } from "node:path";
 import { parseRdarHeader, parseRdarIndexCount, parseRdarIndexHashes, RDAR_HEADER_BYTES, RDAR_INDEX_COUNT_BYTES } from "./rdar-index";
 
@@ -28,6 +29,20 @@ export function readRdarIndexCount(path: string): number {
     if (readSync(fd, head, 0, RDAR_INDEX_COUNT_BYTES, indexOffset) !== RDAR_INDEX_COUNT_BYTES) throw Error("Truncated RDAR index.");
     return parseRdarIndexCount(head);
   } finally { closeSync(fd); }
+}
+
+/** `readRdarIndexCount` without blocking the thread; `size` is the archive's size as just read. */
+export async function readRdarIndexCountAsync(path: string, size: number): Promise<number> {
+  const handle = await open(path, "r");
+  try {
+    const header = new Uint8Array(RDAR_HEADER_BYTES);
+    if ((await handle.read(header, 0, RDAR_HEADER_BYTES, 0)).bytesRead !== RDAR_HEADER_BYTES) throw Error("Truncated RDAR header.");
+    const { indexOffset, indexSize } = parseRdarHeader(header);
+    if (indexSize < RDAR_INDEX_COUNT_BYTES || indexOffset + indexSize > size) throw Error("RDAR index lies outside the file.");
+    const head = new Uint8Array(RDAR_INDEX_COUNT_BYTES);
+    if ((await handle.read(head, 0, RDAR_INDEX_COUNT_BYTES, indexOffset)).bytesRead !== RDAR_INDEX_COUNT_BYTES) throw Error("Truncated RDAR index.");
+    return parseRdarIndexCount(head);
+  } finally { await handle.close(); }
 }
 
 /** Binary search in a sorted hash list. */

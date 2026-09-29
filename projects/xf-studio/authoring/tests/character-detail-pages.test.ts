@@ -123,7 +123,7 @@ describe("two open pages on one host", () => {
     const seen: (string | undefined)[] = [];
     const fake = { request: (_request: CharacterRequest, page?: string) => { seen.push(page); return { schema: "xfs/character-detail-state-1",
       recordSchema: CHARACTER_DETAIL_SCHEMA, key: "a".repeat(32), phase: "preparing", message: "", progress: null, record: null }; },
-      refresh: async () => {} };
+      refresh: async () => {}, answer: async (request: CharacterRequest, page?: string) => fake.request(request, page) };
     const handler = createCharacterDetailHandler(fake as never);
     const scene = { setCharacterDetails: () => null, details: { load: async () => { throw Error("unused"); } } };
     const device = createBrowserCharacterDetailDevice(scene as never, (url, init) =>

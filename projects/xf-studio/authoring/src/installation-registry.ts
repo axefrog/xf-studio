@@ -48,10 +48,14 @@ import { lstat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
 import { currentDiagnostics } from "./diagnostics/host-log";
-import { installationView, type NativeRoute, nativeRouteStamp, openInstallation, openNativeRoute, type Installation, type InstallationOptions } from "./resolver-host";
+import { discoverRoute, DISCOVERY_LIMITS, installationView, type NativeRoute, nativeRouteStamp, openInstallation, openNativeRoute, readInstallationAhead,
+  type Installation, type InstallationOptions } from "./resolver-host";
+import { DiscoverySnapshots, watchUnchanged } from "./installation-snapshot";
+import { hostCodeIdentity } from "./host-code-identity";
+import { timeSlicer } from "./event-loop";
 import { ResourceGraph } from "./resource-graph";
 import { routeIdentity, type LaunchRouteSettings } from "./route-fingerprint";
-import { pathStamp, readListingStamp, type WatchedPath } from "./source-discovery";
+import { pathStamp, type WatchedPath } from "./source-discovery";
 import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 
 /** A launch route and WolvenKit, or null while WolvenKit isn't set up (the route then reads with the native reader alone). */
@@ -65,8 +69,12 @@ export const MAX_GRAPH_BYTES = 256 * 1024 * 1024;
 export const CHECK_FRESH_MS = 250;
 /** How long an installation opened with read errors is reused before it is opened again (PIPE-57). */
 export const PROBLEM_TTL_MS = 60_000;
-/** How many threads read stamps at once when an installation is checked. */
-const CHECK_CONCURRENCY = 64;
+/**
+ * How many stamps are read at once when an installation is checked. Many in flight keep the check short while the host is busy (a person's
+ * request waits on it): the reference installation's 10,209 stamps took 45 ms idle either way, and with the host's thread four-fifths
+ * busy 82 ms at 1,024 against 235 ms at 64.
+ */
+const CHECK_CONCURRENCY = 1024;
 /** How many dropped routes keep their watch lists (PIPE-52). */
 const MAX_RETIRED = 8;
 /** How long a native decoder that couldn't be opened for a reason that may pass is left before it is tried again (NATIVE-26). */
@@ -112,6 +120,11 @@ export type InstallationRegistryOptions = {
   stamp?: (path: string) => Promise<string>;
   /** JSON the views' graphs keep in total (default `MAX_GRAPH_BYTES`). */
   maxGraphBytes?: number;
+  /**
+   * Route discoveries kept across restarts (installation-snapshot.ts). Default: kept in each route's cache folder when the registry opens
+   * real installations (no `open` seam); `false`: never (every open walks the route's folders).
+   */
+  snapshots?: DiscoverySnapshots | false;
   /** Test seams: the clock, how long a clean `revalidate` vouches for the next acquire and how long an installation with read errors is reused. */
   now?: () => number;
   checkFreshMs?: number;
@@ -323,19 +336,34 @@ export class InstallationRegistry {
     return checking;
   }
 
-  private async unchanged(watch: readonly WatchedPath[] | undefined): Promise<boolean> {
-    if (!watch) return true;
-    const stamp = this.options.stamp ?? defaultStamp;
-    let next = 0, same = true;
-    const worker = async () => {
-      while (same && next < watch.length) {
-        const item = watch[next++]!;
-        const now = item.stamp.startsWith("list|") ? await readListingStamp(item.path) : await stamp(item.path);
-        if (now !== item.stamp) same = false;
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(CHECK_CONCURRENCY, watch.length) }, worker));
-    return same;
+  private unchanged(watch: readonly WatchedPath[] | undefined): Promise<boolean> {
+    return watchUnchanged(watch, this.options.stamp ?? defaultStamp, CHECK_CONCURRENCY);
+  }
+
+  /** The kept discoveries, when this registry keeps them (`snapshots`). */
+  private get snapshots(): DiscoverySnapshots | null {
+    const option = this.options.snapshots;
+    if (option === false) return null;
+    return option ?? (this.options.open ? null : defaultSnapshots);
+  }
+
+  /**
+   * Open a real route without holding the host's thread longer than it must (research/backlog/performance.md, warm restart): the route's
+   * discovery comes from its kept snapshot when every stamp it depends on is unchanged (checked in parallel, about 40–90 ms on the
+   * reference installation), else from walking its folders (synchronous, as before, and kept for the next start); the archive indexes and
+   * `.xl` files it names are read ahead in parallel, so the open itself only assembles.
+   */
+  private async openCore(options: InstallationOptions & { native: NativeRoute }): Promise<Installation> {
+    const open = this.options.open ?? openInstallation, snapshots = options.folderStamps ? null : this.snapshots;
+    if (!snapshots) return open(options);
+    const route = { route: routeIdentity(options), limits: DISCOVERY_LIMITS };
+    let discovery = await snapshots.read(options.cacheDir, route);
+    const kept = !!discovery;
+    discovery ??= discoverRoute(options);
+    await readInstallationAhead(discovery, options.cacheDir, timeSlicer());
+    const core = open({ ...options, discovery });
+    if (!kept) void snapshots.write(options.cacheDir, route, discovery);
+    return core;
   }
 
   private open(key: string, entry: Entry, options: InstallationOptions): Promise<Installation> {
@@ -345,7 +373,7 @@ export class InstallationRegistry {
       await new Promise(resolve => setTimeout(resolve, 0));
       const native = await this.native(options.gameRoot);
       this.stats.opens++;
-      const core = (this.options.open ?? openInstallation)({ ...options, native });
+      const core = await this.openCore({ ...options, native });
       const problems = problemsOf(core);
       // Reopened because it was old: the answer changed only if its read errors did.
       if (entry.expired !== undefined && entry.expired !== problems) this.bump(key);
@@ -428,6 +456,8 @@ export class InstallationRegistry {
   }
 }
 
+/** The process's kept route discoveries (installation-snapshot.ts), named by the host code that wrote them. */
+const defaultSnapshots = new DiscoverySnapshots({ code: hostCodeIdentity });
 /** The process's shared registry: every host consumer on the same route uses one opened installation. */
 export const installations = new InstallationRegistry();
 /** `installations.acquire`, as the hosts' `open` seam. */

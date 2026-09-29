@@ -10,7 +10,8 @@
  *
  * `<folder>` holds everything the server keeps (data, preview, resolver and choice preview caches, the Chrome profile); private, keep it
  * outside the repository. Its `data/settings.json` is copied from the installed settings the first time. `XFS_MEASURE_SERVER_ONLY=1`
- * starts only the server (to time the host's own start and preparation). Never port 4317.
+ * starts only the server (to time the host's own start and preparation). `XFS_MEASURE_HOST_PROFILE=<folder>` writes the host's CPU profile of its
+ * first 20 s there (`host.<run>.cpuprofile`). `XFS_MEASURE_WARM=off` opens the page without its warm start (`?warm=off`). Never port 4317.
  */
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -49,7 +50,15 @@ const env = { ...process.env, PORT: String(port), XFAS_DATA_DIR: data, XFS_SETTI
 for (let run = 1; run <= runs; run++) {
   const started = performance.now();
   const lines: string[] = [];
-  const server = Bun.spawn(["bun", "server.ts"], { cwd: root, env, stdout: "pipe", stderr: "pipe" });
+  // `XFS_MEASURE_HOST_PROFILE=<folder>`: the host's CPU profile of its first 20 s (it exits by itself then, so Bun writes the profile).
+  const hostProfile = process.env.XFS_MEASURE_HOST_PROFILE;
+  let preload: string[] = [];
+  if (hostProfile) {
+    const script = join(folder, "exit-after.ts");
+    await Bun.write(script, "setTimeout(() => process.exit(0), Number(process.env.XFS_EXIT_AFTER_MS ?? 20000));");
+    preload = ["--cpu-prof", `--cpu-prof-dir=${resolve(hostProfile)}`, `--cpu-prof-name=host.${run}.cpuprofile`, "--preload", script];
+  }
+  const server = Bun.spawn(["bun", ...preload, "server.ts"], { cwd: root, env, stdout: "pipe", stderr: "pipe" });
   const pump = async (stream: ReadableStream<Uint8Array>) => {
     const decoder = new TextDecoder();
     let rest = "";
@@ -71,16 +80,16 @@ for (let run = 1; run <= runs; run++) {
     await Bun.sleep(15_000);
   } else {
     const pageAsked = performance.now() - started;
-    const page = await launch("about:blank", { width: 1400, height: 900, init: TIMELINE, profile: join(folder, "chrome") });
+    const page = await launch("about:blank", { width: 1400, height: 900, init: TIMELINE, profile: join(folder, "chrome"), args: ["--no-proxy-server"] });
     const profileOut = process.env.XFS_MEASURE_PROFILE_OUT;
     if (profileOut) { await page.send("Profiler.enable"); await page.send("Profiler.setSamplingInterval", { interval: 200 }); await page.send("Profiler.start"); }
     const navigated = performance.now() - started;
-    await page.send("Page.navigate", { url: `http://127.0.0.1:${port}/?verify=1` });
+    await page.send("Page.navigate", { url: `http://127.0.0.1:${port}/?verify=1${process.env.XFS_MEASURE_WARM === "off" ? "&warm=off" : ""}` });
     try {
       const status = "window.xfStudioPresentation?.snapshot().status?.assets?.characterDetails";
       // Complete: details ready and not updating, and a frame drawn after the last placement.
       await page.waitFor(`(() => { const s = ${status}; const f = performance.getEntriesByName("xfs:character:frame"), p = performance.getEntriesByName("xfs:character:placed");
-        return s?.phase === 'ready' && !s.updating && f.length && f.at(-1).startTime > (p.at(-1)?.startTime ?? 0); })()`, 600_000);
+        return s?.phase === 'ready' && !s.updating && f.length && f.at(-1).startTime > (p.at(-1)?.startTime ?? 0); })()`, Number(process.env.XFS_MEASURE_TIMEOUT_MS ?? 600_000));
       const page_ = await page.evaluate(`(() => {
         const paint = Object.fromEntries(performance.getEntriesByType("paint").map(e => [e.name, Math.round(e.startTime)]));
         const nav = performance.getEntriesByType("navigation")[0];
@@ -89,15 +98,21 @@ for (let run = 1; run <= runs; run++) {
         const parts = all.filter(r => r.name.includes("/assets/character/"));
         const resources = all.filter(r => !r.name.includes("/assets/character/"))
           .map(r => [r.name.replace(/^https?:\\/\\/[^/]+/, "").slice(0, 70), Math.round(r.startTime), Math.round(r.responseEnd), r.encodedBodySize]);
-        return { paint, domContentLoaded: Math.round(nav?.domContentLoadedEventEnd ?? -1), load: Math.round(nav?.loadEventEnd ?? -1),
+        return { document: nav ? ["fetchStart", "requestStart", "responseStart", "responseEnd"].map(k => Math.round(nav[k])) : null, paint, domContentLoaded: Math.round(nav?.domContentLoadedEventEnd ?? -1), load: Math.round(nav?.loadEventEnd ?? -1),
           timeline: window.__xfsTimeline, marks, parts: parts.length ? [parts.length, Math.round(Math.min(...parts.map(r => r.startTime))),
             Math.round(Math.max(...parts.map(r => r.responseEnd))), parts.reduce((n, r) => n + r.encodedBodySize, 0)] : null, firstRequests: resources };
       })()`);
       Object.assign(result, { pageAskedMs: Math.round(pageAsked), navigatedMs: Math.round(navigated) }, page_);
       if (profileOut) { const { profile } = await page.send<{ profile: unknown }>("Profiler.stop"); await Bun.write(`${profileOut}.${run}.cpuprofile`, JSON.stringify(profile)); }
+    } catch (error) {
+      // Not complete in time: what the page said, and the V's state, for the reason.
+      console.log(JSON.stringify({ run, failed: (error as Error).message, status: await page.evaluate("JSON.stringify(window.xfStudioPresentation?.snapshot().status?.assets)").catch(() => null) }));
+      for (const entry of page.console.slice(-20)) console.log(`  console ${entry.type}: ${entry.text.slice(0, 300)}`);
+      console.log(lines.slice(-30).join("\n"));
+      throw error;
     } finally { await page.close(); }
   }
-  server.kill();
+  if (hostProfile) await server.exited; else server.kill();
   await server.exited;
   const { firstRequests, ...rest } = result as { firstRequests?: unknown[] };
   console.log(JSON.stringify(rest));

@@ -70,6 +70,12 @@ export function characterRequestFromSave(v: SavedV, parts: readonly CcoPart[] = 
       ({ part, group: group.name, region: morph.region, target: morph.target })))).slice(0, MAX_MORPHS) };
 }
 /**
+ * A request header a page's warm start sends (character-warm-start.ts): answer only from what the host already has (a kept or known answer),
+ * never by starting a preparation.
+ */
+export const CHARACTER_WARM_HEADER = "X-XFS-Warm";
+
+/**
  * A request from a context's base (the save's descriptors), choices and clothing. With `body` false the V's body is off: no clothing is
  * carried and the request says so, so the host prepares the head alone. With `nudity` (and the body on), the body is asked for as the game
  * draws it with nudity allowed.

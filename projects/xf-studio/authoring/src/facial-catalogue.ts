@@ -10,6 +10,7 @@ import { buildVocabulary, type FacialVocabulary } from "./engines/facial-rig/voc
 import { rigRestFromRed, type RigRest } from "./engines/facial-rig/pose";
 import { clipControlVector, decodeClipTracks, type ClipTracks } from "./engines/facial-rig/anim-tracks";
 import type { FacialStartPoint } from "./platform/api/facial";
+import { bytesFromBase64 } from "./base64";
 
 /**
  * The player face the Studio's head is: the female basehead skeleton, and the female head's own facial setup beside it. The face is solved
@@ -76,7 +77,7 @@ export type SetClip = { name: string; type: string; duration: number; frames: nu
 
 const base64 = (value: unknown): Uint8Array | null => {
   const text = isObject(value) && typeof value.Bytes === "string" ? value.Bytes : null;
-  return text === null ? null : Uint8Array.from(atob(text), char => char.charCodeAt(0));
+  return text === null ? null : bytesFromBase64(text);
 };
 
 /**

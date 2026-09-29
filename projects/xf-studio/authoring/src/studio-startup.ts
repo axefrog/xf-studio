@@ -21,6 +21,7 @@ import { createBrowserModInstall } from "./browser-mod-install-device";
 import { builtModsOf, type BuiltMod } from "./mod-install-actions";
 import { createBrowserPreviewDevice } from "./browser-preview-device";
 import { attachBrowserHead, type AttachedHead } from "./browser-head-attachment";
+import { CharacterWarmStart } from "./character-warm-start";
 import type { ContextHistory } from "./character-context-actions";
 import { rasterRegion } from "./engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "./browser-viewport-device";
@@ -117,6 +118,10 @@ async function start(host: StudioHost, root: HTMLElement) {
   void diagnostics.refresh();
   const storage = host.storage;
   const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
+  // The V's details the page asked for last are read while everything else starts (research/backlog/performance.md, warm restart).
+  // `?warm=off` leaves it out (a developer's A/B measurement, tools/measure-warm-restart.ts).
+  const warmStart = new CharacterWarmStart({ storage, verification });
+  if (new URLSearchParams(location.search).get("warm") !== "off") void warmStart.start();
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.
   const transitions = new TransitionSettings(workspace.preview.transitions);
@@ -371,7 +376,7 @@ async function start(host: StudioHost, root: HTMLElement) {
         // The shown V's body decides the core head (the masculine V's is prepared on first use); a V that changes body loads it again.
         prepareCore: body => host.previewPreparation.ensureBody(body, (message, progress) => viewportDevice.headPending("preparing", message, progress)),
         reload: history => { headWorkspace = session.snapshot(); headHistory = history; previewSetup.reloadHead(); }, history,
-        notice: text => adapterMessage("preview", text),
+        notice: text => adapterMessage("preview", text), warmStart,
         // The live feature's layered surface: the preview device fills its layers and the on-head editor edits it. Other composed layered
         // surfaces have no layer source until the core edits more than one live feature.
         layered: liveSurface ? [{ feature: liveSurface.feature, surface: loaded => loaded.feature(liveSurface), preview: previewDevice,

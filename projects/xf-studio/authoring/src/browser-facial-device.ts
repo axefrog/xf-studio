@@ -5,9 +5,10 @@
 import { FACIAL_ENDPOINT, FACIAL_EXPRESSIONS_ENDPOINT, FACIAL_SOLVE_ENDPOINT, type FacialHostState, type FacialSolveAnswer,
   type FacialSolveRequest, type FacialStartPoints } from "./platform/api/facial";
 import type { FacialDevicePort, FacialSolved } from "./facial-preview";
+import { bytesFromBase64 } from "./base64";
 
 const floats = (text: string) => {
-  const bytes = Uint8Array.from(atob(text), char => char.charCodeAt(0));
+  const bytes = bytesFromBase64(text);
   return new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
 };
 

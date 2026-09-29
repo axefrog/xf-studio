@@ -1,5 +1,6 @@
 import type { CharacterDetailPort, HostCharacterState } from "./character-detail-actions";
 import { readCharacterRecord, type CharacterDetailFetch, type LoadedCharacterDetails } from "./character-detail-loader";
+import type { CharacterWarmStart } from "./character-warm-start";
 import { parseCharacterRequest } from "./character-detail-request";
 import { DetailVersionSkewError, type DetailLimit, type SlotLimits } from "./detail-limits";
 import { CHARACTER_DETAIL_SCHEMA, RenderDetailVersionError, type DetailSlot } from "./render-detail";
@@ -45,7 +46,12 @@ function hostState(value: unknown): HostCharacterState {
 const PRELOAD_POLLS = 8;
 const answerState = (value: unknown) => hostState(value);
 
-export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init)): CharacterDetailPort {
+/**
+ * `warm`: the page's warm start (character-warm-start.ts): each request asked is remembered for the next start, and a load takes the
+ * files it read ahead.
+ */
+export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init),
+  warm?: Pick<CharacterWarmStart, "remember" | "files">): CharacterDetailPort {
   /** This page's name, sent with each request. */
   const page = pageName();
   /** The details the scene shows now (this device put them there), whose unchanged parts the next load reuses. */
@@ -84,8 +90,11 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
     return hostState(await response.json());
   };
   return {
-    request: async (request, signal) => answer(await fetcher(CHARACTER_ENDPOINT, { method: "POST", signal,
-      headers: { "Content-Type": "application/json", "X-XFS-Page": page }, body: JSON.stringify(request) }), request),
+    request: async (request, signal) => {
+      warm?.remember(request);
+      return answer(await fetcher(CHARACTER_ENDPOINT, { method: "POST", signal,
+        headers: { "Content-Type": "application/json", "X-XFS-Page": page }, body: JSON.stringify(request) }), request);
+    },
     poll: async (key, signal) => answer(await fetcher(`${CHARACTER_ENDPOINT}?key=${encodeURIComponent(key)}`, { signal })),
     async show(file, signal) {
       let record;
@@ -99,7 +108,7 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       // Through the host's detail loader: each chunk through the adapter for its template, with the host's anisotropy and skin placement.
       await loading;
       if (signal.aborted) throw new DOMException("Superseded.", "AbortError");
-      const load = scene.details.load(record, { fetcher, signal, reuse: shown });
+      const load = scene.details.load(record, { fetcher, signal, reuse: shown, warmed: warm?.files ?? null });
       loading = load.catch(() => {});
       const loaded = await load;
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
