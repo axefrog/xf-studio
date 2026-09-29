@@ -39,10 +39,10 @@ The idea registers hold the detail: [bringing V and the world to life](../resear
 
 ## One engine under all of it
 
-XF Studio is being rebuilt on **XF Strata**, its own reactive stream-graph engine: every subsystem is declared as data (models, behaviours, state machines) and built into live machinery, with deterministic simulation testing. The same engine, specified language-neutrally and checked by shared conformance tests, is planned for the game side too. That turns the directions above into one idea:
+XF Studio is being rebuilt on **XF Strata**, its own reactive stream-graph engine: every subsystem is declared as data (models, behaviours, state machines) and built into live machinery, with deterministic simulation testing. A native version of the same engine is planned for the game side. That turns the directions above into one idea:
 
 - **A quest is a declared model:** a state machine whose sources are game events and whose effects act on the game (journal, messages, map pins, spawns, rewards), editable live instead of waiting for the game to reload quest data.
-- **A character's mind is an actor with a world model:** perception feeding beliefs ("I saw V do this", "someone told me that"), goals and behaviours running as long-lived processes, reactions as effects.
+- **A character's routine is a declared behaviour:** game events in, reactions out, running as a long-lived process.
 - **Tested before it reaches the game:** simulated game sources let every quest, routine or behaviour run many times under odd timings and interruptions first.
 - **Designed live:** the Studio edits a model while the game runs it.
 

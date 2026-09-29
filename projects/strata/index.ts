@@ -3,7 +3,7 @@
  *
  * This file is the public API. Everything a project needs is exported here; the simulation harness, the reference
  * model and the store conformance suite are in `strata/testing`. Nothing else is public, and `tests/api-surface.test.ts`
- * snapshots this surface so any change to it is deliberate (see CHANGELOG.md).
+ * snapshots this surface so any change to it is deliberate (and the change is noted in its commit message).
  */
 
 // The execution kernel (SPEC §3–§10)

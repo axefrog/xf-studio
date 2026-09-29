@@ -1,4 +1,4 @@
-# XF Strata, the graph engine (projects/strata): its own suite (conformance vectors, entity and stream tests, property
+# XF Strata, the graph engine (projects/strata): its own suite (kernel, entity and stream tests, property
 # tests, deterministic simulation, budgets, boundary and API surface), its two typechecks and the minimal example, on
 # every push to main and every pull request that touches it. The Studio's workflow also runs when it changes.
 name: Strata

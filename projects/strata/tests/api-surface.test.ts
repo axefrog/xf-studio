@@ -2,7 +2,7 @@
  * The public API surface (design §1.2): every name exported from `strata` and `strata/testing`, with its declaration as
  * the compiler emits it (the type declarations: public members, signatures, types; private and `@internal` members
  * left out). Any change fails this test until the snapshot is regenerated
- * (`UPDATE_API_SNAPSHOT=1 bun test tests/api-surface.test.ts`) and the change is noted in CHANGELOG.md.
+ * (`UPDATE_API_SNAPSHOT=1 bun test tests/api-surface.test.ts`) and the change is noted in the commit message.
  */
 import { expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";

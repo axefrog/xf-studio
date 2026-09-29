@@ -1,6 +1,6 @@
 /**
- * The conformance runner (SPEC §22): runs the JSON vectors in `conformance/` against this implementation. The engine's
- * own suite runs every vector; a native implementation runs the same files with its own runner.
+ * A runner for data-driven test vectors: each vector describes a graph as data, a script of observations and the
+ * expected results, and is run against this implementation.
  *
  * The environment keeps only what demand requires (SPEC §4.5): whole streams are recorded as they are appended, so
  * retention itself is under test (a window that loses an entry it must keep changes what `collect` computes, and
