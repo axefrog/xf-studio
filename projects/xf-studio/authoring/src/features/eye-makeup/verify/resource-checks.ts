@@ -264,7 +264,6 @@ const srgbDecode = (v: number) => (v <= .04045 ? v / 12.92 : Math.pow((v + .055)
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 /** WolvenKit stores material scalars as float32 and prints nine significant digits. */
 const sameFloat32 = (actual: unknown, want: number) => typeof actual === "number" && Math.abs(actual - Math.fround(want)) <= 1e-7 * Math.max(1, Math.abs(want));
-const toByte = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
 
 /** Active layers of a preset's packaged recipe. */
 function activeLayers(preset: VerifierPreset): Node[] {
@@ -313,7 +312,32 @@ export const HIDDEN_ENTRY = "xfs_hidden";
 export const HIDDEN_VALUES: Readonly<Record<string, number>> = { DiffuseAlpha: 0, NormalAlpha: 0, RoughnessMetalnessAlpha: 0 };
 
 /**
- * Expected scalar and colour parameters of each route's material instance (the published specification).
+ * The linear colour a Fresnel preset's `FresnelColor` must reach the program as: the shift colour (authored sRGB) decoded and normalised
+ * to its peak channel, whose value moves into the intensity (the published specification).
+ */
+export function fresnelColourTarget(preset: VerifierPreset): [number, number, number] {
+  const { shift } = fresnelPigment(preset);
+  const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
+  return (peak > 0 ? linear.map(v => v / peak) : [0, 0, 0]) as [number, number, number];
+}
+/**
+ * Why a stored `FresnelColor` doesn't reach the program as `target`, or null (PIPE-126). The engine's constant-buffer packer sRGB-decodes
+ * every `Color` parameter's RGB, so the stored bytes are decoded here and each must lie within one byte of the target: the verifier never
+ * restates the exporter's encoding, so an encoding in the wrong direction (or none) fails.
+ */
+export function fresnelColourIssue(stored: Node, target: readonly [number, number, number]): string | null {
+  if (!stored || typeof stored !== "object" || stored.$type !== "Color" || stored.Alpha !== 255
+    || Object.keys(stored).sort().join() !== "$type,Alpha,Blue,Green,Red") return "is not an opaque Color";
+  const bytes = [stored.Red, stored.Green, stored.Blue];
+  if (!bytes.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255)) return "has channels that are not bytes";
+  const decode = (byte: number) => srgbDecode(Math.max(0, Math.min(255, byte)) / 255);
+  const channel = bytes.findIndex((byte, c) => target[c]! < decode(byte - 1) || target[c]! > decode(byte + 1));
+  return channel < 0 ? null : `decodes to ${bytes.map(byte => decode(byte).toFixed(4)).join(", ")}, not the normalised linear shift colour `
+    + `${target.map(v => v.toFixed(4)).join(", ")}`;
+}
+/**
+ * Expected scalar and colour parameters of each route's material instance (the published specification). A Fresnel preset's
+ * `FresnelColor` is checked by decoding it instead (`fresnelColourIssue`).
  * `uv` is the verifier's own window transform, required and added for plate-window presets.
  */
 export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPreset, uv?: Readonly<Record<string, number>>): Record<string, Node> {
@@ -327,14 +351,10 @@ export function expectedMaterialValues(route: VerifierRoute, preset: VerifierPre
   if (route === "faceted") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 0, NormalsBlendingMode: 1, ...transform };
   if (route === "glitter") return { ...flat, NormalAlpha: 1, UseNormalAlphaTex: 1, NormalsBlendingMode: 1, ...transform };
   const { shift } = fresnelPigment(preset);
-  const linear = [1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)), peak = Math.max(...linear);
-  // Color parameters reach the program sRGB-decoded (the engine's constant-buffer packer), so the normalised linear colour is stored encoded.
-  const encode = (v: number) => v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055;
-  const [Red, Green, Blue] = peak > 0 ? linear.map(v => toByte(encode(v / peak))) : [0, 0, 0];
+  const peak = Math.max(...[1, 3, 5].map(i => srgbDecode(parseInt(shift.color.slice(i, i + 2), 16) / 255)));
   return { DiffuseAlpha: 1, RoughnessMetalnessAlpha: 1, NormalAlpha: 0, AlphaMaskContrast: 0, SecondaryMaskInfluence: 0,
     RoughnessScale: 0, RoughnessBias: .32, MetalnessScale: 0, MetalnessBias: .08, FadeOutOffset: 1000, FadeOutDistance: 1,
-    FresnelColorIntensity: round6(2 * shift.strength * peak), FresnelExponent: 2,
-    FresnelColor: { $type: "Color", Red, Green, Blue, Alpha: 255 }, DiffuseColor: white };
+    FresnelColorIntensity: round6(2 * shift.strength * peak), FresnelExponent: 2, DiffuseColor: white };
 }
 
 export interface VerifierPlan {
@@ -581,8 +601,12 @@ export function checkResources(plan: VerifierPlan, r: RoundTrippedResources, art
     for (const [key, want] of Object.entries(expected))
       ensure(typeof want === "object" ? sameJson(params[key], want) : sameFloat32(params[key], want),
         `Material ${name} ${key} is ${JSON.stringify(params[key])}, expected ${JSON.stringify(want)}`);
+    if (route === "fresnel") {
+      const issue = fresnelColourIssue(params.FresnelColor, fresnelColourTarget(preset));
+      ensure(!issue, `Material ${name} FresnelColor ${issue}`);
+    }
     const textureParams: string[] = ROUTE_SPEC[route].textures.map(([parameter]) => parameter);
-    const extra = Object.keys(params).filter(key => !(key in expected) && !textureParams.includes(key));
+    const extra = Object.keys(params).filter(key => !(key in expected) && !textureParams.includes(key) && !(route === "fresnel" && key === "FresnelColor"));
     ensure(!extra.length, `Material ${name} sets unexpected parameters: ${extra.join(", ")}`);
     paramsByEntry.set(name, params);
   });
