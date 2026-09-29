@@ -1,0 +1,47 @@
+{
+  "kind": "request",
+  "id": "run-wolvenkit",
+  "owner": "host",
+  "summary": "Run the WolvenKit CLI for an export, pack, extraction or verification.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "exit": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "exit"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "enum": [
+          "export",
+          "pack",
+          "extract",
+          "verify"
+        ]
+      },
+      "args": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "command",
+      "args"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:wolvenkit"
+  ]
+}

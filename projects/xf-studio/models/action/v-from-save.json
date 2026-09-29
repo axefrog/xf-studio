@@ -1,0 +1,33 @@
+{
+  "kind": "action",
+  "id": "v-from-save",
+  "owner": "character",
+  "summary": "Make the focused V from a save, or a new V forked from the Default V with the save's base.",
+  "status": "target",
+  "name": "v.fromSave",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {
+      "save": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "into": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "save",
+      "into"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The save's creator state was decoded."
+  },
+  "effect": {
+    "raises": "request:decode-saved-v",
+    "commit": "Creates or changes a V with the save's base, and a save node on first use."
+  },
+  "undo": "character"
+}

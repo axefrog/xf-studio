@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "view-new",
+  "owner": "views",
+  "summary": "Open a new 3D view of the focused view's scene, sharing its lights and display, with a copied camera and fresh tools.",
+  "status": "target",
+  "name": "view.new",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "from"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Fewer than four 3D views are visible."
+  },
+  "effect": {
+    "commit": "Creates a view referencing the scene, lights and display, with a forked camera and new tools."
+  },
+  "undo": "view-lighting"
+}

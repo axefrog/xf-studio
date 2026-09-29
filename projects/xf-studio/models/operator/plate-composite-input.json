@@ -1,0 +1,42 @@
+{
+  "kind": "operator",
+  "id": "plate-composite-input",
+  "owner": "eye-makeup",
+  "summary": "A scene's plate composite as data: the worn preset's layers in order with raster keys and finishes.",
+  "status": "both",
+  "replaces": [
+    "engines/layered-makeup/render/makeup-stack",
+    "engines/layered-makeup/render/plate-composite",
+    "engines/layered-makeup/render/plate-blend"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:scene",
+    "type:look",
+    "type:preset-eye-makeup"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "shapes.schema.json#/$defs/rasterKey"
+        },
+        "finish": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "finish"
+      ]
+    }
+  },
+  "pure": true
+}

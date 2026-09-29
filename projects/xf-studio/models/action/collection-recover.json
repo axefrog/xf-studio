@@ -1,0 +1,33 @@
+{
+  "kind": "action",
+  "id": "collection-recover",
+  "owner": "platform",
+  "summary": "Recover (collection): restores a mod from the trash.",
+  "status": "current",
+  "name": "collection.recover",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "No other picker is open in the window.",
+    "refusals": [
+      {
+        "code": "picker-busy",
+        "reason": "Another file is being picked."
+      },
+      {
+        "code": "not-ready",
+        "reason": "Build needs its settings, WolvenKit and the eye plate first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Restores a mod from the trash."
+  },
+  "undo": "none",
+  "x-note": "The recovery queue goes away in the target: the store's pending copy is the recovery, and Open is navigation."
+}

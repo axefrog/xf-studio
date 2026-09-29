@@ -1,0 +1,49 @@
+{
+  "kind": "action",
+  "id": "preview-set-key-angle",
+  "owner": "views",
+  "summary": "Set key angle (preview): edits the rig's keys (preview.setKeyAngle).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups",
+    "studio-lighting",
+    "creator-lighting"
+  ],
+  "name": "preview.setKeyAngle",
+  "target": "type:light-rig",
+  "input": {
+    "type": "object",
+    "properties": {
+      "degrees": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 360
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "degrees"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's rig is one of the person's own setups, or a built-in (a change to a built-in forks it into one of the person's own first).",
+    "refusals": [
+      {
+        "code": "limit",
+        "reason": "A setup has at most 16 lights and a few shadow casters."
+      },
+      {
+        "code": "built-in",
+        "reason": "A built-in setup can't be renamed or deleted."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the rig's keys (preview.setKeyAngle)."
+  },
+  "undo": "view-lighting"
+}

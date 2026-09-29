@@ -1,0 +1,36 @@
+{
+  "kind": "request",
+  "id": "derive-swatches",
+  "owner": "character",
+  "summary": "Derive colour swatches for the catalogue.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "swatches": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "swatches"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "reasons": [
+    "warms"
+  ],
+  "servedBy": [
+    "driver:swatches"
+  ]
+}

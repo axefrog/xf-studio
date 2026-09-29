@@ -1,0 +1,46 @@
+{
+  "kind": "operator",
+  "id": "capability",
+  "owner": "platform",
+  "summary": "Whether an action is available on a target now, with the plain reason when it isn't.",
+  "status": "both",
+  "replaces": [
+    "platform/api/capability",
+    "alpha-availability"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "inputs": [
+    "type:window",
+    "the target node",
+    "the action catalogue"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "available": {
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "code": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "available"
+    ]
+  },
+  "pure": true
+}

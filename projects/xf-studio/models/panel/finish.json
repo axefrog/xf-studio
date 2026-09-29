@@ -1,0 +1,33 @@
+{
+  "kind": "panel",
+  "id": "finish",
+  "owner": "eye-makeup",
+  "summary": "Colour & finish for the active layer: colour, opacity, finish, colour shift, glitter model and its settings.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/view/inspector"
+  ],
+  "binding": "the focused preset's active layer (type:editor-session)",
+  "reads": [
+    "type:preset-eye-makeup",
+    "operator:eye-makeup-capability",
+    "operator:layer-export",
+    "operator:glitter-measurement",
+    "operator:limits-for"
+  ],
+  "actions": [
+    "action:effect-mottle-enable",
+    "action:effect-mottle-preset",
+    "action:effect-mottle-set",
+    "action:effect-mottle-shuffle",
+    "action:glitter-select-model",
+    "action:glitter-set-classic",
+    "action:glitter-set-direct",
+    "action:glitter-set-irregular",
+    "action:layer-set-color",
+    "action:layer-set-finish",
+    "action:layer-set-opacity",
+    "action:layer-set-shift",
+    "action:layer-use-game-optics"
+  ]
+}

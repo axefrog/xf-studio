@@ -1,0 +1,40 @@
+{
+  "kind": "panel",
+  "id": "settings",
+  "owner": "setup",
+  "summary": "Settings: game and tools, saves, library backups, diagnostics and updates.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/settings",
+    "studio-ui/panels/game-setup"
+  ],
+  "binding": "type:host-settings",
+  "reads": [
+    "type:host-settings",
+    "operator:setup-readiness",
+    "operator:frameworks",
+    "operator:effective-cli",
+    "operator:saves-folder"
+  ],
+  "actions": [
+    "action:setup-pick-folder",
+    "action:setup-refresh",
+    "action:setup-restore-previous",
+    "action:setup-save",
+    "action:setup-update",
+    "action:character-clear-prepared-files",
+    "action:detect-framework-versions",
+    "action:detect-game-installs",
+    "action:detect-mo2-instances",
+    "action:diagnostics-set-mode",
+    "action:preparation-cancel",
+    "action:preparation-prepare",
+    "action:preparation-rebuild",
+    "action:preparation-refresh",
+    "action:save-set-policy",
+    "action:wolvenkit-cancel",
+    "action:wolvenkit-install",
+    "action:wolvenkit-recheck",
+    "action:wolvenkit-refresh"
+  ]
+}

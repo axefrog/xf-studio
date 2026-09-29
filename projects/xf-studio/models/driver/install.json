@@ -18,7 +18,8 @@
   "environment": "host",
   "serves": [
     "request:plan-install",
-    "request:apply-install"
+    "request:apply-install",
+    "request:reveal-build"
   ],
   "demands": [
     "type:build",

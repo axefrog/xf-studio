@@ -1,0 +1,47 @@
+{
+  "kind": "operator",
+  "id": "panel-page",
+  "owner": "character",
+  "summary": "One page of a row's choices as the panel shows it, from the catalogue and the V's view.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "page": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "page"
+    ]
+  },
+  "inputs": [
+    "type:choice-row",
+    "the V's view"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "choice": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "selected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "choice",
+        "label",
+        "selected"
+      ]
+    }
+  },
+  "pure": true
+}

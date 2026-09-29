@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "mod-split",
+  "owner": "export",
+  "summary": "Split selectors or presets into a new XF-branded mod.",
+  "status": "target",
+  "name": "mod.split",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "mod": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "selectors": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "mod",
+      "selectors"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The mod has more than one selector or preset."
+  },
+  "effect": {
+    "commit": "Creates a mod and moves the chosen selectors into it."
+  },
+  "undo": "none"
+}

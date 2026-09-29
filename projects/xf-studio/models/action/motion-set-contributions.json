@@ -1,0 +1,45 @@
+{
+  "kind": "action",
+  "id": "motion-set-contributions",
+  "owner": "motion",
+  "summary": "Set contributions (motion): sets the scene's motion key (motion.setContributions).",
+  "status": "both",
+  "replaces": [
+    "motion-actions",
+    "platform/core/transition-settings"
+  ],
+  "name": "motion.setContributions",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "type": "boolean"
+      },
+      "face": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "face"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene shows a V and motion is available for her body.",
+    "refusals": [
+      {
+        "code": "motion-unavailable",
+        "reason": "The installation has no creator idle for this body."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the scene's motion key (motion.setContributions)."
+  },
+  "undo": "none"
+}

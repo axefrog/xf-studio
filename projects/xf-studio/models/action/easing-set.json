@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "easing-set",
+  "owner": "shell",
+  "summary": "Set (easing): sets the preferences key (easing.set).",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "easing.set",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {
+      "scope": {
+        "type": "string"
+      },
+      "easing": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "scope",
+      "easing"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "commit": "Sets the preferences key (easing.set)."
+  },
+  "undo": "none"
+}

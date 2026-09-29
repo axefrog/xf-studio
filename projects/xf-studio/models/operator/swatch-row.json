@@ -1,0 +1,39 @@
+{
+  "kind": "operator",
+  "id": "swatch-row",
+  "owner": "character",
+  "summary": "A colour row's swatches in order, with the chosen one marked.",
+  "status": "both",
+  "replaces": [
+    "cc-swatch-display"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:choice-row",
+    "the catalogue's swatches"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "choice": {
+          "type": "string"
+        },
+        "colour": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "choice",
+        "colour"
+      ]
+    }
+  },
+  "pure": true
+}

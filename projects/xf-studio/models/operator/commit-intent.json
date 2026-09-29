@@ -1,0 +1,27 @@
+{
+  "kind": "operator",
+  "id": "commit-intent",
+  "owner": "platform",
+  "summary": "Turns an accepted intent into its commit, session entry or request, in the same cycle as its capability check.",
+  "status": "target",
+  "nodeKind": "effect",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "operator:capability",
+    "the intent"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "commit": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "pure": false
+}

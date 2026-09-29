@@ -1,0 +1,41 @@
+{
+  "kind": "operator",
+  "id": "layer-export",
+  "owner": "eye-makeup",
+  "summary": "Whether and how a layer exports: its adapter, or preview only.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/export-info"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "layer": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "layer"
+    ]
+  },
+  "inputs": [
+    "type:preset-eye-makeup"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "exports": {
+        "type": "boolean"
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "exports",
+      "label"
+    ]
+  },
+  "pure": true
+}

@@ -1,0 +1,44 @@
+{
+  "kind": "action",
+  "id": "collection-import-recipe",
+  "owner": "library",
+  "summary": "Import recipe (collection): creates a preset from the imported recipe and adds it to the mod's selector.",
+  "status": "both",
+  "replaces": [
+    "collection-actions",
+    "collection-application"
+  ],
+  "name": "collection.importRecipe",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "recipe": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "recipe",
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A mod is focused and the preset or product named exists.",
+    "refusals": [
+      {
+        "code": "missing",
+        "reason": "That preset or product no longer exists."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Creates a preset from the imported recipe and adds it to the mod's selector."
+  },
+  "undo": "none"
+}

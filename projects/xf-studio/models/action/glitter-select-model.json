@@ -1,0 +1,56 @@
+{
+  "kind": "action",
+  "id": "glitter-select-model",
+  "owner": "eye-makeup",
+  "summary": "Select model (glitter): edits the preset's layer keys through eye makeup's apply operator (glitter.selectModel), one commit per action or per finished control run.",
+  "status": "both",
+  "replaces": [
+    "eye-makeup-descriptors",
+    "engines/layered-makeup/recipe-actions"
+  ],
+  "name": "glitter.selectModel",
+  "target": "type:preset-eye-makeup",
+  "input": {
+    "type": "object",
+    "properties": {
+      "layerId": {
+        "type": "string"
+      },
+      "model": {
+        "enum": [
+          "classic",
+          "irregular",
+          "direct",
+          "clustered",
+          "fine"
+        ]
+      }
+    },
+    "required": [
+      "layerId",
+      "model"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A preset is open for editing, the layer exists, no gesture is open elsewhere in the window, and the preset isn't locked by a newer build's data.",
+    "refusals": [
+      {
+        "code": "locked",
+        "reason": "This look was saved by a newer XF Studio and can only be viewed here."
+      },
+      {
+        "code": "missing",
+        "reason": "That layer no longer exists."
+      },
+      {
+        "code": "limit",
+        "reason": "A preset has at most 32 layers and 8 warp fields per layer."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the preset's layer keys through eye makeup's apply operator (glitter.selectModel), one commit per action or per finished control run."
+  },
+  "undo": "look"
+}

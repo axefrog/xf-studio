@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "preset-trash",
+  "owner": "library",
+  "summary": "Move a preset to the trash, restorable for 30 days.",
+  "status": "target",
+  "name": "preset.trash",
+  "target": "type:preset-eye-makeup",
+  "input": {
+    "type": "object",
+    "properties": {
+      "preset": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "preset"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The preset isn't in the trash."
+  },
+  "effect": {
+    "commit": "Trashes the preset node."
+  },
+  "undo": "none"
+}

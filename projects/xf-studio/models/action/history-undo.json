@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "history-undo",
+  "owner": "platform",
+  "summary": "Undo (history): raises the undo reques.",
+  "status": "both",
+  "replaces": [
+    "authoring-history",
+    "platform/core/look-history"
+  ],
+  "name": "history.undo",
+  "target": "type:history-scope",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The focused scope has a step to undo, redo or jump to, and no transaction is open in the window.",
+    "refusals": [
+      {
+        "code": "nothing",
+        "reason": "There is nothing to undo."
+      },
+      {
+        "code": "transaction-open",
+        "reason": "Finish or cancel the current adjustment first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:undo"
+  },
+  "undo": "none"
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "guidance-next",
+  "owner": "shell",
+  "summary": "Next (guidance): moves the tour (guidance.next).",
+  "status": "both",
+  "replaces": [
+    "studio-ui/guidance/engine"
+  ],
+  "name": "guidance.next",
+  "target": "type:tour-run",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The tour exists and its anchors are shown."
+  },
+  "effect": {
+    "session": "Moves the tour (guidance.next)."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,49 @@
+{
+  "kind": "operator",
+  "id": "eligibility",
+  "owner": "export",
+  "summary": "What of a mod can ship, and every omitted layer or preset with a plain reason.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "operator:package-snapshot",
+    "operator:layer-export"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "shipped": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "omitted": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "what": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "what",
+            "reason"
+          ]
+        }
+      }
+    },
+    "required": [
+      "shipped",
+      "omitted"
+    ]
+  },
+  "pure": true
+}

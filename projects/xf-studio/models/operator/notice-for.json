@@ -1,0 +1,32 @@
+{
+  "kind": "operator",
+  "id": "notice-for",
+  "owner": "diagnostics",
+  "summary": "The notice a fault becomes: plain message, severity, the one next step and a reference.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the fault"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "string"
+      },
+      "severity": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "message",
+      "severity"
+    ]
+  },
+  "pure": true
+}

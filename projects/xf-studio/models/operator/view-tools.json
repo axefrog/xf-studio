@@ -1,0 +1,51 @@
+{
+  "kind": "operator",
+  "id": "view-tools",
+  "owner": "views",
+  "summary": "The tools a view offers: the platform's and shown modules' for its scene kind, with state and capability.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "placement": {
+        "enum": [
+          "toolbar",
+          "menu",
+          "research"
+        ]
+      }
+    },
+    "required": []
+  },
+  "inputs": [
+    "type:view",
+    "type:scene",
+    "type:tools",
+    "operator:shown-modules",
+    "type:preferences"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "on": {
+          "type": "boolean"
+        },
+        "available": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "on",
+        "available"
+      ]
+    }
+  },
+  "pure": true
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "request",
+  "id": "load-idles",
+  "owner": "motion",
+  "summary": "Have the creator idles read for the installation.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "clips": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "clips"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "bodyGender": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "bodyGender"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:idles"
+  ]
+}

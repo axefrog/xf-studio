@@ -1,0 +1,34 @@
+{
+  "kind": "operator",
+  "id": "legacy-mirror",
+  "owner": "platform",
+  "summary": "The legacy workspace document as a projection of the focused profile (focused V, live layout, focused mod's presets).",
+  "status": "both",
+  "replaces": [
+    "workspace-state",
+    "workspace-composer"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:profile",
+    "type:v",
+    "type:layout",
+    "type:mod",
+    "type:preset-eye-makeup"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "schema": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "pure": true
+}

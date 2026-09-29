@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "camera-end-fov-gesture",
+  "owner": "views",
+  "summary": "End fov gesture (camera): ends the field-of-view drag, closing its step.",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "camera-navigation",
+    "camera-framing"
+  ],
+  "name": "camera.endFovGesture",
+  "target": "type:camera",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists and its scene has an orbit camera.",
+    "refusals": [
+      {
+        "code": "no-view",
+        "reason": "That view is closed."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Ends the field-of-view drag, closing its step."
+  },
+  "undo": "none"
+}

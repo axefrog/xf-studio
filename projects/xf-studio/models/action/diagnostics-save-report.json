@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "diagnostics-save-report",
+  "owner": "diagnostics",
+  "summary": "Save report (diagnostics): changes the report in preparation (diagnostics.saveReport).",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions"
+  ],
+  "name": "diagnostics.saveReport",
+  "target": "type:problem-report",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a report is prepared locally and never sent."
+  },
+  "effect": {
+    "session": "Changes the report in preparation (diagnostics.saveReport)."
+  },
+  "undo": "none"
+}

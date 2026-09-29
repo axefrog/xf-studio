@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "camera-forward",
+  "owner": "views",
+  "summary": "Forward (camera): moves the camera to the previous or next pose on its trail.",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "camera-navigation",
+    "camera-framing"
+  ],
+  "name": "camera.forward",
+  "target": "type:camera",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists and its scene has an orbit camera.",
+    "refusals": [
+      {
+        "code": "no-view",
+        "reason": "That view is closed."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Moves the camera to the previous or next pose on its trail.",
+    "session": "Moves along the camera's trail."
+  },
+  "undo": "none"
+}

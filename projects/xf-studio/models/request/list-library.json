@@ -1,0 +1,42 @@
+{
+  "kind": "request",
+  "id": "list-library",
+  "owner": "library",
+  "summary": "List or search the library's presets, looks and mods.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeRef"
+        }
+      }
+    },
+    "required": [
+      "items"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "types": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "query": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:library-listing"
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "kind": "panel",
+  "id": "library",
+  "owner": "library",
+  "summary": "The library's mods, looks and presets, with search, open, keep version, trash and import or export.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/collection",
+    "collection-application"
+  ],
+  "binding": "type:mod",
+  "reads": [
+    "type:mod",
+    "type:look",
+    "operator:mod-summary",
+    "request:list-library"
+  ],
+  "actions": [
+    "action:library-export-collection",
+    "action:library-export-plan",
+    "action:library-import",
+    "action:library-initialize",
+    "action:library-open",
+    "action:library-package",
+    "action:library-refresh",
+    "action:library-save-copy",
+    "action:library-save",
+    "action:preset-keep-version",
+    "action:preset-purge",
+    "action:preset-restore",
+    "action:preset-trash",
+    "action:collection-export",
+    "action:collection-import-recipe",
+    "action:collection-import",
+    "action:collection-plan",
+    "action:collection-recover",
+    "action:collection-undo-open"
+  ],
+  "x-friction": [
+    {
+      "gap": "Its capability checks revalidate the whole mod and cost about 30 ms; today it repaints at most every 400 ms by hand.",
+      "capability": "per-key-nodes",
+      "closes": "Throttled recomputation of expensive derived values."
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "kind": "action",
+  "id": "part-preset-set-create",
+  "owner": "expressions",
+  "summary": "Create (part preset set): edits the expression mod (partPresetSet.create).",
+  "status": "both",
+  "replaces": [
+    "part-presets",
+    "part-preset-sets"
+  ],
+  "name": "partPresetSet.create",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "members": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "feature",
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable and the set exists.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The set changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression mod (partPresetSet.create)."
+  },
+  "undo": "none"
+}

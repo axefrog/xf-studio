@@ -1,0 +1,20 @@
+{
+  "kind": "panel",
+  "id": "quality",
+  "owner": "eye-makeup",
+  "summary": "Preview quality: the texture tier and the rebuild.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/preview"
+  ],
+  "binding": "type:preferences",
+  "reads": [
+    "type:preferences",
+    "operator:raster-tier",
+    "operator:raster-readiness"
+  ],
+  "actions": [
+    "action:quality-rebuild",
+    "action:quality-set"
+  ]
+}

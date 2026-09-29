@@ -1,0 +1,30 @@
+{
+  "kind": "request",
+  "id": "detect-installs",
+  "owner": "setup",
+  "summary": "Find game installs, MO2 instances and framework versions.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "games": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "games"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:detection"
+  ]
+}

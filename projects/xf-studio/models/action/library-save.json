@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "library-save",
+  "owner": "library",
+  "summary": "Save (library): tags the mod and its presets as a kept version (every edit is already saved).",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "save",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "commit": "Tags the mod and its presets as a kept version (every edit is already saved)."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,44 @@
+{
+  "kind": "operator",
+  "id": "hit-target",
+  "owner": "platform",
+  "summary": "What the pointer is over in a view, asked of the view's editor runtime within the cycle.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "source:pointer-input",
+    "runtime:head-editor",
+    "runtime:uv-canvas"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "type": "string"
+      },
+      "layer": {
+        "type": "string"
+      },
+      "index": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "kind"
+    ]
+  },
+  "pure": true,
+  "x-friction": [
+    {
+      "gap": "The answer comes from a host object synchronously.",
+      "capability": "host-objects-per-node",
+      "closes": "Plain synchronous queries on host objects."
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "kind": "request",
+  "id": "open-window",
+  "owner": "platform",
+  "summary": "Open a window of the Studio on a library.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "library": {
+        "enum": [
+          "real",
+          "verification"
+        ]
+      }
+    },
+    "required": [
+      "library"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:window"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "open-choice-row",
+  "owner": "character",
+  "summary": "Serve an open Character panel row: preparation ahead and pictures.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "open": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "open"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "row": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "row"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:choice-row"
+  ]
+}

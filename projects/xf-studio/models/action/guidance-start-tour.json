@@ -1,0 +1,33 @@
+{
+  "kind": "action",
+  "id": "guidance-start-tour",
+  "owner": "shell",
+  "summary": "Start tour (guidance): raises the run-tour reques.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/guidance/engine"
+  ],
+  "name": "guidance.startTour",
+  "target": "type:tour-run",
+  "input": {
+    "type": "object",
+    "properties": {
+      "tourId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      }
+    },
+    "required": [
+      "tourId"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The tour exists and its anchors are shown."
+  },
+  "effect": {
+    "raises": "request:run-tour"
+  },
+  "undo": "none"
+}

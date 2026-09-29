@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "preview-set-eye-shape",
+  "owner": "views",
+  "summary": "Set eye shape (preview): sets the scene's key (preview.setEyeShape).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "preview-view-graph"
+  ],
+  "name": "preview.setEyeShape",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "index": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 21
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "index"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene is a character scene."
+  },
+  "effect": {
+    "commit": "Sets the scene's key (preview.setEyeShape)."
+  },
+  "undo": "view-lighting"
+}

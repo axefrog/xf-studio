@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "expanded-set",
+  "owner": "shell",
+  "summary": "Set (expanded): writes a per-viewer convenience to the page's own storage.",
+  "status": "both",
+  "replaces": [
+    "ui-preferences",
+    "studio-ui/view-state"
+  ],
+  "name": "expanded.set",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {
+      "keys": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "expanded": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "keys",
+      "expanded"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "session": "Writes a per-viewer convenience to the page's own storage."
+  },
+  "undo": "none"
+}

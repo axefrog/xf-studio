@@ -1,0 +1,31 @@
+{
+  "kind": "operator",
+  "id": "mod-summary",
+  "owner": "library",
+  "summary": "A mod's summary line for lists: presets, products and last build.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:mod",
+    "type:build"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "presets": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "lastBuild": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "pure": true
+}

@@ -1,0 +1,20 @@
+{
+  "kind": "panel",
+  "id": "edge",
+  "owner": "eye-makeup",
+  "summary": "Pigment & edge for the active layer: pigment strength and softness.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/view/inspector"
+  ],
+  "binding": "the focused preset's active layer (type:editor-session)",
+  "reads": [
+    "type:preset-eye-makeup",
+    "operator:eye-makeup-capability",
+    "operator:eye-makeup-apply"
+  ],
+  "actions": [
+    "action:pigment-edit",
+    "action:softness-edit"
+  ]
+}

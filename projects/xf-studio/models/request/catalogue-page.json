@@ -1,0 +1,51 @@
+{
+  "kind": "request",
+  "id": "catalogue-page",
+  "owner": "character",
+  "summary": "Load a page of a Character panel row, or a search.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "choices": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "choices"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "v": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "option": {
+        "type": "string"
+      },
+      "page": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "query": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "v",
+      "option"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:catalogue-page"
+  ]
+}

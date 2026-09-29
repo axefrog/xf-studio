@@ -1,0 +1,28 @@
+{
+  "kind": "operator",
+  "id": "dirty-views",
+  "owner": "platform",
+  "summary": "The visible views to redraw: those whose nodes changed, whose scene animates, or that resized.",
+  "status": "both",
+  "replaces": [
+    "render-scheduler"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:view",
+    "operator:animating",
+    "source:element-size"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

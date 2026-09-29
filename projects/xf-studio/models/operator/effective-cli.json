@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "effective-cli",
+  "owner": "setup",
+  "summary": "The WolvenKit CLI in effect: the one chosen in settings, else the managed install.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:host-settings",
+    "source:host-files"
+  ],
+  "output": {
+    "type": [
+      "string",
+      "null"
+    ]
+  },
+  "pure": true
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "request",
+  "id": "extract-lut",
+  "owner": "views",
+  "summary": "Have the winning creator grade extracted and decoded.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "cube": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "cube"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:lut-host"
+  ]
+}

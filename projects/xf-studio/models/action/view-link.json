@@ -1,0 +1,40 @@
+{
+  "kind": "action",
+  "id": "view-link",
+  "owner": "views",
+  "summary": "Point a view's camera, lights or display at another view's node.",
+  "status": "target",
+  "name": "view.link",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "slot": {
+        "enum": [
+          "camera",
+          "lights",
+          "display"
+        ]
+      },
+      "to": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "view",
+      "slot",
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Both views exist and the slot's kinds fit the scene."
+  },
+  "effect": {
+    "commit": "References the other view's node; the old one is collected if unreferenced."
+  },
+  "undo": "view-lighting"
+}

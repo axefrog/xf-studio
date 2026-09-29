@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "preview-set-hair-look",
+  "owner": "views",
+  "summary": "Set hair look (preview): sets the display's key (preview.setHairLook).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "preview-view-graph"
+  ],
+  "name": "preview.setHairLook",
+  "target": "type:display",
+  "input": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Sets the display's key (preview.setHairLook)."
+  },
+  "undo": "view-lighting"
+}

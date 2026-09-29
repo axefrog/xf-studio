@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "pose-clear",
+  "owner": "poses",
+  "summary": "Clear (pose): holds or clears the scene's pose (pose.clear).",
+  "status": "both",
+  "replaces": [
+    "features/poses/actions"
+  ],
+  "name": "pose.clear",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "to": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Poses panel shows the focused view's V."
+  },
+  "effect": {
+    "commit": "Holds or clears the scene's pose (pose.clear)."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "tours-record",
+  "owner": "shell",
+  "summary": "Record (tours): sets the preferences key (tours.record).",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "tours.record",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {
+      "tourId": {
+        "type": "string"
+      },
+      "outcome": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "tourId",
+      "outcome"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "commit": "Sets the preferences key (tours.record)."
+  },
+  "undo": "none"
+}

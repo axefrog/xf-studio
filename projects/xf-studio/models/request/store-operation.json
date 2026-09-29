@@ -1,0 +1,51 @@
+{
+  "kind": "request",
+  "id": "store-operation",
+  "owner": "platform",
+  "summary": "Perform one operation on the library's store.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "result": {}
+    },
+    "required": [
+      "result"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "operation": {
+        "enum": [
+          "list",
+          "load",
+          "readStream",
+          "append",
+          "changesSince",
+          "counter",
+          "putSnapshot",
+          "dropSnapshots",
+          "compact",
+          "purge"
+        ]
+      },
+      "library": {
+        "enum": [
+          "real",
+          "verification"
+        ]
+      }
+    },
+    "required": [
+      "operation",
+      "library"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:library"
+  ]
+}

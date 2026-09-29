@@ -1,0 +1,37 @@
+{
+  "kind": "operator",
+  "id": "quiet-period",
+  "owner": "platform",
+  "summary": "True once no input and none of the person's own work has happened for N ms; false the moment either does.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "ms": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "ms"
+    ]
+  },
+  "inputs": [
+    "source:pointer-input",
+    "source:key-input",
+    "the person's running processes",
+    "source:page-clock"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true,
+  "x-friction": [
+    {
+      "gap": "A quiet period is the absence of activity across many streams.",
+      "capability": "scheduling-rules",
+      "closes": "A standard quiet-period source that pre-empts background work when it ends."
+    }
+  ]
+}

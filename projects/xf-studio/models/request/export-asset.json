@@ -1,0 +1,43 @@
+{
+  "kind": "request",
+  "id": "export-asset",
+  "owner": "host",
+  "summary": "Have a game resource exported as GLB, PNG or mask in the prepared files.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "file"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "format": {
+        "enum": [
+          "glb",
+          "png",
+          "mask"
+        ]
+      }
+    },
+    "required": [
+      "key",
+      "format"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:asset-export"
+  ]
+}

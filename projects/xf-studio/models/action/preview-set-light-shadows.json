@@ -1,0 +1,51 @@
+{
+  "kind": "action",
+  "id": "preview-set-light-shadows",
+  "owner": "views",
+  "summary": "Set light shadows (preview): edits the rig's keys (preview.setLightShadows).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups",
+    "studio-lighting",
+    "creator-lighting"
+  ],
+  "name": "preview.setLightShadows",
+  "target": "type:light-rig",
+  "input": {
+    "type": "object",
+    "properties": {
+      "light": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "light",
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's rig is one of the person's own setups, or a built-in (a change to a built-in forks it into one of the person's own first).",
+    "refusals": [
+      {
+        "code": "limit",
+        "reason": "A setup has at most 16 lights and a few shadow casters."
+      },
+      {
+        "code": "built-in",
+        "reason": "A built-in setup can't be renamed or deleted."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the rig's keys (preview.setLightShadows)."
+  },
+  "undo": "view-lighting"
+}

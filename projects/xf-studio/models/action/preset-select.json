@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "preset-select",
+  "owner": "library",
+  "summary": "Select (preset): points the profile's focus at the chosen preset (navigation, not an edit).",
+  "status": "both",
+  "replaces": [
+    "collection-actions",
+    "collection-application"
+  ],
+  "name": "preset.select",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A mod is focused and the preset or product named exists.",
+    "refusals": [
+      {
+        "code": "missing",
+        "reason": "That preset or product no longer exists."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Points the profile's focus at the chosen preset (navigation, not an edit)."
+  },
+  "undo": "none"
+}

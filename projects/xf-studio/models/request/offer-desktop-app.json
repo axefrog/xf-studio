@@ -1,0 +1,43 @@
+{
+  "kind": "request",
+  "id": "offer-desktop-app",
+  "owner": "setup",
+  "summary": "Say whether the desktop app is available and open or install it.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "state": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "state"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "step": {
+        "enum": [
+          "refresh",
+          "open",
+          "install"
+        ]
+      },
+      "consent": {
+        "$ref": "shapes.schema.json#/$defs/consent"
+      }
+    },
+    "required": [
+      "step"
+    ]
+  },
+  "reasons": [
+    "person",
+    "consents"
+  ],
+  "servedBy": [
+    "driver:desktop-offer"
+  ]
+}

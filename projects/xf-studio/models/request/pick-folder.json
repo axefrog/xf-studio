@@ -1,0 +1,44 @@
+{
+  "kind": "request",
+  "id": "pick-folder",
+  "owner": "setup",
+  "summary": "Let the person choose a folder for a setting.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "folder": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "folder"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "field": {
+        "enum": [
+          "gameRoot",
+          "mo2Root",
+          "manualModRoot",
+          "wolvenKitCli",
+          "savesDirectory"
+        ]
+      }
+    },
+    "required": [
+      "field"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:folder-picker"
+  ]
+}

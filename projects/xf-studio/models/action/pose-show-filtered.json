@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "pose-show-filtered",
+  "owner": "poses",
+  "summary": "Show filtered (pose): shows or hides filtered poses (a per-viewer convenience).",
+  "status": "both",
+  "replaces": [
+    "features/poses/actions"
+  ],
+  "name": "pose.showFiltered",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "shown": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "shown"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Poses panel shows the focused view's V."
+  },
+  "effect": {
+    "session": "Shows or hides filtered poses (a per-viewer convenience)."
+  },
+  "undo": "none"
+}

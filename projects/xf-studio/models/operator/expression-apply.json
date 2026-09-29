@@ -1,0 +1,45 @@
+{
+  "kind": "operator",
+  "id": "expression-apply",
+  "owner": "expressions",
+  "summary": "An expression action (set a control, mirror, link, reset, start from) as edits of control keys.",
+  "status": "both",
+  "replaces": [
+    "features/expressions/core",
+    "engines/facial-rig/symmetry"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "inputs": [
+    "type:preset-expression",
+    "the action's input"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  "pure": true
+}

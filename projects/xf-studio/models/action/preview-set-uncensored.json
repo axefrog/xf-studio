@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "preview-set-uncensored",
+  "owner": "views",
+  "summary": "Set uncensored (preview): sets the scene's key (preview.setUncensored).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "preview-view-graph"
+  ],
+  "name": "preview.setUncensored",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene is a character scene."
+  },
+  "effect": {
+    "commit": "Sets the scene's key (preview.setUncensored)."
+  },
+  "undo": "view-lighting"
+}

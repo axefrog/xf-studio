@@ -1,0 +1,32 @@
+{
+  "kind": "panel",
+  "id": "expression-sets",
+  "owner": "expressions",
+  "summary": "Expression sets: saved expressions grouped into XF-branded expression mods, with Check and Build.",
+  "status": "both",
+  "replaces": [
+    "features/expressions/view/sets"
+  ],
+  "binding": "type:mod",
+  "reads": [
+    "type:mod",
+    "type:preset-expression",
+    "type:build"
+  ],
+  "actions": [
+    "action:part-preset-delete",
+    "action:part-preset-list",
+    "action:part-preset-rename",
+    "action:part-preset-restore",
+    "action:part-preset-save",
+    "action:part-preset-set-build",
+    "action:part-preset-set-check",
+    "action:part-preset-set-create",
+    "action:part-preset-set-delete",
+    "action:part-preset-set-list",
+    "action:part-preset-set-rename",
+    "action:part-preset-set-reveal",
+    "action:part-preset-set-set-export",
+    "action:part-preset-set-set-members"
+  ]
+}

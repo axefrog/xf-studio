@@ -1,0 +1,41 @@
+{
+  "kind": "operator",
+  "id": "raster-readiness",
+  "owner": "eye-makeup",
+  "summary": "Per layer and in aggregate: ready, updating or blocked with a reason.",
+  "status": "both",
+  "replaces": [
+    "authoring-preview-policy"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the preset's raster family"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "layers": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "overall": {
+        "enum": [
+          "ready",
+          "updating",
+          "blocked"
+        ]
+      }
+    },
+    "required": [
+      "layers",
+      "overall"
+    ]
+  },
+  "pure": true
+}

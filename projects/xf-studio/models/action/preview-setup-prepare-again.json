@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-prepare-again",
+  "owner": "setup",
+  "summary": "Prepare again (preview setup): raises the prepare-core reques.",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.prepareAgain",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "raises": "request:prepare-core"
+  },
+  "undo": "none"
+}

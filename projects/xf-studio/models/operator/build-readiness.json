@@ -1,0 +1,33 @@
+{
+  "kind": "operator",
+  "id": "build-readiness",
+  "owner": "export",
+  "summary": "Whether Build can run now, and the one next step when it can't (settings, WolvenKit, eye plate).",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:host-settings",
+    "operator:effective-cli",
+    "process:eye-plate-cut"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "ready": {
+        "type": "boolean"
+      },
+      "step": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "ready"
+    ]
+  },
+  "pure": true
+}

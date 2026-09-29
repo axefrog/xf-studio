@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "character-redo-clothing",
+  "owner": "character",
+  "summary": "Redo clothing (character): raises the undo reques.",
+  "status": "both",
+  "replaces": [
+    "character-context-actions",
+    "character-context"
+  ],
+  "name": "character.redoClothing",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A V is focused and the installation's creator catalogue for her body is built.",
+    "refusals": [
+      {
+        "code": "catalogue-unavailable",
+        "reason": "The character creator's choices aren't ready yet."
+      },
+      {
+        "code": "not-offered",
+        "reason": "This installation doesn't offer that choice."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:undo"
+  },
+  "undo": "none"
+}

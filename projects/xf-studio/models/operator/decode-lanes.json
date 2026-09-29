@@ -1,0 +1,29 @@
+{
+  "kind": "operator",
+  "id": "decode-lanes",
+  "owner": "host",
+  "summary": "How many decode lanes to run: two when more than 4 GB is free, else one.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "thresholdBytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "thresholdBytes"
+    ]
+  },
+  "inputs": [
+    "source:host-environment"
+  ],
+  "output": {
+    "type": "integer",
+    "minimum": 1,
+    "maximum": 2
+  },
+  "pure": true
+}

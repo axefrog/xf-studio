@@ -1,0 +1,39 @@
+{
+  "kind": "action",
+  "id": "saved-v-load",
+  "owner": "character",
+  "summary": "Load (saved v): sets the V's base to the save's decoded appearance (a new V forked from the Default V when none is focused).",
+  "status": "both",
+  "replaces": [
+    "saved-appearance-actions"
+  ],
+  "name": "savedV.load",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob",
+        "description": "A save's bytes by reference (at most 134217728 bytes)."
+      }
+    },
+    "required": [
+      "bytes"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A V is focused.",
+    "refusals": [
+      {
+        "code": "unreadable-save",
+        "reason": "That file isn't a save XF Studio can read."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:decode-saved-v",
+    "commit": "Sets the V's base to the save's decoded appearance (a new V forked from the Default V when none is focused)."
+  },
+  "undo": "character"
+}

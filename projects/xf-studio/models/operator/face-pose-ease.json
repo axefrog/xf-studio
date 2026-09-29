@@ -1,0 +1,35 @@
+{
+  "kind": "operator",
+  "id": "face-pose-ease",
+  "owner": "expressions",
+  "summary": "The pose shown at a frame, eased from the last held pose to the new one per the scene's transition setting.",
+  "status": "both",
+  "replaces": [
+    "platform/core/value-transition"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "operator:held-face-pose",
+    "source:frames",
+    "type:scene"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "controls": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "controls"
+    ]
+  },
+  "pure": true
+}

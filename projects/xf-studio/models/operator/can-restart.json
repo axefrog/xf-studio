@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "can-restart",
+  "owner": "desktop",
+  "summary": "Whether the app can restart: no package or install work running.",
+  "status": "both",
+  "replaces": [
+    "../desktop/work-activity"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "process:mod-build",
+    "process:install-apply"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

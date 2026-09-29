@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "layouts-switch",
+  "owner": "shell",
+  "summary": "Switch (layouts): points the profile at the chosen layout.",
+  "status": "both",
+  "replaces": [
+    "layout-library"
+  ],
+  "name": "layouts.switch",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; the factory layout can't be renamed or deleted."
+  },
+  "effect": {
+    "commit": "Points the profile at the chosen layout."
+  },
+  "undo": "none"
+}

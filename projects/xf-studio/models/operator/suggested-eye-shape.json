@@ -1,0 +1,22 @@
+{
+  "kind": "operator",
+  "id": "suggested-eye-shape",
+  "owner": "character",
+  "summary": "The eye shape a save's V suggests for the scene.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:v"
+  ],
+  "output": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 21
+  },
+  "pure": true
+}

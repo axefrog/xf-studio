@@ -1,0 +1,37 @@
+{
+  "kind": "operator",
+  "id": "saves-folder",
+  "owner": "save-explorer",
+  "summary": "The saves folder in effect (chosen, detected or a developer's), described without its path.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:host-settings",
+    "source:host-environment"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "enum": [
+          "chosen",
+          "detected",
+          "developer"
+        ]
+      },
+      "display": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "source",
+      "display"
+    ]
+  },
+  "pure": true
+}

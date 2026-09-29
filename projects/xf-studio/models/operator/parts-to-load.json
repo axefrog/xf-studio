@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "parts-to-load",
+  "owner": "character",
+  "summary": "Which of a record's parts must load: every part the pool already holds is reused.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the record",
+    "runtime:detail-part-pool"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

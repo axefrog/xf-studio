@@ -1,0 +1,39 @@
+{
+  "kind": "action",
+  "id": "expression-set-links",
+  "owner": "expressions",
+  "summary": "Set links (expression): edits the expression's control or link keys through the expression apply operator (expression.setLinks).",
+  "status": "both",
+  "replaces": [
+    "features/expressions/core"
+  ],
+  "name": "expression.setLinks",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "links": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "links"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "An expression preset is worn by the focused V's look and the face rig is prepared.",
+    "refusals": [
+      {
+        "code": "face-unavailable",
+        "reason": "The face rig isn't ready for this installation yet."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression's control or link keys through the expression apply operator (expression.setLinks)."
+  },
+  "undo": "look"
+}

@@ -1,0 +1,26 @@
+{
+  "kind": "operator",
+  "id": "save-tree",
+  "owner": "save-explorer",
+  "summary": "The Save Explorer's tree for an open save.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:open-save",
+    "runtime:decoded-save"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  "pure": true
+}

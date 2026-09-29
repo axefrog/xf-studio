@@ -1,0 +1,26 @@
+{
+  "kind": "operator",
+  "id": "exportable",
+  "owner": "platform",
+  "summary": "Whether a node can be exported in a format.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "format": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "format"
+    ]
+  },
+  "inputs": [
+    "the target node"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "run-host",
+  "owner": "host",
+  "summary": "Run the host process for the page and tools.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "running": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "running"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "port": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535
+      }
+    },
+    "required": []
+  },
+  "reasons": [
+    "maintains"
+  ],
+  "servedBy": [
+    "driver:host"
+  ]
+}

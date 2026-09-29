@@ -1,0 +1,67 @@
+{
+  "kind": "action",
+  "id": "glitter-set-direct",
+  "owner": "eye-makeup",
+  "summary": "Set direct (glitter): edits the preset's layer keys through eye makeup's apply operator (glitter.setDirect), one commit per action or per finished control run.",
+  "status": "both",
+  "replaces": [
+    "eye-makeup-descriptors",
+    "engines/layered-makeup/recipe-actions"
+  ],
+  "name": "glitter.setDirect",
+  "target": "type:preset-eye-makeup",
+  "input": {
+    "type": "object",
+    "properties": {
+      "layerId": {
+        "type": "string"
+      },
+      "key": {
+        "enum": [
+          "density",
+          "fineShare",
+          "strength",
+          "color"
+        ]
+      },
+      "value": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "required": [
+      "layerId",
+      "key",
+      "value"
+    ],
+    "additionalProperties": false,
+    "description": "One of the variants: density, fineShare, strength, color."
+  },
+  "capability": {
+    "when": "A preset is open for editing, the layer exists, no gesture is open elsewhere in the window, and the preset isn't locked by a newer build's data.",
+    "refusals": [
+      {
+        "code": "locked",
+        "reason": "This look was saved by a newer XF Studio and can only be viewed here."
+      },
+      {
+        "code": "missing",
+        "reason": "That layer no longer exists."
+      },
+      {
+        "code": "limit",
+        "reason": "A preset has at most 32 layers and 8 warp fields per layer."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the preset's layer keys through eye makeup's apply operator (glitter.setDirect), one commit per action or per finished control run."
+  },
+  "undo": "look"
+}

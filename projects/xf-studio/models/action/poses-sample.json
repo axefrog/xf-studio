@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "poses-sample",
+  "owner": "poses",
+  "summary": "Sample (poses): raises the load-pose-sample reques.",
+  "status": "both",
+  "replaces": [
+    "pose-actions"
+  ],
+  "name": "poses.sample",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "bodyGender": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      },
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bodyGender",
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The scene shows a V."
+  },
+  "effect": {
+    "raises": "request:load-pose-sample"
+  },
+  "undo": "none"
+}

@@ -1,0 +1,36 @@
+{
+  "kind": "operator",
+  "id": "package-plan",
+  "owner": "export",
+  "summary": "Which features ship in which product and under which names.",
+  "status": "both",
+  "replaces": [
+    "platform/core/package-plan"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:mod"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "products": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "products"
+    ]
+  },
+  "pure": true
+}

@@ -1,0 +1,41 @@
+{
+  "kind": "action",
+  "id": "motion-play-blink",
+  "owner": "motion",
+  "summary": "Play blink (motion): plays the game's blink once in the scene; nothing is stored.",
+  "status": "both",
+  "replaces": [
+    "motion-actions",
+    "platform/core/transition-settings"
+  ],
+  "name": "motion.playBlink",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "playing": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "playing"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene shows a V and motion is available for her body.",
+    "refusals": [
+      {
+        "code": "motion-unavailable",
+        "reason": "The installation has no creator idle for this body."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Plays the game's blink once in the scene; nothing is stored."
+  },
+  "undo": "none"
+}

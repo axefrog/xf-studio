@@ -1,0 +1,30 @@
+{
+  "kind": "request",
+  "id": "fit-prepared",
+  "owner": "host",
+  "summary": "Keep the prepared files within their budget.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "bytes"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "reasons": [
+    "cleans"
+  ],
+  "servedBy": [
+    "driver:prepared-budget"
+  ]
+}

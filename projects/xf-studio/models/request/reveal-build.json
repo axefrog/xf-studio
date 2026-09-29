@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "reveal-build",
+  "owner": "install",
+  "summary": "Show a build or its install in the system's file browser.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "shown": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "shown"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "build": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "build"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:install"
+  ]
+}

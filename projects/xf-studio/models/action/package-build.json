@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "package-build",
+  "owner": "platform",
+  "summary": "Build (package): raises the build-mod reques.",
+  "status": "both",
+  "replaces": [
+    "studio-file-operations"
+  ],
+  "name": "package.build",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "No other picker is open in the window.",
+    "refusals": [
+      {
+        "code": "picker-busy",
+        "reason": "Another file is being picked."
+      },
+      {
+        "code": "not-ready",
+        "reason": "Build needs its settings, WolvenKit and the eye plate first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:build-mod"
+  },
+  "undo": "none"
+}

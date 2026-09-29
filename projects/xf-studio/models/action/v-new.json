@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "v-new",
+  "owner": "character",
+  "summary": "Make a new V forked from a Default V.",
+  "status": "target",
+  "name": "v.new",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {
+      "bodyGender": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "bodyGender"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "commit": "Forks the Default V for the body into a new V introduced by the profile."
+  },
+  "undo": "none"
+}

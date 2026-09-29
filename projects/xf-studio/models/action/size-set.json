@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "size-set",
+  "owner": "shell",
+  "summary": "Set (size): writes a per-viewer convenience to the page's own storage.",
+  "status": "both",
+  "replaces": [
+    "ui-preferences",
+    "studio-ui/view-state"
+  ],
+  "name": "size.set",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "height": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "key"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "session": "Writes a per-viewer convenience to the page's own storage."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,45 @@
+{
+  "kind": "action",
+  "id": "camera-creator-framing",
+  "owner": "views",
+  "summary": "Creator framing (camera): sets the camera's pose (camera.creatorFraming), a camera jump recorded on its trail.",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "camera-navigation",
+    "camera-framing"
+  ],
+  "name": "camera.creatorFraming",
+  "target": "type:camera",
+  "input": {
+    "type": "object",
+    "properties": {
+      "page": {
+        "enum": [
+          "face",
+          "hair"
+        ]
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists and its scene has an orbit camera.",
+    "refusals": [
+      {
+        "code": "no-view",
+        "reason": "That view is closed."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the camera's pose (camera.creatorFraming), a camera jump recorded on its trail."
+  },
+  "undo": "view-lighting"
+}

@@ -1,0 +1,32 @@
+{
+  "kind": "operator",
+  "id": "shared-slots",
+  "owner": "views",
+  "summary": "Which of a view's slots are shared with other views, lettered per node, for link badges.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:view"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "camera": {
+        "type": "string"
+      },
+      "lights": {
+        "type": "string"
+      },
+      "display": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "pure": true
+}

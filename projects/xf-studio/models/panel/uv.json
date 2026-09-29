@@ -1,0 +1,47 @@
+{
+  "kind": "panel",
+  "id": "uv",
+  "owner": "eye-makeup",
+  "summary": "The flat UV editor for the focused preset: points, paths, shapes and warp fields drawn over the plate's UV map.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/view/uv",
+    "uv-editor"
+  ],
+  "binding": "the profile's focus.preset pointer (type:preset-eye-makeup)",
+  "reads": [
+    "type:editor-session",
+    "type:gesture",
+    "runtime:uv-canvas",
+    "operator:hit-target",
+    "operator:input-hints",
+    "operator:cursor"
+  ],
+  "actions": [
+    "action:field-add",
+    "action:field-clear",
+    "action:field-remove",
+    "action:field-replace",
+    "action:field-select",
+    "action:field-set-origin",
+    "action:field-set-reach",
+    "action:field-set-vector",
+    "action:path-edit",
+    "action:path-replace-points",
+    "action:point-insert",
+    "action:point-move",
+    "action:point-remove",
+    "action:point-replace",
+    "action:point-select",
+    "action:point-set-tangent",
+    "action:shape-replace",
+    "action:shape-transform"
+  ],
+  "x-friction": [
+    {
+      "gap": "The outline follows every frame of a drag before anything is committed.",
+      "capability": "uncommitted-edits",
+      "closes": "Uncommitted edits seen by consumers at frame rate."
+    }
+  ]
+}

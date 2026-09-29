@@ -1,0 +1,26 @@
+{
+  "kind": "panel",
+  "id": "motion",
+  "owner": "motion",
+  "summary": "Motion for the focused view's scene: idle, clip, body and face contributions, blink, physics and transitions.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/preview"
+  ],
+  "binding": "the window's focus.view pointer's scene (type:scene)",
+  "reads": [
+    "type:scene",
+    "operator:motion-available",
+    "operator:idle-clip"
+  ],
+  "actions": [
+    "action:motion-play-blink",
+    "action:motion-set-blink",
+    "action:motion-set-contributions",
+    "action:motion-set-idle-clip",
+    "action:motion-set-idle",
+    "action:motion-set-paused",
+    "action:motion-set-physics",
+    "action:transition-set"
+  ]
+}

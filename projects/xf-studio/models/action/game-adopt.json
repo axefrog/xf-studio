@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "game-adopt",
+  "owner": "bridge",
+  "summary": "Adopt the running game's value of a fact into the Studio.",
+  "status": "target",
+  "name": "game.adopt",
+  "target": "type:bridge-session",
+  "input": {
+    "type": "object",
+    "properties": {
+      "fact": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "fact"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A game with the bridge is running and the values disagree."
+  },
+  "effect": {
+    "commit": "Sets the node's key to the game's value."
+  },
+  "undo": "character"
+}

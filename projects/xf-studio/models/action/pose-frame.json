@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "pose-frame",
+  "owner": "poses",
+  "summary": "Frame (pose): frames the whole body on the view's camera (a camera jump).",
+  "status": "both",
+  "replaces": [
+    "features/poses/actions"
+  ],
+  "name": "pose.frame",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Poses panel shows the focused view's V."
+  },
+  "effect": {
+    "commit": "Frames the whole body on the view's camera (a camera jump)."
+  },
+  "undo": "view-lighting"
+}

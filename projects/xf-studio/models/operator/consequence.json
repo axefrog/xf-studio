@@ -1,0 +1,39 @@
+{
+  "kind": "operator",
+  "id": "consequence",
+  "owner": "platform",
+  "summary": "What an action will change, in plain words, for confirmations and labels.",
+  "status": "both",
+  "replaces": [
+    "action-consequences"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the target node",
+    "the action's input"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "label": {
+        "type": "string"
+      },
+      "changes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "label",
+      "changes"
+    ]
+  },
+  "pure": true
+}

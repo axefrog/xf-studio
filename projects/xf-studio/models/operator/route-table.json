@@ -1,0 +1,38 @@
+{
+  "kind": "operator",
+  "id": "route-table",
+  "owner": "host",
+  "summary": "The host's routes as data: path to the request each raises.",
+  "status": "both",
+  "replaces": [
+    "../server"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the route catalogue"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "request": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "request"
+      ]
+    }
+  },
+  "pure": true
+}

@@ -1,0 +1,48 @@
+{
+  "kind": "request",
+  "id": "apply-install",
+  "owner": "install",
+  "summary": "Place a build as the person accepted it.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "install": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "install"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "build": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "consent": {
+        "$ref": "shapes.schema.json#/$defs/consent"
+      }
+    },
+    "required": [
+      "build",
+      "consent"
+    ]
+  },
+  "reasons": [
+    "consents"
+  ],
+  "servedBy": [
+    "driver:install"
+  ],
+  "faults": [
+    {
+      "code": "plan-changed",
+      "when": "The plan no longer matches the one reviewed.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ]
+}

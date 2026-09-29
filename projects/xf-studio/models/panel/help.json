@@ -1,0 +1,27 @@
+{
+  "kind": "panel",
+  "id": "help",
+  "owner": "shell",
+  "summary": "Help: tours, answers, shortcuts, About and the desktop app offer.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/guidance/desktop-app-sheet"
+  ],
+  "binding": "type:preferences",
+  "reads": [
+    "type:preferences",
+    "type:tour-run",
+    "request:offer-desktop-app"
+  ],
+  "actions": [
+    "action:guidance-back",
+    "action:guidance-finish",
+    "action:guidance-next",
+    "action:guidance-skip",
+    "action:guidance-start-tour",
+    "action:desktop-app-install",
+    "action:desktop-app-open",
+    "action:desktop-app-refresh",
+    "action:tours-record"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-dismiss",
+  "owner": "setup",
+  "summary": "Dismiss (preview setup): moves the setup card (previewSetup.dismiss).",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.dismiss",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "session": "Moves the setup card (previewSetup.dismiss)."
+  },
+  "undo": "none"
+}

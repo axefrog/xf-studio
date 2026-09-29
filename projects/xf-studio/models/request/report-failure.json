@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "report-failure",
+  "owner": "diagnostics",
+  "summary": "Tell the person about a fault that reached the top, and log it.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "notice": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "notice"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "fault": {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      }
+    },
+    "required": [
+      "fault"
+    ]
+  },
+  "reasons": [
+    "cleans"
+  ],
+  "servedBy": [
+    "driver:diagnostics"
+  ]
+}

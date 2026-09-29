@@ -1,0 +1,30 @@
+{
+  "kind": "request",
+  "id": "list-saves",
+  "owner": "save-explorer",
+  "summary": "List the player's saves.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "saves": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "saves"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:saves-listing"
+  ]
+}

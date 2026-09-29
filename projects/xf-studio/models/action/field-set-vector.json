@@ -1,0 +1,62 @@
+{
+  "kind": "action",
+  "id": "field-set-vector",
+  "owner": "eye-makeup",
+  "summary": "Set vector (field): edits the preset's layer keys through eye makeup's apply operator (field.setVector), one commit per action or per finished control run.",
+  "status": "both",
+  "replaces": [
+    "eye-makeup-descriptors",
+    "engines/layered-makeup/recipe-actions"
+  ],
+  "name": "field.setVector",
+  "target": "type:preset-eye-makeup",
+  "input": {
+    "type": "object",
+    "properties": {
+      "layerId": {
+        "type": "string"
+      },
+      "fieldId": {
+        "type": "string"
+      },
+      "du": {
+        "type": "number",
+        "minimum": -0.1,
+        "maximum": 0.1
+      },
+      "dv": {
+        "type": "number",
+        "minimum": -0.1,
+        "maximum": 0.1
+      }
+    },
+    "required": [
+      "layerId",
+      "fieldId",
+      "du",
+      "dv"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A preset is open for editing, the layer exists, no gesture is open elsewhere in the window, and the preset isn't locked by a newer build's data.",
+    "refusals": [
+      {
+        "code": "locked",
+        "reason": "This look was saved by a newer XF Studio and can only be viewed here."
+      },
+      {
+        "code": "missing",
+        "reason": "That layer no longer exists."
+      },
+      {
+        "code": "limit",
+        "reason": "A preset has at most 32 layers and 8 warp fields per layer."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the preset's layer keys through eye makeup's apply operator (field.setVector), one commit per action or per finished control run."
+  },
+  "undo": "look"
+}

@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "saves-refresh",
+  "owner": "save-explorer",
+  "summary": "Refresh (saves): raises the list-saves reques.",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/actions"
+  ],
+  "name": "saves.refresh",
+  "target": "type:open-save",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The saves folder is known.",
+    "refusals": [
+      {
+        "code": "folder-missing",
+        "reason": "Choose where your saves are in Settings › Saves."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:list-saves"
+  },
+  "undo": "none"
+}

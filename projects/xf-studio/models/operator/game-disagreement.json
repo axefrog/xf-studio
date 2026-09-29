@@ -1,0 +1,49 @@
+{
+  "kind": "operator",
+  "id": "game-disagreement",
+  "owner": "bridge",
+  "summary": "Where the Studio's value and the game's differ, how old the game's is, and the fix routes (push to the game, adopt).",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:bridge-session",
+    "source:bridge",
+    "type:v"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "fact": {
+          "type": "string"
+        },
+        "studio": {},
+        "game": {},
+        "age": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "fact",
+        "studio",
+        "game",
+        "age"
+      ]
+    }
+  },
+  "pure": true,
+  "x-friction": [
+    {
+      "gap": "Game facts are polled remote values that need an age.",
+      "capability": "paced-requests",
+      "closes": "An age on every observation."
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "kind": "action",
+  "id": "preset-edit",
+  "owner": "library",
+  "summary": "Edit (preset): edits the mod's name, products or selector presets (preset.edit); a removed preset goes to the trash, restorable for 30 days.",
+  "status": "both",
+  "replaces": [
+    "collection-actions",
+    "collection-application"
+  ],
+  "name": "preset.edit",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "additionalProperties": false,
+    "description": "One of the variants: add, copy, remove, restore, rename, move."
+  },
+  "capability": {
+    "when": "A mod is focused and the preset or product named exists.",
+    "refusals": [
+      {
+        "code": "missing",
+        "reason": "That preset or product no longer exists."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the mod's name, products or selector presets (preset.edit); a removed preset goes to the trash, restorable for 30 days."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,58 @@
+{
+  "kind": "panel",
+  "id": "character",
+  "owner": "character",
+  "summary": "The Character panel for the focused V: her base, every creator row with choices, pictures and swatches, clothing, own makeup and one Undo.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/character",
+    "studio-ui/panels/character-choices",
+    "cc-panel"
+  ],
+  "binding": "the profile's focus.v pointer (type:v)",
+  "reads": [
+    "type:v",
+    "type:choice-row",
+    "operator:panel-page",
+    "operator:swatch-row",
+    "operator:detail-status",
+    "operator:character-apply",
+    "operator:hidden-options",
+    "request:derive-v-view"
+  ],
+  "actions": [
+    "action:character-clear-prepared-files",
+    "action:character-keep-changes",
+    "action:character-load-preset",
+    "action:character-load-save",
+    "action:character-preset-export",
+    "action:character-preset-import",
+    "action:character-redo-clothing",
+    "action:character-redo",
+    "action:character-reset-all",
+    "action:character-reset",
+    "action:character-retry",
+    "action:character-set-clothing-area",
+    "action:character-set-clothing",
+    "action:character-set-option",
+    "action:character-set-options",
+    "action:character-set-own-makeup",
+    "action:character-undo-clothing",
+    "action:character-undo",
+    "action:character-use-default",
+    "action:saved-v-clear",
+    "action:saved-v-export",
+    "action:saved-v-import",
+    "action:saved-v-load",
+    "action:saved-v-restore",
+    "action:v-from-save",
+    "action:v-new"
+  ],
+  "x-friction": [
+    {
+      "gap": "The panel shows a view derived on the host; it must never pair an older view with newer choices.",
+      "capability": "cross-process-work",
+      "closes": "Derived values computed in another process, glitch-free here."
+    }
+  ]
+}

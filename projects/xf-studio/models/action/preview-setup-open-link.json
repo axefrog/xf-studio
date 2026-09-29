@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "preview-setup-open-link",
+  "owner": "setup",
+  "summary": "Open link (preview setup): opens the link through the external-link sink.",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.openLink",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {
+      "link": {
+        "enum": [
+          "wolvenkit-licence",
+          "wolvenkit-release",
+          "runtime-installer",
+          "runtime-page"
+        ]
+      }
+    },
+    "required": [
+      "link"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "session": "Opens the link through the external-link sink."
+  },
+  "undo": "none"
+}

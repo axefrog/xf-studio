@@ -1,0 +1,47 @@
+{
+  "kind": "action",
+  "id": "preview-delete-lighting-setup",
+  "owner": "views",
+  "summary": "Delete lighting setup (preview): edits the rig's keys (preview.deleteLightingSetup).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups",
+    "studio-lighting",
+    "creator-lighting"
+  ],
+  "name": "preview.deleteLightingSetup",
+  "target": "type:light-rig",
+  "input": {
+    "type": "object",
+    "properties": {
+      "setup": {
+        "type": "string"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "setup"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's rig is one of the person's own setups, or a built-in (a change to a built-in forks it into one of the person's own first).",
+    "refusals": [
+      {
+        "code": "limit",
+        "reason": "A setup has at most 16 lights and a few shadow casters."
+      },
+      {
+        "code": "built-in",
+        "reason": "A built-in setup can't be renamed or deleted."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the rig's keys (preview.deleteLightingSetup)."
+  },
+  "undo": "view-lighting"
+}

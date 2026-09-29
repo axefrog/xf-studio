@@ -1,0 +1,41 @@
+{
+  "kind": "action",
+  "id": "expression-mirror",
+  "owner": "expressions",
+  "summary": "Mirror (expression): edits the expression's control or link keys through the expression apply operator (expression.mirror).",
+  "status": "both",
+  "replaces": [
+    "features/expressions/core"
+  ],
+  "name": "expression.mirror",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "enum": [
+          "left",
+          "right",
+          "flip"
+        ]
+      }
+    },
+    "required": [
+      "from"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "An expression preset is worn by the focused V's look and the face rig is prepared.",
+    "refusals": [
+      {
+        "code": "face-unavailable",
+        "reason": "The face rig isn't ready for this installation yet."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression's control or link keys through the expression apply operator (expression.mirror)."
+  },
+  "undo": "look"
+}

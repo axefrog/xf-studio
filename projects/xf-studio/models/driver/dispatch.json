@@ -23,6 +23,8 @@
   "demands": [
     "source:pointer-input",
     "source:key-input",
+    "sink:clipboard",
+    "sink:external-link",
     "operator:capability",
     "operator:actions-for",
     "operator:context-for",

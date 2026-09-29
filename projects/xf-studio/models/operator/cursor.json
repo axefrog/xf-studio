@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "cursor",
+  "owner": "platform",
+  "summary": "The cursor a view shows for the current hit and modifiers.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "operator:hit-target",
+    "type:window"
+  ],
+  "output": {
+    "type": "string"
+  },
+  "pure": true
+}

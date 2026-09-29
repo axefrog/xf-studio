@@ -71,11 +71,12 @@
             "enum": [
               "matte",
               "regular",
+              "satin",
               "metallic",
               "shimmer",
               "glitter",
               "glossy",
-              "duochrome"
+              "iridescent"
             ]
           },
           "opacity": {

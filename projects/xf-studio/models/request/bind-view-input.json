@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "bind-view-input",
+  "owner": "platform",
+  "summary": "Route input on a visible view or flat editor.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "bound": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "bound"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "view"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:view-input"
+  ]
+}

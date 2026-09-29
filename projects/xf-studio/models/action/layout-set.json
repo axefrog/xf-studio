@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "layout-set",
+  "owner": "shell",
+  "summary": "Set (layout): sets the window's live arrangement until it is saved into a layout.",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "layout.set",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {
+      "layout": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a module a profile needs can't be hidden."
+  },
+  "effect": {
+    "session": "Sets the window's live arrangement until it is saved into a layout."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,36 @@
+{
+  "kind": "request",
+  "id": "warm-v",
+  "owner": "character",
+  "summary": "Warm the last V's files at start.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "files": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "files"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "warms"
+  ],
+  "servedBy": [
+    "driver:warm-start"
+  ]
+}

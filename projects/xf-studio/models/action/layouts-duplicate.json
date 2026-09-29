@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "layouts-duplicate",
+  "owner": "shell",
+  "summary": "Duplicate (layouts): clones the layout.",
+  "status": "both",
+  "replaces": [
+    "layout-library"
+  ],
+  "name": "layouts.duplicate",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; the factory layout can't be renamed or deleted."
+  },
+  "effect": {
+    "commit": "Clones the layout."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,45 @@
+{
+  "kind": "operator",
+  "id": "context-for",
+  "owner": "platform",
+  "summary": "The context menu for a hit: the hit's own section, then the view's tools, then links; only what can be done there.",
+  "status": "both",
+  "replaces": [
+    "context-menu",
+    "studio-context-targets",
+    "studio-ui/target-menus"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the hit target",
+    "operator:actions-for",
+    "operator:view-tools"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "section": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "section",
+        "items"
+      ]
+    }
+  },
+  "pure": true
+}

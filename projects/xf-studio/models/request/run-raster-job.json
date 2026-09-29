@@ -1,0 +1,41 @@
+{
+  "kind": "request",
+  "id": "run-raster-job",
+  "owner": "eye-makeup",
+  "summary": "Run one raster job in the worker, latest per layer.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "$ref": "shapes.schema.json#/$defs/rasterKey"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "$ref": "shapes.schema.json#/$defs/rasterKey"
+      },
+      "layer": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "key",
+      "layer"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:raster-pool"
+  ]
+}

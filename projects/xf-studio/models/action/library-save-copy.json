@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "library-save-copy",
+  "owner": "library",
+  "summary": "Save copy (library): clones the mod with its presets into an independent copy.",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "saveCopy",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "commit": "Clones the mod with its presets into an independent copy."
+  },
+  "undo": "none"
+}

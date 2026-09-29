@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "pose-select",
+  "owner": "poses",
+  "summary": "Select (pose): holds or clears the scene's pose (pose.select).",
+  "status": "both",
+  "replaces": [
+    "features/poses/actions"
+  ],
+  "name": "pose.select",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Poses panel shows the focused view's V."
+  },
+  "effect": {
+    "commit": "Holds or clears the scene's pose (pose.select)."
+  },
+  "undo": "none"
+}

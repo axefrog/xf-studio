@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "camera-body",
+  "owner": "views",
+  "summary": "Body (camera): sets the camera's pose (camera.body), a camera jump recorded on its trail.",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "camera-navigation",
+    "camera-framing"
+  ],
+  "name": "camera.body",
+  "target": "type:camera",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists and its scene has an orbit camera.",
+    "refusals": [
+      {
+        "code": "no-view",
+        "reason": "That view is closed."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the camera's pose (camera.body), a camera jump recorded on its trail."
+  },
+  "undo": "view-lighting"
+}

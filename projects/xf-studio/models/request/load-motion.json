@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "load-motion",
+  "owner": "motion",
+  "summary": "Have a scene's idle, blink and held pose ready to play.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "ready": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ready"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "scene"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:motion-data"
+  ]
+}

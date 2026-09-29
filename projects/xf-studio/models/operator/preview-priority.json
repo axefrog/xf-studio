@@ -1,0 +1,23 @@
+{
+  "kind": "operator",
+  "id": "preview-priority",
+  "owner": "character",
+  "summary": "The order pictures are made in: chosen, hovered or focused, in view, nearest, other rows.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:choice-row"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

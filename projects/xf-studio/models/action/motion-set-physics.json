@@ -1,0 +1,41 @@
+{
+  "kind": "action",
+  "id": "motion-set-physics",
+  "owner": "motion",
+  "summary": "Set physics (motion): sets the scene's motion key (motion.setPhysics).",
+  "status": "both",
+  "replaces": [
+    "motion-actions",
+    "platform/core/transition-settings"
+  ],
+  "name": "motion.setPhysics",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene shows a V and motion is available for her body.",
+    "refusals": [
+      {
+        "code": "motion-unavailable",
+        "reason": "The installation has no creator idle for this body."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the scene's motion key (motion.setPhysics)."
+  },
+  "undo": "none"
+}

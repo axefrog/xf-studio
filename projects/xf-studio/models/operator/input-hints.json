@@ -1,0 +1,40 @@
+{
+  "kind": "operator",
+  "id": "input-hints",
+  "owner": "platform",
+  "summary": "The hint strip for a view: only the targets of tools active there, and what the modifiers held would do.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/input-hints"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:window",
+    "operator:view-tools",
+    "operator:hit-target"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "string"
+        },
+        "does": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "keys",
+        "does"
+      ]
+    }
+  },
+  "pure": true
+}

@@ -1,0 +1,42 @@
+{
+  "kind": "operator",
+  "id": "fit-workspace",
+  "owner": "platform",
+  "summary": "The mirror trimmed to the storage budget: Undo and recovery drafts dropped first.",
+  "status": "both",
+  "replaces": [
+    "workspace-budget"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "budget": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "budget"
+    ]
+  },
+  "inputs": [
+    "operator:legacy-mirror"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string"
+      },
+      "trimmed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "text",
+      "trimmed"
+    ]
+  },
+  "pure": true
+}

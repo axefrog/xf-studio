@@ -1,0 +1,31 @@
+{
+  "kind": "operator",
+  "id": "report-manifest",
+  "owner": "diagnostics",
+  "summary": "What a problem report would contain, item by item.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:problem-report"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "item"
+      ]
+    }
+  },
+  "pure": true
+}

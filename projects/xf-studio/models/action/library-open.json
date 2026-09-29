@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "library-open",
+  "owner": "library",
+  "summary": "Open (library): points the profile's focus at the mod.",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "open",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "commit": "Points the profile's focus at the mod."
+  },
+  "undo": "none"
+}

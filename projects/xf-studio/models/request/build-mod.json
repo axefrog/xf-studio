@@ -1,0 +1,51 @@
+{
+  "kind": "request",
+  "id": "build-mod",
+  "owner": "export",
+  "summary": "Build a mod into a verified candidate and promote it.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "build": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "build"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "mod": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "presets": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeAt"
+        }
+      }
+    },
+    "required": [
+      "mod",
+      "presets"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:package"
+  ],
+  "faults": [
+    {
+      "code": "not-ready",
+      "when": "Settings, WolvenKit or the eye plate aren't ready.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ]
+}

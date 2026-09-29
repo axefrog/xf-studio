@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-recheck-runtime",
+  "owner": "setup",
+  "summary": "Recheck runtime (preview setup): raises the detect-installs reques.",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.recheckRuntime",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "raises": "request:detect-installs"
+  },
+  "undo": "none"
+}

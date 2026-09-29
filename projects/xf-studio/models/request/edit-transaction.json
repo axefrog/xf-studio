@@ -1,0 +1,49 @@
+{
+  "kind": "request",
+  "id": "edit-transaction",
+  "owner": "platform",
+  "summary": "Hold a gesture or control edit open, showing each frame, until it commits or is cancelled.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "enum": [
+          "committed",
+          "cancelled"
+        ]
+      }
+    },
+    "required": [
+      "status"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "target": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "kind": {
+        "enum": [
+          "gesture",
+          "control"
+        ]
+      }
+    },
+    "required": [
+      "window",
+      "target",
+      "kind"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:transaction"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "kind": "operator",
+  "id": "installable",
+  "owner": "install",
+  "summary": "Whether a build can be installed here (never from the verification library).",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:build",
+    "type:window"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "installable": {
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "installable"
+    ]
+  },
+  "pure": true
+}

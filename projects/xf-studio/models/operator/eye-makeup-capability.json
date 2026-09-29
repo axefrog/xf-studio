@@ -1,0 +1,38 @@
+{
+  "kind": "operator",
+  "id": "eye-makeup-capability",
+  "owner": "eye-makeup",
+  "summary": "Eye makeup's own capability rules for its action kinds on a preset.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "inputs": [
+    "type:preset-eye-makeup",
+    "type:editor-session"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "available": {
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "available"
+    ]
+  },
+  "pure": true
+}

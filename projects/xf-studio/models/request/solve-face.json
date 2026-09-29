@@ -1,0 +1,37 @@
+{
+  "kind": "request",
+  "id": "solve-face",
+  "owner": "expressions",
+  "summary": "Show a scene's held expression on its face.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "pose": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "pose"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "scene"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:face-solve"
+  ]
+}

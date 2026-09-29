@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "view-redo",
+  "owner": "views",
+  "summary": "Redo (view): raises the undo reques.",
+  "status": "both",
+  "replaces": [
+    "view-actions"
+  ],
+  "name": "view.redo",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "raises": "request:undo"
+  },
+  "undo": "none"
+}

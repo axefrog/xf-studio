@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "mirror-workspace",
+  "owner": "platform",
+  "summary": "Keep the legacy workspace document a faithful projection of the focused profile.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "written": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "written"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "profile": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "profile"
+    ]
+  },
+  "reasons": [
+    "maintains"
+  ],
+  "servedBy": [
+    "driver:legacy-mirror"
+  ]
+}

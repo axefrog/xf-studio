@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "view-compare-lighting",
+  "owner": "views",
+  "summary": "Open a view that shares the scene, camera and display with the other light setup (Studio or Creator).",
+  "status": "target",
+  "name": "view.compareLighting",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "view"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Creates a view with the other rig, sharing the rest."
+  },
+  "undo": "view-lighting"
+}

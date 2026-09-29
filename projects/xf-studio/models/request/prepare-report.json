@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "prepare-report",
+  "owner": "diagnostics",
+  "summary": "Prepare a Report a problem archive locally.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "file"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "report": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "report"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:diagnostics"
+  ]
+}

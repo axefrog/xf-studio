@@ -1,0 +1,29 @@
+{
+  "kind": "operator",
+  "id": "raster-tier",
+  "owner": "eye-makeup",
+  "summary": "The texture tier to raster at: the preference, capped by the GPU's capacity.",
+  "status": "both",
+  "replaces": [
+    "preview-quality"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:preferences",
+    "source:display-environment"
+  ],
+  "output": {
+    "enum": [
+      512,
+      1024,
+      2048,
+      4096
+    ]
+  },
+  "pure": true
+}

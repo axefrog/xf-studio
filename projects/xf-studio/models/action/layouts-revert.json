@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "layouts-revert",
+  "owner": "shell",
+  "summary": "Revert (layouts): drops the window's unsaved arrangement.",
+  "status": "both",
+  "replaces": [
+    "layout-library"
+  ],
+  "name": "layouts.revert",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; the factory layout can't be renamed or deleted."
+  },
+  "effect": {
+    "commit": "Drops the window's unsaved arrangement."
+  },
+  "undo": "none"
+}

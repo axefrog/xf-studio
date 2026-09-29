@@ -1,0 +1,23 @@
+{
+  "kind": "operator",
+  "id": "gesture-label",
+  "owner": "platform",
+  "summary": "The Undo label of a transaction, from its first frame that changed anything.",
+  "status": "both",
+  "replaces": [
+    "history-labels"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:gesture"
+  ],
+  "output": {
+    "type": "string"
+  },
+  "pure": true
+}

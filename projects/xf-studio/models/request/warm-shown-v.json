@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "warm-shown-v",
+  "owner": "character",
+  "summary": "Resolve the shown V into the shared cache while the host is quiet.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "warm": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "warm"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "request": {
+        "$ref": "shapes.schema.json#/$defs/characterRequest"
+      }
+    },
+    "required": [
+      "request"
+    ]
+  },
+  "reasons": [
+    "warms"
+  ],
+  "servedBy": [
+    "driver:warming"
+  ]
+}

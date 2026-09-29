@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "open-save",
+  "owner": "save-explorer",
+  "summary": "Open a save read-only in the Save Explorer.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "open": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "open"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "folder": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "folder"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:open-save"
+  ]
+}

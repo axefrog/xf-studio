@@ -1,0 +1,43 @@
+{
+  "kind": "request",
+  "id": "draw-choice-picture",
+  "owner": "character",
+  "summary": "Draw one choice picture, strip or live turn in the preview worker.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "picture": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "picture"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "picture",
+          "strip",
+          "turn"
+        ]
+      }
+    },
+    "required": [
+      "key",
+      "kind"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:preview-worker"
+  ]
+}

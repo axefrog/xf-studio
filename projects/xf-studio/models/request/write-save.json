@@ -1,0 +1,49 @@
+{
+  "kind": "request",
+  "id": "write-save",
+  "owner": "character",
+  "summary": "Write a V into a new save or over one by its policy.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "save": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "save"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "v": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "save": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "route": {
+        "enum": [
+          "new-save",
+          "overwrite"
+        ]
+      },
+      "consent": {
+        "$ref": "shapes.schema.json#/$defs/consent"
+      }
+    },
+    "required": [
+      "v",
+      "route"
+    ]
+  },
+  "reasons": [
+    "person",
+    "consents"
+  ],
+  "servedBy": [
+    "driver:save-writer"
+  ]
+}

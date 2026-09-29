@@ -1,0 +1,25 @@
+{
+  "kind": "operator",
+  "id": "character-request",
+  "owner": "character",
+  "summary": "The character request the host prepares, purely from the V and the scene's flags (body shown, uncensored, creator puppet).",
+  "status": "both",
+  "replaces": [
+    "character-detail-request"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:v",
+    "type:scene",
+    "operator:hidden-options"
+  ],
+  "output": {
+    "$ref": "shapes.schema.json#/$defs/characterRequest"
+  },
+  "pure": true
+}

@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "prefetch-face",
+  "owner": "expressions",
+  "summary": "Warm the face data while the window is quiet.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "warm": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "warm"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "scene"
+    ]
+  },
+  "reasons": [
+    "warms"
+  ],
+  "servedBy": [
+    "driver:face-prefetch"
+  ]
+}

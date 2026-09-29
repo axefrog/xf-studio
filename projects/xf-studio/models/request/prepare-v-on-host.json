@@ -1,0 +1,44 @@
+{
+  "kind": "request",
+  "id": "prepare-v-on-host",
+  "owner": "character",
+  "summary": "Prepare a V's record on the host for one requester.",
+  "status": "target",
+  "goal": {
+    "$ref": "shapes.schema.json#/$defs/characterRecord"
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "requester": {
+        "type": "string"
+      },
+      "request": {
+        "$ref": "shapes.schema.json#/$defs/characterRequest"
+      },
+      "warm": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "requester",
+      "request"
+    ]
+  },
+  "reasons": [
+    "supplies",
+    "warms"
+  ],
+  "servedBy": [
+    "driver:v-host"
+  ],
+  "faults": [
+    {
+      "code": "unknown-request",
+      "when": "The request isn't one of the accepted versions.",
+      "fault": "requester",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    }
+  ]
+}

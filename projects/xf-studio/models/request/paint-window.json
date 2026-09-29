@@ -1,0 +1,36 @@
+{
+  "kind": "request",
+  "id": "paint-window",
+  "owner": "shell",
+  "summary": "Paint changed bindings into the DOM once per frame.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "painted": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "painted"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:paint"
+  ]
+}

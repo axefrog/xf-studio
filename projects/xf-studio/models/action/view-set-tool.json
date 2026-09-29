@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "view-set-tool",
+  "owner": "views",
+  "summary": "Set tool (view): sets the view's tool in its tools node.",
+  "status": "both",
+  "replaces": [
+    "view-actions"
+  ],
+  "name": "view.setTool",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "type": "string"
+      },
+      "tool": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "tool",
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Sets the view's tool in its tools node."
+  },
+  "undo": "none"
+}

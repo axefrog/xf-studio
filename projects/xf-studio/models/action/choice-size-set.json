@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "choice-size-set",
+  "owner": "shell",
+  "summary": "Set (choice size): sets the preferences key (choiceSize.set).",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "choiceSize.set",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string"
+      },
+      "size": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "type",
+      "size"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "commit": "Sets the preferences key (choiceSize.set)."
+  },
+  "undo": "none"
+}

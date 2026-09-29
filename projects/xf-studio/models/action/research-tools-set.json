@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "research-tools-set",
+  "owner": "shell",
+  "summary": "Set (research tools): sets the preferences key (researchTools.set).",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "researchTools.set",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "commit": "Sets the preferences key (researchTools.set)."
+  },
+  "undo": "none"
+}

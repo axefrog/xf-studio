@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "save-set-policy",
+  "owner": "character",
+  "summary": "Choose whether a save may be overwritten, or use the default.",
+  "status": "target",
+  "name": "save.setPolicy",
+  "target": "type:save-policy",
+  "input": {
+    "type": "object",
+    "properties": {
+      "save": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "overwrite": {
+        "enum": [
+          "never",
+          "ask",
+          "allow",
+          "default"
+        ]
+      }
+    },
+    "required": [
+      "save",
+      "overwrite"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The save node exists."
+  },
+  "effect": {
+    "commit": "Sets or resets the save's policy fork."
+  },
+  "undo": "none"
+}

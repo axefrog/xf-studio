@@ -1,0 +1,54 @@
+{
+  "kind": "request",
+  "id": "decode-resource",
+  "owner": "host",
+  "summary": "Decode one game resource, natively first and with WolvenKit as the fallback.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "data"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "archive": {
+        "type": "string"
+      },
+      "depotPath": {
+        "type": "string"
+      },
+      "extension": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "archive",
+      "depotPath",
+      "extension"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:decode-pool",
+    "driver:wolvenkit"
+  ],
+  "x-friction": [
+    {
+      "gap": "Two ranked approaches serve the same goal, and a failure of the first selects the second.",
+      "capability": "fault-owners",
+      "closes": "Failures that select a declared fallback approach."
+    }
+  ]
+}

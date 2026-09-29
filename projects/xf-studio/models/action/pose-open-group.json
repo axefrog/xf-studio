@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "pose-open-group",
+  "owner": "poses",
+  "summary": "Open group (pose): edits the pose favourites node.",
+  "status": "both",
+  "replaces": [
+    "features/poses/actions"
+  ],
+  "name": "pose.openGroup",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "group": {
+        "type": "string"
+      },
+      "open": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "group",
+      "open"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Poses panel shows the focused view's V."
+  },
+  "effect": {
+    "commit": "Edits the pose favourites node."
+  },
+  "undo": "none"
+}

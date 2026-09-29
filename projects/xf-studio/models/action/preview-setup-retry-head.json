@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-retry-head",
+  "owner": "setup",
+  "summary": "Retry head (preview setup): raises the show-scene reques.",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.retryHead",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "raises": "request:show-scene"
+  },
+  "undo": "none"
+}

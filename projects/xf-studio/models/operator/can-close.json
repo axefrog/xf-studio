@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "can-close",
+  "owner": "desktop",
+  "summary": "Whether a window can close: every commit acknowledged.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:window",
+    "process:store-append"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

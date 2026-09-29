@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "diagnostics-open-issue",
+  "owner": "diagnostics",
+  "summary": "Open issue (diagnostics): changes the report in preparation (diagnostics.openIssue).",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions"
+  ],
+  "name": "diagnostics.openIssue",
+  "target": "type:problem-report",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a report is prepared locally and never sent."
+  },
+  "effect": {
+    "session": "Changes the report in preparation (diagnostics.openIssue)."
+  },
+  "undo": "none"
+}

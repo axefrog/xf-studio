@@ -1,0 +1,29 @@
+{
+  "kind": "action",
+  "id": "library-export-collection",
+  "owner": "library",
+  "summary": "Export collection (library): raises the export-file reques.",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "exportCollection",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "draft": {
+        "type": "string"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "raises": "request:export-file"
+  },
+  "undo": "none"
+}

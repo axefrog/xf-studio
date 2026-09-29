@@ -1,0 +1,38 @@
+{
+  "kind": "panel",
+  "id": "package",
+  "owner": "export",
+  "summary": "The focused mod's package: products, names, what ships and what is omitted, Check and Build results, and Add to my mod manager.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/collection",
+    "package-action"
+  ],
+  "binding": "the profile's focus.mod pointer (type:mod)",
+  "reads": [
+    "operator:package-plan",
+    "operator:eligibility",
+    "operator:identity-keys",
+    "operator:build-readiness",
+    "type:build",
+    "process:mod-build",
+    "process:mod-check"
+  ],
+  "actions": [
+    "action:package-assign",
+    "action:package-build",
+    "action:package-check",
+    "action:package-merge",
+    "action:package-rename",
+    "action:package-split",
+    "action:mod-install-reveal",
+    "action:mod-install-review"
+  ],
+  "x-friction": [
+    {
+      "gap": "A Build shows no progress in place today, and can't be cancelled from the panel.",
+      "capability": "streamed-results",
+      "closes": "Progress streamed from host work, and cancellation by asking."
+    }
+  ]
+}

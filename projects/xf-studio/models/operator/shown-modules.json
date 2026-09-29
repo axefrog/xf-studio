@@ -1,0 +1,28 @@
+{
+  "kind": "operator",
+  "id": "shown-modules",
+  "owner": "shell",
+  "summary": "The modules shown: the layout's, then the profile's overrides, then the modules' defaults.",
+  "status": "both",
+  "replaces": [
+    "compose/modules",
+    "platform/api/module"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:layout",
+    "type:profile"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

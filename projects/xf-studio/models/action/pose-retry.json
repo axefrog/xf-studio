@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "pose-retry",
+  "owner": "poses",
+  "summary": "Retry (pose): raises the load-pose-catalogue reques.",
+  "status": "both",
+  "replaces": [
+    "features/poses/actions"
+  ],
+  "name": "pose.retry",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Poses panel shows the focused view's V."
+  },
+  "effect": {
+    "raises": "request:load-pose-catalogue"
+  },
+  "undo": "none"
+}

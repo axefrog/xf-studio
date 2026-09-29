@@ -1,0 +1,33 @@
+{
+  "kind": "action",
+  "id": "collection-undo-open",
+  "owner": "library",
+  "summary": "Undo open (collection): points focus back at the mod shown before the last open.",
+  "status": "current",
+  "name": "collection.undoOpen",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "draft": {
+        "type": "string"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A mod is focused and the preset or product named exists.",
+    "refusals": [
+      {
+        "code": "missing",
+        "reason": "That preset or product no longer exists."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Points focus back at the mod shown before the last open."
+  },
+  "undo": "none",
+  "x-note": "The recovery queue goes away in the target: the store's pending copy is the recovery, and Open is navigation."
+}

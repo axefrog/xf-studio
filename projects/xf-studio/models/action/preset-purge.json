@@ -1,0 +1,32 @@
+{
+  "kind": "action",
+  "id": "preset-purge",
+  "owner": "library",
+  "summary": "Delete a preset for good, from the trash only, after the person confirms.",
+  "status": "target",
+  "name": "preset.purge",
+  "target": "type:preset-eye-makeup",
+  "input": {
+    "type": "object",
+    "properties": {
+      "preset": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "confirmed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "preset",
+      "confirmed"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The preset is in the trash and nothing else references it."
+  },
+  "effect": {
+    "commit": "Purges the node from the library and, as a follow-up, from every backup."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,53 @@
+{
+  "kind": "action",
+  "id": "preview-move-light",
+  "owner": "views",
+  "summary": "Move light (preview): edits the rig's keys (preview.moveLight).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups",
+    "studio-lighting",
+    "creator-lighting"
+  ],
+  "name": "preview.moveLight",
+  "target": "type:light-rig",
+  "input": {
+    "type": "object",
+    "properties": {
+      "light": {
+        "type": "string"
+      },
+      "index": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 15
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "light",
+      "index"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's rig is one of the person's own setups, or a built-in (a change to a built-in forks it into one of the person's own first).",
+    "refusals": [
+      {
+        "code": "limit",
+        "reason": "A setup has at most 16 lights and a few shadow casters."
+      },
+      {
+        "code": "built-in",
+        "reason": "A built-in setup can't be renamed or deleted."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the rig's keys (preview.moveLight)."
+  },
+  "undo": "view-lighting"
+}

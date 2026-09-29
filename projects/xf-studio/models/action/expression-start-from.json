@@ -1,0 +1,50 @@
+{
+  "kind": "action",
+  "id": "expression-start-from",
+  "owner": "expressions",
+  "summary": "Start from (expression): edits the expression's control or link keys through the expression apply operator (expression.startFrom).",
+  "status": "both",
+  "replaces": [
+    "features/expressions/core"
+  ],
+  "name": "expression.startFrom",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "origin": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "controls": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "links": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "origin",
+      "controls"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "An expression preset is worn by the focused V's look and the face rig is prepared.",
+    "refusals": [
+      {
+        "code": "face-unavailable",
+        "reason": "The face rig isn't ready for this installation yet."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression's control or link keys through the expression apply operator (expression.startFrom)."
+  },
+  "undo": "look"
+}

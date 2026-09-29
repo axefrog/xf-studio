@@ -1,0 +1,40 @@
+{
+  "kind": "operator",
+  "id": "eye-makeup-gesture",
+  "owner": "eye-makeup",
+  "summary": "A gesture frame (point move, shape transform, warp, tangent) as edits over the preset's working copy.",
+  "status": "both",
+  "replaces": [
+    "engines/layered-makeup/path-edit",
+    "engines/layered-makeup/shape-transform",
+    "authoring-geometry"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:gesture",
+    "type:preset-eye-makeup"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  "pure": true
+}
