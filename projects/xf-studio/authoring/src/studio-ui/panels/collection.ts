@@ -299,7 +299,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // When the line says WolvenKit is needed, its one next step is the button beside it (release-readiness-audit.md item 14).
   const wolvenKitStep = wolvenKitStepButton(rt);
   // Named after the Settings group it mirrors (release-readiness-audit.md C-6).
-  const setup = section({ title: "Game", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game." },
+  const setup = section({ title: "Game", help: "Your game folder and mod manager are chosen in Settings › Game; your own WolvenKit, if you use one, in Settings › Tools." },
     setupLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
   const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });

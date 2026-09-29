@@ -151,7 +151,7 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
     return "WolvenKit isn't set up yet. Set it up in Settings › Game.";
   if (!signature(settings.wolvenKitCli, "MZ")) return "The WolvenKit you chose isn't a Windows program. Choose another in Settings › Tools.";
   try { const issue = wolvenKitProbe(settings.wolvenKitCli); if (issue) return issue; }
-  catch { return "XF Studio couldn't check the WolvenKit you chose. Choose another in Settings › Tools, or let XF Studio set it up in Settings › Game."; }
+  catch { return "XF Studio couldn't check the WolvenKit you chose. Choose another in Settings › Tools."; }
   if (!settings.gameRoot || !file(resolve(settings.gameRoot, "bin/x64/Cyberpunk2077.exe")) ||
       !directory(resolve(settings.gameRoot, "archive/pc"))) return "Select a complete Cyberpunk 2077 game directory.";
   if (!signature(resolve(settings.gameRoot, "bin/x64/Cyberpunk2077.exe"), "MZ"))
