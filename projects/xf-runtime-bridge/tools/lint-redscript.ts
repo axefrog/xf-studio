@@ -5,7 +5,8 @@
 //                               [--extra <dir>]...
 //
 // --extra adds another script folder (repeatable). 0.6: XFRuntimeBridgeEquipmentEx.reds compiles its Equipment-EX class only
-// when that module exists; `--extra tools/lint-stubs/equipment-ex` (a stub of the public API it calls) checks that branch.
+// when that module exists (0.6.1: and Codeware, whose reflection it calls Equipment-EX through); `--codeware <scripts>
+// --extra tools/lint-stubs/equipment-ex` (a stub that makes the module exist) checks that branch.
 //
 // XFRuntimeBridgeShowroom.reds compiles one of two XFShowroom classes by @if(ModuleExists("Codeware")): without --codeware
 // the lint checks the fallback that refuses with codeware_missing; with Codeware's own script sources (its repository's

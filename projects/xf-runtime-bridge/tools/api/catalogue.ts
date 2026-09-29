@@ -200,9 +200,10 @@ async function runScreenshot(input: Record<string, unknown>, context: CommandCon
     const focus = expect.subject && /^piece:[0-9]+$/.test(expect.subject) ? expect.subject : undefined;
     report = await runSceneReport({ include: ["camera", "subjects", "lights"], ...(input.manifest ? { manifest: input.manifest as string } : {}), ...(focus ? { focus } : {}) }, context);
     before = judgeBefore(report, expect);
-    const failed = before.filter((r) => !r.ok);
+    // A check that couldn't run is never read as passed (RB-88): with on_fail refuse it refuses like a failure, saying so.
+    const failed = before.filter((r) => r.ok !== true);
     if (failed.length && refuse) {
-      throw planError("expectation_failed", `The pre-capture check failed, so no screenshot was taken: ${failed.map((f) => f.detail).join("; ")}. Fix the framing or light, or pass on_fail: warn.`);
+      throw planError("expectation_failed", `The pre-capture check didn't pass, so no screenshot was taken: ${failed.map((f) => f.detail).join("; ")}. Fix the framing or light, drop a check that can't run here, or pass on_fail: warn.`);
     }
   }
   const grab = () =>
@@ -233,15 +234,18 @@ async function runScreenshot(input: Record<string, unknown>, context: CommandCon
     let stats = null;
     if (expect.luminance || expect.max_clipped !== undefined || expect.max_crushed !== undefined) {
       const subject = pickSubject(report.subjects ?? [], expect.subject);
-      if (subject?.bounds) stats = frameStatsInCapture(decodePng(new Uint8Array(readFileSync(record.full.path))), record.crop, record.source.window, subject.bounds);
+      const renderAspect = (report.camera as { aspect?: number } | undefined)?.aspect;
+      if (subject?.bounds) stats = frameStatsInCapture(decodePng(new Uint8Array(readFileSync(record.full.path))), record.crop, record.source.window, subject.bounds, renderAspect);
       after = judgeAfter(stats, expect);
     }
-    const ok = [...before, ...after].every((r) => r.ok);
-    value.expectations = { ok, before, after, ...(stats ? { frame: stats } : {}) };
-    if (!ok && refuse && after.some((r) => !r.ok)) {
-      throw planError("expectation_failed", `The capture was taken but failed its check: ${after.filter((r) => !r.ok).map((f) => f.detail).join("; ")}. The file is kept for inspection: ${record.full.path}`);
+    const all = [...before, ...after];
+    const ok = all.every((r) => r.ok === true);
+    const notChecked = all.filter((r) => r.ok === null).map((r) => r.check);
+    value.expectations = { ok, before, after, ...(notChecked.length ? { not_checked: notChecked } : {}), ...(stats ? { frame: stats } : {}) };
+    if (!ok && refuse && after.some((r) => r.ok !== true)) {
+      throw planError("expectation_failed", `The capture was taken but didn't pass its check: ${after.filter((r) => r.ok !== true).map((f) => f.detail).join("; ")}. The file is kept for inspection: ${record.full.path}`);
     }
-    if (!ok) value.warnings = [...before, ...after].filter((r) => !r.ok).map((r) => r.detail);
+    if (!ok) value.warnings = all.filter((r) => r.ok !== true).map((r) => r.detail);
   }
   return { value, images: result.images };
 }
@@ -1254,7 +1258,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "wardrobe.state",
     title: "Read V's wardrobe outfit",
     description:
-      "The wardrobe outfit V wears (set 1-7, or 0 for none) and, for each clothing area (Head, Face, OuterChest, InnerChest, Legs, Feet), what it shows: outfit (the outfit's item), hidden (nothing: the outfit leaves the area empty, or headgear is hidden), equipped or empty; plus what is equipped there and the wardrobe's stored outfits. An active outfit overrides what the equipment slots show, which is why an equipped helmet can stay invisible. manager says who decides: wardrobe (a wardrobe outfit, set 1-7), script (a script mod's outfit system, named in managed_by when known, such as EquipmentEx: active is true while set is 0, and the wardrobe's own requests don't reach it) or none (what is equipped shows); suspended_by_bridge says the bridge took an outfit off (wardrobe_equip resume puts it back); script_outfit is Equipment-EX's outfit when it is installed (active and its parts: outfit slot and item).",
+      "The wardrobe outfit V wears (set 1-7, or 0 for none) and, for each clothing area (Head, Face, OuterChest, InnerChest, Legs, Feet), what it shows: outfit (the outfit's item), hidden (nothing: the outfit leaves the area empty, or headgear is hidden), equipped or empty; plus what is equipped there and the wardrobe's stored outfits. An active outfit overrides what the equipment slots show, which is why an equipped helmet can stay invisible. manager says who decides: wardrobe (a wardrobe outfit, set 1-7), script (a script mod's outfit system, named in managed_by when known, such as EquipmentEx: active is true while set is 0, and the wardrobe's own requests don't reach it) or none (what is equipped shows); suspended_by_bridge says the bridge took an outfit off (wardrobe_equip resume puts it back); script_outfit is Equipment-EX's outfit when it is installed (its version, active and its parts: outfit slot, item and the item's exact identity; available false with why when the installed Equipment-EX lacks a function the bridge calls, and then only suspend and resume drive it).",
     permission: "read",
     input: obj({}),
     bridge: { method: "wardrobe.state" },
@@ -1263,7 +1267,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "wardrobe.equip",
     title: "Change V's wardrobe outfit",
     description:
-      "Changes what V's clothing shows through the wardrobe, as the wardrobe screen does (the equipment system's own requests; stored outfits are never edited or saved): set applies outfit 1-7; clear takes the outfit off, so V shows what is equipped; item shows that clothing item in its area of the active outfit (the item must be in V's inventory or the wardrobe); area with show equipped makes that area show what is equipped there, and show hidden hides it; restore (the undo) puts back exactly the outfit and each area a snapshot recorded (with no outfit too: each area's hidden state); suspend takes the outfit off with the story's own request, whoever manages it (the wardrobe or a script mod's outfit system such as EquipmentEx), so equipped clothing draws, and resume puts that outfit back. Under a script mod's outfit system, item puts the item into that outfit where the bridge can drive it (Equipment-EX: its own outfit system, as its screen does; the undo restores its parts exactly), and suspend and resume work for any; the rest is refused (outfit_managed_elsewhere). Waits until the wardrobe shows the change. Only in normal play, not in combat or a scene. Needs the inventory permission; the kill switch puts back the wardrobe as it was before the bridge's first change.",
+      "Changes what V's clothing shows through the wardrobe, as the wardrobe screen does (the equipment system's own requests; stored outfits are never edited or saved): set applies outfit 1-7; clear takes the outfit off, so V shows what is equipped; item shows that clothing item in its area of the active outfit (the item must be in V's inventory or the wardrobe); area with show equipped makes that area show what is equipped there, and show hidden hides it; restore (the undo) puts back exactly the outfit and each area a snapshot recorded (with no outfit too: each area's hidden state; the same copy of each item when V still has it, and everything it still can, naming what neither the wardrobe nor V's inventory has any more in not_restored); suspend takes the outfit off with the story's own request, whoever manages it (the wardrobe or a script mod's outfit system such as EquipmentEx), so equipped clothing draws, and resume puts that outfit back. Under a script mod's outfit system, item puts the item into that outfit where the bridge can drive it (Equipment-EX: its own outfit system, as its screen does; the undo restores its parts exactly), and suspend and resume work for any; the rest is refused (outfit_managed_elsewhere). Waits until the wardrobe shows the change. Only in normal play, not in combat or a scene. Needs the inventory permission; the kill switch puts back the wardrobe as it was before the bridge's first change.",
     permission: "write-inventory",
     input: obj({
       set: int("Apply this wardrobe outfit (1-7; wardrobe_state lists the stored ones).", 1, 7),
@@ -1287,6 +1291,7 @@ export const CATALOGUE: readonly CommandDef[] = [
                 {
                   area: oneOf("The clothing area.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"]),
                   item: str("The outfit's item in the area (empty: none).", { maxLength: 128 }),
+                  id: str("The item's exact identity as the snapshot reported it (0.6.1: the same copy is put back when V still has it).", { pattern: "^[0-9]{1,20}$", maxLength: 20 }),
                   hidden: bool("Whether the area was hidden."),
                 },
                 ["area"],
@@ -1301,7 +1306,17 @@ export const CATALOGUE: readonly CommandDef[] = [
                 parts: {
                   type: "array",
                   description: "Each outfit slot in use and its item.",
-                  items: { description: "One part.", ...obj({ slot: str("The outfit slot record, e.g. OutfitSlots.Head.", { maxLength: 128 }), item: str("The item record.", { maxLength: 128 }) }, ["slot", "item"]) },
+                  items: {
+                    description: "One part.",
+                    ...obj(
+                      {
+                        slot: str("The outfit slot record, e.g. OutfitSlots.Head.", { maxLength: 128 }),
+                        item: str("The item record.", { maxLength: 128 }),
+                        id: str("The item's exact identity as the snapshot reported it (0.6.1).", { pattern: "^[0-9]{1,20}$", maxLength: 20 }),
+                      },
+                      ["slot", "item"],
+                    ),
+                  },
                   maxItems: 64,
                 },
               }),

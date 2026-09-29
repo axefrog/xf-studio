@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { BridgeClient } from "../bridge-lib.ts";
 import { CommandApi, RequestPacer, rateLimitWaits, type BridgeTransport } from "../api/command-api.ts";
-import { startSelftestHost, tempDir, type Host } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 const apiFor = (host: Host, options: Record<string, unknown> = {}) =>
   new CommandApi({ runtimeDir: host.dir, captureRoot: join(tempDir("xfb-b8-cap-"), "captures"), auditDir: tempDir("xfb-b8-audit-"), idleCloseMs: 300, ...options });
@@ -28,7 +28,7 @@ describe("bridge 0.5.2: no script call while the game is loading (RB-76, session
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom,inventory"], 120);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -90,7 +90,7 @@ describe("bridge 0.5.2: pacing and rate limits (RB-77)", () => {
   let host: Host;
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes"], 60);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     await host?.stop();
   });
@@ -161,7 +161,7 @@ describe("bridge 0.5.2: the wardrobe (outfits decide what each clothing area sho
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom,inventory"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -232,7 +232,7 @@ describe("bridge 0.5.2: the wardrobe (outfits decide what each clothing area sho
     expect(!refused.ok && refused.error.code).toBe("write_class_disabled");
     other.close();
     await locked.stop();
-  });
+  }, HOOK_TIMEOUT_MS);
 });
 
 describe("bridge 0.5.2: placing the photo-mode camera (research)", () => {
@@ -241,7 +241,7 @@ describe("bridge 0.5.2: placing the photo-mode camera (research)", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes"], 60);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();

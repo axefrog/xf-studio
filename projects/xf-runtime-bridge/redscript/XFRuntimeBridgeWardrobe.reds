@@ -41,6 +41,24 @@ public class XFWardrobeSnapshot {
   public let scriptActive: Bool;
   public let scriptSlots: array<TweakDBID>;
   public let scriptItems: array<ItemID>;
+  // 0.6.1 (RB-84): what a restore being assembled couldn't find any more (an area or outfit slot and the item); the rest
+  // is still put back, and the answer names these.
+  public let missing: array<String>;
+}
+
+// The kill switch's restore under a script outfit system after the bridge suspended it (RB-84): the story's restore
+// request is queued, so the outfit's parts go back a moment later, once that request has switched the outfit on again.
+public class XFWardrobeRestoreLater extends DelayCallback {
+  public let snapshot: ref<XFWardrobeSnapshot>;
+
+  public func Call() -> Void {
+    let player = XFInventory.Player();
+    if !IsDefined(player) || !IsDefined(this.snapshot) {
+      return;
+    }
+    let applied = XFWardrobe.Apply(player, this.snapshot);
+    XFBridgeLog.Info("kill-restore", "wardrobe restored after the resume: " + applied);
+  }
 }
 
 public abstract class XFWardrobe {
@@ -123,7 +141,7 @@ public abstract class XFWardrobe {
       if i > 0 {
         out += ",";
       }
-      out += "{\"area\":" + XFJson.Str(XFInventory.AreaName(snapshot.areas[i])) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(snapshot.items[i])) + ",\"hidden\":" + XFJson.Flag(snapshot.hidden[i]) + "}";
+      out += "{\"area\":" + XFJson.Str(XFInventory.AreaName(snapshot.areas[i])) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(snapshot.items[i])) + XFInventory.IdField(snapshot.items[i]) + ",\"hidden\":" + XFJson.Flag(snapshot.hidden[i]) + "}";
       i += 1;
     }
     out += "]";
@@ -134,7 +152,7 @@ public abstract class XFWardrobe {
         if i > 0 {
           out += ",";
         }
-        out += "{\"slot\":" + XFJson.Str(TDBID.ToStringDEBUG(snapshot.scriptSlots[i])) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(snapshot.scriptItems[i])) + "}";
+        out += "{\"slot\":" + XFJson.Str(TDBID.ToStringDEBUG(snapshot.scriptSlots[i])) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(snapshot.scriptItems[i])) + XFInventory.IdField(snapshot.scriptItems[i]) + "}";
         i += 1;
       }
       out += "]}";
@@ -432,25 +450,25 @@ public abstract class XFWardrobe {
     return "{\"ok\":true}";
   }
 
-  // One part of a script outfit (its outfit slot and item) in a restore being assembled.
-  public static func RestorePart(cid: String, slot: String, item: String) -> String {
+  // One part of a script outfit (its outfit slot and item) in a restore being assembled. The exact copy by its identity
+  // (hash, from the snapshot's "id") when V still has it, else the record's first copy (RB-84); an item neither the
+  // wardrobe nor V's inventory has any more is left out and named in the answer, and the rest is still put back.
+  public static func RestorePart(cid: String, slot: String, item: String, hash: String) -> String {
     let snapshot = XFBridgeRegistry.Get().WardrobeRestore();
     if !IsDefined(snapshot) {
       return XFJson.Fail("bad_params", "no wardrobe restore was begun");
     }
-    let player = XFInventory.Player();
-    let wanted = TDBID.Create(item);
-    let own = XFInventory.FindItem(player, wanted);
-    let id = ItemID.IsValid(own) ? own : XFWardrobe.VisualItem(player, wanted);
+    let id = XFInventory.ExactItem(XFInventory.Player(), TDBID.Create(item), hash);
     if !ItemID.IsValid(id) {
-      return XFJson.Fail("not_in_inventory", "neither the wardrobe nor V's inventory has '" + item + "' any more");
+      ArrayPush(snapshot.missing, slot + ": " + item);
+      return "{\"ok\":true,\"missing\":true}";
     }
     ArrayPush(snapshot.scriptSlots, TDBID.Create(slot));
     ArrayPush(snapshot.scriptItems, id);
-    return "{\"ok\":true}";
+    return "{\"ok\":true,\"exact\":" + XFJson.Flag(StrLen(hash) > 0 && Equals(XFInventory.Hash(id), hash)) + "}";
   }
 
-  public static func RestoreSlot(cid: String, area: String, item: String, hidden: Bool) -> String {
+  public static func RestoreSlot(cid: String, area: String, item: String, hidden: Bool, hash: String) -> String {
     let registry = XFBridgeRegistry.Get();
     let snapshot = registry.WardrobeRestore();
     let type = XFInventory.AreaByName(area);
@@ -459,9 +477,11 @@ public abstract class XFWardrobe {
     }
     let id: ItemID;
     if StrLen(item) > 0 {
-      id = XFWardrobe.VisualItem(XFInventory.Player(), TDBID.Create(item));
+      id = XFInventory.ExactItem(XFInventory.Player(), TDBID.Create(item), hash);
       if !ItemID.IsValid(id) {
-        return XFJson.Fail("not_in_inventory", "neither the wardrobe nor V's inventory has '" + item + "' any more");
+        // Left out (RB-84): the area stays as it is now, and the answer names it.
+        ArrayPush(snapshot.missing, area + ": " + item);
+        return "{\"ok\":true,\"missing\":true}";
       }
     }
     ArrayPush(snapshot.areas, type);
@@ -487,8 +507,12 @@ public abstract class XFWardrobe {
     registry.NoteWardrobeSnapshot(before);
     let applied = XFWardrobe.Apply(player, snapshot);
     registry.SetWardrobeRestore(null);
-    XFBridgeLog.Info(cid, "wardrobe.equip restore: outfit " + IntToString(snapshot.set) + ", " + IntToString(ArraySize(snapshot.areas)) + " areas, " + IntToString(ArraySize(snapshot.scriptSlots)) + " script outfit parts (" + applied + ")");
-    return "{\"ok\":true,\"changed\":true,\"applied\":" + XFJson.Str(applied) + ",\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
+    let missing = "";
+    for entry in snapshot.missing {
+      missing += (StrLen(missing) > 0 ? "," : "") + XFJson.Str(entry);
+    }
+    XFBridgeLog.Info(cid, "wardrobe.equip restore: outfit " + IntToString(snapshot.set) + ", " + IntToString(ArraySize(snapshot.areas)) + " areas, " + IntToString(ArraySize(snapshot.scriptSlots)) + " script outfit parts (" + applied + "), " + IntToString(ArraySize(snapshot.missing)) + " left out");
+    return "{\"ok\":true,\"changed\":true,\"applied\":" + XFJson.Str(applied) + ",\"not_restored\":[" + missing + "],\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
   }
 
   // The kill switch: an outfit the bridge took off goes back on first (the story's restore request), then the wardrobe as
@@ -500,14 +524,24 @@ public abstract class XFWardrobe {
       return "";
     }
     let out = "";
+    let resumed = false;
     if registry.IsWardrobeSuspended() {
       XFWardrobe.Queue(player, new QuestRestoreWardrobeSetRequest());
       registry.SetWardrobeSuspended(false);
+      resumed = true;
       out += ",\"wardrobe_resumed\":true";
     }
     let snapshot = registry.TakeWardrobeSnapshot();
     if !IsDefined(snapshot) {
       return out;
+    }
+    // RB-84: a script outfit system's parts go back only after the queued resume has switched its outfit on again (its
+    // own Reactivate), a moment later; applied now they would run first and be undone by it.
+    if resumed && snapshot.scriptKnown && XFScriptOutfit.Present() {
+      let later = new XFWardrobeRestoreLater();
+      later.snapshot = snapshot;
+      GameInstance.GetDelaySystem(GetGameInstance()).DelayCallback(later, 0.5, false);
+      return out + ",\"wardrobe_restored\":" + XFWardrobe.SnapshotJson(snapshot) + ",\"wardrobe_restore\":\"after_resume\"";
     }
     let applied = XFWardrobe.Apply(player, snapshot);
     return out + ",\"wardrobe_restored\":" + XFWardrobe.SnapshotJson(snapshot) + ",\"wardrobe_restore\":" + XFJson.Str(applied);

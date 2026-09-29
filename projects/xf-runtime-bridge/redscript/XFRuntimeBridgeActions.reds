@@ -119,6 +119,8 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // player.* (0.6): status effects the bridge applied to V (crouch, a glide's movement hold); player.stop and the kill switch
   // remove them.
   private let m_playerEffects: array<TweakDBID>;
+  // A glide's watch on the player's own input while it holds V's movement (RB-81).
+  private let m_glideInput: ref<XFGlideInput>;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -506,6 +508,32 @@ public class XFBridgeRegistry extends ScriptableSystem {
     let effects = this.m_playerEffects;
     ArrayClear(this.m_playerEffects);
     return effects;
+  }
+
+  // A glide's watch on the player's own input (RB-81): registered on V for XFGlideInput.Actions() while the movement hold
+  // is on, removed when it goes off (and by player.stop and the kill switch). Starting again begins a fresh watch.
+  public func StartGlideInputWatch(player: ref<PlayerPuppet>) -> Void {
+    this.StopGlideInputWatch(player);
+    if !IsDefined(player) {
+      return;
+    }
+    let watch = new XFGlideInput();
+    for name in XFGlideInput.Actions() {
+      player.RegisterInputListener(watch, name);
+    }
+    this.m_glideInput = watch;
+  }
+
+  public func StopGlideInputWatch(player: ref<PlayerPuppet>) -> Void {
+    if IsDefined(this.m_glideInput) && IsDefined(player) {
+      player.UnregisterInputListener(this.m_glideInput);
+    }
+    this.m_glideInput = null;
+  }
+
+  // The first action the watch saw ("" when none, or no glide holds V).
+  public func GlideInputTouched() -> String {
+    return IsDefined(this.m_glideInput) ? this.m_glideInput.touched : "";
   }
 
   public func PlayerEffectsJson() -> String {

@@ -2921,6 +2921,144 @@ void Bridge060Tests()
     }
 }
 
+// Bridge 0.6.1: the fixes of deep review 6 (RB-79..92) that live in the core.
+void Bridge061Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    namespace b = xfb::behave;
+
+    // RB-83: game.save refuses while the bridge holds something on V, before anything changes (with or without override).
+    {
+        int prepared = 0;
+        w::SaveOps ops;
+        ops.holds = [] { return json::array({"GameplayRestriction.NoMovement", "behaviours running (behave_list)"}); };
+        ops.prepare = [&] {
+            ++prepared;
+            return json{{"lock_released", true}};
+        };
+        ops.status = [] { return json{{"locked", false}, {"state", "saved"}}; };
+        ops.save = [] { return json{{"requested", true}}; };
+        ops.relock = [] {};
+        ops.sleep = [](std::chrono::milliseconds) {};
+        std::string code = "ok", message;
+        try
+        {
+            w::GameSave(p::ParseGameSave(json{{"override_lock", true}}), ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            code = e.code;
+            message = e.what();
+        }
+        Check("0.6.1 game.save refuses bridge_effects_active before prepare, naming what is held (RB-83)",
+              code == "bridge_effects_active" && prepared == 0 && message.find("NoMovement") != std::string::npos &&
+                  message.find("player_stop") != std::string::npos);
+        ops.holds = [] { return json::array(); };
+        Check("0.6.1 game.save goes ahead when nothing is held", ParamsCode([&] { w::GameSave(p::ParseGameSave(json::object()), ops); }) == "ok" && prepared == 1);
+    }
+
+    // RB-81: a glide is capped at 30 s; RB-79/81: V is checked every tick, and the player's own input ends it.
+    {
+        b::Runner runner;
+        xfb::EventLog events;
+        runner.SetEvents(&events);
+        const auto allow = [](xfb::Access) {};
+        Check("0.6.1 behave.glide.path: max_s above 30 is refused, the default is 30 (RB-81)",
+              ParamsCode([&] { runner.Start(b::StartParams("glide_path", json{{"offset", {{"forward", 3}}}, {"max_s", 31}}), allow); }) == "bad_params" &&
+                  runner.Start(b::StartParams("glide_path", json{{"offset", {{"forward", 3}}}}), allow)["max_s"] == 30.0);
+        runner.DropAll("test");
+
+        std::string busy, tookOver;
+        int teleports = 0, reads = 0;
+        bool holding = false;
+        b::Ops fake;
+        fake.player = [&] {
+            ++reads;
+            return json{{"position", {0, 0, 0}}, {"yaw", 0.0}, {"busy", busy}, {"took_over", tookOver}};
+        };
+        fake.path = [](const b::Vec3& aFrom, const b::Vec3& aTo) { return std::vector<b::Vec3>{aFrom, aTo}; };
+        fake.holdMovement = [&](bool aOn) { holding = aOn; };
+        fake.teleportPlayer = [&](const b::Vec3&, double) {
+            // As XFPlayer.Step: the watch's input or a busy state refuses the step.
+            if (!tookOver.empty())
+            {
+                throw xfb::MethodError("user_took_over", "moved");
+            }
+            if (!busy.empty())
+            {
+                throw xfb::MethodError(busy, "busy");
+            }
+            ++teleports;
+        };
+        const auto lastStop = [&] {
+            const auto all = events.Read(0, 500, {"behaviour"})["events"];
+            return all.empty() ? json() : all.back()["data"];
+        };
+        runner.Start(b::StartParams("glide_path", json{{"offset", {{"forward", 10}}}, {"every_ticks", 3}}), allow);
+        runner.Tick(0.1, fake, true); // starting: path, hold
+        runner.Tick(0.1, fake, true); // ticks 1 and 2 of every 3: V is read instead of stepped
+        const int readsBefore = reads;
+        runner.Tick(0.1, fake, true);
+        runner.Tick(0.1, fake, true);
+        Check("0.6.1 behave.glide.path: V is read on every tick without a step (RB-79)", reads - readsBefore >= 1 && teleports >= 1 && holding);
+        busy = "player_busy";
+        runner.Tick(0.1, fake, true);
+        runner.Tick(0.1, fake, true);
+        Check("0.6.1 behave.glide.path: a busy state (a fall) stops it on the next tick and gives the hold back",
+              !runner.Active() && !holding && lastStop().value("reason", std::string()) == "player_busy");
+        busy.clear();
+        runner.Start(b::StartParams("glide_path", json{{"offset", {{"forward", 10}}}}), allow);
+        runner.Tick(0.1, fake, true);
+        runner.Tick(0.1, fake, true);
+        tookOver = "MoveY";
+        runner.Tick(0.1, fake, true);
+        const auto stop = lastStop();
+        Check("0.6.1 behave.glide.path: the player's own input ends it with user_took_over and a way back (RB-81)",
+              !runner.Active() && !holding && stop.value("reason", std::string()) == "user_took_over" && stop.contains("undo") &&
+                  stop.contains("travelled_m"));
+    }
+
+    // RB-84: an item's exact identity in a restore; a restore with an item the game no longer has puts the rest back.
+    {
+        const auto parse = [](const char* aText) { return p::ParseWardrobeEquip(json::parse(aText)); };
+        const auto exact = parse(R"({"restore":{"set":2,"slots":[{"area":"Head","item":"Items.Cap_01_basic_01","id":"1234567890123","hidden":false}],"script_outfit":{"active":true,"parts":[{"slot":"OutfitSlots.Head","item":"Items.Cap_01_basic_01","id":"42"}]}}})");
+        Check("0.6.1 wardrobe.equip: a restore carries each item's exact identity",
+              exact.slots[0].id == "1234567890123" && exact.parts[0].id == "42" &&
+                  ParamsCode([&] { parse(R"({"restore":{"set":0,"slots":[{"area":"Head","item":"Items.A","id":"x1"}]}})"); }) == "bad_params" &&
+                  ParamsCode([&] { parse(R"({"restore":{"set":0,"slots":[{"area":"Head","item":"Items.A","id":"123456789012345678901"}]}})"); }) == "bad_params");
+        const auto request = parse(R"({"restore":{"set":0,"slots":[],"script_outfit":{"active":true,"parts":[{"slot":"OutfitSlots.Head","item":"Items.Cap_01_basic_01"},{"slot":"OutfitSlots.Feet","item":"Items.Boots_gone"}]}}})");
+        w::WardrobeOps ops;
+        ops.change = [] { return json{{"changed", true}, {"not_restored", {"OutfitSlots.Feet: Items.Boots_gone"}}, {"before", {{"set", 0}}}}; };
+        ops.state = [] {
+            return json{{"set", 0}, {"manager", "script"}, {"script_outfit", {{"active", true}, {"parts", {{{"slot", "OutfitSlots.Head"}, {"item", "Items.Cap_01_basic_01"}}}}}}};
+        };
+        ops.settle = [] {};
+        const auto out = w::WardrobeEquip(request, ops);
+        Check("0.6.1 wardrobe.equip {restore}: a missing part is named in not_restored and the rest counts as shown (RB-84)",
+              out.value("shown", false) && out["not_restored"].size() == 1 && out["not_restored"][0] == "OutfitSlots.Feet: Items.Boots_gone");
+    }
+
+    // RB-89: the kill switch's restore waits while behaviours still run (Main.cpp gates it on the runner being idle).
+    {
+        b::Runner runner;
+        runner.Start(b::StartParams("turntable", json{{"deg_per_s", 30}}), [](xfb::Access) {});
+        w::RestoreOnce restore;
+        restore.MarkWrite();
+        int restored = 0;
+        const auto tick = [&] { restore.Tick(!runner.Active(), [&] { ++restored; }); };
+        tick(); // a kill landed after this tick's behaviours ran: they still run, so no restore yet
+        const int early = restored;
+        b::Ops fake;
+        fake.showroom = [] { return json::object(); };
+        fake.place = [](const std::string&, int32_t, const b::Vec3&, double) {};
+        runner.StopAll("kill_switch");
+        runner.Tick(0.1, fake, true);
+        tick();
+        Check("0.6.1 kill switch: the restore runs only after every behaviour's stop step (RB-89)", early == 0 && restored == 1);
+    }
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -2948,6 +3086,7 @@ int RunUnitTests()
     WardrobeTests();
     InkUiTests();
     Bridge060Tests();
+    Bridge061Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

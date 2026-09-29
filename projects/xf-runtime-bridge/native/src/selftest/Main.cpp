@@ -1764,13 +1764,21 @@ int wmain(int argc, wchar_t** argv)
                                              }
                                              return json{{"changed", true}, {"manager_before", manager}, {"before", before}};
                                          }
-                                         const auto applyScript = [&request] {
+                                         // What a restore couldn't find any more (RB-84): left out and named, the rest put back.
+                                         json missing = json::array();
+                                         // As XFScriptOutfit.Apply: switched on again when the snapshot had it on (RB-84), then exactly its parts.
+                                         const auto applyScript = [&request, &known, &missing] {
                                              sim.scriptOutfit = request.scriptActive;
                                              if (request.scriptActive)
                                              {
                                                  sim.scriptParts.clear();
                                                  for (const auto& part : request.parts)
                                                  {
+                                                     if (!known(part.item))
+                                                     {
+                                                         missing.push_back(part.slot + ": " + part.item);
+                                                         continue;
+                                                     }
                                                      sim.scriptParts[part.slot] = part.item;
                                                  }
                                              }
@@ -1798,7 +1806,7 @@ int wmain(int argc, wchar_t** argv)
                                              {
                                                  sim.wardrobeSnapshot = before;
                                              }
-                                             return json{{"changed", true}, {"before", before}};
+                                             return json{{"changed", true}, {"before", before}, {"not_restored", missing}};
                                          }
                                          if (request.mode == "set")
                                          {
@@ -1832,18 +1840,22 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              sim.wardrobeAreas[request.area] = {"", request.mode == "hidden"};
                                          }
+                                         else if (request.scriptKnown && request.scriptActive && sim.scriptPresent)
+                                         {
+                                             // The script outfit was on when the snapshot was taken and is off now: the undo switches it on
+                                             // again (RB-84; it used to be able only to switch it off).
+                                             applyScript();
+                                         }
                                          else
                                          {
+                                             wardrobeApplySet(request.set);
                                              for (const auto& slot : request.slots)
                                              {
                                                  if (!slot.item.empty() && !known(slot.item))
                                                  {
-                                                     throw xfb::MethodError("not_in_inventory", "simulated: nothing has '" + slot.item + "' any more");
+                                                     missing.push_back(slot.area + ": " + slot.item);
+                                                     continue;
                                                  }
-                                             }
-                                             wardrobeApplySet(request.set);
-                                             for (const auto& slot : request.slots)
-                                             {
                                                  // With no outfit an area keeps only its hidden flag (QuestHideSlot); items need an outfit.
                                                  sim.wardrobeAreas[slot.area] = request.set > 0 ? Simulated::WardrobeArea{slot.item, slot.item.empty() && slot.hidden}
                                                                                                 : Simulated::WardrobeArea{"", slot.hidden};
@@ -1854,7 +1866,7 @@ int wmain(int argc, wchar_t** argv)
                                          {
                                              sim.wardrobeSnapshot = before; // the kill switch puts the session's first state back
                                          }
-                                         return json{{"changed", true}, {"before", before}};
+                                         return json{{"changed", true}, {"before", before}, {"not_restored", missing}};
                                      };
                                      ops.state = [wardrobeState] {
                                          std::scoped_lock _(sim.mutex);
@@ -1961,6 +1973,15 @@ int wmain(int argc, wchar_t** argv)
                                      const auto request = p::ParseGameSave(aContext.params);
                                      w::SaveOps ops;
                                      ops.guard = [&dispatcher] { dispatcher.RequireWritesOpen(); };
+                                     ops.holds = [] {
+                                         auto held = sim060 ? sim060->Holds() : json::array();
+                                         std::scoped_lock _(sim.mutex);
+                                         if (sim.wardrobeSuspended)
+                                         {
+                                             held.push_back("outfit suspended by the bridge");
+                                         }
+                                         return held;
+                                     };
                                      ops.prepare = [&request] {
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.phase != "gameplay")
@@ -2206,7 +2227,18 @@ int wmain(int argc, wchar_t** argv)
                                  }));
     dispatcher.Register(simWrite("showroom.clear", xfb::Access::WriteShowroom, xfb::RunOn::BridgeThread, "Removes the showroom (simulated).",
                                  [showroomOps](const xfb::MethodContext& aContext) {
-                                     auto out = xfb::showroom::Clear(xfb::showroom::ParseClear(aContext.params), showroomOps());
+                                     const auto what = xfb::showroom::ParseClear(aContext.params);
+                                     // As XFShowroom.Clear (RB-87): pins above the heads go with the heads, first.
+                                     size_t pins = 0;
+                                     if (what == "all" || what == "pieces")
+                                     {
+                                         std::scoped_lock _(sim.mutex);
+                                         const auto before = sim.pins.size();
+                                         std::erase_if(sim.pins, [](const auto& aPin) { return aPin.piece >= 0; });
+                                         pins = before - sim.pins.size();
+                                     }
+                                     auto out = xfb::showroom::Clear(what, showroomOps());
+                                     out["removed_pins"] = pins;
                                      out["simulated"] = true;
                                      return out;
                                  }));

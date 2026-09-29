@@ -85,6 +85,21 @@ public class XFPinRegistry extends ScriptableSystem {
     this.m_pins = kept;
     return taken;
   }
+
+  // Forgets every pin bound to a showroom head (RB-87: showroom.clear takes the heads they follow away).
+  public func TakeBound() -> array<ref<XFPinEntry>> {
+    let kept: array<ref<XFPinEntry>>;
+    let taken: array<ref<XFPinEntry>>;
+    for entry in this.m_pins {
+      if Equals(entry.target, "piece") {
+        ArrayPush(taken, entry);
+      } else {
+        ArrayPush(kept, entry);
+      }
+    }
+    this.m_pins = kept;
+    return taken;
+  }
 }
 
 public abstract class XFInkPins {
@@ -217,6 +232,26 @@ public abstract class XFInkPins {
       XFBridgeLog.Info(cid, "world.pin cleared " + IntToString(ArraySize(taken)));
     }
     return "{\"ok\":true,\"removed\":[" + removed + "],\"pins\":" + XFInkPins.List(registry) + "}";
+  }
+
+  // showroom.clear of the heads (RB-87): every pin placed above a showroom head goes with them, so no pin is left bound to a
+  // despawned owner. Answers how many were removed.
+  public static func ClearBound(cid: String) -> Int32 {
+    let registry = XFPinRegistry.Get();
+    if !IsDefined(registry) {
+      return 0;
+    }
+    let mappins = GameInstance.GetMappinSystem(GetGameInstance());
+    let taken = registry.TakeBound();
+    for entry in taken {
+      if IsDefined(mappins) {
+        mappins.UnregisterMappin(entry.mappin);
+      }
+    }
+    if ArraySize(taken) > 0 {
+      XFBridgeLog.Info(cid, "world.pin cleared " + IntToString(ArraySize(taken)) + " pin(s) above showroom heads with the heads");
+    }
+    return ArraySize(taken);
   }
 
   // The XF badge: a cyan diamond with "XF" and the label under it, added once to a pin's root widget.

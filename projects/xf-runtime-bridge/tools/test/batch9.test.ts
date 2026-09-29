@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { findCommand } from "../api/catalogue.ts";
-import { startSelftestHost, tempDir, type Host } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 const apiFor = (host: Host) =>
   new CommandApi({ runtimeDir: host.dir, captureRoot: join(tempDir("xfb-b9-cap-"), "captures"), auditDir: tempDir("xfb-b9-audit-"), idleCloseMs: 300 });
@@ -34,7 +34,7 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -103,7 +103,7 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
       other.close();
       await readOnly.stop();
     }
-  });
+  }, HOOK_TIMEOUT_MS);
 });
 
 describe("bridge 0.5.3 Demo C: XF map pins (world.pin, world.pin.clear)", () => {
@@ -112,7 +112,7 @@ describe("bridge 0.5.3 Demo C: XF map pins (world.pin, world.pin.clear)", () => 
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -191,5 +191,5 @@ describe("bridge 0.5.3 Demo C: XF map pins (world.pin, world.pin.clear)", () => 
       other.close();
       await locked.stop();
     }
-  });
+  }, HOOK_TIMEOUT_MS);
 });

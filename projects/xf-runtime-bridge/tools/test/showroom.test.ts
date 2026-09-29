@@ -7,7 +7,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { findCommand } from "../api/catalogue.ts";
 import { choosePieces, eyesOf, facingOf, lightAt, planLayout, readShowroom, spacingFor, spill, toLocal, toWorld, yawFacing, type Vec3 } from "../showroom/plan.ts";
 import { normalise } from "../showroom/commands.ts";
-import { projectDir, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, projectDir, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 const fixture = join(projectDir, "tools", "test", "fixtures", "showroom-manifest.json");
 const near = (a: number, b: number, e = 1e-3) => Math.abs(a - b) <= e;
@@ -104,7 +104,7 @@ describe("showroom.* against the self-test host", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save,showroom"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -196,7 +196,7 @@ describe("showroom refusals", () => {
       api.close();
       await host.stop();
     }
-  });
+  }, HOOK_TIMEOUT_MS);
 
   test("without Codeware the showroom says what to install and spawns nothing", async () => {
     const host = await startSelftestHost(["--allow-writes", "--write-classes", "showroom", "--no-codeware"], 30);
@@ -211,5 +211,5 @@ describe("showroom refusals", () => {
       api.close();
       await host.stop();
     }
-  });
+  }, HOOK_TIMEOUT_MS);
 });

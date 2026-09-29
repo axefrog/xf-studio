@@ -12,28 +12,48 @@ export const projectDir = resolve(import.meta.dir, "..", "..");
 process.env.XFB_NO_INPUT = "1";
 export const selftestExe = join(projectDir, "build", "Release", "xfb_selftest.exe");
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/**
+ * The timeout for a beforeAll hook that starts a process (the self-test host, a synthetic window). Bun's default of 5 s is
+ * too short on a loaded machine (a pwsh window painting a 1920x1080 pattern, a host starting while other agents build),
+ * and a hook that times out drops its whole describe block: the flaky 257-test run with 2 fails and an unhandled error
+ * (RB-92) was a describe of six tests lost that way. Pass it as the hook's second argument.
+ */
+export const HOOK_TIMEOUT_MS = 60_000;
+/** A test process's lifetime floor, in seconds: closed by the test's own afterAll long before; only a safety net. */
+const MIN_LIFETIME_S = 300;
 
 export type Synthetic = { hwnd: bigint; width: number; height: number; close: () => void };
 
 /**
  * Opens tools/test/synthetic-window.ps1: a borderless, non-activating window with an exact client
  * size and a known pattern. By default it sits off-screen (x = -9000), so it never covers anything.
+ * It lives at least MIN_LIFETIME_S (the describe's afterAll closes it): a fixed 30 s used to run out
+ * under load in the middle of a describe block (RB-92).
  */
 export async function openSyntheticWindow(width: number, height: number, options: { x?: number; y?: number; topMost?: boolean; seconds?: number } = {}): Promise<Synthetic> {
-  const args = ["-NoProfile", "-File", join(import.meta.dir, "synthetic-window.ps1"), "-Width", String(width), "-Height", String(height), `-X:${options.x ?? -9000}`, `-Y:${options.y ?? 0}`, "-Seconds", String(options.seconds ?? 30)];
+  const seconds = Math.max(options.seconds ?? MIN_LIFETIME_S, 1);
+  const args = ["-NoProfile", "-File", join(import.meta.dir, "synthetic-window.ps1"), "-Width", String(width), "-Height", String(height), `-X:${options.x ?? -9000}`, `-Y:${options.y ?? 0}`, "-Seconds", String(seconds)];
   if (options.topMost) args.push("-TopMost");
   const child = spawn("pwsh", args, { stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";
   child.stderr!.on("data", (d) => (stderr += String(d)));
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const line = await new Promise<string>((resolveLine, reject) => {
     let out = "";
+    const onExit = (code: number | null) => reject(new Error(`synthetic window exited (${code}): ${stderr}`));
     child.stdout!.on("data", (d) => {
       out += String(d);
-      if (out.includes("\n")) resolveLine(out);
+      if (out.includes("\n")) {
+        child.off("exit", onExit);
+        resolveLine(out);
+      }
     });
-    child.once("exit", (code) => reject(new Error(`synthetic window exited (${code}): ${stderr}`)));
-    setTimeout(() => reject(new Error(`synthetic window did not start: ${stderr}`)), 20000);
-  });
+    child.once("exit", onExit);
+    timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`synthetic window did not start: ${stderr}`));
+    }, 40_000);
+  }).finally(() => clearTimeout(timer));
   const match = /HWND=(\d+) CLIENT=(\d+)x(\d+)/.exec(line);
   if (!match) throw new Error(`unexpected synthetic window output: ${line}`);
   await sleep(200); // first paint
@@ -47,10 +67,13 @@ export async function startSelftestHost(extraArgs: string[] = [], seconds = 60):
   if (!existsSync(selftestExe)) throw new Error(`missing ${selftestExe}; build first: cmake --build build --config Release`);
   const dir = mkdtempSync(join(tmpdir(), "xfb-test-"));
   const log: string[] = [];
-  const child = spawn(selftestExe, ["--runtime-dir", dir, "--seconds", String(seconds), ...extraArgs], { stdio: ["ignore", "pipe", "pipe"] });
+  // The lifetime is a safety net for an orphaned host, never a test's clock (RB-92: a describe outlived its host under load).
+  const lifetime = Math.max(seconds, MIN_LIFETIME_S);
+  const child = spawn(selftestExe, ["--runtime-dir", dir, "--seconds", String(lifetime), ...extraArgs], { stdio: ["ignore", "pipe", "pipe"] });
   child.stdout!.on("data", (d) => log.push(...String(d).split(/\r?\n/).filter(Boolean)));
   child.stderr!.on("data", (d) => log.push(...String(d).split(/\r?\n/).filter(Boolean)));
-  for (let i = 0; i < 100; i++) {
+  // Up to 30 s for session.json (5 s was too short on a loaded machine).
+  for (let i = 0; i < 600; i++) {
     const session = readSession(dir);
     if (session) {
       return {

@@ -17,7 +17,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { PipeConnectError } from "../bridge-lib.ts";
 import { BridgeClient } from "../bridge-lib.ts";
 import { decodePng } from "../capture/image.ts";
-import { openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, openSyntheticWindow, projectDir, sleep, startSelftestHost, tempDir, type Host, type Synthetic } from "./helpers.ts";
 
 type Mcp = { client: Client; close: () => Promise<void> };
 
@@ -62,7 +62,7 @@ describe("MCP server against a read-only bridge", () => {
   beforeAll(async () => {
     host = await startSelftestHost([], 90);
     mcp = await startMcp(["--runtime-dir", host.dir, "--capture-root", join(root, "captures")]);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     await mcp?.close();
     await host?.stop();
@@ -148,7 +148,7 @@ describe("MCP server against a bridge with writes allowed", () => {
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes"], 120);
     mcp = await startMcp(["--runtime-dir", host.dir, "--capture-root", join(tempDir("xfb-mcp-rw-"), "captures")]);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     await mcp?.close();
     await host?.stop();
@@ -350,7 +350,7 @@ describe("MCP server with the creator gate open (batch 3: cc.open, cc.page, cc.a
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--allow-creator-leave"], 120);
     mcp = await startMcp(["--runtime-dir", host.dir, "--capture-root", join(tempDir("xfb-mcp-cc-"), "captures")]);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     await mcp?.close();
     await host?.stop();
@@ -471,7 +471,7 @@ describe("MCP server permissions, no bridge, and captures", () => {
   beforeAll(async () => {
     synthetic = await openSyntheticWindow(3840, 1600);
     mcp = await startMcp(["--read-only", "--runtime-dir", noBridgeDir, "--capture-root", join(root, "captures"), "--capture-hwnd", String(synthetic.hwnd)]);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     await mcp?.close();
     synthetic?.close();

@@ -113,18 +113,40 @@ export function onRay(model: CameraModel, distance: number, at: { x: number; y: 
 }
 
 export type Bounds = { left: number; right: number; top: number; bottom: number; points: number; behind: number };
-/** The screen bounds of a set of world points (frame units), and how many of them fell behind the camera. */
+/** The near plane the bounds are clipped at, in metres along the view. */
+export const NEAR_M = 0.05;
+
+/**
+ * The screen bounds of a convex set of world points (a box's corners; frame units), and how many of them lie behind the
+ * camera. A set that straddles the camera (RB-88) is clipped at the near plane first: every segment between a point in
+ * front and one behind is cut where it crosses the plane, and those cuts, projected, stretch the bounds far past the frame,
+ * as the set really does. Dropping the points behind (as before 0.6.1) could report a box around the camera 100 % in frame.
+ */
 export function boundsOf(model: CameraModel, points: readonly Vec3[]): Bounds | null {
-  const shown = points.map((p) => project(model, p));
-  const front = shown.filter((p) => !p.behind);
+  const depthOf = (p: Vec3) => dot(sub(p, model.position), model.forward);
+  const front = points.filter((p) => depthOf(p) >= NEAR_M);
   if (!front.length) return null;
+  const back = points.filter((p) => depthOf(p) < NEAR_M);
+  const cuts: Vec3[] = [];
+  for (const f of front) {
+    for (const b of back) {
+      const df = depthOf(f), db = depthOf(b);
+      const t = (df - NEAR_M) / (df - db);
+      cuts.push(add(f, scale(sub(b, f), t)));
+    }
+  }
+  const shown = [...front, ...cuts].map((p) => {
+    const d = sub(p, model.position);
+    const depth = Math.max(dot(d, model.forward), NEAR_M);
+    return { x: (dot(d, model.right) / depth) * model.scale, y: (-dot(d, model.up) / depth) * model.scale };
+  });
   return {
-    left: r4(Math.min(...front.map((p) => p.x))),
-    right: r4(Math.max(...front.map((p) => p.x))),
-    top: r4(Math.min(...front.map((p) => p.y))),
-    bottom: r4(Math.max(...front.map((p) => p.y))),
+    left: r4(Math.min(...shown.map((p) => p.x))),
+    right: r4(Math.max(...shown.map((p) => p.x))),
+    top: r4(Math.min(...shown.map((p) => p.y))),
+    bottom: r4(Math.max(...shown.map((p) => p.y))),
     points: points.length,
-    behind: shown.length - front.length,
+    behind: points.filter((p) => depthOf(p) <= 1e-4).length,
   };
 }
 

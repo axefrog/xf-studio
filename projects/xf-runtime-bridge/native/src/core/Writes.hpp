@@ -174,6 +174,11 @@ struct SaveOps
     // throws MethodError (killed, writes_paused) when the kill switch or the panel's pause came since the
     // request arrived (RB-53). Optional.
     std::function<void()> guard;
+    // What the bridge holds on V right now that a save would keep (RB-83): a JSON array of plain names (a status effect
+    // such as a glide's movement hold or a crouch, "behaviours running", "outfit suspended"); empty when nothing. When
+    // it isn't empty the save is refused (bridge_effects_active) before anything changes, with or without override_lock.
+    // Optional.
+    std::function<json()> holds;
     // Game thread: checks the moment, and with override_lock releases the bridge's own save lock
     // ({lock_released}). Throws bridge_save_lock or saving_locked.
     std::function<json()> prepare;

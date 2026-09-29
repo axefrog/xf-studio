@@ -614,6 +614,10 @@ public class XFInkOverlay extends ScriptableSystem {
         this.Apply();
       }
     }
+    // The script gate on every tick, not only with the frame every sixth (RB-86): no world query after a detach begins.
+    if IsDefined(this.m_frame) {
+      this.m_frame.live = XFBridge_Live();
+    }
     this.UpdatePlates();
     return false;
   }

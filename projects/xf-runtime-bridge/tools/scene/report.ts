@@ -5,10 +5,11 @@
 //   each subject (V, NPCs, showroom heads): screen bounds, the fraction in frame, margins to each edge, a static-geometry ray
 //     to the face, distance, which way it faces (0 = the camera), and expression and pose where known;
 //   each light (photo mode's three, XF Finish Showroom's rig lights): on, place, whether it reaches the focus subject's face
-//     and an estimated share of the light there;
+//     (0.6.1, RB-88: a photo-mode light pointing away or outside its cone doesn't) and an estimated share of the light there;
 //   frame statistics of a subject's region from a capture: mean luminance, clipped highlights, crushed shadows;
 //   the world and UI state (time, rain, menus, HUD, interaction choices).
-// Pre-capture expectations (capture.screenshot's expect) are judged from the same report.
+// Pre-capture expectations (capture.screenshot's expect) are judged from the same report. A check that couldn't run is
+// reported as not_checked (ok null), never as passed (RB-88).
 
 import { screenSpace, type ScreenPoint, type SubjectReading } from "../api/framing.ts";
 import type { CommandContext } from "../api/catalogue.ts";
@@ -70,6 +71,8 @@ export type Subject = {
   size: { width: number; height: number } | null;
   occluded: boolean | null;
   occlusion?: Json;
+  /** Corners of the subject's box behind the camera (RB-88): its bounds were clipped at the near plane. */
+  behind_camera?: number;
   face: Vec3;
   expression?: Json;
   pose?: Json;
@@ -105,6 +108,7 @@ function subjectOf(model: CameraModel, kind: Subject["kind"], id: string, raw: J
     size: f ? f.size : null,
     occluded: occlusion && occlusion.checked ? Boolean(occlusion.blocked) : null,
     ...(occlusion ? { occlusion } : {}),
+    ...(b && b.behind > 0 ? { behind_camera: b.behind } : {}),
     face,
   };
 }
@@ -128,10 +132,18 @@ export type LightReport = {
   note?: string;
 };
 
+/** A photo-mode light's cone half-angle assumed when the menu's outer angle isn't known for it [hypothesis], in degrees. */
+export const PHOTO_LIGHT_HALF_ANGLE = 60;
+/** How far a photo-mode light is assumed to reach when its range isn't known [hypothesis], in metres. */
+export const PHOTO_LIGHT_REACH_M = 12;
+
 /**
  * The lights at the focus subject's face. Showroom rig lights use the engine's decoded light forms (lightAt, the manifest's
  * values); photo mode's lights have unknown units, so their strength is a relative inverse-square estimate with a soft cone
- * and they are shared among themselves only (shares within each kind sum to 1).
+ * and they are shared among themselves only (shares within each kind sum to 1). A photo-mode light reaches the face only
+ * when it points towards it (RB-88): never at 90 degrees or more off its axis; within its cone (the menu's outer angle and
+ * range for the selected light, otherwise PHOTO_LIGHT_HALF_ANGLE within PHOTO_LIGHT_REACH_M); outside a known cone or
+ * range, no; otherwise "unknown".
  */
 export function lightsAt(face: Vec3, raw: Json, showroom: Showroom | null, photoMenu: Json | null): LightReport[] {
   const out: LightReport[] = [];
@@ -146,12 +158,22 @@ export function lightsAt(face: Vec3, raw: Json, showroom: Showroom | null, photo
     const d = sub(face, position), dist = Math.hypot(...d) || 1;
     const cos = (d[0] * forward[0] + d[1] * forward[1] + d[2] * forward[2]) / dist;
     const blocked = light.to_face?.checked ? Boolean(light.to_face.blocked) : null;
-    const cone = Math.max(0.1, Math.min(1, (cos + 0.2) / 1.2));
-    const strength = blocked ? 0 : cone / (dist * dist);
+    const axis = Math.hypot(forward[0], forward[1], forward[2]) || 1;
+    const angle = Math.acos(Math.max(-1, Math.min(1, cos / axis))) / DEG;
     const isSelected = light.selected === true || selected === light.light;
+    const half = isSelected && typeof photoMenu?.outer_angle === "number" && photoMenu.outer_angle > 0 ? photoMenu.outer_angle / 2 : null;
+    const range = isSelected && typeof photoMenu?.range === "number" && photoMenu.range > 0 ? photoMenu.range : null;
+    let reaches: boolean | "unknown";
+    if (blocked === true || angle >= 90) reaches = false;
+    else if (range !== null && dist > range) reaches = false;
+    else if (half !== null) reaches = angle <= half;
+    else if (dist < PHOTO_LIGHT_REACH_M && angle <= PHOTO_LIGHT_HALF_ANGLE) reaches = true;
+    else reaches = "unknown";
+    const cone = reaches === false ? 0 : Math.max(0.1, Math.min(1, (cos / axis + 0.2) / 1.2));
+    const strength = cone / (dist * dist);
     const menuOn = isSelected && typeof photoMenu?.on === "number" ? photoMenu.on > 0.5 : null;
-    out.push({ kind: "photo", id: `photo:${light.light}`, on: menuOn ?? true, position, reaches_face: blocked === true ? false : dist < 12 ? true : "unknown", blocked, strength: r4(strength), share: null,
-      note: "photo-mode light: units unknown, strength is relative (1/d² with a soft cone)" });
+    out.push({ kind: "photo", id: `photo:${light.light}`, on: menuOn ?? true, position, reaches_face: reaches, blocked, strength: r4(strength), share: null,
+      note: `photo-mode light: units unknown, strength is relative (1/d² with a soft cone); ${Math.round(angle)} degrees off its axis${half !== null ? `, cone ±${r4(half)}` : ", cone not known (assumed ±" + PHOTO_LIGHT_HALF_ANGLE + ")"}` });
   }
   const rigs = (raw.showroom?.rigs as Json[] | undefined) ?? [];
   if (showroom) {
@@ -174,15 +196,32 @@ export function lightsAt(face: Vec3, raw: Json, showroom: Showroom | null, photo
   return out;
 }
 
-export type FrameStats = { region_px: { x: number; y: number; width: number; height: number }; pixels: number; mean_luminance: number; clipped_highlights: number; crushed_shadows: number };
+export type FrameStats = {
+  region_px: { x: number; y: number; width: number; height: number };
+  pixels: number;
+  mean_luminance: number;
+  clipped_highlights: number;
+  crushed_shadows: number;
+  /** The picture's shape differs from the camera's aspect (RB-88): the region can't be placed in it, so its checks don't run. */
+  aspect_mismatch?: { window_aspect: number; render_aspect: number };
+};
+
+/** The window's and the render's aspect when they differ by more than 2 % (letterboxing, a render resolution unlike the window), else null. */
+export function aspectMismatch(window: { width: number; height: number }, renderAspect: number | undefined): FrameStats["aspect_mismatch"] | null {
+  if (!renderAspect || !(renderAspect > 0) || !(window.width > 0) || !(window.height > 0)) return null;
+  const windowAspect = window.width / window.height;
+  return Math.abs(windowAspect - renderAspect) / renderAspect > 0.02 ? { window_aspect: r4(windowAspect), render_aspect: r4(renderAspect) } : null;
+}
 /**
  * Statistics of a region of a capture (frame units: window heights from the centre): mean luminance (Rec. 709 weights on
  * the 8-bit values, 0-1), the share of pixels with any channel at 250 or more (clipped highlights) and with luminance at
  * 5/255 or less (crushed shadows).
  */
-export function frameStats(pixels: Pixels, bounds: { left: number; right: number; top: number; bottom: number }): FrameStats | null {
+export function frameStats(pixels: Pixels, bounds: { left: number; right: number; top: number; bottom: number }, renderAspect?: number): FrameStats | null {
   const H = pixels.height, W = pixels.width;
-  return statsInRect(pixels, W / 2 + bounds.left * H, W / 2 + bounds.right * H, H / 2 + bounds.top * H, H / 2 + bounds.bottom * H);
+  const stats = statsInRect(pixels, W / 2 + bounds.left * H, W / 2 + bounds.right * H, H / 2 + bounds.top * H, H / 2 + bounds.bottom * H);
+  const mismatch = aspectMismatch({ width: W, height: H }, renderAspect);
+  return stats && mismatch ? { ...stats, aspect_mismatch: mismatch } : stats;
 }
 
 /**
@@ -190,10 +229,12 @@ export function frameStats(pixels: Pixels, bounds: { left: number; right: number
  * bounds (window heights from the window's centre) are mapped into the crop first.
  */
 export function frameStatsInCapture(pixels: Pixels, crop: { x: number; y: number; width: number; height: number }, window: { width: number; height: number },
-  bounds: { left: number; right: number; top: number; bottom: number }): FrameStats | null {
+  bounds: { left: number; right: number; top: number; bottom: number }, renderAspect?: number): FrameStats | null {
   const W = window.width, H = window.height;
   const sx = pixels.width / crop.width, sy = pixels.height / crop.height;
-  return statsInRect(pixels, (W / 2 + bounds.left * H - crop.x) * sx, (W / 2 + bounds.right * H - crop.x) * sx, (H / 2 + bounds.top * H - crop.y) * sy, (H / 2 + bounds.bottom * H - crop.y) * sy);
+  const stats = statsInRect(pixels, (W / 2 + bounds.left * H - crop.x) * sx, (W / 2 + bounds.right * H - crop.x) * sx, (H / 2 + bounds.top * H - crop.y) * sy, (H / 2 + bounds.bottom * H - crop.y) * sy);
+  const mismatch = aspectMismatch(window, renderAspect);
+  return stats && mismatch ? { ...stats, aspect_mismatch: mismatch } : stats;
 }
 
 function statsInRect(pixels: Pixels, left: number, right: number, top: number, bottom: number): FrameStats | null {
@@ -276,6 +317,7 @@ export function buildReport(raw: Json, options: ReportOptions, extra: { showroom
   for (const s of subjects) {
     if (s.occluded) warnings.push(`${s.id} is blocked from the camera (static geometry ${s.occlusion?.hit_distance ?? "?"} m away, the face at ${s.occlusion?.target_distance ?? "?"} m)`);
     if (s.in_frame < 1 && s.in_frame > 0) warnings.push(`${s.id} is only ${Math.round(s.in_frame * 100)} % in frame`);
+    if (s.behind_camera) warnings.push(`${s.id} reaches behind the camera (${s.behind_camera} of its box's corners)`);
   }
   out.warnings = warnings;
   out.model = model;
@@ -299,6 +341,9 @@ export function photoMenuOf(state: Json | null): Json | null {
     selected: typeof value(43) === "number" ? Math.round(value(43)) + 1 : null,
     on: value(44),
     brightness: value(47),
+    // The selected light's range and outer cone angle (48, 50), read as metres and degrees [hypothesis: the menu's units].
+    range: value(48),
+    outer_angle: value(50),
   };
 }
 
@@ -328,7 +373,11 @@ export async function runSceneReport(input: Json, context: CommandContext) {
       value.frame = { error: "no subject with screen bounds to measure (is it in front of the camera?)" };
     } else {
       const pixels = grabForAnalysis(context.api.captureTarget(), options.frame?.max_width ?? 960);
-      value.frame = { subject: subject.id, ...frameStats(pixels, subject.bounds) };
+      const stats = frameStats(pixels, subject.bounds, (model as CameraModel | undefined)?.aspect);
+      value.frame = { subject: subject.id, ...stats };
+      if (stats?.aspect_mismatch) {
+        (value.warnings as string[]).push(`the window (${stats.aspect_mismatch.window_aspect}) and the camera (${stats.aspect_mismatch.render_aspect}) have different shapes, so the frame statistics may measure the wrong region`);
+      }
     }
   }
   return value;
@@ -343,7 +392,13 @@ export type Expectation = {
   max_clipped?: number;
   max_crushed?: number;
 };
-export type ExpectationResult = { check: string; ok: boolean; detail: string };
+/**
+ * One pre- or post-capture check. ok is true only for a check that ran and passed, false for one that ran and failed, and
+ * null (status not_checked) for one that couldn't run (RB-88: no occlusion ray, a region that can't be placed in the
+ * capture); a caller never reads not_checked as passed.
+ */
+export type ExpectationResult = { check: string; ok: boolean | null; status: "passed" | "failed" | "not_checked"; detail: string };
+const result = (check: string, ok: boolean | null, detail: string): ExpectationResult => ({ check, ok, status: ok === null ? "not_checked" : ok ? "passed" : "failed", detail });
 
 /** The subject an expectation names: face / head / body of V, "piece:N", or an NPC id; default V (else the first piece). */
 export function pickSubject(subjects: readonly Subject[], wanted?: string): Subject | undefined {
@@ -355,19 +410,33 @@ export function pickSubject(subjects: readonly Subject[], wanted?: string): Subj
 export function judgeBefore(report: Json, expect: Expectation): ExpectationResult[] {
   const results: ExpectationResult[] = [];
   const subject = pickSubject((report.subjects as Subject[]) ?? [], expect.subject);
-  if (!subject) return [{ check: "subject", ok: false, detail: `no subject ${expect.subject ?? "V"} in the scene report` }];
+  if (!subject) return [result("subject", false, `no subject ${expect.subject ?? "V"} in the scene report`)];
   if (expect.in_frame_margin !== undefined) {
     const m = subject.margins;
     const worst = m ? Math.min(m.left, m.right, m.top, m.bottom) : -1;
-    results.push({ check: "in_frame_margin", ok: subject.in_frame >= 0.999 && worst >= expect.in_frame_margin,
-      detail: m ? `${subject.id}: ${Math.round(subject.in_frame * 100)} % in frame, smallest margin ${r4(worst)} window heights (wanted ${expect.in_frame_margin})` : `${subject.id} isn't in front of the camera` });
+    const behind = subject.behind_camera ?? 0;
+    results.push(result("in_frame_margin", subject.in_frame >= 0.999 && worst >= expect.in_frame_margin && behind === 0,
+      !m ? `${subject.id} isn't in front of the camera`
+        : behind > 0 ? `${subject.id} reaches behind the camera (${behind} corners of its box), so it can't be wholly in frame`
+        : `${subject.id}: ${Math.round(subject.in_frame * 100)} % in frame, smallest margin ${r4(worst)} window heights (wanted ${expect.in_frame_margin})`));
   }
   if (expect.unoccluded) {
-    results.push({ check: "unoccluded", ok: subject.occluded !== true, detail: subject.occluded === null ? `${subject.id}: no occlusion check (too close, or not asked)` : subject.occluded ? `${subject.id} is blocked by static geometry` : `${subject.id} is in clear view` });
+    // Never passed without a ray (RB-88): V's face is checked only in photo mode, and nothing under 30 cm.
+    results.push(result("unoccluded", subject.occluded === null ? null : !subject.occluded,
+      subject.occluded === null ? `${subject.id}: not checked (no sight-line ray ran: V's face is checked only in photo mode, and nothing closer than 30 cm)` : subject.occluded ? `${subject.id} is blocked by static geometry` : `${subject.id} is in clear view`));
   }
   if (expect.lit_by) {
-    const lights = ((report.lights?.each as LightReport[] | undefined) ?? []).filter((l) => (expect.lit_by === "any" || l.kind === expect.lit_by) && l.reaches_face === true && l.on !== false);
-    results.push({ check: "lit_by", ok: lights.length > 0, detail: lights.length ? `${lights.length} ${expect.lit_by === "any" ? "" : expect.lit_by + " "}light(s) reach ${report.lights?.focus}` : `no ${expect.lit_by === "any" ? "" : expect.lit_by + " "}light reaches ${report.lights?.focus ?? subject.id} (the report's lights say which are off or blocked)` });
+    const kind = expect.lit_by === "any" ? "" : expect.lit_by + " ";
+    const matching = ((report.lights?.each as LightReport[] | undefined) ?? []).filter((l) => (expect.lit_by === "any" || l.kind === expect.lit_by) && l.on !== false);
+    const lights = matching.filter((l) => l.reaches_face === true);
+    const unknown = matching.filter((l) => l.reaches_face === "unknown");
+    results.push(
+      lights.length
+        ? result("lit_by", true, `${lights.length} ${kind}light(s) reach ${report.lights?.focus}`)
+        : unknown.length
+          ? result("lit_by", null, `not checked: whether ${unknown.map((l) => l.id).join(", ")} reach ${report.lights?.focus ?? subject.id} isn't known (outside the assumed cone or reach; give the rig's manifest, or select the photo light to read its cone)`)
+          : result("lit_by", false, `no ${kind}light reaches ${report.lights?.focus ?? subject.id} (the report's lights say which are off, blocked or pointing away)`),
+    );
   }
   return results;
 }
@@ -375,13 +444,22 @@ export function judgeBefore(report: Json, expect: Expectation): ExpectationResul
 /** The checks judged on the capture itself: luminance, clipped highlights, crushed shadows in the subject's region. */
 export function judgeAfter(stats: FrameStats | null, expect: Expectation): ExpectationResult[] {
   const results: ExpectationResult[] = [];
-  if (!stats) return expect.luminance || expect.max_clipped !== undefined || expect.max_crushed !== undefined ? [{ check: "frame", ok: false, detail: "the subject's region isn't in the capture" }] : [];
+  const wanted = expect.luminance || expect.max_clipped !== undefined || expect.max_crushed !== undefined;
+  if (!stats) return wanted ? [result("frame", false, "the subject's region isn't in the capture")] : [];
+  if (stats.aspect_mismatch) {
+    // The region can't be placed in a picture of another shape (RB-88): not checked, never passed.
+    const why = `not checked: the capture's shape (${stats.aspect_mismatch.window_aspect}) differs from the camera's (${stats.aspect_mismatch.render_aspect}), so the subject's region can't be placed in it`;
+    if (expect.luminance) results.push(result("luminance", null, why));
+    if (expect.max_clipped !== undefined) results.push(result("clipped_highlights", null, why));
+    if (expect.max_crushed !== undefined) results.push(result("crushed_shadows", null, why));
+    return results;
+  }
   if (expect.luminance) {
     const [lo, hi] = expect.luminance;
-    results.push({ check: "luminance", ok: stats.mean_luminance >= lo && stats.mean_luminance <= hi, detail: `mean luminance ${stats.mean_luminance} (wanted ${lo}-${hi})` });
+    results.push(result("luminance", stats.mean_luminance >= lo && stats.mean_luminance <= hi, `mean luminance ${stats.mean_luminance} (wanted ${lo}-${hi})`));
   }
-  if (expect.max_clipped !== undefined) results.push({ check: "clipped_highlights", ok: stats.clipped_highlights <= expect.max_clipped, detail: `${r4(stats.clipped_highlights * 100)} % clipped (at most ${expect.max_clipped * 100} %)` });
-  if (expect.max_crushed !== undefined) results.push({ check: "crushed_shadows", ok: stats.crushed_shadows <= expect.max_crushed, detail: `${r4(stats.crushed_shadows * 100)} % crushed (at most ${expect.max_crushed * 100} %)` });
+  if (expect.max_clipped !== undefined) results.push(result("clipped_highlights", stats.clipped_highlights <= expect.max_clipped, `${r4(stats.clipped_highlights * 100)} % clipped (at most ${expect.max_clipped * 100} %)`));
+  if (expect.max_crushed !== undefined) results.push(result("crushed_shadows", stats.crushed_shadows <= expect.max_crushed, `${r4(stats.crushed_shadows * 100)} % crushed (at most ${expect.max_crushed * 100} %)`));
   return results;
 }
 

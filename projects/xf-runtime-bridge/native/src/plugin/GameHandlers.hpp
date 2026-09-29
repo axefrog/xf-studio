@@ -14,6 +14,9 @@ namespace xfb::plugin
 void RegisterMethods060(Dispatcher& aDispatcher);
 // Game thread, every Running tick: runs the behaviours (core/Behaviours.hpp) through the redscript layer.
 void TickBehaviours(double aDt, bool aScriptsReady);
+// Game thread, from RestoreAfterKill (RB-90): writes back the first values photo.camera.preset saw for every camera preset
+// flat it rewrote this game run (TweakDB changes outlive loads until the game restarts), then forgets them.
+void RestorePresetsAfterKill();
 
 // Shared with Handlers060.cpp: a redscript layer call (XFRuntimeBridge.<class>.<function>(cid, ...) -> JSON), the game-thread
 // step timeout, and a write method marked for the kill switch's restore.

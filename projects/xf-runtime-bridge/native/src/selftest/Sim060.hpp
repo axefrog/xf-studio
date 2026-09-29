@@ -51,6 +51,8 @@ public:
     void OnDetach();
     // The kill switch's restore: behaviours stopped (their stop steps run on the next tick), V's effects lifted.
     void RestoreAfterKill(json& aOut);
+    // What the bridge holds on V (game.save's refusal, RB-83): its status effects and "behaviours running".
+    json Holds();
     EventLog& Events();
 
 private:

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { CommandApi } from "../api/command-api.ts";
 import { lightParams } from "../api/catalogue.ts";
 import { runScript, SCRIPT_SCHEMA, type SessionScript } from "../session.ts";
-import { startSelftestHost, tempDir, type Host } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 const apiFor = (host: Host) =>
   new CommandApi({ runtimeDir: host.dir, captureRoot: join(tempDir("xfb-b5-cap-"), "captures"), auditDir: tempDir("xfb-b5-audit-"), idleCloseMs: 300 });
@@ -27,7 +27,7 @@ describe("ui.message and the session runner's echo", () => {
     // A read-only bridge: a message changes nothing in the game, so it needs no write permission.
     host = await startSelftestHost([], 60);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -118,7 +118,7 @@ describe("inventory, saves and loading (write classes inventory and save)", () =
   beforeAll(async () => {
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,inventory,save"], 90);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();
@@ -223,7 +223,7 @@ describe("write classes for the new commands", () => {
     // The -writes package's default: inventory stays off until the maintainer approves it.
     host = await startSelftestHost(["--allow-writes", "--write-classes", "photo,world,character,save"], 60);
     api = apiFor(host);
-  });
+  }, HOOK_TIMEOUT_MS);
   afterAll(async () => {
     api?.close();
     await host?.stop();

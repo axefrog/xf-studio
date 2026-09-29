@@ -269,6 +269,11 @@ public abstract class XFShowroom {
     let registry = XFShowroomRegistry.Get();
     let pieces = 0;
     let lights = 0;
+    let pins = 0;
+    if Equals(what, "all") || Equals(what, "pieces") {
+      // Pins above the heads first, so none is left following a despawned head (RB-87).
+      pins = XFInkPins.ClearBound(cid);
+    }
     if IsDefined(registry) {
       if Equals(what, "all") || Equals(what, "pieces") {
         pieces = registry.Forget("pieces");
@@ -286,8 +291,8 @@ public abstract class XFShowroom {
         system.DespawnTagged(n"xfs_showroom_light");
       }
     }
-    XFBridgeLog.Info(cid, "showroom cleared " + what + ": pieces=" + IntToString(pieces) + " lights=" + IntToString(lights));
-    return "{\"ok\":true,\"removed_pieces\":" + IntToString(pieces) + ",\"removed_lights\":" + IntToString(lights) + "}";
+    XFBridgeLog.Info(cid, "showroom cleared " + what + ": pieces=" + IntToString(pieces) + " lights=" + IntToString(lights) + " pins=" + IntToString(pins));
+    return "{\"ok\":true,\"removed_pieces\":" + IntToString(pieces) + ",\"removed_lights\":" + IntToString(lights) + ",\"removed_pins\":" + IntToString(pins) + "}";
   }
 
   public static func Status(cid: String) -> String {

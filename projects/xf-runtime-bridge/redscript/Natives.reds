@@ -29,3 +29,6 @@ public static native func XFBridge_Hud() -> String
 // Bridge 0.6: a note from inside the game into the session's event stream (core/Events.hpp), for a panel button; level
 // info, warn, ask or done. Answers false when the plugin couldn't take it.
 public static native func XFBridge_Note(level: String, text: String) -> Bool
+// Bridge 0.6.1 (RB-86): whether the game's scripts are live now (the script gate alone), for the ink overlay's check on every
+// tick before it queries the world.
+public static native func XFBridge_Live() -> Bool

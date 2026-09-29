@@ -136,12 +136,16 @@ struct Sim060::State
     bool weaponDrawn = false;
     std::string menu;
     std::vector<std::string> effects;
+    // The player's own input (selftest.player {input}), seen by a glide's watch only while its movement hold is on (RB-81).
+    std::string input;
     // A look-at in progress: the camera turns towards the point over the duration.
     bool looking = false;
     double lookFromYaw = 0, lookFromPitch = 0, lookToYaw = 0, lookToPitch = 0, lookT = 0, lookDuration = 1;
     // photo.camera.preset: each preset's flats and the selected preset (0: Customization).
     std::map<int32_t, std::map<std::string, double>> presets;
     int32_t selectedPreset = 0;
+    // The first value of each flat photo.camera.preset rewrote (the kill switch writes them back, RB-90).
+    std::map<int32_t, std::map<std::string, double>> presetOriginals;
 };
 
 Sim060::Sim060(Dispatcher& aDispatcher, GameThreadQueue& aQueue, const Config& aConfig, SimHooks aHooks)
@@ -343,7 +347,24 @@ void Sim060::Register()
                                    self->m_behaviours.StopAll("handed_over");
                                }
                                self->m_dispatcher.SetHandover(*on, note);
-                               return json{{"simulated", true}, {"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on},
+                               json released = nullptr;
+                               if (*on)
+                               {
+                                   // As the plugin (RB-82): V's effects lifted and any look-at ended, on the game thread.
+                                   released = RunGameTask(
+                                       self->m_queue, std::chrono::milliseconds(1000),
+                                       [self] {
+                                           std::scoped_lock _(self->m_state->mutex);
+                                           auto& s = *self->m_state;
+                                           s.looking = false;
+                                           json removed = s.effects;
+                                           s.effects.clear();
+                                           s.crouched = false;
+                                           return json{{"removed", removed}};
+                                       },
+                                       "bridge.handover.player_stop");
+                               }
+                               return json{{"simulated", true}, {"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released},
                                            {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}}};
                            }});
 
@@ -356,12 +377,26 @@ void Sim060::Register()
     m_ops.place = [self](const std::string& aKind, int32_t aIndex, const Vec3& aPosition, double aYaw) {
         self->m_hooks.moveShowroom(aKind, aIndex, aPosition[0], aPosition[1], aPosition[2], aYaw);
     };
-    m_ops.player = [self, busyNow] {
-        std::scoped_lock _(self->m_state->mutex);
-        return json{{"position", Arr(self->m_state->position)}, {"yaw", self->m_state->yaw}, {"busy", busyNow()}};
+    const auto holding = [self] {
+        const auto& e = self->m_state->effects;
+        return std::find(e.begin(), e.end(), "GameplayRestriction.NoMovement") != e.end();
     };
-    m_ops.teleportPlayer = [self](const Vec3& aPosition, double aYaw) {
+    m_ops.player = [self, busyNow, holding] {
         std::scoped_lock _(self->m_state->mutex);
+        return json{{"position", Arr(self->m_state->position)}, {"yaw", self->m_state->yaw}, {"busy", busyNow()},
+                    {"took_over", holding() ? self->m_state->input : std::string()}};
+    };
+    // As XFPlayer.Step: the player's own input or a busy state refuses the step (RB-79, RB-81).
+    m_ops.teleportPlayer = [self, busyNow, holding](const Vec3& aPosition, double aYaw) {
+        std::scoped_lock _(self->m_state->mutex);
+        if (holding() && !self->m_state->input.empty())
+        {
+            throw MethodError("user_took_over", "simulated: the player moved V (" + self->m_state->input + ")");
+        }
+        if (const auto busy = busyNow(); !busy.empty())
+        {
+            throw MethodError(busy, "simulated: V is no longer free to move (" + busy + ")");
+        }
         self->m_state->position = aPosition;
         self->m_state->yaw = aYaw;
     };
@@ -403,6 +438,7 @@ void Sim060::Register()
         if (aOn && std::find(e.begin(), e.end(), id) == e.end())
         {
             e.push_back(id);
+            self->m_state->input.clear(); // the watch starts with the hold
         }
         if (!aOn)
         {
@@ -490,6 +526,11 @@ void Sim060::Register()
                     throw MethodError("too_far", "simulated: more than 50 m");
                 }
                 bool snapped = false;
+                const bool streamed = to[0] >= 0 && to[0] <= 300 && to[1] >= 0 && to[1] <= 400;
+                if (request.exact && distance > 0.5 && !streamed)
+                {
+                    throw MethodError("not_streamed", "simulated: the world there isn't loaded (exact ground checks streaming too, RB-80)");
+                }
                 if (!request.exact)
                 {
                     if (to[0] < 0 || to[0] > 300 || to[1] < 0 || to[1] > 400)
@@ -672,6 +713,11 @@ void Sim060::Register()
         json written = json::object();
         for (const auto& [name, value] : request.values)
         {
+            auto& originals = s.presetOriginals[request.preset];
+            if (!originals.contains(name))
+            {
+                originals[name] = flats[name];
+            }
             flats[name] = value;
             written[name] = value;
         }
@@ -702,6 +748,7 @@ void Sim060::Register()
                                std::scoped_lock _(self->m_state->mutex);
                                auto& s = *self->m_state;
                                s.busy = aContext.params.value("busy", std::string());
+                               s.input = aContext.params.value("input", std::string());
                                if (aContext.params.contains("position"))
                                {
                                    s.position = VecOf(aContext.params["position"]);
@@ -710,7 +757,7 @@ void Sim060::Register()
                                {
                                    s.yaw = aContext.params["yaw"].get<double>();
                                }
-                               return json{{"busy", s.busy}, {"position", Arr(s.position)}, {"yaw", s.yaw}};
+                               return json{{"busy", s.busy}, {"input", s.input}, {"position", Arr(s.position)}, {"yaw", s.yaw}};
                            }});
     (void)st;
 }
@@ -759,6 +806,23 @@ void Sim060::OnDetach()
     m_state->looking = false;
 }
 
+json Sim060::Holds()
+{
+    json held = json::array();
+    {
+        std::scoped_lock _(m_state->mutex);
+        for (const auto& effect : m_state->effects)
+        {
+            held.push_back(effect);
+        }
+    }
+    if (m_behaviours.Active())
+    {
+        held.push_back("behaviours running (behave_list)");
+    }
+    return held;
+}
+
 void Sim060::RestoreAfterKill(json& aOut)
 {
     // As the plugin, whose next Running tick runs every behaviour's stop step after the kill switch (the self-test host
@@ -773,5 +837,20 @@ void Sim060::RestoreAfterKill(json& aOut)
         m_state->crouched = false;
     }
     m_state->looking = false;
+    // As RestorePresetsAfterKill (RB-90): every rewritten camera preset flat gets its first value back.
+    if (!m_state->presetOriginals.empty())
+    {
+        json restored = json::object();
+        for (const auto& [preset, originals] : m_state->presetOriginals)
+        {
+            for (const auto& [name, value] : originals)
+            {
+                m_state->presets[preset][name] = value;
+            }
+            restored[std::to_string(preset)] = originals.size();
+        }
+        m_state->presetOriginals.clear();
+        aOut["presets_restored"] = restored;
+    }
 }
 } // namespace xfb::selftest
