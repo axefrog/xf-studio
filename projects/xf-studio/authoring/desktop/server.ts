@@ -20,7 +20,7 @@ import { verificationInstallReceipts, verificationSettingsDirectory } from "../s
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
 import { desktopPackageRequest } from "./package";
-import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, probeBun, type WolvenKitProbe } from "./build";
+import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, PROBE_PENDING, probeBun, type WolvenKitProbe } from "./build";
 import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
 import { DesktopUpdateService, type NativeUpdater, type UpdateTrust } from "./update-service";
@@ -190,6 +190,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const settingsFeatures = (settings: LocalSettings) => {
     const buildIssue = desktopBuildIssue(settings, dataRoot, toolsRoot, ...readinessProbes);
     return { updater: false, installer: true, packageCheck: true, packageBuild: buildIssue === null, packageBuildIssue: buildIssue,
+      packageBuildPending: buildIssue === PROBE_PENDING,
       wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
       eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
       frameworks: hostFrameworkCheck(settings) };

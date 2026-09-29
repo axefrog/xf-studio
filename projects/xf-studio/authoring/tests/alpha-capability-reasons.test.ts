@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { type StudioAction, type StudioTarget } from "../src/studio-application";
 import { createTrustedAuthoringCore } from "../src/trusted-authoring-core";
 import { ACTION_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { BUILD_NEEDS_SETUP, NO_3D_PREVIEW_IN_ALPHA, USER_FACING_JARGON } from "../src/alpha-availability";
+import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON, NO_3D_PREVIEW_IN_ALPHA, USER_FACING_JARGON } from "../src/alpha-availability";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
@@ -60,5 +60,5 @@ test("layer order limits say where the layer already is", () => {
 });
 
 test("the alpha reasons themselves follow the wording policy", () => {
-  for (const reason of [NO_3D_PREVIEW_IN_ALPHA, BUILD_NEEDS_SETUP]) expect(USER_FACING_JARGON.test(reason)).toBe(false);
+  for (const reason of [NO_3D_PREVIEW_IN_ALPHA, BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON]) expect(USER_FACING_JARGON.test(reason)).toBe(false);
 });
