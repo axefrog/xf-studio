@@ -39,6 +39,16 @@ export function createWolvenKitEyePlateTools(cli: string, timeoutMs = defaultTim
       requireFile(json, `WolvenKit did not serialize ${basename(file)}.`);
       return json;
     },
+    async serializeFiles({ files, outDir, signal }) {
+      const names = files.map(file => basename(file).toLowerCase());
+      if (new Set(names).size !== names.length) throw new ToolRunError("plate_tool_failed", "Resources serialized together need distinct names.");
+      await runTool(cli, ["convert", "serialize", ...files, "-o", outDir], signal, timeoutMs);
+      return files.map(file => {
+        const json = join(outDir, basename(file) + ".json");
+        requireFile(json, `WolvenKit did not serialize ${basename(file)}.`);
+        return json;
+      });
+    },
     async deserialize({ jsonDir, outDir, names, signal }) {
       await runTool(cli, ["convert", "deserialize", jsonDir, "-o", outDir], signal, timeoutMs);
       for (const name of names) requireFile(join(outDir, name), `WolvenKit did not convert ${name}.`);

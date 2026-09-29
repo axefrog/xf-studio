@@ -15,8 +15,11 @@ import { PackageToolError } from "../../../package-build-wolvenkit";
 import type { PackagePlate } from "../../../package-action";
 import type { PlateReachInput } from "../../../plate-reach";
 
-/** What the host hands the builder for the plate: the plate directory and, for the built-in plate, its cache manifest. */
-export type PlateBuilderInput = { readonly directory: string; readonly manifest?: string };
+/**
+ * What the host hands the builder for the plate: the plate directory and, for the built-in plate, its cache manifest and
+ * the folder of WolvenKit JSON kept beside it (read instead of serializing the plate when it still matches).
+ */
+export type PlateBuilderInput = { readonly directory: string; readonly manifest?: string; readonly json?: string };
 /**
  * The plate as a Build plans, builds and verifies on it: its files and provenance, the recipe's morph target
  * count (unknown for an override) and its UV footprint (`footprint`, `sha256`: the plan reads these).
@@ -39,9 +42,11 @@ function existing(path: string, label: string): string {
 /** The builder-side plate input as the host passed it, or a refusal naming what is missing. */
 export function plateBuilderInput(value: unknown): PlateBuilderInput {
   const input = value as Partial<PlateBuilderInput> | null;
-  if (!input || typeof input.directory !== "string" || (input.manifest !== undefined && typeof input.manifest !== "string"))
+  if (!input || typeof input.directory !== "string" || (input.manifest !== undefined && typeof input.manifest !== "string") ||
+      (input.json !== undefined && typeof input.json !== "string"))
     return refuse("package_input_missing", "Build requires the eye plate (--plate, and --plate-manifest for the built-in plate).");
-  return { directory: input.directory, ...(input.manifest !== undefined ? { manifest: input.manifest } : {}) };
+  return { directory: input.directory, ...(input.manifest !== undefined ? { manifest: input.manifest } : {}),
+    ...(input.json !== undefined ? { json: input.json } : {}) };
 }
 
 /**
@@ -113,6 +118,7 @@ export async function plateBuildValue(input: PlateBuilderInput, tools: ResourceT
   const mesh = join(directory, stem + ".mesh"), morph = join(directory, stem + ".morphtarget");
   const { record, morphTargets } = plateProvenance(input.manifest, mesh, morph);
   const reach = await packagedPlateReach(input.manifest, directory, stem, work, tools);
-  return { ...reach, directory, ...(input.manifest !== undefined ? { manifest: input.manifest } : {}), stem, mesh, morph, record,
+  return { ...reach, directory, ...(input.manifest !== undefined ? { manifest: input.manifest } : {}),
+    ...(input.json !== undefined ? { json: input.json } : {}), stem, mesh, morph, record,
     ...(morphTargets !== undefined ? { morphTargets } : {}) };
 }

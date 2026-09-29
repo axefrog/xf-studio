@@ -27,7 +27,7 @@ export function createWolvenKitVerifierTools(cli: string, gamepath: string | und
   };
   return {
     unbundle: (archive, output) => run(["unbundle", archive, "-o", output]),
-    serialize: (input, output) => run(["convert", "serialize", input, "-o", output]),
+    serialize: (input, output) => run(["convert", "serialize", ...[input].flat(), "-o", output]),
     exportTextures: (input, output) => {
       if (!isDirectory(gamepath)) throw Error("WolvenKit's texture export needs the Cyberpunk 2077 folder.");
       return run(["export", input, "-o", output, "--uext", "dds", "--gamepath", gamepath!]);

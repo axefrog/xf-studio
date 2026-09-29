@@ -149,8 +149,12 @@ export const EYE_MAKEUP_EXPORTER: FeatureExporter<EyeMakeupPlan> = Object.freeze
   },
   protectedInputs(prerequisites) {
     const plate = prerequisites[EYE_PLATE_PREREQUISITE], his = prerequisites[EYE_PLATE_MASCULINE_PREREQUISITE];
-    return [...plate === undefined ? [] : [["plate source", plateBuilderInput(plate).directory] as const],
-      ...his === undefined || unavailablePlate(his) ? [] : [["masculine plate source", plateBuilderInput(his).directory] as const]];
+    const inputs = (label: string, value: unknown) => {
+      const input = plateBuilderInput(value);
+      return [[label, input.directory] as const, ...input.json !== undefined ? [[`${label} JSON`, input.json] as const] : []];
+    };
+    return [...plate === undefined ? [] : inputs("plate source", plate),
+      ...his === undefined || unavailablePlate(his) ? [] : inputs("masculine plate source", his)];
   },
   async buildInputs(context) {
     const plate = await plateBuildValue(plateBuilderInput(context.prerequisites[EYE_PLATE_PREREQUISITE]), context.tools, context.work);
@@ -169,8 +173,9 @@ export const EYE_MAKEUP_EXPORTER: FeatureExporter<EyeMakeupPlan> = Object.freeze
     try {
       context.log(`Building ${outcome.check.presets.length} eye-makeup preset(s) in ignored local intermediates: ${context.work}`);
       record = await buildEyeMakeupResources({ collection: JSON.parse(outcome.packaged), work: context.work, staging: context.staging,
-        plate: plate.directory, region: EYE_MAKEUP_REGION, plateUv: plate.footprint, tools: context.tools, signal: context.signal, log: context.log,
-        ...(his ? { masculine: { plate: his.directory, plateUv: his.footprint } } : {}) });
+        plate: plate.directory, ...plate.json ? { plateJson: plate.json } : {}, region: EYE_MAKEUP_REGION, plateUv: plate.footprint,
+        tools: context.tools, signal: context.signal, log: context.log, converting: () => context.stage?.("convert"),
+        ...(his ? { masculine: { plate: his.directory, plateUv: his.footprint, ...his.json ? { plateJson: his.json } : {} } } : {}) });
     } catch (error) {
       if (error instanceof PackageToolError) refuse(error.code, error.code === "package_tool_failed"
         ? `WolvenKit failed while building resources: ${error.message}` : error.message);

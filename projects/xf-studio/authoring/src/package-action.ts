@@ -1,7 +1,7 @@
 import type { EyePlateHeadRecord } from "./eye-plate-head-source";
 import type { ExportRoute } from "./engines/layered-makeup/finish-export";
 import type { PresetDiagnostics } from "./export-diagnostics";
-import type { PackageBuildResult, PackageCheckResult } from "./platform/api";
+import { PACKAGE_BUILD_STAGES, type PackageBuildProgress, type PackageBuildResult, type PackageCheckResult } from "./platform/api";
 
 export type PackageAction = "check" | "build";
 /**
@@ -21,12 +21,37 @@ export class PackageRequestError extends Error {
   constructor(readonly code: string, message: string) { super(message); }
 }
 
+/** The running Build's stage, as the host reports it (PIPE-131), or null when none runs or the answer isn't one. */
+export async function requestPackageProgress(): Promise<PackageBuildProgress | null> {
+  const response = await packageRequest("/api/package/progress", { cache: "no-store" });
+  if (!response.ok || !(response.headers.get("Content-Type") ?? "").includes("application/json")) return null;
+  const build = (await response.json() as { build?: Partial<PackageBuildProgress> | null }).build;
+  return build && (PACKAGE_BUILD_STAGES as readonly unknown[]).includes(build.stage) && Number.isInteger(build.step) && Number.isInteger(build.steps)
+    ? { stage: build.stage!, step: build.step!, steps: build.steps!, ...Number.isInteger(build.looks) ? { looks: build.looks! } : {} } : null;
+}
+
+/** The progress line for a Build's stage: which step of how many, and what it is doing, in plain words. */
+export function packageBuildStageLine(progress: PackageBuildProgress): string {
+  const looks = progress.looks === undefined ? "the looks" : progress.looks === 1 ? "1 look" : `${progress.looks} looks`;
+  const doing: Record<PackageBuildProgress["stage"], string> = {
+    prepare: "Reading what the mod needs from your game files…",
+    compose: `Making the textures for ${looks}…`,
+    convert: `Converting ${looks} into game files…`,
+    pack: "Packing the mod…",
+    verify: "Checking the packed mod…",
+  };
+  return `Step ${progress.step} of ${progress.steps}: ${doing[progress.stage]}`;
+}
+
 /**
  * Presentation-independent request contract: the collection's stored form (with its package plan); the server
  * decides every filesystem and tool path, and answers every product the collection builds.
  */
+/** The package routes' one network read. */
+const packageRequest = (path: string, init: RequestInit) => fetch(path, init);
+
 export async function requestPackage(action: PackageAction, collection: unknown): Promise<PackageCheckResult | PackageBuildResult> {
-  const response = await fetch("/api/package", { method: "POST", headers: { "Content-Type": "application/json" },
+  const response = await packageRequest("/api/package", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, collection }) });
   if (!(response.headers.get("Content-Type") ?? "").includes("application/json"))
     throw new PackageRequestError("transport", "Restart XF Studio to build mod files.");

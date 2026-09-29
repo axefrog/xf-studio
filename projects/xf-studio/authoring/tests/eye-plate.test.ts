@@ -13,6 +13,7 @@ import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, ey
 import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/plate-uv-footprint-io";
 import { depotPathRegex } from "../src/eye-plate-wolvenkit";
+import { keptJsonDirectory, readKeptJson } from "../src/derived-cache";
 import { FIXTURE_DIFFS, fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 
 const withDirectory = async (run: (dir: string) => Promise<void> | void) => {
@@ -337,4 +338,29 @@ test("cancellation and tool failures leave no partial cache entry", () => withDi
   expect(readdirSync(cacheRoot).sort()).toEqual(["status.json"]);
   expect(existsSync(join(cacheRoot, eyePlateCacheName(recipe, eyePlateCacheKey(recipe, recipe.source.supported[0]))))).toBe(false);
   expect(FIXTURE_DIFFS).toHaveLength(2);
+}));
+
+test("PIPE-130: a published plate keeps WolvenKit's JSON of itself; an older entry gets it once, in one launch", () => withDirectory(async dir => {
+  const mesh = fixtureHeadMesh(), morph = fixtureHeadMorph();
+  const recipe = hashedRecipe(mesh, morph);
+  const game = fakeGame(dir), cacheRoot = join(dir, "cache"), serializer = "wolvenkit:9.0.1:test";
+  const calls: string[] = [];
+  const first = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, serializer, tools: fakeTools({ mesh, morph }, recipe, calls) });
+  // The readback that verified the plate is kept beside it, bound to the resource bytes and this WolvenKit.
+  expect(first.json).toBe(keptJsonDirectory(dirname(first.directory), serializer));
+  const kept = readKeptJson(first.json!, serializer, [first.meshFile, first.morphFile])!;
+  expect(readFileSync(kept["xfs_eye_plate.mesh"]!, "utf8")).toBe(readFileSync(first.meshFile, "utf8"));
+  // Reused as it is: no WolvenKit launch at all.
+  calls.length = 0;
+  expect((await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, serializer, tools: fakeTools({ mesh, morph }, recipe, calls) })).json).toBe(first.json);
+  expect(calls).toEqual([]);
+  // Another WolvenKit (or an entry published before this): its JSON is made once, both files in one launch where the tools can.
+  const batched: string[] = [], tools = fakeTools({ mesh, morph }, recipe, calls);
+  tools.serializeFiles = async ({ files, outDir }) => { batched.push(files.map(file => basename(file)).join(",")); return Promise.all(files.map(file => tools.serialize({ file, outDir }))); };
+  const other = await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, serializer: "wolvenkit:9.1.0:next", tools });
+  expect(other.json).toBe(keptJsonDirectory(dirname(first.directory), "wolvenkit:9.1.0:next"));
+  expect(batched).toEqual(["xfs_eye_plate.mesh,xfs_eye_plate.morphtarget"]);
+  expect(readKeptJson(first.json!, serializer, [first.meshFile, first.morphFile])).not.toBeNull();
+  // Without a serializer nothing is kept or read.
+  expect((await ensureEyePlate({ gameRoot: game, cacheRoot, recipe, tools: fakeTools({ mesh, morph }, recipe) })).json).toBeUndefined();
 }));

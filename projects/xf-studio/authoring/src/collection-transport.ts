@@ -1,5 +1,5 @@
 import { CollectionServiceError, type CollectionTransport } from "./collection-service";
-import { PackageRequestError, requestPackage } from "./package-action";
+import { PackageRequestError, requestPackage, requestPackageProgress } from "./package-action";
 import type { CollectionSummary, StoredCollection } from "./collection-store";
 
 /** Local HTTP is an injected detail, rather than a dependency of collection commands. */
@@ -26,5 +26,6 @@ export function collectionTransport(endpoint: string): CollectionTransport {
         throw error;
       }
     },
+    packageProgress: () => requestPackageProgress().catch(() => null),
   };
 }

@@ -171,8 +171,8 @@ test("Build with his plate ready makes one mod for both bodies; her files are th
   const xl = readFileSync(join(result.products[0].package, "archive", "pc", "mod", `${plan.namespace}.archive.xl`), "utf8");
   expect(xl).toBe(archiveXlDeclaration(plan));
   expect(result.products[0].verifiedUnpackedFiles).toBe(4 * 3 + 8);
-  // His plate is read after hers, his resources are converted with hers, and the host packs once.
-  expect(both.calls).toEqual(["serialize", "serialize", "import", "import", "deserialize", "deserialize", "deserialize", "pack"]);
+  // His plate is read after hers, his resources are converted with hers in one launch (PIPE-130), and the host packs once.
+  expect(both.calls).toEqual(["serialize", "serialize", "import", "import", "deserialize", "pack"]);
   const record = JSON.parse(readFileSync(join(both.dir, "build", basename(result.products[0].package), "features", "eye-makeup", "build.json"), "utf8"));
   expect(record.masculine).toMatchObject({ plateStem: "xfs_eye_plate_pma", plateUv: { footprintSha256: plateReachInput(FOOTPRINT).sha256 } });
   expect(both.verified[0].prerequisites[EYE_PLATE_MASCULINE_PREREQUISITE]).toMatchObject({ morphTargets: 100,

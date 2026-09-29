@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { eyeCheck } from "./fixtures/package-results";
-import { CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
+import { BUILD_PROGRESS_INTERVAL_MS, CollectionService, CollectionServiceError, type CollectionTransport } from "../src/collection-service";
+import type { PackageBuildProgress } from "../src/platform/api";
 import { collectionDraft, emptyMemory } from "../src/collection-workspace";
 import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/workspace-state";
 import type { EditorSnapshot } from "../src/collection-session";
@@ -190,4 +191,22 @@ test("the first collection keeps every editor-memory field of the legacy workspa
   // The recipe is the look's eye-makeup part; the memory is that feature's editor state and the look's history.
   expect(Object.keys(draft.memory[draft.selected!])).toEqual(["eye-makeup", "@look"]);
   expect(recipeOf(draft.collection.presets[0])).toEqual(recipe);
+});
+
+test("PIPE-131: while a Build runs, its progress line and bar follow the host's stage, and stop with its answer", async () => {
+  const f = fixture(); await f.service.execute({ kind: "initialize" });
+  let current: PackageBuildProgress | null = { stage: "convert", step: 3, steps: 5, looks: 2 }, finish!: (error: Error) => void;
+  f.transport.packageProgress = async () => current;
+  f.transport.package = () => new Promise((_resolve, reject) => { finish = reject; });
+  const running = f.service.execute({ kind: "package", action: "build" });
+  await Bun.sleep(30);
+  expect(f.service.view().progress).toMatchObject({ phase: "working", code: "package", message: "Step 3 of 5: Converting 2 looks into game files…", fraction: .5 });
+  current = { stage: "verify", step: 5, steps: 5, looks: 2 };
+  await Bun.sleep(BUILD_PROGRESS_INTERVAL_MS + 100);
+  expect(f.service.view().progress).toMatchObject({ message: "Step 5 of 5: Checking the packed mod…", fraction: .9 });
+  finish(new CollectionServiceError("package_build_failed", "Package Build failed. Your draft is unchanged; nothing was installed."));
+  await running;
+  await Bun.sleep(BUILD_PROGRESS_INTERVAL_MS + 50);
+  // Its answer is the last word: no later stage overwrites it.
+  expect(f.service.view().progress).toMatchObject({ phase: "error", code: "package_build_failed" });
 });

@@ -130,7 +130,8 @@ export function localPackageAdapter(options: { exporters: readonly FeatureExport
       return { snapshot: resolve(build, "package-snapshots", id), work: resolve(build, "package-work", id),
         stage: resolve(build, "package-stage", id), candidates: dist, wolvenkit: tools.wolvenkit, gamepath: tools.gamepath };
     },
-    runBuilder: (args, run) => runProcessTree(tools.bun, [script, ...args], { cwd: run.cwd, signal: run.signal, timeoutMs: run.timeoutMs }),
+    runBuilder: (args, run) => runProcessTree(tools.bun, [script, ...args], { cwd: run.cwd, signal: run.signal, timeoutMs: run.timeoutMs,
+      onStdoutLine: run.onLine }),
     log: (scope, code, message, detail) => hostFailure("package", code, `Package ${scope}: ${message}`, detail,
       code === "invalid_collection" || code === "no_exportable_content" ? "warn" : "error"),
   };
@@ -159,7 +160,7 @@ export function packageRequestSettings(load: () => LocalSettings, action: Packag
  */
 export function createPackageHandler(adapter: (action: PackageAction) => PackageHostAdapter) {
   const service = new PackageHostService();
-  return async (request: Request): Promise<Response> => {
+  return Object.assign(async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     if (url.hostname !== "127.0.0.1" || request.headers.get("Origin") !== url.origin ||
         request.headers.get("Content-Type")?.split(";")[0] !== "application/json")
@@ -188,5 +189,9 @@ export function createPackageHandler(adapter: (action: PackageAction) => Package
     }
     const outcome = await service.run(host, action, input.collection, request.signal);
     return outcome.ok ? json(outcome.result) : json({ code: outcome.code, error: outcome.message, ...(outcome.omissions ? { omissions: outcome.omissions } : {}) }, outcome.status);
-  };
+  }, {
+    /** `GET /api/package/progress`: the running Build's stage (PIPE-131); codes and counts only, no paths. */
+    progress: (request: Request): Response => new URL(request.url).hostname !== "127.0.0.1" ? json({ error: "Use the local studio." }, 403)
+      : request.method !== "GET" ? json({ error: "Method not allowed." }, 405) : json({ build: service.buildProgress() }),
+  });
 }

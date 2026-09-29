@@ -16,6 +16,7 @@ import { EYE_PLATE_HEAD_SETTING } from "./eye-plate-head-choice";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { createInstalledHeadSource } from "./eye-plate-head-resolver";
 import { createWolvenKitEyePlateTools } from "./eye-plate-wolvenkit";
+import { wolvenKitIdentity, wolvenKitIdentityKey } from "./wolvenkit-cli";
 import { plateReachInput, readManifestPlateReach } from "./plate-uv-footprint-io";
 import { plateUvFootprint } from "./engines/layered-makeup/plate-uv-window";
 import { PLATE_STEMS } from "./package-resource-builder";
@@ -96,13 +97,16 @@ export function eyePlatePrerequisite(options: EyePlatePrerequisiteOptions): Host
     },
     async prepare(signal) {
       if (options.override) return overridePlate(options.override, tools());
+      // The WolvenKit whose JSON of the plate is kept beside it (PIPE-130); none for a test's stand-in tools.
+      const identity = options.tools ? null : wolvenKitIdentity(options.wolvenKitCli);
+      const serializer = identity ? wolvenKitIdentityKey(identity) : undefined;
       try {
         const plate = await ensureEyePlate({ gameRoot: options.route.gameRoot, cacheRoot: options.cacheRoot, tools: tools(), signal, recipe,
           headSource: createInstalledHeadSource({ ...options.route, wolvenKitCli: options.wolvenKitCli }, join(options.cacheRoot, "resolver")),
-          headOverride: options.headOverride, routeKey: routeKey ?? undefined });
+          headOverride: options.headOverride, routeKey: routeKey ?? undefined, ...serializer ? { serializer } : {} });
         const reach = readManifestPlateReach(plate.manifestFile, plate.manifest);
         if (!reach) throw Error("The prepared eye plate has no recorded UV footprint.");
-        return { builder: { directory: plate.directory, manifest: plate.manifestFile },
+        return { builder: { directory: plate.directory, manifest: plate.manifestFile, ...plate.json ? { json: plate.json } : {} },
           plan: { ...reach, record: packagePlateRecord(plate.manifest) } };
       } catch (error) {
         if (error instanceof EyePlateError) {
