@@ -1,0 +1,42 @@
+{
+  "suite": "kernel-cycles",
+  "vectors": [
+    {
+      "name": "diamond-join-computes-once",
+      "kind": "kernel",
+      "rules": ["6.4", "6.5", "6.9"],
+      "description": "A feeds B and C, which both feed D. Priming computes each node once; one observation of A computes D once, after both B and C, never from one new and one old value.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "b", "kind": "combinator", "op": "sum", "inputs": ["a"], "params": { "add": 1 } },
+        { "id": "c", "kind": "combinator", "op": "sum", "inputs": ["a"], "params": { "add": 2 } },
+        { "id": "d", "kind": "combinator", "op": "sum", "inputs": ["b", "c"] },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["d"] }
+      ] },
+      "script": [ { "observe": { "a": 2 } } ],
+      "expect": {
+        "streams": { "a": [1, 2], "b": [2, 3], "c": [3, 4], "d": [5, 7] },
+        "computes": { "b": 2, "c": 2, "d": 2, "log": 2 },
+        "logs": { "log": [[5], [7]] }
+      }
+    },
+    {
+      "name": "end-on-unchanged-skips-downstream",
+      "kind": "kernel",
+      "rules": ["5.3", "6.4.6", "6.5"],
+      "description": "B's output doesn't change when A goes from 3 to 4, so B sends END(unchanged) and D and the effect do no work.",
+      "graph": { "nodes": [
+        { "id": "a", "kind": "seed", "initial": 1 },
+        { "id": "b", "kind": "combinator", "op": "threshold", "inputs": ["a"], "params": { "at": 10 } },
+        { "id": "d", "kind": "combinator", "op": "identity", "inputs": ["b"] },
+        { "id": "log", "kind": "effect", "op": "record", "inputs": ["d"] }
+      ] },
+      "script": [ { "observe": { "a": 3 } }, { "observe": { "a": 4 } }, { "observe": { "a": 12 } } ],
+      "expect": {
+        "streams": { "b": [false, true], "d": [false, true] },
+        "computes": { "b": 4, "d": 2, "log": 2 },
+        "logs": { "log": [[false], [true]] }
+      }
+    }
+  ]
+}
