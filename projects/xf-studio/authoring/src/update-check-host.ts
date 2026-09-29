@@ -4,22 +4,23 @@
  * own check, `POST {action: "skip", version}` stops announcing a version, and `GET` returns the last answer without asking GitHub.
  * The request's own signal cancels a check the page no longer waits for.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { readBodyText } from "./request-body";
 import { emptyUpdateCheckMemory, parseVersion, UpdateCheckService, type ReleaseSource, type UpdateCheckMemory, type UpdateCheckStore } from "./update-check";
 
-const FILE = "update-check.json";
 const SCHEMA = "xfs/update-check-memory-1";
+/** The file the update check keeps what it found in, beside the settings. */
+export const UPDATE_CHECK_FILE = "update-check.json";
+/** One small text file, read and written (atomically) by the host that passes it in, so this module touches no files itself. */
+export type TextFile = { read(): string | null; write(text: string): void };
 
-/** What the update check found, in `<settings>/update-check.json`. An unreadable file reads as empty; nothing in it is personal. */
-export class UpdateCheckFileStore implements UpdateCheckStore {
-  private readonly path: string;
-  constructor(private readonly directory: string) { this.path = join(directory, FILE); }
+/** What the update check found, kept as JSON in a text file. An unreadable file reads as empty; nothing in it is personal. */
+export class UpdateCheckJsonStore implements UpdateCheckStore {
+  constructor(private readonly file: TextFile) {}
   load(): UpdateCheckMemory {
     try {
-      if (!existsSync(this.path)) return emptyUpdateCheckMemory();
-      const data = JSON.parse(readFileSync(this.path, "utf8"));
+      const text = this.file.read();
+      if (text === null) return emptyUpdateCheckMemory();
+      const data = JSON.parse(text);
       if (data?.schema !== SCHEMA) return emptyUpdateCheckMemory();
       const latest = data.latest && parseVersion(data.latest.tag) && typeof data.latest.version === "string"
         ? { version: data.latest.version as string, tag: data.latest.tag as string, prerelease: data.latest.prerelease === true } : null;
@@ -27,12 +28,7 @@ export class UpdateCheckFileStore implements UpdateCheckStore {
         skipped: typeof data.skipped === "string" && parseVersion(data.skipped) ? data.skipped : null };
     } catch { return emptyUpdateCheckMemory(); }
   }
-  save(memory: UpdateCheckMemory) {
-    mkdirSync(this.directory, { recursive: true });
-    const temporary = `${this.path}.${process.pid}.tmp`;
-    writeFileSync(temporary, JSON.stringify({ schema: SCHEMA, ...memory }, null, 1));
-    renameSync(temporary, this.path);
-  }
+  save(memory: UpdateCheckMemory) { this.file.write(JSON.stringify({ schema: SCHEMA, ...memory }, null, 1)); }
 }
 
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
@@ -56,14 +52,14 @@ export function createUpdateCheckHandler(service: UpdateCheckService) {
   };
 }
 
+type Place = { file: TextFile; checkOnStart(): boolean };
 /**
  * The two endpoints a host serves: `/api/update-check` for the person's settings, and `/api/verification/update-check` for a verification
- * workspace, which keeps what it found in its own settings folder and follows its own copy of the Settings switch (UI-98).
+ * workspace, which keeps what it found in its own file and follows its own copy of the Settings switch (UI-98).
  */
-export function updateCheckEndpoints(options: { installed: string; releases: ReleaseSource; now: () => number;
-  settings: { directory: string; checkOnStart(): boolean }; verification: { directory: string; checkOnStart(): boolean } }) {
-  const service = (place: { directory: string; checkOnStart(): boolean }) => new UpdateCheckService({ installed: options.installed,
-    releases: options.releases, now: options.now, store: new UpdateCheckFileStore(place.directory),
+export function updateCheckEndpoints(options: { installed: string; releases: ReleaseSource; now: () => number; settings: Place; verification: Place }) {
+  const service = (place: Place) => new UpdateCheckService({ installed: options.installed,
+    releases: options.releases, now: options.now, store: new UpdateCheckJsonStore(place.file),
     // An unreadable settings file leaves the check at start as it is by default: on.
     automatic: () => { try { return place.checkOnStart(); } catch { return true; } } });
   return { "/api/update-check": createUpdateCheckHandler(service(options.settings)),

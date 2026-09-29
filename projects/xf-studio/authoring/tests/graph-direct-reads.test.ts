@@ -37,6 +37,9 @@ const GRANDFATHERED: Readonly<Record<string, Readonly<Record<string, number>>>> 
   "browser-mod-install-device": { network: 1 },
   "browser-pose-device": { network: 4 },
   "browser-save-explorer-device": { network: 1 },
+  // Recorded exception (ui-architecture-boundary.md open work 17): the update check's page device, one request to its own host; it goes
+  // when the page's host requests get a source adapter. Awaiting the coordinator's decision.
+  "browser-update-check-device": { network: 1 },
   "cc-catalogue-host": { files: 2, environment: 1 }, // previously undetected (review 7): environment
   "cc-catalogue-service": { clock: 3, timers: 1 },
   "cc-icon-host": { clock: 2, files: 1 },

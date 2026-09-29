@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
@@ -51,7 +51,7 @@ import { WolvenKitSetupHost, wolvenKitReadinessIssue, type WolvenKitSetupOptions
 import { createWolvenKitSetupHandler } from "../src/wolvenkit-setup-server";
 import { wolvenKitLinkUrl, type WolvenKitLink } from "../src/wolvenkit-setup";
 import { isProjectLink, PROJECT_LINKS } from "../src/project-links";
-import { updateCheckEndpoints } from "../src/update-check-host";
+import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "../src/update-check-host";
 import { gitHubReleases } from "../src/update-check-github";
 import type { LocalSettings } from "../src/local-settings";
 import { hostDiagnosticsAt, hostFailure, setProcessDiagnostics } from "../src/diagnostics/host-log";
@@ -178,10 +178,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     updateGuard || null);
   // Checking for a newer XF Studio against its GitHub releases (the check at start follows Settings › Updates). A copy whose version
   // metadata is missing answers that it couldn't check.
+  const textFileAt = (path: string) => ({ read: () => existsSync(path) ? readFileSync(path, "utf8") : null,
+    write: (text: string) => { mkdirSync(dirname(path), { recursive: true }); const temporary = `${path}.${process.pid}.tmp`;
+      writeFileSync(temporary, text); renameSync(temporary, path); } });
   const updateCheckRequests = updateCheckEndpoints({ installed: version.version, now: () => Date.now(),
     releases: gitHubReleases(fetch, { userAgent: `XF-Studio/${version.version}` }),
-    settings: { directory: dataRoot, checkOnStart: () => settingsStore.load().settings.updates.checkOnStart },
-    verification: { directory: verificationSettingsDirectory(dataRoot), checkOnStart: () => verificationSettings.load().settings.updates.checkOnStart } });
+    settings: { file: textFileAt(resolve(dataRoot, UPDATE_CHECK_FILE)), checkOnStart: () => settingsStore.load().settings.updates.checkOnStart },
+    verification: { file: textFileAt(resolve(verificationSettingsDirectory(dataRoot), UPDATE_CHECK_FILE)), checkOnStart: () => verificationSettings.load().settings.updates.checkOnStart } });
   const savedSettings = () => { try { return settingsStore.load().settings; } catch { return null; } };
   // WolvenKit: a CLI path in Build setup wins; otherwise XF Studio's own copy, downloaded with consent.
   const wolvenKit = new WolvenKitSetupHost({ root: desktopToolsRoot(dataRoot), configured: () => savedSettings()?.wolvenKitCli ?? null,

@@ -10,7 +10,8 @@ export const RELEASES_API = "https://api.github.com/repos/axefrog/xf-studio/rele
 export const RELEASES_TIMEOUT_MS = 10_000;
 const MAX_BYTES = 2 * 1024 * 1024;
 
-type Fetch = (input: string, init: RequestInit) => Promise<Response>;
+/** The host's HTTP request function, passed in by the host (a simulated one in tests), so this module reads no network itself. */
+type Get = (input: string, init: RequestInit) => Promise<Response>;
 
 /** The releases in a GitHub API answer: tags of published releases, drafts left out. */
 export function releasesFromGitHub(data: unknown): ReleaseInfo[] | null {
@@ -25,13 +26,12 @@ export function releasesFromGitHub(data: unknown): ReleaseInfo[] | null {
 
 const failed = (reason: CheckFailure): ReleaseList => ({ ok: false, reason });
 
-/** @param fetch the host's `fetch` (a simulated one in tests). */
-export function gitHubReleases(fetch: Fetch, options: { url?: string; timeoutMs?: number; userAgent?: string } = {}): ReleaseSource {
+export function gitHubReleases(get: Get, options: { url?: string; timeoutMs?: number; userAgent?: string } = {}): ReleaseSource {
   return async signal => {
     const timeout = AbortSignal.timeout(options.timeoutMs ?? RELEASES_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(options.url ?? RELEASES_API, { signal: AbortSignal.any([signal, timeout]), redirect: "follow",
+      response = await get(options.url ?? RELEASES_API, { signal: AbortSignal.any([signal, timeout]), redirect: "follow",
         headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": options.userAgent ?? "XF-Studio" } });
     } catch {
       return failed(signal.aborted ? "unavailable" : "offline");

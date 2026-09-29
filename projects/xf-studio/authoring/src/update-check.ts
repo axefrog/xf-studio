@@ -142,11 +142,11 @@ export class UpdateCheckService {
     const fresh = memory.checkedAt !== null && this.options.now() - memory.checkedAt < recheck && this.options.now() >= memory.checkedAt;
     if (this.startedThisRun || fresh) return this.answer(memory, null, null, true);
     this.startedThisRun = true;
-    return this.fetch(signal, true);
+    return this.ask(signal, true);
   }
 
   /** The person's own check: always asks GitHub (joining a check already running). */
-  check(signal: AbortSignal): Promise<UpdateCheckAnswer> { return this.fetch(signal, false); }
+  check(signal: AbortSignal): Promise<UpdateCheckAnswer> { return this.ask(signal, false); }
 
   /** Stop announcing this version at start (a newer one is announced again). */
   skip(version: string): UpdateCheckAnswer {
@@ -157,7 +157,7 @@ export class UpdateCheckService {
     return this.answer(memory, null, null, false);
   }
 
-  private fetch(signal: AbortSignal, startup: boolean): Promise<UpdateCheckAnswer> {
+  private ask(signal: AbortSignal, startup: boolean): Promise<UpdateCheckAnswer> {
     if (!parseVersion(this.options.installed)) return Promise.resolve(this.answer(this.memory(), "failed", "unavailable", startup));
     if (this.running) return this.running.then(answer => startup ? this.answer(this.memory(), answer.result === "failed" ? "failed" : null, answer.reason, true) : answer);
     const run = (async () => {

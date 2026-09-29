@@ -1,5 +1,5 @@
 import { allowsNativeTextMenu } from "../context-menu";
-import { checkForUpdatesNow, scheduleStartupUpdateCheck } from "./update-check";
+import { checkForUpdatesNow, startupUpdateCheck } from "./update-check";
 import { comingSoon, liveFeatures, plannedShown } from "./coming-soon";
 import type { StudioAction } from "../studio-application";
 import type { StudioFileAction } from "../studio-file-operations";
@@ -345,9 +345,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     else view.openReference();
   });
   header.bindPalette(() => openPalette(commands));
-  // The check at start (the host skips it when Settings › Updates turns it off): after first paint, once the page is idle.
-  scheduleStartupUpdateCheck(rt, run => requestAnimationFrame(() => setTimeout(() =>
-    typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout: 10_000 }) : run(), 2000)));
+  // The check at start (the host skips it when Settings › Updates turns it off); the service waits until after first paint.
+  startupUpdateCheck(rt);
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, layouts, preferences: () => port.preferences.snapshot(),
     guidance: { start: guidance.start, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port)) } } });
   return { dock, runtime: rt };

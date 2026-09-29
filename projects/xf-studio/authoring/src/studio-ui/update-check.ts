@@ -44,22 +44,20 @@ export async function checkForUpdatesNow(rt: Runtime, notice: boolean) {
 }
 
 /**
- * The check at start, after first paint and off the critical path: once the page has painted and the browser is idle, the host is asked;
- * a newer version not skipped before is announced once. Its failures stay silent.
+ * The check at start, asked for once the Studio is mounted: the service waits for first paint and a moment more, so it stays off the
+ * critical path. A newer version not skipped before is announced once; its failures stay silent.
  */
-export function scheduleStartupUpdateCheck(rt: Runtime, idle: (run: () => void) => void) {
-  idle(() => {
-    const updates = rt.port.updates;
-    if (!updates.capability({ kind: "updates.startupCheck" }).available) return;
-    void updates.dispatch({ kind: "updates.startupCheck" }).then(outcome => {
-      rt.changed();
-      if (!outcome.ok || !outcome.answer.announce || !outcome.answer.latest) return;
-      const version = outcome.answer.latest.version;
-      rt.feedback.toast("info", "Updates", `XF Studio ${version} is available. You have ${outcome.answer.installed}.`, [
-        { label: "Open the releases page", run: () => void openReleasesPage(rt) },
-        { label: "Skip this version", run: () => void updates.dispatch({ kind: "updates.skipVersion", version }).then(() => {
-          rt.feedback.record("info", "Updates", `XF Studio won't mention ${version} again. Help › Check for updates still finds it.`); }) },
-      ]);
-    });
+export function startupUpdateCheck(rt: Runtime) {
+  const updates = rt.port.updates;
+  if (!updates.capability({ kind: "updates.startupCheck" }).available) return;
+  void updates.dispatch({ kind: "updates.startupCheck" }).then(outcome => {
+    rt.changed();
+    if (!outcome.ok || !outcome.answer.announce || !outcome.answer.latest) return;
+    const version = outcome.answer.latest.version;
+    rt.feedback.toast("info", "Updates", `XF Studio ${version} is available. You have ${outcome.answer.installed}.`, [
+      { label: "Open the releases page", run: () => void openReleasesPage(rt) },
+      { label: "Skip this version", run: () => void updates.dispatch({ kind: "updates.skipVersion", version }).then(() => {
+        rt.feedback.record("info", "Updates", `XF Studio won't mention ${version} again. Help › Check for updates still finds it.`); }) },
+    ]);
   });
 }

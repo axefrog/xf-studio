@@ -1,11 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { compareVersions, emptyUpdateCheckMemory, newestRelease, parseVersion, UPDATE_RECHECK_MS, UpdateCheckService,
   type ReleaseList, type UpdateCheckMemory } from "../src/update-check";
 import { gitHubReleases, RELEASES_API, releasesFromGitHub, simulatedReleases } from "../src/update-check-github";
-import { createUpdateCheckHandler, UpdateCheckFileStore } from "../src/update-check-host";
+import { createUpdateCheckHandler, UpdateCheckJsonStore } from "../src/update-check-host";
 import { UpdateCheckActions } from "../src/update-check-actions";
 import { UPDATE_CHECK_DESCRIPTORS } from "../src/studio-action-descriptors";
 import { updateCheckLine } from "../src/studio-ui/update-check";
@@ -124,9 +121,10 @@ test("the GitHub adapter lists published releases, pre-releases included, and na
 });
 
 test("the host keeps what was found in a file and serves the check to the page only", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "xfs-update-check-"));
-  try {
-    const store = new UpdateCheckFileStore(directory);
+  let saved: string | null = null;
+  const file = { read: () => saved, write: (text: string) => { saved = text; } };
+  {
+    const store = new UpdateCheckJsonStore(file);
     expect(store.load()).toEqual(emptyUpdateCheckMemory());
     const service = new UpdateCheckService({ installed: "0.1.0-alpha.2", now: () => 5, automatic: () => true, store,
       releases: simulatedReleases("newer", "0.1.0-alpha.2") });
@@ -136,16 +134,16 @@ test("the host keeps what was found in a file and serves the check to the page o
       handle(new Request(`${origin}/api/update-check`, { method: "POST", headers, body: JSON.stringify(body) }));
     const started = await (await post({ action: "startup" })).json();
     expect(started).toMatchObject({ schema: "xfs/update-check-1", result: "newer", announce: true, latest: { version: "0.2.0-beta.1" } });
-    expect(JSON.parse(readFileSync(join(directory, "update-check.json"), "utf8"))).toMatchObject({ checkedAt: 5, latest: { tag: "v0.2.0-beta.1" } });
+    expect(JSON.parse(saved!)).toMatchObject({ checkedAt: 5, latest: { tag: "v0.2.0-beta.1" } });
     expect(await (await post({ action: "skip", version: "0.2.0-beta.1" })).json()).toMatchObject({ result: "newer" });
-    expect(new UpdateCheckFileStore(directory).load().skipped).toBe("0.2.0-beta.1");
+    expect(new UpdateCheckJsonStore(file).load().skipped).toBe("0.2.0-beta.1");
     expect((await post({ action: "check" }, { Origin: "https://example.test", "Content-Type": "application/json" })).status).toBe(403);
     expect((await post({ action: "check", url: "https://example.test" })).status).toBe(400);
     expect((await post({ action: "skip", version: "../x" })).status).toBe(400);
     expect(await (await handle(new Request(`${origin}/api/update-check`))).json()).toMatchObject({ result: "newer", announce: false });
-    writeFileSync(join(directory, "update-check.json"), "{ not json");
-    expect(new UpdateCheckFileStore(directory).load()).toEqual(emptyUpdateCheckMemory());
-  } finally { rmSync(directory, { recursive: true, force: true }); }
+    saved = "{ not json";
+    expect(new UpdateCheckJsonStore(file).load()).toEqual(emptyUpdateCheckMemory());
+  }
 });
 
 test("the page's actions are catalogued, pre-empt the check at start, and say plainly what was found", async () => {
@@ -192,20 +190,23 @@ test("the page's actions are catalogued, pre-empt the check at start, and say pl
 });
 
 test("the check at start waits for a quiet moment, announces a newer version once, and Skip this version stops it", async () => {
-  const { scheduleStartupUpdateCheck } = await import("../src/studio-ui/update-check");
+  const { startupUpdateCheck } = await import("../src/studio-ui/update-check");
   let memory = emptyUpdateCheckMemory(), on = true;
   const service = () => new UpdateCheckService({ installed: "0.1.0-alpha.2", now: () => 1, automatic: () => on,
     store: { load: () => memory, save: next => { memory = next; } }, releases: simulatedReleases("newer", "0.1.0-alpha.2") });
   const start = async () => {
     const host = service(), toasts: { message: string; actions: { label: string; run(): void }[] }[] = [];
+    const waits: number[] = [];
+    let idle: (() => void) | null = null;
     const actions = new UpdateCheckActions(async (body, sent) => ({ ok: true, status: 200,
-      data: body.action === "skip" ? host.skip(body.version) : body.action === "startup" ? await host.startup(sent) : await host.check(sent) }));
+      data: body.action === "skip" ? host.skip(body.version) : body.action === "startup" ? await host.startup(sent) : await host.check(sent) }),
+      { frame: run => run(0), after: (ms, run) => { waits.push(ms); idle = run; } });
     const rt = { port: { updates: actions, links: { open: async () => ({ ok: true as const }) } },
       feedback: { toast: (_tone: string, _source: string, message: string, list: { label: string; run(): void }[] = []) => { toasts.push({ message, actions: list }); return () => {}; },
         record: () => {} }, changed: () => {} };
-    let idle: (() => void) | null = null;
-    scheduleStartupUpdateCheck(rt as never, run => { idle = run; });
+    startupUpdateCheck(rt as never);
     expect(toasts).toEqual([]);
+    expect(waits).toEqual([2000]);
     idle!();
     await new Promise(resolve => setTimeout(resolve, 0)); await new Promise(resolve => setTimeout(resolve, 0));
     return toasts;

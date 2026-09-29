@@ -57,6 +57,8 @@ export function helpTopicsFor(finishes: readonly FinishSummary[]): readonly Help
 
 /** Public pages the Help view links to; the host opens them in the person's browser. */
 export const HELP_LINKS = [
+  // Where new versions are downloaded; Check for updates, above it, says whether there is one (release-readiness-audit.md item 22).
+  { link: "project-releases", label: "XF Studio releases", detail: "Every version on GitHub, with what changed. New versions are downloaded here." },
   { link: "project-knowledge", label: "How the game works: knowledge pages", detail: "Research notes on the game's files, shaders and character creator." },
   { link: "project-issues", label: "Ask a question or see known problems", detail: "XF Studio's issue tracker on GitHub." },
 ] as const;
