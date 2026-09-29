@@ -35,7 +35,7 @@ test("a feature view's context is its facade and the shell's services: no port, 
   const { shell, ctx, toasts } = fixture();
   expect(ctx.facade).toBe(shell.feature("eye-makeup"));
   expect(Object.keys(ctx).sort()).toEqual(["anchors", "changed", "dispatch", "easing", "facade", "facial", "feedback", "links", "modInstall", "openSettings", "platform", "presets", "range", "readiness",
-    "reveal", "targetMenu", "targetSections", "undoAction", "uv"]);
+    "research", "reveal", "targetMenu", "targetSections", "undoAction", "uv"]);
   expect(Object.isFrozen(ctx)).toBe(true);
   expect(Object.keys(ctx.uv).sort()).toEqual(["attach", "command", "commandCapability", "hints", "menu", "resize"]);
   // "Add to my mod manager" for a mod the view built: the shell's review sheet over port.modInstall, named by product only.
@@ -67,6 +67,7 @@ test("eye makeup's layer menu: the layer's context entries, then its view's comm
   expect(context.items.map(shown)).toEqual(contextItems(rt, shell.authoring.contextQuery({ kind: "layer", id: layer.id }), anchor).map(shown));
   const at = (action: EyeMakeupAction) => shell.authoring.contextCapability(target, action);
   const finishes = shell.feature("eye-makeup").finishCatalogue();
+  const current = finishes.find(item => item.id === layer.finish || item.stored.includes(layer.finish))?.id ?? layer.finish;
   expect(own.label).toBeUndefined();
   expect(own.items.map(shown)).toEqual([
     { label: "Bring forward", icon: "arrowUp", shortcut: chordLabel(keyBindingById("rows.reorder").chords[0]), hint: undefined, checked: undefined,
@@ -76,7 +77,8 @@ test("eye makeup's layer menu: the layer's context entries, then its view's comm
     { label: "Mirror across the face", icon: "mirror", shortcut: undefined, hint: undefined, checked: layer.symmetry,
       capability: at({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: !layer.symmetry }) },
     { submenu: "Finish", icon: "finish", items: shell.authoring.choicesFor(target, "layer.setFinish", "finish")
-      .filter(choice => finishes.some(item => item.id === choice.value)).map(choice => {
+      // A finish that hasn't passed in game (the catalogue's `research`) is offered only with research tools, or while the layer uses it.
+      .filter(choice => finishes.some(item => item.id === choice.value && (!item.research || item.id === current))).map(choice => {
         const descriptor = finishes.find(item => item.id === choice.value)!;
         return { label: descriptor.label, icon: undefined, shortcut: undefined, capability: choice.capability,
           checked: (finishes.find(item => item.id === layer.finish || item.stored.includes(layer.finish))?.id ?? layer.finish) === choice.value,
@@ -96,11 +98,18 @@ test("eye makeup's layer menu: the layer's context entries, then its view's comm
 test("eye makeup's palette entries come from its view, with the facade's capability", () => {
   const { shell, ctx } = fixture();
   const commands = featureCommands(EYE_MAKEUP_VIEW_BINDING, ctx as FeatureViewContext);
-  const finishes = shell.feature("eye-makeup").finishCatalogue();
+  const finishes = shell.feature("eye-makeup").finishCatalogue(), selected = ctx.facade.view().layer()!;
+  const current = finishes.find(item => item.id === selected.finish || item.stored.includes(selected.finish))?.id;
   expect(commands.map(command => [command.id, command.group])).toEqual([
     ["layer.add", "Edit"], ["layer.duplicate", "Edit"], ["layer.remove", "Edit"], ["layer.reset", "Edit"], ["layer.toggle", "Edit"],
     ["point.remove", "Shape"], ["path.bezier", "Shape"], ["layer.mirror", "Shape"], ["field.add", "Shape"], ["field.remove", "Shape"],
-    ...finishes.map(finish => [`finish.${finish.id}`, "Colour & finish"])]);
+    ...finishes.filter(finish => !finish.research || finish.id === current).map(finish => [`finish.${finish.id}`, "Colour & finish"])]);
+  // Shimmer and Glitter wait for a game check: offered only with research tools on (release-readiness-audit.md item 5).
+  expect(finishes.filter(finish => finish.research).map(finish => finish.id)).toEqual(["shimmer", "glitter"]);
+  shell.preferences.dispatch({ kind: "researchTools.set", enabled: true });
+  expect(featureCommands(EYE_MAKEUP_VIEW_BINDING, ctx as FeatureViewContext).filter(command => command.id.startsWith("finish."))
+    .map(command => command.id)).toEqual(finishes.map(finish => `finish.${finish.id}`));
+  shell.preferences.dispatch({ kind: "researchTools.set", enabled: false });
   const layer = ctx.facade.view().layer()!;
   const byId = new Map(commands.map(command => [command.id, command]));
   expect(byId.get("layer.add")!.capability()).toEqual(shell.authoring.capability({ kind: "layer.edit", command: { kind: "add" } }));

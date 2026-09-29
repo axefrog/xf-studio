@@ -16,7 +16,8 @@ import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { collectionMenu, presetMenu } from "../target-menus";
 import { openReportDialog } from "../diagnostics/report-dialog";
-import { setupStatus } from "./game-setup";
+import { setupStatus, wantsWolvenKitStep } from "./game-setup";
+import { wolvenKitStepButton } from "../wolvenkit-step";
 import { modInstallLabel, openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
@@ -209,8 +210,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   };
   let savedSignature = "";
   // What the files are, in the Files heading's help tip; with research tools (UI-85) it adds what a compiler plan is.
-  const filesHelp = "Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first. A layer mask is a picture of the selected layer's shape.";
-  const researchHelp = "Research: a compiler plan is input for the offline compiler, not a mod. Exporting one saves a version first.";
+  const filesHelp = "Collection and recipe files keep your work editable, to back it up or share it. Exporting a collection saves a version in your library first.";
+  const researchHelp = "Research: a compiler plan is input for the offline compiler, not a mod; exporting one saves a version first. A layer mask is a picture of the selected layer's shape.";
   const filesSection = section({ title: "Files", help: filesHelp }, h("div", { class: "button-grid" }, fileButtons.importCollection, fileButtons.exportCollection,
     fileButtons.exportPlan, fileButtons.importRecipe, fileButtons.exportRecipe, fileButtons.exportMask));
   const filesTip = filesSection.querySelector<HTMLElement>(".help-tip")!;
@@ -254,7 +255,9 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       }
       savedEmpty.hidden = library.summaries.length > 0;
       const research = !!frame.preferences?.researchTools;
-      fileButtons.exportPlan.hidden = !research; setHelp(filesTip, research ? [filesHelp, researchHelp] : filesHelp);
+      // The compiler plan and the raw layer mask are research outputs (release-readiness-audit.md item 6).
+      fileButtons.exportPlan.hidden = !research; fileButtons.exportMask.hidden = !research;
+      setHelp(filesTip, research ? [filesHelp, researchHelp] : filesHelp);
       for (const [key, action] of [["importCollection", "collection.import"], ["exportCollection", "collection.export"], ["exportPlan", "collection.plan"],
         ["importRecipe", "recipe.import"], ["exportRecipe", "recipe.export"], ["exportMask", "mask.export"]] as const)
         applyCapability(fileButtons[key], port.files.capability({ kind: action }));
@@ -267,8 +270,10 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // The game and mod manager are chosen in Settings (UI-109); here, one line says whether Build and Add are ready, with the way there.
   const showSetup = () => rt.settings.open("game");
   const setupLine = h("p", { class: "setup-status", role: "status" });
+  // When the line says WolvenKit is needed, its one next step is the button beside it (release-readiness-audit.md item 14).
+  const wolvenKitStep = wolvenKitStepButton(rt);
   const setup = section({ title: "Game & tools", help: "Your game folder, mod manager and WolvenKit are chosen in Settings › Game and Settings › Tools." },
-    setupLine, h("div", { class: "row wrap gap-s" }, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
+    setupLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
   const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // While the latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
@@ -345,18 +350,16 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   }
   // Build readiness (including the host's Build setup) is part of the file capability.
   const buildCapability = () => port.files.capability({ kind: "package.build" });
-  const finishList = h("ul", { class: "finish-status" }, rt.finishes.map(finish => h("li", {},
-    h("span", { text: finish.label }), badge(finish.exportAdapter === "none" ? "Preview only" : finish.exportAdapter === "experimental" ? "Experimental" : "Can be built",
-      finish.exportAdapter === "flat-provisional" ? "success" : "warning"))));
+  // No list of finishes here (release-readiness-audit.md item 7): the finish picker groups them by what can be built, and Check
+  // names every layer it leaves out.
   const element = h("div", { class: "panel-content" },
     section({ title: "Mod package", help: [`Builds your own copy of your XF mods from your current draft, unsaved edits included.`,
-      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`] },
+      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`,
+      "Check names any layer it would leave out, and why. The finish picker groups finishes by what can be built."] },
       // Check, then the primary Build last; the progress takes the rest of the same row (one line, reserved), so it adds no band.
       mods, h("div", { class: "row gap-s package-actions" }, check, build, rebuild, progress)),
     result,
-    setup,
-    section({ title: "What can be packaged", help: ["Check decides what is built; this list is a guide.",
-      "Preview-only layers are left out and named in the result. Experimental finishes may look different in game."] }, finishList));
+    setup);
   rt.anchors.register("package.check", check);
   return {
     spec: { id: "package", ...PANEL_META["package"], element },
@@ -370,6 +373,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       renderMods(frame.library.products ?? [], frame.library.packagePlanIssue);
       const line = setupStatus(frame);
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
+      wolvenKitStep.update(frame, wantsWolvenKitStep(frame));
       const working = library.busy && library.progress?.code === "package";
       progress.classList.toggle("idle", !working);
       setText(progressText, working ? library.progress!.message : "");

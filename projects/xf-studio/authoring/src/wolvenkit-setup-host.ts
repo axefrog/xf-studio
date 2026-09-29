@@ -8,6 +8,7 @@ import { probeWolvenKitCliAsync, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity
 import { extractionIssue, MANAGED_INSTALL_SCHEMA, megabytes, parseInstallManifest, WOLVENKIT_RELEASE,
   type ManagedInstallManifest, type ManagedToolRelease } from "./wolvenkit-release";
 import { extractZip, ZipError } from "./zip-extract";
+import { WOLVENKIT_UNSET } from "./local-settings-readiness";
 
 /**
  * Application service for the WolvenKit CLI that XF Studio uses to read game files. It decides
@@ -72,8 +73,8 @@ const MESSAGES = {
   disk: "XF Studio couldn't save WolvenKit in its data folder. Check that the drive has about 150 MB free, then try again.",
   cancelled: "The WolvenKit download was cancelled. You can start it again at any time.",
   failed: "WolvenKit couldn't be set up. Try again; if it keeps happening, restart XF Studio.",
-  unsupported: "XF Studio can download WolvenKit on Windows only. Enter your own WolvenKit CLI in the setup panel instead.",
-  customMissing: "The WolvenKit CLI chosen in Build setup can't be found. Choose it again, or clear that field so XF Studio can download its own copy.",
+  unsupported: "XF Studio can download WolvenKit on Windows only. Name your own WolvenKit in Settings › Tools instead.",
+  customMissing: "The WolvenKit chosen in Settings › Tools can't be found. Choose it again, or clear that field so XF Studio can download its own copy.",
 } as const;
 const runtimeMessage = (name: string) =>
   `WolvenKit needs Microsoft's free ${name}, which isn't on this computer yet. Install it from Microsoft, then choose Check again.`;
@@ -334,6 +335,7 @@ export function wolvenKitReadinessIssue(state: WolvenKitSetupState): { code: str
     case "needs-runtime": return { code: "wolvenkit_runtime_missing", reason: state.message };
     case "custom-missing": return { code: "wolvenkit_missing", reason: state.message };
     case "unsupported": return { code: "wolvenkit_unset", reason: state.message };
-    default: return { code: "wolvenkit_unset", reason: "WolvenKit isn't set up yet. XF Studio can download it for you from the 3D preview card, or you can enter your own WolvenKit CLI here." };
+    // The one next step is the "Set up WolvenKit…" button beside this line (release-readiness-audit.md item 14, C-16).
+    default: return { code: "wolvenkit_unset", reason: WOLVENKIT_UNSET };
   }
 }

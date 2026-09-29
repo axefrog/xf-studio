@@ -26,6 +26,11 @@ export type FinishDescriptor = {
    * experimental finishes export only in their game-matched model. */
   exportAdapter: "flat-provisional" | "experimental" | "none";
   exportNote: string;
+  /**
+   * Not yet passed in game (exportable first, release-readiness-audit.md item 5): offered only with research tools on, or on a
+   * layer already using it. Its layers keep working, and Check and Build treat them exactly as before.
+   */
+  research?: true;
 };
 export type GlitterModelDescriptor = { id: GlitterModel; label: string; summary: string;
   /** A research study: offered only with research tools on (or on a layer already using it). */
@@ -56,6 +61,11 @@ const short: Record<FinishId, [string, string[]]> = {
 export const FINISH_IDS: readonly FinishId[] = ["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"];
 /** Stored legacy names `layer.setFinish` still accepts (as the same finish) but never offers. */
 export const LEGACY_FINISH_ALIASES: readonly Finish[] = ["satin"];
+/**
+ * Finishes behind research tools until they pass in game: Shimmer (its rebuilt grain awaits a game check after session 6 showed the
+ * earlier one as glossy vinyl) and Glitter (preview only; the in-game candidate failed). Take a finish out once it passes in game.
+ */
+export const RESEARCH_FINISHES: readonly FinishId[] = ["shimmer", "glitter"];
 
 /**
  * Read-only finish taxonomy for presentations. Export status derives from the same route
@@ -70,6 +80,7 @@ export function finishCatalogue(wording: RegionWording): FinishDescriptor[] {
       stored: LEGACY_FINISH_ALIASES.filter(alias => canonicalFinish(alias) === id), description: finishDescription(id as Finish, wording.surface),
       preview: summary.adapter === "none" ? "preview-study" : "working",
       exportAdapter: summary.adapter, exportNote: summary.note,
+      ...(RESEARCH_FINISHES.includes(id) ? { research: true as const } : {}),
     };
   });
 }

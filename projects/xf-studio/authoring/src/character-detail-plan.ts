@@ -728,7 +728,7 @@ export function planCharacterDetails(resolved: ResolvedCharacter, cco: CcoResour
       const { noun, not, pronoun } = SLOT_WORDS[slot];
       slots.push({ slot, state: "unavailable", label, message: unreadable
         ? `XF Studio couldn't read your V's ${noun} (${inMessage})${unreadable.app?.archive ? ` from ${unreadable.app.archive}` : ""}, so ${pronoun} ${not} shown.` +
-          (readers.wolvenKit ? "" : " Setting up WolvenKit from the 3D preview card may let XF Studio read it.")
+          (readers.wolvenKit ? "" : " Setting up WolvenKit may let XF Studio read it.")
         : missing ? `Your V's ${noun} (${inMessage}) ${not} in your installed game files, so ${pronoun} ${not} shown.`
         : `XF Studio can't draw your V's ${noun} (${inMessage}) yet, so ${pronoun} ${not} shown.` });
       continue;

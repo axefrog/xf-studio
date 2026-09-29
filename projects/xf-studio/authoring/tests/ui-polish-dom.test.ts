@@ -121,7 +121,10 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   const port = {
     files: { capability: () => ({ available: true }), snapshot: () => files },
     library: { capability: () => ({ available: true }), summary: () => ({ busy: false, products: [], draft: { presets: [{ id: "look1", name: "Night market" }] } }) },
-    authoring: { capability: () => ({ available: true }), requestCapability: () => ({ available: true }) },
+    authoring: { capability: () => ({ available: true }), requestCapability: () => ({ available: true }), previewState: () => ({}) },
+    // WolvenKit's next step beside a setup line that needs it (release-readiness-audit.md item 14).
+    previewSetup: { snapshot: () => ({ wolvenKitStep: { label: "Set up WolvenKit…", action: { kind: "previewSetup.consent" } } }),
+      capability: () => ({ available: true }), dispatch: async () => ({ ok: true }) },
     localSetup: { snapshot: () => setup.snapshot(), capability: (a: never) => setup.capability(a), dispatch: (a: never) => setup.dispatch(a) },
     installDetection: { snapshot: () => detection.snapshot(), capability: (a: never) => detection.capability(a), dispatch: (a: never) => detection.dispatch(a) },
     modInstall: { snapshot: () => install.snapshot(), capability: (a: never) => install.capability(a), dispatch: (a: never) => install.dispatch(a) },

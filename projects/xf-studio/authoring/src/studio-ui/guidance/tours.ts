@@ -26,7 +26,7 @@ export const TOURS: readonly Tour[] = [
         body: "Your changes appear on the 3D head as you work. Drag to turn the view, use the wheel to zoom and right-drag to pan. [[key:head.front]] returns to the front view.\n\nIf the 3D preview isn't set up yet, this pane shows the one next step. The UV map works without it." },
         buttons: [{ label: "Show the front view", action: { kind: "studio", action: { kind: "camera.front" } } }] },
       { anchor: "finish.picker", content: { title: "Choose a colour and a finish",
-        body: `Pick the layer's colour, then its finish. ${FINISH_MOD_TOKEN}; the picker groups the others by how far they can go, and preview-only finishes are marked.` },
+        body: `Pick the layer's colour, then its finish. ${FINISH_MOD_TOKEN}; the picker groups the others by how far they can go.` },
         buttons: [{ label: "Try Metallic", action: { kind: "studio.activeLayer", action: { kind: "layer.setFinish", finish: "metallic" } } }],
         advanceWhen: { any: [{ event: "finish.changed" }, { event: "color.changed" }] } },
       { anchor: "presets.list", content: { title: "Presets are complete looks",

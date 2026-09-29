@@ -1,7 +1,7 @@
 import type { EyeMakeupAction } from "../../../eye-makeup-model";
 import { shortcutLabel } from "../../../input-bindings";
 import type { FeatureCommand } from "../../../studio-ui/views/feature-view";
-import { addLayer, catalogues, type EyeMakeupViewContext } from "./actions";
+import { addLayer, catalogues, finishOffered, type EyeMakeupViewContext } from "./actions";
 
 /**
  * Eye makeup's command-palette entries (a view contribution the shell renders after its own Edit commands):
@@ -24,7 +24,8 @@ export function eyeMakeupCommands(ctx: EyeMakeupViewContext): FeatureCommand<Eye
     act("field.add", "Add warp", "Shape", layer && { kind: "field.add", layerId: layer.id }, { icon: "warp" }),
     act("field.remove", "Remove selected warp", "Shape", layer && field && { kind: "field.remove", layerId: layer.id, fieldId: field.id }, { icon: "trash" },
       layer ? "Select a warp first." : "Select a layer first."),
-    ...finishes.map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : finish.exportAdapter === "experimental" ? " (experimental export)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
+    // Exportable first: a finish that hasn't passed in game is offered only with research tools, or while the layer uses it.
+    ...finishes.filter(finish => finishOffered(ctx, finish, layer && catalogues(ctx).finishOf(layer.finish)?.id)).map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : finish.exportAdapter === "experimental" ? " (experimental export)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
       { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview only study" : "exports" })),
   ];
 }

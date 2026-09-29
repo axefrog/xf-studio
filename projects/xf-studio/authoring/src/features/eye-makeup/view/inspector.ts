@@ -14,7 +14,7 @@ import { ChoiceList, propertyList, setHelp } from "../../../studio-ui/components
 import { icon } from "../../../studio-ui/icons";
 import type { Frame } from "../../../studio-ui/runtime";
 import type { PanelController } from "../../../studio-ui/panels/collection";
-import { addLayer, addLayerCapability, catalogues, finenessState, type EyeMakeupViewContext } from "./actions";
+import { addLayer, addLayerCapability, catalogues, finenessState, finishOffered, type EyeMakeupViewContext } from "./actions";
 import { EYE_MAKEUP_PANEL_META } from "./contribution";
 
 type RLayer = ReadonlyDeep<Layer>;
@@ -74,14 +74,14 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
     });
     return { finish, element };
   });
-  const finishGroup = h("div", { class: "finish-groups", role: "group", "aria-label": "Finish family" },
-    (["flat-provisional", "experimental", "none"] as const).filter(status => finishButtons.some(item => item.finish.exportAdapter === status))
-      .map(status => h("div", { class: "finish-group", "data-status": status },
-        h("span", { class: `finish-tag ${status === "flat-provisional" ? "ok" : "warn"}`, "aria-hidden": "true", text: statusText[status] }),
-        h("div", { class: "finish-grid" }, finishButtons.filter(item => item.finish.exportAdapter === status).map(item => item.element)))));
+  const statusGroups = (["flat-provisional", "experimental", "none"] as const).filter(status => finishButtons.some(item => item.finish.exportAdapter === status))
+    .map(status => ({ status, element: h("div", { class: "finish-group", "data-status": status },
+      h("span", { class: `finish-tag ${status === "flat-provisional" ? "ok" : "warn"}`, "aria-hidden": "true", text: statusText[status] }),
+      h("div", { class: "finish-grid" }, finishButtons.filter(item => item.finish.exportAdapter === status).map(item => item.element))) }));
+  const finishGroup = h("div", { class: "finish-groups", role: "group", "aria-label": "Finish family" }, statusGroups.map(group => group.element));
   finishGroup.addEventListener("keydown", event => {
-    // Arrow keys follow the visual order (grouped by status), not catalogue order.
-    const buttons = [...finishGroup.querySelectorAll<HTMLButtonElement>(".finish-option")], index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    // Arrow keys follow the visual order (grouped by status), not catalogue order; finishes behind research tools are skipped.
+    const buttons = [...finishGroup.querySelectorAll<HTMLButtonElement>(".finish-option:not([hidden])")], index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
     if (step && index >= 0) { event.preventDefault(); buttons[(index + step + buttons.length) % buttons.length].focus(); }
   });
@@ -177,11 +177,15 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       const current = catalogues(ctx).finishOf(layer.finish)?.id ?? layer.finish, target = { kind: "layer" as const, id: layer.id };
       const choices = ctx.facade.choicesFor(target, "layer.setFinish", "finish");
       for (const { finish, element } of finishButtons) {
+        // Exportable first: a finish that hasn't passed in game shows only with research tools, or while this layer uses it.
+        element.hidden = !finishOffered(ctx, finish, current);
         setAttr(element, "aria-pressed", String(finish.id === current));
         const choice = choices.find(item => item.value === finish.id);
         element.disabled = !!choice && !choice.capability.available && finish.id !== current;
         element.title = `${finish.label}. ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
       }
+      // A status group with nothing offered (Preview only, while Glitter is behind research tools) takes its heading with it.
+      for (const group of statusGroups) group.element.hidden = finishButtons.every(item => item.finish.exportAdapter !== group.status || item.element.hidden);
       const descriptor = catalogues(ctx).finishes.find(finish => finish.id === current);
       setText(description, descriptor ? `${descriptor.aliases.length ? `${descriptor.shortLabel} (also ${descriptor.aliases.join(", ")}). ` : ""}${descriptor.description}` : "");
       // Per-layer status: an experimental finish still in its earlier preview model is left out until switched.

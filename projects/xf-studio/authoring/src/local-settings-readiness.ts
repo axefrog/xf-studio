@@ -124,8 +124,11 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   };
 }
 
-/** Shown when no WolvenKit is set up yet; XF Studio can download its own copy. */
-export const WOLVENKIT_UNSET = "WolvenKit isn't set up yet. XF Studio can download it for you, or you can enter your own WolvenKit CLI here.";
+/**
+ * Shown when no WolvenKit is set up yet; XF Studio can download its own copy. The one next step is a button beside this line wherever
+ * it shows (Settings, Mod package: "Set up WolvenKit…", the setup service's `wolvenKitStep`), so the words name no other place.
+ */
+export const WOLVENKIT_UNSET = "WolvenKit isn't set up yet. XF Studio can set it up for you.";
 
 /**
  * Environment overrides remain highest priority for localhost until package-server is migrated.

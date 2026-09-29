@@ -26,6 +26,14 @@ export function finenessState(capability: ReturnType<EyeMakeupViewContext["facad
   return notApplicable ? { hidden: true, disabled: false } : { hidden: false, disabled: true, reason: capability.reason };
 }
 
+/**
+ * Whether a finish is offered: exportable first (release-readiness-audit.md item 5), so a finish that hasn't passed in game (the
+ * catalogue's `research`) shows only with research tools on, or where a layer already uses it (`current`), so its state is never hidden.
+ */
+export function finishOffered(ctx: EyeMakeupViewContext, finish: { id: string; research?: true }, current?: string): boolean {
+  return !finish.research || finish.id === current || ctx.research();
+}
+
 type Catalogues = {
   readonly finishes: ReturnType<EyeMakeupFacade["finishCatalogue"]>;
   readonly glitterModels: ReturnType<EyeMakeupFacade["glitterModelCatalogue"]>;
