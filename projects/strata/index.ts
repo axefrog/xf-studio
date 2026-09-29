@@ -20,7 +20,8 @@ export { erector, GRAPH_MODEL_SCHEMA } from "./src/kernel/erector";
 export type { GraphModel, NodeModel, NodeRefData } from "./src/kernel/erector";
 
 // Registration
-export { defineType, defineRule, constantId } from "./src/define";
+export { defineType, defineRule, constantId, kindAt } from "./src/define";
+export { seededRandom, prng } from "./src/random";
 export type { TypeSpec, TypeDef, RuleSpec, RuleDef, RuleContext, ConflictDraft, DeriveContext, Upcaster } from "./src/define";
 export { defineSource, defineSink, JobQueue } from "./src/sources";
 export type {

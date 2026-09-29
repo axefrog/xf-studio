@@ -21,7 +21,8 @@ export type EventRef = { readonly node: NodeRef; readonly seq: number };
 /**
  * How a field holds data and how it layers.
  * - `value`: an atomic JSON value.
- * - `ref` / `refs`: an edge to one node, or an ordered, atomic list of edges. `clone` says whether a deep clone copies
+ * - `ref` / `refs`: an edge to one node, or an ordered, atomic list of edges; `to` names the accepted types, or `"*"`
+ *   for any type. `clone` says whether a deep clone copies
  *   the target (`follow`) or keeps pointing at it (`share`); `follows` says whether derivations walk the edge.
  * - `entry`: a reference to a stream entry (an `EventRef`); compaction keeps what it points at.
  * - `map`: keyed values, resolved per key; keys union across layers; a tombstone removes an inherited key.

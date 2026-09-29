@@ -4,7 +4,8 @@
  */
 export { runKernelVector, conformanceOperators } from "./src/testing/conformance";
 export type { KernelVector, KernelStep, VectorSuite } from "./src/testing/conformance";
-export { Scheduler, simClock, seededRandom, prng, settle, SimJobs, SimFiles, SimInput, SimRequests } from "./src/testing/sim-sources";
+export { Scheduler, simClock, settle, SimJobs, SimFiles, SimInput, SimRequests } from "./src/testing/sim-sources";
+export { seededRandom, prng } from "./src/random";
 export { SimStore } from "./src/testing/sim-store";
 export { referenceModel, replayTo } from "./src/testing/reference";
 export { simulate, runSteps, generateSteps, shrink, replay } from "./src/testing/simulate";

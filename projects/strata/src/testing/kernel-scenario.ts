@@ -13,7 +13,8 @@ import { erector, GRAPH_MODEL_SCHEMA } from "../kernel/erector";
 import type { GraphModel, NodeModel } from "../kernel/erector";
 import type { Operators } from "../kernel/operators";
 import { conformanceOperators } from "./conformance";
-import { prng, Scheduler, simClock } from "./sim-sources";
+import { Scheduler, simClock } from "./sim-sources";
+import { prng } from "../random";
 import type { Scenario, SimAction } from "./simulate";
 
 export type KernelWorld = {

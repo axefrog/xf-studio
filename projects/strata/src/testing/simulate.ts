@@ -5,7 +5,8 @@
  * A failing run reports its seed and steps; the shrinker reduces the steps to a minimal failing list, which goes
  * into a regression file that every suite run replays.
  */
-import { prng, settle } from "./sim-sources";
+import { settle } from "./sim-sources";
+import { prng } from "../random";
 
 export type Step =
   | { readonly kind: "act"; readonly action: string; readonly args: readonly number[] }

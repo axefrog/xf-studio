@@ -112,7 +112,7 @@ const isRef = (value: unknown): value is NodeRef => !!value && typeof value === 
   typeof (value as NodeRef).type === "string" && typeof (value as NodeRef).id === "string" && Object.keys(value).length === 2;
 const isEventRef = (value: unknown): value is EventRef => !!value && typeof value === "object" && isRef((value as EventRef).node) &&
   Number.isSafeInteger((value as EventRef).seq) && (value as EventRef).seq >= 1 && Object.keys(value).length === 2;
-const accepts = (to: NodeType | readonly NodeType[], type: NodeType) => typeof to === "string" ? to === type : to.includes(type);
+const accepts = (to: NodeType | readonly NodeType[], type: NodeType) => to === "*" || (typeof to === "string" ? to === type : to.includes(type));
 
 /** Why a value doesn't fit a leaf kind, or null when it does. `null` clears a `ref`; references name an accepted type. */
 export function valueProblem(kind: FieldKind, value: unknown): string | null {

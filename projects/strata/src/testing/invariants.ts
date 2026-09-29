@@ -88,7 +88,7 @@ export function checkStructure(graph: Graph, types: readonly TypeSpec[], store?:
       const spec = def.fields[item.path[0]];
       let kind: FieldKind = spec;
       while (kind.kind === "map") kind = kind.of;
-      if ((kind.kind === "ref" || kind.kind === "refs") && ![kind.to].flat().includes(item.target.type))
+      if ((kind.kind === "ref" || kind.kind === "refs") && kind.to !== "*" && ![kind.to].flat().includes(item.target.type))
         problems.push(`structure: ${rec.ref.id.slice(0, 8)} references a ${item.target.type} where ${short(kind.to)} is accepted`);
     }
   }

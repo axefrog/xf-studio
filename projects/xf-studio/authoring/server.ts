@@ -3,6 +3,11 @@ import { existsSync, mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
+// The graph (XF Strata): its store and backups in the library files, its host transport and inspector feed (profiles and
+// graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
+import { createGraphHandler, GraphLibrary } from "./src/platform/graph-adapters/graph-host";
+import { hostClock, hostRandom } from "./src/platform/graph-adapters/host-sources";
+import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "./src/compose/graph";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "./src/features/expressions/export/game";
@@ -59,6 +64,13 @@ const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verific
 // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
 const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
 const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
+const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
+const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), graphOptions);
+const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), graphOptions);
+const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
+  ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
+// The library's daily backup, a moment after starting (never for an isolated server's own library).
+if (!state.isolated) setTimeout(() => graphLibrary.dailyBackup(), 2000);
 const localSettings = new LocalSettingsStore(state.settingsDirectory);
 // A verification workspace (?verify) edits its own copy of the settings, starting from these (UI-98).
 const verificationSettings = new LocalSettingsStore(verificationSettingsDirectory(dataRoot), { seed: () => localSettings.load().settings });
@@ -258,6 +270,7 @@ const server = Bun.serve({
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(request, store, prefix);
     for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(request, store, prefix);
+    for (const [prefix, handle] of graphRequests) if (url.pathname.startsWith(prefix + "/")) return handle(request);
     for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
       if (url.pathname === prefix || url.pathname.startsWith(prefix + "/"))
         return libraryRequest(request, store, prefix);

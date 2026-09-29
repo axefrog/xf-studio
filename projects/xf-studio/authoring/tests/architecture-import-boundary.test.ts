@@ -261,15 +261,56 @@ function platformViolations(tree: Tree): string[] {
   const pure = tree.names.filter(name => name.startsWith("platform/") && !name.startsWith("platform/scene/"));
   // The export host (platform/export, host only) alone uses Node; the api and core never import it (§7 rule 6).
   const host = (name: string) => name.startsWith("platform/export/");
+  // The graph's adapters (platform/graph-adapters: SQLite, backups, the host transport, host sources) implement XF Strata's
+  // interfaces; only they use Bun's SQLite and Node's files, and no other platform module imports them. They and the
+  // graph types reach the engine through its entry point alone (profiles and graph design §1.1, boundary rules 1-2).
+  const graphAdapter = (name: string) => name.startsWith("platform/graph-adapters/");
+  const graph = (name: string) => graphAdapter(name) || name.startsWith("platform/graph-types/");
   return pure.flatMap(name => [
     ...resolvedIn(tree, name).filter(path => !path.startsWith("platform/") || path.startsWith("platform/scene/") ||
-      !host(name) && host(path))
+      !host(name) && host(path) || !graphAdapter(name) && graphAdapter(path))
       .filter(path => !(host(name) && /^node:(?:crypto|fs|path)$/.test(path)))
+      .filter(path => !(graph(name) && path === "strata"))
+      .filter(path => !(graphAdapter(name) && /^(?:bun:sqlite|node:(?:fs|path))$/.test(path)))
       .filter(path => !(name === "platform/api/scene" && path === "three")).map(path => `${name} -> ${path}`),
     ...valueImportsOf(tree, name, /^three(?:\/|$)/).map(path => `${name} -> ${path} (value)`),
     ...(name === "platform/api/index" && /["']\.\/scene["']/.test(tree.text(name)) ? [`${name} re-exports platform/api/scene`] : []),
   ]);
 }
+
+test("the graph's adapters and types reach XF Strata through its entry point, and only the adapters use SQLite and files", () => {
+  expect(walk("platform")).toContain("platform/graph-adapters/sqlite-store");
+  const probes: Record<string, string>[] = [
+    { "platform/graph-types/rules": `import { x } from "../../../../strata/src/graph";` },
+    { "platform/graph-types/rules": `import { Database } from "bun:sqlite";` },
+    { "platform/core/registry": `import { SqliteGraphStore } from "../graph-adapters/sqlite-store";` },
+    { "platform/api/index": `import { createGraph } from "strata";` },
+    { "platform/graph-adapters/sqlite-store": `import { x } from "../../features/eye-makeup";` },
+  ];
+  for (const probe of probes) expect(platformViolations(probed(probe)).length, JSON.stringify(probe)).toBeGreaterThan(0);
+});
+
+test("Studio code reaches XF Strata only through strata and strata/testing, and src never imports the testing entry", () => {
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const deep = (text: string) => imports(text).filter(specifier => /(?:^|\/)strata\/(?!testing$)|projects\/strata|\.\.\/strata/.test(specifier) && specifier !== "strata");
+  const violations = [
+    ...DISK.names.flatMap(name => [...deep(source(name)), ...imports(source(name)).filter(specifier => specifier === "strata/testing")].map(specifier => `src/${name} -> ${specifier}`)),
+    ...["server.ts", "desktop/server.ts"].flatMap(file => deep(readFileSync(new URL(`../${file}`, import.meta.url), "utf8")).map(specifier => `${file} -> ${specifier}`)),
+  ];
+  expect(violations).toEqual([]);
+  expect(deep(`import { x } from "../../strata/src/graph";`).length).toBe(1);
+  expect(deep(`import { x } from "strata/src/kernel/kernel";`).length).toBe(1);
+  expect(deep(`import { x } from "strata"; import { y } from "strata/testing";`)).toEqual([]);
+});
+
+test("no feature, device or presentation module imports the graph's store adapter (only the graph writes nodes)", () => {
+  const adapters = /^platform\/graph-adapters\/(?:sqlite-store|backups|graph-host)$/;
+  const importers = (tree: Tree) => tree.names.filter(name => !name.startsWith("platform/graph-adapters/"))
+    .filter(name => resolvedIn(tree, name).some(path => adapters.test(path)));
+  expect(importers(DISK)).toEqual([]);
+  expect(importers(probed({ "features/eye-makeup/index": `import { SqliteGraphStore } from "../../platform/graph-adapters/sqlite-store";` })))
+    .toEqual(["features/eye-makeup/index"]);
+});
 
 test("platform code imports only the platform: nothing from features, engines, compose or legacy src", () => {
   const platform = walk("platform");
