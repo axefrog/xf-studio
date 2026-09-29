@@ -17,7 +17,7 @@
 
 ## Known open items (29 September 2026)
 
-- **Speed:** choosing Colour-shifting froze the UI for 5–10 s (PREV-188); switching hairstyle is very slow (PREV-189); first-run preparation takes about 55 s (a one-time step with WolvenKit download and progress, but still measured against a budget).
+- **Speed:** choosing a finish no longer freezes the page (PREV-188 fixed: Colour-shifting drawn in about 15 ms, Glitter's programs compiled ahead), and a hairstyle switch no longer freezes it either (PREV-189 fixed: a prepared hairstyle the pointer rested on shows in about 80 ms, one new to the page in 0.25–0.9 s, never with a task over 50 ms). Still open: a hairstyle never prepared still waits for the host (0.2–4.2 s: WolvenKit for its layer masks, one texture decode after another; PREV-190), a warm restart to the player's own V takes about 6 s against a 2 s budget, and first-run preparation takes about 55 s (a one-time step with WolvenKit download and progress, but still measured against a budget).
 - **Finishes:** Glitter and Shimmer reworked offline and waiting for in-game verdicts; Glossy and Colour-shifting still experimental.
 - **Clutter:** preview-only finishes and research tools need an audit against "exportable first".
 - **Consistency:** open UI findings in the ledger (UI-139, UI-144..157 and others), and layer names repeating after a removal (CORE-125).

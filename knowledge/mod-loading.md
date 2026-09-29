@@ -169,7 +169,24 @@ Preparing ahead, per row: 16 CCXL hairstyles 44–116 s and 11 launches, 11.5 MB
 | Reset all after them | 0.14–27.8 s | 0.09 s, 0.11 s | 0.07 s, 0.08 s |
 | `/health` while it ran: median, p95, max | 0.12, 0.76, 26.6 s | 0.10, 0.25, 2.0 s | 0.10, 0.15, 0.23 s |
 
-"First time" is the first round after a server restart: it includes the host preparing each record (0.2–0.7 s) and the page loading parts it hadn't shown. "Again" is the second round. The `/health` median is mostly the probe's own start-up. What is left: a part new to the page costs its first frame about 150–220 ms (a new hairstyle: texture upload about 125 ms, program link about 60 ms), and each change asked for checks the mod setup's watched paths (about 55–90 ms of the 75–110 ms). Both are in the [performance backlog](../research/backlog/performance.md).
+"First time" is the first round after a server restart: it includes the host preparing each record (0.2–0.7 s) and the page loading parts it hadn't shown. "Again" is the second round. The `/health` median is mostly the probe's own start-up. What is left: each change asked for checks the mod setup's watched paths (about 55–90 ms of the 75–110 ms), in the [performance backlog](../research/backlog/performance.md).
+
+**A part new to the page: made ready before it shows (PREV-189, 29 September 2026).** Measured on the default V with a headless GPU Chrome (a fresh profile each run, so no compiled program was cached; ANGLE on D3D11, RTX 4070), `tools/measure-hairstyle-switch.ts` with the page instrumented by `tools/gl-probe.ts`. Before, a hairstyle new to the page froze the page for its first frame: 0.7–0.9 s for a 4096² hairstyle (three 4096² maps at 110–145 ms each, because an image element uploaded unpremultiplied is decoded again on the page's thread, and two to four programs linked at 120–160 ms each), after 0.35 s of loading its files one after another; 1.28–1.36 s in all. Now:
+
+- **Files at once, bitmaps off the page's thread.** A record's new parts are fetched and decoded together (the loader starts every file its budget allows before building), and each map is decoded a second way, as an `ImageBitmap` with the raw texels WebGL is given (`premultiplyAlpha: none`, `colorSpaceConversion: none`), which its first upload uses and then closes. A 4096² upload is 40–45 ms. The image element stays the texture's image (a restored context uploads from it), and only the skin's maps, which the CPU reads under decals, are decoded ahead as elements.
+- **Uploads stream, a few per frame.** A part's maps start uploading as soon as it is built, each turn just after a frame in a task of its own, never inside the frame's own draw.
+- **Prepared before placing** (`prepareDetails`, character-renderer.ts): the remaining maps, the layered stacks' bakes, the rest-pose bounds of each skinned mesh (Three otherwise skins every vertex on the CPU in the first frame to sort it: 85 ms for a large hairstyle), and every program compiled for each pass the scene draws the part in (forward into the display's target, the skin scatter's input variants, the contact shadows' caster depth) with `compileAsync` over KHR_parallel_shader_compile; once the GPU has drained (a fence), each program's first use is taken between frames. The shown V keeps drawing meanwhile; a newer change stops it (`xfs:character:prepared` marks its end).
+- **Loaded ahead on hover.** With a Character row open, a prepared choice the pointer rests on for 150 ms has its parts loaded and prepared into the part pool, asked of the host as another page (`X-XFS-Page: <page>-ahead`), so the person's own V is never superseded and nothing is prepared that the host hadn't prepared already; the person's own change stops it at once.
+
+| Hairstyle switch (default V, host warm) | Before | After |
+|---|---|---|
+| Prepared, new to the page (4096² maps, a program new to the page) | 1.28–1.36 s, one 0.84–0.89 s task | 0.68–0.91 s, no task over 50 ms |
+| Prepared, new to the page (a CCXL hairstyle, 10 MB geometry) | 1.36 s, tasks of 0.71 s and 78 ms | 0.80–0.85 s, no task over 50 ms |
+| Prepared, new to the page (2048² maps), after the host's answer | 0.28 s, one 135–137 ms task | 0.21–0.23 s, no task over 50 ms |
+| Prepared, the pointer rested on it 0.4 s | – | 77–86 ms (a load ahead still under way at the click: 0.26–0.47 s) |
+| Shown before on this page | 71–85 ms | 73–89 ms |
+| Never prepared | host 0.4–4.2 s, then the above | the same host time, then the above: layer masks still go to WolvenKit (3.3–3.8 s), native texture decodes run one at a time (0.1–0.3 s each); PREV-190 |
+
 
 **Prepared files: what persists, and when it is prepared again.** A choice is shown ready when a later preparation of it would need no WolvenKit. Everything prefetch writes is keyed so that a changed source is never served:
 
