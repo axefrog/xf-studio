@@ -36,6 +36,8 @@ export type EntityVector = {
   readonly expect: {
     readonly effective?: Readonly<Record<string, Json | null>>;
     readonly refusals?: readonly (string | null)[];
+    /** The types refused when they are registered (SPEC §15.3), by name; any other refusal fails the vector. */
+    readonly refusedTypes?: readonly string[];
     readonly streams?: Readonly<Record<string, readonly (readonly [number, string])[]>>;
     readonly origins?: Readonly<Record<string, Readonly<Record<string, string>>>>;
     readonly changes?: readonly (readonly string[])[];
@@ -64,7 +66,8 @@ export function typeFromData(data: TypeData): TypeDef {
 /** Runs one entity vector; returns its problems (empty when it passes). */
 export async function runEntityVector(vector: EntityVector): Promise<string[]> {
   const scheduler = new Scheduler(), memory = new MemoryStore(), life = new Aborter();
-  const types = vector.types.map(typeFromData);
+  const refusedTypes: string[] = [];
+  const types = vector.types.flatMap(data => { try { return [typeFromData(data)]; } catch { refusedTypes.push(data.type); return []; } });
   const labels = new Map<string, NodeRef>();
   const names = new Map<string, string>();
   const resolveLabels = (value: unknown): unknown => {
@@ -154,6 +157,7 @@ export async function runEntityVector(vector: EntityVector): Promise<string[]> {
     if (!equal(actual, want)) problems.push(`${vector.name}: ${label} is ${show(actual)}, expected ${show(want)}`);
   }
   if (expect.refusals && !equal(refusals, expect.refusals)) problems.push(`${vector.name}: refusals ${show(refusals)}, expected ${show(expect.refusals)}`);
+  if (!equal(refusedTypes, expect.refusedTypes ?? [])) problems.push(`${vector.name}: refused types ${show(refusedTypes)}, expected ${show(expect.refusedTypes ?? [])}`);
   for (const [label, expected] of Object.entries(expect.streams ?? {})) {
     const ref = labels.get(label);
     const actual = ref ? (await graph.history(ref)).map(entry => [entry.seq, entry.op.kind]) : [];

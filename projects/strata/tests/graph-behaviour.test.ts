@@ -11,6 +11,7 @@ import { GROUP, ITEM, SYNTHETIC_RULES as SYNTHETIC_RULES_FOR_TESTS } from "../sr
 import { entryReferences, keepSet, nodeReferences, rollupDeltaStream } from "../src/compaction";
 import { fold, upcast } from "../src/fold";
 import { pathKey } from "strata";
+import type { DeriveResult } from "strata";
 import { create, drive, harness, ok } from "./helpers";
 
 function sessions(extra: Record<string, unknown> = {}) {
@@ -1316,17 +1317,27 @@ test("map keys: a feed with several masks takes each, an emptied submap and abse
   expect([graph.resolve(k, ["n"]), graph.resolve(k, ["n", "a"])]).toEqual([{}, undefined]);
 });
 
-test("a derivation cycle names the nodes on it, wherever it is read from", () => {
-  const { graph } = harness();
-  const a = create(graph, ITEM, { title: "a" }), b = create(graph, ITEM, { title: "b", link: a });
-  ok(graph.commit([{ op: "set", node: a, path: ["link"], value: b }]));
-  const ids = (result: ReturnType<typeof graph.derive>) => result.ok ? [] : (result.cycle ?? []).map(ref => ref.id);
-  const loop = (list: string[]) => list.length === 3 && list[0] === list[2] && new Set(list).size === 2 && list.includes(a.id) && list.includes(b.id);
-  // Entered at A, the cycle is named from A; read from B afterwards, it is the same cycle.
-  expect([ids(graph.derive(a, "summary")), ids(graph.derive(b, "summary"))]).toEqual([[a.id, b.id, a.id], [a.id, b.id, a.id]]);
-  const c = create(graph, ITEM, { title: "c", link: a });
-  const fromC = graph.derive(c, "summary");
-  expect([fromC.ok ? "ok" : fromC.reason, loop(ids(fromC))]).toEqual(["cycle", true]);
+test("a derivation cycle is named from its node whose ID sorts first, whichever node is read first", () => {
+  // Two graphs with the same seeded IDs: one reads the cycle from A first, the other from B.
+  const make = () => {
+    const { graph } = harness();
+    const a = create(graph, ITEM, { title: "a" }), b = create(graph, ITEM, { title: "b", link: a });
+    ok(graph.commit([{ op: "set", node: a, path: ["link"], value: b }]));
+    const c = create(graph, ITEM, { title: "c", link: a });
+    return { graph, a, b, c };
+  };
+  const ids = (result: DeriveResult) => result.ok ? [] : (result.cycle ?? []).map(ref => ref.id);
+  const one = make(), two = make();
+  const [first, second] = [one.a.id, one.b.id].sort();
+  const named = [first, second, first];
+  expect([ids(one.graph.derive(one.a, "summary")), ids(one.graph.derive(one.b, "summary"))]).toEqual([named, named]);
+  expect([ids(two.graph.derive(two.b, "summary")), ids(two.graph.derive(two.a, "summary"))]).toEqual([named, named]);
+  // A node that reads through the cycle names the same cycle, read before or after the nodes on it.
+  expect(ids(one.graph.derive(one.c, "summary"))).toEqual(named);
+  const three = make();
+  expect(ids(three.graph.derive(three.c, "summary"))).toEqual(named);
+  // Memoised, the inner result as well as the outer one.
+  expect(three.graph.derive(three.a, "summary")).toBe(three.graph.derive(three.a, "summary"));
 });
 
 test("follow cycles go only through follows references to nodes that exist, from any of a node's references", () => {
@@ -1446,13 +1457,19 @@ test("a rolled-up run is replaced before the kept entry that ends it, and folds 
   expect(fold(null, rolled, def)).toEqual(fold(null, entries as never, def));
 });
 
-test("upcasting takes the first step from each schema, and a chain that never reaches the type's schema stops after 64 steps", () => {
+test("a type whose upcasters don't all reach its schema is refused when it is defined", () => {
   const rename = (from: string, to: string) => (path: readonly string[], value: unknown) => ({ path: path[0] === from ? [to, ...path.slice(1)] : [...path], value: value as never });
-  const looping = defineType({ type: "loop", owner: "t", schema: "3", fields: { a: { kind: "value" }, b: { kind: "value" }, c: { kind: "value" } },
-    upcasters: [{ from: "1", to: "2", set: rename("a", "b") }, { from: "1", to: "2", set: rename("a", "c") }, { from: "2", to: "1", set: rename("b", "a") }] });
-  const entry = { node: { type: "loop", id: "x" }, seq: 1, pos: 1, commit: "c", actor: "a", actorSeq: 1, at: 0, schema: "1", op: { kind: "set", path: ["a"], value: 1 } };
-  const once = upcast({ ...looping, upcasters: looping.upcasters!.slice(0, 2), schema: "2" } as never, entry as never);
-  expect([once.op, upcast(looping, entry as never).op]).toEqual([{ kind: "set", path: ["b"], value: 1 }, { kind: "set", path: ["a"], value: 1 }]);
+  const define = (schema: string, upcasters: { from: string; to: string }[]) => () =>
+    defineType({ type: "t", owner: "t", schema, fields: { a: { kind: "value" } }, upcasters: upcasters.map(step => ({ ...step, set: rename("a", "a") })) });
+  expect(define("3", [{ from: "1", to: "2" }, { from: "2", to: "1" }])).toThrow("upcasters from schema 1 never reach schema 3");
+  expect(define("3", [{ from: "1", to: "2" }])).toThrow("upcasters from schema 1 never reach schema 3");
+  expect(define("3", [{ from: "1", to: "2" }, { from: "1", to: "3" }, { from: "2", to: "3" }])).toThrow("two upcasters from schema 1");
+  expect(define("3", [{ from: "3", to: "1" }, { from: "1", to: "3" }])).toThrow("an upcaster from its current schema 3");
+  expect(define("3", [{ from: "2", to: "3" }, { from: "1", to: "2" }, { from: "0", to: "2" }])).not.toThrow();
+  // Registered, a chain runs to the end; an entry of a schema no step starts from is read as it is.
+  const def = define("3", [{ from: "2", to: "3" }, { from: "1", to: "2" }])();
+  const entry = (schema: string) => ({ node: { type: "t", id: "x" }, seq: 1, pos: 1, commit: "c", actor: "a", actorSeq: 1, at: 0, schema, op: { kind: "set", path: ["a"], value: 1 } });
+  expect([upcast(def, entry("1") as never).schema, upcast(def, entry("0") as never).schema]).toEqual(["3", "0"]);
 });
 
 test("references are checked whole: every item of a list, and the exact type named", () => {

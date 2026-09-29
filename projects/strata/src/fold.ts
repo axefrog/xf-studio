@@ -64,11 +64,15 @@ function upcastPrimitive(op: PrimitiveOp, set: NonNullable<TypeSpec["upcasters"]
   return next ? { kind: "set", path: next.path, value: next.value } : null;
 }
 
-/** An entry as the type's current schema has it, through its upcasters (pure; the stored entry is untouched). */
+/**
+ * An entry as the type's current schema has it, through its upcasters (pure; the stored entry is untouched). A type's
+ * upcasters are checked when it is defined to reach its schema (SPEC §15.3); an entry of a schema no step starts from
+ * is read as it is.
+ */
 export function upcast(def: TypeSpec, entry: Entry): Entry {
   if (entry.schema === def.schema || !def.upcasters?.length) return entry;
   let op = entry.op, schema = entry.schema;
-  for (let guard = 0; schema !== def.schema && guard < 64; guard++) {
+  while (schema !== def.schema) {
     const step = def.upcasters.find(item => item.from === schema);
     if (!step) break;
     switch (op.kind) {
