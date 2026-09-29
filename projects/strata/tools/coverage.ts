@@ -5,8 +5,9 @@
  *
  *   STRATA_ACORN=<acorn.mjs> bun tools/coverage.ts [--list uncovered.txt] [--ratchet | --record] [test files…]
  *
- * `--ratchet` fails when the share of covered outcomes falls below the one recorded in `tools/quality.json`;
- * `--record` records it (after a run that raised it). Coverage never goes down.
+ * Two shares come out: the public one (the suite alone, as CI runs it) and, with STRATA_VECTORS, the full one.
+ * `--ratchet` fails when a share falls below the one recorded in `tools/quality.json`; `--record` records them and
+ * refuses to lower one. Coverage never goes down.
  *
  * Run it under the memory guard: it runs the whole suite.
  */
@@ -36,37 +37,56 @@ const outputs = [join(work, "suite.json")];
 run(ROOT, outputs[0]);
 if (process.env.STRATA_VECTORS) { outputs.push(join(work, "vectors.json")); run(process.env.STRATA_VECTORS, outputs[1], { STRATA_ENGINE: ROOT }); }
 
-const merged = new Map<string, Hit[]>();
-for (const file of outputs) {
-  let data: Record<string, Hit[]>;
-  try { data = JSON.parse(readFileSync(file, "utf8")); } catch { continue; }
-  for (const [name, probes] of Object.entries(data)) {
-    const current = merged.get(name);
-    if (!current) { merged.set(name, probes); continue; }
-    probes.forEach((probe, i) => probe.hits.forEach((count, j) => { current[i].hits[j] += count; }));
+/** Merges the counts of some of the runs, file by file. */
+function merge(runs: readonly string[]): Map<string, Hit[]> {
+  const merged = new Map<string, Hit[]>();
+  for (const file of runs) {
+    let data: Record<string, Hit[]>;
+    try { data = JSON.parse(readFileSync(file, "utf8")); } catch { continue; }
+    for (const [name, probes] of Object.entries(data)) {
+      const current = merged.get(name);
+      if (!current) { merged.set(name, structuredClone(probes)); continue; }
+      probes.forEach((probe, i) => probe.hits.forEach((count, j) => { current[i].hits[j] += count; }));
+    }
   }
+  return merged;
 }
+// Two baselines: `public` (the suite alone, as CI runs it) and `full` (with the private vectors).
+const measured = new Map<"public" | "full", Map<string, Hit[]>>([["public", merge(outputs.slice(0, 1))]]);
+if (outputs.length > 1) measured.set("full", merge(outputs));
 rmSync(work, { recursive: true, force: true });
 
-let total = 0, covered = 0;
-const lines: string[] = [], missing: string[] = [];
-for (const [name, probes] of [...merged].sort(([a], [b]) => a < b ? -1 : 1)) {
-  let fileTotal = 0, fileCovered = 0;
-  for (const probe of probes) probe.hits.forEach((count, i) => {
-    fileTotal++;
-    if (count > 0) fileCovered++;
-    else missing.push(`${name}:${probe.line}  ${probe.fn}  [${probe.kind}: ${probe.outcomes[i]} never]  ${probe.code}`);
-  });
-  total += fileTotal; covered += fileCovered;
-  lines.push(`${name.padEnd(34)} ${String(fileCovered).padStart(5)} / ${String(fileTotal).padEnd(5)} ${(100 * fileCovered / Math.max(1, fileTotal)).toFixed(1).padStart(6)} %`);
+type Share = { covered: number; total: number; percent: number };
+function report(merged: Map<string, Hit[]>): { share: Share; lines: string[]; missing: string[] } {
+  let total = 0, covered = 0;
+  const lines: string[] = [], missing: string[] = [];
+  for (const [name, probes] of [...merged].sort(([a], [b]) => a < b ? -1 : 1)) {
+    let fileTotal = 0, fileCovered = 0;
+    for (const probe of probes) probe.hits.forEach((count, i) => {
+      fileTotal++;
+      if (count > 0) fileCovered++;
+      else missing.push(`${name}:${probe.line}  ${probe.fn}  [${probe.kind}: ${probe.outcomes[i]} never]  ${probe.code}`);
+    });
+    total += fileTotal; covered += fileCovered;
+    lines.push(`${name.padEnd(34)} ${String(fileCovered).padStart(5)} / ${String(fileTotal).padEnd(5)} ${(100 * fileCovered / Math.max(1, fileTotal)).toFixed(1).padStart(6)} %`);
+  }
+  return { share: { covered, total, percent: Math.round(10000 * covered / Math.max(1, total)) / 100 }, lines, missing };
 }
-console.log(`\nBranch outcomes covered\n${lines.join("\n")}\n${"all engine files".padEnd(34)} ${String(covered).padStart(5)} / ${String(total).padEnd(5)} ${(100 * covered / Math.max(1, total)).toFixed(1).padStart(6)} %`);
-if (listFile) { writeFileSync(listFile, `${missing.join("\n")}\n`); console.log(`${missing.length} uncovered outcomes listed in ${listFile}`); }
-const quality = existsSync(QUALITY) ? JSON.parse(readFileSync(QUALITY, "utf8")) as Record<string, unknown> : {};
-const share = Math.round(10000 * covered / Math.max(1, total)) / 100;
-const floor = (quality.coverage as { percent?: number } | undefined)?.percent;
-if (record && (floor === undefined || share >= floor)) {
-  writeFileSync(QUALITY, `${JSON.stringify({ ...quality, coverage: { covered, total, percent: share } }, null, 2)}\n`);
-  console.log(`recorded ${share} % in tools/quality.json`);
+const quality = (existsSync(QUALITY) ? JSON.parse(readFileSync(QUALITY, "utf8")) : {}) as Record<"public" | "full", { coverage?: Share } | undefined>;
+let fell = false;
+const shares: [ "public" | "full", Share][] = [];
+for (const [baseline, merged] of measured) {
+  const { share, lines, missing } = report(merged);
+  shares.push([baseline, share]);
+  console.log(`\nBranch outcomes covered (${baseline === "full" ? "suite and external vectors" : "the suite alone"})\n${lines.join("\n")}\n${"all engine files".padEnd(34)} ${String(share.covered).padStart(5)} / ${String(share.total).padEnd(5)} ${share.percent.toFixed(1).padStart(6)} %`);
+  // The uncovered list is the most complete run's.
+  if (listFile && baseline === [...measured.keys()].at(-1)) { writeFileSync(listFile, `${missing.join("\n")}\n`); console.log(`${missing.length} uncovered outcomes listed in ${listFile}`); }
+  const floor = quality[baseline]?.coverage?.percent;
+  if (floor !== undefined && share.percent < floor) { console.error(`Branch coverage (${baseline}) fell from ${floor} % to ${share.percent} %.`); fell = true; }
 }
-if ((ratchet || record) && floor !== undefined && share < floor) { console.error(`Branch coverage fell from ${floor} % to ${share} %.`); process.exit(1); }
+if (record && !fell) {
+  for (const [baseline, share] of shares) quality[baseline] = { ...quality[baseline], coverage: share };
+  writeFileSync(QUALITY, `${JSON.stringify(quality, null, 2)}\n`);
+  console.log(`recorded ${shares.map(([baseline, share]) => `${baseline} ${share.percent} %`).join(", ")} in tools/quality.json`);
+}
+if ((ratchet || record) && fell) process.exit(1);

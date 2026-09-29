@@ -1,13 +1,15 @@
 {
-  "mutants": {
-    "killed": 4257,
-    "survived": 0,
-    "equivalent": 506,
-    "percent": 100
-  },
-  "coverage": {
-    "covered": 2878,
-    "total": 2964,
-    "percent": 97.1
+  "full": {
+    "mutants": {
+      "killed": 4257,
+      "survived": 0,
+      "equivalent": 506,
+      "percent": 100
+    },
+    "coverage": {
+      "covered": 2878,
+      "total": 2964,
+      "percent": 97.1
+    }
   }
 }

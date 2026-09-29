@@ -55,8 +55,10 @@ bun run bench               # the load and commit budgets
 bun run sim:long 5000 400   # a longer simulation for the review cadence (under the memory guard)
 bun tools/coverage.ts --list uncovered.txt   # branch coverage (every branch outcome of the engine)
 bun tools/mutate.ts --survivors survivors.txt # mutation testing: every surviving mutant is a missing test or an equivalent change
+bun run coverage:ratchet    # fails if branch coverage fell below the recorded baseline
+bun run mutate:ratchet      # fails if the mutation score fell (runs only mutants not yet in the cache)
 ```
 
-The two quality tools parse the engine with acorn, which isn't a dependency of the package: set `STRATA_ACORN` to an acorn `dist/acorn.mjs` (npm `acorn`, MIT). Run both under the memory guard; the mutation tool also takes `STRATA_GUARD` (`<python>|<memory_guard.py>|<GB>`) to guard each test process, since a mutant can loop or allocate without bound. Mutants recorded as equivalent, with the reason, are in `tools/equivalent-mutants.json`; branches left uncovered on purpose are listed, with the reason, in `tools/uncovered-branches.md`.
+The two quality tools parse the engine with acorn, which isn't a dependency of the package: set `STRATA_ACORN` to an acorn `dist/acorn.mjs` (npm `acorn`, MIT). Run both under the memory guard; the mutation tool also takes `STRATA_GUARD` (`<python>|<memory_guard.py>|<GB>`) to guard each test process, since a mutant can loop or allocate without bound. `tools/quality.json` keeps two baselines: `public`, the suite alone (what CI checks), and `full`, which also counts external conformance tests named by `STRATA_VECTORS`. `--record` records a run's scores and refuses to lower one. The mutation cache is keyed by a hash of each mutant's function and records the test set it ran against, so a rewritten function's mutants run again. Mutants recorded as equivalent, with the reason, are in `tools/equivalent-mutants.md`; branches left uncovered on purpose are listed, with the reason, in `tools/uncovered-branches.md`.
 
 A failing simulation prints its seed and steps; the harness shrinks them to a minimal trace, which goes into `tests/sim/regressions.json` and replays on every run.
