@@ -45,8 +45,9 @@
   },
   "cancel": "The worker is terminated.",
   "cleanup": "The lane's worker is recreated on the next demand.",
-  "deadline": "the decode time budget, after which WolvenKit is tried",
+  "deadline": 10000,
   "lane": "host decode workers; lanes by free memory",
+  "suspend": "A decode can't pause mid-resource; while suspended its result is held, and it is shown when the person's own work ends.",
   "faults": [
     {
       "code": "over-time-budget",

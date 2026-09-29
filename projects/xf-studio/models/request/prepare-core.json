@@ -42,5 +42,18 @@
   ],
   "servedBy": [
     "driver:core"
+  ],
+  "standIn": {
+    "goal": {
+      "body": "female"
+    },
+    "summary": "When the masculine core can't be prepared, the feminine core is shown instead, with a notice."
+  },
+  "x-friction": [
+    {
+      "gap": "Showing the feminine head when the masculine core fails is a stand-in goal chosen by hand in the scene today.",
+      "capability": "fault-owners",
+      "closes": "A declared stand-in served when every approach fails for the request's own goal."
+    }
   ]
 }

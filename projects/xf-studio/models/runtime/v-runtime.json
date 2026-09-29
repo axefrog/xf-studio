@@ -1,0 +1,23 @@
+{
+  "kind": "runtime",
+  "id": "v-runtime",
+  "owner": "character",
+  "summary": "One V's character runtime in one scene (her details, rig and motion state), one per V and scene, so two Vs can be shown at once with independent histories.",
+  "status": "target",
+  "environment": "page",
+  "key": [
+    "type:v",
+    "type:scene"
+  ],
+  "factory": "planned",
+  "ready": "driver:v-details",
+  "query": [],
+  "linger": 2000,
+  "x-friction": [
+    {
+      "gap": "Today one character runtime serves whichever V is shown; each V needs its own, made when a view shows her and collected shortly after none does.",
+      "capability": "host-objects-per-node",
+      "closes": "Host objects made per key of nodes on first demand, counted by demand, and collected after a linger."
+    }
+  ]
+}

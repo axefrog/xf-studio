@@ -37,6 +37,7 @@
     "process:detail-load"
   ],
   "runtimes": [
+    "runtime:v-runtime",
     "runtime:detail-part-pool"
   ],
   "faults": [
@@ -48,12 +49,12 @@
       "then": "fail"
     }
   ],
-  "lifetime": "Per scene runtime and record; a newer record supersedes the load.",
+  "lifetime": "Per scene and V while a view shows the V; a newer record supersedes the load, and the parts it used linger in the pool.",
   "x-friction": [
     {
-      "gap": "Superseded loads keep what they built in the pool for a later claim; another V clears it.",
+      "gap": "Parts a superseded load built stay in the pool for 30 s after their last use, so going back is free; nothing claims or clears them by hand.",
       "capability": "keep-after-use",
-      "closes": "Results kept after their demand ends, claimed by a later demand, with an eviction rule."
+      "closes": "Demand that lingers after its last consumer, per part."
     }
   ]
 }

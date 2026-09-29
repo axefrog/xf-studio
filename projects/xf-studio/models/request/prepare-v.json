@@ -37,6 +37,10 @@
   "servedBy": [
     "driver:v-preparation"
   ],
+  "key": [
+    "the V shown"
+  ],
+  "linger": 30000,
   "faults": [
     {
       "code": "needs-wolvenkit",

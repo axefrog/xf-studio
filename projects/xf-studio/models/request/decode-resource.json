@@ -46,9 +46,9 @@
   ],
   "x-friction": [
     {
-      "gap": "Two ranked approaches serve the same goal, and a failure of the first selects the second.",
+      "gap": "Two ranked approaches serve the same goal: a native decode over its 10 s budget, or failing, hands over to WolvenKit with the time the request has left.",
       "capability": "fault-owners",
-      "closes": "Failures that select a declared fallback approach."
+      "closes": "Failures, including an approach over its time budget, that select the next declared approach."
     }
   ]
 }

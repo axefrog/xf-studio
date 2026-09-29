@@ -41,6 +41,9 @@
       }
     ]
   },
+  "results": {
+    "$ref": "shapes.schema.json#/$defs/blob"
+  },
   "cancel": "The drag ending aborts it.",
   "cleanup": "Frame bitmaps are closed.",
   "deadline": "none",
