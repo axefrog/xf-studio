@@ -373,3 +373,24 @@ export function recrop(options: { path: string; region?: RegionSpec; view?: Scal
     derived_from: { path: requested, ...(parent ? { window: parent.source.window, crop: { x: parent.crop.x, y: parent.crop.y, width: parent.crop.width, height: parent.crop.height } } : {}) },
   });
 }
+
+/**
+ * A capture file inside the capture folder (0.6, capture.sheet's cells), with recrop's checks: the path as written (no other
+ * drive, UNC or device path, or ..), then again after resolving junctions; only .png files.
+ */
+export function checkedCapturePath(rootDir: string, file: string): string {
+  const root = resolve(rootDir);
+  if (typeof file !== "string" || UNC.test(file.trim())) throw new CaptureError(OUTSIDE, "bad_file");
+  const requested = resolve(root, file);
+  if (UNC.test(requested) || outside(root, requested)) throw new CaptureError(OUTSIDE, "bad_file");
+  if (!requested.toLowerCase().endsWith(".png") || !existsSync(requested)) throw new CaptureError("Pass a .png file of an earlier capture (its .full.png or its viewing copy).", "bad_file");
+  try {
+    const realRoot = realpathSync.native(root);
+    const path = realpathSync.native(requested);
+    if (UNC.test(path) || UNC.test(realRoot) || outside(realRoot, path)) throw new CaptureError(OUTSIDE, "bad_file");
+    return path;
+  } catch (error) {
+    if (error instanceof CaptureError) throw error;
+    throw new CaptureError(OUTSIDE, "bad_file");
+  }
+}

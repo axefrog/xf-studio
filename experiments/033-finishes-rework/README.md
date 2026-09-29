@@ -1,6 +1,6 @@
-# Experiment 032: Glitter and Shimmer reworked after session 6
+# Experiment 033: Glitter and Shimmer reworked after session 6
 
-**Status (29 September 2026): offline design and evidence done; built into XF Finish Showroom; not yet in game.** Session 6 judged the two finishes by hand under movable lights ([Glitter design](../../research/materials/finish-designs/glitter.md), [Shimmer design](../../research/materials/finish-designs/shimmer.md)). This experiment finds the Studio models the maintainer liked, reworks both exports toward them, measures the change with experiment 030's tools, and evaluates one isolated alternative template. The in-game check is the finishes row of the [session-7 checks](../../research/runtime/runtime-bridge-test-card.md#session-7-checks-bridge-053).
+**Status (29 September 2026): offline design and evidence done; built into XF Finish Showroom; not yet in game.** Session 6 judged the two finishes by hand under movable lights ([Glitter design](../../research/materials/finish-designs/glitter.md), [Shimmer design](../../research/materials/finish-designs/shimmer.md)). This experiment finds the Studio models the maintainer liked, reworks both exports toward them, measures the change with experiment 030's tools, and evaluates one isolated alternative template. The in-game check is the finishes row of the [session-7 checks](../../research/runtime/runtime-bridge-test-card.md#ink-demo-rows-bridge-053).
 
 Evidence grades as in the knowledge base: **[source]** compiled programs or tool source; **[resource]** installed game or tool output; **[offline]** measured here; **[runtime]** seen in game; **[hypothesis]** not established.
 
@@ -139,9 +139,9 @@ No template was switched. The research route that would remove the fade is the q
 | [`car-paint.ts`](car-paint.ts), [`car-paint-result.json`](car-paint-result.json) | The car-paint flake map's statistics (numbers only; the texture stays in the ignored `research/consumers/car-paint/`) |
 
 ```powershell
-bun experiments/032-finishes-rework/diagnose.ts [--png]
-bun experiments/032-finishes-rework/bc5-fade.ts <showroom build>/eye-build/<eye build> PATH_TO_GAME
-bun experiments/032-finishes-rework/car-paint.ts PATH_TO_GAME [PATH_TO_car_paint_01_n.xbm]
+bun experiments/033-finishes-rework/diagnose.ts [--png]
+bun experiments/033-finishes-rework/bc5-fade.ts <showroom build>/eye-build/<eye build> PATH_TO_GAME
+bun experiments/033-finishes-rework/car-paint.ts PATH_TO_GAME [PATH_TO_car_paint_01_n.xbm]
 ```
 
 The car-paint resources were extracted read-only with WolvenKit CLI 9.0.1 (`unbundle -r` on `archive/pc/content`; `convert serialize`) into the ignored `research/consumers/car-paint/`. Game resources are CD PROJEKT RED's (game 2.31), read only.

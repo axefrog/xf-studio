@@ -1,6 +1,6 @@
 // Board 2's flake normals through WolvenKit's BC5 (experiment 032). Offline; reads one verified build's packed textures.
 //
-//   bun experiments/032-finishes-rework/bc5-fade.ts <eye-build-dir> PATH_TO_GAME   # bc5-result.json (asset-free numbers)
+//   bun experiments/033-finishes-rework/bc5-fade.ts <eye-build-dir> PATH_TO_GAME   # bc5-result.json (asset-free numbers)
 //
 // The eye build of the Glitter board (the showroom's `eye-build/…` folder) holds each preset's baked chains (`features/
 // eye-makeup/baked/*.raw`, what Build supplied) and the .xbm files WolvenKit 9.0.1 made from them (`archive/…/textures`).

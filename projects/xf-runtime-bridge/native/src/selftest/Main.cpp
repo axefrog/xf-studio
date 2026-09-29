@@ -36,6 +36,7 @@
 #include "core/ScriptLayer.hpp"
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
+#include "selftest/Sim060.hpp"
 
 #include <functional>
 #include <limits>
@@ -329,6 +330,15 @@ int wmain(int argc, wchar_t** argv)
                                                                        {2, {{"Head", "Items.Cap_01_basic_01"}, {"OuterChest", "Items.Jacket_01_basic_01"}}}};
         std::vector<std::string> wardrobeStored{"Items.Jacket_01_basic_01", "Items.Cap_01_basic_01"};
         json wardrobeSnapshot;
+        // 0.6: a script outfit system (EquipmentEx on session 6's profile) that wraps IsVisualSetActive and replaces the
+        // vanilla wardrobe requests with no-ops; selftest.phase {script_outfit: true} puts one on. The bridge's suspend
+        // (the story's own request) takes either kind of outfit off and remembers it for resume.
+        bool scriptOutfit = false;
+        bool scriptPresent = false;                 // Equipment-EX installed (selftest.phase {script_outfit} says so)
+        std::map<std::string, std::string> scriptParts; // its outfit: outfit slot -> item (kept while it is off)
+        bool wardrobeSuspended = false;
+        int suspendedSet = 0;
+        bool suspendedScript = false;
         // Photo-mode poses: two categories (0 Idle, 900 XF Live) and their poses; the XF carrier is pose 7 of 900.
         int32_t poseCategory = 0;
         int32_t pose = 1;
@@ -384,6 +394,8 @@ int wmain(int argc, wchar_t** argv)
     };
     static Simulated sim;
     sim.codeware = codeware;
+    // Bridge 0.6's simulated world (selftest/Sim060.cpp): scene.read, the handover, behaviours, player control, input.probe.
+    static std::unique_ptr<xfb::selftest::Sim060> sim060;
     static xfb::writes::RestoreOnce restore;
     // The script layer's readiness (RB-76), as the plugin keeps it: the simulated session is up from the start;
     // selftest.script_layer moves it, and the simulated load detaches, attaches and lets the player in. With
@@ -490,6 +502,24 @@ int wmain(int argc, wchar_t** argv)
                              sim.photoTimeLabel = aContext.params.value("photo_time_label", std::string("TIME OF DAY"));
                              sim.faceTableReadable = aContext.params.value("face_table_readable", true);
                              sim.cameraHolds = aContext.params.value("camera_holds", false);
+                             if (aContext.params.contains("script_outfit"))
+                             {
+                                 // As EquipmentEx's Activate: every base area's visuals cleared (hidden), no wardrobe set.
+                                 sim.scriptOutfit = aContext.params.value("script_outfit", false);
+                                 sim.scriptPresent = true;
+                                 if (sim.scriptOutfit && sim.scriptParts.empty())
+                                 {
+                                     sim.scriptParts = {{"OutfitSlots.Torso", "Items.Jacket_01_basic_01"}};
+                                 }
+                                 for (const auto& area : {"Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"})
+                                 {
+                                     sim.wardrobeAreas[area] = {"", sim.scriptOutfit};
+                                 }
+                                 if (sim.scriptOutfit)
+                                 {
+                                     sim.wardrobeSet = 0;
+                                 }
+                             }
                              sim.cameraAt = {0.0, 0.0, 1.6};
                              return json{{"phase", sim.phase}, {"creator_opens", sim.creatorOpens}, {"player", sim.player}};
                          }});
@@ -525,6 +555,7 @@ int wmain(int argc, wchar_t** argv)
         return json{{"simulated", true},
                                          {"allow_writes", config.allowWrites},
                                          {"writes_paused", dispatcher.WritesPaused()},
+                                         {"handed_over", dispatcher.HandedOver()},
                                          {"write_classes", xfb::WriteClassList(config)},
                                          {"phase", sim.phase},
                                          {"player_present", sim.phase == "gameplay" || sim.phase == "photo_mode"},
@@ -547,6 +578,7 @@ int wmain(int argc, wchar_t** argv)
                                  out["simulated"] = true;
                                  out["allow_writes"] = config.allowWrites;
                                  out["writes_paused"] = dispatcher.WritesPaused();
+                                 out["handed_over"] = dispatcher.HandedOver();
                                  out["write_classes"] = xfb::WriteClassList(config);
                                  return out;
                              };
@@ -811,9 +843,11 @@ int wmain(int argc, wchar_t** argv)
                                      out["simulated"] = true;
                                      return out;
                                  }));
-    dispatcher.Register({"photo.subject", xfb::Access::Read, xfb::RunOn::GameThread, "V's head and the camera (simulated).",
-                         [requirePhase](const xfb::MethodContext& aContext) {
-                             const auto request = p::ParseSubject(aContext.params);
+    const auto simSubject = [requirePhase](double aUp, double aForward, double aRight) -> json {
+                             struct
+                             {
+                                 double up, forward, right;
+                             } request{aUp, aForward, aRight};
                              requirePhase("photo_mode", "not_in_photo_mode");
                              std::scoped_lock _(sim.mutex);
                              const auto attr = [](int32_t aKey, double aDefault) {
@@ -875,6 +909,11 @@ int wmain(int argc, wchar_t** argv)
                                            {"left_right", {{"value", lr}, {"min", -5}, {"max", 5}}},
                                            {"near_far", {{"value", nf}, {"min", -5}, {"max", 5}}},
                                            {"up_down", {{"value", ud}, {"min", -5}, {"max", 5}}}}}};
+    };
+    dispatcher.Register({"photo.subject", xfb::Access::Read, xfb::RunOn::GameThread, "V's head and the camera (simulated).",
+                         [simSubject](const xfb::MethodContext& aContext) {
+                             const auto request = p::ParseSubject(aContext.params);
+                             return simSubject(request.up, request.forward, request.right);
                          }});
     dispatcher.Register(simWrite("photo.expression.set", xfb::Access::WritePhoto, xfb::RunOn::GameThread, "Expression (simulated).",
                                  [requirePhase, simulatedSet](const xfb::MethodContext& aContext) {
@@ -1592,6 +1631,7 @@ int wmain(int argc, wchar_t** argv)
             sim.wardrobeAreas[area] = it != set.end() ? Simulated::WardrobeArea{it->second, false} : Simulated::WardrobeArea{"", true};
         }
     };
+    const auto wardrobeManager = []() -> std::string { return sim.wardrobeSet > 0 ? "wardrobe" : sim.scriptOutfit ? "script" : "none"; };
     const auto wardrobeShows = [](const std::string& aArea) -> std::string {
         const auto& area = sim.wardrobeAreas[aArea];
         if (area.hidden)
@@ -1610,9 +1650,19 @@ int wmain(int argc, wchar_t** argv)
         {
             slots.push_back({{"area", area}, {"item", sim.wardrobeAreas[area].item}, {"hidden", sim.wardrobeAreas[area].hidden}});
         }
-        return json{{"set", sim.wardrobeSet}, {"slots", slots}};
+        json out{{"set", sim.wardrobeSet}, {"slots", slots}};
+        if (sim.scriptPresent)
+        {
+            json parts = json::array();
+            for (const auto& [slot, item] : sim.scriptParts)
+            {
+                parts.push_back({{"slot", slot}, {"item", item}});
+            }
+            out["script_outfit"] = {{"active", sim.scriptOutfit}, {"parts", sim.scriptOutfit ? parts : json::array()}};
+        }
+        return out;
     };
-    const auto wardrobeState = [wardrobeShows] {
+    const auto wardrobeState = [wardrobeShows, wardrobeManager] {
         json areas = json::array();
         for (const auto& area : wardrobeAreaNames)
         {
@@ -1632,7 +1682,21 @@ int wmain(int argc, wchar_t** argv)
             }
             sets.push_back({{"set", set}, {"items", list}});
         }
-        return json{{"simulated", true}, {"set", sim.wardrobeSet}, {"active", sim.wardrobeSet > 0}, {"enabled", true}, {"areas", areas}, {"sets", sets}};
+        json out{{"simulated", true}, {"set", sim.wardrobeSet}, {"active", sim.wardrobeSet > 0 || sim.scriptOutfit}, {"manager", wardrobeManager()},
+                 {"suspended_by_bridge", sim.wardrobeSuspended}, {"enabled", true}, {"areas", areas}, {"sets", sets}};
+        if (sim.scriptOutfit)
+        {
+            out["managed_by"] = "EquipmentEx";
+        }
+        json parts = json::array();
+        for (const auto& [slot, item] : sim.scriptParts)
+        {
+            parts.push_back({{"slot", slot}, {"item", item}});
+        }
+        out["script_outfit"] = sim.scriptPresent ? json{{"present", true}, {"available", true}, {"name", "EquipmentEx"}, {"active", sim.scriptOutfit}, {"blocked", false},
+                                                         {"parts", sim.scriptOutfit ? parts : json::array()}}
+                                                  : json{{"present", false}};
+        return out;
     };
     dispatcher.Register({"wardrobe.state", xfb::Access::Read, xfb::RunOn::GameThread, "The wardrobe (simulated).",
                          [wardrobeState](const xfb::MethodContext& aContext) {
@@ -1641,10 +1705,10 @@ int wmain(int argc, wchar_t** argv)
                              return wardrobeState();
                          }});
     dispatcher.Register(simWrite("wardrobe.equip", xfb::Access::WriteInventory, xfb::RunOn::BridgeThread, "Wardrobe (simulated).",
-                                 [&queue, slotOf, wardrobeApplySet, wardrobeSnapshot, wardrobeState](const xfb::MethodContext& aContext) {
+                                 [&queue, slotOf, wardrobeApplySet, wardrobeSnapshot, wardrobeState, wardrobeManager](const xfb::MethodContext& aContext) {
                                      const auto request = p::ParseWardrobeEquip(aContext.params);
                                      w::WardrobeOps ops;
-                                     ops.change = [&request, slotOf, wardrobeApplySet, wardrobeSnapshot] {
+                                     ops.change = [&request, slotOf, wardrobeApplySet, wardrobeSnapshot, wardrobeManager] {
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.phase != "gameplay")
                                          {
@@ -1655,6 +1719,87 @@ int wmain(int argc, wchar_t** argv)
                                              return std::find(sim.wardrobeStored.begin(), sim.wardrobeStored.end(), aItem) != sim.wardrobeStored.end() ||
                                                     std::find(sim.inventory.begin(), sim.inventory.end(), aItem) != sim.inventory.end();
                                          };
+                                         const auto manager = wardrobeManager();
+                                         if (request.mode == "resume")
+                                         {
+                                             if (!sim.wardrobeSuspended)
+                                             {
+                                                 return json{{"changed", false}, {"note", "simulated: the bridge hasn't taken an outfit off"}, {"before", before}};
+                                             }
+                                             if (sim.suspendedScript)
+                                             {
+                                                 sim.scriptOutfit = true;
+                                                 for (const auto& area : wardrobeAreaNames)
+                                                 {
+                                                     sim.wardrobeAreas[area] = {"", true};
+                                                 }
+                                             }
+                                             else
+                                             {
+                                                 wardrobeApplySet(sim.suspendedSet);
+                                             }
+                                             sim.wardrobeSuspended = false;
+                                             sim.gameSaveLock = true;
+                                             return json{{"changed", true}, {"manager_before", manager}, {"before", before}};
+                                         }
+                                         if (request.mode == "suspend")
+                                         {
+                                             if (manager == "none")
+                                             {
+                                                 return json{{"changed", false}, {"note", "simulated: no outfit decides what V shows"}, {"before", before}};
+                                             }
+                                             sim.suspendedScript = manager == "script";
+                                             sim.suspendedSet = sim.wardrobeSet;
+                                             sim.scriptOutfit = false;
+                                             sim.wardrobeSet = 0;
+                                             for (const auto& area : wardrobeAreaNames)
+                                             {
+                                                 sim.wardrobeAreas[area] = {}; // UnequipVisuals / ShowEquipment: every area shows what is equipped
+                                             }
+                                             sim.wardrobeSuspended = true;
+                                             sim.gameSaveLock = true;
+                                             if (sim.wardrobeSnapshot.is_null())
+                                             {
+                                                 sim.wardrobeSnapshot = before;
+                                             }
+                                             return json{{"changed", true}, {"manager_before", manager}, {"before", before}};
+                                         }
+                                         const auto applyScript = [&request] {
+                                             sim.scriptOutfit = request.scriptActive;
+                                             if (request.scriptActive)
+                                             {
+                                                 sim.scriptParts.clear();
+                                                 for (const auto& part : request.parts)
+                                                 {
+                                                     sim.scriptParts[part.slot] = part.item;
+                                                 }
+                                             }
+                                         };
+                                         if (manager == "script")
+                                         {
+                                             if (request.mode == "item")
+                                             {
+                                                 if (!known(request.item))
+                                                 {
+                                                     throw xfb::MethodError("not_in_inventory", "simulated: nothing has '" + request.item + "'");
+                                                 }
+                                                 sim.scriptParts["OutfitSlots." + slotOf(request.item)] = request.item;
+                                             }
+                                             else if (request.mode == "restore" && request.scriptKnown)
+                                             {
+                                                 applyScript();
+                                             }
+                                             else
+                                             {
+                                                 throw xfb::MethodError("outfit_managed_elsewhere", "simulated: V's outfit is managed by EquipmentEx; use item, suspend or resume");
+                                             }
+                                             sim.gameSaveLock = true;
+                                             if (sim.wardrobeSnapshot.is_null())
+                                             {
+                                                 sim.wardrobeSnapshot = before;
+                                             }
+                                             return json{{"changed", true}, {"before", before}};
+                                         }
                                          if (request.mode == "set")
                                          {
                                              if (!sim.wardrobeSets.count(request.set))
@@ -1697,12 +1842,11 @@ int wmain(int argc, wchar_t** argv)
                                                  }
                                              }
                                              wardrobeApplySet(request.set);
-                                             if (request.set > 0)
+                                             for (const auto& slot : request.slots)
                                              {
-                                                 for (const auto& slot : request.slots)
-                                                 {
-                                                     sim.wardrobeAreas[slot.area] = {slot.item, slot.item.empty() && slot.hidden};
-                                                 }
+                                                 // With no outfit an area keeps only its hidden flag (QuestHideSlot); items need an outfit.
+                                                 sim.wardrobeAreas[slot.area] = request.set > 0 ? Simulated::WardrobeArea{slot.item, slot.item.empty() && slot.hidden}
+                                                                                                : Simulated::WardrobeArea{"", slot.hidden};
                                              }
                                          }
                                          sim.gameSaveLock = true;
@@ -1771,7 +1915,12 @@ int wmain(int argc, wchar_t** argv)
                                          const auto& area = sim.wardrobeAreas[slot];
                                          if (area.hidden || (sim.wardrobeSet > 0 && !area.item.empty()))
                                          {
-                                             step["outfit"] = {{"set", sim.wardrobeSet}, {"area", slot}, {"shows", area.hidden ? "hidden" : "outfit"}, {"outfit_item", area.item}};
+                                             step["outfit"] = {{"manager", sim.wardrobeSet > 0 ? "wardrobe" : sim.scriptOutfit ? "script" : "none"},
+                                                               {"set", sim.wardrobeSet}, {"area", slot}, {"shows", area.hidden ? "hidden" : "outfit"}, {"outfit_item", area.item}};
+                                             if (sim.scriptOutfit)
+                                             {
+                                                 step["outfit"]["managed_by"] = "EquipmentEx";
+                                             }
                                          }
                                          return step;
                                      };
@@ -2024,7 +2173,10 @@ int wmain(int argc, wchar_t** argv)
                              }
                              if (sim.phase == "photo_mode")
                              {
-                                 out["camera"] = {{"position", {100.0, 198.0, 11.7}}, {"forward", {0.0, 1.0, 0.0}}};
+                                 // As scene.read's simulated photo-mode camera (0.6): pitched 10 degrees down at V's face.
+                                 const double pitch = -10.0 * 3.14159265358979 / 180.0;
+                                 out["camera"] = {{"position", {100.0, 198.0, 11.7}}, {"forward", {0.0, std::cos(pitch), std::sin(pitch)}},
+                                                  {"right", {1.0, 0.0, 0.0}}, {"up", {0.0, -std::sin(pitch), std::cos(pitch)}}, {"fov", 30.0}, {"aspect", 16.0 / 9.0}};
                              }
                              return out;
                          }});
@@ -2081,8 +2233,14 @@ int wmain(int argc, wchar_t** argv)
     // The kill switch's restore, simulated like XFBridgeActions.RestoreAfterKill: unfreeze and
     // show the photo-mode menu; the save lock would stay.
     const auto simulatedRestore = [] {
+        json player = json::object();
+        if (sim060)
+        {
+            sim060->RestoreAfterKill(player); // behaviours stopped, V's effects lifted (0.6)
+        }
         std::scoped_lock _(sim.mutex);
         json out{{"simulated", true}, {"world_unfrozen", sim.frozen}, {"photo_ui_shown", sim.hudHidden}, {"cursor_shown", sim.cursorHidden}};
+        out.update(player);
         if (sim.creatorOpenTicks >= 0)
         {
             out["creator_open_withdrawn"] = true;
@@ -2111,10 +2269,29 @@ int wmain(int argc, wchar_t** argv)
             out["pins_cleared"] = sim.pins.size();
             sim.pins.clear();
         }
-        // The wardrobe before the bridge's first change this session (0.5.2), as XFWardrobe.RestoreAfterKill.
+        // The wardrobe before the bridge's first change this session (0.5.2), as XFWardrobe.RestoreAfterKill: an outfit the
+        // bridge suspended goes back on first (0.6).
+        if (sim.wardrobeSuspended)
+        {
+            sim.wardrobeSuspended = false;
+            sim.scriptOutfit = sim.suspendedScript;
+            out["wardrobe_resumed"] = true;
+        }
         if (sim.wardrobeSnapshot.is_object())
         {
             const auto snapshot = sim.wardrobeSnapshot;
+            if (snapshot.contains("script_outfit"))
+            {
+                sim.scriptOutfit = snapshot["script_outfit"].value("active", false);
+                if (sim.scriptOutfit)
+                {
+                    sim.scriptParts.clear();
+                    for (const auto& part : snapshot["script_outfit"]["parts"])
+                    {
+                        sim.scriptParts[part.value("slot", std::string())] = part.value("item", std::string());
+                    }
+                }
+            }
             sim.wardrobeSet = snapshot.value("set", 0);
             for (const auto& slot : snapshot["slots"])
             {
@@ -2132,6 +2309,62 @@ int wmain(int argc, wchar_t** argv)
     const auto restoreFailed = [](const std::string& aWhat) {
         xfb::log::Warn("bridge.kill_restore_failed", "what=" + aWhat, "kill-restore");
     };
+
+    {
+        xfb::selftest::SimHooks hooks;
+        hooks.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        hooks.showroom = [] {
+            std::scoped_lock _(sim.mutex);
+            json pieces = json::array(), rigs = json::array();
+            for (const auto& item : sim.showroom)
+            {
+                if (item.ticks > 0)
+                {
+                    continue;
+                }
+                json o{{"index", item.index}, {"label", item.label}, {"appearance", item.appearance}, {"position", {item.x, item.y, item.z}}, {"yaw", item.yaw}, {"base_yaw", item.baseYaw}};
+                (item.kind == "pieces" ? pieces : rigs).push_back(o);
+            }
+            return json{{"pieces", pieces}, {"rigs", rigs}};
+        };
+        hooks.moveShowroom = [](const std::string& aKind, int32_t aIndex, double aX, double aY, double aZ, double aYaw) {
+            std::scoped_lock _(sim.mutex);
+            for (auto& item : sim.showroom)
+            {
+                if (item.kind == aKind && item.index == aIndex)
+                {
+                    item.x = aX;
+                    item.y = aY;
+                    item.z = aZ;
+                    item.yaw = aYaw;
+                    return;
+                }
+            }
+            throw xfb::MethodError("no_such_piece", "simulated: the showroom has no " + aKind + " " + std::to_string(aIndex));
+        };
+        hooks.subject = simSubject;
+        hooks.setAttribute = [simulatedSet](int32_t aKey, float aValue) { return simulatedSet(aKey, aValue).value("after", aValue); };
+        hooks.photoLights = [] {
+            std::scoped_lock _(sim.mutex);
+            json out = json::object();
+            for (const auto& [light, at] : sim.lights)
+            {
+                out[std::to_string(light)] = {at[0], at[1], at[2]};
+            }
+            return out;
+        };
+        hooks.scriptsReady = [] { return simLayer.Ready(); };
+        hooks.markWrite = [] { restore.MarkWrite(); };
+        hooks.takeSaveLock = [] {
+            std::scoped_lock _(sim.mutex);
+            sim.gameSaveLock = true;
+        };
+        sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
+        sim060->Register();
+    }
 
     if (!bridge.Start(error))
     {
@@ -2185,6 +2418,13 @@ int wmain(int argc, wchar_t** argv)
         {
             queue.Drain(4); // the plugin does this once per engine tick
             {
+                // Bridge 0.6: the simulated look-at and the behaviours, at tick rate (the plugin's TickBehaviours).
+                static auto last = std::chrono::steady_clock::now();
+                const auto now = std::chrono::steady_clock::now();
+                sim060->Tick(std::chrono::duration<double>(now - last).count());
+                last = now;
+            }
+            {
                 // The simulated equipment system, save system and loading screen.
                 std::scoped_lock _(sim.mutex);
                 if (sim.pendingTicks > 0 && --sim.pendingTicks == 0)
@@ -2233,6 +2473,7 @@ int wmain(int argc, wchar_t** argv)
                 if (sim.loadTicks == 3)
                 {
                     simLayer.OnDetach();
+                    sim060->OnDetach();
                 }
                 else if (sim.loadTicks == 2)
                 {

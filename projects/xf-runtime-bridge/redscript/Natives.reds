@@ -26,3 +26,6 @@ public static native func XFBridge_ScriptLayer(event: String) -> Bool
 // script gate and the ui.message lines as tab-separated records. The redscript overlay (XFRuntimeBridgeInk.reds) pulls it;
 // the plugin never calls into scripts for the panel.
 public static native func XFBridge_Hud() -> String
+// Bridge 0.6: a note from inside the game into the session's event stream (core/Events.hpp), for a panel button; level
+// info, warn, ask or done. Answers false when the plugin couldn't take it.
+public static native func XFBridge_Note(level: String, text: String) -> Bool

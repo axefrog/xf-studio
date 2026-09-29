@@ -62,10 +62,11 @@ function listFiles(dir: string): string[] {
 /** The variant's config.ini, from the project's (which must keep every switch off). */
 /**
  * The -writes package's write classes: inventory only with --allow-inventory (the maintainer's approval); showroom (XF Finish
- * Showroom's test heads and lights, bridge 0.5) in every -writes build, which only the dedicated test profile stages.
+ * Showroom's test heads and lights, bridge 0.5) and player (0.6: teleport, look, crouch, weapons, menus, glides) in every
+ * -writes build, which only the dedicated test profile stages. act (irreversible actions for V) stays off: no command uses it yet.
  */
 export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
-  options.allowInventory ? ["photo", "world", "character", "inventory", "save", "showroom"] : ["photo", "world", "character", "save", "showroom"];
+  options.allowInventory ? ["photo", "world", "character", "inventory", "save", "showroom", "player"] : ["photo", "world", "character", "save", "showroom", "player"];
 
 export function variantConfig(base: string, variant: Variant, options: { allowInventory?: boolean } = {}): string {
   let config = base;

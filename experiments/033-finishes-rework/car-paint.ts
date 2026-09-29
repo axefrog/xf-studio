@@ -1,6 +1,6 @@
 // The car-paint metallic flake layer, measured (experiment 032, task 5). Offline; reads one extracted game texture.
 //
-//   bun experiments/032-finishes-rework/car-paint.ts PATH_TO_GAME [XBM]   # car-paint-result.json (asset-free numbers only)
+//   bun experiments/033-finishes-rework/car-paint.ts PATH_TO_GAME [XBM]   # car-paint-result.json (asset-free numbers only)
 //
 // Input: `base\surfaces\materials\paint\car_paint\car_paint_01_n.xbm`, the normal map of `car_paint_metallic_01.mltemplate`
 // (the layer the game's car paint setups use), extracted read-only with WolvenKit 9.0.1 into the ignored

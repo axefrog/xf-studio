@@ -59,6 +59,16 @@ public class XFShowroomRegistry extends ScriptableSystem {
     return null;
   }
 
+  // One item by kind ("pieces" or "lights") and index (0.6: behaviours move rigs too).
+  public func Item(kind: String, index: Int32) -> ref<XFShowroomItem> {
+    for item in this.m_items {
+      if Equals(item.kind, kind) && item.index == index {
+        return item;
+      }
+    }
+    return null;
+  }
+
   // Forgets every item of a kind ("pieces", "lights" or "all"); answers how many.
   public func Forget(what: String) -> Int32 {
     let kept: array<ref<XFShowroomItem>>;
@@ -136,7 +146,11 @@ public abstract class XFShowroomText {
     let camera = GameInstance.GetCameraSystem(GetGameInstance());
     let transform: Transform;
     if IsDefined(camera) && camera.GetActiveCameraWorldTransform(transform) {
-      out += ",\"camera\":{\"position\":" + XFShowroomText.Arr(transform.position) + ",\"forward\":" + XFShowroomText.Arr(camera.GetActiveCameraForward()) + "}";
+      // 0.6: the whole pose (right, up, field of view, aspect) so the tools can put a head's eyes on the view ray and
+      // project them back (showroom.spawn's placement is computed, not guessed).
+      out += ",\"camera\":{\"position\":" + XFShowroomText.Arr(transform.position) + ",\"forward\":" + XFShowroomText.Arr(camera.GetActiveCameraForward());
+      out += ",\"right\":" + XFShowroomText.Arr(camera.GetActiveCameraRight()) + ",\"up\":" + XFShowroomText.Arr(camera.GetActiveCameraUp());
+      out += ",\"fov\":" + XFJson.Num(camera.GetActiveCameraFOV()) + ",\"aspect\":" + XFJson.Num(camera.GetAspectRatio()) + "}";
     }
     return out + "}";
   }
@@ -222,6 +236,34 @@ public abstract class XFShowroom {
     return "{\"ok\":true,\"index\":" + IntToString(index) + ",\"previous_yaw\":" + XFJson.Num(previous) + ",\"yaw\":" + XFJson.Num(yaw) + "}";
   }
 
+  // Moves and turns one piece or rig (0.6: turntable and keep_framed behaviours); the item keeps its new place.
+  public static func Move(cid: String, kind: String, index: Int32, x: Float, y: Float, z: Float, yaw: Float) -> String {
+    let refusal = XFShowroomText.Refusal();
+    if StrLen(refusal) > 0 {
+      return refusal;
+    }
+    let registry = XFShowroomRegistry.Get();
+    let item = IsDefined(registry) ? registry.Item(kind, index) : null;
+    if !IsDefined(item) {
+      return XFJson.Fail("no_such_piece", "the showroom has no " + kind + " " + IntToString(index));
+    }
+    let system = GameInstance.GetStaticEntitySystem();
+    let entity = system.GetEntity(item.id) as GameObject;
+    if !system.IsSpawned(item.id) || !IsDefined(entity) {
+      return XFJson.Fail("not_spawned_yet", kind + " " + IntToString(index) + " isn't in the world yet; try again in a moment");
+    }
+    let position = new Vector4(x, y, z, 1.0);
+    if Vector4.Distance(GetPlayer(GetGameInstance()).GetWorldPosition(), position) > 30.0 {
+      return XFJson.Fail("too_far", "that place is more than 30 m from V");
+    }
+    let angles: EulerAngles;
+    angles.Yaw = yaw;
+    GameInstance.GetTeleportationFacility(GetGameInstance()).Teleport(entity, position, angles);
+    item.position = position;
+    item.yaw = yaw;
+    return "{\"ok\":true}";
+  }
+
   public static func Clear(cid: String, what: String) -> String {
     let system = GameInstance.GetStaticEntitySystem();
     let registry = XFShowroomRegistry.Get();
@@ -295,6 +337,10 @@ public abstract class XFShowroom {
   }
 
   public static func Turn(cid: String, index: Int32, yaw: Float) -> String {
+    return XFShowroom.Missing();
+  }
+
+  public static func Move(cid: String, kind: String, index: Int32, x: Float, y: Float, z: Float, yaw: Float) -> String {
     return XFShowroom.Missing();
   }
 

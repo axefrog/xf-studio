@@ -51,6 +51,8 @@ export const INSTRUCTIONS = [
   "Photo-mode actions need photo mode open: for now the player presses the photo mode key (photo_enter answers so), and game_wait with phase photo_mode notices it. photo_frame frames V automatically; photo_hud_hide hides the menu and cursor before a capture.",
   "capture_screenshot works without the bridge and returns a small preview plus the path of a full-resolution file; capture_recrop cuts a tighter area from that file; capture_burst takes a short series for flicker checks.",
   "ui_message shows a short line to the player under the bridge's in-game label (and the session runner echoes its notes and asks there).",
+  "scene_report is your own view of the shot without a screenshot: where each subject sits in the frame, whether static geometry blocks its face, which lights reach it, and (include frame) the luminance of its region; capture_screenshot's expect refuses or warns before a bad capture. session_log reads (or follows) the session's events; session_note adds a marker; session_handover gives the game to the player until session_resume.",
+  "behave_* tools start routines that run inside the game at frame rate (a turntable, a smooth look, a glide along a walkable path, keeping a subject framed); each streams its progress to session_events and stops on behave_stop, the kill switch or loading a save.",
   "Only game_save saves the game, and only when asked: it refuses while the bridge's own save lock is held unless override_lock is given. inventory_equip and inventory_unequip need the inventory permission, which the bridge's config.ini keeps off until the maintainer approves it.",
 ].join(" ");
 

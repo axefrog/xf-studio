@@ -6,9 +6,11 @@
 import { captureWindow, CaptureError, type CaptureRecord } from "../capture/capture.ts";
 import type { CommandContext, CommandResult } from "../api/catalogue.ts";
 import {
-  choosePieces, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, readShowroom, spill, spacingFor, toWorld, yawFacing,
-  type Anchor, type RigPlacement, type RigProfile, type Showroom, type Vec3,
+  choosePieces, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, spill, spacingFor, toWorld, yawFacing,
+  type Anchor, type Placement, type RigPlacement, type RigProfile, type Showroom, type Vec3,
 } from "./plan.ts";
+import { calibrate, modelFromFov, poseOf, project, type Calibration, type CameraModel, type CameraPose } from "../scene/camera.ts";
+import { frameOf } from "../scene/report.ts";
 
 type Json = Record<string, any>;
 
@@ -40,9 +42,11 @@ const manifestsOf = (input: Json): Showroom[] => {
 
 /**
  * showroom.spawn: the chosen presets' heads in a row or an arc in front of V or the camera. Distances run from the camera
- * (or V's eyes) to each head's eyes, and the heads stand with their eyes at height_m above V's ground: by default the
- * camera's height with the camera as anchor (session 5's close-ups at 1.3 m showed only the crowns), a head's natural
- * height with V as anchor (0.5.2).
+ * (or V's eyes) to each head's eyes. With the camera as anchor and no height_m (0.6), the middle head's eyes go exactly on
+ * the camera's view ray through the window's centre at distance_m, the rest at the same distance and elevation angle
+ * (planOnRay), and every head's eyes are projected back into the frame to check it: by the game's own projection
+ * (scene.read) where the bridge has it, else by the camera model. height_m (eyes above V's ground) keeps the 0.5.2 layout;
+ * with V as anchor the heads stand at their natural height.
  */
 export async function runShowroomSpawn(input: Json, context: CommandContext): Promise<CommandResult> {
   const showrooms = manifestsOf(input);
@@ -52,11 +56,24 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
   const spacing = (input.spacing_m as number | undefined) ?? 0.7, distance = (input.distance_m as number | undefined) ?? 2.5;
   const lateral = (input.lateral_m as number | undefined) ?? 0;
   const eyes = eyesOf(showrooms[0]!.headJoint);
-  const cameraZ = (raw.camera as { position: Vec3 } | undefined)?.position[2];
-  const defaultHeight = from === "camera" && cameraZ !== undefined ? cameraZ - anchor.ground : eyes[2];
-  const height = Math.round(((input.height_m as number | undefined) ?? defaultHeight) * 1000) / 1000;
-  const anchorEye = from === "camera" ? anchor.origin[2] : anchor.ground + eyes[2];
-  const placements = planLayout(anchor, pieces.length, layout, spacing, distance, lateral, { eyes, height, anchorEye });
+  const pose = poseOf(raw.camera);
+  const onRay = from === "camera" && input.height_m === undefined && pose !== null;
+  let placements: Placement[];
+  let heightFrom: string;
+  let height: number;
+  if (onRay) {
+    placements = planOnRay(pose!, pieces.length, layout, spacing, distance, lateral, eyes);
+    const mid = placements[Math.floor((placements.length - 1) / 2)]!;
+    height = Math.round((mid.eyes![2] - anchor.ground) * 1000) / 1000;
+    heightFrom = "camera_ray";
+  } else {
+    const cameraZ = (raw.camera as { position: Vec3 } | undefined)?.position[2];
+    const defaultHeight = from === "camera" && cameraZ !== undefined ? cameraZ - anchor.ground : eyes[2];
+    height = Math.round(((input.height_m as number | undefined) ?? defaultHeight) * 1000) / 1000;
+    const anchorEye = from === "camera" ? anchor.origin[2] : anchor.ground + eyes[2];
+    placements = planLayout(anchor, pieces.length, layout, spacing, distance, lateral, { eyes, height, anchorEye });
+    heightFrom = input.height_m !== undefined ? "given" : from === "camera" ? "camera" : "natural";
+  }
   const raise = Math.round((height - eyes[2]) * 1000) / 1000;
   const notes: string[] = [];
   if (raise > PEDESTAL_BELOW_M) notes.push(`The heads stand ${raise} m above their natural height; the pedestals reach only ${PEDESTAL_BELOW_M} m down, so they end in the air.`);
@@ -64,18 +81,55 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
   const items = placements.map((p, i) => ({ index: p.index, template: pieces[i]!.template, appearance: pieces[i]!.appearance, label: pieces[i]!.name,
     x: p.position[0], y: p.position[1], z: p.position[2], yaw: p.yaw }));
   const placed = await call(context, "showroom.place", { items, replace: input.replace !== false }, 30000);
+  const projected = pose ? await projectEyes(context, pose, placements.map((p) => p.eyes!)) : null;
+  if (projected?.some((p) => !p.in_frame)) notes.push(`Head ${projected.filter((p) => !p.in_frame).map((p) => p.index).join(", ")} is outside the frame (projected eyes); fewer heads, a smaller spacing_m or a larger distance_m brings it in.`);
   return { value: { anchor: from, layout, spacing_m: spacing, distance_m: distance, lateral_m: lateral, height_m: height,
-    height_from: input.height_m !== undefined ? "given" : from === "camera" ? "camera" : "natural", raised_m: raise,
+    height_from: heightFrom, raised_m: raise,
     measured_to: "each head's eyes, from the camera (or V's eyes)",
-    pieces: items.map((item, i) => ({ index: item.index, label: item.label, appearance: item.appearance, position: [item.x, item.y, item.z], eyes: placements[i]!.eyes, yaw: item.yaw })),
+    pieces: items.map((item, i) => ({ index: item.index, label: item.label, appearance: item.appearance, position: [item.x, item.y, item.z], eyes: placements[i]!.eyes, yaw: item.yaw,
+      ...(projected ? { eyes_on_screen: projected[i] } : {}) })),
+    ...(projected ? { projection: { by: projected[0]?.by, units: "window heights from the window's centre, x right, y down; in frame while |y| <= 0.5 and |x| <= aspect/2" } } : {}),
     ...(notes.length ? { notes } : {}),
     ...placed } };
+}
+
+/**
+ * Where each head's eyes land in the frame: the game's own projection (scene.read with points, 0.6) when the bridge
+ * answers it, else the camera model from the anchor's pose.
+ */
+async function projectEyes(context: CommandContext, pose: CameraPose, points: Vec3[]) {
+  let model: CameraModel = modelFromFov(pose);
+  let game: { x: number; y: number }[] | null = null;
+  try {
+    const read = await call(context, "scene.read", { points, parts: ["camera"] });
+    const camera = poseOf(read.camera) ?? pose;
+    model = calibrate(camera, read.calibration as Calibration | undefined);
+    const shown = (read.points as { screen: unknown }[] | undefined) ?? [];
+    if (shown.length === points.length && read.calibration) {
+      const toFrame = frameOf(read.calibration as Calibration, camera.aspect);
+      game = shown.map((p) => toFrame(p.screen as never));
+    }
+  } catch {
+    // An older bridge (no scene.read) or a refusal: the model alone.
+  }
+  return points.map((point, index) => {
+    const m = project(model, point);
+    const g = game?.[index];
+    const at = g ?? { x: m.x, y: m.y };
+    return { index, x: Math.round(at.x * 1e4) / 1e4, y: Math.round(at.y * 1e4) / 1e4, in_frame: !m.behind && Math.abs(at.y) <= 0.5 && Math.abs(at.x) <= model.aspect / 2,
+      by: g ? "game" : model.by === "game" ? "model (calibrated by the game)" : "model (field of view read as vertical)" };
+  });
 }
 
 type StatePiece = { index: number; label: string; appearance: string; position: Vec3; yaw: number; base_yaw: number; spawned: boolean };
 
 /** showroom.light: a creator-style rig on each head, one head, or V. */
 export async function runShowroomLight(input: Json, context: CommandContext): Promise<CommandResult> {
+  if (input.rig === "none") {
+    // 0.6 (session 6's friction): the rigs off, the heads kept, so the player lights them with photo mode's own lights.
+    const cleared = await call(context, "showroom.clear", { what: "lights" });
+    return { value: { rig: "none", ...cleared, undo: null, undo_note: "showroom_light with a rig lights the heads again" } };
+  }
   const showrooms = manifestsOf(input);
   const showroom = showrooms[0]!;
   const profile = ((input.rig as RigProfile | undefined) ?? "creator") as RigProfile;

@@ -513,6 +513,7 @@ json GameStatus(const MethodContext& aContext)
              {"allow_writes", state.config.allowWrites},
              {"write_classes", WriteClassList(state.config)},
              {"writes_paused", state.bridge && state.bridge->GetDispatcher().WritesPaused()},
+             {"handed_over", state.bridge && state.bridge->GetDispatcher().HandedOver()},
              {"allow_live_pose", state.config.allowLivePose}};
     if (!state.queue.IsPumping())
     {
@@ -959,13 +960,21 @@ json WardrobeEquipMethod(const MethodContext& aContext)
                 {
                     // Begin, one slot each, then apply: all in this one game-thread step.
                     int32_t set = request.set;
-                    CallScript("XFWardrobe", "RestoreBegin", {"Int32"}, {&set}, cid);
+                    bool scriptKnown = request.scriptKnown;
+                    bool scriptActive = request.scriptActive;
+                    CallScript("XFWardrobe", "RestoreBegin", {"Int32", "Bool", "Bool"}, {&set, &scriptKnown, &scriptActive}, cid);
                     for (const auto& slot : request.slots)
                     {
                         RED4ext::CString area(slot.area.c_str());
                         RED4ext::CString item(slot.item.c_str());
                         bool hidden = slot.hidden;
                         CallScript("XFWardrobe", "RestoreSlot", {"String", "String", "Bool"}, {&area, &item, &hidden}, cid);
+                    }
+                    for (const auto& part : request.parts)
+                    {
+                        RED4ext::CString slot(part.slot.c_str());
+                        RED4ext::CString item(part.item.c_str());
+                        CallScript("XFWardrobe", "RestorePart", {"String", "String"}, {&slot, &item}, cid);
                     }
                     return CallScript("XFWardrobe", "RestoreFinish", {}, {}, cid);
                 }
@@ -1700,6 +1709,28 @@ MethodSpec WriteMethod(std::string aName, Access aAccess, RunOn aRunOn, std::str
 }
 } // namespace
 
+// For the 0.6 methods in Handlers060.cpp (declared in GameHandlers.hpp).
+nlohmann::json ScriptCall(const std::string& aClass, const char* aFunction, std::initializer_list<const char*> aTypes,
+                          std::initializer_list<void*> aValues, const std::string& aCid)
+{
+    return CallScript(aClass, aFunction, aTypes, aValues, aCid);
+}
+std::chrono::milliseconds GameTimeout()
+{
+    return Timeout();
+}
+MethodSpec MarkedWrite(std::string aName, Access aAccess, RunOn aRunOn, std::string aSummary, std::function<nlohmann::json(const MethodContext&)> aFn)
+{
+    return {aName, aAccess, aRunOn, std::move(aSummary), [aName, aFn](const MethodContext& aContext) {
+                Get().restore.MarkWrite();
+                auto result = aFn(aContext);
+                log::Info("write.done",
+                          "method=" + aName + " undo=" + SerializeJson(result.contains("undo") ? result["undo"] : nlohmann::json("none")),
+                          aContext.cid);
+                return result;
+            }};
+}
+
 void RestoreAfterKill()
 {
     if (live::HasSnapshot())
@@ -1756,6 +1787,7 @@ void ReleaseCursorAfterIdle()
 
 void RegisterMethods(Dispatcher& aDispatcher)
 {
+    RegisterMethods060(aDispatcher);
     auto& state = Get();
 
     aDispatcher.Register({"bridge.info", Access::Read, RunOn::BridgeThread,

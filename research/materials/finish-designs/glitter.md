@@ -2,7 +2,7 @@
 
 **Status:** preview only. Check and Build omit active Glitter layers with that reason. The game route (resolved glint flakes, below) is built as a **diagnostic** route that only a prepared board reaches, and it has been in game once:
 - **Session 6 (29 September), board 1's Glitter A**, judged by hand under movable lights: "doesn't seem much like glitter". The flecks looked printed on top of the purple base, with little light response.
-- The route is now reworked as **glitter flakes 2**, which reproduces the Studio's glint models ([experiment 032](../../../experiments/032-finishes-rework/README.md)). It is built into board 2 ([experiment 021](../../../experiments/021-glitter-board/README.md)) for the [session-7 checks](../../runtime/runtime-bridge-test-card.md#session-7-checks-bridge-053).
+- The route is now reworked as **glitter flakes 2**, which reproduces the Studio's glint models ([experiment 033](../../../experiments/033-finishes-rework/README.md)). It is built into board 2 ([experiment 021](../../../experiments/021-glitter-board/README.md)) for the [session-7 checks](../../runtime/runtime-bridge-test-card.md#ink-demo-rows-bridge-053).
 
 **Glitter ships in 1.0 only if board 2 passes in game.** The engine reasoning is in [Glitter in game](../../../knowledge/glitter-in-game.md).
 
@@ -12,7 +12,7 @@ Individually visible reflective flakes of varied size and spacing over visible p
 
 ## Glitter flakes 2: the Studio's models in the game
 
-The Studio's glint models, Direct-light glints, Clustered fine glints and Dense fine speckles, looked right to the maintainer; the classic macro dots did not. The reference is the maintainer's "Glitterati" preset, read from a copy of the library: Dense fine speckles, density 0.88, fine share 0.88, strength 16, pink `#fa006c` over `#620422` ([experiment 032 §1](../../../experiments/032-finishes-rework/README.md#1-the-reference-models)).
+The Studio's glint models, Direct-light glints, Clustered fine glints and Dense fine speckles, looked right to the maintainer; the classic macro dots did not. The reference is the maintainer's "Glitterati" preset, read from a copy of the library: Dense fine speckles, density 0.88, fine share 0.88, strength 16, pink `#fa006c` over `#620422` ([experiment 032 §1](../../../experiments/033-finishes-rework/README.md#1-the-reference-models)).
 
 [`glitter-studio-flakes.ts`](../../../projects/xf-studio/authoring/src/glitter-studio-flakes.ts) maps a glint layer's settings onto the route's flakes as faithfully as the decal allows:
 - **Where the flakes are:** the model's own count per mm² and cluster envelope.
@@ -28,7 +28,7 @@ Offline, the floor removes what made board 1 look printed [offline]:
 - At a macro framing, 32 % of its flakes were brightest exactly where the lid's own sheen is, and up to 43 % lit at once.
 - With the flakes-2 normals, no flake fades, 1–2 % peak with the skin, and twinkle rises by half.
 
-The reference model's two-texel flakes resolve at a macro framing but give way to sheen by 0.1 mm per pixel, so board 2 tests both it and board-1-sized flakes ([experiment 032 §2](../../../experiments/032-finishes-rework/README.md#offline-evidence)).
+The reference model's two-texel flakes resolve at a macro framing but give way to sheen by 0.1 mm per pixel, so board 2 tests both it and board-1-sized flakes ([experiment 032 §2](../../../experiments/033-finishes-rework/README.md#offline-evidence)).
 
 ## Engine routes, ranked
 
@@ -39,7 +39,7 @@ The reference model's two-texel flakes resolve at a macro framing but give way t
 | — | The faceted Shimmer bake with fewer cells and more tilt | Same program; facets are UV-cell discs in the head-UV atlas. Board 2's coarse "glitter proxy" (`cells` 32) makes discs of about 5.6 mm; 017's *Shimmer · strong* makes 2.8 mm discs. | Sequins or hammered metal, not glitter. It cannot get finer without the window. |
 | — | Per-flake Fresnel in `mesh_decal_gradientmap_recolor_blendable` | Its Fresnel term uses the normal-mapped normal [source] | A view-only twinkle, added to albedo (at most white) with one shift colour per draw. A possible later variant. |
 | — | `metal_base_glitter.mt`, `mesh_decal_particles.mt`, multilayered | Noise/time emission, a time-driven flipbook, and an opaque surface respectively [source] | Rejected |
-| — | The car-paint metallic flake layer (`car_paint_metallic_01.mltemplate` on the vehicles' multilayered `vehicle_destr_blendshape.mt`, with its forward coat pass) | Opaque multilayered surface; the flakes are a tiled 512² one-texel noise normal at 6–9° of tilt [resource] [offline] ([experiment 032 §5](../../../experiments/032-finishes-rework/README.md#5-an-isolated-alternative-the-car-paint-metallic-flake-layer)) | Rejected for the plate: replaces the skin, no soft coverage, the coat lands only on its own base pass. Its flakes would all fade in our decal; they are a car's micro-sparkle (Shimmer's pattern), not glitter |
+| — | The car-paint metallic flake layer (`car_paint_metallic_01.mltemplate` on the vehicles' multilayered `vehicle_destr_blendshape.mt`, with its forward coat pass) | Opaque multilayered surface; the flakes are a tiled 512² one-texel noise normal at 6–9° of tilt [resource] [offline] ([experiment 032 §5](../../../experiments/033-finishes-rework/README.md#5-an-isolated-alternative-the-car-paint-metallic-flake-layer)) | Rejected for the plate: replaces the skin, no soft coverage, the coat lands only on its own base pass. Its flakes would all fade in our decal; they are a car's micro-sparkle (Shimmer's pattern), not glitter |
 
 The installed community glitter eyeshadow (*Winterkissed*, Limerence × AllieKat) confirms that modders ship glitter through plain `mesh_decal`. It uses 4096² maps on the vanilla eye-makeup UVs, near-1 metalness and embossed outline normals. Its outline normals give the ring pattern our reference review rejected, so rank 1 uses flat flakes instead ([experiment 018](../../../experiments/018-glitter-route/README.md#community-glitter-winterkissed)).
 

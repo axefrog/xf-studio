@@ -2,7 +2,7 @@
 
 **Status (29 September 2026): board 2 is built through the production pipeline and passed the independent verifier; built into XF Finish Showroom; not yet seen in game.**
 - **Board 1** (26–27 September) was judged in session 6 (29 September): "doesn't seem much like glitter" ([below](#board-1-and-its-verdict)).
-- **Board 2** reproduces the Studio's glint models with *glitter flakes 2*: every flake above the decal's normal fade, per-flake surfaces, a large population, clustering and the models' own density ([experiment 032](../032-finishes-rework/README.md)).
+- **Board 2** reproduces the Studio's glint models with *glitter flakes 2*: every flake above the decal's normal fade, per-flake surfaces, a large population, clustering and the models' own density ([experiment 033](../033-finishes-rework/README.md)).
 
 The production Glitter guard is unchanged: a Glitter layer in any collection is still omitted with its reason, and **Glitter ships in 1.0 only if board 2 passes**. The consolidated reading is in [Glitter in game](../../knowledge/glitter-in-game.md); the pipeline contract is [the diagnostic Glitter route](../../research/authoring/studio-to-mod-pipeline.md#the-diagnostic-glitter-route).
 
@@ -57,7 +57,7 @@ On this build ([`result.json`](result.json), WolvenKit CLI 9.0.1's own BC decode
 1. **V sign on a decoded export.** The verifier decodes a stored BC4 level of every preset. Mapped through the packaged transform at 19,680 plate points per chunk, every preset matches its authored head-UV coverage: mean error 0.0009–0.0020, no point off by more than 0.5, offset estimate 0 or 1/16 texel.
 2. **BC5 on the flakes.**
    - The angle between supplied and decoded normals on level-0 flake texels (mask ≥ ½) is 0.15–0.75° on average and 0.98–2.5° at the 95th percentile. The reference model's two-texel flakes put more distinct normals in each 4 × 4 block than board 1's.
-   - **Of every fully covered flake texel supplied at 14° or steeper, 99.98–100 % keep mode 1's full weight after BC5, and none falls below half** (mean tilt loss 0.006–0.017°; [bc5-result.json](../032-finishes-rework/bc5-result.json), [`bc5-fade.ts`](../032-finishes-rework/bc5-fade.ts)).
+   - **Of every fully covered flake texel supplied at 14° or steeper, 99.98–100 % keep mode 1's full weight after BC5, and none falls below half** (mean tilt loss 0.006–0.017°; [bc5-result.json](../033-finishes-rework/bc5-result.json), [`bc5-fade.ts`](../033-finishes-rework/bc5-fade.ts)).
    - The flake mask's BC4 error on antialiased edges is 0.017–0.021 on average and 0.051–0.059 at the 95th percentile.
 3. **WolvenKit keeps the supplied nested chains** for the 4096 × 1024 maps and the 2048² accent. The decoded levels 1–3 of the flake mask sit 0.001–0.017 (mean absolute) from the supplied nested levels, against 0.10–0.30 from a BOX chain of level 0.
 4. **The independent verifier** passed with every glitter check:
@@ -89,7 +89,7 @@ Board 1 was built on 26–27 September (archive `f24639fe…1b`, collection `a25
 
 **Session 6 (29 September)** [runtime]: in showroom close-ups under the creator rig (height 1.9 m, sweep −30°/0°/+30°), Glitter A showed a fine sparkle grain. Judged by hand with movable lights: "doesn't seem much like glitter". The flecks looked printed on top of the purple base, with very limited light response.
 
-Offline, the reason is the tilt distribution [offline] ([experiment 032](../032-finishes-rework/README.md#offline-evidence)):
+Offline, the reason is the tilt distribution [offline] ([experiment 033](../033-finishes-rework/README.md#offline-evidence)):
 - 37 % of board 1's flake texels tilted less than mode 1's ≈ 11.5° fade, so they wrote no normal.
 - A third of the flakes were brightest exactly where the skin's own highlight is.
 - Up to 43 % lit under one light.
@@ -103,7 +103,7 @@ Board 1's A recipe survives unchanged as the left lid of board 2's B.
 
 ## Test card
 
-Session 7 runs board 2 in XF Finish Showroom, not in the creator: the finishes row of the [session-7 checks](../../research/runtime/runtime-bridge-test-card.md#session-7-checks-bridge-053). Close-ups at height 1.9 m under the creator rig, then judging by hand with movable lights.
+Session 7 runs board 2 in XF Finish Showroom, not in the creator: the finishes row of the [session-7 checks](../../research/runtime/runtime-bridge-test-card.md#ink-demo-rows-bridge-053). Close-ups at height 1.9 m under the creator rig, then judging by hand with movable lights.
 - **Pass for Glitter:** on A, and on C or D, individual points switch on and off as the light or the head moves, with the pigment visible between them. On B, the right lid shows that more clearly than the left.
 - **Also answered:** E and F, as board 1's test card asked (nested against BOX at pull-back; the accent in the dark and whether it clears).
 
@@ -126,7 +126,7 @@ cd projects/xf-studio/authoring
 bun tools/build_showroom_package.ts --collection ../../../experiments/021-glitter-board/glitter-board.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game> --diagnostics
 cd ../../..
 bun experiments/021-glitter-board/summarize.ts <showroom build>/eye-build/<eye build> --json experiments/021-glitter-board/result.json
-bun experiments/032-finishes-rework/bc5-fade.ts <showroom build>/eye-build/<eye build> <game>
+bun experiments/033-finishes-rework/bc5-fade.ts <showroom build>/eye-build/<eye build> <game>
 ```
 
 `bun tools/build_collection_package.ts … --diagnostics` builds the same eye makeup as XF Eye Artistry for the creator.

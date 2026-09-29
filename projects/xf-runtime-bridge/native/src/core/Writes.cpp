@@ -1021,7 +1021,12 @@ json InventoryEquip(const params::InventoryEquipRequest& aRequest, const Invento
     {
         out["outfit"] = *outfit;
         out["hidden_by_outfit"] = true;
-        out["outfit_note"] = outfit->value("shows", std::string()) == "hidden"
+        const auto manager = outfit->value("manager", std::string());
+        const auto managedBy = outfit->value("managed_by", std::string());
+        out["outfit_note"] = manager == "script"
+                                 ? "the item is equipped, but V's outfit is managed by " + (managedBy.empty() ? std::string("a script mod's outfit system") : managedBy) +
+                                       ", which replaces the wardrobe's own requests, so it doesn't draw; wardrobe.equip with suspend: true takes that outfit off for now (the story's own request) so it draws, and resume: true puts the outfit back"
+                             : outfit->value("shows", std::string()) == "hidden"
                                  ? "the item is equipped, but the " + slot + " area is hidden (an empty area of the active wardrobe outfit, or hidden headgear), so it doesn't draw; wardrobe.equip with item puts it into the outfit, or with area and show: equipped shows it"
                                  : "the item is equipped, but the active wardrobe outfit shows another item in the " + slot + " area; wardrobe.equip with item puts this one into the outfit, or clear: true takes the outfit off";
     }
@@ -1393,8 +1398,24 @@ bool WardrobeShows(const params::WardrobeEquipRequest& aRequest, const json& aSt
     {
         return set == 0;
     }
+    // A script outfit system's parts (0.6, Equipment-EX): an item put into its outfit shows among them.
+    const auto parts = aState.contains("script_outfit") && aState["script_outfit"].is_object() ? aState["script_outfit"].value("parts", json::array()) : json::array();
+    const auto partHas = [&](const std::string& aItem, const std::string& aSlot) {
+        for (const auto& part : parts)
+        {
+            if (part.is_object() && sameItem(part.value("item", std::string()), aItem) && (aSlot.empty() || part.value("slot", std::string()) == aSlot))
+            {
+                return true;
+            }
+        }
+        return false;
+    };
     if (aRequest.mode == "item")
     {
+        if (partHas(aRequest.item, ""))
+        {
+            return true;
+        }
         for (const auto& area : areas)
         {
             if (area.is_object() && area.value("shows", std::string()) == "outfit" &&
@@ -1410,20 +1431,51 @@ bool WardrobeShows(const params::WardrobeEquipRequest& aRequest, const json& aSt
         const auto shows = areaOf(aRequest.area).value("shows", std::string());
         return aRequest.mode == "hidden" ? shows == "hidden" : (shows == "equipped" || shows == "empty");
     }
+    // 0.6: suspend shows once no outfit decides what V shows; resume once one does again.
+    if (aRequest.mode == "suspend")
+    {
+        return aState.value("manager", std::string("none")) == "none";
+    }
+    if (aRequest.mode == "resume")
+    {
+        return aState.value("manager", std::string("none")) != "none";
+    }
     if (aRequest.mode == "restore")
     {
         if (set != aRequest.set)
         {
             return false;
         }
-        if (aRequest.set == 0)
+        // A script outfit (0.6): on or off as recorded, and exactly the recorded parts while on; its areas are its own.
+        if (aRequest.scriptKnown)
         {
-            return true;
+            const auto outfit = aState.contains("script_outfit") && aState["script_outfit"].is_object() ? aState["script_outfit"] : json::object();
+            if (outfit.value("active", false) != aRequest.scriptActive)
+            {
+                return false;
+            }
+            if (aRequest.scriptActive)
+            {
+                if (parts.size() != aRequest.parts.size())
+                {
+                    return false;
+                }
+                for (const auto& part : aRequest.parts)
+                {
+                    if (!partHas(part.item, part.slot))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
+        // With no outfit (set 0) each area's hidden flag is compared too (0.6, session 6's T9: the undo answered shown
+        // while Head, hidden before, had come back shown).
         for (const auto& slot : aRequest.slots)
         {
             const auto area = areaOf(slot.area);
-            if (!slot.item.empty())
+            if (!slot.item.empty() && aRequest.set != 0)
             {
                 if (area.value("shows", std::string()) != "outfit" || !sameItem(area.value("outfit_item", std::string()), slot.item))
                 {
@@ -1450,7 +1502,7 @@ json WardrobeEquip(const params::WardrobeEquipRequest& aRequest, const WardrobeO
         out["changed"] = false;
         out["state"] = aOps.state();
         out["undo"] = nullptr;
-        out["undo_note"] = "nothing changed (no outfit was active)";
+        out["undo_note"] = step.contains("note") ? step.value("note", std::string()) : "nothing changed (no outfit was active)";
         return out;
     }
     json state;
@@ -1468,7 +1520,19 @@ json WardrobeEquip(const params::WardrobeEquipRequest& aRequest, const WardrobeO
     {
         out["note"] = "the game took the request, but the wardrobe didn't show the change within the wait (it may still change)";
     }
-    if (before.is_object())
+    if (aRequest.mode == "suspend" || aRequest.mode == "resume")
+    {
+        // The story's requests undo each other exactly: the outfit (and, under a script outfit system, its parts) is
+        // remembered by whoever manages it.
+        const bool suspend = aRequest.mode == "suspend";
+        out["undo"] = {{"method", "wardrobe.equip"}, {"params", {{suspend ? "resume" : "suspend", true}}}};
+        out["undo_note"] = suspend ? "resume: true puts the outfit back on (the kill switch does too)" : "suspend: true takes it off again";
+        if (step.contains("manager_before"))
+        {
+            out["manager_before"] = step["manager_before"];
+        }
+    }
+    else if (before.is_object())
     {
         out["undo"] = {{"method", "wardrobe.equip"}, {"params", {{"restore", before}}}};
         out["undo_note"] = "puts the wardrobe back exactly: the outfit that was active (or none) and what each area showed";

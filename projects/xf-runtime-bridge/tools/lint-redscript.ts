@@ -2,6 +2,10 @@
 // COPY of the game's r6/cache/final.redscripts. Never point --bundle at the live game file.
 //
 //   bun tools/lint-redscript.ts --bundle <copy of final.redscripts> [--cli <redscript-cli.exe>] [--codeware <Codeware scripts dir>]
+//                               [--extra <dir>]...
+//
+// --extra adds another script folder (repeatable). 0.6: XFRuntimeBridgeEquipmentEx.reds compiles its Equipment-EX class only
+// when that module exists; `--extra tools/lint-stubs/equipment-ex` (a stub of the public API it calls) checks that branch.
 //
 // XFRuntimeBridgeShowroom.reds compiles one of two XFShowroom classes by @if(ModuleExists("Codeware")): without --codeware
 // the lint checks the fallback that refuses with codeware_missing; with Codeware's own script sources (its repository's
@@ -25,6 +29,13 @@ const cli = option("--cli") ?? process.env.XFB_REDSCRIPT_CLI ?? "D:/Dev/tools/re
 const bundle = option("--bundle") ?? process.env.XFB_REDSCRIPT_BUNDLE;
 const sources = resolve(import.meta.dir, "..", "redscript");
 const codeware = option("--codeware") ?? process.env.XFB_CODEWARE_SCRIPTS;
+const extras = args.flatMap((arg, i) => (arg === "--extra" && args[i + 1] ? [resolve(args[i + 1]!)] : []));
+for (const extra of extras) {
+  if (!existsSync(extra)) {
+    console.error(`extra script folder not found at ${extra}`);
+    process.exit(2);
+  }
+}
 
 if (!existsSync(cli)) {
   console.error(`redscript-cli not found at ${cli} (official release v0.5.31; see docs/toolchain.md)`);
@@ -39,7 +50,7 @@ if (!bundle || !existsSync(bundle)) {
   process.exit(2);
 }
 
-const result = spawnSync(cli, ["lint", "-s", sources, ...(codeware ? ["-s", codeware] : []), "-b", bundle], { encoding: "utf8" });
+const result = spawnSync(cli, ["lint", "-s", sources, ...(codeware ? ["-s", codeware] : []), ...extras.flatMap((e) => ["-s", e]), "-b", bundle], { encoding: "utf8" });
 const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
 process.stdout.write(output);
 const errors = output.split(/\r?\n/).filter((line) => line.includes("ERROR"));
@@ -47,4 +58,4 @@ if (result.status !== 0 || errors.length > 0) {
   console.error(`\nredscript lint FAILED (${errors.length} error line(s), exit ${result.status})`);
   process.exit(1);
 }
-console.log(`\nredscript lint passed: ${join("redscript")}${codeware ? ` with Codeware's scripts (${codeware})` : " without Codeware"} against ${bundle}`);
+console.log(`\nredscript lint passed: ${join("redscript")}${codeware ? ` with Codeware's scripts (${codeware})` : " without Codeware"}${extras.length ? ` and ${extras.join(", ")}` : ""} against ${bundle}`);

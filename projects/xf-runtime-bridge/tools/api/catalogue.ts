@@ -13,6 +13,8 @@
 //   write-inventory  changes V's clothing and inventory (off in the bridge's config.ini until the maintainer approves it)
 //   write-save       makes a manual save or loads one
 //   write-showroom   spawns, turns and removes XF Finish Showroom's test heads and light rigs (the test profile only)
+//   write-player     moves and turns V, turns her view, crouches, draws or holsters, opens menus (0.6; the test profile only)
+//   act-player       irreversible actions in the world: using devices, dialogue, consuming (0.6; reserved, no command yet)
 //   control          changes only the bridge itself (the kill switch)
 // The game side enforces the real gate: every write is refused unless the bridge's config.ini
 // has allow_writes = true, which only the dedicated test profile sets.
@@ -29,6 +31,10 @@ import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
+import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, withOverlayCleared } from "./catalogue060.ts";
+import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
+import { decodePng } from "../capture/image.ts";
+import { readFileSync } from "node:fs";
 
 /** game.status refusals game.wait waits through: the engine not ticking for a moment while a save loads (0.5.2). */
 const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_not_running", "game_loading"]);
@@ -36,7 +42,7 @@ const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_no
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
-export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "control";
+export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "control";
 
 export const PERMISSIONS: Record<Permission, { label: string; description: string }> = {
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
@@ -71,6 +77,15 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
     label: "Set up the finish showroom",
     description:
       "Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile.",
+  },
+  "write-player": {
+    label: "Move V",
+    description:
+      "Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile.",
+  },
+  "act-player": {
+    label: "Act for V",
+    description: "Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile.",
   },
   control: {
     label: "Stop the bridge",
@@ -172,6 +187,65 @@ function wrapCapture(run: () => CaptureRecord): CommandResult {
   }
 }
 
+/**
+ * capture.screenshot (0.6): pre-capture expectations from the scene report, the XF overlay out of the picture, and
+ * checks on the subject's region of the capture itself.
+ */
+async function runScreenshot(input: Record<string, unknown>, context: CommandContext): Promise<CommandResult> {
+  const expect = input.expect as Expectation | undefined;
+  const refuse = (input.on_fail ?? "refuse") === "refuse";
+  let report: Record<string, any> | null = null;
+  let before: ReturnType<typeof judgeBefore> = [];
+  if (expect) {
+    const focus = expect.subject && /^piece:[0-9]+$/.test(expect.subject) ? expect.subject : undefined;
+    report = await runSceneReport({ include: ["camera", "subjects", "lights"], ...(input.manifest ? { manifest: input.manifest as string } : {}), ...(focus ? { focus } : {}) }, context);
+    before = judgeBefore(report, expect);
+    const failed = before.filter((r) => !r.ok);
+    if (failed.length && refuse) {
+      throw planError("expectation_failed", `The pre-capture check failed, so no screenshot was taken: ${failed.map((f) => f.detail).join("; ")}. Fix the framing or light, or pass on_fail: warn.`);
+    }
+  }
+  const grab = () =>
+    captureWindow({
+      target: context.api.captureTarget(),
+      region: regionOf(input),
+      view: viewOf(input),
+      route: (input.route as "auto" | "printwindow" | "screen" | undefined) ?? "auto",
+      name: input.name as string | undefined,
+      outDir: context.captureRoot,
+    });
+  let record!: CaptureRecord;
+  let overlay: Record<string, unknown> | null = null;
+  try {
+    if (input.clear_overlay === false) record = grab();
+    else {
+      const done = await withOverlayCleared(context, grab);
+      record = done.value;
+      overlay = done.overlay;
+    }
+  } catch (error) {
+    captureFailure(error);
+  }
+  const result = captureResult(record);
+  const value: Record<string, unknown> = { ...record, ...(overlay ? { overlay } : {}) };
+  if (expect && report) {
+    let after: ReturnType<typeof judgeAfter> = [];
+    let stats = null;
+    if (expect.luminance || expect.max_clipped !== undefined || expect.max_crushed !== undefined) {
+      const subject = pickSubject(report.subjects ?? [], expect.subject);
+      if (subject?.bounds) stats = frameStatsInCapture(decodePng(new Uint8Array(readFileSync(record.full.path))), record.crop, record.source.window, subject.bounds);
+      after = judgeAfter(stats, expect);
+    }
+    const ok = [...before, ...after].every((r) => r.ok);
+    value.expectations = { ok, before, after, ...(stats ? { frame: stats } : {}) };
+    if (!ok && refuse && after.some((r) => !r.ok)) {
+      throw planError("expectation_failed", `The capture was taken but failed its check: ${after.filter((r) => !r.ok).map((f) => f.detail).join("; ")}. The file is kept for inspection: ${record.full.path}`);
+    }
+    if (!ok) value.warnings = [...before, ...after].filter((r) => !r.ok).map((r) => r.detail);
+  }
+  return { value, images: result.images };
+}
+
 /** pose.live.apply: the catalogue's list of {joint, rotation} becomes the bridge's map of joint to rotation. */
 export function livePoseParams(input: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -210,6 +284,8 @@ async function runPhotoOpen(input: Record<string, unknown>, context: CommandCont
   if (status.allow_writes !== true || !classes.includes("photo")) throw Object.assign(new Error("writes"), { plain: plainBridgeError(status.allow_writes === true ? "write_class_disabled" : "writes_disabled") });
   // The in-game panel can pause writes; the key press is a write too.
   if (status.writes_paused === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("writes_paused") });
+  // 0.6: a session handed over to the player is the player's; the key is a change too.
+  if (status.handed_over === true) throw Object.assign(new Error("writes"), { plain: plainBridgeError("handed_over") });
   const phase = String(status.phase);
   if (phase === "photo_mode") return { value: { changed: false, note: "Photo mode was already open." } };
   if (phase !== "gameplay") throw planError("not_in_gameplay", `Photo mode opens only from normal play; the game is in ${phase}. Close menus first.`);
@@ -616,18 +692,24 @@ export const CATALOGUE: readonly CommandDef[] = [
         "How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route.",
         ["auto", "printwindow", "screen"],
       ),
-    }),
-    local: async (input, { api, captureRoot }) =>
-      wrapCapture(() =>
-        captureWindow({
-          target: api.captureTarget(),
-          region: regionOf(input),
-          view: viewOf(input),
-          route: (input.route as "auto" | "printwindow" | "screen" | undefined) ?? "auto",
-          name: input.name as string | undefined,
-          outDir: captureRoot,
+      clear_overlay: bool("Keep the bridge's own overlay out of the picture: its message lines are cleared and its HUD panel and label hidden for the capture, then the panel comes back (default true; needs the game bridge)."),
+      expect: {
+        description:
+          "Checks judged before the capture from the scene report (subject in frame with a margin, not blocked, lit) and after it on the subject's region (mean luminance, clipped highlights, crushed shadows); on_fail says what a failure does.",
+        ...obj({
+          subject: str("The subject: v, face, head or body (V), piece:<index> (a showroom head) or an NPC's id. Default V, else the first showroom head.", { maxLength: 80 }),
+          in_frame_margin: num("Wholly in frame with at least this margin to every edge, in window heights (0 to 0.5).", 0, 0.5),
+          unoccluded: bool("No static geometry between the camera and the face."),
+          lit_by: oneOf("At least one light reaches the face: any, photo (photo mode's) or rig (the showroom's).", ["any", "photo", "rig"]),
+          luminance: { type: "array", description: "The subject region's mean luminance within [low, high] (0 to 1).", items: num("A luminance, 0 to 1.", 0, 1), minItems: 2, maxItems: 2 },
+          max_clipped: num("At most this share of the region clipped (any channel at 250 or more), 0 to 1.", 0, 1),
+          max_crushed: num("At most this share of the region crushed (luminance at 5/255 or less), 0 to 1.", 0, 1),
         }),
-      ),
+      },
+      on_fail: oneOf("refuse (default): a failed check before the capture takes none, one after it answers expectation_failed (the file is kept for inspection); warn: capture anyway and list the failures.", ["refuse", "warn"]),
+      manifest: str("A showroom build's folder or manifest.json, so lit_by can judge its rig lights.", { maxLength: 1024 }),
+    }),
+    local: runScreenshot,
   },
   {
     name: "capture.recrop",
@@ -675,6 +757,9 @@ export const CATALOGUE: readonly CommandDef[] = [
       }
     },
   },
+
+  // The agent's view of the game, the session log and contact sheets (0.6)
+  ...SCENE_COMMANDS,
 
   // Game state (read-only)
   {
@@ -874,6 +959,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     undo: "the result's undo puts the camera back where it was, looking the same way; closing photo mode resets the camera anyway.",
     local: runCameraPlace,
   },
+  PRESET_COMMAND,
   {
     name: "photo.light.set",
     title: "Adjust a photo-mode light",
@@ -1168,7 +1254,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "wardrobe.state",
     title: "Read V's wardrobe outfit",
     description:
-      "The wardrobe outfit V wears (set 1-7, or 0 for none) and, for each clothing area (Head, Face, OuterChest, InnerChest, Legs, Feet), what it shows: outfit (the outfit's item), hidden (nothing: the outfit leaves the area empty, or headgear is hidden), equipped or empty; plus what is equipped there and the wardrobe's stored outfits. An active outfit overrides what the equipment slots show, which is why an equipped helmet can stay invisible.",
+      "The wardrobe outfit V wears (set 1-7, or 0 for none) and, for each clothing area (Head, Face, OuterChest, InnerChest, Legs, Feet), what it shows: outfit (the outfit's item), hidden (nothing: the outfit leaves the area empty, or headgear is hidden), equipped or empty; plus what is equipped there and the wardrobe's stored outfits. An active outfit overrides what the equipment slots show, which is why an equipped helmet can stay invisible. manager says who decides: wardrobe (a wardrobe outfit, set 1-7), script (a script mod's outfit system, named in managed_by when known, such as EquipmentEx: active is true while set is 0, and the wardrobe's own requests don't reach it) or none (what is equipped shows); suspended_by_bridge says the bridge took an outfit off (wardrobe_equip resume puts it back); script_outfit is Equipment-EX's outfit when it is installed (active and its parts: outfit slot and item).",
     permission: "read",
     input: obj({}),
     bridge: { method: "wardrobe.state" },
@@ -1177,7 +1263,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "wardrobe.equip",
     title: "Change V's wardrobe outfit",
     description:
-      "Changes what V's clothing shows through the wardrobe, as the wardrobe screen does (the equipment system's own requests; stored outfits are never edited or saved): set applies outfit 1-7; clear takes the outfit off, so V shows what is equipped; item shows that clothing item in its area of the active outfit (the item must be in V's inventory or the wardrobe); area with show equipped makes that area show what is equipped there, and show hidden hides it; restore (the undo) puts back exactly the outfit and each area a snapshot recorded. Waits until the wardrobe shows the change. Only in normal play, not in combat or a scene. Needs the inventory permission; the kill switch puts back the wardrobe as it was before the bridge's first change.",
+      "Changes what V's clothing shows through the wardrobe, as the wardrobe screen does (the equipment system's own requests; stored outfits are never edited or saved): set applies outfit 1-7; clear takes the outfit off, so V shows what is equipped; item shows that clothing item in its area of the active outfit (the item must be in V's inventory or the wardrobe); area with show equipped makes that area show what is equipped there, and show hidden hides it; restore (the undo) puts back exactly the outfit and each area a snapshot recorded (with no outfit too: each area's hidden state); suspend takes the outfit off with the story's own request, whoever manages it (the wardrobe or a script mod's outfit system such as EquipmentEx), so equipped clothing draws, and resume puts that outfit back. Under a script mod's outfit system, item puts the item into that outfit where the bridge can drive it (Equipment-EX: its own outfit system, as its screen does; the undo restores its parts exactly), and suspend and resume work for any; the rest is refused (outfit_managed_elsewhere). Waits until the wardrobe shows the change. Only in normal play, not in combat or a scene. Needs the inventory permission; the kill switch puts back the wardrobe as it was before the bridge's first change.",
     permission: "write-inventory",
     input: obj({
       set: int("Apply this wardrobe outfit (1-7; wardrobe_state lists the stored ones).", 1, 7),
@@ -1185,6 +1271,8 @@ export const CATALOGUE: readonly CommandDef[] = [
       item: str("Show this clothing item record in its area of the active outfit, for example Items.Helmet_01_basic_01.", { pattern: "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$", maxLength: 128 }),
       area: oneOf("The clothing area for show.", ["Head", "Face", "OuterChest", "InnerChest", "Legs", "Feet"]),
       show: oneOf("With area: equipped (the area shows what is equipped there) or hidden (nothing).", ["equipped", "hidden"]),
+      suspend: bool("true: take the outfit off for now with the story's own request (works under the wardrobe and script outfit systems alike), so equipped clothing draws; the undo is resume."),
+      resume: bool("true: put back the outfit the bridge took off with suspend."),
       restore: {
         description: "A wardrobe_equip answer's undo: the outfit (0 none) and what each area showed.",
         ...obj(
@@ -1206,12 +1294,24 @@ export const CATALOGUE: readonly CommandDef[] = [
               },
               maxItems: 6,
             },
+            script_outfit: {
+              description: "A script outfit system's outfit when the snapshot was taken (Equipment-EX): on or off, and its parts.",
+              ...obj({
+                active: bool("Whether that outfit was on."),
+                parts: {
+                  type: "array",
+                  description: "Each outfit slot in use and its item.",
+                  items: { description: "One part.", ...obj({ slot: str("The outfit slot record, e.g. OutfitSlots.Head.", { maxLength: 128 }), item: str("The item record.", { maxLength: 128 }) }, ["slot", "item"]) },
+                  maxItems: 64,
+                },
+              }),
+            },
           },
           ["set"],
         ),
       },
     }),
-    undo: "the result's undo (wardrobe_equip with restore) puts the outfit and every area back exactly; the kill switch restores the wardrobe as it was before the bridge's first change.",
+    undo: "the result's undo (wardrobe_equip with restore, or resume after suspend) puts the outfit and every area back exactly; the kill switch resumes a suspended outfit and restores the wardrobe as it was before the bridge's first change.",
     bridge: { method: "wardrobe.equip", timeoutMs: () => 15000 },
   },
   {
@@ -1396,7 +1496,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj(
       {
         manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used).", { maxLength: 1024 }),
-        rig: oneOf("creator (default), creator_face or key.", ["creator", "creator_face", "key"]),
+        rig: oneOf("creator (default), creator_face, key, or none (remove every rig and keep the heads, as showroom_clear with what: lights).", ["creator", "creator_face", "key", "none"]),
         target: oneOf("each (default): a rig per head; piece: the head given by piece; v: V herself.", ["each", "piece", "v"]),
         piece: int("The head's index in the lineup (0 is the first), with target piece.", 0, 23),
         replace: bool("Remove the rigs placed earlier first (default true)."),
@@ -1450,6 +1550,10 @@ export const CATALOGUE: readonly CommandDef[] = [
     input: obj({}),
     bridge: { method: "showroom.state" },
   },
+
+  // Behaviours in the plugin at tick rate, and player control phase 1 (0.6)
+  ...BEHAVE_COMMANDS,
+  ...PLAYER_COMMANDS,
 ];
 
 export function findCommand(name: string): CommandDef | undefined {

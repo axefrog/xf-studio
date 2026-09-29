@@ -5,7 +5,7 @@
 - At *Shimmer · strong* it was a static field of dots (session 3, 28 September), and under a neutral key light at face framing a regular grid of dots far too large (session 4). [Experiment 030](../../../experiments/030-shimmer-grain/README.md) traced that and replaced it with shimmer-grain-1.
 - shimmer-grain-1, a uniform glossy pearly surface with a sparse one-texel grain, "reads more like a glossy vinyl than a shimmer" (session 6, 29 September, judged by hand under movable lights).
 
-[Experiment 032](../../../experiments/032-finishes-rework/README.md) measures why and checks grain-2 offline. The in-game check is the finishes row of the [session-7 checks](../../runtime/runtime-bridge-test-card.md#session-7-checks-bridge-053).
+[Experiment 033](../../../experiments/033-finishes-rework/README.md) measures why and checks grain-2 offline. The in-game check is the finishes row of the [session-7 checks](../../runtime/runtime-bridge-test-card.md#ink-demo-rows-bridge-053).
 
 ## Intended look
 
@@ -20,7 +20,7 @@ A fine reflective sheen: many tiny particles that sparkle individually when the 
 
 ## The design: shimmer-grain-2
 
-`mesh_decal`, entry `@faceted`: a tangent normal map with `NormalAlpha` 1, `UseNormalAlphaTex` 0, **`NormalsBlendingMode` 1**, plus per-texel roughness and metalness. The route and material are unchanged; only the maps differ ([`shimmer-grain.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/shimmer-grain.ts)). The model is the Studio's Dense fine speckles glitter model, the one closest to shimmer ([experiment 032 §1](../../../experiments/032-finishes-rework/README.md#1-the-reference-models)), made finer, denser and flatter.
+`mesh_decal`, entry `@faceted`: a tangent normal map with `NormalAlpha` 1, `UseNormalAlphaTex` 0, **`NormalsBlendingMode` 1**, plus per-texel roughness and metalness. The route and material are unchanged; only the maps differ ([`shimmer-grain.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/shimmer-grain.ts)). The model is the Studio's Dense fine speckles glitter model, the one closest to shimmer ([experiment 032 §1](../../../experiments/033-finishes-rework/README.md#1-the-reference-models)), made finer, denser and flatter.
 
 | Part | Value | Why |
 |---|---|---|
@@ -36,7 +36,7 @@ A fine reflective sheen: many tiny particles that sparkle individually when the 
 
 ### Offline result
 
-From [experiment 032](../../../experiments/032-finishes-rework/README.md#3-shimmer-shimmer-grain-2), on *Shimmer · strong*'s stripes, with the tools of [experiment 030](../../../experiments/030-shimmer-grain/README.md) plus a steady-state forecast of the temporal clamp [offline]:
+From [experiment 033](../../../experiments/033-finishes-rework/README.md#3-shimmer-shimmer-grain-2), on *Shimmer · strong*'s stripes, with the tools of [experiment 030](../../../experiments/030-shimmer-grain/README.md) plus a steady-state forecast of the temporal clamp [offline]:
 
 - **Close up, speckle instead of gloss.** Speckle inside the near-mirror highlight is 1.0–1.1 (grain-1: 0.36–0.48), and 0.86–0.96 after the clamp. Pinpoints under an oblique light are two to three times as frequent. Twinkle for a 10° light move is 0.19–0.27 (grain-1: 0.06–0.09).
 - **Face framing, a soft sheen.** Grain-1's fine stripe peaked above Satin (0.93 against 0.72): the gloss. Grain-2 peaks lower (0.40–0.46), falls off more slowly and matches Satin from 16° out; its tint is not in these luminance figures.
@@ -57,7 +57,7 @@ From [experiment 032](../../../experiments/032-finishes-rework/README.md#3-shimm
 |---|---|
 | **Dense specks over a satin base** (`mesh_decal` mode 1, above; shimmer-grain-2) | **Implemented** |
 | Sparse grain over one uniform glossy surface (shimmer-grain-1, 28–29 September) | Retired: glossy vinyl in session 6. Its sparse one-texel grains are what the temporal clamp removes, leaving the uniform gloss |
-| The car-paint metallic flake layer (`car_paint_metallic_01.mltemplate` on the vehicles' multilayered template) | Rejected as a template: opaque, replaces the skin. Its flake map is dense one-texel noise at 6–9° of tilt, which would all fade in our decal ([experiment 032 §5](../../../experiments/032-finishes-rework/README.md#5-an-isolated-alternative-the-car-paint-metallic-flake-layer)); the pattern supports grain-2's |
+| The car-paint metallic flake layer (`car_paint_metallic_01.mltemplate` on the vehicles' multilayered template) | Rejected as a template: opaque, replaces the skin. Its flake map is dense one-texel noise at 6–9° of tilt, which would all fade in our decal ([experiment 032 §5](../../../experiments/033-finishes-rework/README.md#5-an-isolated-alternative-the-car-paint-metallic-flake-layer)); the pattern supports grain-2's |
 | Classic facet bake (UV-cell discs with per-facet metalness, retired 28 September) | Rejected. A lattice of millimetre discs painted into metalness: static dots in game |
 | Larger, resolved flakes with nested mips | That is Glitter's design ([Glitter](glitter.md)), deliberately kept distinct |
 | Flat sheen only (no normal map) | Fallback if the grain misbehaves in game: the same surface without its close-up sparkle |

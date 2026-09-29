@@ -44,11 +44,15 @@ enum class Access
     WriteInventory, // V's clothing and inventory (inventory.*); off unless allow_write_classes lists "inventory"
     WriteSave,      // manual saves and loading (game.save, game.load); off unless the list has "save"
     WriteShowroom,  // XF Finish Showroom props and light rigs (showroom.*); off unless the list has "showroom"
+    WritePlayer,    // 0.6: reversible player changes (teleport, look, crouch, weapons, menus, behaviours that move V); "player"
+    ActPlayer,      // 0.6: irreversible actions in the world (using devices, dialogue, consuming); "act"
     Notify,         // shows a message in the bridge's own in-game label (ui.message); not a write, never changes the game
     Control         // changes only the bridge itself (bridge.kill); always allowed, never touches the game
 };
 
 std::string_view AccessName(Access aAccess);
+// The name allow_write_classes lists for a write class ("photo", ..., "player", "act"); empty for the others.
+std::string_view ConfigClassName(Access aAccess);
 bool IsWrite(Access aAccess);
 // The config bit for a write class (0 for Read, Write and Control).
 uint32_t WriteClassBit(Access aAccess);
@@ -132,7 +136,24 @@ public:
 
     // For multi-step writes, before each step that changes the game (RB-53): throws MethodError killed
     // or writes_paused when the kill switch or the panel's pause came after the request was accepted.
+    // 0.6: also handed_over while the session is handed over to the player.
     void RequireWritesOpen() const;
+
+    // 0.6: a method whose write class depends on its parameters (behave.start, player.action) checks it here: throws
+    // MethodError write_class_disabled unless allow_write_classes lists that class. Registered as Access::Write, so the
+    // dispatcher has already checked allow_writes, the pause and the handover.
+    void RequireWriteClass(Access aAccess) const;
+
+    // 0.6, session.handover / session.resume: while handed over, every write is refused with handed_over, so the player
+    // has the game to themselves; nothing else changes (reads, notes, the kill switch still work). Unlike the panel's pause
+    // (the player's own switch, which no pipe method can undo), a client that handed over may resume.
+    void SetHandover(bool aOn, const std::string& aNote = {});
+    bool HandedOver() const;
+
+    // 0.6: the session event stream (core/Events.hpp). The dispatcher reports every write it answers (ok or refused),
+    // the kill switch and handovers through this sink; unset, nothing is reported.
+    using EventSink = std::function<void(const std::string& aKind, const std::string& aLevel, const std::string& aText, const nlohmann::json& aData)>;
+    void SetEventSink(EventSink aSink);
 
     nlohmann::json Describe() const;
     uint64_t RequestCount() const;
@@ -151,6 +172,8 @@ private:
     std::string m_killReason;
     std::atomic<bool> m_killed{false};
     std::atomic<bool> m_writesPaused{false};
+    std::atomic<bool> m_handover{false};
+    EventSink m_eventSink;
     std::atomic<uint64_t> m_requests{0};
     std::atomic<uint64_t> m_cidCounter{0};
 

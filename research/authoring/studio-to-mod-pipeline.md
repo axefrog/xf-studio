@@ -224,7 +224,7 @@ At 2048 × 512 a texel is about 0.13 × 0.12 mm on the lids: today's texel count
 
 The [Glitter game route](../../knowledge/glitter-in-game.md#3-primary-route-resolved-glint-flakes-mesh_decal-plate-local-window) is built as a **diagnostic** route for in-game tests ([experiment 021](../../experiments/021-glitter-board/README.md)). The Glitter finish itself keeps no route: Glitter layers in any collection, this one included, are still omitted with a reason. Only a prepared collection's `glitter` knob (`xfs/export-diagnostics-1`, [`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/export-diagnostics.ts)) selects the route, for a preset whose active layers are all flat finishes. Its `base` surface (roughness, metalness) replaces the pigment layers' own; each `region` names one pigment layer and gives flake statistics (width, spread, cover, tilt, roughness, metalness, colour, seed), a mip rule (`nested` or `box`), or mirrors another region's flakes across u = ½; an optional `accent` takes the lowest-key share of one region's flakes. The knob cannot be combined with a surface override or head UV. Only the CLI's `--diagnostics` honours it; both hosts drop it.
 
-**Glitter flakes 2** (after session 6; [experiment 032](../../experiments/032-finishes-rework/README.md)). A region's flakes may also set:
+**Glitter flakes 2** (after session 6; [experiment 033](../../experiments/033-finishes-rework/README.md)). A region's flakes may also set:
 - `tiltMinDeg`: every flake tilts at least this much, then |N(0, σ)| up to the maximum;
 - `roughnessMax` and `metalnessMin`: each flake draws its own roughness and metalness in those ranges;
 - `largeShare` with `largeSizeMm`: a share of larger flakes;
@@ -499,7 +499,7 @@ Rerun the comparisons from the authoring directory with `bun tools/compare-build
 
 The verifier's ArchiveXL path expansion is a **model inferred from inspected resource rules**, not a game execution trace; the diagnostic builds that match it registered and switched in game (see the top of this guide). Still without game evidence:
 - The separation of the flat finishes under a controlled directional light. Under the creator's soft light Gloss A–D barely separated.
-- Shimmer's faceted route: sessions 3 and 4 saw a static, regular grid of oversized dots, and session 6 saw the sparse grain that replaced it ([experiment 030](../../experiments/030-shimmer-grain/README.md)) read as glossy vinyl. The route now writes dense specks over a satin base ([experiment 032](../../experiments/032-finishes-rework/README.md)); Shimmer stays experimental until that build has been seen in game.
+- Shimmer's faceted route: sessions 3 and 4 saw a static, regular grid of oversized dots, and session 6 saw the sparse grain that replaced it ([experiment 030](../../experiments/030-shimmer-grain/README.md)) read as glossy vinyl. The route now writes dense specks over a satin base ([experiment 033](../../experiments/033-finishes-rework/README.md)); Shimmer stays experimental until that build has been seen in game.
 - The diagnostic Glitter route: board 1 looked printed in session 6; board 2 (glitter flakes 2) is built into XF Finish Showroom for session 7 ([experiment 021](../../experiments/021-glitter-board/README.md)).
 - The faceted normal orientation.
 - The makeup under a `hide_Head` item with the `hx_` component.

@@ -114,6 +114,11 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // and a restore being assembled area by area.
   private let m_wardrobeSnapshot: ref<XFWardrobeSnapshot>;
   private let m_wardrobeRestore: ref<XFWardrobeSnapshot>;
+  // wardrobe.equip {suspend} (0.6): the bridge took the outfit off with the story's own request and owes the resume.
+  private let m_wardrobeSuspended: Bool;
+  // player.* (0.6): status effects the bridge applied to V (crouch, a glide's movement hold); player.stop and the kill switch
+  // remove them.
+  private let m_playerEffects: array<TweakDBID>;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -477,6 +482,51 @@ public class XFBridgeRegistry extends ScriptableSystem {
 
   public func SetWardrobeRestore(snapshot: ref<XFWardrobeSnapshot>) -> Void {
     this.m_wardrobeRestore = snapshot;
+  }
+
+  public func HasPlayerEffect(id: TweakDBID) -> Bool {
+    return ArrayContains(this.m_playerEffects, id);
+  }
+
+  public func HasAnyPlayerEffect() -> Bool {
+    return ArraySize(this.m_playerEffects) > 0;
+  }
+
+  public func NotePlayerEffect(id: TweakDBID, on: Bool) -> Void {
+    if on {
+      if !ArrayContains(this.m_playerEffects, id) {
+        ArrayPush(this.m_playerEffects, id);
+      }
+    } else {
+      ArrayRemove(this.m_playerEffects, id);
+    }
+  }
+
+  public func TakePlayerEffects() -> array<TweakDBID> {
+    let effects = this.m_playerEffects;
+    ArrayClear(this.m_playerEffects);
+    return effects;
+  }
+
+  public func PlayerEffectsJson() -> String {
+    let out = "[";
+    let i = 0;
+    while i < ArraySize(this.m_playerEffects) {
+      if i > 0 {
+        out += ",";
+      }
+      out += XFJson.Str(TDBID.ToStringDEBUG(this.m_playerEffects[i]));
+      i += 1;
+    }
+    return out + "]";
+  }
+
+  public func SetWardrobeSuspended(suspended: Bool) -> Void {
+    this.m_wardrobeSuspended = suspended;
+  }
+
+  public func IsWardrobeSuspended() -> Bool {
+    return this.m_wardrobeSuspended;
   }
 
   public func WardrobeRestore() -> ref<XFWardrobeSnapshot> {
@@ -1172,6 +1222,8 @@ public abstract class XFBridgeActions {
     // clears it.
     // The wardrobe as it was before the bridge's first change this session (0.5.2).
     out += XFWardrobe.RestoreAfterKill(cid);
+    // 0.6: every status effect the bridge applied to V, and any look-at it started.
+    out += XFPlayer.RestoreAfterKill(cid);
     if registry.IsSaveLockHeld() {
       out += ",\"save_lock_kept\":true";
     }

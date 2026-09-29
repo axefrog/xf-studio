@@ -1,7 +1,7 @@
 // Glitter flakes 2 and shimmer-grain-2: offline evidence (experiment 032). Deterministic; reads no game files.
 //
-//   bun experiments/032-finishes-rework/diagnose.ts          # result.json (tracked, asset-free)
-//   bun experiments/032-finishes-rework/diagnose.ts --png    # also renders into ignored generated/
+//   bun experiments/033-finishes-rework/diagnose.ts          # result.json (tracked, asset-free)
+//   bun experiments/033-finishes-rework/diagnose.ts --png    # also renders into ignored generated/
 //
 // The tools are experiment 030's: the export's own maps and mip chains (Build's compilers on the built-in plate's window),
 // rendered by a small deferred-light model of `mesh_decal` mode 1 on the skin class: the gate saturate(50 − 50z) on the

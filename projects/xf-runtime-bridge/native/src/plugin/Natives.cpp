@@ -168,6 +168,40 @@ void Kill(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64
     });
 }
 
+// XFBridge_Note(level: String, text: String) -> Bool   (0.6: a note from inside the game into the session event stream,
+// for a button in the CET panel or the XF HUD panel; core/Events.hpp). Works while the bridge is killed too: notes are
+// the player's record, not a change.
+void Note(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    RED4ext::CString level;
+    RED4ext::CString text;
+    RED4ext::GetParameter(aFrame, &level);
+    RED4ext::GetParameter(aFrame, &text);
+    aFrame->code++; // skip ParamEnd
+
+    if (aOut)
+    {
+        *aOut = false;
+    }
+    Guarded("XFBridge_Note", [&] {
+        auto wanted = ToStd(level);
+        if (wanted != "info" && wanted != "warn" && wanted != "ask" && wanted != "done")
+        {
+            wanted = "info";
+        }
+        const auto body = ToStd(text);
+        if (body.empty())
+        {
+            return;
+        }
+        Get().events.Push("note", wanted, "game", body);
+        if (aOut)
+        {
+            *aOut = true;
+        }
+    });
+}
+
 // XFBridge_Rearm(reason: String) -> String   (the CET panel's Reconnect after the kill switch)
 // Asks the next Running ticks to re-arm the bridge with a new session (Main.cpp HandleRearm); answers
 // {"requested":true} or {"requested":false,"reason":"..."} at once. Only an in-game action can do this:
@@ -412,7 +446,8 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_CreatorRedirect", &CreatorRedirectNative, "String", {"state"});
         RegisterGlobal(rtti, "XFBridge_ScriptLayer", &ScriptLayerEvent, "Bool", {"event"});
         RegisterGlobal(rtti, "XFBridge_Hud", &Hud, "String", {});
-        log::Info("rtti.register_types", "phase=post_register natives=13");
+        RegisterGlobal(rtti, "XFBridge_Note", &Note, "Bool", {"level", "text"});
+        log::Info("rtti.register_types", "phase=post_register natives=14");
     }
     catch (const std::exception& e)
     {
