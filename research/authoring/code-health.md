@@ -85,6 +85,13 @@ Reviews never block feature work directly. Fixes run as a parallel cleanup track
 
 | ID | Severity | Area | Finding | Status |
 |---|---|---|---|---|
+| UI-165 | Low | Panels menu hierarchy | A module's Show switch looks like the panel entries under it, and with a module off its switch and panel share one icon; the next module (piercings) will make the menu scroll at a 900 px window. List a hidden module's panels only once its Show switch is on, or use a submenu, rather than shrinking rows (UI gate on claude/track-d-layout) | Open, UI track (design debt) |
+| UI-166 | Low | Panels menu descriptions | Panel descriptions moved into native `title` tooltips, which a sighted keyboard user never sees | Open, UI track (design debt) |
+| UI-167 | Low | Header priorities | At 1424 px the module list truncates to "EYE MAKEUP · S…" (prefer "Eye makeup +3"); at 1100 px the collection name disappears before the module list, the reverse of the priority the CSS comment states | Open, UI track (design debt) |
+| UI-168 | Low | Report dialog | "Your mod setup · 0 B" reads as empty though it holds one part that is off by default; show "Not included" | Open, UI track (design debt) |
+| UI-169 | Low | Library buttons | The Files buttons stretch to the panel width, the primary comes first (B6), and the current row's Reopen is quiet while other rows' Open is bordered (pre-existing) | Open, UI track (design debt) |
+| UI-170 | Low | Style guide samples | The folder-setting sample paths lost their backslashes ("D:Steamsteamapps…") (pre-existing) | Open, UI track (design debt) |
+| DESK-13 | Low | Desktop typecheck | `tsc --noEmit` for the desktop project fails on main (Electrobun type declarations and the `strata` path mapping), found by the beta speed check | Open |
 | RB-93 | Low | Kill-switch restore [plausible] | `XFWardrobeRestoreLater` runs 0.5 s later from the DelaySystem without checking `XFBridge_Live` or the phase (`XFRuntimeBridgeWardrobe.reds`, `Call`): the one new path the load/detach gate doesn't cover; it also runs after the restore reported done, outside RB-89's ordering | Open, cleanup-review7 |
 | RB-94 | Low | Save refusal [plausible] | The holds are read in one game task (`GameHandlers.cpp:1059-1074`) before `prepare` and the save; a `behave.start` (not queued) or `player.effect` from another client in between is written into the save | Open, cleanup-review7 |
 | RB-95 | Low | Equipment-EX reflection | `XFScriptOutfit.Api()` rescans the class's functions and reads the version on every call, 2–3 times per `wardrobe.state` (cache it per session); `EquipInto` passes an empty `TweakDBID` for the `opt` slot, relying on Equipment-EX treating it as omitted [plausible, provable only in game] | Open, cleanup-review7 |
