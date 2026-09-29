@@ -41,7 +41,7 @@ export async function checkForUpdatesNow(rt: Runtime, notice: boolean) {
   const updates = rt.port.updates;
   const allowed = updates.capability({ kind: "updates.check" });
   if (!allowed.available) { if (notice) rt.feedback.toast("info", "Updates", allowed.reason ?? "Checking for updates isn't available here."); return; }
-  const close = notice ? rt.feedback.toast("info", "Updates", "Checking for updates…") : null;
+  const close = notice ? rt.feedback.toast("info", "Updates", "Checking for updates…", [], { sticky: true }) : null;
   const running = updates.dispatch({ kind: "updates.check" });
   rt.changed();
   await running;
