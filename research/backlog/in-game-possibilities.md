@@ -5,8 +5,8 @@
 ## The interface
 
 1. An XF HUD panel in the game's own style (replacing the CET status label). *First demo, bridge 0.5.3.*
-2. World-space ink: nameplates and holographic labels floating over objects. *First demo: showroom pedestal nameplates.*
-3. Our own map pins and on-screen markers, like quest markers: a navigation layer for the showroom, quests and points of interest. *First demo: `world.pin`.*
+2. World-space ink: nameplates and holographic labels floating over objects. *First demo: showroom pedestal nameplates. Built in bridge 0.5.3 (offline tests pass); awaiting session 7 ([test card](../runtime/runtime-bridge-test-card.md#session-7-checks-bridge-053) U5–U6).*
+3. Our own map pins and on-screen markers, like quest markers: a navigation layer for the showroom, quests and points of interest. *First demo: `world.pin`. Built in bridge 0.5.3 (offline tests pass); awaiting session 7 (U7–U8).*
 4. A holographic V damage display: the inventory paperdoll's 3D preview of V with a holo material and glowing damaged regions (or an ink vector body).
 5. A new phone app, with the game's phone as our UI surface.
 6. A terminal or computer program: an in-game XF control panel on V's apartment computer.
