@@ -287,6 +287,26 @@ test("while a node is being collapsed, a commit touching it among others is refu
   expect(await drive(scheduler, collapsing)).toMatchObject({ ok: true });
 });
 
+test("while a node is being collapsed, a commit that would reference it or pin one of its entries is refused as busy, and it still reads the same after", async () => {
+  // Found by the simulation: a fork pinned to an entry of a node being collapsed was accepted, so the collapse moved a
+  // stream that a second entry referenced, and the pin read nothing from it afterwards.
+  const { graph, scheduler } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const x = create(graph, ITEM, { title: "x", tags: { k: 1 } });
+  create(graph, GROUP, { label: "h", members: { x } });
+  const collapsing = graph.collapseInline(x);
+  const refused = [
+    graph.commit([{ op: "create", type: ITEM, from: { fork: x, at: 1 } }]),
+    graph.commit([{ op: "create", type: ITEM, fields: { title: "r", link: x } }]),
+    graph.commit([{ op: "create", type: ITEM, fields: { title: "p", pin: { node: x, seq: 1 } } }]),
+  ].map(result => result.ok ? "ok" : result.reason);
+  expect(refused).toEqual(["busy", "busy", "busy"]);
+  // Something that doesn't refer to it goes ahead.
+  ok(graph.commit([{ op: "create", type: ITEM, fields: { title: "other" } }]));
+  expect(await drive(scheduler, collapsing)).toMatchObject({ ok: true });
+  expect(graph.resolve(x, ["title"])).toBe("x");
+});
+
 test("a deep clone creates its root first, then what it follows in the order it follows them", () => {
   const { graph } = harness();
   const t1 = create(graph, ITEM, { title: "t1" });

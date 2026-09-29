@@ -14,7 +14,7 @@ import { layerOrder, Resolver } from "./resolve";
 import type { StateReader } from "./resolve";
 import { ReadModel, hasRefs } from "./model";
 import type { DeriveResult, NodeSnapshot, Reference, Referrer } from "./model";
-import { collapseInline as collapsePrimitive, entryKey, entryReferences, keepSet, rollupDeltaStream, rollupValueStream } from "./compaction";
+import { collapseInline as collapsePrimitive, entryKey, entryReferences, keepSet, nodeReferences, rollupDeltaStream, rollupValueStream } from "./compaction";
 import type { KeepOptions, Stream } from "./compaction";
 import { page as inspectorPage } from "./inspect";
 import type { InspectorDetail, InspectorEdge, InspectorPage, InspectorRow } from "./inspect";
@@ -22,7 +22,7 @@ import type { GraphStore, AppendResult } from "./store";
 import type { Sink, SinkDef, SourceDef, Sources } from "./sources";
 import { resolveClaims, trustSelf } from "./trust";
 import type { Claim, FramePolicies, TrustPolicy } from "./trust";
-import { Aborter } from "./kernel/abort";
+import { Aborter, onAbort } from "./kernel/abort";
 import type { AbortSignalLike } from "./kernel/abort";
 import { Environment, kernelInternals, KNode, LATEST, UNCHANGED } from "./kernel/kernel";
 import type { Process, ProcessState, RunContext } from "./kernel/kernel";
@@ -579,7 +579,7 @@ export class StrataGraph implements GraphView {
       if (rec) for (const entry of rec.entries) if (entry.pos <= pos) seq = entry.seq;
       return { seq: rec && rec.base.pos <= pos ? Math.max(seq, rec.base.seq) : seq, constant: !!rec?.constant };
     });
-    if (this.timeModels.size > 16) this.timeModels.delete(this.timeModels.keys().next().value!);
+    if (this.timeModels.size >= 16) this.timeModels.delete(this.timeModels.keys().next().value!);
     this.timeModels.set(pos, model);
     return model;
   }
@@ -645,7 +645,7 @@ export class StrataGraph implements GraphView {
   private applyWork(work: Working, options: CommitOptions, cause: ChangeSet["cause"], check?: () => Refusal | null, track = true): CommitResult {
     // Refused before anything is taken: no commit ID, position or actor counter is used by a refused commit (§17.1).
     if (this.env.inCycle) return BUSY();
-    const compacting = this.compactingConflict(work);
+    const compacting = this.compactingConflict(work) ?? this.collapsingConflict(work);
     if (compacting) return compacting;
     if (work.order.some(id => this.collapsing.has(id))) return refusal("busy", "That is being moved into the entry that refers to it.");
     const cycle = this.layerCycle(work);
@@ -699,6 +699,8 @@ export class StrataGraph implements GraphView {
       this.commits.set(commitId, record);
       if (cause === "commit" || cause === "fix") {
         this.stack(this.undoStacks, scope).push(commitId);
+        // A new commit ends the scope's Redo history: its records go with it.
+        for (const id of this.redoStacks.get(scope) ?? []) this.commits.delete(id);
         this.redoStacks.set(scope, []);
       }
     }
@@ -1103,6 +1105,7 @@ export class StrataGraph implements GraphView {
     }, "rollback");
     this.headPos = state.headPos;
     this.actorSeq = state.actorSeq;
+    this.forgetGone();
   }
 
   /** Paths an op changes (`"all"` for whole-state and layer changes). */
@@ -1270,11 +1273,15 @@ export class StrataGraph implements GraphView {
       for (const id of before.keys()) { const seed = this.entitySeeds.get(id); if (seed) this.env.observe(seed, commit); }
       this.env.observe(this.batchSeed, batch as unknown as Json);
     });
-    // Rewire demanded layering combinators whose layers changed (after the cycle that reported the change).
+    // Rewire demanded layering combinators whose layers changed (after the cycle that reported the change). A gone
+    // node no longer layered from lets go of its kernel nodes.
+    let orphaned = false;
     for (const [id, was] of before) {
       const node = this.effectiveNodes.get(id), rec = this.records.get(id);
       if (node && rec && !equal(was?.layers ?? [], rec.head?.layers ?? [])) this.env.setInputs(node, this.effectiveInputs(rec.ref));
+      for (const layer of was?.layers ?? []) if (this.effectiveNodes.has(layer.from.id) && !this.records.has(layer.from.id) && !this.inlined.has(layer.from.id)) orphaned = true;
     }
+    if (orphaned) this.forgetGone();
     const set = this.assembled.get(commit);
     this.assembled.delete(commit);
     return set ?? freeze({ commit, ...(label ? { label } : {}), cause, nodes: meta.filter(item => item.meta.length) });
@@ -1349,6 +1356,33 @@ export class StrataGraph implements GraphView {
 
   private readonly purgedRefs = new Map<string, NodeRef>();
 
+  /**
+   * Forgets the kernel nodes (seed and layering combinator) of nodes that are gone, once nothing wires them in: no
+   * node layers from it any more and no kernel node other than another gone node's demands it (a subscription to
+   * everything demands every node's combinator as the host, and that demand goes with it). Also forgets the gone
+   * nodes' references, which only the change set announcing them needed. Runs after a purge, a rollback and an
+   * unsubscription from a gone node.
+   */
+  private forgetGone(): void {
+    this.purgedRefs.clear();
+    const gone = (id: string) => !this.records.has(id) && !this.inlined.has(id) && !this.layerIndex.has(id);
+    const candidates = new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()].filter(gone));
+    if (!candidates.size) return;
+    kernelInternals.release(this.env, () => {
+      for (let removed = true; removed;) {
+        removed = false;
+        for (const id of candidates) {
+          const nodes = [this.effectiveNodes.get(id), this.entitySeeds.get(id)].filter((node): node is KNode => !!node);
+          if (nodes.some(node => [...node.demands.keys()].some(consumer => consumer instanceof KNode && !nodes.includes(consumer)))) continue;
+          for (const node of nodes) kernelInternals.removeNow(this.env, node);
+          this.effectiveNodes.delete(id); this.entitySeeds.delete(id); candidates.delete(id);
+          removed = true;
+        }
+      }
+    });
+  }
+
+
   private indexLayers(id: string, before: NodeState | null, after: NodeState | null): void {
     if (before && after && before.layers === after.layers) return;
     for (const layer of before?.layers ?? []) {
@@ -1414,7 +1448,7 @@ export class StrataGraph implements GraphView {
       this.allDemand = new Aborter();
       for (const rec of this.records.values()) if (!rec.constant) this.effectiveNode(rec.ref).demand(LATEST, this.allDemand.signal, "all");
     }
-    const effect = this.env.effect({ name: "subscribe all", inputs: [this.commitsSeed], run: context => {
+    const effect = this.env.effect({ name: "subscribe all", inputs: [this.commitsSeed], signal: options.signal, run: context => {
       for (const entry of context.inputs[0].fresh) listener(entry.value as unknown as ChangeSet);
     } });
     this.env.connect(effect, options.signal);
@@ -1434,7 +1468,7 @@ export class StrataGraph implements GraphView {
     const self = this.effectiveNode(target);
     const inputsFor = () => options.follows ? [self, ...this.followsClosure(target).map(item => this.effectiveNode(item))] : [self];
     let effect: KNode;
-    effect = this.env.effect({ name: `subscribe ${ref.id}`, inputs: inputsFor(), run: context => {
+    effect = this.env.effect({ name: `subscribe ${ref.id}`, inputs: inputsFor(), signal: options.signal, run: context => {
       const own = context.inputs[0].changed ? (context.inputs[0].value as EffectiveOut | undefined)?.change : undefined;
       const via = context.inputs.slice(1).filter(input => input.changed && (input.value as EffectiveOut | undefined)?.change)
         .map(input => (input.value as EffectiveOut).change!.node);
@@ -1445,11 +1479,13 @@ export class StrataGraph implements GraphView {
       }
     } });
     this.env.connect(effect, options.signal);
+    // A subscription to a node that has gone meanwhile was the last thing holding its kernel nodes.
+    onAbort(options.signal, () => { if (!this.records.has(target.id) && !this.inlined.has(target.id)) this.forgetGone(); });
   }
 
   /** The pending (unacknowledged) commits whenever they change, until `signal` aborts: the host's recovery copy. */
   subscribePending(listener: (pending: readonly PendingCommit[]) => void, options: { readonly signal: AbortSignalLike }): void {
-    const effect = this.env.effect({ name: "pending", inputs: [this.pendingSeed], run: context => {
+    const effect = this.env.effect({ name: "pending", inputs: [this.pendingSeed], signal: options.signal, run: context => {
       if (context.inputs[0].changed) listener(context.inputs[0].value as unknown as PendingCommit[]);
     } });
     this.env.connect(effect, options.signal);
@@ -1658,6 +1694,7 @@ export class StrataGraph implements GraphView {
     for (const id of ids) this.commits.delete(id);
     this.notifyPending();
     this.emit(beforeStates, "rollback", `rollback:${dropped[0].commit}`);
+    this.forgetGone();
     // A pin may have pointed into what was dropped.
     this.refreshPinned(`rollback-pins:${dropped[0].commit}`);
   }
@@ -1834,6 +1871,7 @@ export class StrataGraph implements GraphView {
    */
   forgetHistory(scope?: string): void {
     for (const stacks of [this.undoStacks, this.redoStacks]) {
+      for (const [name, stack] of stacks) if (scope === undefined || name === scope) for (const id of stack) this.commits.delete(id);
       if (scope === undefined) stacks.clear(); else stacks.delete(scope);
     }
   }
@@ -1852,7 +1890,8 @@ export class StrataGraph implements GraphView {
     const id = stack?.[stack.length - 1];
     if (!id) return refusal("nothing-to-undo", "There is nothing to undo.");
     const result = this.compensate(id, "undo");
-    if (result.ok) { stack!.pop(); this.stack(this.redoStacks, scope).push(result.commit); }
+    // The undone commit's record is read only through the stacks: its compensation's record stands in for it.
+    if (result.ok) { stack!.pop(); this.commits.delete(id); this.stack(this.redoStacks, scope).push(result.commit); }
     return result;
   }
 
@@ -1862,7 +1901,7 @@ export class StrataGraph implements GraphView {
     const id = stack?.[stack.length - 1];
     if (!id) return refusal("nothing-to-undo", "There is nothing to redo.");
     const result = this.compensate(id, "redo");
-    if (result.ok) { stack!.pop(); this.stack(this.undoStacks, scope).push(result.commit); }
+    if (result.ok) { stack!.pop(); this.commits.delete(id); this.stack(this.undoStacks, scope).push(result.commit); }
     return result;
   }
 
@@ -1931,13 +1970,13 @@ export class StrataGraph implements GraphView {
   }
 
   private reevaluate(subjects: Set<string>): void {
-    const global = this.rules.filter(rule => rule.scope === "global");
+    const global = this.rules.filter(rule => rule.scope === "global"), dropped = new Set<string>();
     const all = global.length ? new Set([...subjects, ...this.records.keys()]) : subjects;
     for (const id of all) {
       const rec = this.records.get(id), inSubjects = subjects.has(id);
       const rules = rec ? this.rulesFor(rec.ref.type).filter(rule => inSubjects || rule.scope === "global") : [];
       // Drop what this subject produced before, for the rules re-evaluated now.
-      for (const rule of inSubjects ? this.rules : global) this.dropProduced(`${rule.id}\u0000${id}`);
+      for (const rule of inSubjects ? this.rules : global) this.dropProduced(`${rule.id}\u0000${id}`, dropped);
       if (!rec || !this.headState(rec.ref)) continue;
       for (const rule of rules) {
         const producer = `${rule.id}\u0000${id}`;
@@ -1952,16 +1991,19 @@ export class StrataGraph implements GraphView {
         if (ids.size) this.produced.set(producer, ids);
       }
     }
+    // A conflict gone after the re-evaluation takes its acknowledgement with it.
+    for (const id of dropped) if (!this.conflictsById.has(id)) this.acknowledgements.delete(id);
   }
 
-  private dropProduced(producer: string): void {
+  /** Drops what a producer produced; a conflict nothing produces any more goes, and is added to `dropped`. */
+  private dropProduced(producer: string, dropped: Set<string>): void {
     const ids = this.produced.get(producer);
     if (!ids) return;
     this.produced.delete(producer);
     for (const id of ids) {
       const producers = this.producers.get(id);
       producers?.delete(producer);
-      if (!producers?.size) { this.producers.delete(id); this.conflictsById.delete(id); }
+      if (!producers?.size) { this.producers.delete(id); this.conflictsById.delete(id); dropped.add(id); }
     }
   }
 
@@ -2069,6 +2111,23 @@ export class StrataGraph implements GraphView {
           if (this.compacting.get(target.node.id)?.has(target.seq))
             return refusal("busy", "That history is being tidied up right now; try again in a moment.");
         }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * A commit that would add a reference to a node being collapsed, or to one of its entries, is refused while the
+   * collapse is under way (SPEC §16.6): the collapse was allowed because exactly one entry referenced the node.
+   */
+  private collapsingConflict(work: Working): Refusal | null {
+    if (!this.collapsing.size) return null;
+    for (const id of work.order) {
+      const def = this.types.get(work.refs.get(id)!.type);
+      for (const op of work.ops.get(id) ?? []) {
+        const entry = { op, commit: "" } as Entry;
+        if (entryReferences(entry, def).some(target => this.collapsing.has(target.node.id)) || nodeReferences(entry, def).some(ref => this.collapsing.has(ref.id)))
+          return refusal("busy", "What this refers to is being moved into the entry that refers to it; try again in a moment.");
       }
     }
     return null;
@@ -2222,6 +2281,7 @@ export class StrataGraph implements GraphView {
     const beforeStates = this.refresh(touched, () => { this.inlined.delete(ref.id); this.indexLayers(ref.id, item.state, null); }, "purge");
     this.forgetTimes();
     this.emit(beforeStates, "purge", `purge:${ref.id}`);
+    this.forgetGone();
     return { ok: true };
   }
 
@@ -2272,9 +2332,14 @@ export class StrataGraph implements GraphView {
       this.indexUnique(rec, before, null);
     }, "purge");
     for (const stacks of [this.undoStacks, this.redoStacks]) for (const [scope, stack] of stacks)
-      stacks.set(scope, stack.filter(id => !this.commits.get(id)?.touches.has(ref.id)));
+      stacks.set(scope, stack.filter(id => {
+        const touched = !!this.commits.get(id)?.touches.has(ref.id);
+        if (touched) this.commits.delete(id);
+        return !touched;
+      }));
     this.forgetTimes();
     this.emit(beforeStates, "purge", `purge:${ref.id}`);
+    this.forgetGone();
     return { ok: true };
   }
 
@@ -2338,8 +2403,55 @@ export class StrataGraph implements GraphView {
       resolver: this.head.resolver,
       layerIndex: this.layerIndex,
       outbox: this.outbox,
+      tables: () => this.tables(),
     };
   }
+
+  /**
+   * The sizes of the graph's internal tables and how many of their rows belong to nothing live (test-only): the
+   * "bounded by the live set" invariant (`strata/testing`) checks that the orphan counts are 0 and the caches bounded.
+   */
+  private tables() {
+    const live = (id: string) => this.records.has(id) || this.inlined.has(id);
+    const onStacks = new Set<string>();
+    for (const stacks of [this.undoStacks, this.redoStacks]) for (const stack of stacks.values()) for (const id of stack) onStacks.add(id);
+    let layerRows = 0, emptyLayerSets = 0, goneDependents = 0, refRows = 0, emptyReferrerSets = 0, strayReferrers = 0;
+    for (const deps of this.layerIndex.values()) { layerRows += deps.size; if (!deps.size) emptyLayerSets++; for (const id of deps.keys()) if (!live(id)) goneDependents++; }
+    for (const referrers of this.refIndex.values()) {
+      refRows += referrers.size;
+      if (!referrers.size) emptyReferrerSets++;
+      for (const id of referrers.keys()) if (!this.refsOut.has(id)) strayReferrers++;
+    }
+    const count = <T>(items: Iterable<T>, test: (item: T) => boolean) => { let n = 0; for (const item of items) if (test(item)) n++; return n; };
+    // A gone node's kernel nodes stay only while another kernel node wires them in or a node still layers from it.
+    const machineryKept = (id: string) => {
+      if (live(id) || this.layerIndex.has(id)) return true;
+      const own = [this.effectiveNodes.get(id), this.entitySeeds.get(id)];
+      return own.some(node => !!node && [...node.demands.keys()].some(consumer => consumer instanceof KNode && !own.includes(consumer)));
+    };
+
+    return {
+      kernel: kernelInternals.tables(this.env),
+      records: this.records.size, inlined: this.inlined.size, defaultsMemo: this.defaultsMemo.size, timeModels: this.timeModels.size,
+      commitEnds: this.commitEnds.size, collapsing: this.collapsing.size, collapsingInto: this.collapsingInto.size, purging: this.purging.size,
+      compacting: this.compacting.size, slowFolds: this.slowFolds.size, sourceRings: this.sourceRings.size, purgedRefs: this.purgedRefs.size,
+      layerIndex: this.layerIndex.size, layerRows, emptyLayerSets, goneDependents,
+      refIndex: this.refIndex.size, refRows, emptyReferrerSets, strayReferrers, refsOut: this.refsOut.size,
+      goneRefsOut: count(this.refsOut.keys(), id => !live(id)),
+      uniqueIndex: this.uniqueIndex.size, goneUnique: count(this.uniqueIndex.values(), id => !live(id)),
+
+      conflicts: this.conflictsById.size, producers: this.producers.size, produced: this.produced.size,
+      orphanProducers: count(this.producers, ([id, set]) => !set.size || !this.conflictsById.has(id)) + count(this.conflictsById.keys(), id => !this.producers.has(id)),
+      orphanProduced: count(this.produced.values(), ids => !ids.size || [...ids].some(id => !this.conflictsById.has(id))),
+      acknowledgements: this.acknowledgements.size, orphanAcknowledgements: count(this.acknowledgements.keys(), id => !this.conflictsById.has(id)),
+      commits: this.commits.size, commitsOffStacks: count(this.commits.keys(), id => !onStacks.has(id)), onStacks: onStacks.size,
+      outbox: this.outbox.length, rejected: this.rejectedCommits.length, ackedCommits: this.ackedCommits.size,
+      entitySeeds: this.entitySeeds.size, effectiveNodes: this.effectiveNodes.size,
+      goneMachinery: count(new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()]), id => !machineryKept(id)),
+      assembled: this.assembled.size, reports: this.reports.length, flushWaiters: this.flushWaiters.length,
+    };
+  }
+
 }
 
 /** The leaf paths whose values differ between two effective values of a type (maps walked per key). */

@@ -27,7 +27,7 @@ const DEFAULT_FILES = [
 ];
 const DEFAULT_TESTS = ["tests/kernel.test.ts", "tests/kernel-policy.test.ts", "tests/erector.test.ts", "tests/edges.test.ts", "tests/units.test.ts", "tests/data-cases.test.ts", "tests/graph-api.test.ts",
   "tests/entity.test.ts", "tests/streams.test.ts", "tests/lifetime.test.ts", "tests/store.test.ts", "tests/example.test.ts", "tests/interleavings.test.ts",
-  "tests/kernel-model.test.ts", "tests/erector-and-processes.test.ts", "tests/graph-behaviour.test.ts", "tests/property.test.ts", "tests/sim/dst.test.ts"];
+  "tests/kernel-model.test.ts", "tests/erector-and-processes.test.ts", "tests/graph-behaviour.test.ts", "tests/property.test.ts", "tests/tables.test.ts", "tests/sim/dst.test.ts"];
 
 /** The test set the first caches were keyed by. */
 const OLDER_TESTS = ["tests/entity.test.ts", "tests/streams.test.ts", "tests/lifetime.test.ts", "tests/store.test.ts", "tests/example.test.ts",

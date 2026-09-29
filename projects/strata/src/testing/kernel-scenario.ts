@@ -9,7 +9,7 @@
 import { equal } from "../json";
 import type { Json } from "../json";
 import { Aborter } from "../kernel/abort";
-import { Environment, ErrorValue, KNode, LATEST, Process, UNCHANGED } from "../kernel/kernel";
+import { Environment, ErrorValue, kernelInternals, KNode, LATEST, Process, UNCHANGED } from "../kernel/kernel";
 import type { CycleReport, Driver, KEntry } from "../kernel/kernel";
 import { erector, GRAPH_MODEL_SCHEMA } from "../kernel/erector";
 import type { GraphModel, NodeModel } from "../kernel/erector";
@@ -17,6 +17,7 @@ import type { Operators } from "../kernel/operators";
 import { conformanceOperators } from "./conformance";
 import { Scheduler, simClock } from "./sim-sources";
 import { prng } from "../random";
+import { kernelTableProblems } from "./invariants";
 import type { Scenario, SimAction } from "./simulate";
 
 export type KernelWorld = {
@@ -183,6 +184,8 @@ export function kernelScenario(): Scenario<KernelWorld> {
       }
       if (world.env.root.children.length) problems.push(`leak: the root still has ${world.env.root.children.length} children`);
       if (listenerCount(world.env.root.signal)) problems.push(`leak: the root's token still has ${listenerCount(world.env.root.signal)} listeners`);
+      problems.push(...kernelTableProblems(kernelInternals.tables(world.env), { settled: true }));
+      if (kernelInternals.tables(world.env).scopes !== 1) problems.push(`leak: ${kernelInternals.tables(world.env).scopes - 1} run scopes outlived the teardown`);
       return problems;
     },
     check(world) {
@@ -226,6 +229,7 @@ export function kernelScenario(): Scenario<KernelWorld> {
         const code = (entry.value as { code?: string }).code;
         if (code !== "cycle" && code !== "effect") problems.push(`errors: unexpected ${code}: ${(entry.value as { message: string }).message}`);
       }
+      problems.push(...kernelTableProblems(kernelInternals.tables(world.env)));
       return problems;
     },
   };

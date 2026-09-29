@@ -93,6 +93,8 @@ export class KNode<T = unknown> {
   run?: Run;
   /** @internal Effects: the run scope connecting them. */
   scope?: Scope;
+  /** @internal A run's own effect: the run whose scope lists it until it is forgotten. */
+  owner?: Scope;
   /** @internal Keep every entry (debugging, entity streams managed elsewhere). */
   retainAll = false;
   constructor(readonly env: Environment, readonly id: string, readonly kind: NodeKind, readonly name: string) {}
@@ -316,7 +318,9 @@ export class Environment {
 
   /** Within a change: forgets a node at once (an effect is disconnected, host demand on it released). */
   private removeNow(node: KNode): void {
-    if (node.kind === "effect") this.disconnect(node);
+    // A run's own effect leaves its run's list too (the erector forgets effects it replaces while its run goes on).
+    if (node.kind === "effect") { if (node.owner) this.forgetEffect(node, node.owner); else this.disconnect(node); }
+
     for (const consumer of [...node.demands.keys()]) if (consumer instanceof HostDemand) this.releaseDemand(node, consumer);
     if (node.active && node.kind !== "effect") this.deactivate(node);
     if (this.nodes.get(node.id) === node) this.nodes.delete(node.id);
@@ -723,6 +727,7 @@ export class Environment {
       env: this, signal: scope.signal, process: scope.process,
       effect: spec => {
         const effect = this.effect({ id: spec.id, name: spec.name, inputs: spec.inputs, run: spec.run });
+        effect.owner = scope;
         scope.nodes.push(effect);
         this.change(() => { if (!scope.signal.aborted && !spec.signal?.aborted) this.connectEffect(effect, scope); else this.forgetEffect(effect, scope); });
         // An effect may end before its run, by its own token; either way it is forgotten.
@@ -788,6 +793,28 @@ export class Environment {
   }
 
   /**
+   * The sizes of the kernel's internal tables, and how many of their rows belong to nothing live (test-only, through
+   * `kernelInternals.tables`): every table is bounded by the live nodes, runs and pending work.
+   */
+  private tables(): KernelTables {
+    let finishedScopes = 0, scopeNodes = 0, forgottenInScopes = 0, scopeEffects = 0, strayEffects = 0, demandEdges = 0, staleDemands = 0;
+    for (const [process, scope] of this.scopes) {
+      if (process.terminal) finishedScopes++;
+      scopeNodes += scope.nodes.length;
+      for (const node of scope.nodes) if (this.nodes.get(node.id) !== node) forgottenInScopes++;
+      scopeEffects += scope.effects.length;
+      for (const effect of scope.effects) if (effect.scope !== scope) strayEffects++;
+    }
+    for (const node of this.nodes.values()) for (const consumer of node.demands.keys()) {
+      demandEdges++;
+      if (consumer instanceof KNode && this.nodes.get(consumer.id) !== consumer) staleDemands++;
+    }
+    return { nodes: this.nodes.size, scopes: this.scopes.size, finishedScopes, scopeNodes, forgottenInScopes, scopeEffects, strayEffects,
+      demandEdges, staleDemands, primed: this.primed.size, pendingChanges: this.pendingChanges.length,
+      pendingObservations: this.pendingObservations.length, transactionBuffer: this.transactionBuffer.length };
+  }
+
+  /**
    * The process tree for inspection (SPEC §9.8): each run names its driver (the actor), the role it fills and the
    * driver's members; each process its status and children.
    */
@@ -817,7 +844,20 @@ export const kernelInternals = {
   setInputsNow: (env: Environment, node: KNode, inputs: readonly Input[]): void => env["setInputsNow"](node, inputs),
   startDriver: (env: Environment, driver: Driver, options: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json; readonly role?: string }): Process =>
     env["startDriver"](driver, options),
+  /** Runs `fn` as a release: a change that only ends things, never dropped at the activation bound. */
+  release: (env: Environment, fn: () => void): void => env["release"](fn),
+  /** Test-only: the sizes of the kernel's internal tables (the "bounded by the live set" invariant reads them). */
+
+  tables: (env: Environment): KernelTables => env["tables"](),
 };
+
+/** The kernel's internal table sizes (test-only). The `…InScopes`, `finishedScopes` and `staleDemands` counts are rows that belong to nothing live. */
+export type KernelTables = {
+  readonly nodes: number; readonly scopes: number; readonly finishedScopes: number; readonly scopeNodes: number; readonly forgottenInScopes: number;
+  readonly scopeEffects: number; readonly strayEffects: number; readonly demandEdges: number; readonly staleDemands: number; readonly primed: number;
+  readonly pendingChanges: number; readonly pendingObservations: number; readonly transactionBuffer: number;
+};
+
 
 // -------------------------------------------------------------------------------------------------------------------
 // Helpers
