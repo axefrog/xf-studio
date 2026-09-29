@@ -6,7 +6,7 @@ import { effectiveTheme, type ThemePreference } from "../ui-preferences";
 import { shortcutLabel } from "../input-bindings";
 import { openInputReference, openPalette, type Command } from "./commands";
 import { studioShortcut } from "./shortcuts";
-import { applyCapability, button } from "./controls";
+import { applyCapability, badge, button } from "./controls";
 import { installReasonTips } from "./reason-tip";
 import { installHelpTips } from "./help-tip";
 import { DockView } from "./dock/dock-view";
@@ -216,6 +216,21 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   // A window that opens in another size class than last time counts as crossing into it.
   requestAnimationFrame(() => layouts.sizeClass(dock.sizeClass, false));
 
+  /**
+   * The 3D preview setup card sits in the 3D view pane, its subject, whenever that pane is shown (release-readiness-audit.md item 10), so
+   * it never covers an inspector; it floats over the window only while the pane is hidden. Moving it keeps focus where it was.
+   */
+  const headPane = byId.get("head")?.spec.element;
+  const dockSetupCard = (frame: Frame) => {
+    const host = headPane && dock.isVisible("head") ? headPane : root;
+    if (setupCard.element.parentElement !== host) {
+      const focused = setupCard.element.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+      if (host === root) root.insertBefore(setupCard.element, setupCard.consent); else host.append(setupCard.element);
+      focused?.focus({ preventScroll: true });
+    }
+    headPane?.classList.toggle("setup-card-docked", host === headPane && frame.previewSetup.card.open);
+  };
+  rt.setupCardDocked = () => setupCard.element.parentElement === headPane;
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
@@ -237,7 +252,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
     const notice = port.diagnostics.snapshot().notice;
     if (notice && notice.id !== lastNotice) { lastNotice = notice.id; feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref }); }
-    header.update(frame); status.update(frame); setupCard.update(frame); guidance.update(frame);
+    header.update(frame); status.update(frame); setupCard.update(frame); dockSetupCard(frame); guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
     for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form: Settings › Game.
@@ -419,7 +434,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
       { label: "View preferences", invoker: event.currentTarget as Element }) });
   const verify = h("span", { class: "verify-flag", title: "Isolated verification draft and library. Your normal work is untouched.", hidden: true }, "Verification workspace");
   const element = h("header", { class: "shell-header" },
-    h("div", { class: "brand", "aria-label": "XF Studio" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, "XF"), h("span", { class: "brand-name" }, "Studio")),
+    // The release stage beside the name (release-readiness-audit.md item 22): the first public release is a beta.
+    h("div", { class: "brand", "aria-label": "XF Studio beta" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, "XF"), h("span", { class: "brand-name" }, "Studio"),
+      Object.assign(badge("Beta", "accent"), { title: "XF Studio is in beta: it may not work on every setup yet. Help › Report a problem… tells us what doesn't." })),
     category,
     h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
     verify,
@@ -759,6 +776,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
         ...always, run: () => { if (entry.opens) void openDesktopApp(rt); else openDesktopAppSheet(rt); } }; })()] : []),
     { id: "help.shortcuts", title: "Keyboard & mouse", group: "Help", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"),
       keywords: "shortcuts keys bindings gestures", ...always, run: () => view.openReference() },
+    // A way to learn about updates (release-readiness-audit.md item 22): the releases page, opened by the host; nothing is checked by itself.
+    { id: "help.updates", title: "Check for updates", group: "Help", icon: "link", keywords: "update new version release download latest beta github",
+      ...always, run: () => void port.links.open("project-releases").then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "Help", outcome.message); }) },
     { id: "help.report", title: "Report a problem…", group: "Help", icon: "warning", keywords: "bug issue error crash diagnostics log github",
       capability: () => port.diagnostics.capability({ kind: "diagnostics.prepareReport" }), run: () => { openReportDialog(rt, null); } },
     ...(["deep", "normal"] as const).filter(mode => (port.diagnostics.snapshot().mode?.mode ?? "normal") !== mode).map(mode => ({

@@ -114,6 +114,8 @@ export class StudioRuntime {
    * forward and expanded where it is, then the group is shown and focused. The shell sets this once the dock exists.
    */
   settings: { open(section?: SettingsSection): void } = { open: () => {} };
+  /** Whether the 3D preview setup card sits in the 3D view pane (it then covers nothing else); the shell sets this once the dock exists. */
+  setupCardDocked: () => boolean = () => false;
   /**
    * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
    *   composition root handed `mountStudio`.

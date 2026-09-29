@@ -143,9 +143,10 @@ export type WorkspaceState = {
   /**
    * 3D preview setup preference: whether the preview may start preparing by itself once nothing is
    * missing (off after the person cancelled a run). Absent means on. Kept in the workspace so it
-   * follows the verification scope and survives the desktop's changing loopback port.
+   * follows the verification scope and survives the desktop's changing loopback port. `declined`: the person chose Not now on
+   * the setup card, so it stays closed (the head pane keeps the next step) until they ask for it again. Absent means not declined.
    */
-  previewSetup?: { autostart: boolean };
+  previewSetup?: { autostart: boolean; declined?: true };
   /**
    * Entries of features this build does not register (from a newer build), carried unchanged:
    * the loose look's other parts and memory, and other features' workspace memory.
@@ -265,7 +266,7 @@ export function parseWorkspace(value: unknown, model: DocumentModel, warnings?: 
   const views = v.views !== undefined ? parseViewGraph(v.views, STUDIO_VIEW_GRAPH_RULES) : undefined;
   if (views && !isDefaultViewGraph(views)) state.views = views;
   if (v.previewSetup && typeof v.previewSetup === "object" && typeof v.previewSetup.autostart === "boolean")
-    state.previewSetup = { autostart: v.previewSetup.autostart };
+    state.previewSetup = { autostart: v.previewSetup.autostart, ...(v.previewSetup.declined === true ? { declined: true as const } : {}) };
   if (v.library) {
     if (typeof v.library.name === "string" && v.library.name.length <= 120) state.library.name = v.library.name;
     if (uuid(v.library.selected)) state.library.selected = v.library.selected;

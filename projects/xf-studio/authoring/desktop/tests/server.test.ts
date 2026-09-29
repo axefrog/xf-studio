@@ -172,7 +172,8 @@ test("SQLite library initializes in the supplied user-data root", async () => {
   const cookie = (await fetch(app.url)).headers.get("set-cookie")!.split(";")[0];
   const response = await fetch(base + "/api/collections", { headers: { Cookie: cookie } });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject([{ name: "Makeup collection", revision: 1, count: 0 }]);
+  // A fresh library starts empty: no phantom collection before the first Save (release-readiness-audit.md item 11).
+  expect(await response.json()).toEqual([]);
   const denied = await fetch(base + "/api/collections", { method: "POST", headers: { Cookie: cookie,
     "Content-Type": "application/json", Origin: "http://attacker.example" }, body: "{}" });
   expect(denied.status).toBe(403);

@@ -175,7 +175,7 @@ export function undoReplaceAction(rt: StudioRuntime, label: string): FeedbackAct
   const before = rt.port.library.summary().draft?.id;
   return { label, run: () => {
     if (!before || rt.port.library.summary().draft?.previous?.id !== before) {
-      rt.feedback.toast("warning", "Library", "The draft from before that change is no longer the recoverable draft. Use Recover previous draft in the Library panel if it is listed there.");
+      rt.feedback.toast("warning", "Library", "The draft from before that change is no longer the first one to recover. Find it under Recent drafts in the Library panel.");
       return;
     }
     void rt.file({ kind: "collection.recover" });
@@ -194,10 +194,15 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   const stateLine = h("p", { class: "state-line" });
   const progress = progressBar({ label: "Library request in progress" }).element;
   progress.hidden = true;
-  const refresh = button({ label: "Refresh", icon: "refresh", small: true, variant: "quiet", onClick: () => void rt.request({ kind: "refresh" }, { quietSuccess: true }) });
-  const recover = button({ label: "Recover previous draft", icon: "undo", small: true,
-    onClick: () => void rt.file({ kind: "collection.recover" }) });
-  const recoverNote = note("", "info");
+  // The saved list updates itself (release-readiness-audit.md item 13): read quietly whenever this panel is shown or the window comes
+  // back (another window of XF Studio may have saved), so there is no Refresh button.
+  const syncList = () => { if (port.authoring.requestCapability({ kind: "refresh" }).available) void port.library.execute({ kind: "refresh" }); };
+  window.addEventListener("focus", syncList);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); });
+  // Earlier drafts, newest first, each brought back with its own Recover (item 13): the draft you had open joins the list.
+  const drafts = h("ul", { class: "saved-list", "aria-label": "Recent drafts" });
+  const draftsSection = h("div", { class: "stack gap-s" }, h("span", { class: "eyebrow", text: "Recent drafts" }), drafts);
+  let draftsSignature = "";
   const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
   const savedEmpty = emptyState("Nothing saved yet", "Save to library keeps the first version of this collection. Drafts still autosave on this computer.");
   const fileButtons = {
@@ -219,11 +224,11 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     section({ title: "Local library", help: ["Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.",
       "Your draft also saves itself on this computer as you work."] },
       stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy)),
-    section({ title: "Saved collections", help: "Opening one keeps your current draft: Recover previous draft brings it back." }, h("div", { class: "row between" }, h("span"), refresh),
-      savedEmpty, saved, h("div", { class: "row wrap gap-s" }, recover), recoverNote),
+    section({ title: "Saved collections", help: "Opening one keeps the draft you had open: it goes under Recent drafts, where Recover brings it back." },
+      savedEmpty, saved, draftsSection),
     filesSection);
   return {
-    spec: { id: "library", ...PANEL_META["library"], element },
+    spec: { id: "library", ...PANEL_META["library"], element, visibility: visible => { if (visible) syncList(); } },
     update(frame) {
       const library = frame.library, draft = library.draft;
       const state = libraryState(frame);
@@ -232,11 +237,19 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       progress.hidden = !library.busy;
       applyCapability(save, port.authoring.requestCapability({ kind: "save" }));
       applyCapability(saveCopy, port.authoring.requestCapability({ kind: "saveCopy" }));
-      applyCapability(refresh, port.authoring.requestCapability({ kind: "refresh" }));
-      const recovery = frame.files.recovery;
-      applyCapability(recover, recovery);
-      setText(recoverNote, draft?.previous ? `Next draft: “${draft.previous.name}”${draft.previous.revision ? ` (version ${draft.previous.revision})` : ""}. ${draft.recoveryCount} of ${draft.recoveryLimit} drafts recoverable; recover again to walk through them.` : "");
-      recoverNote.hidden = !draft?.previous;
+      const queue = draft?.recovery ?? [], draftsKey = JSON.stringify([queue, library.busy]);
+      draftsSection.hidden = !queue.length;
+      if (draftsKey !== draftsSignature) {
+        draftsSignature = draftsKey;
+        drafts.replaceChildren(...queue.map(entry => {
+          const recover = button({ label: "Recover", icon: "undo", small: true, title: `Bring back “${entry.name}”; the draft you have open joins this list`,
+            onClick: () => void rt.file({ kind: "collection.recover", draft: entry.id }) });
+          applyCapability(recover, port.files.capability({ kind: "collection.recover", draft: entry.id }));
+          return h("li", { class: "saved-row" }, h("div", { class: "saved-main" }, h("strong", { text: entry.name }),
+            h("span", { class: "muted small", text: `${plural(entry.presets, "preset")} · ${entry.revision ? `from version ${entry.revision}` : "never saved"}` })),
+            recover);
+        }));
+      }
       const signature = JSON.stringify([library.summaries, draft?.id, library.busy]);
       if (signature !== savedSignature) {
         savedSignature = signature;

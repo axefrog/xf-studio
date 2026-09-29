@@ -68,8 +68,8 @@ export class CollectionApplication implements CollectionViewPort {
     const outcome = this.dispatch({ kind: "collection.importRecipe", recipe, name });
     if (!outcome.ok) throw Error(outcome.message);
   }
-  recover() {
-    const outcome = this.dispatch({ kind: "collection.undoOpen" });
+  recover(draft?: string) {
+    const outcome = this.dispatch({ kind: "collection.undoOpen", ...(draft !== undefined ? { draft } : {}) });
     if (!outcome.ok) throw Error(outcome.message);
   }
 }

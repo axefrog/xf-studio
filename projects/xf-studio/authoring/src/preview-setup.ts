@@ -25,7 +25,19 @@ export type PreviewSetupAction =
   | { kind: "previewSetup.consent" } | { kind: "previewSetup.consentClose" }
   | { kind: "previewSetup.installWolvenKit"; version: string } | { kind: "previewSetup.cancelDownload" }
   | { kind: "previewSetup.useDetectedWolvenKit" } | { kind: "previewSetup.recheckRuntime" }
-  | { kind: "previewSetup.retryHead" };
+  | { kind: "previewSetup.retryHead" }
+  /** How the person installs mods, asked on the first-run card when Mod Organizer 2 was found; saved with **Use this folder**. */
+  | { kind: "previewSetup.chooseRoute"; route: InstallRoute };
+/** How mods are installed: through a Mod Organizer 2 profile, or into the game folder (Vortex or by hand). */
+export type InstallRoute = "mo2" | "direct";
+/**
+ * The first-run card's question (release-readiness-audit.md item 9): how the person installs mods, asked when Mod Organizer 2 was
+ * found on this computer, so the install route and the framework check are right from the first run. Defaults first: the MO2
+ * instance found is chosen until the person picks otherwise.
+ */
+export type PreviewSetupRouteQuestion = { label: string; options: { value: InstallRoute; label: string; title: string }[]; chosen: InstallRoute;
+  /** The instance and profile the card saves with MO2, in words ("Cyberpunk MO2 · profile Main"). */
+  detail: string };
 export type PreviewSetupButton = { label: string; action: PreviewSetupAction };
 export type PreviewSetupCapability = { available: boolean; reason?: string };
 export type PreviewSetupOutcome = { ok: true } | { ok: false; message: string };
@@ -47,6 +59,8 @@ export type PreviewSetupCard = {
   /** "Not now" is offered unless work is running (the card then shows its progress). */
   canDismiss: boolean;
   busy: boolean;
+  /** How mods are installed, asked beside **Use this folder** when Mod Organizer 2 was found; null otherwise. */
+  route: PreviewSetupRouteQuestion | null;
 };
 export type PreviewSetupConsent = {
   title: string; intro: string; facts: { label: string; value: string }[]; runtimeNote: string | null;
@@ -88,6 +102,11 @@ export type PreviewSetupPort = {
   setupPlace: string;
   /** May the preview start preparing by itself? Kept in the workspace. */
   autostart: { get(): boolean; set(on: boolean): void };
+  /**
+   * Did the person choose **Not now** on the card? Kept in the workspace, so a declined card stays declined across dialogs and
+   * restarts (release-readiness-audit.md item 10); the head pane keeps offering the next step. Without it, for this session only.
+   */
+  declined?: { get(): boolean; set(on: boolean): void };
   /** Loads the 3D head from the prepared preview; throws a `HeadLoadError` (or any error). */
   loadHead(): Promise<void>;
 };
@@ -115,6 +134,10 @@ export class PreviewSetupActions {
   private busy = false;
   private notice: { text: string; key: string } | null = null;
   private detectedGame: string | null = null;
+  /** The Mod Organizer 2 instance found that manages Cyberpunk 2077, with its last-used profile, for the route question. */
+  private detectedMo2: { root: string; name: string; profile: string | null } | null = null;
+  /** The person's answer to the route question on the card, until **Use this folder** saves it. */
+  private routeChoice: InstallRoute | null = null;
   /** Why a copy that detection recognised can't be used (for example the Xbox app's), shown when no folder was found. */
   private gameNote: string | null = null;
   private detection: "idle" | "looking" | "done" = "idle";
@@ -130,6 +153,7 @@ export class PreviewSetupActions {
   private started = false;
   constructor(private readonly port: PreviewSetupPort) {
     this.attempted = !port.autostart.get();
+    this.dismissed = port.declined?.get() ?? false;
     this.setupRevision = port.localSetup.snapshot().view?.revision;
     port.preparation.subscribe(() => this.preparationChanged());
     port.wolvenKit.subscribe(() => this.wolvenKitChanged());
@@ -164,6 +188,7 @@ export class PreviewSetupActions {
       primary: looking || !view?.primary ? null : this.button(view.primary.label, view.primary.action, wolvenKit),
       secondary: view?.secondary ? this.button(view.secondary.label, view.secondary.action, wolvenKit) : null,
       links: view?.links ?? [], canDismiss: !working, busy: this.busy,
+      route: !looking && view?.primary?.action === "use-game" ? this.routeQuestion() : null,
     };
     const consentView = this.consentOpen && wolvenKit ? wolvenKitConsent(wolvenKit) : null;
     const consent: PreviewSetupConsent | null = consentView && wolvenKit ? {
@@ -213,6 +238,8 @@ export class PreviewSetupActions {
         return wolvenKit.snapshot()?.detected ? { available: true } : { available: false, reason: "No WolvenKit was found on this computer." };
       case "previewSetup.retryHead":
         return this.head.phase === "failed" ? { available: true } : { available: false, reason: "The 3D head isn't waiting to be loaded again." };
+      case "previewSetup.chooseRoute":
+        return this.snapshot().card.route ? { available: true } : { available: false, reason: "Nothing is being asked about how you install mods." };
     }
   }
 
@@ -221,8 +248,9 @@ export class PreviewSetupActions {
     if (!allowed.available) return { ok: false, message: allowed.reason! };
     const { preparation, wolvenKit, localSetup } = this.port;
     switch (action.kind) {
-      case "previewSetup.show": this.dismissed = false; this.showRequests++; this.notify(); return { ok: true };
-      case "previewSetup.dismiss": this.dismissed = true; this.consentOpen = false; this.notify(); return { ok: true };
+      case "previewSetup.show": this.decline(false); this.showRequests++; this.notify(); return { ok: true };
+      case "previewSetup.dismiss": this.decline(true); this.consentOpen = false; this.notify(); return { ok: true };
+      case "previewSetup.chooseRoute": this.routeChoice = action.route; this.notify(); return { ok: true };
       case "previewSetup.consent": this.consentOpen = true; this.notify(); return { ok: true };
       case "previewSetup.consentClose": this.consentOpen = false; this.notify(); return { ok: true };
       case "previewSetup.openSetup":
@@ -248,11 +276,16 @@ export class PreviewSetupActions {
           return outcome;
         });
       case "previewSetup.useDetectedGame": {
-        const folder = this.detectedGame!;
-        return this.run(async () => this.saved(await localSetup.dispatch({ kind: "setup.update", fields: { gameRoot: folder } })));
+        // The folder, and how mods are installed when the card asked (the MO2 instance and profile it found, unless Settings already
+        // names them), in one change, so the route and the framework check are right from the first run.
+        const folder = this.detectedGame!, route = this.snapshot().card.route, settings = localSetup.snapshot().view?.fields;
+        const fields = !route ? { gameRoot: folder } : route.chosen === "direct" ? { gameRoot: folder, launchRoute: "direct" as const }
+          : { gameRoot: folder, launchRoute: "mo2" as const, mo2Root: settings?.mo2Root ?? this.detectedMo2!.root,
+            mo2ProfileId: settings?.mo2ProfileId ?? this.detectedMo2!.profile };
+        return this.run(async () => this.saved(await localSetup.dispatch({ kind: "setup.update", fields })));
       }
       case "previewSetup.installWolvenKit":
-        this.consentOpen = false; this.dismissed = false; this.port.autostart.set(true);
+        this.consentOpen = false; this.decline(false); this.port.autostart.set(true);
         return this.run(() => wolvenKit.dispatch({ kind: "wolvenkit.install", version: action.version }));
       case "previewSetup.cancelDownload": return this.run(() => wolvenKit.dispatch({ kind: "wolvenkit.cancel" }));
       case "previewSetup.useDetectedWolvenKit": {
@@ -350,8 +383,29 @@ export class PreviewSetupActions {
       const candidates = games?.candidates ?? [];
       this.detectedGame = candidates.length === 1 ? candidates[0]!.root : null;
       this.gameNote = gameDetectionNote(games);
-    } catch { this.detectedGame = null; this.gameNote = null; }
+      // Mod Organizer 2, for the card's route question: the first instance that manages Cyberpunk 2077 (read only, quick).
+      if (this.detectedGame) {
+        const found = await this.port.detection.dispatch({ kind: "detect.mo2Instances" });
+        const instance = found.ok ? this.port.detection.snapshot().mo2?.instances.find(item => item.managesCyberpunk) : undefined;
+        this.detectedMo2 = instance ? { root: instance.root, name: instance.name,
+          profile: instance.selectedProfile ?? instance.profiles[0] ?? null } : null;
+      }
+    } catch { this.detectedGame = null; this.gameNote = null; this.detectedMo2 = null; }
     finally { this.detection = "done"; this.notify(); }
+  }
+  /** The card's route question, while Mod Organizer 2 was found and the saved settings don't already name how mods are installed. */
+  private routeQuestion(): PreviewSetupRouteQuestion | null {
+    const mo2 = this.detectedMo2, fields = this.port.localSetup.snapshot().view?.fields;
+    if (!mo2 || (fields?.launchRoute === "mo2" && fields.mo2Root)) return null;
+    return { label: "How do you install mods?", chosen: this.routeChoice ?? "mo2",
+      detail: `${mo2.name}${mo2.profile ? ` · profile ${mo2.profile}` : ""}`,
+      options: [{ value: "mo2", label: "Mod Organizer 2", title: `Your mods are managed in Mod Organizer 2 (${mo2.name})` },
+        { value: "direct", label: "Vortex or by hand", title: "Your mods go into the game's own folder" }] };
+  }
+  /** Record the person's Not now (or taking it back), in the workspace when the host keeps it. */
+  private decline(on: boolean) {
+    this.dismissed = on;
+    if (this.port.declined && this.port.declined.get() !== on) this.port.declined.set(on);
   }
 
   // ---- View facts ----

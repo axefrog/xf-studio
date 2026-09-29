@@ -63,8 +63,9 @@ test("collection bootstrap attaches a detached view and switches per-preset edit
   let events = 0; const unsubscribe = f.bootstrap.subscribe(() => events++);
   expect(f.bootstrap.dispatch({ kind: "preset.edit", command: { kind: "add" } }).ok).toBe(true);
   expect(f.bootstrap.view().draft?.collection.presets).toHaveLength(2);
-  expect(f.document.recipe.layers).toHaveLength(0);
-  expect(f.bootstrap.currentLayerCount()).toBe(0);
+  // A new preset starts like the first one, with the starter layer (release-readiness-audit.md item 12).
+  expect(f.document.recipe.layers).toHaveLength(1);
+  expect(f.bootstrap.currentLayerCount()).toBe(1);
   expect(f.bootstrap.dispatch({ kind: "preset.select", id: f.collection.presets[0].id }).ok).toBe(true);
   expect(f.document.recipe.layers).toHaveLength(4);
   expect(f.restored()).toBeGreaterThan(0);

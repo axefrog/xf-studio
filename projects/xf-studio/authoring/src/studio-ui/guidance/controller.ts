@@ -147,7 +147,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
   const offer = new Callout({ className: "guidance-offer", closeLabel: "Not now", onClose: () => declineOffer(),
     onKey: event => { if (event.key !== "Escape") return false; declineOffer(); return true; } });
   offer.update({ eyebrow: "Welcome", title: "New to XF Studio?",
-    body: "A short tour shows where everything is: layers, drawing, the head view, colour and finish, your library and making your mod. It takes about two minutes, and you can replay it from Help.",
+    body: "A short tour shows where everything is: layers, drawing, the head view, colour and finish, your library and making your mod. It takes about two minutes, and you can replay it from Help.\n\nXF Studio is in beta. If something doesn't work, **Report a problem…** in Help prepares a report for you to review; nothing is sent by itself.",
     actions: [{ id: "later", label: "Not now", variant: "quiet", run: () => declineOffer() },
       { id: "start", label: "Show me around", variant: "primary", run: () => { start(ONBOARDING_TOUR_ID); } }] });
   let offerState: "waiting" | "shown" | "done" = "waiting";
@@ -161,15 +161,16 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     if (hadFocus) document.querySelector<HTMLElement>(".shell-header button")?.focus();
   }
   /**
-   * Offer onboarding once, after the welcome screen: never while a dialog is open, while the 3D
-   * preview card is asking for something, or in a verification workspace unless `force` asks.
+   * Offer onboarding once, on the first run (release-readiness-audit.md item 11), after the welcome screen: never while a dialog is
+   * open, while the 3D preview card floats over the window asking for something (docked in the 3D view pane it covers nothing, so the
+   * offer shows beside it), or in a verification workspace unless `force` asks.
    */
   function maybeOffer(frame: Frame, force = false) {
     if (offerState !== "waiting" || running) return;
     if (!force) {
       if (frame.status.verification || frame.preferences.tours?.[ONBOARDING_TOUR_ID]) { offerState = "done"; return; }
       const card = frame.previewSetup.card;
-      if (performance.now() - mountedAt < 1500 || document.querySelector("dialog[open]") || (card.open && !card.busy)) return;
+      if (performance.now() - mountedAt < 1500 || document.querySelector("dialog[open]") || (card.open && !card.busy && !rt.setupCardDocked())) return;
     }
     offerState = "shown";
     offer.show();

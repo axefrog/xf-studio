@@ -33,9 +33,11 @@ export type CollectionAction =
   | { kind: "collection.rename"; name: string }
   /** A stored collection of either schema (`xfas/collection-1` or `xfs/collection-2`). */
   | { kind: "collection.open"; collection: LookCollection | unknown; revision?: number }
-  | { kind: "collection.undoOpen" }
+  /** Bring back an earlier draft from the recovery queue: `draft` names one (its collection ID), else the previous one. */
+  | { kind: "collection.undoOpen"; draft?: string }
   | { kind: "collection.importRecipe"; recipe: Recipe; name: string }
-  | { kind: "collection.saved"; result: StoredCollection; sourceId: string }
+  /** `renamedFrom`: a Save as new collection gave the copy a unique name; the draft takes it while it still has this one. */
+  | { kind: "collection.saved"; result: StoredCollection; sourceId: string; renamedFrom?: string }
   /**
    * The package plan (feature-module platform §6): which features ship in which XF mod. `package.rename` names a mod
    * (an empty `modName` goes back to the name that follows its features); `package.assign` moves a feature into an existing
@@ -60,6 +62,11 @@ export type CollectionDraftSummary = {
   /** Oldest first; `restore` brings back the last entry. */
   removed: { id: string; name: string; index: number }[];
   previous?: { id: string; name: string; revision?: number };
+  /**
+   * The recovery queue, newest first (the previous draft, then older ones), for a list to pick from (release-readiness-audit.md
+   * item 13): each draft's collection ID, name, saved revision and preset count; `locked` as for `oldestRecoverable`.
+   */
+  recovery: { id: string; name: string; revision?: number; presets: number; locked?: true }[];
   recoveryCount: number; recoveryLimit: number;
   /** `locked`: it holds a look made with a newer version, which the library can't take, so this draft may be its only copy. */
   oldestRecoverable?: { id: string; name: string; revision?: number; locked?: true };
@@ -91,6 +98,8 @@ export class CollectionActions {
       removed: s.removed.map(entry => ({ id: entry.preset.id, name: entry.preset.name, index: entry.index })),
       previous: s.previous ? { id: s.previous.collection.id, name: s.previous.collection.name,
         revision: s.previous.revision } : undefined,
+      recovery: recovery.map(draft => ({ id: draft.collection.id, name: draft.collection.name, revision: draft.revision,
+        presets: draft.collection.presets.length, ...(holdsLocked(draft) ? { locked: true as const } : {}) })),
       recoveryCount: recovery.length, recoveryLimit: COLLECTION_RECOVERY_LIMIT,
       oldestRecoverable: oldest ? { id: oldest.collection.id, name: oldest.collection.name,
         revision: oldest.revision, ...(holdsLocked(oldest) ? { locked: true as const } : {}) } : undefined };
@@ -158,6 +167,8 @@ export class CollectionActions {
     const state = this.session.state;
     if (action.kind === "collection.undoOpen" && !state.previous)
       return refusal("invalid_value", "No previous collection draft.");
+    if (action.kind === "collection.undoOpen" && action.draft !== undefined && !this.recoveryCollection(action.draft))
+      return refusal("missing_target", "That earlier draft is no longer in the recovery list.");
     if (action.kind === "preset.edit") {
       const command = action.command;
       if (command.kind === "restore" && !state.removed.length)
@@ -200,9 +211,9 @@ export class CollectionActions {
       case "preset.select": this.session.select(action.id); break;
       case "collection.rename": this.session.renameCollection(action.name); break;
       case "collection.open": this.session.open(action.collection, action.revision); break;
-      case "collection.undoOpen": this.session.undoOpen(); break;
+      case "collection.undoOpen": this.session.undoOpen(action.draft); break;
       case "collection.importRecipe": this.session.importRecipe(action.recipe, action.name); break;
-      case "collection.saved": this.session.saved(action.result, action.sourceId); break;
+      case "collection.saved": this.session.saved(action.result, action.sourceId, action.renamedFrom); break;
       case "package.rename": case "package.assign": case "package.split": case "package.merge":
         this.session.editPackagePlan(newId => packagePlanEdit(action, newId), this.products()); break;
     }

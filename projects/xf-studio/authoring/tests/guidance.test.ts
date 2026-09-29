@@ -74,7 +74,7 @@ test("tour data names only registered anchors, catalogued actions and real key b
   expect(onboarding.steps.length).toBeGreaterThanOrEqual(6);
   expect(onboarding.steps.length).toBeLessThanOrEqual(8);
   const whatsNew = TOURS.find(tour => tour.audience === "whats-new")!;
-  expect(whatsNew.version).toBe("0.1.0-alpha.1");
+  expect(whatsNew.version).toBe("0.1.0-beta.1");
   expect(whatsNew.steps.length).toBeGreaterThanOrEqual(3);
   expect(whatsNew.steps.length).toBeLessThanOrEqual(4);
 });
@@ -340,7 +340,7 @@ test("help topics are data: valid key tokens, known tours, searchable; links are
   expect(searchTopics("preview only", helpTopicsFor(finishCatalogue())).map(topic => topic.id)).toContain("finishes");
   expect(searchTopics("undo history")[0].id).toBe("undo");
   expect(searchTopics("zzzz nothing")).toEqual([]);
-  expect(searchTours("new", TOURS).map(item => item.id)).toContain("whats-new-0.1.0-alpha.1");
+  expect(searchTours("new", TOURS).map(item => item.id)).toContain("whats-new-0.1.0-beta.1");
   for (const item of HELP_LINKS) expect(isProjectLink(item.link)).toBe(true);
   // Markdown-lite: bold, bullets and key tokens become structure, never markup.
   expect(parseHelp("Hi **there** [[key:shell.undo]]\n\n- one\n- two <b>")).toEqual([

@@ -126,6 +126,15 @@ export function withLiveFeatures(look: Look, memory: LookMemory, states: Readonl
 export function newLook(id: string, name: string, model: DocumentModel): Look {
   return { id, name, revision: 1, parts: { [model.live]: model.parts.envelope(model.live, emptyRecipe()) } };
 }
+/**
+ * A look for **Add preset**: the live feature's starter part (eye makeup: one layer, as the first preset starts), so a new look is
+ * ready to shape instead of empty (release-readiness-audit.md item 12). Without a starter, the empty part.
+ */
+export function starterLook(id: string, name: string, model: DocumentModel): Look {
+  const starter = model.parts.feature(model.live)?.part.starter();
+  return starter === undefined ? newLook(id, name, model)
+    : { id, name, revision: 1, parts: { [model.live]: model.parts.envelope(model.live, structuredClone(starter)) } };
+}
 
 /**
  * A fresh draft of a stored collection of either schema (`xfas/collection-1` or `xfs/collection-2`). A look
@@ -322,7 +331,7 @@ export function editPresets(value: CollectionWorkspace, command: PresetCommand, 
     if (presets.some(p => p.id === id) || state.removed.some(entry => entry.preset.id === id)) throw Error("That preset ID is already in use.");
     // A copy carries every part of the look; its editor memory starts fresh.
     const preset: Preset = command.kind === "copy" ? { ...structuredClone(presets[index]), id,
-      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : newLook(id, newPresetName(presets, state.removed.map(entry => entry.preset)), model);
+      name: `${presets[index].name.slice(0, 113)} (copy)`, revision: 1 } : starterLook(id, newPresetName(presets, state.removed.map(entry => entry.preset)), model);
     presets.splice(command.kind === "copy" ? index + 1 : presets.length, 0, preset);
     state.selected = preset.id; state.memory[preset.id] = withLiveMemory(undefined, emptyMemory(), model);
   } else if (command.kind === "remove") {
