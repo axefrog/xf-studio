@@ -1,0 +1,29 @@
+[
+  {
+    "name": "injected-stale-memo",
+    "scenario": "graph",
+    "seed": "0",
+    "note": "Found by the injected propagation bug (memo invalidation skipped for some nodes) at step 36 of seed 0, shrunk to six steps: another window's two commits, a crash, then a revert. Without the fault it must hold every invariant.",
+    "steps": [
+      { "kind": "act", "action": "other-window", "args": [0, 0, 0, 0, 0] },
+      { "kind": "act", "action": "other-window", "args": [0, 0, 0, 0, 0] },
+      { "kind": "deliver", "pick": 0 },
+      { "kind": "deliver", "pick": 0 },
+      { "kind": "crash" },
+      { "kind": "act", "action": "tag-or-revert", "args": [0, 0, 0, 0, 0] }
+    ]
+  },
+  {
+    "name": "undo-after-redo",
+    "scenario": "graph",
+    "seed": "8",
+    "note": "Seed 8 failed at step 178, shrunk to five steps: undoing a redo must fold back to the state before the redo (the harness had not recorded that state).",
+    "steps": [
+      { "kind": "act", "action": "create", "args": [0, 0, 0, 0, 0] },
+      { "kind": "act", "action": "set", "args": [0, 0, 0, 0, 0] },
+      { "kind": "act", "action": "undo", "args": [0, 0, 0, 0, 0] },
+      { "kind": "act", "action": "redo", "args": [0, 0, 0, 0, 0] },
+      { "kind": "act", "action": "undo", "args": [0, 0, 0, 0, 0] }
+    ]
+  }
+]

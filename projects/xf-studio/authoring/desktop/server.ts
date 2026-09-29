@@ -4,6 +4,11 @@ import { randomBytes } from "node:crypto";
 import { LookLibrary, libraryRequest } from "../src/library-store";
 import { CollectionLibrary, collectionRequest } from "../src/collection-store";
 import { PartPresetLibrary, partPresetRequest } from "../src/part-preset-store";
+// The graph (XF Strata): its store and backups in the library files, its host transport and inspector feed (profiles and
+// graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
+import { createGraphHandler, GraphLibrary } from "../src/platform/graph-adapters/graph-host";
+import { hostClock, hostRandom } from "../src/platform/graph-adapters/host-sources";
+import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "../src/compose/graph";
 import { createLocalSettingsHandler } from "../src/local-settings-server";
 import { FOLDER_FIELDS, type FolderField } from "../src/local-setup-actions";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/install-detection-server";
@@ -126,6 +131,13 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
   const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
   const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
+  const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
+  const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), graphOptions);
+  const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), graphOptions);
+  const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
+    ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
+  // The library's daily backup, a moment after starting.
+  const backupTimer = setTimeout(() => graphLibrary.dailyBackup(), 2000);
   // Desktop settings follow the Electrobun identity and channel. Never inherit
   // localhost's per-user default or developer XFS_PACKAGE_* environment paths.
   const settingsStore = new LocalSettingsStore(dataRoot);
@@ -407,6 +419,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return collectionRequest(routedRequest, store, prefix);
       for (const [prefix, store] of [["/api/part-presets", partPresets], ["/api/verification/part-presets", verificationPartPresets]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return partPresetRequest(routedRequest, store, prefix);
+      for (const [prefix, handle] of graphRequests) if (url.pathname.startsWith(prefix + "/")) return handle(routedRequest);
       for (const [prefix, store] of [["/api/looks", library], ["/api/verification/looks", verificationLibrary]] as const)
         if (url.pathname === prefix || url.pathname.startsWith(prefix + "/")) return libraryRequest(routedRequest, store, prefix);
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
@@ -459,6 +472,6 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     characterDetails,
     /** WolvenKit setup (tests and shutdown). */
     wolvenKit,
-    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); library.close(); verificationLibrary.close(); },
+    stop() { diagnostics.trace.flush(); shutdown.abort(); previewCore.cancel(); characterDetails.cancel(); wolvenKit.cancel(); server.stop(true); facial.dispose(); collections.close(); verificationCollections.close(); partPresets.close(); verificationPartPresets.close(); clearTimeout(backupTimer); graphLibrary.close(); verificationGraphLibrary.close(); library.close(); verificationLibrary.close(); },
   };
 }

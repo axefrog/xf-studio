@@ -5,7 +5,9 @@
   "compilerOptions": {
     "paths": {
       "three": ["./node_modules/@types/three"],
-      "three/addons/*": ["./node_modules/@types/three/examples/jsm/*"]
+      "three/addons/*": ["./node_modules/@types/three/examples/jsm/*"],
+      "strata": ["../../strata/index.ts"],
+      "strata/testing": ["../../strata/testing.ts"]
     }
   },
   // Tracked scripts only: each experiment's ignored `generated/` output is never needed.
