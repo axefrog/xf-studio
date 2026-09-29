@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import { Aborter, constantId, createGraph, defineRule, defineSink, defineSource, defineType, MemoryStore, trustTable } from "strata";
 import type { ChangeSet, Entry, Graph, GraphOptions, NodeChange, NodeRef, TypeDef } from "strata";
-import { sampleEntry, Scheduler, seededRandom, settle, simClock, SimStore, SYNTHETIC_RULES, SYNTHETIC_TYPES } from "strata/testing";
+import { sampleEntry, Scheduler, seededRandom, settle, simClock, SimStore, STRATA_DEBUG, SYNTHETIC_RULES, SYNTHETIC_TYPES } from "strata/testing";
 import { GROUP, ITEM } from "../src/testing/synthetic";
 import { create, drive, harness, ok } from "./helpers";
 
@@ -607,4 +607,562 @@ test("a derivation that throws throws to its reader; derivations reading a missi
   expect(past.references(b).map(item => item.target.id)).toEqual([a.id]);
   expect(past.derive(b, "chain")).toEqual({ ok: true, value: "end" });
   expect(graph.referrers(a)).toEqual([]);
+});
+
+/** Delivers every pending store reply and timer. */
+async function idle(scheduler: Scheduler): Promise<void> {
+  for (let i = 0; i < 200; i++) { await settle(); if (!scheduler.pending().length) { await settle(); if (!scheduler.pending().length) return; } scheduler.deliver(0); }
+}
+
+/** Graphs over one store, opened one after another (sessions or windows). */
+function storeSessions() {
+  const scheduler = new Scheduler(), memory = new MemoryStore(), store = new SimStore(memory, scheduler);
+  let session = 0;
+  const open = async () => {
+    const graph = createGraph({ types: SYNTHETIC_TYPES, store, sources: sources(scheduler, `window ${session++}`), signal: new Aborter().signal });
+    await drive(scheduler, graph.load());
+    return graph;
+  };
+  return { scheduler, memory, store, open };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Entries' metadata, loads, reads and views, stated exactly
+// ---------------------------------------------------------------------------------------------------------------
+
+test("a commit's first entry alone carries its meta (label, scope and basis, in order); provenance is written only when given", async () => {
+  const { graph, scheduler, store } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const a = create(graph, ITEM, { title: "a" }), b = create(graph, ITEM, { title: "b" });
+  const both = ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "a2" }, { op: "set", node: b, path: ["title"], value: "b2" },
+    { op: "set", node: a, path: ["tags", "x"], value: 1 }], { label: "Both", scope: "s" }));
+  expect(graph.pending().find(item => item.commit === both.commit)).toMatchObject({ label: "Both" });
+  await drive(scheduler, graph.flush());
+  const ofCommit = (ref: NodeRef) => store!.inner.readStreamNow(ref).filter(entry => entry.commit === both.commit);
+  expect(ofCommit(a).map(entry => entry.meta ?? null)).toEqual([{ label: "Both", scope: "s", basis: [[a.id, 1], [b.id, 1]] }, null]);
+  expect(ofCommit(b).map(entry => entry.meta ?? null)).toEqual([null]);
+  expect([...ofCommit(a), ...ofCommit(b)].some(entry => "provenance" in entry)).toBe(false);
+  const plain = ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "a3" }]));
+  await drive(scheduler, graph.flush());
+  const entry = store!.inner.readStreamNow(a).find(item => item.commit === plain.commit)!;
+  expect(entry.meta).toStrictEqual({ basis: [[a.id, 3]] });
+  expect(graph.pending()).toEqual([]);
+});
+
+test("a value stream's first commit creates it and later ones replace its state; without a store commits are acknowledged at once", () => {
+  const note = defineType({ type: "note", owner: "t", schema: "1", stream: "value", fields: { text: { kind: "value" } } });
+  const graph = graphOf([note]);
+  const created = ok(graph.commit([{ op: "create", type: "note", as: "n", fields: { text: "one" } }]));
+  const n = created.created.n;
+  const changed = ok(graph.commit([{ op: "set", node: n, path: ["text"], value: "two" }]));
+  expect(graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === n.id)!.entries.map(entry => entry.op.kind)).toEqual(["create", "state"]);
+  expect([graph.acknowledged(created.commit), graph.acknowledged(changed.commit), graph.resolve(n, ["text"])]).toEqual([true, true, "two"]);
+});
+
+test("a session node's commit on a stored graph is acknowledged at once and never reaches the outbox", async () => {
+  const pose = defineType({ type: "pose", owner: "t", schema: "1", persistence: "session", fields: { x: { kind: "value" } } });
+  const { graph, scheduler } = harness({ store: true, extra: { types: [...SYNTHETIC_TYPES, pose] } });
+  await drive(scheduler, graph.load());
+  const made = ok(graph.commit([{ op: "create", type: "pose", as: "p", fields: { x: 1 } }]));
+  expect([graph.acknowledged(made.commit), graph.pending()]).toEqual([true, []]);
+});
+
+test("a load reports what it read and how long folding took, snapshots what it had to fold whole or long, and restores the unique index", async () => {
+  const scheduler = new Scheduler(), memory = new MemoryStore(), store = new SimStore(memory, scheduler);
+  const clock = simClock(scheduler);
+  let slow = false, tick = 0;
+  const timed = { ...clock, monotonic: () => slow ? (tick += 10) : clock.monotonic() };
+  let session = 0;
+  const open = async (extra: Partial<GraphOptions> = {}) => {
+    const graph = createGraph({ types: SYNTHETIC_TYPES, store, snapshotEvery: 3, sources: { clock: timed, random: seededRandom(`load ${session++}`) }, signal: new Aborter().signal, ...extra });
+    const loaded = await drive(scheduler, graph.load());
+    return { graph, loaded };
+  };
+  const { graph } = await open({ writeSnapshots: false });
+  const a = create(graph, ITEM, { title: "a", code: "unique-a" });
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "a2" }]));
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "a3" }]));
+  const b = create(graph, ITEM, { title: "b" });
+  await drive(scheduler, graph.flush());
+  scheduler.advance(5);
+  // No snapshots yet: every entry is read, the fold took no time on this clock, and a's three entries reach the bound.
+  const { graph: second, loaded } = await open();
+  expect(loaded).toEqual({ nodes: 3, entries: 4, foldMs: 0 });
+  await idle(scheduler);
+  expect([memory.snapshotOf(a)?.seq, memory.snapshotOf(b)]).toEqual([3, undefined]);
+  const taken = second.commit([{ op: "create", type: ITEM, as: "c", fields: { code: "unique-a" } }]);
+  expect(taken.ok ? "ok" : taken.reason).toBe("unique");
+  // A clock on which folding looks slow: the node folded is snapshotted, though under the bound.
+  slow = true;
+  await open();
+  await idle(scheduler);
+  slow = false;
+  expect(memory.snapshotOf(b)?.seq).toBe(1);
+});
+
+test("loading again replaces what a node held: a unique value it gave up is free, a stored layer cycle loads and reads", async () => {
+  const { scheduler, memory, open } = storeSessions();
+  const graph = await open();
+  const a = create(graph, ITEM, { title: "a", code: "first" });
+  await drive(scheduler, graph.flush());
+  const other = await open();
+  ok(other.commit([{ op: "set", node: a, path: ["code"], value: "second" }]));
+  await drive(scheduler, other.flush());
+  await drive(scheduler, graph.load());
+  ok(graph.commit([{ op: "create", type: ITEM, as: "b", fields: { code: "first" } }]));
+  // Two windows each close half of a layer cycle: it loads, and reading it ends.
+  const x = create(graph, ITEM, { title: "x" }), y = create(graph, ITEM, { title: "y" });
+  await drive(scheduler, graph.flush());
+  const left = await open(), right = await open();
+  ok(left.commit([{ op: "rebase", node: x, base: y }]));
+  ok(right.commit([{ op: "rebase", node: y, base: x }]));
+  await drive(scheduler, left.flush());
+  await drive(scheduler, right.flush());
+  const cyclic = await open();
+  expect([cyclic.resolve(x, ["title"]), cyclic.resolve(y, ["title"])]).toEqual(["x", "y"]);
+  const pinned = ok(cyclic.commit([{ op: "create", type: ITEM, as: "p", from: { fork: x, at: 2 } }])).created.p;
+  expect(cyclic.resolve(pinned, ["title"])).toBe("x");
+  expect(memory.allEntries().length).toBeGreaterThan(0);
+});
+
+test("reads: a node's snapshot names its seq and whether it is built in; referrers come from the index, in order, of the type asked; issues come from the type's check", () => {
+  const checked = defineType({ type: "checked", owner: "t", schema: "1", fields: { n: { kind: "value" }, other: { kind: "ref", to: ITEM, clone: "share" } },
+    validate: value => typeof value.n === "number" && value.n < 0 ? [{ path: ["n"], message: "negative" }] : [] });
+  const graph = graphOf([...SYNTHETIC_TYPES, checked]);
+  const starter = { type: ITEM, id: constantId(ITEM, "starter") };
+  expect(graph.read(starter)).toMatchObject({ seq: 0, constant: true });
+  const target = create(graph, ITEM, { title: "t" });
+  expect(graph.read(target)).toMatchObject({ seq: 1, constant: false });
+  const first = create(graph, ITEM, { title: "1", link: target });
+  const second = create(graph, "checked", { n: -1, other: target });
+  expect(graph.referrers(target).map(item => item.node.id)).toEqual([first.id, second.id]);
+  expect(graph.referrers({ type: GROUP, id: target.id })).toEqual([]);
+  expect(graph.issues(second)).toEqual([{ path: ["n"], message: "negative" }]);
+  expect(graph.issues(first)).toEqual([]);
+});
+
+test("edits refused with their reasons: a bad target, a path with a part that isn't text, a reset, tombstone or apply of a path the type lacks, a tag naming anything but entries", () => {
+  const { graph } = harness();
+  const a = create(graph, ITEM, { title: "a" });
+  const reason = (edits: unknown[]) => { const result = graph.commit(edits as never); return result.ok ? "ok" : `${result.reason}: ${result.message}`; };
+  expect(reason([])).toBe("empty: Nothing to change.");
+  expect(reason([{ op: "set", node: { type: ITEM, id: 5 }, path: ["title"], value: "x" }])).toBe("missing: Name the node to change.");
+  expect(reason([{ op: "set", node: { id: "x", type: 5 }, path: ["title"], value: "x" }])).toBe("missing: Name the node to change.");
+  expect(reason([{ op: "set", node: a, path: ["tags", 5], value: 1 }])).toMatch(/^path:/);
+  expect(reason([{ op: "reset", node: a, path: ["nothing"] }])).toMatch(/^path:/);
+  expect(reason([{ op: "tombstone", node: a, path: ["nothing", "k"] }])).toMatch(/^path:/);
+  expect(reason([{ op: "applyToSource", node: a, path: ["nothing"] }])).toMatch(/^path:/);
+  expect(reason([{ op: "tag", node: a, label: "t", entries: [{ node: a, seq: 1 }, { node: a }] }])).toMatch(/^value:/);
+  const single = defineType({ type: "single", owner: "t", schema: "1", fields: { x: { kind: "value" } } });
+  const small = graphOf([single]);
+  const s = ok(small.commit([{ op: "create", type: "single", as: "s", fields: { x: 1 } }])).created.s;
+  const refused = small.commit([{ op: "set", node: s, path: "x" as never, value: 2 }]);
+  expect(refused.ok ? "ok" : refused.reason).toBe("path");
+});
+
+test("unique values: two new holders in one change clash, other types don't, and two nodes may swap theirs in one change", () => {
+  const coded = (type: string) => defineType({ type, owner: "t", schema: "1", fields: { code: { kind: "value", unique: true } } });
+  const graph = graphOf([coded("one"), coded("two")]);
+  const twice = graph.commit([{ op: "create", type: "one", as: "a", fields: { code: "x" } }, { op: "create", type: "one", as: "b", fields: { code: "x" } }]);
+  expect(twice.ok ? "ok" : twice.reason).toBe("unique");
+  const made = ok(graph.commit([{ op: "create", type: "one", as: "a", fields: { code: "x" } }, { op: "create", type: "two", as: "b", fields: { code: "x" } },
+    { op: "create", type: "one", as: "c", fields: { code: "y" } }]));
+  const { a, c } = made.created;
+  ok(graph.commit([{ op: "set", node: a, path: ["code"], value: "y" }, { op: "set", node: c, path: ["code"], value: "x" }]));
+  expect([graph.resolve(a, ["code"]), graph.resolve(c, ["code"])]).toEqual(["y", "x"]);
+  // An action with nothing blocking it goes through.
+  ok(graph.commit([{ op: "set", node: a, path: ["code"], value: "z" }], { action: "one.edit" }));
+});
+
+test("renaming a trashed node keeps it trashed; trashing a fork keeps its layers; a fork takes its source's name; a node can't layer from itself", () => {
+  const { graph } = harness();
+  const source = ok(graph.commit([{ op: "create", type: ITEM, as: "s", name: "Source", fields: { title: "s" } }])).created.s;
+  const fork = ok(graph.commit([{ op: "create", type: ITEM, as: "f", from: { fork: source } }])).created.f;
+  expect(graph.read(fork)?.name).toBe("Source");
+  ok(graph.commit([{ op: "trash", node: fork }]));
+  expect(graph.read(fork)?.layers.map(layer => layer.from.id)).toEqual([source.id]);
+  ok(graph.commit([{ op: "rename", node: fork, name: "Renamed" }]));
+  expect([graph.read(fork)?.name, graph.read(fork)?.trashed]).toEqual(["Renamed", true]);
+  const self = graph.commit([{ op: "create", type: ITEM, as: "x", id: "self", layers: [{ from: { type: ITEM, id: "self" }, role: "base", paths: "*" }] }]);
+  expect(self.ok ? "ok" : self.reason).toBe("cycle");
+});
+
+test("detach keeps only inherited values as its own; a feed from a source replaces that source's earlier feed and keeps the others", () => {
+  const { graph } = harness();
+  const base = create(graph, ITEM, { title: "base" }), fa = create(graph, ITEM, { tags: { a: 1 } }), fb = create(graph, ITEM, { tags: { b: 2 } });
+  const node = ok(graph.commit([{ op: "create", type: ITEM, as: "n", from: { fork: base } }])).created.n;
+  ok(graph.commit([{ op: "feed", node, from: fa, paths: [["tags", "a"]] }, { op: "feed", node, from: fb, paths: [["tags", "b"]] }]));
+  ok(graph.commit([{ op: "feed", node, from: fa, paths: [["tags"]] }]));
+  expect(graph.read(node)?.layers.map(layer => [layer.from.id, layer.role])).toEqual([[base.id, "base"], [fb.id, "feed"], [fa.id, "feed"]]);
+  ok(graph.commit([{ op: "detach", node }]));
+  expect(graph.read(node)!.own).toMatchObject({ [JSON.stringify(["title"])]: "base", [JSON.stringify(["tags", "a"])]: 1, [JSON.stringify(["tags", "b"])]: 2 });
+  // A node fed one path: its own defaults stay defaults, not copied.
+  const fed = create(graph, ITEM, {});
+  ok(graph.commit([{ op: "feed", node: fed, from: fa, paths: [["tags", "a"]] }]));
+  ok(graph.commit([{ op: "detach", node: fed }]));
+  expect(Object.keys(graph.read(fed)!.own).sort()).toEqual([JSON.stringify(["code"]), JSON.stringify(["tags", "a"])].sort());
+});
+
+test("apply to source writes into the first covering layer that has a value there, a feed before the base", () => {
+  const { graph } = harness();
+  const base = create(graph, ITEM, { title: "from base" }), feed = create(graph, ITEM, { title: "from feed" });
+  const node = ok(graph.commit([{ op: "create", type: ITEM, as: "n", from: { fork: base } }])).created.n;
+  ok(graph.commit([{ op: "feed", node, from: feed, paths: [["title"]] }]));
+  ok(graph.commit([{ op: "set", node, path: ["title"], value: "mine" }]));
+  ok(graph.commit([{ op: "applyToSource", node, path: ["title"] }]));
+  expect([graph.resolve(feed, ["title"]), graph.resolve(base, ["title"])]).toEqual(["mine", "from base"]);
+  const only = ok(graph.commit([{ op: "create", type: ITEM, as: "o", from: { fork: base } }])).created.o;
+  ok(graph.commit([{ op: "set", node: only, path: ["tags", "k"], value: 3 }]));
+  ok(graph.commit([{ op: "applyToSource", node: only, path: ["tags", "k"] }]));
+  expect(graph.resolve(base, ["tags", "k"])).toBe(3);
+});
+
+test("revert: to the current version changes nothing, to version 0 doesn't exist, and to a loaded snapshot's version needs no history", async () => {
+  const { scheduler, open } = storeSessions();
+  let graph = await open();
+  const a = create(graph, ITEM, { title: "one" });
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "two" }]));
+  const reason = (to: number) => { const result = graph.commit([{ op: "revert", node: a, to }]); return result.ok ? "ok" : `${result.reason}: ${result.message}`; };
+  expect(reason(2)).toMatch(/^empty:/);
+  expect(reason(0)).toBe("missing: That version doesn't exist.");
+  await drive(scheduler, graph.flush());
+  await drive(scheduler, graph.snapshotAll());
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "three" }]));
+  await drive(scheduler, graph.flush());
+  graph = await open();
+  ok(graph.commit([{ op: "revert", node: a, to: 2 }]));
+  expect(graph.resolve(a, ["title"])).toBe("two");
+});
+
+test("a deep clone leaves identity fields out, points followed references at the copies, and keeps a followed reference to a missing node as it is", () => {
+  const kinds = defineType({ type: "k", owner: "t", schema: "1", fields: { title: { kind: "value" }, secret: { kind: "map", of: { kind: "value" }, inherit: false },
+    link: { kind: "ref", to: "k", clone: "follow", follows: true } } });
+  const graph = graphOf([kinds]);
+  const child = ok(graph.commit([{ op: "create", type: "k", as: "c", fields: { title: "child" } }])).created.c;
+  const parent = ok(graph.commit([{ op: "create", type: "k", as: "p", fields: { title: "parent", secret: { s: 1 }, link: child } }])).created.p;
+  const copy = ok(graph.commit([{ op: "create", type: "k", as: "copy", from: { clone: parent } }])).created.copy;
+  const link = graph.resolve(copy, ["link"]) as NodeRef;
+  expect([graph.resolve(copy, ["secret"]), link.id === child.id, graph.resolve(link, ["title"])]).toEqual([{}, false, "child"]);
+  const dangling = ok(graph.commit([{ op: "create", type: "k", as: "d", fields: { link: { type: "k", id: "gone" } } }])).created.d;
+  const copied = ok(graph.commit([{ op: "create", type: "k", as: "x", from: { clone: dangling } }])).created.x;
+  expect(graph.resolve(copied, ["link"])).toEqual({ type: "k", id: "gone" });
+});
+
+test("ranges come in position order across nodes, including an entry only a snapshot covered", async () => {
+  const { scheduler, open } = storeSessions();
+  let graph = await open();
+  const a = create(graph, ITEM, { title: "a" }), b = create(graph, ITEM, { title: "b" });
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "a2" }]));
+  await drive(scheduler, graph.flush());
+  await drive(scheduler, graph.snapshotAll());
+  graph = await open();
+  const range = await drive(scheduler, graph.range(0, graph.position));
+  expect(range.map(entry => [entry.node.id, entry.seq])).toEqual([[a.id, 1], [b.id, 1], [a.id, 2]]);
+});
+
+test("a view at an entry of a long stream finds it; one at an entry whose commit ends in a node loaded from a snapshot reads the whole commit", async () => {
+  const { scheduler, open } = storeSessions();
+  let graph = await open();
+  const n = create(graph, ITEM, { title: "0" });
+  for (let i = 1; i <= 5; i++) ok(graph.commit([{ op: "set", node: n, path: ["title"], value: `${i}` }]));
+  expect((await graph.at({ node: n, seq: 2 }, [n])).resolve(n, ["title"])).toBe("1");
+  const s = { type: ITEM, id: "s-node" };
+  const a = ok(graph.commit([{ op: "create", type: ITEM, as: "a" }, { op: "create", type: ITEM, as: "s", id: "s-node", fields: { title: "s1" } },
+    { op: "rebase", node: { created: "a" }, base: s }])).created.a;
+  ok(graph.commit([{ op: "set", node: s, path: ["title"], value: "s2" }]));
+  await drive(scheduler, graph.flush());
+  await drive(scheduler, graph.snapshotAll());
+  graph = await open();
+  expect((await drive(scheduler, graph.at({ node: a, seq: 2 }, [a]))).resolve(a, ["title"])).toBe("s1");
+});
+
+test("a graph without a store runs no store driver; with one, a flush waiting on a store that never answers ends when the graph stops", async () => {
+  expect(graphOf(SYNTHETIC_TYPES).storeProcess).toBeUndefined();
+  const scheduler = new Scheduler(), life = new Aborter();
+  const graph = createGraph({ types: SYNTHETIC_TYPES, store: new SimStore(new MemoryStore(), scheduler), sources: sources(scheduler), signal: life.signal });
+  await drive(scheduler, graph.load());
+  create(graph, ITEM, { title: "a" });
+  let flushed = false;
+  void graph.flush().then(() => { flushed = true });
+  await settle();
+  life.abort();
+  await settle(); await settle();
+  expect(flushed).toBe(true);
+});
+
+test("a view at the head lists the conflicts the graph lists, acknowledged ones left out", async () => {
+  const warn = defineRule({ id: "warn", owner: "t", subject: ITEM, severity: "warning", evaluate: subject => [{ sentence: "w", subjects: [subject] }] });
+  const graph = graphOf(SYNTHETIC_TYPES, { rules: [warn] });
+  create(graph, ITEM, { title: "a" });
+  const [conflict] = graph.conflicts();
+  graph.acknowledge(conflict.id);
+  const view = await graph.at("head");
+  expect(view.conflicts().map(item => item.id)).toEqual(graph.conflicts().map(item => item.id));
+});
+
+test("a snapshot of an older schema is never used: the node folds from its whole stream, counted once", async () => {
+  const scheduler = new Scheduler(), memory = new MemoryStore(), store = new SimStore(memory, scheduler);
+  const a = { type: ITEM, id: "00000000-0000-4000-8000-00000000000a" };
+  memory.appendNow({ commit: "c1", entries: [sampleEntry(a, 1, "c1")], expect: [[a.id, 0]] });
+  memory.appendNow({ commit: "c2", entries: [sampleEntry(a, 2, "c2", { op: { kind: "set", path: ["tags", "k"], value: 1 } })], expect: [[a.id, 1]] });
+  memory.putSnapshotNow({ node: a, seq: 1, pos: 1, schema: "1", state: { name: "old", own: { [JSON.stringify(["name"])]: "from the snapshot" }, layers: [], trashed: false, retracted: false } });
+  const graph = createGraph({ types: SYNTHETIC_TYPES, store, sources: sources(scheduler), signal: new Aborter().signal });
+  const loaded = await drive(scheduler, graph.load());
+  expect([loaded.entries, graph.resolve(a, ["title"]), graph.resolve(a, ["tags", "k"])]).toEqual([2, "a1", 1]);
+});
+
+test("a fold that takes exactly the slow bound isn't slow", async () => {
+  const scheduler = new Scheduler(), memory = new MemoryStore(), store = new SimStore(memory, scheduler);
+  const clock = simClock(scheduler);
+  let tick = 0;
+  const graph = createGraph({ types: SYNTHETIC_TYPES, store, sources: { clock, random: seededRandom("a") }, signal: new Aborter().signal });
+  const a = create(await (async () => { await drive(scheduler, graph.load()); return graph; })(), ITEM, { title: "a" });
+  await drive(scheduler, graph.flush());
+  const timed = createGraph({ types: SYNTHETIC_TYPES, store, snapshotFoldMs: 5, sources: { clock: { ...clock, monotonic: () => (tick += 5) }, random: seededRandom("b") }, signal: new Aborter().signal });
+  await drive(scheduler, timed.load());
+  await idle(scheduler);
+  expect(memory.snapshotOf(a)).toBeUndefined();
+});
+
+test("pins: through a stored layer cycle, a diamond of sources, and a force-purged source", async () => {
+  const { scheduler, open } = storeSessions();
+  let graph = await open();
+  const x = create(graph, ITEM, { title: "x" }), y = create(graph, ITEM, { title: "y" });
+  await drive(scheduler, graph.flush());
+  const left = await open(), right = await open();
+  ok(left.commit([{ op: "rebase", node: x, base: y }]));
+  ok(right.commit([{ op: "rebase", node: y, base: x }]));
+  await drive(scheduler, left.flush());
+  await drive(scheduler, right.flush());
+  graph = await open();
+  const throughCycle = ok(graph.commit([{ op: "create", type: ITEM, as: "p", from: { fork: y, at: 2 } }])).created.p;
+  expect(graph.resolve(throughCycle, ["title"])).toBe("y");
+  // A diamond: d feeds from b and c, both forks of a.
+  const a = create(graph, ITEM, { title: "a" });
+  const b = ok(graph.commit([{ op: "create", type: ITEM, as: "b", from: { fork: a } }])).created.b;
+  const c = ok(graph.commit([{ op: "create", type: ITEM, as: "c", from: { fork: a } }])).created.c;
+  const d = ok(graph.commit([{ op: "create", type: ITEM, as: "d", from: { fork: b } }, { op: "feed", node: { created: "d" }, from: c, paths: [["tags"]] }])).created.d;
+  ok(graph.commit([{ op: "create", type: ITEM, as: "q", from: { fork: d, at: 2 } }]));
+  // A dependent whose source was purged by force can still be pinned.
+  const gone = create(graph, ITEM, { title: "gone" });
+  const orphan = ok(graph.commit([{ op: "create", type: ITEM, as: "o", from: { fork: gone } }])).created.o;
+  expect(await drive(scheduler, graph.purge(gone, { force: true }))).toEqual({ ok: true });
+  ok(graph.commit([{ op: "create", type: ITEM, as: "r", from: { fork: orphan, at: 1 } }]));
+});
+
+test("history cursors: entries after a seq, from memory or loaded, and no position for seq 0", async () => {
+  const { scheduler, open } = storeSessions();
+  let graph = await open();
+  const a = create(graph, ITEM, { title: "1" });
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "2" }]));
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "3" }]));
+  expect([(await graph.after(a, 1)).map(entry => entry.seq), (await graph.after(a, 3)).length, graph.posOf({ node: a, seq: 0 })]).toEqual([[2, 3], 0, undefined]);
+  await drive(scheduler, graph.flush());
+  await drive(scheduler, graph.snapshotAll());
+  graph = await open();
+  expect((await drive(scheduler, graph.after(a, 0))).map(entry => entry.seq)).toEqual([1, 2, 3]);
+  graph = await open();
+  expect((await drive(scheduler, graph.after(a, 1))).map(entry => entry.seq)).toEqual([2, 3]);
+});
+
+test("a past view: reads carry the seq then and whether a node is built in; conflicts are those of then; a node outside its roots whose history it didn't load reads as absent", async () => {
+  const flag = defineRule({ id: "flag", owner: "t", subject: ITEM, severity: "warning",
+    evaluate: (subject, context) => context.resolve(subject, ["title"]) === "bad" ? [{ sentence: "bad", subjects: [subject] }] : [] });
+  const { scheduler, open } = storeSessions();
+  let graph = await open();
+  const a = create(graph, ITEM, { title: "bad" });
+  const then = graph.position;
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "good" }]));
+  const b = create(graph, ITEM, { title: "later" });
+  await drive(scheduler, graph.flush());
+  await drive(scheduler, graph.snapshotAll());
+  const starter = { type: ITEM, id: constantId(ITEM, "starter") };
+  const rules = createGraph({ types: SYNTHETIC_TYPES, rules: [flag], sources: sources(scheduler, "rules") });
+  const r = create(rules, ITEM, { title: "bad" });
+  const rulesThen = rules.position;
+  ok(rules.commit([{ op: "set", node: r, path: ["title"], value: "good" }]));
+  expect((await rules.at(rulesThen)).conflicts().map(item => item.rule)).toEqual(["flag"]);
+  expect(rules.conflicts()).toEqual([]);
+  graph = await open();
+  const view = await drive(scheduler, graph.at(then, [a]));
+  expect([view.read(a)?.seq, view.read(starter)?.constant, view.read(a)?.constant, view.resolve(b)]).toEqual([1, true, false, undefined]);
+  const later = await drive(scheduler, graph.at(graph.position, [a, b]));
+  expect(later.read(b)?.seq).toBe(1);
+});
+
+test("commits record provenance only when given, and a pending commit without a label has none", async () => {
+  const { graph, scheduler, store } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const a = create(graph, ITEM, { title: "a" });
+  const provenance = { actor: "game", actorSeq: 7, at: 5 };
+  const told = ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "b" }], { provenance }));
+  expect(Object.keys(graph.pending().at(-1)!)).not.toContain("label");
+  await drive(scheduler, graph.flush());
+  expect(store!.inner.readStreamNow(a).find(entry => entry.commit === told.commit)).toMatchObject({ provenance, actor: "game", actorSeq: 7, at: 5 });
+});
+
+test("apply to source skips a feed that doesn't cover the path, and says exactly why a path can't be applied", () => {
+  const { graph } = harness();
+  const base = create(graph, ITEM, { title: "from base" }), side = create(graph, ITEM, { title: "side", tags: { t: 1 } });
+  const node = ok(graph.commit([{ op: "create", type: ITEM, as: "n", from: { fork: base } }])).created.n;
+  ok(graph.commit([{ op: "feed", node, from: side, paths: [["tags"]] }]));
+  ok(graph.commit([{ op: "set", node, path: ["title"], value: "mine" }]));
+  ok(graph.commit([{ op: "applyToSource", node, path: ["title"] }]));
+  expect([graph.resolve(base, ["title"]), graph.resolve(side, ["title"])]).toEqual(["mine", "side"]);
+  const refused = graph.commit([{ op: "applyToSource", node, path: ["nothing"] }]);
+  expect(refused.ok ? "" : refused.message).toBe("item has no field [\"nothing\"].");
+});
+
+test("a deep clone remaps a followed list of references, and leaves a plain value that looks like a reference as it is", () => {
+  const kinds = defineType({ type: "k", owner: "t", schema: "1", fields: { title: { kind: "value" }, data: { kind: "value" },
+    many: { kind: "refs", to: "k", clone: "follow" } } });
+  const graph = graphOf([kinds]);
+  const child = ok(graph.commit([{ op: "create", type: "k", as: "c", fields: { title: "child" } }])).created.c;
+  const parent = ok(graph.commit([{ op: "create", type: "k", as: "p", fields: { many: [child], data: { type: "k", id: child.id } } }])).created.p;
+  const copy = ok(graph.commit([{ op: "create", type: "k", as: "copy", from: { clone: parent } }])).created.copy;
+  const many = graph.resolve(copy, ["many"]) as NodeRef[];
+  expect([many.length, many[0].id === child.id, graph.resolve(many[0], ["title"]), graph.resolve(copy, ["data"])]).toEqual([1, false, "child", { type: "k", id: child.id }]);
+});
+
+test("a collapsed node reads with seq 0, now and in a past view; it isn't listed among a node's referrers; rules see a node's referrers", async () => {
+  const { graph, scheduler } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const target = create(graph, ITEM, { title: "t" });
+  const x = create(graph, ITEM, { title: "x", link: target });
+  create(graph, GROUP, { label: "h", members: { x } });
+  const before = graph.position;
+  create(graph, ITEM, { title: "later" });
+  await drive(scheduler, graph.flush());
+  expect(graph.referrers(target).map(item => item.node.id)).toEqual([x.id]);
+  expect(await drive(scheduler, graph.collapseInline(x))).toMatchObject({ ok: true });
+  expect(graph.read(x)?.seq).toBe(0);
+  expect((await drive(scheduler, graph.at(before, [x]))).read(x)?.seq).toBe(0);
+  expect(graph.referrers(target)).toEqual([]);
+  const order = defineRule({ id: "order", owner: "t", subject: ITEM, severity: "notice",
+    evaluate: (subject, context) => { const ids = context.referrers(subject).map(item => item.node.id); return ids.length > 1 ? [{ sentence: ids.join(" ") }] : []; } });
+  const ruled = graphOf(SYNTHETIC_TYPES, { rules: [order] });
+  const t = create(ruled, ITEM, { title: "t" }), old = create(ruled, ITEM, { title: "old" }), young = create(ruled, ITEM, { title: "young", link: t });
+  ok(ruled.commit([{ op: "set", node: old, path: ["link"], value: t }]));
+  expect(ruled.conflicts(t).map(item => item.sentence)).toEqual([`${old.id} ${young.id}`]);
+});
+
+test("change sets: each node once, sorted by ID, with its bookkeeping (created, name, layers, trashed, retracted, purged), the cause, and a label only when given", async () => {
+  const { graph, scheduler } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const sets: ChangeSet[] = [];
+  const life = new Aborter();
+  graph.subscribeAll(set => sets.push(set), { signal: life.signal });
+  const meta = (set: ChangeSet) => set.nodes.map(item => [item.node.id, [...item.meta]]);
+  const made = ok(graph.commit([{ op: "create", type: ITEM, as: "b", id: "b-id" }, { op: "create", type: ITEM, as: "a", id: "a-id" }], { label: "Make" }));
+  expect([made.changes.label, made.changes.cause, meta(made.changes)]).toEqual(["Make", "commit", [["a-id", ["created"]], ["b-id", ["created"]]]]);
+  const { a, b } = made.created;
+  const renamed = ok(graph.commit([{ op: "rename", node: a, name: "A" }]));
+  expect(renamed.changes).toStrictEqual({ commit: renamed.commit, cause: "commit", nodes: renamed.changes.nodes });
+  expect(meta(renamed.changes)).toEqual([["a-id", ["name"]]]);
+  expect(meta(ok(graph.commit([{ op: "rebase", node: a, base: b }])).changes)).toEqual([["a-id", ["layers"]]]);
+  expect(meta(ok(graph.commit([{ op: "trash", node: b }])).changes)).toEqual([["b-id", ["trashed"]]]);
+  const c = ok(graph.commit([{ op: "create", type: ITEM, as: "c", id: "c-id" }], { scope: "c" })).created.c;
+  const undone = graph.undo("c");
+  expect([undone.ok && undone.changes.cause, undone.ok && meta(undone.changes)]).toEqual(["undo", [["c-id", ["retracted"]]]]);
+  expect(graph.exists(c)).toBe(false);
+  await drive(scheduler, graph.flush());
+  expect(await drive(scheduler, graph.purge(b, { force: true }))).toEqual({ ok: true });
+  const purged = sets.at(-1)!;
+  expect([purged.cause, purged.nodes.find(item => item.node.id === "b-id")?.meta]).toEqual(["purge", ["purged"]]);
+  expect(sets.slice(0, 4).map(meta)).toEqual([meta(made.changes), meta(renamed.changes), [["a-id", ["layers"]]], [["b-id", ["trashed"]]]]);
+  life.abort();
+});
+
+test("a refused fix leaves everything as it was: no new node, no new entries, the same position and actor counter, the unique value it took free", () => {
+  const rule = defineRule({ id: "odd", owner: "t", subject: [ITEM], severity: "warning", evaluate: (subject, context) =>
+    context.resolve(subject, ["title"]) === "odd" ? [{ sentence: "odd", routes: [{ id: "sprawl", label: "Sprawl", consequence: "", patch: [
+      { op: "create", type: ITEM, as: "x", id: "x-id", fields: { code: "taken-by-fix" } },
+      { op: "rename", node: subject, name: "renamed" },
+      { op: "set", node: subject, path: ["link"], value: subject },
+    ] }] }] : [] });
+  const { graph } = harness({ extra: { rules: [...SYNTHETIC_RULES, rule] } });
+  const node = create(graph, ITEM, { title: "odd" });
+  const conflict = graph.conflicts(node).find(item => item.rule === "odd")!;
+  const position = graph.position, seq = graph.seqOf(node);
+  const actorSeqs = () => graph[STRATA_DEBUG]().records.flatMap(rec => rec.entries.map(entry => entry.actorSeq));
+  const before = Math.max(...actorSeqs());
+  const refused = graph.fix(conflict.id, "sprawl");
+  expect(refused.ok ? "" : refused.reason).toBe("conflict");
+  expect([graph.exists({ type: ITEM, id: "x-id" }), graph.read(node)?.name, graph.seqOf(node), graph.position]).toEqual([false, "", seq, position]);
+  ok(graph.commit([{ op: "create", type: ITEM, as: "y", fields: { code: "taken-by-fix" } }]));
+  expect(Math.max(...actorSeqs())).toBe(before + 1);
+});
+
+test("a clone gets fresh identity values, and the name given goes to its root only", () => {
+  const { graph } = harness();
+  const child = create(graph, ITEM, { title: "child" });
+  const parent = ok(graph.commit([{ op: "create", type: ITEM, as: "p", name: "Parent", fields: { title: "parent", link: child } }])).created.p;
+  ok(graph.commit([{ op: "rename", node: child, name: "Child" }]));
+  const copy = ok(graph.commit([{ op: "create", type: ITEM, as: "c", name: "Copy", from: { clone: parent } }])).created.c;
+  const linked = graph.resolve(copy, ["link"]) as NodeRef;
+  expect([graph.read(copy)?.name, graph.read(linked)?.name]).toEqual(["Copy", "Child"]);
+  const code = graph.resolve(copy, ["code"]);
+  expect(typeof code === "string" && code !== graph.resolve(parent, ["code"])).toBe(true);
+  expect(typeof graph.resolve(linked, ["code"])).toBe("string");
+  const unnamed = ok(graph.commit([{ op: "create", type: ITEM, as: "u", from: { clone: parent } }])).created.u;
+  expect(graph.read(unnamed)?.name).toBe("Parent");
+});
+
+test("layers: a list, or refused; a pin to a node edited in the same change; a pin to a collapsed node's entry is missing; a cycle names the node when it has a name", async () => {
+  const { graph, scheduler } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const reason = (edits: unknown[]) => { const result = graph.commit(edits as never); return result.ok ? "ok" : `${result.reason}: ${result.message}`; };
+  expect(reason([{ op: "create", type: ITEM, as: "x", layers: {} }])).toBe("value: Layers are a list.");
+  const s = create(graph, ITEM, { title: "s" });
+  expect(reason([{ op: "layers", node: s, layers: {} }])).toBe("value: Layers are a list.");
+  expect(reason([{ op: "set", node: s, path: ["title"], value: "s2" }, { op: "create", type: ITEM, as: "p", from: { fork: s, at: 1 } }])).toBe("ok");
+  const inner = create(graph, ITEM, { title: "inner" });
+  create(graph, GROUP, { label: "h", members: { inner } });
+  await drive(scheduler, graph.flush());
+  expect(await drive(scheduler, graph.collapseInline(inner))).toMatchObject({ ok: true });
+  expect(reason([{ op: "create", type: ITEM, as: "q", from: { fork: inner, at: 1 } }])).toMatch(/^missing:/);
+  const named = ok(graph.commit([{ op: "create", type: ITEM, as: "n", name: "Named" }])).created.n;
+  const fork = ok(graph.commit([{ op: "create", type: ITEM, as: "f", from: { fork: named } }])).created.f;
+  expect(reason([{ op: "rebase", node: named, base: fork }])).toBe("cycle: That item already takes values from \u201cNamed\u201d.");
+  const plain = create(graph, ITEM, {});
+  const plainFork = ok(graph.commit([{ op: "create", type: ITEM, as: "g", from: { fork: plain } }])).created.g;
+  expect(reason([{ op: "rebase", node: plain, base: plainFork }])).toBe("cycle: That item already takes values from this one.");
+});
+
+test("invalidation: a change reaching a node twice by different paths reaches its dependents with both, a change in a stored layer cycle ends, and a commit changing a reference and a value re-indexes the reference", async () => {
+  const { graph } = harness();
+  const s0 = create(graph, ITEM, { tags: { k: 1 } }), s1 = create(graph, ITEM, { title: "one" });
+  const s2 = ok(graph.commit([{ op: "create", type: ITEM, as: "s2", from: { fork: s0 } }])).created.s2;
+  const d = ok(graph.commit([{ op: "create", type: ITEM, as: "d", from: { fork: s1 } }, { op: "feed", node: { created: "d" }, from: s2, paths: [["tags"]] }])).created.d;
+  const e = ok(graph.commit([{ op: "create", type: ITEM, as: "e", from: { fork: d } }])).created.e;
+  expect([graph.resolve(e, ["title"]), graph.resolve(e, ["tags", "k"])]).toEqual(["one", 1]);
+  ok(graph.commit([{ op: "set", node: s1, path: ["title"], value: "two" }, { op: "set", node: s0, path: ["tags", "k"], value: 2 }]));
+  expect([graph.resolve(e, ["title"]), graph.resolve(e, ["tags", "k"])]).toEqual(["two", 2]);
+  const target = create(graph, ITEM, { title: "target" });
+  graph.referrers(target);
+  ok(graph.commit([{ op: "set", node: s1, path: ["link"], value: target }, { op: "set", node: s1, path: ["title"], value: "three" }]));
+  // s1 now references it, and d and e through what they inherit from s1.
+  expect(graph.referrers(target).map(item => item.node.id).sort()).toEqual([s1.id, d.id, e.id].sort());
+  const { scheduler, open } = storeSessions();
+  const first = await open();
+  const x = create(first, ITEM, { title: "x" }), y = create(first, ITEM, { title: "y" });
+  await drive(scheduler, first.flush());
+  const left = await open(), right = await open();
+  ok(left.commit([{ op: "rebase", node: x, base: y }]));
+  ok(right.commit([{ op: "rebase", node: y, base: x }]));
+  await drive(scheduler, left.flush());
+  await drive(scheduler, right.flush());
+  const cyclic = await open();
+  cyclic.conflicts();
+  ok(cyclic.commit([{ op: "set", node: x, path: ["tags", "k"], value: 5 }]));
+  expect(cyclic.resolve(x, ["tags", "k"])).toBe(5);
+});
+
+test("a session node's stream compacts in memory once its Undo history ends", async () => {
+  const pose = defineType({ type: "pose", owner: "t", schema: "1", persistence: "session", fields: { x: { kind: "value" } } });
+  const graph = graphOf([pose]);
+  const p = ok(graph.commit([{ op: "create", type: "pose", as: "p", fields: { x: 0 } }])).created.p;
+  for (let i = 1; i <= 3; i++) ok(graph.commit([{ op: "set", node: p, path: ["x"], value: i }]));
+  graph.forgetHistory();
+  expect(await graph.compact(p)).toMatchObject({ ok: true, before: 4 });
 });

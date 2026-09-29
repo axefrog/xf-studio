@@ -2,7 +2,7 @@
  * Mutation testing of the engine (no mutation tool runs under Bun, so this is a small one). Each mutant is one small
  * change to one engine file (see `mutants` in `instrument.ts`); the suite runs against it (`preload-mutant.ts` swaps
  * the file in as it loads) and must fail. A mutant the suite survives is either a missing test or an equivalent
- * change, recorded as such in `tools/equivalent-mutants.json` with the reason.
+ * change, recorded as such in `tools/equivalent-mutants.md` with the reason.
  *
  *   STRATA_ACORN=<acorn.mjs> bun tools/mutate.ts [--files a.ts,b.ts] [--workers 4] [--timeout 60000]
  *     [--cache results.json] [--survivors survivors.txt] [--recheck] [--] [test files…]
@@ -46,8 +46,23 @@ const onlyCache = flag("--only-cache");
 const ratchet = flag("--ratchet"), record = flag("--record");
 const dash = argv.indexOf("--");
 const tests = dash >= 0 ? argv.slice(dash + 1) : argv.length ? argv : DEFAULT_TESTS;
-const equivalents = new Map<string, string>(existsSync(join(ROOT, "tools", "equivalent-mutants.json"))
-  ? (JSON.parse(readFileSync(join(ROOT, "tools", "equivalent-mutants.json"), "utf8")) as { key: string; reason: string }[]).map(item => [item.key, item.reason]) : []);
+/**
+ * The mutants recorded as equivalent: in the Markdown file, a list item holding a key in double backticks, then its
+ * reason on the indented lines after it.
+ */
+function readEquivalents(path: string): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!existsSync(path)) return out;
+  let key: string | undefined;
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const item = /^- ``(.+)``\s*$/.exec(line);
+    if (item) { key = item[1]; out.set(key, ""); continue; }
+    if (key && /^\s+\S/.test(line)) out.set(key, `${out.get(key)} ${line.trim()}`.trim());
+    else if (!/^\s*$/.test(line)) key = undefined;
+  }
+  return out;
+}
+const equivalents = readEquivalents(join(ROOT, "tools", "equivalent-mutants.md"));
 
 type Status = "killed" | "survived" | "timeout";
 type Result = { status: Status; file: string; mutant: Mutant; ms: number };

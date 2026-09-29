@@ -6,6 +6,7 @@
  */
 import { expect, test } from "bun:test";
 import { AbortedError, Aborter, anySignal, catalogue, combine, createEnvironment, errorValue, filter, flatMap, LATEST, map, scan, standardOperators, StrataSignal, UNCHANGED } from "strata";
+import { onAbort } from "../src/kernel/abort";
 import type { ComputeContext, DemandSpec, Environment, Json, KEntry, KNode, Process } from "strata";
 import { Scheduler, settle, simClock } from "strata/testing";
 import { kernelInternals } from "../src/kernel/kernel";
@@ -585,10 +586,14 @@ test("a state machine: only its own states and events count, guards read their i
   expect(run({ inputs: [], cycle: 1, at: 0, env })).toEqual({ state: "idle" });
   expect(run(at("idle", input(true, 1), input(false, false)))).toBe(UNCHANGED);
   expect(run(at("idle", input(true, 1), input(false, true)))).toEqual({ state: "busy", from: "idle", event: "go", effects: ["start"] });
-  expect(run(at("busy", input(true, 1), input(false)))).toEqual({ state: "idle", from: "busy", event: "go" });
+  // No effects: no effects member at all.
+  expect(run(at("busy", input(true, 1), input(false)))).toStrictEqual({ state: "idle", from: "busy", event: "go" });
   expect(run(at("idle", input(false, 1), input(true, true)))).toBe(UNCHANGED);
   expect(run(at("toString", input(true, 1)))).toBe(UNCHANGED);
   expect(run(at("idle", input(true, 1), input(false, true), input(true, 1)))).toEqual({ state: "busy", from: "idle", event: "go", effects: ["start"] });
+  // An input the machine doesn't name is no event, even where a state has an event called "undefined".
+  const odd = machine({ initial: "idle", inputs: ["go"], states: { idle: { on: { undefined: { target: "odd" } } } } } as Json);
+  expect(odd(at("idle", input(false, 1), input(true, 1)))).toBe(UNCHANGED);
   const bare = machine({ initial: "only", states: { only: { on: { x: { target: 5 } } } } } as unknown as Json);
   expect(bare(at("only", input(true, 1)))).toBe(UNCHANGED);
 });
@@ -618,4 +623,50 @@ test("reading a node during a cycle returns its latest without activating it", (
   expect(env.read(dormant)?.value).toBe(4);
   expect(dormant.active).toBe(false);
   life.abort();
+});
+
+/** A host-like signal that honours `once` the way an EventTarget does, and counts what it still holds. */
+class HostSignal {
+  aborted = false; reason: unknown = undefined;
+  held: { listener: () => void; once: boolean }[] = [];
+  addEventListener(_type: "abort", listener: () => void, options?: { readonly once?: boolean }): void { this.held.push({ listener, once: !!options?.once }); }
+  removeEventListener(_type: "abort", listener: () => void): void { this.held = this.held.filter(item => item.listener !== listener); }
+  fire(reason: unknown): void {
+    this.aborted = true; this.reason = reason;
+    for (const item of [...this.held]) { if (item.once) this.removeEventListener("abort", item.listener); item.listener(); }
+  }
+}
+const listenersOf = (signal: unknown) => (signal as { listeners: unknown[] }).listeners.length;
+
+test("tokens leave nothing behind: a fired signal drops its listeners, an aborted parent links no later parent, a one-time watch leaves a host signal", () => {
+  const token = new Aborter();
+  const seen: string[] = [];
+  const listener = () => seen.push("abort");
+  token.signal.addEventListener("abort", listener);
+  // Only the abort type is a cancellation listener: removing another type's leaves it.
+  token.signal.removeEventListener("other" as "abort", listener);
+  token.abort("done");
+  expect([seen, listenersOf(token.signal)]).toEqual([["abort"], 0]);
+  const gone = new Aborter();
+  gone.abort("early");
+  const live = new Aborter();
+  const child = new Aborter(gone.signal, live.signal);
+  expect([child.signal.aborted, child.signal.reason, listenersOf(live.signal)]).toEqual([true, "early", 0]);
+  const host = new HostSignal();
+  onAbort(host, () => seen.push("host"));
+  host.fire("stop");
+  expect([seen, host.held.length]).toEqual([["abort", "host"], 0]);
+});
+
+test("flatMap reading an inner node that has no entry yet leaves its output unchanged, however often the outer value repeats", () => {
+  const { env, stream } = world();
+  const outer = env.seed<number>({ initial: 0 });
+  const blank = env.seed<number>();
+  const node = flatMap(env, outer, () => blank);
+  watch(node);
+  env.observe(outer, 1);
+  env.observe(outer, 2);
+  expect(stream(node)).toEqual([]);
+  env.observe(blank, 7);
+  expect(stream(node)).toEqual([7]);
 });

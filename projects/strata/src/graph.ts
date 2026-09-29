@@ -652,6 +652,8 @@ export class StrataGraph implements GraphView {
     const cycle = this.layerCycle(work);
     if (cycle) return cycle;
     const commitId = this.sources.random.stream("commits").uuid(), at = this.sources.clock.now();
+    // A commit refused after it was applied (a fix adding a blocking conflict) gives back its positions and counters.
+    const startPos = this.headPos, startActorSeq = this.actorSeq;
     const groups = new Map<string, { ref: NodeRef; def: TypeDef; entries: Entry[] }>();
     const basis: [NodeId, number][] = [];
     let first = true;
@@ -681,7 +683,7 @@ export class StrataGraph implements GraphView {
     const meta: CommitMeta = { ...firstGroup.entries[0].meta, basis };
     firstGroup.entries[0] = freeze({ ...firstGroup.entries[0], meta });
 
-    const saved = this.saveRecords(groups.keys());
+    const saved = { ...this.saveRecords(groups.keys()), headPos: startPos, actorSeq: startActorSeq };
     const conflictsBefore = check ? new Set([...this.blockingConflicts()].map(item => item.id)) : null;
     const before = this.applyGroups(groups, cause);
     if (check) {
@@ -951,6 +953,7 @@ export class StrataGraph implements GraphView {
     const id = edit.id ?? this.sources.random.stream("ids").uuid();
     if (this.taken(work, id)) refuse("exists", "A node with that ID already exists.");
     const ref = { type: def.type, id };
+    if (edit.layers !== undefined && !Array.isArray(edit.layers)) refuse("value", "Layers are a list.");
     let layers: Layer[] = [...(edit.layers ?? [])];
     let name = edit.name;
     if (edit.from && "fork" in edit.from) {

@@ -806,3 +806,64 @@ test("loading a node's history takes only what it lacks: another window's newer 
   expect([later.seqOf(n), later.resolve(n, ["title"])]).toEqual([3, "theirs"]);
   expect((await drive(scheduler, later.history(n))).map(entry => entry.seq)).toEqual([1, 2, 3]);
 });
+
+test("recovery rejects a commit whose layer source is gone, and keeps one tagging a built-in's entry; a view at a built-in's entry reads the start", async () => {
+  const { scheduler, store, open } = sessions(SYNTHETIC_TYPES, { retryMs: 40, replyTimeoutMs: 200 });
+  const main = await open();
+  const source = create(main, ITEM, { title: "source" }), n = create(main, ITEM, { title: "n" });
+  await drive(scheduler, main.flush());
+  store.failNext = 1000;
+  const fork = ok(main.commit([{ op: "create", type: ITEM, as: "f", from: { fork: source } }]));
+  const starter = { type: ITEM, id: main.list(ITEM).find(ref => ref.id.startsWith("builtin:"))!.id };
+  const tagged = ok(main.commit([{ op: "tag", node: n, label: "t", entries: [{ node: starter, seq: 1 }] }]));
+  const recovery = main.pending();
+  scheduler.drop();
+  store.failNext = 0;
+  // Another window deletes the fork's source for good before the restart.
+  const other = await open();
+  expect(await drive(scheduler, other.purge(source))).toEqual({ ok: true });
+  const later = await open();
+  expect(later.recover(recovery)).toEqual({ applied: 1, skipped: 0, rejected: 1 });
+  expect(later.rejected().map(item => item.commit)).toEqual([fork.commit]);
+  await drive(scheduler, later.flush());
+  expect(later.acknowledged(tagged.commit)).toBe(true);
+  expect((await drive(scheduler, later.at({ node: starter, seq: 1 }))).resolve(starter, ["title"])).toBe("starter");
+});
+
+test("two windows giving one unique value to different nodes: moving one holder off it leaves the other holding it", async () => {
+  const { scheduler, open } = sessions();
+  const a = await open(), b = await open();
+  const x = create(a, ITEM, { title: "x" });
+  await drive(scheduler, a.flush());
+  await drive(scheduler, b.sync());
+  const y = create(b, ITEM, { title: "y" });
+  ok(b.commit([{ op: "set", node: y, path: ["code"], value: "same" }]));
+  ok(a.commit([{ op: "set", node: x, path: ["code"], value: "same" }]));
+  await drive(scheduler, a.flush());
+  await drive(scheduler, b.flush());
+  await drive(scheduler, a.sync());
+  ok(a.commit([{ op: "set", node: x, path: ["code"], value: "moved" }]));
+  const z = create(a, ITEM, { title: "z" });
+  const taken = a.commit([{ op: "set", node: z, path: ["code"], value: "same" }]);
+  expect(taken.ok ? "ok" : taken.reason).toBe("unique");
+});
+
+test("recovery keeps a commit whose layer source it creates itself or is collapsed", async () => {
+  const { scheduler, store, open } = sessions(SYNTHETIC_TYPES, { retryMs: 40, replyTimeoutMs: 200 });
+  const main = await open();
+  const x = create(main, ITEM, { title: "x" });
+  create(main, GROUP, { label: "h", members: { x } });
+  await drive(scheduler, main.flush());
+  expect(await drive(scheduler, main.collapseInline(x))).toMatchObject({ ok: true });
+  store.failNext = 1000;
+  ok(main.commit([{ op: "create", type: ITEM, as: "a", id: "a-node", fields: { title: "a" } },
+    { op: "create", type: ITEM, as: "b", from: { fork: { type: ITEM, id: "a-node" } } }]));
+  const fork = ok(main.commit([{ op: "create", type: ITEM, as: "f", from: { fork: x } }]));
+  const recovery = main.pending();
+  scheduler.drop();
+  store.failNext = 0;
+  const later = await open();
+  expect(later.recover(recovery)).toEqual({ applied: 2, skipped: 0, rejected: 0 });
+  await drive(scheduler, later.flush());
+  expect(later.resolve(fork.created.f, ["title"])).toBe("x");
+});

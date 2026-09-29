@@ -55,10 +55,12 @@ test("an operator that fails to make its node is reported with its message, what
     broken: { kind: "combinator", create: () => { throw new Error("bad params"); } },
     odd: { kind: "combinator", create: () => { throw "just text"; } } };
   const model = env.seed<GraphModel>({ initial: { nodes: [{ id: "a", kind: "combinator", op: "broken" }, { id: "b", kind: "combinator", op: "odd" }] } });
-  erect(env, model, operators).token.abort();
+  const built = erect(env, model, operators);
   const messages = (appended.get("$errors") ?? []).map(entry => (entry.value as { message: string }).message);
-  expect(messages.some(message => message.includes("bad params"))).toBe(true);
-  expect(messages.some(message => message.includes("just text"))).toBe(true);
+  expect(messages).toEqual(["Operator broken couldn't be made for a: bad params", "Operator odd couldn't be made for b: just text"]);
+  // Neither is erected, and nothing else goes wrong.
+  expect([built.live("a"), built.live("b"), built.nodes.value()]).toEqual([undefined, undefined, {}]);
+  built.token.abort();
 });
 
 test("an ID another node already holds is refused; a model with no entry erects nothing; null or an error as the model keeps what was erected", () => {
@@ -81,6 +83,7 @@ test("an ID another node already holds is refused; a model with no entry erects 
   env.observe(source, "fail" as never);
   expect(built.live("a")).toBe(a);
   expect(codes()).toEqual(["model", "model", "model"]);
+  expect(env.errors.value()).toMatchObject({ message: "The model is an error: no model" });
   expect(modelProblem({ nodes: [{ id: "x", kind: "seed" }] })).toBeNull();
   expect(modelProblem({ nodes: [{ id: "x", kind: "seed" }] }, id => id === "x")).toContain("already taken");
   built.token.abort();
@@ -104,6 +107,12 @@ test("an erector rewires a node whose demand changes between a spec and a spec n
   expect(w.inputs).toBe(again);
   env.observe(model, nodes({ demand: { latest: true } }));
   expect(w.inputs[0].demand).toEqual({ latest: true });
+  // One plain spec for another, and one of two inputs for another: both rewire.
+  env.observe(model, nodes({ demand: { rolling: { entries: 3 } } }));
+  expect(w.inputs[0].demand).toEqual({ rolling: { entries: 3 } });
+  env.observe(model, nodes({ inputs: ["s", "spec"] }));
+  env.observe(model, nodes({ inputs: ["s", "x"] }, [{ id: "x", kind: "seed" }]));
+  expect(w.inputs.map(input => input.node)).toEqual([built.live("s")!, built.live("x")!]);
   built.token.abort();
   expect(env.node("w")).toBeUndefined();
 });
@@ -121,7 +130,29 @@ test("a model change and the erector's end in one cycle: the end wins and nothin
   expect(built.live("b")).toBeUndefined();
   expect(env.node("a")).toBeUndefined();
   expect(env.node("e")).toBeUndefined();
+  expect(Object.keys(built.nodes.value() ?? {})).not.toContain("b");
   life.abort();
+});
+
+test("an erector without a name is called so, and once stopped it erects its model afresh when started again", () => {
+  const { env } = world();
+  const model = env.seed<GraphModel>({ initial: { nodes: [{ id: "a", kind: "seed", initial: 1 }] } });
+  const built = erect(env, model);
+  expect([built.driver.name, env.allNodes().some(node => node.name === "erector model")]).toEqual(["erector", true]);
+  const first = built.live("a");
+  built.token.abort();
+  expect(env.node("a")).toBeUndefined();
+  const again = new Aborter();
+  built.driver.start(again.signal);
+  expect(built.live("a")).not.toBe(first);
+  expect(env.node("a")?.value()).toBe(1);
+  again.abort();
+});
+
+test("a model's format problems are named exactly", () => {
+  expect(modelProblem("a list of nodes")).toBe("a model is an object with a nodes list.");
+  expect(modelProblem({ nodes: ["a node"] })).toBe("node 0 is not an object.");
+  expect(modelProblem({ nodes: [{ id: "a", kind: "combinator", inputs: ["b", 5] }] })).toBe("a's inputs must be model IDs or node references.");
 });
 
 test("a node forgotten by its token also ends the host demand on it", () => {
@@ -225,10 +256,10 @@ test("a model node is replaced when its kind, operator, parameters or a seed's f
 });
 
 test("a model seed with no entry erects nothing until its first model arrives", () => {
-  const { env } = world();
+  const { env, codes } = world();
   const model = env.seed<GraphModel>();
   const built = erect(env, model);
-  expect(built.nodes.value()).toEqual({});
+  expect([built.nodes.value(), codes()]).toEqual([{}, []]);
   env.observe(model, { nodes: [{ id: "a", kind: "seed", initial: 1 }] });
   expect(built.live("a")?.value()).toBe(1);
   built.token.abort();
