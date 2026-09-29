@@ -730,3 +730,18 @@ test("diagnostics' pure half is DOM- and host-free, and only composition roots i
   expect([...reachIn(leak, "diagnostics/actions", true)]).toContain("diagnostics/host-log");
   expect(pageGlobals(`${source("diagnostics/redact")}\nconst __probe = window.location;`)).toContain("window");
 });
+
+test("the local setup's host readiness and page service share their codes through a contract, not each other (DESK-14)", () => {
+  expect(resolved("local-settings-readiness")).not.toContain("local-setup-actions");
+  expect(resolved("local-settings-readiness")).toContain("local-readiness-codes");
+  expect(resolved("local-setup-actions")).toContain("local-readiness-codes");
+  expect(resolved("local-readiness-codes")).toEqual([]);
+});
+
+test("the page's host devices share one request helper and import no other device (UPD-03)", () => {
+  for (const device of ["browser-update-check-device", "browser-desktop-app-device"]) {
+    expect(resolved(device)).toContain("browser-host-request");
+    expect(resolved(device).filter(name => name.startsWith("browser-") && name !== "browser-host-request")).toEqual([]);
+  }
+  expect(resolved("browser-host-request")).toEqual([]);
+});

@@ -1,5 +1,5 @@
-import { dirname, resolve, sep } from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { resolve, sep } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
 import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
@@ -25,6 +25,7 @@ import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods
 import { createSavesHandler } from "./src/features/save-explorer/host/saves-server";
 import { savesFolderProbe, savesHostSources } from "./src/saves-host-sources";
 import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "./src/update-check-host";
+import { textFileAt } from "./src/derived-cache";
 import { gitHubReleases, SIMULATED_RELEASE_KINDS, type SimulatedReleaseKind, simulatedReleases } from "./src/update-check-github";
 import desktopPackage from "./desktop/package.json";
 import { createDesktopAppHandler, createDesktopAppHostPort, DESKTOP_APP_READ_ONLY_TEST_SERVER, DESKTOP_APP_READ_ONLY_VERIFICATION, detectDesktopApp } from "./src/desktop-app-host";
@@ -103,10 +104,6 @@ const detectDesktop = () => detectDesktopApp(createDesktopAppHostPort(), { deskt
   siteConfig: resolve(import.meta.dir, "..", "site", "site.config.json") });
 // Checking for a newer XF Studio against its GitHub releases. The version is the desktop app's (desktop/package.json is the single source).
 // An isolated server may simulate the answer (XFS_UPDATE_CHECK_FIXTURE=newer|current|offline|slow) for tests and interface reviews.
-/** One small text file the host keeps (the update check's memory), written atomically. */
-const textFileAt = (path: string) => ({ read: () => existsSync(path) ? readFileSync(path, "utf8") : null,
-  write: (text: string) => { mkdirSync(dirname(path), { recursive: true }); const temporary = `${path}.${process.pid}.tmp`;
-    writeFileSync(temporary, text); renameSync(temporary, path); } });
 const updateFixture = state.isolated ? process.env.XFS_UPDATE_CHECK_FIXTURE : undefined;
 const updateCheckRequests = updateCheckEndpoints({ installed: desktopPackage.version, now: () => Date.now(),
   releases: SIMULATED_RELEASE_KINDS.includes(updateFixture as SimulatedReleaseKind)

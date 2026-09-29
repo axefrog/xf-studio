@@ -2,7 +2,7 @@
  * The page's side of the update check (`update-check.ts` holds the policy, run by the host). A presentation dispatches typed actions and
  * reads a snapshot: the check at start (after first paint; the host decides whether it runs), the person's own check, and skipping a
  * version. The check at start waits for first paint and a moment more (time from the clock source), so it never competes with the Studio's
- * own start; the person's check pre-empts a check at start still waiting. Cancellation is by `AbortSignal`.
+ * own start; the person's check pre-empts a check at start still in that wait (once sent, the host joins the two). Cancellation is by `AbortSignal`.
  */
 import { UPDATE_CHECK_DESCRIPTORS } from "./studio-action-descriptors";
 import { UPDATE_CHECK_SCHEMA, type UpdateCheckAnswer } from "./update-check";
@@ -36,7 +36,8 @@ const UNREACHABLE = "XF Studio couldn't check for updates just now.";
 export class UpdateCheckActions {
   private state: UpdateCheckState = { busy: null, answer: null, checkedByPerson: false, unreachable: false };
   private listeners = new Set<() => void>();
-  private startup: AbortController | null = null;
+  /** The check at start while it is still in its quiet wait (the person's own check sets it aside only then). */
+  private waiting: AbortController | null = null;
   /**
    * @param transport the host's endpoint, or null where no host checks (fixtures).
    * @param clock the clock source's timers; without one the check at start asks at once.
@@ -70,15 +71,17 @@ export class UpdateCheckActions {
   async dispatch(action: UpdateCheckAction, signal?: AbortSignal): Promise<UpdateCheckOutcome> {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Not available right now." };
-    // The person's own check comes first: a check at start still waiting is abandoned.
-    if (action.kind === "updates.check") this.startup?.abort();
+    // The person's own check comes first: a check at start still in its quiet wait is abandoned. Once sent, it is left to finish
+    // (the host joins both to one request, so aborting it here would only fail the person's check).
+    if (action.kind === "updates.check") this.waiting?.abort();
     const controller = new AbortController();
     const stop = () => controller.abort();
     signal?.addEventListener("abort", stop, { once: true });
     if (action.kind === "updates.startupCheck") {
-      this.startup = controller;
+      this.waiting = controller;
       if (this.clock) await this.quietMoment(controller.signal);
-      if (controller.signal.aborted) { if (this.startup === controller) this.startup = null; signal?.removeEventListener("abort", stop);
+      if (this.waiting === controller) this.waiting = null;
+      if (controller.signal.aborted) { signal?.removeEventListener("abort", stop);
         return { ok: false, code: "cancelled", message: "The check at start was set aside." }; }
     }
     const body = action.kind === "updates.skipVersion" ? { action: "skip" as const, version: action.version }
@@ -94,7 +97,6 @@ export class UpdateCheckActions {
       return { ok: false, code: controller.signal.aborted ? "cancelled" : "transport", message: UNREACHABLE };
     } finally {
       signal?.removeEventListener("abort", stop);
-      if (this.startup === controller) this.startup = null;
       if (action.kind !== "updates.skipVersion" && this.state.busy === action.kind) this.publish({ busy: null });
     }
   }

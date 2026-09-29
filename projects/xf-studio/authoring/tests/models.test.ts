@@ -6,15 +6,18 @@
  * Schema, validated here by a minimal validator (no dependency).
  */
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CAPABILITIES, KINDS, MODELS_DIR, loadModels, renderIndex, type Model } from "../tools/models-index";
+import { CAPABILITIES, CATALOGUE_FILES, catalogueStrays, KINDS, MODELS_DIR, loadModels, renderIndex, type Model } from "../tools/models-index";
 
 const SCHEMA_DIR = join(MODELS_DIR, "schema");
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 const TESTS = fileURLToPath(new URL("./", import.meta.url));
 const REF = /^(type|source|sink|operator|driver|process|runtime|request|action|panel|flow):([a-z0-9]+(?:-[a-z0-9]+)*)$/;
+/** A string that starts like a reference (`<kind>:`); one that doesn't then match `REF` is a malformed reference. */
+const REF_LIKE = /^(type|source|sink|operator|driver|process|runtime|request|action|panel|flow):/;
 
 // ---------------------------------------------------------------------------------------------------------------
 // A minimal JSON Schema validator: the keywords the catalogue's schemas use, and nothing else.
@@ -58,6 +61,7 @@ export function validate(value: unknown, schema: Schema, file: string, path = "$
     const text = value as string;
     if (typeof schema.pattern === "string" && !new RegExp(schema.pattern, "u").test(text)) errors.push(`${path}: "${text}" doesn't match ${schema.pattern}`);
     if (typeof schema.minLength === "number" && text.length < schema.minLength) errors.push(`${path}: shorter than ${schema.minLength}`);
+    if (typeof schema.maxLength === "number" && text.length > schema.maxLength) errors.push(`${path}: longer than ${schema.maxLength}`);
   }
   if (t === "integer" || t === "number") {
     if (typeof schema.minimum === "number" && (value as number) < schema.minimum) errors.push(`${path}: below ${schema.minimum}`);
@@ -111,6 +115,27 @@ const refsIn = (value: unknown, out: string[] = []): string[] => {
   else if (value && typeof value === "object") for (const item of Object.values(value)) refsIn(item, out);
   return out;
 };
+/** Strings that start like a reference (`<kind>:`) but aren't one. */
+const malformedRefs = (value: unknown, out: string[] = []): string[] => {
+  if (typeof value === "string") { if (REF_LIKE.test(value) && !REF.test(value)) out.push(value); }
+  else if (Array.isArray(value)) for (const item of value) malformedRefs(item, out);
+  else if (value && typeof value === "object") for (const item of Object.values(value)) malformedRefs(item, out);
+  return out;
+};
+/** The requests some other model raises: a driver's or flow's `raises`, an action's effect, a flow's steps, a fault's route. A model never raises itself. */
+function raisedRequests(models: readonly Model[]): Set<string> {
+  const raised = new Set<string>();
+  for (const model of models) {
+    const self = `${model.kind}:${model.id}`;
+    const add = (ref: string) => { if (ref !== self) raised.add(ref); };
+    for (const ref of (model.raises as string[] | undefined) ?? []) add(ref);
+    const effect = model.effect as { raises?: string } | undefined;
+    if (effect?.raises) add(effect.raises);
+    for (const step of (model.steps as { model: string }[] | undefined) ?? []) add(step.model);
+    for (const item of (model.faults as { goesTo: string }[] | undefined) ?? []) add(item.goesTo);
+  }
+  return raised;
+}
 
 /** The members of each kind that hold JSON Schemas of plain data. */
 const SCHEMA_MEMBERS: Readonly<Record<string, readonly string[]>> = {
@@ -160,6 +185,33 @@ describe("the validator", () => {
     expect(validate({ ...probe, fields: { r: { kind: "ref" } } }, SCHEMAS["type.schema.json"], "type.schema.json").length).toBeGreaterThan(0);
     expect(checkInner({ type: "object", properties: { a: { $ref: "shapes.schema.json#/$defs/nope" } } }, "probe").length).toBe(1);
   });
+
+  test("enforces maxLength (CORE-147)", () => {
+    expect(validate("abc", { type: "string", maxLength: 3 }, "probe")).toEqual([]);
+    expect(validate("abcd", { type: "string", maxLength: 3 }, "probe")).toEqual(["$: longer than 3"]);
+  });
+
+  test("the catalogue checks refuse strays, self-raised requests and malformed references (CORE-147)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xfs-models-"));
+    try {
+      for (const kind of [...KINDS, "schema"]) mkdirSync(join(dir, kind));
+      for (const name of CATALOGUE_FILES) writeFileSync(join(dir, name), "");
+      writeFileSync(join(dir, "request", "probe.json"), JSON.stringify({ kind: "request", id: "probe" }));
+      expect(catalogueStrays(dir)).toEqual([]);
+      mkdirSync(join(dir, "drivers"));
+      writeFileSync(join(dir, "drivers", "misfiled.json"), "{}");
+      writeFileSync(join(dir, "request", "notes.txt"), "");
+      writeFileSync(join(dir, "schema", "extra.json"), "{}");
+      writeFileSync(join(dir, "stray.json"), "{}");
+      expect(catalogueStrays(dir)).toEqual(["drivers", "request/notes.txt", "schema/extra.json", "stray.json"]);
+      expect(() => loadModels(dir)).toThrow("drivers");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+    const request = { kind: "request", id: "loop", owner: "platform", summary: "", status: "target", faults: [{ goesTo: "request:loop" }] } as unknown as Model;
+    expect(raisedRequests([request]).has("request:loop")).toBe(false);
+    expect(raisedRequests([request, { ...request, id: "other" } as Model]).has("request:loop")).toBe(true);
+    expect(malformedRefs({ a: "driver:ok-one", b: ["driver:Bad_One", "request:", "type:x y"], c: "a driver: not a reference" }))
+      .toEqual(["driver:Bad_One", "request:", "type:x y"]);
+  });
 });
 
 describe("the model catalogue", () => {
@@ -179,8 +231,9 @@ describe("the model catalogue", () => {
     expect(errors).toEqual([]);
   });
 
-  test("every reference resolves, and IDs are unique within a kind", () => {
+  test("every reference resolves and is well formed, and IDs are unique within a kind", () => {
     expect(new Set(BY_REF.keys()).size).toBe(MODELS.length);
+    expect(MODELS.flatMap(model => malformedRefs(model).map(ref => `${model.kind}:${model.id} → ${ref}`))).toEqual([]);
     const broken = MODELS.flatMap(model => refsIn(model).filter(ref => !BY_REF.has(ref)).map(ref => `${model.kind}:${model.id} → ${ref}`));
     expect(broken).toEqual([]);
   });
@@ -212,14 +265,7 @@ describe("the model catalogue", () => {
   });
 
   test("every request is raised by a driver, an action, a fault's route or a flow, unless it is a root raised from outside", () => {
-    const raised = new Set<string>();
-    for (const model of MODELS) {
-      for (const ref of (model.raises as string[] | undefined) ?? []) raised.add(ref);
-      const effect = model.effect as { raises?: string } | undefined;
-      if (effect?.raises) raised.add(effect.raises);
-      for (const step of (model.steps as { model: string }[] | undefined) ?? []) raised.add(step.model);
-      for (const item of (model.faults as { goesTo: string }[] | undefined) ?? []) raised.add(item.goesTo);
-    }
+    const raised = raisedRequests(MODELS);
     const orphans = of<{ root?: boolean }>("request").filter(request => !request.root && !raised.has(`request:${request.id}`)).map(request => request.id);
     expect(orphans).toEqual([]);
   });

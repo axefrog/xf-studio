@@ -1,3 +1,4 @@
+import { BUILD_TOOLS_CHECKING } from "./local-readiness-codes";
 import type { LocalSetupFields, LocalSetupView } from "./local-settings-server";
 
 /**
@@ -13,8 +14,6 @@ export type FolderField = "gameRoot" | "mo2Root" | "manualModRoot" | "savesDirec
 export const FOLDER_FIELDS: readonly FolderField[] = ["gameRoot", "mo2Root", "manualModRoot", "savesDirectory"];
 /** The host's native folder picker: the folder chosen, or null when the person cancelled. */
 export type FolderPicker = (field: FolderField) => Promise<string | null>;
-/** A Build readiness issue that clears by itself once the host's background tool check answers (`HostFeatures.packageBuildPending`). */
-export const BUILD_TOOLS_CHECKING = "build_tools_checking";
 /** How soon the page asks again while the host is still checking its build tools. */
 export const BUILD_TOOLS_RECHECK_MS = 750;
 /** Whether a view's Build readiness is only waiting for the host's tool check. */

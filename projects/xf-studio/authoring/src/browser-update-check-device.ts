@@ -1,5 +1,5 @@
 import { hostClock } from "./platform/graph-adapters/host-sources";
-import { hostRequest } from "./browser-desktop-app-device";
+import { hostRequest } from "./browser-host-request";
 import { UpdateCheckActions } from "./update-check-actions";
 
 /** The page's update-check device: one POST per action to the host's endpoint, which alone talks to GitHub; timers from the page's clock. */

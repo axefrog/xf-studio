@@ -120,6 +120,119 @@ test("the GitHub adapter lists published releases, pre-releases included, and na
   expect(await simulatedReleases("current", "0.1.0-alpha.2")(signal())).toEqual({ ok: true, releases: [release("v0.1.0-alpha.2")] });
 });
 
+/** A release source held until `answer()`, which rejects as the GitHub adapter does when its signal aborts. */
+function heldSource(list: ReleaseList = { ok: true, releases: [release("v0.1.0-alpha.2"), release("v0.1.0-beta.1")] }) {
+  const pending: { signal: AbortSignal; resolve: (list: ReleaseList) => void }[] = [];
+  const source = (signal: AbortSignal) => new Promise<ReleaseList>((resolve, reject) => {
+    const call = { signal, resolve };
+    pending.push(call);
+    signal.addEventListener("abort", () => { pending.splice(pending.indexOf(call), 1); reject(signal.reason); }, { once: true });
+  });
+  return { source, pending, answer: () => { for (const call of pending.splice(0)) call.resolve(list); } };
+}
+function heldService(held: ReturnType<typeof heldSource>) {
+  let memory = emptyUpdateCheckMemory();
+  return new UpdateCheckService({ installed: "0.1.0-alpha.2", now: () => 1_000_000, automatic: () => true, releases: held.source,
+    store: { load: () => structuredClone(memory), save: next => { memory = structuredClone(next); } } });
+}
+const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+test("checks made while one is running join its one request, which stops only when every one of them has been aborted (UPD-01, UPD-04)", async () => {
+  // The person's check during the check at start: aborting the check at start leaves the request running for the person.
+  {
+    const held = heldSource(), service = heldService(held);
+    const a = new AbortController(), b = new AbortController();
+    const startup = service.startup(a.signal), manual = service.check(b.signal);
+    expect(held.pending.length).toBe(1);
+    a.abort();
+    expect(await startup).toMatchObject({ result: "failed", reason: "unavailable", announce: false });
+    expect(held.pending[0].signal.aborted).toBe(false);
+    held.answer();
+    expect(await manual).toMatchObject({ result: "newer", latest: { version: "0.1.0-beta.1" }, announce: false });
+  }
+  // Both joined and neither aborted: one request, and each caller gets its own answer (only the check at start announces).
+  {
+    const held = heldSource(), service = heldService(held);
+    const startup = service.startup(new AbortController().signal), manual = service.check(new AbortController().signal);
+    expect(held.pending.length).toBe(1);
+    held.answer();
+    expect(await startup).toMatchObject({ result: "newer", announce: true });
+    expect(await manual).toMatchObject({ result: "newer", announce: false });
+  }
+  // Every joined check aborted: the request is abandoned.
+  {
+    const held = heldSource(), service = heldService(held);
+    const a = new AbortController(), b = new AbortController();
+    const first = service.check(a.signal), second = service.check(b.signal);
+    const request = held.pending[0].signal;
+    a.abort();
+    expect(request.aborted).toBe(false);
+    b.abort();
+    expect(request.aborted).toBe(true);
+    expect(held.pending.length).toBe(0);
+    expect(await first).toMatchObject({ result: "failed" });
+    expect(await second).toMatchObject({ result: "failed" });
+  }
+});
+
+test("an aborted or failed check at start leaves the next start free to ask (UPD-02)", async () => {
+  const held = heldSource(), service = heldService(held);
+  const first = new AbortController();
+  const aborted = service.startup(first.signal);
+  first.abort();
+  expect(await aborted).toMatchObject({ result: "failed" });
+  await flush();
+  const second = service.startup(new AbortController().signal);
+  expect(held.pending.length).toBe(1);
+  held.answer();
+  expect(await second).toMatchObject({ result: "newer", announce: true });
+  // Once one has finished, the check at start doesn't ask again this run.
+  expect(await service.startup(new AbortController().signal)).toMatchObject({ result: "newer", announce: false });
+  expect(held.pending.length).toBe(0);
+  // Offline: the next start asks again.
+  const offline = harness(undefined, { ok: false, reason: "offline" });
+  await offline.service.startup(signal());
+  await offline.service.startup(signal());
+  expect(offline.calls()).toBe(2);
+});
+
+test("the person's check made while the check at start is waiting on GitHub says what it found (UPD-01)", async () => {
+  const held = heldSource(), service = heldService(held);
+  // The host's endpoint, as the page reaches it: a request whose signal aborts rejects, as fetch does.
+  const actions = new UpdateCheckActions((body, sent) => new Promise((resolve, reject) => {
+    sent.addEventListener("abort", () => reject(sent.reason), { once: true });
+    const answer = body.action === "skip" ? Promise.resolve(service.skip(body.version)) : body.action === "check" ? service.check(sent) : service.startup(sent);
+    answer.then(data => resolve({ ok: true, status: 200, data }), reject);
+  }));
+  const startup = actions.dispatch({ kind: "updates.startupCheck" });
+  await flush();
+  expect(held.pending.length).toBe(1);
+  const manual = actions.dispatch({ kind: "updates.check" });
+  await flush();
+  held.answer();
+  expect(await manual).toMatchObject({ ok: true, answer: { result: "newer", latest: { version: "0.1.0-beta.1" } } });
+  expect(await startup).toMatchObject({ ok: true, answer: { result: "newer" } });
+  expect(actions.snapshot()).toMatchObject({ busy: null, checkedByPerson: true, unreachable: false });
+});
+
+test("the person's check sets aside a check at start still in its quiet wait, and nothing is asked for it", async () => {
+  const held = heldSource(), service = heldService(held);
+  const timers: (() => void)[] = [];
+  const actions = new UpdateCheckActions(async (body, sent) => ({ ok: true, status: 200,
+    data: body.action === "skip" ? service.skip(body.version) : body.action === "check" ? await service.check(sent) : await service.startup(sent) }),
+    { after: (_ms, run, stop) => { if (!stop?.aborted) timers.push(run); } });
+  const startup = actions.dispatch({ kind: "updates.startupCheck" });
+  const manual = actions.dispatch({ kind: "updates.check" });
+  expect(await startup).toMatchObject({ ok: false, code: "cancelled" });
+  await flush();
+  expect(held.pending.length).toBe(1);
+  held.answer();
+  expect(await manual).toMatchObject({ ok: true, answer: { result: "newer" } });
+  for (const run of timers) run();
+  await flush();
+  expect(held.pending.length).toBe(0);
+});
+
 test("the host keeps what was found in a file and serves the check to the page only", async () => {
   let saved: string | null = null;
   const file = { read: () => saved, write: (text: string) => { saved = text; } };
@@ -140,7 +253,8 @@ test("the host keeps what was found in a file and serves the check to the page o
     expect((await post({ action: "check" }, { Origin: "https://example.test", "Content-Type": "application/json" })).status).toBe(403);
     expect((await post({ action: "check", url: "https://example.test" })).status).toBe(400);
     expect((await post({ action: "skip", version: "../x" })).status).toBe(400);
-    expect(await (await handle(new Request(`${origin}/api/update-check`))).json()).toMatchObject({ result: "newer", announce: false });
+    // Only the page's POSTs are served: there is no read-only GET (UPD-03).
+    expect((await handle(new Request(`${origin}/api/update-check`))).status).toBe(405);
     saved = "{ not json";
     expect(new UpdateCheckJsonStore(file).load()).toEqual(emptyUpdateCheckMemory());
   }
@@ -169,7 +283,8 @@ test("the page's actions are catalogued, pre-empt the check at start, and say pl
   expect(actions.snapshot().busy).toBe("updates.startupCheck");
   expect(updateCheckLine(actions.snapshot())).toBeNull();
   const manual = actions.dispatch({ kind: "updates.check" });
-  expect(startupSignal!.aborted).toBe(true);
+  // The check at start was already sent, so it is left to finish (the host joins the two; UPD-01).
+  expect(startupSignal!.aborted).toBe(false);
   // A check still running has no line of its own: views keep the last result and show the check on their button.
   expect(checkingForUpdates(actions.snapshot())).toBe(true);
   expect(updateCheckLine(actions.snapshot())).toBeNull();

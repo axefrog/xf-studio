@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { defaultLocalSettings, migrateLocalSettings, parseLocalSettings } from "../src/local-settings";
 import { evaluateLocalReadiness, packageToolPaths } from "../src/local-settings-readiness";
 import { LocalSettingsStore } from "../src/local-settings-store";
-import { BUILD_TOOLS_CHECKING } from "../src/local-setup-actions";
+import { BUILD_TOOLS_CHECKING } from "../src/local-readiness-codes";
 
 const withDirectory = (run: (dir: string) => void) => {
   const dir = mkdtempSync(join(tmpdir(), "xfs-settings-test-"));

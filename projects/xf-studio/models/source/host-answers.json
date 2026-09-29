@@ -11,6 +11,7 @@
     "browser-desktop-app-device",
     "browser-facial-device",
     "browser-grading-lut-device",
+    "browser-host-request",
     "browser-install-detection-device",
     "browser-local-setup-device",
     "browser-mod-install-device",
