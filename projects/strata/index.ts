@@ -30,7 +30,7 @@ export type {
 
 // The graph
 export { createGraph } from "./src/graph";
-export type { Graph, GraphOptions, GraphView, CommitOptions, PendingCommit, RejectedCommit } from "./src/graph";
+export type { Graph, StrataGraph, GraphOptions, GraphView, CommitOptions, PendingCommit, RejectedCommit } from "./src/graph";
 export type { NodeSnapshot, DeriveResult, Reference, Referrer } from "./src/model";
 
 // Data types

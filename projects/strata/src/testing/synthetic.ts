@@ -9,7 +9,8 @@ import type { RuleDef, TypeDef } from "../define";
 import { pathKey } from "../paths";
 import type { NodeRef } from "../types";
 
-export const ITEM = "item", GROUP = "group";
+export const ITEM = "item";
+export const GROUP = "group";
 
 export const itemType: TypeDef = defineType({
   type: ITEM, owner: "synthetic", schema: "2",

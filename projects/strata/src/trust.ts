@@ -11,8 +11,14 @@ import type { EventRef } from "./types";
 /** One actor's claim about a fact, true as of its last observation. */
 export type Claim = { readonly actor: string; readonly value: Json; readonly asOf: number; readonly entry?: EventRef };
 
-/** How much an actor is trusted for a kind of fact: higher wins; 0 is not trusted. */
-export interface TrustPolicy { rank(factKind: string, actor: string): number }
+/**
+ * How much an actor is trusted for a kind of fact, within a frame of reference: higher wins; 0 is not trusted. There
+ * is no global truth: a frame is the domain in which a collective of actors agrees (the local actor's own frame by
+ * default), so policies are per frame.
+ */
+export interface TrustPolicy { rank(factKind: string, actor: string, frame?: string): number }
+/** Trust policies per frame of reference: the policy for a frame. */
+export type FramePolicies = (frame: string) => TrustPolicy;
 
 /** The default policy: an actor trusts itself for everything and nobody else. */
 export const trustSelf = (self: string): TrustPolicy => ({ rank: (_kind, actor) => actor === self ? 1 : 0 });
@@ -35,14 +41,14 @@ export type Disagreement = {
  * The value to use for a fact from several actors' claims: the most trusted actor's latest claim. When trusted claims
  * differ from another actor's latest claim, the result also carries the disagreement.
  */
-export function resolveClaims(factKind: string, claims: readonly Claim[], policy: TrustPolicy):
+export function resolveClaims(factKind: string, claims: readonly Claim[], policy: TrustPolicy, frame?: string):
   { readonly value?: Json; readonly from?: Claim; readonly disagreement?: Disagreement } {
   const latest = new Map<string, Claim>();
   for (const claim of claims) {
     const current = latest.get(claim.actor);
     if (!current || claim.asOf >= current.asOf) latest.set(claim.actor, claim);
   }
-  const ranked = [...latest.values()].map(claim => ({ claim, rank: policy.rank(factKind, claim.actor) }))
+  const ranked = [...latest.values()].map(claim => ({ claim, rank: policy.rank(factKind, claim.actor, frame) }))
     .sort((a, b) => b.rank - a.rank || b.claim.asOf - a.claim.asOf || (a.claim.actor < b.claim.actor ? -1 : 1));
   const trusted = ranked.find(item => item.rank > 0)?.claim;
   const differing = [...latest.values()].some(claim => trusted && !equal(claim.value, trusted.value));

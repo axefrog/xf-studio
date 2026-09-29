@@ -104,6 +104,13 @@ export class Scope {
   constructor(readonly env: Environment, readonly process: Process, readonly signal: AbortSignalLike) {}
 }
 
+/** A node of the inspectable process tree. */
+export type ProcessTreeNode = {
+  readonly id: string; readonly name: string; readonly status: string;
+  readonly actor?: string; readonly role?: string; readonly members?: readonly string[];
+  readonly children: readonly ProcessTreeNode[];
+};
+
 /** Process state entries (SPEC §9.2). */
 export type ProcessState =
   | { readonly status: "running" }
@@ -117,6 +124,10 @@ export class Process extends KNode<ProcessState> {
   readonly aborter: Aborter;
   readonly children: Process[] = [];
   terminal = false;
+  /** For a driver's run: the driver (the actor) whose activity this is. */
+  driver?: Driver;
+  /** The role this run fills in its parent's graph, if it was started into one. */
+  role?: string;
   constructor(env: Environment, id: string, name: string, readonly parent: Process | undefined, signal?: AbortSignalLike) {
     super(env, id, "process", name);
     this.aborter = new Aborter(signal, parent?.aborter.signal);
@@ -138,10 +149,19 @@ export interface RunContext {
   /** A child process doing long-running work in the context of `parent` (the run's process by default). */
   spawn<R extends Json>(name: string, work: (signal: AbortSignalLike, report: (progress: Json) => void) => Promise<R>, options?: { readonly parent?: Process; readonly id?: string }): Process;
   /** Starts a child driver whose run is a child of `parent` (the run's process by default). */
-  start(driver: Driver, options?: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json }): Process;
+  start(driver: Driver, options?: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json; readonly role?: string }): Process;
 }
 
-export type DriverDefinition = { readonly name: string; start(run: RunContext, params?: Json): void | Promise<Json | void> };
+/**
+ * A driver's definition. A driver is an actor (SPEC §9.7): its ID is the actor's ID, its run's internal graph is the
+ * actor's private world model, and its run's process node is the actor's observable activity. A collective or a union
+ * is a driver whose internals are its members (`members`, other actors' IDs); a leaf actor is a collective of one.
+ */
+export type DriverDefinition = {
+  readonly name: string;
+  readonly members?: readonly string[];
+  start(run: RunContext, params?: Json): void | Promise<Json | void>;
+};
 
 /** A driver: starting it returns the run's process node. */
 export class Driver extends KNode<string> {
@@ -581,9 +601,11 @@ export class Environment {
   // ---------------------------------------------------------------------------------------------------------------
 
   /** @internal Starts a driver's run: a queued change; returns the run's process node at once. */
-  startDriver(driver: Driver, options: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json }): Process {
+  startDriver(driver: Driver, options: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json; readonly role?: string }): Process {
     const parent = options.parent ?? this.root;
     const process = this.register(new Process(this, this.newId(`run:${driver.id}`), `${driver.name} run`, parent, options.signal));
+    process.driver = driver;
+    if (options.role) process.role = options.role;
     parent.children.push(process);
     this.change(() => {
       this.append(driver, process.id);
@@ -647,6 +669,19 @@ export class Environment {
     promise.then(
       result => { if (!signal.aborted) finish({ status: "done", result: toJson(result) }); },
       error => { if (!signal.aborted) finish({ status: "failed", error: { message: messageOf(error) } }); });
+  }
+
+  /**
+   * The process tree for inspection (SPEC §9.8): each run names its driver (the actor), the role it fills and the
+   * driver's members; each process its status and children.
+   */
+  processTree(from: Process = this.root): ProcessTreeNode {
+    return {
+      id: from.id, name: from.name, status: from.status() ?? "pending",
+      ...(from.driver ? { actor: from.driver.id, ...(from.driver.definition.members ? { members: [...from.driver.definition.members] } : {}) } : {}),
+      ...(from.role ? { role: from.role } : {}),
+      children: from.children.map(child => this.processTree(child)),
+    };
   }
 
   /** A token as a node (SPEC §8.5): a seed that is `false`, then `true` when the signal aborts. */

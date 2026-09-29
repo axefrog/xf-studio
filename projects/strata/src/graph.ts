@@ -21,7 +21,7 @@ import type { InspectorDetail, InspectorEdge, InspectorPage, InspectorRow } from
 import type { GraphStore, AppendResult } from "./store";
 import type { Sink, SinkDef, SourceDef, Sources } from "./sources";
 import { resolveClaims, trustSelf } from "./trust";
-import type { Claim, TrustPolicy } from "./trust";
+import type { Claim, FramePolicies, TrustPolicy } from "./trust";
 import { Aborter } from "./kernel/abort";
 import type { AbortSignalLike } from "./kernel/abort";
 import { Environment, KNode, LATEST, UNCHANGED } from "./kernel/kernel";
@@ -41,9 +41,15 @@ export interface GraphOptions {
   readonly sources: Sources;
   /** The store. Without one, the graph is session-only (every commit is acknowledged at once). */
   readonly store?: GraphStore;
-  /** This actor's ID (default `"local"`); every entry carries it and the actor's own sequence number. */
+  /**
+   * This actor's ID (default `"local"`): the ID of the driver the graph runs as (one ID space for drivers and actors),
+   * carried by every entry with the actor's own sequence number. It may name a collective (a composite actor).
+   */
   readonly actor?: string;
-  readonly trust?: TrustPolicy;
+  /** Members, when this actor is a collective or a union. */
+  readonly members?: readonly string[];
+  /** Trust per frame of reference (the local actor's own frame by default). */
+  readonly trust?: TrustPolicy | FramePolicies;
   readonly sinks?: readonly { readonly def: SinkDef; readonly sink: Sink }[];
   /** Write a snapshot when a node's tail passes this many entries (default 200). */
   readonly snapshotEvery?: number;
@@ -133,7 +139,7 @@ export class StrataGraph implements GraphView {
   private readonly rules: readonly RuleDef[];
   private readonly store?: GraphStore;
   private readonly sources: Sources;
-  private readonly trustPolicy: TrustPolicy;
+  private readonly trustPolicy: FramePolicies;
   private readonly faults?: Faults;
   private readonly snapshotEvery: number;
   private readonly snapshotFoldMs: number;
@@ -188,6 +194,8 @@ export class StrataGraph implements GraphView {
   /** The store driver's run: appends, loads and snapshots are its child processes (SPEC §19.5). */
   private storeRun?: RunContext;
   readonly storeProcess?: Process;
+  /** The actor's observable activity: the process of the driver this graph runs as. */
+  readonly actorProcess: Process;
   private readonly sinks: readonly { readonly def: SinkDef; readonly sink: Sink }[];
   private headPos = 0;
   private storeHead = 0;
@@ -203,7 +211,8 @@ export class StrataGraph implements GraphView {
     if (!options.sources?.clock || !options.sources?.random) throw new Error("A graph needs clock and random sources.");
     this.store = options.store;
     this.rules = options.rules ?? [];
-    this.trustPolicy = options.trust ?? trustSelf(this.actor);
+    const trust = options.trust ?? trustSelf(this.actor);
+    this.trustPolicy = typeof trust === "function" ? trust : () => trust;
     this.faults = options[STRATA_FAULTS];
     this.sinks = options.sinks ?? [];
     this.snapshotEvery = options.snapshotEvery ?? 200;
@@ -234,10 +243,15 @@ export class StrataGraph implements GraphView {
     this.batchSeed = this.env.seed({ id: "graph:batches", name: "batches" });
     this.commitsSeed = this.env.seed({ id: "graph:commits", name: "commits" });
     this.pendingSeed = this.env.seed({ id: "graph:pending", name: "pending", initial: [] });
-    if (this.store) {
-      const driver = this.env.driver({ name: "store", start: run => { this.storeRun = run; } }, "graph:store");
-      this.storeProcess = driver.start(options.signal);
-    }
+    // The graph runs as its actor's driver; the store is a child driver in the role "store" (SPEC §9.7, §19.5).
+    let storeProcess: Process | undefined;
+    const actor = this.env.driver({ name: `actor ${this.actor}`, ...(options.members ? { members: options.members } : {}), start: run => {
+      if (!this.store) return;
+      const store = this.env.driver({ name: "store", start: storeRun => { this.storeRun = storeRun; } }, `${this.actor}/store`);
+      storeProcess = run.start(store, { role: "store" });
+    } }, this.actor);
+    this.actorProcess = actor.start(options.signal);
+    this.storeProcess = storeProcess;
     if (!this.store) this.loaded = true;
   }
 
@@ -305,8 +319,13 @@ export class StrataGraph implements GraphView {
     if (bound === undefined) throw new Error(`Source ${def.name} is not bound.`);
     return bound as T;
   }
-  /** Resolves a fact from several actors' claims with the graph's trust policy. */
-  trust(factKind: string, claims: readonly Claim[]) { return resolveClaims(factKind, claims, this.trustPolicy); }
+  /**
+   * Resolves a fact from several actors' claims with the trust policy of a frame of reference (this actor's own frame
+   * by default). There is no global truth; `read` and `resolve` are this actor's perceived world.
+   */
+  trust(factKind: string, claims: readonly Claim[], frame = this.actor) { return resolveClaims(factKind, claims, this.trustPolicy(frame), frame); }
+  /** The frame of reference this graph's values are in: the local actor's own. */
+  get frame(): string { return this.actor; }
 
   // -------------------------------------------------------------------------------------------------------------
   // Loading, history and time
@@ -687,9 +706,10 @@ export class StrataGraph implements GraphView {
       case "set": {
         const { ref, def } = this.editable(work, edit.node);
         const at = this.leafPath(def, edit.path, "field");
-        const problem = valueProblem(at.kind, edit.value);
+        const value = this.withCreated(work, edit.value);
+        const problem = valueProblem(at.kind, value);
         if (problem) refuse("value", `${pathKey(edit.path)} must be ${problem}.`);
-        work.push(ref, { kind: "set", path: [...edit.path], value: freeze(edit.value as Json) });
+        work.push(ref, { kind: "set", path: [...edit.path], value: freeze(value as Json) });
         return;
       }
       case "reset": {
@@ -788,13 +808,26 @@ export class StrataGraph implements GraphView {
         const { ref, def, state } = this.editable(work, edit.node);
         const own: Record<string, Json> = {};
         for (const [key, value] of Object.entries(state.own)) if (def.fields[keyPath(key)[0]]?.inherit === false) own[key] = value;
-        Object.assign(own, this.ownOf(def, edit.fields));
+        Object.assign(own, this.ownOf(def, this.withCreated(work, edit.fields) as Record<string, unknown>));
         const next = finish({ name: state.name, own, layers: state.layers, trashed: state.trashed, retracted: state.retracted });
         for (const op of diffStates(state, next)) work.push(ref, op);
         return;
       }
       default: refuse("value", `Unknown edit ${(edit as { op?: unknown }).op}.`);
     }
+  }
+
+  /** A value with each `{ created: label }` replaced by the node created under that label earlier in this commit. */
+  private withCreated(work: Working, value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(item => this.withCreated(work, item));
+    if (!value || typeof value !== "object") return value;
+    const record = value as Record<string, unknown>;
+    if (Object.keys(record).length === 1 && typeof record.created === "string") {
+      const ref = work.created.get(record.created);
+      if (!ref) refuse("missing", `No node was created as "${record.created}" earlier in this change.`);
+      return ref;
+    }
+    return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, this.withCreated(work, item)]));
   }
 
   private ownOf(def: TypeSpec, fields: Readonly<Record<string, unknown>>): Record<string, Json> {
@@ -830,7 +863,7 @@ export class StrataGraph implements GraphView {
       name ??= sourceState!.name;
       layers = [{ from: source, role: "base", paths: "*", ...(edit.from.at ? { at: { node: source, seq: edit.from.at } } : {}) }, ...layers];
     }
-    const own = { ...this.identityOf(def), ...this.ownOf(def, edit.fields ?? {}) };
+    const own = { ...this.identityOf(def), ...this.ownOf(def, this.withCreated(work, edit.fields ?? {}) as Record<string, unknown>) };
     work.refs.set(id, ref);   // so layer checks can name it
     const checked = layers.length ? this.checkLayers(work, ref, def, layers) : [];
     work.push(ref, { kind: "create", state: freeze({ ...EMPTY_STATE, name: name ?? "", own, layers: checked }) });
