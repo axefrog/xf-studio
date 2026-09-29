@@ -604,12 +604,13 @@ These modules assume one V, one save, one live look, one surface or one subject.
 | Table | Holds |
 |---|---|
 | `library_info(key, value)` | Library UUID; the migration record (what was read from which revisions, the old-to-new identity map) |
-| `events(pos INTEGER PRIMARY KEY, node, type, seq, commit_id, actor, actor_seq, at, schema, op)` | Every node's stream; `pos` is the local commit order; `(node, seq)` unique |
+| `events(pos INTEGER PRIMARY KEY AUTOINCREMENT, node, type, seq, commit_id, actor, actor_seq, at, schema, op, extra)` | Every node's stream; `pos` is the local commit order, never reissued even after a purge (SPEC §19.3; G1 libraries are migrated in place, after a backup); `(node, seq)` unique |
 | `snapshots(node, seq, schema, value, made_at)` | Folds up to `seq`: caches, rebuildable from `events` |
 | `compactions(node, seq, at)` | Where a node's history was compacted (the snapshot at that point is its base) |
 | `node_index(node, type, head_seq, name, trashed)` | A rebuildable index for listing without folding |
 | `export_ids(id PRIMARY KEY, kind, node)` | Unique export IDs and mod keys (an index, rebuildable from the streams) |
 | `save_backups(save, taken_at, sha256, file)` | The copies kept before overwrites (files in the Studio's data folder) |
+| `purge_pending(node, at)` | Purges whose follow-up (the log checkpoint, the backups) hasn't finished: retried until it does |
 
 Presets move into `events` like everything else; `part_presets` and the collection tables are read by the migration and never written again by this build.
 
@@ -637,7 +638,7 @@ Presets move into `events` like everything else; `part_presets` and the collecti
 
 ### 7.4 Automatic database backups
 
-The database is the only home of the work, so it is backed up without asking: SQLite's online backup into a `backups` folder beside it at the first start of each day and before every migration, keeping seven daily and four weekly copies. Settings has **Restore a backup…** with each copy's date and counts.
+The database is the only home of the work, so it is backed up without asking: SQLite's online backup into a `backups` folder beside it once each day the Studio runs (checked at start and then hourly, so a Studio left running still takes one) and before every migration, keeping seven daily and four weekly copies. A purge reaches every copy; a copy that can't be purged yet (locked) stays on a pending list and is retried, and never fails the purge. Restoring is refused while another connection has the library open, and applies any pending purge to the restored copy. Settings has **Restore a backup…** with each copy's date and counts.
 
 ## 8. UI surfaces (specified for the UI track)
 
@@ -715,10 +716,10 @@ About **49 days** in all, plus 4 for the gated offline writer and a cleanup trac
 
 **Built** on branch `claude/g1-strata` (29 September 2026), pending review and merge:
 
-- **XF Strata 0.1** (`projects/strata/`): the kernel of §1.4 and the entity layer of §2 and §4 as specified in [SPEC.md](../../projects/strata/SPEC.md) (22 sections, a non-normative explainer beside each), 33 conformance vectors (20 kernel, 13 entity), the graph-model JSON Schema, `strata/testing`, the README, the changelog and the minimal example. The engine compiles against ES2022 alone and reads no host global.
+- **XF Strata 0.1** (`projects/strata/`): the kernel of §1.4 and the entity layer of §2 and §4 as specified in [SPEC.md](../../projects/strata/SPEC.md) (22 sections, a non-normative explainer beside each), 52 conformance vectors (29 kernel, 19 entity, 4 canonical-form; 33 at the merge, the rest added in the first review's cleanup), the graph-model JSON Schema, `strata/testing`, the README, the changelog and the minimal example. The engine compiles against ES2022 alone and reads no host global.
 - **Tests:** the vectors; named cases (§9 G1 row); event-sourcing cases over a simulated store; the store conformance suite; property tests against a brute-force reference model (six seeds of 250 random operations on graphs up to 200 nodes, fork chains 8 deep: effective values, exact change sets, exact undo after every operation); deterministic simulation of 500 seeds of 200 steps for the entity layer (delays, reordering, refused writes, lost replies, a second window, crash-restart with the recovery copy, jobs) and 500 for the kernel (random declared subsystems with diamonds, rewiring, drivers, nested processes, aborts), every invariant after every step, in about 20 seconds; an injected propagation bug found at step 36 and shrunk to six steps, now a regression; the boundary test and the API surface snapshot.
-- **Budgets:** in the engine, 10,000 nodes over one million entries fold from snapshots in about 50 ms and a commit on a node shared by 20 subscribed forks takes about 0.8 ms (median; 1.4 ms at the 95th percentile); on the Studio's SQLite store the same library loads, read and fold, in about 170 ms (`tools/bench-graph-store.ts`).
-- **The Studio:** `platform/graph-adapters/` (the SQLite store with the §7.3 tables beside the released ones and `user_version` untouched, daily backups with seven daily and four weekly copies, restore, purge reaching backups, the host transport and the page's store over it, host clock and random sources), `platform/graph-types/` (pointers with follow paths; R1–R3, L1–L2), `compose/graph.ts`, `/api/graph` and `/api/verification/graph` on both hosts, the ratchets (direct reads: 163 modules grandfathered, only shrinking; singleton assumptions) and the boundary rules below (1, 2 and 3 in force; 4–9 arrive with their slices).
+- **Budgets:** in the engine, 10,000 nodes over one million entries load from snapshots and short tails in about 50 ms of folding, and fold from empty in about 175 ms; a commit on a node shared by 20 subscribed forks returns in about 0.7 ms (median; 1.3 ms at the 95th percentile) and is acknowledged by an in-memory store in about 0.8 ms; on the Studio's SQLite store the same library loads, read and fold, in about 165 ms (`tools/bench-graph-store.ts`).
+- **The Studio:** `platform/graph-adapters/` (the SQLite store with the §7.3 tables beside the released ones and `user_version` untouched, daily backups with seven daily and four weekly copies, restore, purge reaching backups, the host transport and the page's store over it, host clock and random sources), `platform/graph-types/` (pointers with follow paths; R1–R3, L1–L2), `compose/graph.ts`, `/api/graph` and `/api/verification/graph` on both hosts, the ratchets (direct reads: 169 modules grandfathered with a count per kind, only shrinking; singleton assumptions) and the boundary rules below (1, 2 and 3 in force; 4–9 arrive with their slices).
 
 **Deviations, with reasons:**
 
