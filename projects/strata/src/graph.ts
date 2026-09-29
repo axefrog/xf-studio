@@ -200,7 +200,8 @@ export class StrataGraph implements GraphView {
   /** The pending commits (the recovery copy) whenever they change. */
   private readonly pendingSeed: KNode;
   private reports: NodeChange[] = [];
-  private readonly assembled = new Map<string, ChangeSet>();
+  /** The change sets an emit is waiting for (its cycle runs at once), by commit; filled in by `onCycle`. */
+  private readonly assembled = new Map<string, ChangeSet | undefined>();
   private allDemand: Aborter | null = null;
   private allSubscribers = 0;
   /** The store driver's run: appends, loads and snapshots are its child processes (SPEC §19.5). */
@@ -1269,6 +1270,8 @@ export class StrataGraph implements GraphView {
       meta.push({ node: ref, paths: [], meta: items, via: [] });
     }
     const batch = { commit, cause, ...(label ? { label } : {}), meta };
+    // Waiting for the change set: a cycle that runs later (this one is queued mid-cycle) assembles one nobody takes.
+    this.assembled.set(commit, undefined);
     this.env.transaction(() => {
       for (const id of before.keys()) { const seed = this.entitySeeds.get(id); if (seed) this.env.observe(seed, commit); }
       this.env.observe(this.batchSeed, batch as unknown as Json);
@@ -1304,8 +1307,7 @@ export class StrataGraph implements GraphView {
     nodes.push(...reported.values());
     const set: ChangeSet = freeze({ commit: batch.commit, ...(batch.label ? { label: batch.label } : {}), cause: batch.cause,
       nodes: nodes.sort((a, b) => a.node.id < b.node.id ? -1 : a.node.id > b.node.id ? 1 : 0) });
-    this.assembled.set(batch.commit, set);
-    if (this.assembled.size > 64) this.assembled.delete(this.assembled.keys().next().value!);
+    if (this.assembled.has(batch.commit)) this.assembled.set(batch.commit, set);
     if (set.nodes.length && this.commitsSeed.active) this.env.observe(this.commitsSeed, set as unknown as Json);
   }
 
@@ -1555,11 +1557,11 @@ export class StrataGraph implements GraphView {
    * retried after a `retry` process (a timer) completes.
    */
   private pump(): void {
-    if (!this.storeRun || this.inflight !== null || this.retrying || !this.outbox.length) {
+    if (this.inflight !== null || this.retrying || !this.outbox.length) {
       if (!this.outbox.length) this.resolveFlush();
       return;
     }
-    const run = this.storeRun, store = this.store!, item = this.outbox[0], token = ++this.token;
+    const run = this.storeRun!, store = this.store!, item = this.outbox[0], token = ++this.token;
     this.inflight = token;
     const process = run.spawn("append", signal => new Promise<Json>((resolve, reject) => {
       // The wait for a reply ends with the reply (or the process): no timer outlives the append.
@@ -2106,7 +2108,7 @@ export class StrataGraph implements GraphView {
     if (!this.compacting.size) return null;
     for (const id of work.order) {
       const def = this.types.get(work.refs.get(id)!.type);
-      for (const op of work.ops.get(id) ?? []) {
+      for (const op of work.ops.get(id)!) {
         for (const target of entryReferences({ op, commit: "" } as Entry, def)) {
           if (this.compacting.get(target.node.id)?.has(target.seq))
             return refusal("busy", "That history is being tidied up right now; try again in a moment.");
@@ -2124,7 +2126,7 @@ export class StrataGraph implements GraphView {
     if (!this.collapsing.size) return null;
     for (const id of work.order) {
       const def = this.types.get(work.refs.get(id)!.type);
-      for (const op of work.ops.get(id) ?? []) {
+      for (const op of work.ops.get(id)!) {
         const entry = { op, commit: "" } as Entry;
         if (entryReferences(entry, def).some(target => this.collapsing.has(target.node.id)) || nodeReferences(entry, def).some(ref => this.collapsing.has(ref.id)))
           return refusal("busy", "What this refers to is being moved into the entry that refers to it; try again in a moment.");
@@ -2466,7 +2468,7 @@ class Working {
   seqOf(ref: NodeRef): number { return this.seqs.get(ref.id) ?? this.graph.seqOf(ref); }
   push(ref: NodeRef, op: Op): void {
     const fresh = !this.ops.has(ref.id);
-    const before = fresh ? this.base(ref) : this.states.get(ref.id) ?? null;
+    const before = fresh ? this.base(ref) : this.states.get(ref.id) as NodeState | null;
     const after = fold(before, [{ op } as Entry]);
     // An edit that changes nothing is not recorded: no entry, nothing to undo.
     const primitive = op.kind === "set" || op.kind === "reset" || op.kind === "tombstone" || op.kind === "layers" || op.kind === "rename";

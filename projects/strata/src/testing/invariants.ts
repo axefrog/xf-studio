@@ -196,8 +196,8 @@ export async function checkConsistentCut(graph: Graph, types: readonly TypeSpec[
   return problems;
 }
 
-/** The caps on the graph's caches: views of the past, and change sets assembled for a commit made during a cycle. */
-const CACHE_CAPS = { timeModels: 16, assembled: 64 } as const;
+/** The cap on the graph's cache of views of the past. */
+const CACHE_CAPS = { timeModels: 16 } as const;
 
 /** The kernel's table sizes, and how many rows belong to nothing live (`finishedScopes`, `…InScopes`, `staleDemands`). */
 export function kernelTableSizes(t: KernelTables) {
@@ -273,7 +273,7 @@ export function checkTables(graph: Graph, options: { readonly settled?: boolean 
   };
   if (options.settled) Object.assign(zero, {
     "collapses": t.collapsing + t.collapsingInto, "purges": t.purging, "compactions": t.compacting,
-    "slow folds": t.slowFolds, "unassembled reports": t.reports, "flush waiters": t.flushWaiters,
+    "slow folds": t.slowFolds, "unassembled reports": t.reports, "change sets not taken": t.assembled, "flush waiters": t.flushWaiters,
   });
   for (const [what, count] of Object.entries(zero)) if (count) problems.push(`tables: ${count} ${what}`);
   for (const [cache, cap] of Object.entries(CACHE_CAPS)) if (t[cache as keyof typeof CACHE_CAPS] > cap) problems.push(`tables: ${t[cache as keyof typeof CACHE_CAPS]} ${cache}, over the cap of ${cap}`);

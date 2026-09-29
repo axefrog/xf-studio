@@ -238,6 +238,16 @@ test("inspector rows count references both ways, name the layering, the chain de
   expect(graph.inspect("id:builtin").rows.every(item => item.constant)).toBe(true);
 });
 
+test("the inspector's depth counts a force-purged source as one step with nothing beyond it", async () => {
+  const { graph, scheduler } = harness();
+  const base = create(graph, ITEM, { title: "base" });
+  const fork = ok(graph.commit([{ op: "create", type: ITEM, as: "f", from: { fork: base } }])).created.f;
+  const second = ok(graph.commit([{ op: "create", type: ITEM, as: "s", from: { fork: fork } }])).created.s;
+  expect(graph.inspectorRow(second)!.depth).toBe(2);
+  ok(await drive(scheduler, graph.purge(fork, { force: true })));
+  expect(graph.inspectorRow(second)!.depth).toBe(1);
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // Conflicts, acknowledgement and fixes
 // ---------------------------------------------------------------------------------------------------------------
