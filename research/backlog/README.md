@@ -43,6 +43,20 @@ Goal: procedural finishes computed in the game's own material shader, the way th
 
 If route 1 or 2 works, it opens pearl interference colour, holographic and animated finishes, and custom materials well beyond makeup. Starts after the current session's merges; read-only research first, and anything in the game is done under supervision.
 
+
+### Queued: the XF Strata site (29 September 2026; starts when G1's kernel lands)
+
+A `/strata/` subsection of the Pages site with its own design and palette. It positions XF Strata as a well-tested, well-documented subsystem, which forces a coherent, careful design. Contents:
+
+- **Concepts:** streams, demand, node kinds, START/END cycles, drivers and processes, cancellation, data-first erection, layering, event sourcing, actors.
+- **Tutorial and API reference.**
+- **The normative spec,** rendered from `projects/strata/SPEC.md`.
+- **Examples:** a glitch-free diamond, a live demand-window resize, nested processes with abort, undo and fork over history.
+- **Interactive widgets:** a START/END cycle visualiser, a process-tree explorer, a demand-window scrubber, a compaction demo.
+- **A playground** running the real engine in the browser (Strata reads no host globals), with the conformance vectors as loadable examples.
+
+Everything is generated from, or tested against, the real package; the design lead reviews the site like any UI; the site budget is measured before any raise. It may later move to its own repository.
+
 ## Ranked tracks
 
 | Priority | Track | Status | Owner doc |
