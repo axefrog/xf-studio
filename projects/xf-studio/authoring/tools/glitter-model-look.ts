@@ -27,6 +27,13 @@ const floatAt = (panel: string, width: number, height = 900) => page.evaluate(`(
   const tree = dock.tree, win = tree.floating.find(w => JSON.stringify(w.node).includes(${JSON.stringify(`"${panel}"`)}));
   dock.update({ ...tree, floating: tree.floating.map(w => w === win ? { ...w, x: 24, y: 24, w: ${width}, h: ${height} } : w) });
   return !!win; })()`);
+/** Nothing floating over the panel: close menus and tips, move the pointer away, hide toasts and open popovers. */
+const clearOverlays = async () => {
+  await page.key("Escape"); await page.mouse("mouseMoved", 1430, 990, { button: "none", buttons: 0 });
+  await page.evaluate(`(() => { for (const e of document.querySelectorAll('.toast, .toast-stack, .toasts, .popover, .tooltip, .viewport-state, .setup-card'))
+    e.style.visibility = 'hidden'; for (const e of document.querySelectorAll(':popover-open')) try { e.hidePopover(); } catch {} })()`);
+  await page.wait(300);
+};
 const windowRect = (panel: string) => page.evaluate(`(() => { const tab = document.querySelector('[data-panel="${panel}"]'); const g = tab?.closest(".dock-group");
   const w = g?.parentElement?.closest("[class*=float], [class*=window]") ?? g; if (!w) return null; const r = w.getBoundingClientRect();
   return { x: Math.max(0, r.x - 4), y: Math.max(0, r.y - 4), width: Math.min(innerWidth, r.width + 8), height: Math.min(innerHeight, r.height + 8) }; })()`);
@@ -43,7 +50,7 @@ try {
       await floatAt("finish", width); await page.wait(700);
       // Bring the Glitter section into view inside the panel.
       await page.evaluate(`[...document.querySelectorAll('.section-title')].find(e => e.textContent === 'Glitter')?.scrollIntoView({ block: 'start' })`);
-      await page.wait(300);
+      await page.wait(300); await clearOverlays();
       const clip = await windowRect("finish") as { x: number; y: number; width: number; height: number } | null;
       await page.screenshot(resolve(out, `${scheme}-${width}-research-${research ? "on" : "off"}.png`), clip ?? undefined);
     }
@@ -53,7 +60,7 @@ try {
   const shoot = async (id: string) => {
     await floatAt("finish", 300); await page.wait(700);
     await page.evaluate(`[...document.querySelectorAll('.section-title')].find(e => e.textContent === 'Glitter')?.scrollIntoView({ block: 'start' })`);
-    await page.wait(300);
+    await page.wait(300); await clearOverlays();
     const clip = await windowRect("finish") as { x: number; y: number; width: number; height: number } | null;
     await page.screenshot(resolve(out, `${scheme}-300-legacy-${id}.png`), clip ?? undefined);
   };

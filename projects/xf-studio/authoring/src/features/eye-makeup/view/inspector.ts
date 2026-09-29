@@ -157,7 +157,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   const irregularSection = section({ title: "Irregular flakes", help: ["Field density is not a visible flake count.",
     "The counts measure the painted shape's texture: flake centres in the shape, the field they come from, and texture pixels with flake coverage. They are not glints seen on screen."] },
   irregular.count.element, measurement, irregular.radius.element, irregular.spread.element, irregular.tilt.element, irregular.color.element);
-  const directSection = section({ title: "Glitter flakes", help: ["Turn the head or move the light to see the flakes sparkle.", "Preview only: Glitter isn't built into mods yet."] },
+  const directSection = section({ title: "Glitter flakes", help: "Turn the head or move the light to see the flakes sparkle." },
     direct.density.element, direct.fineShare.element, direct.strength.element, direct.color.element);
   const body = h("div", { class: "stack" },
     section("Pigment", h("div", { class: "row gap-m align-end" }, color.element, opacity.element)),
