@@ -17,6 +17,8 @@
 
 ## Known open items (29 September 2026)
 
+The first full [readiness audit](../research/authoring/release-readiness-audit.md) (29 September 2026) inventories every visible feature by export status, lists the consistency, speed and first-run gaps, and ranks the closing work by track.
+
 - **Speed:** choosing Colour-shifting froze the UI for 5–10 s (PREV-188); switching hairstyle is very slow (PREV-189); first-run preparation takes about 55 s (a one-time step with WolvenKit download and progress, but still measured against a budget).
 - **Finishes:** Glitter and Shimmer reworked offline and waiting for in-game verdicts; Glossy and Colour-shifting still experimental.
 - **Clutter:** preview-only finishes and research tools need an audit against "exportable first".
