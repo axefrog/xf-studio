@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-retry-head",
   "owner": "setup",
-  "summary": "Retry head (preview setup): raises the show-scene reques.",
+  "summary": "Retry head (preview setup): raises the show-scene request.",
   "status": "both",
   "replaces": [
     "preview-setup"

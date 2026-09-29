@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preparation-prepare",
   "owner": "preview",
-  "summary": "Prepare (preview): raises the prepare-core reques.",
+  "summary": "Prepare (preview): raises the prepare-core request.",
   "status": "both",
   "replaces": [
     "preview-preparation"

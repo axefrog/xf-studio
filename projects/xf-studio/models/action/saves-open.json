@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "saves-open",
   "owner": "save-explorer",
-  "summary": "Open (saves): raises the open-save reques.",
+  "summary": "Open (saves): raises the open-save request.",
   "status": "both",
   "replaces": [
     "features/save-explorer/actions"

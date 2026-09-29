@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "saved-v-import",
   "owner": "platform",
-  "summary": "Import (saved v): raises the pick-file reques.",
+  "summary": "Import (saved v): raises the pick-file request.",
   "status": "both",
   "replaces": [
     "studio-file-operations"

@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "diagnostics-prepare-report",
   "owner": "diagnostics",
-  "summary": "Prepare report (diagnostics): raises the prepare-report reques.",
+  "summary": "Prepare report (diagnostics): raises the prepare-report request.",
   "status": "both",
   "replaces": [
     "diagnostics/actions"

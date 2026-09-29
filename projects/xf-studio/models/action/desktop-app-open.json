@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "desktop-app-open",
   "owner": "setup",
-  "summary": "Open (desktop app): raises the offer-desktop-app reques.",
+  "summary": "Open (desktop app): raises the offer-desktop-app request.",
   "status": "both",
   "replaces": [
     "desktop-app"

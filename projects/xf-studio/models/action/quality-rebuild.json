@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "quality-rebuild",
   "owner": "eye-makeup",
-  "summary": "Rebuild (quality): raises the raster-layer reques.",
+  "summary": "Rebuild (quality): raises the raster-layer request.",
   "status": "both",
   "replaces": [
     "preview-quality-actions"

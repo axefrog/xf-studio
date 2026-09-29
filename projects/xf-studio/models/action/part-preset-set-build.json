@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "part-preset-set-build",
   "owner": "expressions",
-  "summary": "Build (part preset set): raises the build-mod reques.",
+  "summary": "Build (part preset set): raises the build-mod request.",
   "status": "both",
   "replaces": [
     "part-presets",

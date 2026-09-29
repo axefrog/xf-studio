@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-cancel-download",
   "owner": "setup",
-  "summary": "Cancel download (preview setup): raises the set-up-wolvenkit reques.",
+  "summary": "Cancel download (preview setup): raises the set-up-wolvenkit request.",
   "status": "both",
   "replaces": [
     "preview-setup"

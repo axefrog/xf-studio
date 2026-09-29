@@ -35,7 +35,9 @@
   "raises": [
     "request:install-webview2",
     "request:run-host",
-    "request:store-commits"
+    "request:store-commits",
+    "request:update-app",
+    "request:open-window"
   ],
   "faults": [
     {

@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "desktop-app-refresh",
   "owner": "setup",
-  "summary": "Refresh (desktop app): raises the offer-desktop-app reques.",
+  "summary": "Refresh (desktop app): raises the offer-desktop-app request.",
   "status": "both",
   "replaces": [
     "desktop-app"

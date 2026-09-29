@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "detect-mo2-instances",
   "owner": "setup",
-  "summary": "Mo2 instances (detect): raises the detect-installs reques.",
+  "summary": "Mo2 instances (detect): raises the detect-installs request.",
   "status": "both",
   "replaces": [
     "install-detection-actions"

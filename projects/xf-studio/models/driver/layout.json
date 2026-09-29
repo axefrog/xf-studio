@@ -32,7 +32,12 @@
   ],
   "raises": [
     "request:paint-window",
-    "request:show-view"
+    "request:show-view",
+    "request:catalogue-page",
+    "request:show-poses",
+    "request:list-library",
+    "request:list-saves",
+    "request:run-tour"
   ],
   "faults": [],
   "lifetime": "Per window."

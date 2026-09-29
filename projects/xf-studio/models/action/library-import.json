@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "library-import",
   "owner": "library",
-  "summary": "Import (library): raises the pick-file reques.",
+  "summary": "Import (library): raises the pick-file request.",
   "status": "both",
   "replaces": [
     "collection-service"

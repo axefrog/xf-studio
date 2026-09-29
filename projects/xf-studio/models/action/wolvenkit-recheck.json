@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "wolvenkit-recheck",
   "owner": "setup",
-  "summary": "Recheck (wolvenkit): raises the set-up-wolvenkit reques.",
+  "summary": "Recheck (wolvenkit): raises the set-up-wolvenkit request.",
   "status": "both",
   "replaces": [
     "wolvenkit-setup"

@@ -33,7 +33,8 @@
   "runtimes": [],
   "raises": [
     "request:derive-v-view",
-    "request:build-catalogue"
+    "request:build-catalogue",
+    "request:open-choice-row"
   ],
   "faults": [],
   "lifetime": "Per open row or search.",

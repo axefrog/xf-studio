@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "detect-game-installs",
   "owner": "setup",
-  "summary": "Game installs (detect): raises the detect-installs reques.",
+  "summary": "Game installs (detect): raises the detect-installs request.",
   "status": "both",
   "replaces": [
     "install-detection-actions"

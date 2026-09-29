@@ -54,7 +54,9 @@
     "request:set-up-preview",
     "request:mirror-workspace",
     "request:migrate-library",
-    "request:warm-v"
+    "request:warm-v",
+    "request:prefetch-face",
+    "request:report-failure"
   ],
   "faults": [
     {

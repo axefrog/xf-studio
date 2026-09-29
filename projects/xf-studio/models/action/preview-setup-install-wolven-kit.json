@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-install-wolven-kit",
   "owner": "setup",
-  "summary": "Install wolven kit (preview setup): raises the set-up-wolvenkit reques.",
+  "summary": "Install wolven kit (preview setup): raises the set-up-wolvenkit request.",
   "status": "both",
   "replaces": [
     "preview-setup"

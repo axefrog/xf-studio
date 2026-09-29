@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "package-build",
   "owner": "platform",
-  "summary": "Build (package): raises the build-mod reques.",
+  "summary": "Build (package): raises the build-mod request.",
   "status": "both",
   "replaces": [
     "studio-file-operations"

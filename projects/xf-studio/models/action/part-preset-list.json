@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "part-preset-list",
   "owner": "expressions",
-  "summary": "List (part preset): raises the list-library reques.",
+  "summary": "List (part preset): raises the list-library request.",
   "status": "both",
   "replaces": [
     "part-presets"

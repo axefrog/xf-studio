@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "detect-framework-versions",
   "owner": "setup",
-  "summary": "Framework versions (detect): raises the detect-installs reques.",
+  "summary": "Framework versions (detect): raises the detect-installs request.",
   "status": "both",
   "replaces": [
     "install-detection-actions"

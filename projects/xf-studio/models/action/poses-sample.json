@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "poses-sample",
   "owner": "poses",
-  "summary": "Sample (poses): raises the load-pose-sample reques.",
+  "summary": "Sample (poses): raises the load-pose-sample request.",
   "status": "both",
   "replaces": [
     "pose-actions"

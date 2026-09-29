@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "character-clear-prepared-files",
   "owner": "character",
-  "summary": "Clear prepared files (character): raises the clear-prepared reques.",
+  "summary": "Clear prepared files (character): raises the clear-prepared request.",
   "status": "both",
   "replaces": [
     "character-context-actions",

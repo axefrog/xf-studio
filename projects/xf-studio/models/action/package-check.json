@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "package-check",
   "owner": "platform",
-  "summary": "Check (package): raises the check-mod reques.",
+  "summary": "Check (package): raises the check-mod request.",
   "status": "both",
   "replaces": [
     "studio-file-operations"

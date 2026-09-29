@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "collection-import",
   "owner": "platform",
-  "summary": "Import (collection): raises the pick-file reques.",
+  "summary": "Import (collection): raises the pick-file request.",
   "status": "both",
   "replaces": [
     "studio-file-operations"

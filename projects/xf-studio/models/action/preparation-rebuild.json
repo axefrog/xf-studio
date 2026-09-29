@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preparation-rebuild",
   "owner": "preview",
-  "summary": "Rebuild (preview): raises the prepare-core reques.",
+  "summary": "Rebuild (preview): raises the prepare-core request.",
   "status": "both",
   "replaces": [
     "preview-preparation"

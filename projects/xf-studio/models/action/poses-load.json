@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "poses-load",
   "owner": "poses",
-  "summary": "Load (poses): raises the load-pose-catalogue reques.",
+  "summary": "Load (poses): raises the load-pose-catalogue request.",
   "status": "both",
   "replaces": [
     "pose-actions"

@@ -70,6 +70,10 @@
     },
     "faults": {
       "$ref": "common.schema.json#/$defs/faults"
+    },
+    "root": {
+      "const": true,
+      "description": "Raised from outside the graph (the person, the operating system) rather than by another model."
     }
   },
   "allOf": [

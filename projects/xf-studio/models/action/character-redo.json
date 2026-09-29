@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "character-redo",
   "owner": "character",
-  "summary": "Redo (character): raises the undo reques.",
+  "summary": "Redo (character): raises the undo request.",
   "status": "both",
   "replaces": [
     "character-context-actions",

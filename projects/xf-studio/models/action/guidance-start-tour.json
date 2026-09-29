@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "guidance-start-tour",
   "owner": "shell",
-  "summary": "Start tour (guidance): raises the run-tour reques.",
+  "summary": "Start tour (guidance): raises the run-tour request.",
   "status": "both",
   "replaces": [
     "studio-ui/guidance/engine"

@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-cancel",
   "owner": "setup",
-  "summary": "Cancel (preview setup): raises the prepare-core reques.",
+  "summary": "Cancel (preview setup): raises the prepare-core request.",
   "status": "both",
   "replaces": [
     "preview-setup"

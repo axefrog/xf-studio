@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-prepare-again",
   "owner": "setup",
-  "summary": "Prepare again (preview setup): raises the prepare-core reques.",
+  "summary": "Prepare again (preview setup): raises the prepare-core request.",
   "status": "both",
   "replaces": [
     "preview-setup"

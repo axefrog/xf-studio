@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preparation-cancel",
   "owner": "preview",
-  "summary": "Cancel (preview): raises the prepare-core reques.",
+  "summary": "Cancel (preview): raises the prepare-core request.",
   "status": "both",
   "replaces": [
     "preview-preparation"

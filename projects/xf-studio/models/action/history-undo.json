@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "history-undo",
   "owner": "platform",
-  "summary": "Undo (history): raises the undo reques.",
+  "summary": "Undo (history): raises the undo request.",
   "status": "both",
   "replaces": [
     "authoring-history",

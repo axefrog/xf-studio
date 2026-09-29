@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-consent",
   "owner": "setup",
-  "summary": "Consent (preview setup): raises the set-up-wolvenkit reques.",
+  "summary": "Consent (preview setup): raises the set-up-wolvenkit request.",
   "status": "both",
   "replaces": [
     "preview-setup"

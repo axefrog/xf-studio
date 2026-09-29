@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "wolvenkit-install",
   "owner": "setup",
-  "summary": "Install (wolvenkit): raises the set-up-wolvenkit reques.",
+  "summary": "Install (wolvenkit): raises the set-up-wolvenkit request.",
   "status": "both",
   "replaces": [
     "wolvenkit-setup"

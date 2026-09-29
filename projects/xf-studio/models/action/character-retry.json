@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "character-retry",
   "owner": "character",
-  "summary": "Retry (character): raises the prepare-v reques.",
+  "summary": "Retry (character): raises the prepare-v request.",
   "status": "both",
   "replaces": [
     "character-context-actions",

@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "saves-open-file",
   "owner": "save-explorer",
-  "summary": "Open file (saves): raises the pick-file reques.",
+  "summary": "Open file (saves): raises the pick-file request.",
   "status": "both",
   "replaces": [
     "features/save-explorer/actions"

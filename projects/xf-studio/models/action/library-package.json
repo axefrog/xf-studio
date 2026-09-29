@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "library-package",
   "owner": "library",
-  "summary": "Package (library): raises the build-mod reques.",
+  "summary": "Package (library): raises the build-mod request.",
   "status": "both",
   "replaces": [
     "collection-service"

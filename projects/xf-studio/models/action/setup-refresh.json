@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "setup-refresh",
   "owner": "setup",
-  "summary": "Refresh (setup): raises the load-nodes reques.",
+  "summary": "Refresh (setup): raises the load-nodes request.",
   "status": "both",
   "replaces": [
     "local-setup-actions"

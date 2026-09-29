@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "part-preset-set-reveal",
   "owner": "expressions",
-  "summary": "Reveal (part preset set): raises the reveal-build reques.",
+  "summary": "Reveal (part preset set): raises the reveal-build request.",
   "status": "both",
   "replaces": [
     "part-presets",

@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "character-undo-clothing",
   "owner": "character",
-  "summary": "Undo clothing (character): raises the undo reques.",
+  "summary": "Undo clothing (character): raises the undo request.",
   "status": "both",
   "replaces": [
     "character-context-actions",

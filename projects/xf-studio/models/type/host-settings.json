@@ -27,12 +27,11 @@
     },
     "launchRoute": {
       "kind": "value",
-      "doc": "How the game is launched: through MO2 or directly.",
+      "doc": "How the game is launched: through MO2 or directly (Vortex deploys into the game folder, so it is the direct route).",
       "shape": {
         "enum": [
-          "mo2",
           "direct",
-          "vortex"
+          "mo2"
         ]
       }
     },
@@ -136,16 +135,23 @@
     },
     "installMode": {
       "kind": "value",
-      "doc": "Where Add to my mod manager places a build.",
+      "doc": "Where Add to my mod manager places a build: nowhere, the game folder, or MO2.",
       "shape": {
-        "type": "string"
+        "enum": [
+          "none",
+          "direct",
+          "mo2"
+        ]
       }
     },
     "eyePlateHead": {
       "kind": "value",
-      "doc": "Which head the eye plate is cut from when an installed head mod isn't supported.",
+      "doc": "Which head the eye plate is cut from: the installed one, or the base game's when an installed head mod isn't supported.",
       "shape": {
-        "type": "string"
+        "enum": [
+          "installed",
+          "base-game"
+        ]
       }
     },
     "updates": {
@@ -155,7 +161,10 @@
         "type": "object",
         "properties": {
           "channel": {
-            "type": "string"
+            "enum": [
+              "stable",
+              "canary"
+            ]
           },
           "checkAutomatically": {
             "type": "boolean"

@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-prepare",
   "owner": "setup",
-  "summary": "Prepare (preview setup): raises the prepare-core reques.",
+  "summary": "Prepare (preview setup): raises the prepare-core request.",
   "status": "both",
   "replaces": [
     "preview-setup"

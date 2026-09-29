@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "view-undo",
   "owner": "views",
-  "summary": "Undo (view): raises the undo reques.",
+  "summary": "Undo (view): raises the undo request.",
   "status": "both",
   "replaces": [
     "view-actions"

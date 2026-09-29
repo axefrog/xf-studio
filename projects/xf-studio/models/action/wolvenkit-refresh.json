@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "wolvenkit-refresh",
   "owner": "setup",
-  "summary": "Refresh (wolvenkit): raises the set-up-wolvenkit reques.",
+  "summary": "Refresh (wolvenkit): raises the set-up-wolvenkit request.",
   "status": "both",
   "replaces": [
     "wolvenkit-setup"

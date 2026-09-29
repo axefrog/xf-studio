@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "recipe-import",
   "owner": "platform",
-  "summary": "Import (recipe): raises the pick-file reques.",
+  "summary": "Import (recipe): raises the pick-file request.",
   "status": "both",
   "replaces": [
     "studio-file-operations"

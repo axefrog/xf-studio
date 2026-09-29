@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "preview-setup-refresh",
   "owner": "setup",
-  "summary": "Refresh (preview setup): raises the detect-installs reques.",
+  "summary": "Refresh (preview setup): raises the detect-installs request.",
   "status": "both",
   "replaces": [
     "preview-setup"

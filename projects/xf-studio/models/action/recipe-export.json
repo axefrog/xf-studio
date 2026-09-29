@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "recipe-export",
   "owner": "platform",
-  "summary": "Export (recipe): raises the export-file reques.",
+  "summary": "Export (recipe): raises the export-file request.",
   "status": "both",
   "replaces": [
     "studio-file-operations"

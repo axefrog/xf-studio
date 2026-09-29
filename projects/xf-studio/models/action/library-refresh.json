@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "library-refresh",
   "owner": "library",
-  "summary": "Refresh (library): raises the list-library reques.",
+  "summary": "Refresh (library): raises the list-library request.",
   "status": "both",
   "replaces": [
     "collection-service"

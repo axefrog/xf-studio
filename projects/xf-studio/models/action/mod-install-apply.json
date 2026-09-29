@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "mod-install-apply",
   "owner": "install",
-  "summary": "Apply (mod install): raises the apply-install reques.",
+  "summary": "Apply (mod install): raises the apply-install request.",
   "status": "both",
   "replaces": [
     "mod-install-actions"

@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "saves-refresh",
   "owner": "save-explorer",
-  "summary": "Refresh (saves): raises the list-saves reques.",
+  "summary": "Refresh (saves): raises the list-saves request.",
   "status": "both",
   "replaces": [
     "features/save-explorer/actions"

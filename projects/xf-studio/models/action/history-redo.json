@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "history-redo",
   "owner": "platform",
-  "summary": "Redo (history): raises the undo reques.",
+  "summary": "Redo (history): raises the undo request.",
   "status": "both",
   "replaces": [
     "authoring-history",

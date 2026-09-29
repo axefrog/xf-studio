@@ -40,7 +40,8 @@
     "request:store-operation",
     "request:back-up-library",
     "request:open-installation",
-    "request:write-log"
+    "request:write-log",
+    "request:warm-shown-v"
   ],
   "faults": [
     {

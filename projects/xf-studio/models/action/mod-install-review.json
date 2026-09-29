@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "mod-install-review",
   "owner": "install",
-  "summary": "Review (mod install): raises the plan-install reques.",
+  "summary": "Review (mod install): raises the plan-install request.",
   "status": "both",
   "replaces": [
     "mod-install-actions"

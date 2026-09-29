@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "history-jump-to",
   "owner": "platform",
-  "summary": "Jump to (history): raises the undo reques.",
+  "summary": "Jump to (history): raises the undo request.",
   "status": "both",
   "replaces": [
     "authoring-history",

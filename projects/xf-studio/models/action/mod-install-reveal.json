@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "mod-install-reveal",
   "owner": "install",
-  "summary": "Reveal (mod install): raises the reveal-build reques.",
+  "summary": "Reveal (mod install): raises the reveal-build request.",
   "status": "both",
   "replaces": [
     "mod-install-actions"

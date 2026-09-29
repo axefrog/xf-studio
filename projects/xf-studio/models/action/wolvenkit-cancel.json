@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "wolvenkit-cancel",
   "owner": "setup",
-  "summary": "Cancel (wolvenkit): raises the set-up-wolvenkit reques.",
+  "summary": "Cancel (wolvenkit): raises the set-up-wolvenkit request.",
   "status": "both",
   "replaces": [
     "wolvenkit-setup"

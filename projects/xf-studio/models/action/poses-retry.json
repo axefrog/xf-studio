@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "poses-retry",
   "owner": "poses",
-  "summary": "Retry (poses): raises the load-pose-catalogue reques.",
+  "summary": "Retry (poses): raises the load-pose-catalogue request.",
   "status": "both",
   "replaces": [
     "pose-actions"

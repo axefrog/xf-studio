@@ -32,6 +32,7 @@
   "servedBy": [
     "driver:desktop-shell"
   ],
+  "root": true,
   "faults": [
     {
       "code": "unsafe",

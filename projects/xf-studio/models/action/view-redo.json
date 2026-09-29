@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "view-redo",
   "owner": "views",
-  "summary": "Redo (view): raises the undo reques.",
+  "summary": "Redo (view): raises the undo request.",
   "status": "both",
   "replaces": [
     "view-actions"

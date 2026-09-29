@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "library-export-collection",
   "owner": "library",
-  "summary": "Export collection (library): raises the export-file reques.",
+  "summary": "Export collection (library): raises the export-file request.",
   "status": "both",
   "replaces": [
     "collection-service"

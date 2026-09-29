@@ -2,7 +2,7 @@
   "kind": "action",
   "id": "part-preset-set-check",
   "owner": "expressions",
-  "summary": "Check (part preset set): raises the check-mod reques.",
+  "summary": "Check (part preset set): raises the check-mod request.",
   "status": "both",
   "replaces": [
     "part-presets",

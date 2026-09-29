@@ -34,5 +34,6 @@
   ],
   "servedBy": [
     "driver:window"
-  ]
+  ],
+  "root": true
 }
