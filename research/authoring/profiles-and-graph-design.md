@@ -1,6 +1,6 @@
 # Profiles, Vs, saves and presets: the Studio graph
 
-**Status:** design, revision 3 (29 September 2026): revision 2 rebuilt on **event sourcing** as the data foundation, with the actor model refined (§0.1); nothing built. It is the connective tissue the [1.0 bar](../../docs/release-readiness.md) needs between features that exist today in separate places: the Save Explorer, loading a V for editing, the Character panel's V, the collection library, part presets, saved layouts, the view graph and export identities. Everything becomes a **node** in one graph stored in the player's database. Profiles are nodes the interface anchors to; they introduce other nodes but own none. Any node can exist any number of times, and any node can share with, fork from or feed from another. The graph core is a standalone engine package, event-sourced, with deterministic simulation testing built in (§1, §2.8, §5). The maintainer reviews this revision before anything is built.
+**Status:** design, revision 4 (29 September 2026): event sourcing in the vocabulary of **streams** (value and delta streams, entries as nodes, compaction by reachability with reactive policies), and the open questions recorded as reversible decisions (§11); nothing built. It is the connective tissue the [1.0 bar](../../docs/release-readiness.md) needs between features that exist today in separate places: the Save Explorer, loading a V for editing, the Character panel's V, the collection library, part presets, saved layouts, the view graph and export identities. Everything becomes a **node** in one graph stored in the player's database. Profiles are nodes the interface anchors to; they introduce other nodes but own none. Any node can exist any number of times, and any node can share with, fork from or feed from another. The graph core is a standalone engine package, event-sourced, with deterministic simulation testing built in (§1, §2.8, §5). The maintainer reviews this revision before anything is built.
 
 It extends the [architecture contract](architecture-contract.md), the [feature-module platform](feature-module-platform.md) (§2 document model, §6 export), the [view graph design](view-graph-design.md) (whose nodes join this graph) and the [selectors design](selectors-design.md), and it follows the save-safety rules of [save files](../../knowledge/save-files.md#5-editing-safely), the [save write-back design](../character-customization/save-writeback-design.md) and the [save editor design](../save/save-editor-design.md#7-edit-safety). Code paths are relative to `projects/xf-studio/authoring/src/`.
 
@@ -17,7 +17,7 @@ It extends the [architecture contract](architecture-contract.md), the [feature-m
 - [8. UI surfaces (specified for the UI track)](#8-ui-surfaces-specified-for-the-ui-track)
 - [9. Phased implementation plan](#9-phased-implementation-plan)
 - [10. Proposed architecture-contract addition](#10-proposed-architecture-contract-addition)
-- [11. Open questions, with recommended defaults](#11-open-questions-with-recommended-defaults)
+- [11. Decisions on the open questions](#11-decisions-on-the-open-questions)
 
 ## 0. Summary
 
@@ -35,11 +35,11 @@ It extends the [architecture contract](architecture-contract.md), the [feature-m
 | 8 | Consider installed mods from elsewhere in deployment warnings? | Yes, as far as is reasonable (§4.1, D2). |
 | 9 | (Added requirement) Testing | **Deterministic simulation testing** is a first-class property: every source of non-determinism is a swappable source node, nothing reads the clock, randomness, files, the network or the bridge directly, and the engine ships a seeded simulation harness (§5). |
 | 10 | (Added requirement) Reuse | The graph core is a **standalone, reusable engine** in its own neutrally named package with a small documented API, importing nothing from the Studio, so another project can start from it (§1). |
-| 11 | (Added requirement) Data foundation | **Event sourcing:** a source node's data is its append-only log; values are folds; snapshots are caches; derived nodes materialise only the time window asked for. Undo, history, revert and forking from any past point follow from it (§2.8). An opinion from another actor is an event from its log (§1.3). |
+| 11 | (Added requirement) Data foundation | **Event sourcing with streams:** a source node's data is its stream (value streams replace, delta streams change; entries are nodes); values are folds; snapshots are caches; derived nodes materialise only the time window asked for. Undo, history, revert and forking from any past point follow from it (§2.8). An opinion from another actor is an event from its stream (§1.3). |
 
 ### 0.2 The model in one paragraph
 
-The Studio keeps **one graph**, built on a standalone graph engine (working name **Strata**, §1). Its nodes are typed records of **fields**; some fields are **references** to other nodes. Every node is top-level in the database, with a stable UUID, and any type can have any number of nodes. A node's stored data is an **append-only log** of its changes; its value is the fold of that log, loaded from a snapshot plus a short tail, and any past point can be viewed, forked from or reverted to. A node's value can be **layered**: it may **fork** from a base node of its type (inheriting every field it doesn't set itself) and take **feeds** from other nodes of its type (importing only chosen fields), to any depth, without cycles. **Deep clone** makes an independent copy of a node and, by type rules, of what it references. Types include feature presets, looks, Vs, saves and save policies, mods, layouts, views and their scenes, cameras and lights, **pointer** nodes that panels bind to, and profiles. **Constant** nodes shipped with the Studio (the Default Vs, the factory layout, the baseline save policy) are read-only starting points. Derived values (a V's resolved appearance, a mod's identity keys, conflicts) are recomputed only along the edges a change travels.
+The Studio keeps **one graph**, built on a standalone graph engine (working name **Strata**, §1). Its nodes are typed records of **fields**; some fields are **references** to other nodes. Every node is top-level in the database, with a stable UUID, and any type can have any number of nodes. A node's stored data is an **append-only stream** of its changes; its value is the fold of that stream, loaded from a snapshot plus a short tail, and any past point can be viewed, forked from or reverted to. A node's value can be **layered**: it may **fork** from a base node of its type (inheriting every field it doesn't set itself) and take **feeds** from other nodes of its type (importing only chosen fields), to any depth, without cycles. **Deep clone** makes an independent copy of a node and, by type rules, of what it references. Types include feature presets, looks, Vs, saves and save policies, mods, layouts, views and their scenes, cameras and lights, **pointer** nodes that panels bind to, and profiles. **Constant** nodes shipped with the Studio (the Default Vs, the factory layout, the baseline save policy) are read-only starting points. Derived values (a V's resolved appearance, a mod's identity keys, conflicts) are recomputed only along the edges a change travels.
 
 ### 0.3 Key design decisions
 
@@ -48,15 +48,15 @@ The Studio keeps **one graph**, built on a standalone graph engine (working name
 3. **No implicit current anything.** Every action names the node it acts on. "The focused V" or "the preset being edited" are pointer nodes a panel is bound to, never state hidden in a service. A ratchet test lists today's singleton assumptions and may only shrink.
 4. **Runtimes per node, shared by reference.** A preset's preview textures are made once per revision and used by every V that wears it; a V's character runtime exists once however many views show it. Runtimes are reference-counted by what is visible or bound, and withdrawn when nothing is.
 5. **Layering is field-level and explicit.** Resolution order: the node's own value, then its feeds in order, then its base, then the type default. Every panel can say where a value comes from and offer Reset, Override here and Edit the source.
-6. **The database is the working store, as logs.** Every commit appends events; values are folds; snapshots are caches; nothing is overwritten except by an explicit compaction or purge. Files are export and import. Storage is additive (new tables, no column added to a released table, `user_version` left at 2), with automatic backups and a pre-migration copy.
+6. **The database is the working store, as streams.** Every commit appends events; values are folds; snapshots are caches; nothing is overwritten except by an explicit compaction or purge. Files are export and import. Storage is additive (new tables, no column added to a released table, `user_version` left at 2), with automatic backups and a pre-migration copy.
 7. **Conflicts never block looking, only doing,** and offer undoable fix routes. Deployment conflicts between mods are warnings.
 8. **Saves:** a new save is always offered; overwriting follows the save's policy node; every overwrite keeps a restorable copy; the offline writer stays gated on its in-game session, and Apply in game comes first.
 
-**Plan.** Nine slices (G1–G9, §9), about 49 agent-days plus 4 for the gated offline writer. G1 delivers the engine package first (event logs, folds, snapshots and time windows, multiplicity, layering, sources and the simulation harness, proved against a brute-force reference model), then the Studio's adapters and store on it.
+**Plan.** Nine slices (G1–G9, §9), about 49 agent-days plus 4 for the gated offline writer. G1 delivers the engine package first (event streams, folds, snapshots and time windows, multiplicity, layering, sources and the simulation harness, proved against a brute-force reference model), then the Studio's adapters and store on it.
 
 ## 1. Layers and the graph engine package
 
-The graph core is a **standalone, reusable engine**, so another project can start from the same architecture. Its working name is **Strata** (neutral, and it names what the engine is about: layered nodes; question Q5).
+The graph core is a **standalone, reusable engine**, so another project can start from the same architecture. Its working name is **Strata** (neutral, and it names what the engine is about: layered nodes; decision Q5).
 
 ### 1.1 Layers
 
@@ -79,16 +79,16 @@ The graph core is a **standalone, reusable engine**, so another project can star
 
 Not built and outside every slice here; G1 only makes room for it. The direction: design in the Studio on one screen while the running game updates live on the other, through the runtime bridge.
 
-- **Actors.** Each process (the Studio, the game plugin, the desktop host, an AI agent) is an actor. What an actor sees directly is **its own world**: its own logs. What it can't see is its **model of beliefs**, built from what other actors have told it.
-- **An opinion is an event from another actor's log.** "The game says V's hair is `38_ash_brown`" arrives as the game's event, recorded in the Studio's **belief log** for that channel with its provenance: the actor, the actor's sequence number, the time, and the trust the Studio places in that actor for that kind of fact. Nothing is overwritten.
+- **Actors.** Each process (the Studio, the game plugin, the desktop host, an AI agent) is an actor. What an actor sees directly is **its own world**: its own streams. What it can't see is its **model of beliefs**, built from what other actors have told it.
+- **An opinion is an event from another actor's stream.** "The game says V's hair is `38_ash_brown`" arrives as the game's event, recorded in the Studio's **belief stream** for that channel with its provenance: the actor, the actor's sequence number, the time, and the trust the Studio places in that actor for that kind of fact. Nothing is overwritten.
 - **A belief is "true as of the last observation",** not stale. Its age is shown when it matters ("as of 12 s ago").
-- **Re-engaging.** When contact is lost and regained, each side resumes the observation channels relevant to past and current exchanges with a cursor: "send me everything after your event N". Logs make this exact.
+- **Re-engaging.** When contact is lost and regained, each side resumes the observation channels relevant to past and current exchanges with a cursor: "send me everything after your event N". Streams make this exact.
 - **Trust per fact kind.** The game is authoritative on live runtime state (the scene report, V as drawn, the XF HUD and ink state, showroom lights), the Studio on authored presets and rigs, a save on stored state. Resolving a value asks whose opinion counts for this kind of fact, never which write came last.
 - **Disagreement is a visible state:** "Studio says A, game says B, as of 12 s ago", with fix routes like any conflict (**Push A to the game**, **Adopt B**). The inspector shows it.
 - **Sinks** send the Studio's authoritative events (presets, light rigs, face control vectors, HUD layouts) to the game as they happen; in-game UI (ink panels, a later ImGui overlay) renders nodes of the game plugin's own graph.
 - **Deterministic by construction:** another actor's events are source events, so the harness simulates delay, reordering, loss, reconnection with cursors, and stale or lying actors.
 
-**Engine primitives G1 carries now** (implementation of actors, channels, sinks and trust tables later): node IDs are UUIDs (constants have stable string IDs); every event carries its actor and the actor's own sequence number; a commit names the node positions it was made against; a **belief log** is an ordinary log whose events keep their origin's provenance (actor, actor sequence, time); resolution takes a pluggable **trust policy** per fact kind (the Studio alone trusts itself for everything until then); **disagreement** is a state a value can be in, listed with conflicts; logs, snapshots and change sets are plain serialisable data; sources and sinks are one interface pair; a log can be read "after event N". No remote actor, bridge sink or trust table is built.
+**Engine primitives G1 carries now** (implementation of actors, channels, sinks and trust tables later): node IDs are UUIDs (constants have stable string IDs); every event carries its actor and the actor's own sequence number; a commit names the node positions it was made against; a **belief stream** is an ordinary stream whose events keep their origin's provenance (actor, actor sequence, time); resolution takes a pluggable **trust policy** per fact kind (the Studio alone trusts itself for everything until then); **disagreement** is a state a value can be in, listed with conflicts; streams, snapshots and change sets are plain serialisable data; sources and sinks are one interface pair; a stream can be read "after event N". No remote actor, bridge sink or trust table is built.
 
 ## 2. Graph foundations
 
@@ -118,16 +118,16 @@ export interface NodeTypeContribution {
 export type NodeEvent = { readonly node: NodeRef; readonly seq: number; readonly commit: string; readonly actor: string;
   readonly actorSeq: number; readonly at: number; readonly schema: string; readonly op: NodeOp;   // stored, never rewritten (§2.8)
   readonly provenance?: Provenance };                        // present on belief events from another actor (§1.3)
-/** A node's value is the fold of its log: what it sets itself (a tombstone removes an inherited map key), its layers, its state. */
+/** A node's value is the fold of its stream: what it sets itself (a tombstone removes an inherited map key), its layers, its state. */
 export type NodeState = { readonly ref: NodeRef; readonly seq: number; readonly name: string;
   readonly own: Readonly<Record<string, unknown>>; readonly layers?: readonly Layer[]; readonly trashed?: true };
 export type EventRef = { readonly node: NodeRef; readonly seq: number };
 export type Layer = { readonly from: NodeRef; readonly role: "base" | "feed"; readonly paths: "*" | readonly Path[];
-  readonly at?: EventRef };                                  // pinned to a point of the source's log; absent: follows it live
+  readonly at?: EventRef };                                  // pinned to a point of the source's stream; absent: follows it live
 ```
 
 - **Identity fields never inherit** (`inherit: false`): the node's name defaults from its source but is its own, and export IDs, creation times and provenance are always the node's own.
-- **Maps are the unit of fine-grained sharing.** A feature declares which parts of its data are keyed maps. Eye makeup declares its layers as a map by layer ID, so a fork can change one layer's colour and keep following the base's other layers (question Q2). Anything not declared is atomic.
+- **Maps are the unit of fine-grained sharing.** A feature declares which parts of its data are keyed maps. Eye makeup declares its layers as a map by layer ID, so a fork can change one layer's colour and keep following the base's other layers (decision Q2). Anything not declared is atomic.
 - **References are edges.** A `ref` or `refs` field is an edge to another node. `clone` says whether a deep clone copies the target (`follow`) or keeps pointing at it (`share`). `follows` says whether derivations walk it (a V's `look` does; a V's `origin` save doesn't).
 
 ### 2.2 Multiplicity
@@ -159,7 +159,7 @@ For a map field, the keys are the union of the keys found at every step, each ke
 | **Detach** | Copies every inherited value into own values and drops the layers | Nothing | Freeze a fork before its source changes |
 | **Rebase** | Points a fork at another base of the same type | The new base's values | Move a fork onto an updated template |
 | **Reset** (per path) | Removes an own value | That path again | Undo an override |
-| **Push to source** (per path) | Writes an own value into the node it would inherit from, then resets it | — | Promote a local tweak to everyone sharing the source |
+| **Apply to source** (per path) | Writes an own value into the node it would inherit from, then resets it | — | Promote a local tweak to everyone sharing the source |
 | **Fork from a past point** | A fork whose base is pinned to `node@seq` | The source as it was then | Start again from last week's version |
 | **Revert to a point** | Appends the events that turn the current value into the value at that point | — | Go back without losing the history in between |
 
@@ -194,43 +194,68 @@ What a panel shows is a wiring, not a service's state.
 ### 2.7 Storage and the service
 
 - **The engine's graph** (Strata, created by the Studio's composition with its types, rules, sources and store) holds every node's current fold in memory, loaded from snapshots and tails (large preset bodies on demand), the reverse layer and reference indexes, the resolution cache, derivations, conflicts and the Graph history. It publishes detached snapshots per node and per query, and a change set per commit.
-- **The store** is the engine's `GraphStore` interface, implemented by the Studio's SQLite adapter behind the host transport: read a log after event N, read the latest snapshot, append a commit's events (guarded by each node's expected `seq`), write and discard snapshots, compact, purge.
+- **The store** is the engine's `GraphStore` interface, implemented by the Studio's SQLite adapter behind the host transport: read a stream after event N, read the latest snapshot, append a commit's events (guarded by each node's expected `seq`), write and discard snapshots, compact, purge.
 - **Other windows** change the database too: the host bumps a change counter on every commit (and SQLite's `data_version` catches another process); a focused window polls it, reads the new events after its cursor and propagates. A stale commit gets a plain "changed in another window", and the edit stays in the workspace's recovery copy.
 - **Feature code never touches the store.** A feature registers its node types and rules, reads through its facade and edits through its actions.
 
-### 2.8 Event sourcing: logs, folds, snapshots and time
+### 2.8 Event sourcing: streams, folds, snapshots and time
 
-The data foundation is **event sourcing**. A source node's data **is** its append-only log of deltas; everything else is computed from logs.
+The data foundation is **event sourcing**, in the vocabulary of **streams**. A source node's data **is** its stream of entries; some streams happen to be persistent (every authored node's), others live only in the session (the pointer's moves, the clock's ticks) unless something records them. Everything else is computed from streams.
 
-| Thing | What it is | Persisted? |
-|---|---|---|
-| **Event** | One delta to one node: `{ node, seq, commit, actor, actorSeq, at, schema, op }`. `seq` counts the node's own events; `commit` groups the events of one commit; `actorSeq` is the actor's own counter; `at` comes from the `clock` source; `op` is a set, reset, layer, reference, rename, trash, restore, tag or compensation. | Yes: logs are the truth, never rewritten |
-| **Source node's value** | The fold of its log (from its type's `defaults`, applying each `op` in order) | No: computed |
-| **Snapshot** | A source's fold up to event N, stored for fast loads | Yes, as a cache: discardable and rebuildable, never truth |
-| **Derived node** | A value computed over other nodes (a resolved V, identity keys, conflicts), materialised only for the **time window** someone asks for: now, a moment in the past, or a replay range | Never as history; memoised in memory for the windows in use |
+**Two kinds of stream.**
 
-**Time.** A point in time is a position in the database's commit order (the local commit sequence, which also orders every actor's events as received), and it can be named by an event (`node@seq`), a commit, a tag or a wall-clock time mapped to the last commit before it. `graph.at(point)` gives a read-only view of the whole graph at that point: every log folded to it, a **consistent cut**, so resolution, layering and derivation at T see each source as it was at T. `graph.range(from, to)` gives the events in between for replay. "Now" is simply the head.
+| Kind | Each entry | Current value | Examples |
+|---|---|---|---|
+| **Value stream** | Replaces the last | The latest entry | A camera pose, the pointer position, a bridge report of V as drawn, a job's progress |
+| **Delta stream** | Changes the state | The fold of the entries (from the type's `defaults`, applying each `op` in order) | A preset's edits, a V's creator choices, a profile's wiring |
 
-**Layering over time.** A layer names a source and optionally a point: `{ from, role, paths, at? }`. Without `at` it follows the source live, as in §2.3. With `at` it is **pinned**: the source's value at that point, whatever happens to the source later. **Fork from a past point** is a fork pinned to `node@seq`. Unpinning (follow live again) and re-pinning to a later point are ordinary layer events, so a pinned fork can be brought up to date deliberately.
+A node type declares which kind its stream is; the engine treats both the same way for time, references and compaction.
+
+**Entries are nodes.** Each entry is a constant node, a data source in its own right: `{ stream, seq, commit, actor, actorSeq, at, schema, op | value }`, where `seq` counts the stream's entries, `commit` groups the entries of one commit, `actorSeq` is the actor's own counter, `at` comes from the `clock` source, and a delta's `op` is a set, reset, layer, reference, rename, trash, restore, tag or compensation. Because an entry is a node, anything can reference it: a tag, a Build's manifest (`node@seq` for every preset it packed), a pinned layer, a replay recording, a bookmark in the inspector. Those references are what compaction respects.
+
+| Thing | Persisted? |
+|---|---|
+| Entries of persistent streams | Yes: the truth. Never edited; removed only by compaction of unreferenced entries or by purge |
+| A node's current value | No: the latest entry (value stream) or the fold (delta stream) |
+| **Snapshot** of a delta stream's fold up to entry N | Yes, as a cache: discardable and rebuildable, never truth |
+| **Derived node** (a resolved V, identity keys, conflicts), materialised only for the **time window** someone asks for: now, a moment in the past, a replay range | Never as history; memoised in memory for the windows in use |
+
+**Time.** A point in time is a position in the database's commit order (the local commit sequence, which also orders every actor's entries as received). It can be named by an entry (`node@seq`), a commit, a tag, or a wall-clock time mapped to the last commit before it. `graph.at(point)` gives a read-only view of the whole graph at that point: every stream folded to it, a **consistent cut**, so resolution, layering and derivation at T see each source as it was at T. `graph.range(from, to)` gives the entries in between for replay. "Now" is simply the head.
+
+**Layering over time.** A layer names a source and optionally a point: `{ from, role, paths, at? }`. Without `at` it follows the source live, as in §2.3. With `at` it is **pinned**: the source's value at that entry, whatever happens to the source later. **Fork from a past point** is a fork pinned to `node@seq`. Unpinning (follow live again) and re-pinning to a later point are ordinary layer entries, so a pinned fork can be brought up to date deliberately. A pin is a reference to an entry, so compaction keeps it.
 
 **What comes free, now.**
 
-- **Undo and redo** append compensating events (`op: compensate`, naming the events they reverse); redo compensates the compensation. Logs are never cut, so history and blame keep every step, and undo is exact because a fold is deterministic.
-- **History** of any node is its log, grouped by commit and labelled from the actions that made them.
-- **Revert to a point** appends the events that turn the current fold into the fold at that point.
-- **Tags** ("Keep this version", "Built as XF Eye Artistry 3") are tag events; a Build's manifest records the `node@seq` of every preset it packed.
+- **Undo and redo** append compensating entries (`op: compensate`, naming the entries they reverse); redo compensates the compensation. History and blame keep every step, and undo is exact because a fold is deterministic.
+- **History** of any node is its stream, grouped by commit and labelled from the actions that made them.
+- **Revert to a point** appends the entries that turn the current fold into the fold at that point.
+- **Tags** ("Keep this version", "Built as XF Eye Artistry 3") are entries that reference other entries.
 
-**Enabled later, named here so the model keeps room for them:** the same preset shown at a historical offset beside the live one (a pinned feed or a view on `graph.at(T)`); time-proportional replay and recording of editing sessions (§5.4); recorded live sources replayed in simulation, since a DST trace and a recorded session are the same kind of thing (§5.4); history and blame in the inspector; rebasing a fork onto a later point of its base, and merging a fork's events back into its base.
+**Enabled later, named here so the model keeps room for them:** the same preset shown at a historical offset beside the live one (a pinned feed, or a view on `graph.at(T)`); time-proportional replay and recording of editing sessions (§5.4); recorded live sources replayed in simulation, since a DST trace and a recorded session are the same kind of thing (§5.4); history and blame in the inspector; rebasing a fork onto a later point of its base, and merging a fork's entries back into its base.
+
+**Compaction by reachability.** Compaction never loses anything something points at. It keeps:
+
+- the **latest entry** of every stream;
+- **every entry something references** (tags, manifests, pins, recordings, bookmarks, compensations and what they reverse while they are in reach of an undo stack);
+
+and **rolls up the rest**:
+
+- **Value streams:** unreferenced entries are dropped. 900 pointer moves become the latest entry plus the pinned ones.
+- **Delta streams: rollups by time bucket.** Runs of unreferenced entries are replaced by the state at bucket boundaries (one second by default), skipping buckets in which nothing changed that was still visible afterwards. 78 micro-edits in a few seconds become three or four state entries, and the fold at every kept boundary and every referenced entry is unchanged.
+- **References are shallow,** by node ID, so other streams that reference the rolled-up node are unaffected.
+- **Inline collapse:** where exactly one entry references a whole stream that has been rolled up (a short session stream recorded under one replay entry, say), the stream may be collapsed into that entry's data, which keeps historical integrity because nothing else could observe the difference.
+
+**Compaction policies are reactive nodes.** A policy node decides, from the graph, what a stream keeps and when rollups run: "keep full detail of this editing session while a replay recording references it", "roll up pointer streams at the end of each session", "keep one-minute buckets for presets older than a month". Because policies are nodes, they react to what references them and change with context, which is the general direction: the more governance lives in the graph, the more context-sensitive the Studio becomes. The default policy keeps everything of authored delta streams and rolls up session value streams at session end. G1 ships the compaction primitives; policy nodes come in a later slice.
 
 **Costs, and the answers.**
 
 | Cost | Answer |
 |---|---|
-| **Retention** | Keep everything by default. Opt-in **compaction points** per node or for the whole library ("Keep history from this point"): the prefix before the point is folded into a snapshot that becomes the log's base, and the prefix is deleted. History before a compaction point is gone, and the inspector says so. Events a Build's manifest names are kept unless their node is compacted past them, which Check then reports. |
-| **A real purge** | **Delete permanently** removes a node's log, snapshots, tags and export IDs from the database: removal, not hiding. Anything that touches a save (a V from a save, a save node, write records) is purgeable the same way. Backups still hold copies until they rotate out; **Also remove from backups** rewrites the affected backups at once (question Q7). Other nodes' logs refer to a purged node only by ID, and show R2. |
-| **Event schema evolution** | Every event records its type's schema version. A type registers **upcasters**, pure functions from version n events to version n+1 events, applied on read; stored events are never rewritten. Snapshots record the schema version they were folded with and are rebuilt when it changes. Each type keeps fixture logs from every schema it ever wrote, and the suite replays them through the upcaster chain. |
-| **Load speed** | A node loads from its latest snapshot plus a short tail. A snapshot is written when a node's tail passes 200 events or 5 ms of folding, and for every changed node when the Studio closes. Budgets: a node opens in under 20 ms; the engine's startup fold of 10,000 nodes over one million events stays under 300 ms from snapshots (measured in G1), inside the 1.0 "no multi-second waits" bar. |
-| **Write volume** | One event per commit point: a drag or a slider move is one event at its end (intermediate states stay in the session, as today's gestures do), so a long editing session writes a few events a second at most. Appends are cheap under WAL; a frame's commits are written in one transaction. |
+| **Retention** | Keep everything of authored streams by default. Compaction removes only unreferenced entries, and only when a policy says so; what a rollup removed is gone, and the inspector marks where rollups happened. |
+| **A real purge** | **Delete permanently** removes a node's stream, its entries, snapshots and export IDs from the database, and from existing backups (decision Q7): removal, not hiding. Anything that touches a save (a V from a save, a save node, write records) is purgeable the same way. Other streams refer to a purged node only by ID, and show R2. |
+| **Event schema evolution** | Every entry records its type's schema version. A type registers **upcasters**, pure functions from version n entries to version n+1 entries, applied on read; stored entries are never rewritten. Snapshots record the schema they were folded with and are rebuilt when it changes. Each type keeps fixture streams from every schema it ever wrote, and the suite replays them through the upcaster chain. |
+| **Load speed** | A delta-stream node loads from its latest snapshot plus a short tail; a value-stream node reads its latest entry. A snapshot is written when a tail passes 200 entries or 5 ms of folding, and for every changed node when the Studio closes. Budgets: a node opens in under 20 ms; the engine's startup fold of 10,000 nodes over one million entries stays under 300 ms from snapshots (measured in G1), inside the 1.0 "no multi-second waits" bar. |
+| **Write volume** | One entry per commit point in authored streams: a drag or a slider move is one entry at its end (intermediate states stay in session streams), so a long editing session writes a few entries a second at most. Appends are cheap under WAL; a frame's commits are written in one transaction. |
 
 ## 3. Node types
 
@@ -274,7 +299,7 @@ This is today's character-context state (`StoredCharacter`) with the `SavedV` be
 
 - A preset is one feature's node, autosaved as it is edited. A look is a node that references feature presets by creator row (a row key is the feature type and its target, `eye-makeup:own`, `cheeks:vanilla:makeupCheeks`, the unit the game saves and the [selectors design](selectors-design.md#12-types-targets-and-caps) organises around).
 - **Comparing on several Vs:** give each V the same look, or looks that reference the same preset, and open a view per V (§6.3).
-- **History:** a preset's log is its history; **Keep this version** adds a tag, and every Build tags what it packed and records each preset's `node@seq` in the manifest.
+- **History:** a preset's stream is its history; **Keep this version** adds a tag, and every Build tags what it packed and records each preset's `node@seq` in the manifest.
 - **Trash:** deleting moves a node to the trash, restorable for 30 days; **Delete permanently** acts only there.
 
 ### 3.5 Saves
@@ -384,7 +409,7 @@ export type GraphPatch = readonly (
 | View and lighting | As built, per view graph | The Camera & light panel |
 | **Graph** (new) | Wiring: references, layers, forks, clones, profiles' introductions, trash, fixes, renames | The profile switcher, the V list, the Saves panel, the Conflicts list, the inspector |
 
-Editing a preset shared by three Vs is one step in that preset's history, whichever V's panel made it. Each scope's Undo stack is a list of the session's commits; Undo appends their compensations (§2.8), so the log keeps every step and blame stays true. Purging and compaction are the only irreversible actions, and say so.
+Editing a preset shared by three Vs is one step in that preset's history, whichever V's panel made it. Each scope's Undo stack is a list of the session's commits; Undo appends their compensations (§2.8), so the stream keeps every step and blame stays true. Purging and compaction are the only irreversible actions, and say so.
 
 ## 5. Deterministic simulation testing
 
@@ -417,7 +442,7 @@ Every source of non-determinism enters the graph as a **source node**: a node wh
   3. **No silently ignored conflict:** the conflict index equals a full evaluation of every rule; every action a blocking conflict covers is refused with `conflict`; every refusal has a reason code.
   4. **No lost work:** every accepted edit is in the store once acknowledged, or in the recovery copy until then, across crashes; after a restart the effective state equals the last accepted one.
   5. **The person's actions pre-empt background work:** between a user action's dispatch and its first published snapshot no background completion is applied, and a job the action asks for starts before background jobs queued earlier and not yet running.
-  6. **Structure holds:** layer edges acyclic, export IDs unique, log sequences gap-free and monotonic, no reference to a type its field doesn't accept.
+  6. **Structure holds:** layer edges acyclic, export IDs unique, stream sequences gap-free and monotonic, no reference to a type its field doesn't accept.
   7. **The event-sourcing invariants** of §5.4.
 - **Reproducible failures.** A failing run reports its seed and event trace, and a shrinker reduces the trace to a minimal one. The seed and trace go into the regression list (`tests/sim/regressions.json`), which every suite run replays.
 - **Budgets.** The standard suite runs 500 seeds of 200 steps under the memory guard in under a minute; a longer run with more seeds is a separate command for the coordinator's review cadence.
@@ -443,16 +468,16 @@ Today's code reads these directly in many places. Across `src/`: 57 files use `D
 
 From the page's point of view, host-side services (the resolver, WolvenKit and the package builders) are adapters behind the `files` and `jobs` sources. Giving the host's own internals simulated file systems is a later, separate track.
 
-### 5.4 Recordings and traces are logs
+### 5.4 Recordings and traces are streams
 
-With event sourcing, a simulation trace and a recording of a real session are the same kind of thing: a set of source logs. The live sources of §5.1 (input, clock, jobs, store replies, the bridge) keep their events in a bounded session ring in memory. The harness's traces are those logs, and so is a problem report's replayable trace (question Q4). **Recording** (later) persists the ring for a session, so a real editing session or a bug can be replayed in the simulator exactly as it happened, or played back in proportion to real time. Authored nodes' logs are persisted always; live sources' logs only when recording.
+With event sourcing, a simulation trace and a recording of a real session are the same kind of thing: a set of source streams. The live sources of §5.1 (input, clock, jobs, store replies, the bridge) keep their events in a bounded session ring in memory. The harness's traces are those streams, and so is a problem report's replayable trace, which is opt-in and privacy-scanned (decision Q4). **Recording** (later) persists the ring for a session, so a real editing session or a bug can be replayed in the simulator exactly as it happened, or played back in proportion to real time. Authored nodes' streams are persisted always; live sources' streams only when recording.
 
 The harness gains four invariants from event sourcing, checked after every step:
 
 - **Snapshot plus tail equals the full fold,** for every node and every snapshot point.
-- **A view at T is a consistent cut:** `graph.at(T)` equals replaying every log up to T from empty.
-- **Compensation is exact:** undoing any sequence of commits folds to the state before it, byte for byte, and the log only grew.
-- **Upcasting is faithful:** fixture logs of every past schema fold, through the upcasters, to the values recorded when they were written.
+- **A view at T is a consistent cut:** `graph.at(T)` equals replaying every stream up to T from empty.
+- **Compensation is exact:** undoing any sequence of commits folds to the state before it, byte for byte, and the stream only grew.
+- **Upcasting is faithful:** fixture streams of every past schema fold, through the upcasters, to the values recorded when they were written.
 
 ## 6. Flows
 
@@ -507,7 +532,7 @@ The profile switcher moves the workspace's active-profile pointer. The presentat
 
 ### 6.8 Making profiles distinct: reference, fork, clone
 
-**New profile ▸ from this one** shows, per introduced node, the three choices as a button set, with defaults (question Q1): presets, looks and mods **referenced** (the work stays shared), Vs, views, layouts and pointers **forked** (the new profile can rearrange and restyle without disturbing the old one, and still follows what it doesn't change). **New profile ▸ from Default V** forks a Default V and the factory layout. Later, any introduced node's menu has **Make distinct here ▸ Fork · Clone**, which forks or clones it and re-points only this profile's reference.
+**New profile ▸ from this one** shows, per introduced node, the three choices as a button set, with the default (decision Q1) **Reference** for everything: the new profile starts as another way into the same nodes, and anything can be made distinct later, one node at a time. **New profile ▸ from Default V** forks a Default V and the factory layout. Later, any introduced node's menu has **Make distinct here ▸ Fork · Clone**, which forks or clones it and re-points only this profile's reference.
 
 ### 6.9 A world-editing profile with V editing off
 
@@ -551,11 +576,11 @@ These modules assume one V, one save, one live look, one surface or one subject.
 | Table | Holds |
 |---|---|
 | `library_info(key, value)` | Library UUID; the migration record (what was read from which revisions, the old-to-new identity map) |
-| `events(pos INTEGER PRIMARY KEY, node, type, seq, commit_id, actor, actor_seq, at, schema, op)` | Every node's log; `pos` is the local commit order; `(node, seq)` unique |
+| `events(pos INTEGER PRIMARY KEY, node, type, seq, commit_id, actor, actor_seq, at, schema, op)` | Every node's stream; `pos` is the local commit order; `(node, seq)` unique |
 | `snapshots(node, seq, schema, value, made_at)` | Folds up to `seq`: caches, rebuildable from `events` |
 | `compactions(node, seq, at)` | Where a node's history was compacted (the snapshot at that point is its base) |
 | `node_index(node, type, head_seq, name, trashed)` | A rebuildable index for listing without folding |
-| `export_ids(id PRIMARY KEY, kind, node)` | Unique export IDs and mod keys (an index, rebuildable from the logs) |
+| `export_ids(id PRIMARY KEY, kind, node)` | Unique export IDs and mod keys (an index, rebuildable from the streams) |
 | `save_backups(save, taken_at, sha256, file)` | The copies kept before overwrites (files in the Studio's data folder) |
 
 Presets move into `events` like everything else; `part_presets` and the collection tables are read by the migration and never written again by this build.
@@ -566,7 +591,7 @@ Presets move into `events` like everything else; `part_presets` and the collecti
 |---|---|
 | Each collection's latest revision | A mod node with the **same UUID** (so the install host still recognises its installed build as the same mod and replaces it), a new key, its name, selector settings and package-plan choices; a multi-product plan becomes one mod per product |
 | Each look | A preset node with the look's UUID and a new export ID, in that mod's selector in the same order; its other parts (an expression tried on it) become presets of their own, referenced with it by a look node named after it |
-| Earlier revisions of each look | Events of its log, oldest first, at their original times |
+| Earlier revisions of each look | Events of its stream, oldest first, at their original times |
 | Removed presets and recovery drafts | Nodes in the trash |
 | Expression presets and sets | Preset nodes (same UUIDs, new export IDs) and mod nodes |
 | The workspace's `savedV` and `preview.character` | A V node ("My V", or "V from <save>" with a `save` node when the save is found), wearing a look of the selected preset |
@@ -618,7 +643,7 @@ Functional specifications: the UI component track builds or extends the componen
 
 ### 8.5 Layering affordances
 
-- **Field origin marker** (`FieldOrigin` component): beside any control whose value is inherited, a small marker says where it comes from ("From Default V", "Fed from Evening look"). An overridden value shows a distinct mark. The control's menu offers only what applies: **Reset to inherited**, **Edit <source>** (rebinds the panel to the source), **Push to <source>**, **Override here** (for a value edited while inherited, the default action of editing is to override here; editing the source is the explicit choice).
+- **Field origin marker** (`FieldOrigin` component): beside any control whose value is inherited, a small marker says where it comes from ("From Default V", "Fed from Evening look"). An overridden value shows a distinct mark. The control's menu offers only what applies: **Reset to inherited**, **Edit <source>** (rebinds the panel to the source), **Apply to <source>**, **Override here** (for a value edited while inherited, the default action of editing is to override here; editing the source is the explicit choice).
 - **Distinctness chooser** (`ShareModeChooser`): Reference · Fork · Clone as a three-button set with one consequence line each, used by New profile, Add to profile, Make distinct and Make a variant.
 - **Feed editor**: on a node's menu, **Take values from ▸** a node of its type, then the paths as a checklist tree (for a V: creator sections and rows; for eye makeup: its layers), in the list the feed will resolve in.
 
@@ -630,7 +655,7 @@ An optional panel, `graph.inspector`: a developer's diagnostic view and an **Adv
 - **Rows:** type (icon and label), name, ID and export ID, usage count, layer mark (fork, fed), conflict marker. Expanding shows **Uses**, **Used by**, **Based on**, **Feeds from** and **Fed into**, each child a link.
 - **Type-aware actions:** the context menu lists only what can be done to that node, from the application: Switch to (profile), Show in a view (V), Wear or Add to mod (preset), Edit this V (save), Fork, Clone, Detach, Rebase, Restore or Delete permanently (trash), Reveal in its panel, Copy ID, the node's fix routes.
 - **Search and filters:** one field over name, type, ID and export ID, origin save, mod, profile membership and wiring, plus always-visible facet chips that combine: type, feature, "in the active profile" (reachable from it), "has conflicts" (by severity), "unused" (nothing references it), "orphaned" (references to missing nodes), "forked" or "fed", "from a save", "newer build". Typed facets work too (`type:preset used:0`, `origin:ManualSave-12`, `id:k7m2qd`, `uses>2`, `depth>3`).
-- **Later, from the logs:** a **History** tab per node (its events by commit, with actor and time), **blame** per field (which commit set the current value), and **Show as it was** at any point beside the live node.
+- **Later, from the streams:** a **History** tab per node (its events by commit, with actor and time), **blame** per field (which commit set the current value), and **Show as it was** at any point beside the live node.
 - **Smart behaviour:** **Show what depends on this** (transitive referrers and layer dependents); **Highlight conflicts** along the paths from the active profile; **Focus the active profile**; **Unused presets** with a bulk **Move to the trash** (one Graph step).
 - **No coupling:** the panel calls `port.graph.inspect(query) → InspectorPage` (the application builds the index and returns detached rows and edges, paged 200 at a time), `port.graph.actionsFor(ref) → ActionOffer[]` (each with its capability) and `port.graph.dispatch(action)`. It never receives the store, the service or an editable body; research-view bodies are detached JSON copies. The index is built when the panel is first shown and withdrawn when it is hidden.
 
@@ -646,7 +671,7 @@ Each slice leaves `main` green (suite, typecheck, browser and desktop builds, th
 
 | # | Slice | Scope | Tests and gates | Effort | Needs |
 |---|---|---|---|---|---|
-| G1 | **The graph engine, then the Studio's store on it** | **Stage 1, the engine package** (`projects/strata/`): node types with field specs (value, ref, refs, keyed maps, `inherit: false`), constants, references and the reverse reference index, layers (base and ordered feeds with path masks) and the reverse layer index, resolution with memoisation, the layer-cycle refusal, batched commits and propagation, fork, feed, deep clone with per-field rules, detach, rebase, reset, push to source, trash semantics, the conflict and invariant framework with fix routes, history, source and sink interfaces with simulated implementations, events carrying actor and actor sequence, belief logs with provenance, reading a log after event N, a pluggable per-kind trust policy (the Studio trusting itself only) and disagreement as a value state, **the log, fold, snapshot and time-window API** (append, fold, `at(T)`, `range`, pinned layers, compensating undo, revert, tags, compaction points, purge, upcasters), the storage interface with an in-memory store, the inspector data model and query language, `strata/testing` (seeded scheduler, scripted and generated input, invariants, shrinker, regression replay), README, API surface snapshot and the minimal example. **Stage 2, the Studio on it:** the SQLite store adapter and host transport (`events`, `snapshots` and index tables, the snapshot policy), Bun and browser clock and random sources, pointers and follow paths as Studio types, rules R1–R3 and L1–L2, automatic backups and Restore, the inspector's read-only developer view, and the ratchets (singletons, direct reads) with their starting lists | **Engine:** property tests against a brute-force reference model on random graphs of synthetic types (up to 200 nodes, layer chains 8 deep, several feeds per node, map tombstones): effective values equal the naive resolver's after every random operation sequence, propagation reports exactly the (node, path) pairs whose effective value changed, and Undo of every operation folds back to the prior state byte for byte while the log only grows. **Event sourcing:** for random logs, snapshot plus tail equals the full fold at every point; `at(T)` equals a from-empty replay to T; a fork pinned to `node@seq` ignores later events of its base; revert restores the fold at its point; compaction keeps the current value and every event after the point; purge leaves no row naming the node; a two-version fixture log upcasts and folds to its recorded values. Load budget: 10,000 nodes over one million events fold from snapshots in under 300 ms. Named cases: 20 nodes referencing one node get one notification each per commit; a fork follows its base until overridden; a feed takes only its paths; a three-level fork of a fork of a constant; a layer cycle is refused and a reference cycle raises its conflict; a clone is independent and remaps internal references; purging a layer source offers detach. **Simulation:** 500 seeds of 200 steps with delays, reordering, failures and crash-restart, all six invariants after every step; a deliberately injected propagation bug is found and shrunk to a minimal trace, which then replays as a regression. **Boundaries:** the engine imports nothing outside its folder and reads no clock, randomness, file, network or host global; the API surface snapshot; the example runs. Budget: a commit touching one node shared by 20 others under 2 ms with 10,000 nodes. **Studio:** the store adapter passes the engine's store conformance suite (the same tests the in-memory store passes); Studio code imports only the engine's entry points; alpha.2's vendored stores open a library with the new tables | 12 (9 + 3) | — |
+| G1 | **The graph engine, then the Studio's store on it** | **Stage 1, the engine package** (`projects/strata/`): node types with field specs (value, ref, refs, keyed maps, `inherit: false`), constants, references and the reverse reference index, layers (base and ordered feeds with path masks) and the reverse layer index, resolution with memoisation, the layer-cycle refusal, batched commits and propagation, fork, feed, deep clone with per-field rules, detach, rebase, reset, push to source, trash semantics, the conflict and invariant framework with fix routes, history, source and sink interfaces with simulated implementations, events carrying actor and actor sequence, belief streams with provenance, reading a stream after event N, a pluggable per-kind trust policy (the Studio trusting itself only) and disagreement as a value state, **streams** (value and delta kinds, entries as referenceable nodes, persistent and session streams) with **the fold, snapshot and time-window API** (append, fold, `at(T)`, `range`, pinned layers, compensating undo, revert, tags, purge, upcasters) and **the compaction primitives** (reachability from references, value-stream roll-up, delta rollups by time bucket, inline collapse; policy nodes in a later slice), the storage interface with an in-memory store, the inspector data model and query language, `strata/testing` (seeded scheduler, scripted and generated input, invariants, shrinker, regression replay), README, API surface snapshot and the minimal example. **Stage 2, the Studio on it:** the SQLite store adapter and host transport (`events`, `snapshots` and index tables, the snapshot policy), Bun and browser clock and random sources, pointers and follow paths as Studio types, rules R1–R3 and L1–L2, automatic backups and Restore, the inspector's read-only developer view, and the ratchets (singletons, direct reads) with their starting lists | **Engine:** property tests against a brute-force reference model on random graphs of synthetic types (up to 200 nodes, layer chains 8 deep, several feeds per node, map tombstones): effective values equal the naive resolver's after every random operation sequence, propagation reports exactly the (node, path) pairs whose effective value changed, and Undo of every operation folds back to the prior state byte for byte while the stream only grows. **Event sourcing:** for random streams, snapshot plus tail equals the full fold at every point; `at(T)` equals a from-empty replay to T; a fork pinned to `node@seq` ignores later events of its base; revert restores the fold at its point; compaction keeps the latest entry and every referenced entry, rolls up the rest, and leaves the fold unchanged at every kept boundary and referenced entry; a rolled-up node's referrers in other streams are unaffected; inline collapse happens only with exactly one referrer; purge leaves no row naming the node; a two-version fixture stream upcasts and folds to its recorded values. Load budget: 10,000 nodes over one million events fold from snapshots in under 300 ms. Named cases: 20 nodes referencing one node get one notification each per commit; a fork follows its base until overridden; a feed takes only its paths; a three-level fork of a fork of a constant; a layer cycle is refused and a reference cycle raises its conflict; a clone is independent and remaps internal references; purging a layer source offers detach. **Simulation:** 500 seeds of 200 steps with delays, reordering, failures and crash-restart, all six invariants after every step; a deliberately injected propagation bug is found and shrunk to a minimal trace, which then replays as a regression. **Boundaries:** the engine imports nothing outside its folder and reads no clock, randomness, file, network or host global; the API surface snapshot; the example runs. Budget: a commit touching one node shared by 20 others under 2 ms with 10,000 nodes. **Studio:** the store adapter passes the engine's store conformance suite (the same tests the in-memory store passes); Studio code imports only the engine's entry points; alpha.2's vendored stores open a library with the new tables | 12 (9 + 3) | — |
 | G2 | **V nodes and the Default V source** | `v` type and `VData`; the Default V constants; the character runtime per V node (the singleton ratchet's character rows emptied); `character.*` with targets; several Vs in a profile, flicking in the focused view; the V list and chips; origin markers in the Character panel; first-start migration of the workspace V; legacy mirrors | Codec and layering tests on `VData` (a forked V overriding one option); two V runtimes alive at once with independent histories; mirror read by the alpha.2 workspace reader; flick timing on the reference save in `?verify=1` | 5 | G1 |
 | G3 | **Saves and save policies** | `save` and `save-policy` types, the baseline constant and Save defaults; the Saves panel (converged Save Explorer, several open saves, Edit this V, Show, Bring changes in, Load again); fingerprints in `saves-server.ts`; policy controls; V3 and V4 | Policy resolution through the default (changing the default changes un-overridden saves only); fingerprint tests on synthetic saves (never private ones); re-base keeps own choices and lists overlaps; `?verify=1`: two saves open, two Vs | 3 | G2 |
 | G4 | **Profiles, pointers and panel binding** | `profile`, `layout` and `pointer` types; panel instances with bindings; focus pointers and follow paths; Pin to this; the profile switcher with layouts folded in; New profile with the distinctness chooser; module needs; P1–P3; the conflict indicator, list and in-place Fix | Binding tests: two Character panels on two Vs, focus changes only the unpinned one; pointer follow updates on a scene rewire; rule tests with each route applied and undone; capability refusals carry `conflict`; boundary: actions carry targets, `studio-ui` reads only `port.graph`; `?verify=1`: a profile without a V showing Eye makeup, fixed each way | 6 | G2 |
@@ -680,8 +705,8 @@ About **49 days** in all, plus 4 for the gated offline writer and a cleanup trac
 | Several Vs and views cost memory and GPU time | Runtimes per node shared by reference; one raster per preset revision; the view graph's frame budget and hidden-view pause; details released after the grace period |
 | Migration loses work | Additive tables; source rows never rewritten; a pre-migration copy and backups; a dry run with counts; the parity gate |
 | Names change for players of earlier builds | Said once at the first Build; the install host replaces the earlier build; nothing is released yet beyond alphas |
-| Logs grow without bound | Keep everything by default; opt-in compaction points; snapshots keep loads short |
-| Event schemas change and old history stops replaying | Upcasters per type; fixture logs of every schema replayed in the suite; snapshots rebuilt on schema change |
+| Streams grow without bound | Keep everything by default; opt-in compaction points; snapshots keep loads short |
+| Event schemas change and old history stops replaying | Upcasters per type; fixture streams of every schema replayed in the suite; snapshots rebuilt on schema change |
 | Autosave pressure and concurrency | Debounce and commit points; WAL; revision guards; the recovery copy; the write-load test |
 | An overwrite damages a save | Never by default; per-save opt-in; a copy kept first; the identity test, version gate and re-read; the offline writer gated on the session |
 | Panels feel unpredictable with several Vs | Focus pointers as the default binding; Pin to this; every panel header names the node it shows |
@@ -693,19 +718,21 @@ About **49 days** in all, plus 4 for the gated offline writer and a cleanup trac
 
 For [the architecture contract](architecture-contract.md), under "Ownership and dependency direction", to apply after review:
 
-> **The graph engine and deterministic sources.** Studio state that people create, share or wire lives in the graph as append-only event logs (values are folds; snapshots and derived values are caches, never truth; history changes only by an explicit compaction or purge), built on the standalone graph engine (`projects/strata/`), which imports nothing from the Studio and is used only through its public entry points (`strata`, and `strata/testing` in tests). Adapters (SQLite storage, Bun and browser sources, the bridge) implement the engine's interfaces; Studio domain types (V, presets and looks, saves and policies, profiles, layouts, pointers, mods) are registered through its API; features register their own types and rules; the presentation reads only detached snapshots, queries and capabilities through `port.graph`. Every action names the node it targets; no service holds an implicit current V, look, preset, save or view. Every source of non-determinism (clock and timers, randomness and IDs, input, storage, files, jobs and workers, the network, the game bridge) enters as a source node that the composition binds to a real adapter in the app and a simulated one in tests; only adapter modules may read them directly (boundary tests enforce both rules), and new behaviour ships with a seeded simulation of its flow whose invariants hold after every step.
+> **The graph engine and deterministic sources.** Studio state that people create, share or wire lives in the graph as append-only event streams (values are folds; snapshots and derived values are caches, never truth; history changes only by an explicit compaction or purge), built on the standalone graph engine (`projects/strata/`), which imports nothing from the Studio and is used only through its public entry points (`strata`, and `strata/testing` in tests). Adapters (SQLite storage, Bun and browser sources, the bridge) implement the engine's interfaces; Studio domain types (V, presets and looks, saves and policies, profiles, layouts, pointers, mods) are registered through its API; features register their own types and rules; the presentation reads only detached snapshots, queries and capabilities through `port.graph`. Every action names the node it targets; no service holds an implicit current V, look, preset, save or view. Every source of non-determinism (clock and timers, randomness and IDs, input, storage, files, jobs and workers, the network, the game bridge) enters as a source node that the composition binds to a real adapter in the app and a simulated one in tests; only adapter modules may read them directly (boundary tests enforce both rules), and new behaviour ships with a seeded simulation of its flow whose invariants hold after every step.
 
-## 11. Open questions, with recommended defaults
+## 11. Decisions on the open questions
 
-| # | Question | Recommended default |
+Recorded 29 September 2026. Each is a **coordinator default; the maintainer may reverse it**, and the design keeps each reversible.
+
+| # | Question | Decision |
 |---|---|---|
-| Q1 | **New profile from this one:** what does each introduced node become by default? | Presets, looks and mods **referenced** (the work stays shared); Vs, views, layouts and pointers **forked** (the new profile can rearrange and restyle, and still follows whatever it doesn't change). The chooser shows and changes each. |
-| Q2 | **Fine-grained sharing inside a preset:** should eye makeup's layers be a keyed map from the start of G5, so a fork can change one layer and keep following the others, or should a preset's part stay one atomic value at first? | **Keyed by layer from G5.** It is what makes forks useful for makeup; each layer stays atomic inside. |
-| Q3 | **Editing an inherited value in a panel:** does it override on this node (the source unchanged), or edit the source for everyone? | **Override here**, with **Edit <source>** and **Push to <source>** one click away, so shared work never changes by accident. |
-| Q4 | **Replayable problem reports:** should Report a problem include the session's random seed and a bounded trace of source events (event kinds, timings and node IDs; no file contents, save data or paths), so a reported bug can be replayed in the simulation harness? | **Yes, as a listed item of the report the person can untick,** like every other item; the trace window is bounded and redacted with the diagnostics rules. |
-| Q5 | **The engine's name:** Strata (working name), or another neutral name? | **Strata**; renaming is cheap until its first tag. |
-| Q6 | **Undo in an append-only world:** should Undo append compensating events (the undone step stays in history and blame), or move a head pointer so undone steps become a hidden branch? | **Compensating events.** History stays honest, other windows and actors see an ordinary change, and redo is one more event. |
-| Q7 | **Purge and backups:** should **Delete permanently** also scrub the node from existing backups at once, or let backups age out (a week to a month)? | **Scrub at once by default** (the privacy case, and anything touching saves), with a choice to leave backups as they are. |
+| Q1 | New profile from this one: what does each introduced node become by default? | **Reference everything.** Make distinct here (fork or clone) stays one click per node. |
+| Q2 | Fine-grained sharing inside a preset | **Layers forkable singly:** eye makeup's layers are a keyed map from G5, so a fork can change one layer and keep following the others. |
+| Q3 | Editing an inherited value in a panel | **Override on this node,** with **Apply to source** (and Edit the source) one click away. |
+| Q4 | Replayable problem reports | **Replayable traces, opt-in and privacy-scanned:** the seed and a bounded trace of source entries (kinds, timings, node IDs; no file contents, save data or paths), included only when the person ticks it, after the private-data scan the report already runs. |
+| Q5 | The engine's name | **Strata stays a working name**; renaming is cheap until its first tag. |
+| Q6 | Undo in an append-only world | **Compensating entries**; history and blame keep every step. |
+| Q7 | Purge and backups | **Purge from backups too,** at once. |
 
 ## Related pages
 
