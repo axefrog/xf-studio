@@ -705,7 +705,7 @@ Subsystems already covered by a deep review, with the focus a later review shoul
 
 ## Fixed on main after the speed-2 merge
 
-- **PREV-197 (High while it lasted):** after the speed-2 merge, V's details failed to prepare on the first restart: two decode lanes decoded the same texture (wanted by two requests) side by side, the second deleted the first's fresh cache entry and its rename failed with EPERM on Windows. A resource several requests want is now decoded once and answers each of them, and a cache write keeps a verified entry of the same identity (`db7586a`, regression test in `native-mask.test.ts`). The render smoke test didn't catch it because it runs on a warm cache.
+- **PREV-197 (High while it lasted):** after the speed-2 merge, V's details failed to prepare on the first restart: two decode lanes decoded the same texture (wanted by two requests) side by side, the second deleted the first's fresh cache entry and its rename failed with EPERM on Windows. A resource several requests want is now decoded once and answers each of them, and a cache write keeps a verified entry of the same identity (`db7586a`, regression test in `native-mask.test.ts`). The render smoke test did not catch it; a cold-cache run belongs in it.
 
 ## Fixed in claude/cleanup-bridge-r6
 
