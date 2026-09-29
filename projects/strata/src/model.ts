@@ -66,15 +66,15 @@ export class ReadModel {
     const def = this.reader.def(ref.type);
     if (!def || !this.reader.state(ref)) return [];
     const out: Reference[] = [];
-    const walk = (path: Path, kind: FieldKind, follows: boolean) => {
-      if (kind.kind === "map") { for (const key of this.resolver.mapKeys(ref, path)) walk([...path, key], kind.of, follows); return; }
+    const walk = (path: Path, kind: FieldKind) => {
+      if (kind.kind === "map") { for (const key of this.resolver.mapKeys(ref, path)) walk([...path, key], kind.of); return; }
       if (kind.kind !== "ref" && kind.kind !== "refs") return;
       const value = this.resolver.leaf(ref, path).value;
       const targets = kind.kind === "ref" ? [value] : Array.isArray(value) ? value : [];
       for (const target of targets) if (target && typeof target === "object" && typeof (target as NodeRef).id === "string")
         out.push({ path, target: target as NodeRef, follows: !!kind.follows });
     };
-    for (const [field, spec] of Object.entries(def.fields)) if (hasRefs(spec)) walk([field], spec, followsOf(spec));
+    for (const [field, spec] of Object.entries(def.fields)) if (hasRefs(spec)) walk([field], spec);
     return out;
   }
 
@@ -142,7 +142,6 @@ export class ReadModel {
     return result;
   }
 
-  invalidateDerived(id: string): void { this.derived.delete(id); }
   clearDerived(): void { this.derived.clear(); }
 
   ruleContext(): RuleContext {
@@ -161,4 +160,3 @@ export class ReadModel {
 }
 
 export const hasRefs = (kind: FieldKind): boolean => kind.kind === "ref" || kind.kind === "refs" || kind.kind === "map" && hasRefs(kind.of);
-const followsOf = (kind: FieldKind): boolean => kind.kind === "map" ? followsOf(kind.of) : (kind.kind === "ref" || kind.kind === "refs") && !!kind.follows;

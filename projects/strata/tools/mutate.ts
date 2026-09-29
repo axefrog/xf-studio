@@ -27,7 +27,7 @@ const DEFAULT_FILES = [
 ];
 const DEFAULT_TESTS = ["tests/kernel.test.ts", "tests/kernel-policy.test.ts", "tests/erector.test.ts", "tests/edges.test.ts", "tests/units.test.ts", "tests/data-cases.test.ts", "tests/graph-api.test.ts",
   "tests/entity.test.ts", "tests/streams.test.ts", "tests/lifetime.test.ts", "tests/store.test.ts", "tests/example.test.ts", "tests/interleavings.test.ts",
-  "tests/kernel-model.test.ts", "tests/property.test.ts", "tests/sim/dst.test.ts"];
+  "tests/kernel-model.test.ts", "tests/erector-and-processes.test.ts", "tests/graph-behaviour.test.ts", "tests/property.test.ts", "tests/sim/dst.test.ts"];
 
 /** The test set the first caches were keyed by. */
 const OLDER_TESTS = ["tests/entity.test.ts", "tests/streams.test.ts", "tests/lifetime.test.ts", "tests/store.test.ts", "tests/example.test.ts",
@@ -47,8 +47,8 @@ const ratchet = flag("--ratchet"), record = flag("--record");
 const dash = argv.indexOf("--");
 const tests = dash >= 0 ? argv.slice(dash + 1) : argv.length ? argv : DEFAULT_TESTS;
 /**
- * The mutants recorded as equivalent: in the Markdown file, a list item holding a key in double backticks, then its
- * reason on the indented lines after it.
+ * The mutants recorded as equivalent: in the Markdown file, a list item holding a key in double backticks (its file
+ * written from the repository root), then its reason on the indented lines after it.
  */
 function readEquivalents(path: string): Map<string, string> {
   const out = new Map<string, string>();
@@ -56,7 +56,8 @@ function readEquivalents(path: string): Map<string, string> {
   let key: string | undefined;
   for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
     const item = /^- ``(.+)``\s*$/.exec(line);
-    if (item) { key = item[1]; out.set(key, ""); continue; }
+    // Keys are written from the repository root; the tool's own keys start at the engine's folder.
+    if (item) { key = item[1].replace(/^projects\/strata\//, ""); out.set(key, ""); continue; }
     if (key && /^\s+\S/.test(line)) out.set(key, `${out.get(key)} ${line.trim()}`.trim());
     else if (!/^\s*$/.test(line)) key = undefined;
   }

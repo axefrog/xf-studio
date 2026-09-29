@@ -10,7 +10,7 @@
  *
  * Run it under the memory guard: it runs the whole suite.
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ROOT } from "./instrument";
@@ -62,3 +62,11 @@ for (const [name, probes] of [...merged].sort(([a], [b]) => a < b ? -1 : 1)) {
 }
 console.log(`\nBranch outcomes covered\n${lines.join("\n")}\n${"all engine files".padEnd(34)} ${String(covered).padStart(5)} / ${String(total).padEnd(5)} ${(100 * covered / Math.max(1, total)).toFixed(1).padStart(6)} %`);
 if (listFile) { writeFileSync(listFile, `${missing.join("\n")}\n`); console.log(`${missing.length} uncovered outcomes listed in ${listFile}`); }
+const quality = existsSync(QUALITY) ? JSON.parse(readFileSync(QUALITY, "utf8")) as Record<string, unknown> : {};
+const share = Math.round(10000 * covered / Math.max(1, total)) / 100;
+const floor = (quality.coverage as { percent?: number } | undefined)?.percent;
+if (record && (floor === undefined || share >= floor)) {
+  writeFileSync(QUALITY, `${JSON.stringify({ ...quality, coverage: { covered, total, percent: share } }, null, 2)}\n`);
+  console.log(`recorded ${share} % in tools/quality.json`);
+}
+if ((ratchet || record) && floor !== undefined && share < floor) { console.error(`Branch coverage fell from ${floor} % to ${share} %.`); process.exit(1); }

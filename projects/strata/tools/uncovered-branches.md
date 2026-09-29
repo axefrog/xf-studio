@@ -7,7 +7,7 @@
 | `kernel.ts` `drain` | a primed set with no active node | a node is primed only while active, and going dormant takes it out of the set |
 | `kernel.ts` `dropFollower`, `disconnect`, `forgetProcess` | the node already forgotten, not in its scope's list, already inactive; a process without a parent or not among its children | each is forgotten or disconnected exactly once: a process only once it is terminal (its terminal flag stops a second end), a follower only with its edge, an effect only while connected |
 | `operators.ts` `scan`, `flatMap` | an error among an input's fresh entries; an error on the inner node | the input-error guard before them returns any input's error first |
-| `model.ts` `references` walk, `followsOf`, `derive` | a leaf that isn't a reference under a reference field; a derivation cycle without its nodes | only fields whose leaves are references are walked; a cycle result always carries its cycle |
+| `model.ts` `references` walk, `derive` | a leaf that isn't a reference under a reference field; a derivation cycle without its nodes | only fields whose leaves are references are walked; a cycle result always carries its cycle |
 | `resolve.ts` `candidateKeys` | a node whose state exists but whose type isn't registered, or a leaf path asked for its map keys | callers reach it only through `mapKeys` of a map path of a registered type |
 | `store.ts` `listNow` | a stream without entries | a stream is created by its first entry and removed with its last |
 | `trust.ts` `resolveClaims` | two latest claims of one actor | claims are reduced to one latest per actor before ranking |
