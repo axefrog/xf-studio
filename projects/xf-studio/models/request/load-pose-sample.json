@@ -1,0 +1,42 @@
+{
+  "kind": "request",
+  "id": "load-pose-sample",
+  "owner": "poses",
+  "summary": "Load a held pose's sampled clip.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "data"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "pose": {
+        "type": "string"
+      },
+      "bodyGender": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "pose",
+      "bodyGender"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:pose-sample"
+  ]
+}

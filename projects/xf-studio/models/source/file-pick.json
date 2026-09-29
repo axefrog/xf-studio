@@ -1,0 +1,47 @@
+{
+  "kind": "source",
+  "id": "file-pick",
+  "owner": "platform",
+  "summary": "Files the person picks or drops: name, size and bytes by reference.",
+  "status": "both",
+  "replaces": [
+    "browser-file-device"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "purpose": {
+        "enum": [
+          "recipe",
+          "collection",
+          "save",
+          "character-preset"
+        ]
+      },
+      "name": {
+        "type": "string"
+      },
+      "size": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "window",
+      "purpose",
+      "name",
+      "size",
+      "bytes"
+    ]
+  },
+  "adapter": "../../../strata/src/sources",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "One per pick."
+}

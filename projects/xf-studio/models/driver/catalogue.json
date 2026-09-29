@@ -1,0 +1,46 @@
+{
+  "kind": "driver",
+  "id": "catalogue",
+  "owner": "character",
+  "summary": "Builds each body gender's creator catalogue per installation and language, answers pages and searches, and derives a V's view from it.",
+  "status": "both",
+  "replaces": [
+    "cc-catalogue",
+    "cc-catalogue-host",
+    "cc-catalogue-server",
+    "cc-catalogue-service",
+    "cc-render-coverage",
+    "cco-model",
+    "game-text"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:build-catalogue",
+    "request:derive-v-view"
+  ],
+  "demands": [
+    "operator:catalogue-key",
+    "source:host-files",
+    "source:host-environment"
+  ],
+  "creates": [],
+  "starts": [
+    "process:catalogue-build",
+    "process:v-view-derive"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:open-installation",
+    "request:derive-swatches",
+    "request:derive-icons"
+  ],
+  "faults": [],
+  "lifetime": "Per gender and installation, while a V of that gender is shown or its panel is open.",
+  "x-friction": [
+    {
+      "gap": "The V's view is computed here and consumed on the page as if it were a local derived value.",
+      "capability": "cross-process-work",
+      "closes": "Derived values computed in another process, glitch-free with local ones."
+    }
+  ]
+}

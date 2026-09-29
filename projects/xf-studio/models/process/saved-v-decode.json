@@ -1,0 +1,64 @@
+{
+  "kind": "process",
+  "id": "saved-v-decode",
+  "owner": "character",
+  "summary": "Decoding a save's creator node and loadout into a SavedV, in a worker.",
+  "status": "both",
+  "replaces": [
+    "save-reader",
+    "saved-appearance-actions"
+  ],
+  "driver": "driver:open-save",
+  "work": "Reads the creator state and the loadout from the save's bytes.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "saved": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "enum": [
+              "eye-artistry/saved-v-1"
+            ]
+          }
+        },
+        "required": [
+          "schema"
+        ]
+      },
+      "loadout": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "saved",
+      "loadout"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable-save"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between slices.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "page worker, the person's own"
+}

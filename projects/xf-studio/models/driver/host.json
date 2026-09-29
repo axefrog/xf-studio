@@ -1,0 +1,68 @@
+{
+  "kind": "driver",
+  "id": "host",
+  "owner": "host",
+  "summary": "The root of the host process: serves the page bundle and endpoints, and starts the library, settings, installation, preparation, export and install drivers per library.",
+  "status": "both",
+  "replaces": [
+    "../browser-build",
+    "../server",
+    "event-loop",
+    "host-state",
+    "local-settings-readiness",
+    "local-settings-server",
+    "local-settings-store"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:run-host"
+  ],
+  "demands": [
+    "source:host-environment",
+    "source:host-requests",
+    "source:host-clock",
+    "source:host-random",
+    "type:host-settings",
+    "operator:route-table"
+  ],
+  "creates": [
+    "the configuration node from the environment (cache roots, budgets, idle source mode, overlays)",
+    "one child run of library and backups per library (real and verification)"
+  ],
+  "starts": [
+    "process:host-run"
+  ],
+  "runtimes": [
+    "runtime:http-server",
+    "runtime:page-bundle"
+  ],
+  "raises": [
+    "request:store-operation",
+    "request:back-up-library",
+    "request:open-installation",
+    "request:write-log",
+    "request:warm-shown-v"
+  ],
+  "faults": [
+    {
+      "code": "port-taken",
+      "when": "Another process holds the loopback port.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "The host process, from start to shutdown; aborting its token cancels every host run.",
+  "x-friction": [
+    {
+      "gap": "Two hand-made copies of every stateful host service serve the real and verification scopes.",
+      "capability": "separate-libraries",
+      "closes": "Several graphs side by side, sharing drivers keyed by library."
+    },
+    {
+      "gap": "A request's own abort isn't tied to the host work it starts.",
+      "capability": "reasons-for-work",
+      "closes": "Requests carrying their requester and lifetime into host work."
+    }
+  ]
+}

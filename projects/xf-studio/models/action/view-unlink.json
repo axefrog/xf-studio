@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "view-unlink",
+  "owner": "views",
+  "summary": "Give a view its own copy of a shared camera, lights or display.",
+  "status": "target",
+  "name": "view.unlink",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "slot": {
+        "enum": [
+          "camera",
+          "lights",
+          "display"
+        ]
+      }
+    },
+    "required": [
+      "view",
+      "slot"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The slot is shared."
+  },
+  "effect": {
+    "commit": "Forks the shared node and points the view at the fork."
+  },
+  "undo": "view-lighting"
+}

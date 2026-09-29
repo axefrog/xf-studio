@@ -1,0 +1,38 @@
+{
+  "kind": "sink",
+  "id": "game-writes",
+  "owner": "bridge",
+  "summary": "Commands that change the running game, each recorded in the audit log with its reversal note before it is sent.",
+  "status": "target",
+  "environment": "bridge",
+  "input": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string"
+      },
+      "args": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "reversal": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "command",
+      "args",
+      "reversal"
+    ]
+  },
+  "adapter": "planned",
+  "idempotency": "The command's ID, recorded before sending.",
+  "x-friction": [
+    {
+      "gap": "Every write to the game has a reversal note, and Undo in the Studio should reach it: compensation in an outside system.",
+      "capability": "undo-groups",
+      "closes": "Undo that drives compensating effects in outside systems, keyed by step."
+    }
+  ]
+}

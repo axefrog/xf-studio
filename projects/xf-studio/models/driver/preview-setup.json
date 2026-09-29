@@ -1,0 +1,48 @@
+{
+  "kind": "driver",
+  "id": "preview-setup",
+  "owner": "setup",
+  "summary": "The first-run path to an interactive head, as a state machine over settings, detection, WolvenKit, the core and the head: it raises the one next step.",
+  "status": "both",
+  "replaces": [
+    "alpha-availability",
+    "head-load-error",
+    "host-state-poller",
+    "preview-preparation",
+    "preview-setup",
+    "studio-ui/preview-setup-card",
+    "wolvenkit-setup"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:set-up-preview"
+  ],
+  "demands": [
+    "type:host-settings",
+    "type:preferences",
+    "type:consent",
+    "operator:setup-state",
+    "source:focus-input"
+  ],
+  "creates": [
+    "the setup state machine erected from its model"
+  ],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:detect-installs",
+    "request:prepare-core",
+    "request:set-up-wolvenkit",
+    "request:show-scene"
+  ],
+  "faults": [
+    {
+      "code": "no-game-folder",
+      "when": "No game folder is set or detected; the card asks for it.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per window, while the setup card or a head pane is shown."
+}

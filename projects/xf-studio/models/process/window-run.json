@@ -1,0 +1,36 @@
+{
+  "kind": "process",
+  "id": "window-run",
+  "owner": "platform",
+  "summary": "The window's root run; its tree is the window's whole activity.",
+  "status": "target",
+  "driver": "driver:window",
+  "work": "Runs the window's child drivers until the window closes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "null"
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "library-unreadable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Closing the window aborts its token, which ends every child.",
+  "cleanup": "Children end with the token; the legacy mirror writes once more first.",
+  "deadline": "none",
+  "lane": "page, root"
+}

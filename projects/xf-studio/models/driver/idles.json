@@ -1,0 +1,32 @@
+{
+  "kind": "driver",
+  "id": "idles",
+  "owner": "motion",
+  "summary": "Reads the creator's preview idles (body clips and their solved faces) per installation.",
+  "status": "both",
+  "replaces": [
+    "idle-endpoint",
+    "idle-host",
+    "idle-server",
+    "native/anim-decode",
+    "native/anim-set"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:load-idles"
+  ],
+  "demands": [
+    "source:host-files"
+  ],
+  "creates": [],
+  "starts": [
+    "process:idle-catalogue-read"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:prepare-face",
+    "request:open-installation"
+  ],
+  "faults": [],
+  "lifetime": "Per installation, while an idle is shown."
+}

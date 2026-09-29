@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "saved-v-clear",
+  "owner": "character",
+  "summary": "Clear (saved v): sets the V's base back to the game's default.",
+  "status": "both",
+  "replaces": [
+    "saved-appearance-actions"
+  ],
+  "name": "savedV.clear",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A V is focused.",
+    "refusals": [
+      {
+        "code": "unreadable-save",
+        "reason": "That file isn't a save XF Studio can read."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the V's base back to the game's default."
+  },
+  "undo": "character"
+}

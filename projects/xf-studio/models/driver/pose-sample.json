@@ -1,0 +1,26 @@
+{
+  "kind": "driver",
+  "id": "pose-sample",
+  "owner": "poses",
+  "summary": "Loads the sampled clip of a held pose for its scene's motion.",
+  "status": "both",
+  "replaces": [
+    "pose-actions",
+    "pose-stage"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:load-pose-sample"
+  ],
+  "demands": [
+    "type:scene",
+    "source:host-answers"
+  ],
+  "creates": [],
+  "starts": [
+    "process:pose-sample-load"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "Per held pose."
+}

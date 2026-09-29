@@ -1,0 +1,49 @@
+{
+  "kind": "request",
+  "id": "bridge-command",
+  "owner": "bridge",
+  "summary": "Run one command in the running game.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "reply": {}
+    },
+    "required": [
+      "reply"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string"
+      },
+      "args": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "command",
+      "args"
+    ]
+  },
+  "reasons": [
+    "person",
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:bridge"
+  ],
+  "faults": [
+    {
+      "code": "no-bridge",
+      "when": "No game with the bridge is running.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ]
+}

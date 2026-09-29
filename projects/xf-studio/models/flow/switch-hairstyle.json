@@ -1,0 +1,103 @@
+{
+  "kind": "flow",
+  "id": "switch-hairstyle",
+  "owner": "character",
+  "summary": "Switching a V's hairstyle in the Character panel, prepared ahead where possible, with the tile selected at once.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "type:choice-row",
+      "does": "The hair row is open; its visible choices and hover are session state."
+    },
+    {
+      "model": "driver:choice-row",
+      "does": "Asks the host to prepare the visible choices ahead and asks for their pictures."
+    },
+    {
+      "model": "driver:prefetch",
+      "does": "Prepares choices in priority order, pausing while the person's own request runs."
+    },
+    {
+      "model": "driver:detail-preload",
+      "does": "After a 0.4 s rest on a choice, preloads its parts into the pool."
+    },
+    {
+      "model": "action:character-set-option",
+      "does": "The click shows the tile selected at once and commits the option key (a character step)."
+    },
+    {
+      "model": "operator:character-request",
+      "does": "Changes with the V's hair key."
+    },
+    {
+      "model": "driver:v-preparation",
+      "does": "Asks for the new request, superseding its own older one."
+    },
+    {
+      "model": "driver:v-host",
+      "does": "Answers from a valid kept answer, or prepares the record."
+    },
+    {
+      "model": "operator:parts-to-load",
+      "does": "Keeps every unchanged part and takes the preloaded hair from the pool."
+    },
+    {
+      "model": "driver:v-details",
+      "does": "Loads the rest and swaps the new set in."
+    },
+    {
+      "model": "process:dangle-compile",
+      "does": "Provides the new hair's dangle spec to motion."
+    },
+    {
+      "model": "driver:frame",
+      "does": "Draws the scene."
+    }
+  ],
+  "demand": "The scene showing the V; the open row for prefetch and pictures.",
+  "faults": [
+    {
+      "code": "preparation-failed",
+      "when": "The new choice couldn't be prepared; the V stays as shown, with Try again.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "needs-wolvenkit",
+      "when": "Preparing the choice needs WolvenKit.",
+      "fault": "owner",
+      "goesTo": "request:set-up-wolvenkit",
+      "then": "suspend"
+    },
+    {
+      "code": "not-offered",
+      "when": "The installation can't honour a choice; it shows as a conflict in the V's view.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Prepared and hovered: first frame under 200 ms (met today: 77–86 ms).",
+      "Prepared, new to the page: under 1 s (met: 0.26–0.91 s).",
+      "Never prepared: under 1 s typical with progress at once (0.34–2.3 s measured; over for three 4096² maps).",
+      "No main-thread task over 50 ms."
+    ],
+    "memory": "The part pool holds the previous V's parts until another V clears it."
+  },
+  "invariants": [
+    "The tile shows the choice selected in the same cycle as the click, and rolls back only on refusal.",
+    "Background prefetch never runs while the person's own request runs.",
+    "A superseded request never overwrites a newer one's result.",
+    "The view never mixes parts of two records."
+  ],
+  "x-friction": [
+    {
+      "gap": "Prefetch pauses, not aborts, for the person's request.",
+      "capability": "pause-and-resume",
+      "closes": "Suspending and resuming background work."
+    }
+  ]
+}

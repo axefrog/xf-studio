@@ -1,0 +1,36 @@
+{
+  "kind": "driver",
+  "id": "poses",
+  "owner": "poses",
+  "summary": "Serves the Poses panel: the catalogue for the shown V's body, filtered by what she wears, with favourites.",
+  "status": "both",
+  "replaces": [
+    "browser-pose-device",
+    "features/poses/actions",
+    "features/poses/facade",
+    "features/poses/library",
+    "features/poses/view/panel"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:show-poses"
+  ],
+  "demands": [
+    "type:pose-favourites",
+    "type:scene",
+    "operator:poses-for",
+    "operator:pose-filter",
+    "source:host-answers"
+  ],
+  "creates": [],
+  "starts": [
+    "process:pose-catalogue-fetch"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:load-pose-catalogue",
+    "request:store-commits"
+  ],
+  "faults": [],
+  "lifetime": "While the Poses panel is shown."
+}

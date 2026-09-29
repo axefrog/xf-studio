@@ -1,0 +1,26 @@
+{
+  "kind": "driver",
+  "id": "backups",
+  "owner": "library",
+  "summary": "Backs the library up once a day it runs (checked at start and hourly) and before every migration, keeping seven daily and four weekly copies, and finishes pending purges.",
+  "status": "both",
+  "replaces": [
+    "platform/graph-adapters/backups"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:back-up-library"
+  ],
+  "demands": [
+    "source:host-clock",
+    "source:host-files"
+  ],
+  "creates": [],
+  "starts": [
+    "process:library-backup",
+    "process:purge-follow-up"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "Per library while the host runs; an hourly check under the library's token."
+}

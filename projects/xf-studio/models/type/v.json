@@ -1,0 +1,234 @@
+{
+  "kind": "type",
+  "id": "v",
+  "owner": "character",
+  "summary": "A V as data: body gender, a base (the game's default or a save's decoded appearance), creator choices by option, clothing, and the look she wears.",
+  "status": "both",
+  "replaces": [
+    "character-context-actions",
+    "saved-appearance-actions",
+    "character-context",
+    "cc-preset"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "What the V is called in lists (\"My V\", \"V from <save>\").",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+      }
+    },
+    "bodyGender": {
+      "kind": "value",
+      "doc": "The body the V is drawn with.",
+      "shape": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "base": {
+      "kind": "value",
+      "doc": "Where the V's appearance starts: the game's default for the body, or a save's decoded appearance and loadout (detached from the file).",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "default"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "save"
+                ]
+              },
+              "saved": {
+                "type": "object",
+                "properties": {
+                  "schema": {
+                    "enum": [
+                      "eye-artistry/saved-v-1"
+                    ]
+                  }
+                },
+                "required": [
+                  "schema"
+                ]
+              },
+              "loadout": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            },
+            "required": [
+              "kind",
+              "saved"
+            ]
+          }
+        ]
+      }
+    },
+    "choices": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Option key → the creator choice set on it (part, option, choice, and the options a switcher activates); keyed so a fork overrides one option.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "part": {
+            "type": "string"
+          },
+          "option": {
+            "type": "string"
+          },
+          "choice": {
+            "type": "string"
+          },
+          "activates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mod": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "part",
+          "option",
+          "choice"
+        ]
+      }
+    },
+    "kept": {
+      "kind": "value",
+      "doc": "A portable preset's entries kept verbatim for a later round trip.",
+      "shape": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "clothingState": {
+      "kind": "value",
+      "doc": "How the V is dressed in the preview.",
+      "shape": {
+        "enum": [
+          "saved",
+          "no-headwear",
+          "underwear",
+          "custom"
+        ]
+      }
+    },
+    "clothingCustom": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Clothing area → shown, for the custom state.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "ownMakeup": {
+      "kind": "value",
+      "doc": "Whether the V's own saved makeup is hidden while a preset is worn.",
+      "shape": {
+        "enum": [
+          "shown",
+          "hidden"
+        ]
+      }
+    },
+    "look": {
+      "kind": "ref",
+      "to": "type:look",
+      "clone": "follow",
+      "doc": "The look the V wears; a clone takes its own copy."
+    },
+    "origin": {
+      "kind": "ref",
+      "to": "type:save",
+      "clone": "share",
+      "doc": "The save this V was read from, for writing back; never needed to show her."
+    }
+  },
+  "defaults": {
+    "base": {
+      "kind": "default"
+    },
+    "choices": {},
+    "clothingState": "no-headwear",
+    "clothingCustom": {},
+    "ownMakeup": "shown"
+  },
+  "constants": [
+    {
+      "name": "default-female",
+      "label": "Default V (feminine)",
+      "fields": {
+        "name": "Default V",
+        "bodyGender": "female",
+        "base": {
+          "kind": "default"
+        }
+      }
+    },
+    {
+      "name": "default-male",
+      "label": "Default V (masculine)",
+      "fields": {
+        "name": "Default V",
+        "bodyGender": "male",
+        "base": {
+          "kind": "default"
+        }
+      }
+    }
+  ],
+  "rules": [
+    "choice-not-offered-by-installation",
+    "save-looks-changed-since-read",
+    "body-matches-base"
+  ],
+  "migration": {
+    "from": [
+      "the workspace's preview.character (StoredCharacter)",
+      "the workspace's savedV"
+    ],
+    "how": "One V node (\"My V\", or \"V from <save>\" with a save node when the save is found) forked from the matching Default V, wearing a look of the selected preset.",
+    "dryRun": "The migrated V's derived character request equals the one today's context sends for the same workspace."
+  },
+  "x-friction": [
+    {
+      "gap": "The Character panel's Undo spans creator choices and clothing in the order made, while Clothing has its own Undo over just its fields: two overlapping undo sets on one node.",
+      "capability": "undo-groups",
+      "closes": "Undo sets over fields of a node, with steps and redo tracked per set."
+    }
+  ]
+}

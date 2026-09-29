@@ -1,0 +1,65 @@
+{
+  "kind": "request",
+  "id": "apply-intent",
+  "owner": "platform",
+  "summary": "Apply one intent (an action by name, its target and input) from a panel, palette, shortcut, tour or script.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "applied": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "applied"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      },
+      "target": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "target",
+      "input",
+      "window"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:dispatch"
+  ],
+  "faults": [
+    {
+      "code": "unknown-action",
+      "when": "The action isn't in the catalogue.",
+      "fault": "requester",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    },
+    {
+      "code": "outside-accepts",
+      "when": "The input is outside the action's schema or limits.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ]
+}

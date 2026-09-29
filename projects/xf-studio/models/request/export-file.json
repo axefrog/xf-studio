@@ -1,0 +1,46 @@
+{
+  "kind": "request",
+  "id": "export-file",
+  "owner": "platform",
+  "summary": "Hand the person a node in a portable file.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "target": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "format": {
+        "enum": [
+          "recipe",
+          "mask",
+          "collection",
+          "plan",
+          "saved-v",
+          "character-preset"
+        ]
+      }
+    },
+    "required": [
+      "target",
+      "format"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:files"
+  ]
+}

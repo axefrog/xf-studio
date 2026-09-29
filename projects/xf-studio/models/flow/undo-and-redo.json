@@ -1,0 +1,73 @@
+{
+  "kind": "flow",
+  "id": "undo-and-redo",
+  "owner": "platform",
+  "summary": "Undo and Redo routed by focus to the right history, as compensating commits.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "source:key-input",
+      "does": "Ctrl+Z or Ctrl+Y, or the History panel."
+    },
+    {
+      "model": "type:window",
+      "does": "Its focused panel decides the scope: a view, Camera & light or quality → View and lighting; Character → the V's character scope; elsewhere → the focused preset's look scope."
+    },
+    {
+      "model": "driver:dispatch",
+      "does": "Refuses while a gesture or control edit is open in the window."
+    },
+    {
+      "model": "driver:history",
+      "does": "Appends the compensating commits of the scope's top step (a look step may span several presets)."
+    },
+    {
+      "model": "driver:raster",
+      "does": "Re-demands the changed layers (usually raster cache hits by layer hash)."
+    },
+    {
+      "model": "driver:frame",
+      "does": "Draws."
+    },
+    {
+      "model": "driver:store",
+      "does": "Appends and acknowledges."
+    }
+  ],
+  "demand": "The person's shortcut or the History panel.",
+  "faults": [
+    {
+      "code": "nothing-to-undo",
+      "when": "The scope has no step.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "compensation-conflicts",
+      "when": "Another window changed a field after the step.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Like any change: under 100 ms to drawn."
+    ],
+    "memory": "No new memory beyond the compensating entries."
+  },
+  "invariants": [
+    "Undo folds each node back exactly to its state before the step.",
+    "Redo is offered only while the scope's head equals the last Undo's result.",
+    "Look history never contains a camera orbit, a light change or a creator choice.",
+    "Camera navigation never creates a step."
+  ],
+  "x-friction": [
+    {
+      "gap": "Three separate implementations today; one engine capability over sets of nodes and fields would serve all.",
+      "capability": "undo-groups",
+      "closes": "Undo over named sets of nodes and fields."
+    }
+  ]
+}

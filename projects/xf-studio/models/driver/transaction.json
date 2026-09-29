@@ -1,0 +1,56 @@
+{
+  "kind": "driver",
+  "id": "transaction",
+  "owner": "platform",
+  "summary": "Opens, holds and closes a window's one gesture or control edit: every frame shown at once, one commit at the end, nothing on Escape.",
+  "status": "both",
+  "replaces": [
+    "authoring-control-edits",
+    "authoring-gestures",
+    "gesture-cancel",
+    "layer-render-queue",
+    "platform/core/history-transaction"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:edit-transaction"
+  ],
+  "demands": [
+    "type:gesture",
+    "type:control-edit",
+    "operator:eye-makeup-gesture",
+    "operator:gesture-label"
+  ],
+  "creates": [
+    "the working copy of the target (its value with the open frames layered over it), demanded by the raster and every view"
+  ],
+  "starts": [],
+  "runtimes": [],
+  "raises": [
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "gesture-open",
+      "when": "A second gesture while one is open in the window.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "stale-layer",
+      "when": "The layer was removed (in another window) during the gesture.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per window; a transaction lives from its first frame to its commit or cancel.",
+  "x-friction": [
+    {
+      "gap": "Frames of a drag must be seen at frame rate but leave one commit, or none.",
+      "capability": "uncommitted-edits",
+      "closes": "Uncommitted edits layered over a node, collapsed into one commit or dropped."
+    }
+  ]
+}

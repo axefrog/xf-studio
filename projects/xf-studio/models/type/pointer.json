@@ -1,0 +1,44 @@
+{
+  "kind": "type",
+  "id": "pointer",
+  "owner": "platform",
+  "summary": "A fixed reference to any node, or a follow path from another pointer, so panels bind to wiring rather than to a service's state.",
+  "status": "current",
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "target": {
+      "kind": "ref",
+      "to": "*",
+      "clone": "share",
+      "doc": "A fixed target: any node."
+    },
+    "from": {
+      "kind": "ref",
+      "to": "type:pointer",
+      "clone": "share",
+      "doc": "Or: follow another pointer, then walk path from where it points.",
+      "follows": true
+    },
+    "path": {
+      "kind": "value",
+      "doc": "Reference fields walked from where from points.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "from": "focus.view",
+      "path": [
+        "scene",
+        "v"
+      ]
+    }
+  ]
+}

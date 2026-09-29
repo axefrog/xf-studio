@@ -1,0 +1,49 @@
+{
+  "kind": "action",
+  "id": "layer-edit",
+  "owner": "eye-makeup",
+  "summary": "Edit (layer): edits the preset's layer keys through eye makeup's apply operator (layer.edit), one commit per action or per finished control run.",
+  "status": "both",
+  "replaces": [
+    "eye-makeup-descriptors",
+    "engines/layered-makeup/recipe-actions"
+  ],
+  "name": "layer.edit",
+  "target": "type:preset-eye-makeup",
+  "input": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "additionalProperties": false,
+    "description": "One of the variants: add, duplicate, remove, reset, rename, move."
+  },
+  "capability": {
+    "when": "A preset is open for editing, the layer exists, no gesture is open elsewhere in the window, and the preset isn't locked by a newer build's data.",
+    "refusals": [
+      {
+        "code": "locked",
+        "reason": "This look was saved by a newer XF Studio and can only be viewed here."
+      },
+      {
+        "code": "missing",
+        "reason": "That layer no longer exists."
+      },
+      {
+        "code": "limit",
+        "reason": "A preset has at most 32 layers and 8 warp fields per layer."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the preset's layer keys through eye makeup's apply operator (layer.edit), one commit per action or per finished control run."
+  },
+  "undo": "look"
+}

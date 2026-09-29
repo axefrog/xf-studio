@@ -1,0 +1,143 @@
+{
+  "kind": "type",
+  "id": "mod",
+  "owner": "export",
+  "summary": "One installable XF mod: its manager name, short key, the products and selectors it ships and the presets each selector offers.",
+  "status": "both",
+  "replaces": [
+    "platform/core/package-plan",
+    "part-preset-sets",
+    "collection-store",
+    "library-store",
+    "collection-service"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The mod's name in mod managers; XF-branded by default (XF Eye Artistry for eye makeup).",
+      "shape": {
+        "type": "string",
+        "maxLength": 80
+      }
+    },
+    "key": {
+      "kind": "value",
+      "doc": "The mod's six-character key, used in archive, namespace and depot names; a fork or clone gets its own.",
+      "inherit": false,
+      "unique": true,
+      "shape": {
+        "type": "string",
+        "pattern": "^[0-9a-hjkmnp-tv-z]{6}$"
+      }
+    },
+    "chosenKey": {
+      "kind": "value",
+      "doc": "A key the person chose for a published mod (2–16 of a-z0-9); overrides key in identifiers.",
+      "shape": {
+        "type": "string",
+        "pattern": "^[a-z0-9]{2,16}$"
+      }
+    },
+    "products": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Product ID → which features ship in it and its name (the package plan); one product per mod after migration.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "features"
+        ]
+      }
+    },
+    "selectors": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Selector ID → its label and caps, as the selectors design defines them.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      }
+    },
+    "selectorPresets": {
+      "kind": "map",
+      "of": {
+        "kind": "refs",
+        "to": [
+          "type:preset-eye-makeup",
+          "type:preset-expression"
+        ],
+        "clone": "share"
+      },
+      "doc": "Selector ID → the presets it offers, in menu order."
+    },
+    "settings": {
+      "kind": "value",
+      "doc": "Export options that aren't per selector (compatibility table, sharing).",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "table": {
+            "enum": [
+              "installed",
+              "sharing"
+            ]
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  "defaults": {
+    "products": {},
+    "selectors": {},
+    "selectorPresets": {},
+    "settings": {}
+  },
+  "rules": [
+    "key-unique-in-library",
+    "installed-identity-clash",
+    "selector-within-caps"
+  ],
+  "migration": {
+    "from": [
+      "each collection's latest revision and its package plan",
+      "each expression set"
+    ],
+    "how": "A mod node with the collection's UUID (so an installed build is recognised as the same mod) and a new key; a multi-product plan becomes one mod per product; an expression set becomes a mod of its presets.",
+    "dryRun": "Collections, sets and presets read against planned; a migrated collection builds the same files under the new names (compared with the migration's identity map).",
+    "copy": "The library is copied beside itself before anything is written."
+  },
+  "x-friction": [
+    {
+      "gap": "Collection revisions migrate as entries that must keep their saved times.",
+      "capability": "original-times",
+      "closes": "Import entries carrying an original time apart from the append time."
+    }
+  ]
+}

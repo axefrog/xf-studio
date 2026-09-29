@@ -1,0 +1,44 @@
+{
+  "kind": "source",
+  "id": "bridge",
+  "owner": "bridge",
+  "summary": "The running game's XF bridge: whether a session file names a live game, its replies to commands, and capture files.",
+  "status": "target",
+  "environment": "bridge",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "enum": [
+          "session",
+          "reply",
+          "capture",
+          "closed"
+        ]
+      },
+      "sid": {
+        "type": "string"
+      },
+      "reply": {},
+      "capture": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "asOf": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "Up to 18 requests a second in bursts of 36.",
+  "x-friction": [
+    {
+      "gap": "The game plugin refuses more than 20 requests a second; the client paces, bursts and retries after refusal, and game facts are only as fresh as the last reply.",
+      "capability": "paced-requests",
+      "closes": "Paced request sources with retries and reconnection, and an age on each observation."
+    }
+  ]
+}

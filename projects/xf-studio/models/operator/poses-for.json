@@ -1,0 +1,36 @@
+{
+  "kind": "operator",
+  "id": "poses-for",
+  "owner": "poses",
+  "summary": "The poses of a scene's V's body gender.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:scene",
+    "process:pose-catalogue-fetch"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    }
+  },
+  "pure": true
+}

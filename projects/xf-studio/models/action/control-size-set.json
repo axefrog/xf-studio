@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "control-size-set",
+  "owner": "shell",
+  "summary": "Set (control size): sets the preferences key (controlSize.set).",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "controlSize.set",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {
+      "control": {
+        "type": "string"
+      },
+      "size": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "control",
+      "size"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "commit": "Sets the preferences key (controlSize.set)."
+  },
+  "undo": "none"
+}

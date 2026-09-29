@@ -1,0 +1,40 @@
+{
+  "kind": "request",
+  "id": "load-v-details",
+  "owner": "character",
+  "summary": "Load a prepared V's record into a scene.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "record": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "record"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "record": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "scene",
+      "record"
+    ]
+  },
+  "reasons": [
+    "shows",
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:v-details"
+  ]
+}

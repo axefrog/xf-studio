@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "desktop-app-refresh",
+  "owner": "setup",
+  "summary": "Refresh (desktop app): raises the offer-desktop-app request.",
+  "status": "both",
+  "replaces": [
+    "desktop-app"
+  ],
+  "name": "desktopApp.refresh",
+  "target": "type:consent",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Studio runs on localhost (the desktop app has no offer).",
+    "refusals": [
+      {
+        "code": "installer-changed",
+        "reason": "The setup program changed since it was shown; look again."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:offer-desktop-app"
+  },
+  "undo": "none"
+}

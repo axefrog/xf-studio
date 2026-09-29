@@ -1,0 +1,52 @@
+{
+  "kind": "process",
+  "id": "finish-compile",
+  "owner": "eye-makeup",
+  "summary": "Compiling a scene's finish programs ahead while it is idle, so the first use of a finish costs nothing.",
+  "status": "target",
+  "driver": "driver:scene",
+  "work": "Links each finish program the scene's plate may use, one per idle frame.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "programs": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "programs"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "link-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The scene ending aborts it between programs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "page GPU, idle frames only",
+  "x-friction": [
+    {
+      "gap": "Compiling ahead is a runtime's own background work that must yield to frames.",
+      "capability": "frame-timing",
+      "closes": "Runtime background work under the frame budget."
+    }
+  ]
+}

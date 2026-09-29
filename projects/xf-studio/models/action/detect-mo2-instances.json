@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "detect-mo2-instances",
+  "owner": "setup",
+  "summary": "Mo2 instances (detect): raises the detect-installs request.",
+  "status": "both",
+  "replaces": [
+    "install-detection-actions"
+  ],
+  "name": "detect.mo2Instances",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The host is reachable."
+  },
+  "effect": {
+    "raises": "request:detect-installs"
+  },
+  "undo": "none"
+}

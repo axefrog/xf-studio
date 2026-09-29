@@ -1,0 +1,44 @@
+{
+  "kind": "driver",
+  "id": "layout",
+  "owner": "shell",
+  "summary": "Makes a window's panel instances from its layout; a panel instance being visible is the demand for its bindings.",
+  "status": "both",
+  "replaces": [
+    "layout-library",
+    "studio-ui/dock/dock-view",
+    "studio-ui/dock/layout",
+    "studio-ui/dock/persist",
+    "studio-ui/layouts",
+    "studio-ui/views/contribution",
+    "studio-ui/views/panels",
+    "studio-ui/views/shell"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:lay-out-window"
+  ],
+  "demands": [
+    "type:layout",
+    "type:window",
+    "source:element-size",
+    "operator:layout-for",
+    "operator:shown-modules"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [
+    "runtime:panel-dom"
+  ],
+  "raises": [
+    "request:paint-window",
+    "request:show-view",
+    "request:catalogue-page",
+    "request:show-poses",
+    "request:list-library",
+    "request:list-saves",
+    "request:run-tour"
+  ],
+  "faults": [],
+  "lifetime": "Per window."
+}

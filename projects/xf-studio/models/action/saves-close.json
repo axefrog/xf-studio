@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "saves-close",
+  "owner": "save-explorer",
+  "summary": "Close (saves): changes the open save's view (saves.close).",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/actions"
+  ],
+  "name": "saves.close",
+  "target": "type:open-save",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The saves folder is known.",
+    "refusals": [
+      {
+        "code": "folder-missing",
+        "reason": "Choose where your saves are in Settings › Saves."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Changes the open save's view (saves.close)."
+  },
+  "undo": "none"
+}

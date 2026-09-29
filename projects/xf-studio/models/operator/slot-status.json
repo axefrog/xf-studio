@@ -1,0 +1,26 @@
+{
+  "kind": "operator",
+  "id": "slot-status",
+  "owner": "character",
+  "summary": "Per slot: shown, updating or a plain problem, within the detail limits.",
+  "status": "both",
+  "replaces": [
+    "detail-limits"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the record",
+    "process:detail-load"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "pure": true
+}

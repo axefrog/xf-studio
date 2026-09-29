@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "diagnostics-set-description",
+  "owner": "diagnostics",
+  "summary": "Set description (diagnostics): changes the report in preparation (diagnostics.setDescription).",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions"
+  ],
+  "name": "diagnostics.setDescription",
+  "target": "type:problem-report",
+  "input": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a report is prepared locally and never sent."
+  },
+  "effect": {
+    "session": "Changes the report in preparation (diagnostics.setDescription)."
+  },
+  "undo": "none"
+}

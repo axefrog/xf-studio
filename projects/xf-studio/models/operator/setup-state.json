@@ -1,0 +1,51 @@
+{
+  "kind": "operator",
+  "id": "setup-state",
+  "owner": "setup",
+  "summary": "The preview setup state machine: from nothing set up to an interactive head, with the one next step.",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "initial": {
+        "type": "string"
+      },
+      "states": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "initial",
+      "states"
+    ]
+  },
+  "inputs": [
+    "type:host-settings",
+    "process:detection-scan",
+    "process:wolvenkit-download",
+    "process:core-derive",
+    "process:head-load",
+    "type:preferences"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "state": {
+        "type": "string"
+      },
+      "step": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "state"
+    ]
+  },
+  "pure": true
+}

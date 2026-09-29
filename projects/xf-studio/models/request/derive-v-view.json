@@ -1,0 +1,51 @@
+{
+  "kind": "request",
+  "id": "derive-v-view",
+  "owner": "character",
+  "summary": "Derive a V's view and character request from the installed catalogue.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "request": {
+        "$ref": "shapes.schema.json#/$defs/characterRequest"
+      }
+    },
+    "required": [
+      "view",
+      "request"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "v": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "v"
+    ]
+  },
+  "reasons": [
+    "shows",
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:catalogue"
+  ],
+  "x-friction": [
+    {
+      "gap": "A derived value computed on the host must never be shown against newer local choices.",
+      "capability": "cross-process-work",
+      "closes": "Derived values computed in another process, glitch-free here."
+    }
+  ]
+}

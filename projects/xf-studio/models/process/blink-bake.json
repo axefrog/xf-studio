@@ -1,0 +1,44 @@
+{
+  "kind": "process",
+  "id": "blink-bake",
+  "owner": "expressions",
+  "summary": "Baking the game's blink into a curve the motion runtime plays.",
+  "status": "target",
+  "driver": "driver:face-host",
+  "work": "Solves the blink frames and writes the curve.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "curve": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "curve"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "face-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "host"
+}

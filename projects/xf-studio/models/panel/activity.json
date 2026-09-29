@@ -1,0 +1,16 @@
+{
+  "kind": "panel",
+  "id": "activity",
+  "owner": "shell",
+  "summary": "Activity: every running and recent piece of work in plain words, with notices and their references.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/feedback"
+  ],
+  "binding": "the window's process tree",
+  "reads": [
+    "type:notice",
+    "process:window-run"
+  ],
+  "actions": []
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "detect-framework-versions",
+  "owner": "setup",
+  "summary": "Framework versions (detect): raises the detect-installs request.",
+  "status": "both",
+  "replaces": [
+    "install-detection-actions"
+  ],
+  "name": "detect.frameworkVersions",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The host is reachable."
+  },
+  "effect": {
+    "raises": "request:detect-installs"
+  },
+  "undo": "none"
+}

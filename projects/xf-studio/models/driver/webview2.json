@@ -1,0 +1,25 @@
+{
+  "kind": "driver",
+  "id": "webview2",
+  "owner": "desktop",
+  "summary": "Installs WebView2 before any window, with the person's consent, when it is missing.",
+  "status": "both",
+  "replaces": [
+    "../desktop/webview2"
+  ],
+  "environment": "desktop",
+  "serves": [
+    "request:install-webview2"
+  ],
+  "demands": [
+    "source:host-processes",
+    "type:consent"
+  ],
+  "creates": [],
+  "starts": [
+    "process:webview2-install"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "At app start, until WebView2 is present or the person declines."
+}

@@ -1,0 +1,43 @@
+{
+  "kind": "action",
+  "id": "motion-set-idle-clip",
+  "owner": "motion",
+  "summary": "Set idle clip (motion): sets the scene's motion key (motion.setIdleClip).",
+  "status": "both",
+  "replaces": [
+    "motion-actions",
+    "platform/core/transition-settings"
+  ],
+  "name": "motion.setIdleClip",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "clip": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clip"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene shows a V and motion is available for her body.",
+    "refusals": [
+      {
+        "code": "motion-unavailable",
+        "reason": "The installation has no creator idle for this body."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the scene's motion key (motion.setIdleClip)."
+  },
+  "undo": "none"
+}

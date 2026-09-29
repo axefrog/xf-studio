@@ -1,0 +1,30 @@
+{
+  "kind": "panel",
+  "id": "presets",
+  "owner": "library",
+  "summary": "The focused mod's presets in selector order, with the one being edited selected.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/collection",
+    "preset-collection"
+  ],
+  "binding": "the profile's focus.mod pointer (type:mod)",
+  "reads": [
+    "type:mod",
+    "type:preset-eye-makeup",
+    "operator:layer-export",
+    "operator:capability"
+  ],
+  "actions": [
+    "action:collection-import-recipe",
+    "action:collection-open",
+    "action:collection-rename",
+    "action:preset-edit",
+    "action:preset-keep-version",
+    "action:preset-purge",
+    "action:preset-restore",
+    "action:preset-select",
+    "action:preset-trash",
+    "action:mod-split"
+  ]
+}

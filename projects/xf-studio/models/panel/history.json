@@ -1,0 +1,26 @@
+{
+  "kind": "panel",
+  "id": "history",
+  "owner": "platform",
+  "summary": "Every recent change in the focused scope and the others, as separate categories, with jump to any step.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/history"
+  ],
+  "binding": "the window's focused scope (type:history-scope)",
+  "reads": [
+    "type:history-scope",
+    "operator:gesture-label"
+  ],
+  "actions": [
+    "action:character-redo-clothing",
+    "action:character-redo",
+    "action:character-undo-clothing",
+    "action:character-undo",
+    "action:history-jump-to",
+    "action:history-redo",
+    "action:history-undo",
+    "action:view-redo",
+    "action:view-undo"
+  ]
+}

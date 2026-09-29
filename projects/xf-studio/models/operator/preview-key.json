@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "preview-key",
+  "owner": "character",
+  "summary": "A choice picture's key from its source and subject.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the choice's source",
+    "the subject head"
+  ],
+  "output": {
+    "type": "string"
+  },
+  "pure": true
+}

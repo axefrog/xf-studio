@@ -1,0 +1,51 @@
+{
+  "kind": "runtime",
+  "id": "layer-textures",
+  "owner": "eye-makeup",
+  "summary": "One layer's raster uploaded as textures, kept per raster key and shared by every scene wearing the preset.",
+  "status": "both",
+  "replaces": [
+    "browser-preview-device"
+  ],
+  "environment": "page",
+  "key": [
+    "a raster key (preset, layer, layer hash, tier, region)"
+  ],
+  "factory": "planned",
+  "ready": "driver:raster",
+  "query": [
+    {
+      "name": "ready",
+      "input": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "shapes.schema.json#/$defs/rasterKey"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready"
+        ]
+      }
+    }
+  ],
+  "linger": 10000,
+  "x-friction": [
+    {
+      "gap": "The raster's bytes arrive by reference from the worker and live on the GPU.",
+      "capability": "binary-by-reference",
+      "closes": "Blob references with GPU residence."
+    }
+  ]
+}

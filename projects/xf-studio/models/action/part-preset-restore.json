@@ -1,0 +1,41 @@
+{
+  "kind": "action",
+  "id": "part-preset-restore",
+  "owner": "expressions",
+  "summary": "Restore (part preset): restores the preset from the trash.",
+  "status": "both",
+  "replaces": [
+    "part-presets"
+  ],
+  "name": "partPreset.restore",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "feature",
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The preset changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Restores the preset from the trash."
+  },
+  "undo": "none"
+}

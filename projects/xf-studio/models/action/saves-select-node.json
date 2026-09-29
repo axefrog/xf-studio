@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "saves-select-node",
+  "owner": "save-explorer",
+  "summary": "Select node (saves): changes the open save's view (saves.selectNode).",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/actions"
+  ],
+  "name": "saves.selectNode",
+  "target": "type:open-save",
+  "input": {
+    "type": "object",
+    "properties": {
+      "node": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "node"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The saves folder is known.",
+    "refusals": [
+      {
+        "code": "folder-missing",
+        "reason": "Choose where your saves are in Settings › Saves."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Changes the open save's view (saves.selectNode)."
+  },
+  "undo": "none"
+}

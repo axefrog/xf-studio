@@ -1,0 +1,34 @@
+{
+  "kind": "request",
+  "id": "install-webview2",
+  "owner": "desktop",
+  "summary": "Have WebView2 installed before any window opens.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "present": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "present"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "consent": {
+        "$ref": "shapes.schema.json#/$defs/consent"
+      }
+    },
+    "required": []
+  },
+  "reasons": [
+    "blocks",
+    "consents"
+  ],
+  "servedBy": [
+    "driver:webview2"
+  ]
+}

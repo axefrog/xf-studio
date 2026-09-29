@@ -1,0 +1,36 @@
+{
+  "kind": "request",
+  "id": "open-installation",
+  "owner": "host",
+  "summary": "Have the game installation on the configured route open and valid.",
+  "status": "target",
+  "goal": {
+    "$ref": "shapes.schema.json#/$defs/installation"
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "settings": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "settings"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:installation"
+  ],
+  "faults": [
+    {
+      "code": "game-root-missing",
+      "when": "No game folder is known.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ]
+}

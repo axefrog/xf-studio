@@ -1,0 +1,33 @@
+{
+  "kind": "source",
+  "id": "page-location",
+  "owner": "platform",
+  "summary": "The page address's parameters: the verification scope, warm start and session markers.",
+  "status": "target",
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "verify": {
+        "type": "boolean"
+      },
+      "warm": {
+        "type": "boolean"
+      },
+      "session": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "verify",
+      "warm",
+      "session"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "Once per window start."
+}

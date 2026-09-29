@@ -1,0 +1,55 @@
+{
+  "kind": "runtime",
+  "id": "opened-installation",
+  "owner": "host",
+  "summary": "An opened installation: archive indexes, winners and declarations on one route.",
+  "status": "both",
+  "replaces": [
+    "installation-registry"
+  ],
+  "environment": "host",
+  "key": [
+    "the route key"
+  ],
+  "factory": "installation-registry",
+  "ready": "driver:installation",
+  "query": [
+    {
+      "name": "winner",
+      "input": {
+        "type": "object",
+        "properties": {
+          "depotPath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "depotPath"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "archive": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "archive",
+          "provider"
+        ]
+      }
+    }
+  ],
+  "linger": 60000,
+  "x-friction": [
+    {
+      "gap": "The installation stays valid only while its stamp set is unchanged.",
+      "capability": "stamped-files",
+      "closes": "Caches keyed by stamp sets."
+    }
+  ]
+}

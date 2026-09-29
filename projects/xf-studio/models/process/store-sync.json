@@ -1,0 +1,50 @@
+{
+  "kind": "process",
+  "id": "store-sync",
+  "owner": "platform",
+  "summary": "Pulling other writers' commits after the store's change counter moved.",
+  "status": "target",
+  "driver": "driver:store",
+  "work": "Reads every entry since the last position and folds it into the demanded nodes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "entries": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "to": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "entries",
+      "to"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreachable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "page, background"
+}

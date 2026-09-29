@@ -1,0 +1,22 @@
+{
+  "kind": "panel",
+  "id": "warp",
+  "owner": "eye-makeup",
+  "summary": "Warp fields of the active layer.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/view/inspector"
+  ],
+  "binding": "the focused preset's active layer (type:editor-session)",
+  "reads": [
+    "type:preset-eye-makeup",
+    "type:editor-session"
+  ],
+  "actions": [
+    "action:field-add",
+    "action:field-clear",
+    "action:field-remove",
+    "action:field-select",
+    "action:field-set-reach"
+  ]
+}

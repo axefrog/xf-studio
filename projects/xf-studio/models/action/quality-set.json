@@ -1,0 +1,42 @@
+{
+  "kind": "action",
+  "id": "quality-set",
+  "owner": "eye-makeup",
+  "summary": "Set (quality): sets the preferred texture tier.",
+  "status": "both",
+  "replaces": [
+    "preview-quality-actions"
+  ],
+  "name": "quality.set",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {
+      "size": {
+        "enum": [
+          512,
+          1024,
+          2048,
+          4096
+        ]
+      }
+    },
+    "required": [
+      "size"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A preview is shown.",
+    "refusals": [
+      {
+        "code": "capacity",
+        "reason": "This GPU can't hold textures that large."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the preferred texture tier."
+  },
+  "undo": "none"
+}

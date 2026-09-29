@@ -1,0 +1,38 @@
+{
+  "kind": "request",
+  "id": "run-tour",
+  "owner": "shell",
+  "summary": "Run a guided tour.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "outcome": {
+        "enum": [
+          "finished",
+          "skipped"
+        ]
+      }
+    },
+    "required": [
+      "outcome"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "tour": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "tour"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:tour"
+  ]
+}

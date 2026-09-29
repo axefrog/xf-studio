@@ -1,0 +1,45 @@
+{
+  "kind": "action",
+  "id": "expression-intensity",
+  "owner": "expressions",
+  "summary": "Intensity (expression): edits the expression's control or link keys through the expression apply operator (expression.intensity).",
+  "status": "both",
+  "replaces": [
+    "features/expressions/core"
+  ],
+  "name": "expression.intensity",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "base": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "amount": {
+        "type": "number",
+        "minimum": -1,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "base",
+      "amount"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "An expression preset is worn by the focused V's look and the face rig is prepared.",
+    "refusals": [
+      {
+        "code": "face-unavailable",
+        "reason": "The face rig isn't ready for this installation yet."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression's control or link keys through the expression apply operator (expression.intensity)."
+  },
+  "undo": "look"
+}

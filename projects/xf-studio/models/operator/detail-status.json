@@ -1,0 +1,44 @@
+{
+  "kind": "operator",
+  "id": "detail-status",
+  "owner": "character",
+  "summary": "A V's detail status: phase, per-slot states, updating, update error and what is needed.",
+  "status": "both",
+  "replaces": [
+    "character-detail-actions"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:v",
+    "process:v-prepare",
+    "process:detail-load"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "phase": {
+        "enum": [
+          "preparing",
+          "loading",
+          "shown",
+          "failed",
+          "needs"
+        ]
+      },
+      "slots": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "phase"
+    ]
+  },
+  "pure": true
+}

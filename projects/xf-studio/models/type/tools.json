@@ -1,0 +1,36 @@
+{
+  "kind": "type",
+  "id": "tools",
+  "owner": "views",
+  "summary": "A view's overlays and editing tools: each view tool's on or off state and whether pointer editing is allowed there.",
+  "status": "both",
+  "replaces": [
+    "platform/core/view-tools"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "on": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "View tool ID (eye-makeup.surface, eye-makeup.wire) → on.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "editing": {
+      "kind": "value",
+      "doc": "Whether pointer editing is allowed in this view.",
+      "shape": {
+        "type": "boolean"
+      }
+    }
+  },
+  "defaults": {
+    "on": {},
+    "editing": true
+  }
+}

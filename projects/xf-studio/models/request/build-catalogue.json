@@ -1,0 +1,38 @@
+{
+  "kind": "request",
+  "id": "build-catalogue",
+  "owner": "character",
+  "summary": "Have a body gender's creator catalogue built for the installation and language.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "bodyGender": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "bodyGender"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:catalogue"
+  ]
+}

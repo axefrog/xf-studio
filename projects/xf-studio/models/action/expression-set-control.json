@@ -1,0 +1,45 @@
+{
+  "kind": "action",
+  "id": "expression-set-control",
+  "owner": "expressions",
+  "summary": "Set control (expression): edits the expression's control or link keys through the expression apply operator (expression.setControl).",
+  "status": "both",
+  "replaces": [
+    "features/expressions/core"
+  ],
+  "name": "expression.setControl",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 96
+      },
+      "value": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "name",
+      "value"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "An expression preset is worn by the focused V's look and the face rig is prepared.",
+    "refusals": [
+      {
+        "code": "face-unavailable",
+        "reason": "The face rig isn't ready for this installation yet."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression's control or link keys through the expression apply operator (expression.setControl)."
+  },
+  "undo": "look"
+}

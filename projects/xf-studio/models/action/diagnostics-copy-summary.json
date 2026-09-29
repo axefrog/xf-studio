@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "diagnostics-copy-summary",
+  "owner": "diagnostics",
+  "summary": "Copy summary (diagnostics): changes the report in preparation (diagnostics.copySummary).",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions"
+  ],
+  "name": "diagnostics.copySummary",
+  "target": "type:problem-report",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a report is prepared locally and never sent."
+  },
+  "effect": {
+    "session": "Changes the report in preparation (diagnostics.copySummary)."
+  },
+  "undo": "none"
+}

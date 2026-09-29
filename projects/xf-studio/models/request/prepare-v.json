@@ -1,0 +1,49 @@
+{
+  "kind": "request",
+  "id": "prepare-v",
+  "owner": "character",
+  "summary": "Have the host prepare a V shown in a visible view.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "record": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "record"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "v": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "request": {
+        "$ref": "shapes.schema.json#/$defs/characterRequest"
+      }
+    },
+    "required": [
+      "v",
+      "request"
+    ]
+  },
+  "reasons": [
+    "shows",
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:v-preparation"
+  ],
+  "faults": [
+    {
+      "code": "needs-wolvenkit",
+      "when": "Preparing it needs WolvenKit.",
+      "fault": "owner",
+      "goesTo": "request:set-up-wolvenkit",
+      "then": "suspend"
+    }
+  ]
+}

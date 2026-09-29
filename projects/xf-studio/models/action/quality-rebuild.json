@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "quality-rebuild",
+  "owner": "eye-makeup",
+  "summary": "Rebuild (quality): raises the raster-layer request.",
+  "status": "both",
+  "replaces": [
+    "preview-quality-actions"
+  ],
+  "name": "quality.rebuild",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A preview is shown.",
+    "refusals": [
+      {
+        "code": "capacity",
+        "reason": "This GPU can't hold textures that large."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:raster-layer"
+  },
+  "undo": "none"
+}

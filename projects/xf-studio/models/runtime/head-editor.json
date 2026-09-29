@@ -1,0 +1,77 @@
+{
+  "kind": "runtime",
+  "id": "head-editor",
+  "owner": "eye-makeup",
+  "summary": "Picking on the head in one view: the skinned, morphed plate surface and its occlusion.",
+  "status": "both",
+  "replaces": [
+    "surface-editor",
+    "surface-map",
+    "surface-occlusion"
+  ],
+  "environment": "page",
+  "key": [
+    "type:view",
+    "type:scene"
+  ],
+  "factory": "planned",
+  "ready": "driver:view-input",
+  "query": [
+    {
+      "name": "hit",
+      "input": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          },
+          "uv": {
+            "type": "object",
+            "properties": {
+              "u": {
+                "type": "number"
+              },
+              "v": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "u",
+              "v"
+            ]
+          }
+        },
+        "required": [
+          "target",
+          "uv"
+        ]
+      },
+      "budget": "under 2 ms, inside the input's cycle"
+    }
+  ],
+  "linger": 0,
+  "x-friction": [
+    {
+      "gap": "A hit must be answered synchronously by the runtime inside the input's cycle to keep the pointer responsive.",
+      "capability": "host-objects-per-node",
+      "closes": "A sanctioned synchronous query port on host objects returning plain answers."
+    }
+  ]
+}

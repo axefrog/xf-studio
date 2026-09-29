@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "preview-select-lighting-setup",
+  "owner": "views",
+  "summary": "Select lighting setup (preview): points the view's lights at the chosen setup's rig.",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups"
+  ],
+  "name": "preview.selectLightingSetup",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "setup": {
+        "type": "string"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "setup"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Points the view's lights at the chosen setup's rig."
+  },
+  "undo": "view-lighting"
+}

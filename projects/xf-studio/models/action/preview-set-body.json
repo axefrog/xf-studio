@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "preview-set-body",
+  "owner": "views",
+  "summary": "Set body (preview): sets the display's key (preview.setBody).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "preview-view-graph"
+  ],
+  "name": "preview.setBody",
+  "target": "type:display",
+  "input": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Sets the display's key (preview.setBody)."
+  },
+  "undo": "view-lighting"
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "setup-refresh",
+  "owner": "setup",
+  "summary": "Refresh (setup): raises the load-nodes request.",
+  "status": "both",
+  "replaces": [
+    "local-setup-actions"
+  ],
+  "name": "setup.refresh",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The host is reachable; the verification copy's settings start as a fork of the real ones."
+  },
+  "effect": {
+    "raises": "request:load-nodes"
+  },
+  "undo": "none"
+}

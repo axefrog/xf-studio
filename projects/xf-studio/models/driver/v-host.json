@@ -1,0 +1,69 @@
+{
+  "kind": "driver",
+  "id": "v-host",
+  "owner": "character",
+  "summary": "Prepares a V on the host: one run per requester at a time, superseded only by that requester's newer request, into a content-addressed cache shared per installation.",
+  "status": "both",
+  "replaces": [
+    "character-detail-host",
+    "character-detail-plan",
+    "character-detail-request",
+    "character-detail-server",
+    "character-detail-service",
+    "character-timing",
+    "choice-manifest",
+    "clothing-host",
+    "dangle-host",
+    "deformation-rig-host",
+    "detail-limits",
+    "prepared-answers"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:prepare-v-on-host"
+  ],
+  "demands": [
+    "operator:answer-valid",
+    "source:host-files",
+    "source:host-clock"
+  ],
+  "creates": [],
+  "starts": [
+    "process:v-prepare-host",
+    "process:dangle-compile",
+    "process:deformation-rig-compile",
+    "process:clothing-resolve"
+  ],
+  "runtimes": [
+    "runtime:preparation-cache"
+  ],
+  "raises": [
+    "request:open-installation",
+    "request:export-asset",
+    "request:build-catalogue"
+  ],
+  "faults": [
+    {
+      "code": "needs-wolvenkit",
+      "when": "Preparing this V needs WolvenKit; the request is suspended, not failed.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "unknown-request",
+      "when": "The request is outside the accepted character request versions.",
+      "fault": "requester",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per requester (a page's actor) and request key; the shared cache lives per installation fingerprint.",
+  "x-friction": [
+    {
+      "gap": "A page's newer request supersedes only that page's older one; the host run for a key is shared across pages.",
+      "capability": "reasons-for-work",
+      "closes": "Requests with requester identity and supersession scoped to the requester."
+    }
+  ]
+}

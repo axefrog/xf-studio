@@ -1,0 +1,25 @@
+{
+  "kind": "driver",
+  "id": "icons",
+  "owner": "character",
+  "summary": "Derives icon sheets for the creator's rows in the background.",
+  "status": "both",
+  "replaces": [
+    "cc-icon-host",
+    "cc-icons"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:derive-icons"
+  ],
+  "demands": [
+    "operator:quiet-period"
+  ],
+  "creates": [],
+  "starts": [
+    "process:icon-sheets"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "After a catalogue build, until every sheet is derived."
+}

@@ -1,0 +1,32 @@
+{
+  "kind": "sink",
+  "id": "host-files-write",
+  "owner": "host",
+  "summary": "Files the host writes: caches, prepared records, settings copies, backups; staged in a work folder and published atomically.",
+  "status": "both",
+  "replaces": [
+    "derived-cache"
+  ],
+  "environment": "host",
+  "input": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "atomic": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "path",
+      "bytes",
+      "atomic"
+    ]
+  },
+  "adapter": "derived-cache",
+  "idempotency": "The content hash: an identical write is skipped."
+}

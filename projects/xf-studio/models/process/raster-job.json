@@ -1,0 +1,81 @@
+{
+  "kind": "process",
+  "id": "raster-job",
+  "owner": "eye-makeup",
+  "summary": "Rasterising one layer's mask and optical maps at a texture tier, off the main thread.",
+  "status": "both",
+  "replaces": [
+    "raster-worker",
+    "engines/layered-makeup/raster-processor",
+    "raster-task-yield"
+  ],
+  "driver": "driver:raster-pool",
+  "work": "Computes the layer's mask, albedo and optical mip chain for its raster key in the raster worker.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "$ref": "shapes.schema.json#/$defs/rasterKey"
+      },
+      "mask": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "optics": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "albedo": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "stats": {
+        "type": "object",
+        "properties": {
+          "ms": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": []
+      }
+    },
+    "required": [
+      "key",
+      "mask",
+      "optics",
+      "albedo",
+      "stats"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "fine-glitter-outside-region",
+              "cancelled",
+              "worker-crashed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "A cancel message with the job's version reaches the worker, which checks it between slices.",
+  "cleanup": "Nothing is published unless the whole bundle is complete.",
+  "deadline": "none",
+  "lane": "page raster worker; latest wins per layer, the edited layer first",
+  "x-friction": [
+    {
+      "gap": "Masks and optical chains up to 4096² travel from the worker to the GPU; they can't be entries.",
+      "capability": "binary-by-reference",
+      "closes": "Blob references with a residence moving from worker to GPU."
+    }
+  ]
+}

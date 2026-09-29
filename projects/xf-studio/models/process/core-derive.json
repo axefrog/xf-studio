@@ -1,0 +1,55 @@
+{
+  "kind": "process",
+  "id": "core-derive",
+  "owner": "preview",
+  "summary": "Deriving the core preview for one body from the player's game files.",
+  "status": "target",
+  "driver": "driver:core",
+  "work": "Resolves, exports and assembles the head, eye plate, eyes and maps for the body.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/blob"
+        }
+      }
+    },
+    "required": [
+      "body",
+      "files"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "derivation-failed",
+              "needs-wolvenkit"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The host's token for the run; checked between stages.",
+  "cleanup": "The staged work folder is removed.",
+  "deadline": "none",
+  "lane": "host, one derivation at a time"
+}

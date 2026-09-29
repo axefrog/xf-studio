@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "collection-export",
+  "owner": "library",
+  "summary": "Exporting a mod and its presets as a portable collection file or package plan.",
+  "status": "target",
+  "driver": "driver:files",
+  "work": "Projects the mod and its presets at head into the portable collection format.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "bytes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "not-exportable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, the person's own"
+}

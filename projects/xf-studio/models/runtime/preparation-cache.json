@@ -1,0 +1,47 @@
+{
+  "kind": "runtime",
+  "id": "preparation-cache",
+  "owner": "character",
+  "summary": "The content-addressed V preparation cache and its run map, shared per installation fingerprint.",
+  "status": "both",
+  "replaces": [
+    "character-detail-service"
+  ],
+  "environment": "host",
+  "key": [
+    "the installation fingerprint"
+  ],
+  "factory": "character-detail-service",
+  "ready": "driver:v-host",
+  "query": [
+    {
+      "name": "answer",
+      "input": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "record": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "record"
+        ]
+      }
+    }
+  ],
+  "linger": 60000
+}

@@ -1,0 +1,47 @@
+{
+  "kind": "source",
+  "id": "worker-clock",
+  "owner": "platform",
+  "summary": "Time inside the raster and choice preview workers, used to slice work and yield.",
+  "status": "both",
+  "replaces": [
+    "choice-preview-render",
+    "choice-preview-worker",
+    "engines/layered-makeup/raster-processor",
+    "raster-task-yield",
+    "raster-worker"
+  ],
+  "environment": "worker",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "wall": {
+        "type": "number"
+      },
+      "monotonic": {
+        "type": "number"
+      },
+      "after": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "ms"
+        ]
+      }
+    },
+    "required": [],
+    "description": "Either a reading (wall and monotonic time in ms) or a timer's firing, named by the id it was asked for."
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "Per slice of worker work (every few milliseconds while a job runs)."
+}

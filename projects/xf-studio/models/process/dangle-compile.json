@@ -1,0 +1,44 @@
+{
+  "kind": "process",
+  "id": "dangle-compile",
+  "owner": "character",
+  "summary": "Compiling a hair or item's dangle spec for the motion runtime.",
+  "status": "target",
+  "driver": "driver:v-host",
+  "work": "Reads the resource's physics setup and writes its dangle spec.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "spec": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "spec"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unsupported"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "host, with its preparation"
+}

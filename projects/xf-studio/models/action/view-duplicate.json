@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "view-duplicate",
+  "owner": "views",
+  "summary": "Duplicate a view, sharing every node except its tools.",
+  "status": "target",
+  "name": "view.duplicate",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "view"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Creates a view referencing the same nodes, with new tools."
+  },
+  "undo": "view-lighting"
+}

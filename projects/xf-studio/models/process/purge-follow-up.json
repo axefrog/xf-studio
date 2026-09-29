@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "purge-follow-up",
+  "owner": "library",
+  "summary": "Finishing a purge in every backup copy.",
+  "status": "target",
+  "driver": "driver:backups",
+  "work": "Applies pending purges to the backups, retrying locked ones later.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "pending": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "pending"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "locked"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 60000,
+  "lane": "host, background"
+}

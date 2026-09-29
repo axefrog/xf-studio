@@ -1,0 +1,33 @@
+{
+  "kind": "action",
+  "id": "preset-keep-version",
+  "owner": "library",
+  "summary": "Keep this version of a preset, as a named tag on its history.",
+  "status": "target",
+  "name": "preset.keepVersion",
+  "target": "type:preset-eye-makeup",
+  "input": {
+    "type": "object",
+    "properties": {
+      "preset": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "label": {
+        "type": "string",
+        "maxLength": 80
+      }
+    },
+    "required": [
+      "preset",
+      "label"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The preset exists."
+  },
+  "effect": {
+    "commit": "Tags the preset's current entry."
+  },
+  "undo": "none"
+}

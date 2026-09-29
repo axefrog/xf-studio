@@ -1,0 +1,83 @@
+{
+  "kind": "source",
+  "id": "host-clock",
+  "owner": "host",
+  "summary": "The host process's wall and monotonic time and its timers.",
+  "status": "both",
+  "replaces": [
+    "cc-catalogue-service",
+    "cc-icon-host",
+    "cc-swatch-host",
+    "character-detail-host",
+    "character-detail-service",
+    "choice-prefetch",
+    "clothing-host",
+    "collection-store",
+    "desktop-app-host",
+    "diagnostics/host-log",
+    "diagnostics/host-report",
+    "diagnostics/trace-window",
+    "diagnostics/zip",
+    "dotnet-runtime",
+    "event-loop",
+    "eye-plate-cache",
+    "facial-host",
+    "game-asset-export",
+    "grading-lut-host",
+    "idle-host",
+    "installation-registry",
+    "library-store",
+    "mod-install-host",
+    "mod-install-transport",
+    "native-geometry-export",
+    "native-texture-export",
+    "native/native-decode",
+    "package-resource-builder",
+    "part-preset-store",
+    "platform/export/check-runner",
+    "platform/export/product-builder",
+    "platform/export/product-host",
+    "pose-catalogue-host",
+    "preview-core-service",
+    "process-tree",
+    "resolver-host",
+    "showroom/build",
+    "source-discovery",
+    "tool-download",
+    "wolvenkit-cli",
+    "wolvenkit-setup-host"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "wall": {
+        "type": "number"
+      },
+      "monotonic": {
+        "type": "number"
+      },
+      "after": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "ms"
+        ]
+      }
+    },
+    "required": [],
+    "description": "Either a reading (wall and monotonic time in ms) or a timer's firing, named by the id it was asked for."
+  },
+  "adapter": "platform/graph-adapters/host-sources",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "Read on demand; timers fire once per request (backup checks hourly under a token)."
+}

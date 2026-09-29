@@ -1,0 +1,40 @@
+{
+  "kind": "request",
+  "id": "back-up-library",
+  "owner": "library",
+  "summary": "Back up the library now or when the daily check is due.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "file"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "enum": [
+          "daily",
+          "pre-migration",
+          "pre-restore"
+        ]
+      }
+    },
+    "required": [
+      "kind"
+    ]
+  },
+  "reasons": [
+    "maintains",
+    "blocks"
+  ],
+  "servedBy": [
+    "driver:backups"
+  ]
+}

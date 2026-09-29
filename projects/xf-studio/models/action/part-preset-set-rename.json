@@ -1,0 +1,52 @@
+{
+  "kind": "action",
+  "id": "part-preset-set-rename",
+  "owner": "expressions",
+  "summary": "Rename (part preset set): edits the expression mod (partPresetSet.rename).",
+  "status": "both",
+  "replaces": [
+    "part-presets",
+    "part-preset-sets"
+  ],
+  "name": "partPresetSet.rename",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "revision": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "feature",
+      "id",
+      "name",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable and the set exists.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The set changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression mod (partPresetSet.rename)."
+  },
+  "undo": "none"
+}

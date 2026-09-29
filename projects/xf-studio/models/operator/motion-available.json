@@ -1,0 +1,32 @@
+{
+  "kind": "operator",
+  "id": "motion-available",
+  "owner": "motion",
+  "summary": "Whether motion is available for a scene, with plain reasons when it isn't.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:scene",
+    "runtime:motion-rig"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "available": {
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "available"
+    ]
+  },
+  "pure": true
+}

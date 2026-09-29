@@ -1,0 +1,34 @@
+{
+  "kind": "action",
+  "id": "preview-setup-choose-route",
+  "owner": "setup",
+  "summary": "Choose route (preview setup): moves the setup card (previewSetup.chooseRoute).",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.chooseRoute",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {
+      "route": {
+        "enum": [
+          "mo2",
+          "direct"
+        ]
+      }
+    },
+    "required": [
+      "route"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "session": "Moves the setup card (previewSetup.chooseRoute)."
+  },
+  "undo": "none"
+}

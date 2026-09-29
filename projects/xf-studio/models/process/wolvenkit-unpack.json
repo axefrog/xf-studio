@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "wolvenkit-unpack",
+  "owner": "setup",
+  "summary": "Unpacking and verifying the downloaded WolvenKit and publishing it into the tools folder.",
+  "status": "target",
+  "driver": "driver:wolvenkit-setup",
+  "work": "Unpacks, verifies and moves the CLI into place atomically.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "cli": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cli",
+      "version"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unpack-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "The staging folder is removed.",
+  "deadline": 120000,
+  "lane": "host, the person's own"
+}

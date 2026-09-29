@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "shapes.schema.json",
+  "title": "Descriptors shared by several models",
+  "$defs": {
+    "blob": {
+      "type": "object",
+      "required": [
+        "$blob"
+      ],
+      "additionalProperties": false,
+      "description": "Large binary data by reference: never inline.",
+      "properties": {
+        "$blob": {
+          "type": "object",
+          "required": [
+            "hash",
+            "size",
+            "type"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string"
+            },
+            "residence": {
+              "enum": [
+                "page",
+                "worker",
+                "gpu",
+                "host-cache",
+                "host-disk"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "nodeRef": {
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "description": "A reference to a node in the graph."
+    },
+    "nodeAt": {
+      "type": "object",
+      "required": [
+        "node",
+        "seq"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "description": "A node at one entry of its stream (node@seq)."
+    },
+    "fault": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "owner": {
+          "enum": [
+            "requester",
+            "owner",
+            "shared",
+            "person"
+          ]
+        },
+        "ref": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "object"
+        }
+      },
+      "description": "A failure as plain data: a code, a plain message, who must act, and a diagnostics reference."
+    },
+    "percent": {
+      "type": "object",
+      "required": [
+        "done",
+        "total"
+      ],
+      "properties": {
+        "done": {
+          "type": "number",
+          "minimum": 0
+        },
+        "total": {
+          "type": "number",
+          "minimum": 0
+        },
+        "stage": {
+          "type": "string"
+        }
+      },
+      "description": "Progress: how much of how much, and the stage in plain words."
+    },
+    "rasterKey": {
+      "type": "object",
+      "required": [
+        "preset",
+        "layer",
+        "layerHash",
+        "tier",
+        "region"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "$ref": "#/$defs/nodeRef"
+        },
+        "layer": {
+          "type": "string"
+        },
+        "layerHash": {
+          "type": "string"
+        },
+        "tier": {
+          "enum": [
+            512,
+            1024,
+            2048,
+            4096
+          ]
+        },
+        "region": {
+          "type": "string"
+        }
+      },
+      "description": "What one layer's raster is kept per: its preset, layer ID and content hash, the texture tier and the region."
+    },
+    "characterRequest": {
+      "type": "object",
+      "required": [
+        "schema",
+        "bodyGender",
+        "appearances",
+        "morphs"
+      ],
+      "properties": {
+        "schema": {
+          "const": "xfs/character-request-7"
+        },
+        "bodyGender": {
+          "enum": [
+            "female",
+            "male"
+          ]
+        },
+        "appearances": {
+          "type": "array"
+        },
+        "morphs": {
+          "type": "array"
+        },
+        "ambiguities": {
+          "type": "array"
+        },
+        "clothing": {
+          "type": "object"
+        },
+        "flags": {
+          "type": "object"
+        }
+      },
+      "description": "What the host prepares for a V: pure data derived from the V and the scene's flags."
+    },
+    "characterRecord": {
+      "type": "object",
+      "required": [
+        "key",
+        "components",
+        "slots",
+        "files"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "components": {
+          "type": "array"
+        },
+        "slots": {
+          "type": "object"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/blob"
+          }
+        },
+        "problems": {
+          "type": "array"
+        }
+      },
+      "description": "A prepared V: its content-addressed key, components per slot and the files it names by reference."
+    },
+    "installation": {
+      "type": "object",
+      "required": [
+        "routeKey",
+        "fingerprint",
+        "watch"
+      ],
+      "properties": {
+        "routeKey": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "watch": {
+          "$ref": "#/$defs/blob"
+        },
+        "language": {
+          "type": "string"
+        }
+      },
+      "description": "An opened game installation on one launch route: its key, fingerprint and the stamp set its validity rests on (by reference; it is large)."
+    },
+    "stampSet": {
+      "type": "object",
+      "required": [
+        "hash",
+        "count"
+      ],
+      "properties": {
+        "hash": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "description": "A set of file stamps (path, size, time) summarised by hash."
+    },
+    "consent": {
+      "type": "object",
+      "required": [
+        "subject",
+        "token"
+      ],
+      "properties": {
+        "subject": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "shown": {
+          "type": "object"
+        }
+      },
+      "description": "The person's consent to exactly the thing they were shown, named by a token the host re-checks."
+    }
+  }
+}

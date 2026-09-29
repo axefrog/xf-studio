@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "preview-set-skin-scatter",
+  "owner": "views",
+  "summary": "Set skin scatter (preview): sets the display's key (preview.setSkinScatter).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "preview-view-graph"
+  ],
+  "name": "preview.setSkinScatter",
+  "target": "type:display",
+  "input": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Sets the display's key (preview.setSkinScatter)."
+  },
+  "undo": "view-lighting"
+}

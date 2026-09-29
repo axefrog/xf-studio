@@ -1,0 +1,38 @@
+{
+  "kind": "operator",
+  "id": "glitter-measurement",
+  "owner": "eye-makeup",
+  "summary": "A glitter layer's measured flake statistics, from its latest raster.",
+  "status": "both",
+  "replaces": [
+    "glitter-measurements"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the layer's raster"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "flakes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "coverage": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "flakes",
+      "coverage"
+    ]
+  },
+  "pure": true
+}

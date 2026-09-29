@@ -1,0 +1,16 @@
+{
+  "kind": "panel",
+  "id": "game-link",
+  "owner": "bridge",
+  "summary": "What the running game shows against the Studio's values, with Push to the game and Adopt.",
+  "status": "target",
+  "binding": "type:bridge-session",
+  "reads": [
+    "operator:game-disagreement",
+    "type:bridge-session"
+  ],
+  "actions": [
+    "action:game-adopt",
+    "action:game-push"
+  ]
+}

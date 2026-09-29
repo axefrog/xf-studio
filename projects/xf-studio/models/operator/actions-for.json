@@ -1,0 +1,36 @@
+{
+  "kind": "operator",
+  "id": "actions-for",
+  "owner": "platform",
+  "summary": "The actions offered on a target, in menu order, each with its capability.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the target node",
+    "operator:capability"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "available": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "available"
+      ]
+    }
+  },
+  "pure": true
+}

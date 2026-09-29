@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "set-up-preview",
+  "owner": "setup",
+  "summary": "Bring a window from nothing set up to an interactive head, one next step at a time.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "state": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "state"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:preview-setup"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "kind": "driver",
+  "id": "detail-preload",
+  "owner": "character",
+  "summary": "Preloads a hovered or focused prepared choice's parts into the pool, so the click shows it at once.",
+  "status": "both",
+  "replaces": [
+    "browser-character-detail-device"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:preload-choice"
+  ],
+  "demands": [
+    "type:choice-row",
+    "source:page-clock"
+  ],
+  "creates": [],
+  "starts": [
+    "process:choice-preload"
+  ],
+  "runtimes": [
+    "runtime:detail-part-pool"
+  ],
+  "faults": [],
+  "lifetime": "Per hovered choice, from a 0.4 s rest until the pointer leaves or the choice is shown.",
+  "x-friction": [
+    {
+      "gap": "A preloaded part waits in the pool for the click, then is claimed.",
+      "capability": "keep-after-use",
+      "closes": "Results kept after their demand ends for a later claim."
+    }
+  ]
+}

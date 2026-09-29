@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "choice-preview-worker",
+  "owner": "character",
+  "summary": "The choice preview worker with its offscreen GL context and a subject head per body.",
+  "status": "both",
+  "replaces": [
+    "browser-choice-preview-device"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window"
+  ],
+  "factory": "browser-choice-preview-device",
+  "ready": "driver:preview-worker",
+  "query": [],
+  "linger": 15000
+}

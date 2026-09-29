@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "environment-map",
+  "owner": "views",
+  "summary": "The prefiltered environment map a context's rigs light with.",
+  "status": "both",
+  "replaces": [
+    "studio-environment"
+  ],
+  "environment": "page",
+  "key": [
+    "runtime:gl-renderer"
+  ],
+  "factory": "planned",
+  "ready": "driver:scene",
+  "query": [],
+  "linger": 5000
+}

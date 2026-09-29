@@ -1,0 +1,40 @@
+{
+  "kind": "request",
+  "id": "pick-file",
+  "owner": "platform",
+  "summary": "Let the person pick a file for a purpose and read it.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "bytes"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "purpose": {
+        "enum": [
+          "recipe",
+          "collection",
+          "save",
+          "character-preset"
+        ]
+      }
+    },
+    "required": [
+      "purpose"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:files"
+  ]
+}

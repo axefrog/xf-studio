@@ -1,0 +1,47 @@
+{
+  "kind": "process",
+  "id": "idle-catalogue-load",
+  "owner": "motion",
+  "summary": "Loading the creator idle catalogue for a scene's body.",
+  "status": "target",
+  "driver": "driver:motion-data",
+  "work": "Asks the host for the idle catalogue and keeps the answer.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "clips": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "clips"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "idle-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, warming"
+}

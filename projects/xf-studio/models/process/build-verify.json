@@ -1,0 +1,59 @@
+{
+  "kind": "process",
+  "id": "build-verify",
+  "owner": "export",
+  "summary": "Verifying a candidate independently of the builder.",
+  "status": "target",
+  "driver": "driver:package",
+  "work": "Reads the packed archives back and checks them against the plan.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "verifiers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "passed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "passed"
+          ]
+        }
+      }
+    },
+    "required": [
+      "verifiers"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "gate-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 120000,
+  "lane": "host, with its build"
+}

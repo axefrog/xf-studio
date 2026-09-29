@@ -1,0 +1,42 @@
+{
+  "kind": "action",
+  "id": "part-preset-set-reveal",
+  "owner": "expressions",
+  "summary": "Reveal (part preset set): raises the reveal-build request.",
+  "status": "both",
+  "replaces": [
+    "part-presets",
+    "part-preset-sets"
+  ],
+  "name": "partPresetSet.reveal",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "feature",
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable and the set exists.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The set changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:reveal-build"
+  },
+  "undo": "none"
+}

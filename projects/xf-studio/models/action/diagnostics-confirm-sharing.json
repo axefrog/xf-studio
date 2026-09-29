@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "diagnostics-confirm-sharing",
+  "owner": "diagnostics",
+  "summary": "Confirm sharing (diagnostics): changes the report in preparation (diagnostics.confirmSharing).",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions"
+  ],
+  "name": "diagnostics.confirmSharing",
+  "target": "type:problem-report",
+  "input": {
+    "type": "object",
+    "properties": {
+      "confirmed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "confirmed"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a report is prepared locally and never sent."
+  },
+  "effect": {
+    "session": "Changes the report in preparation (diagnostics.confirmSharing)."
+  },
+  "undo": "none"
+}

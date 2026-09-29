@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "route-key",
+  "owner": "host",
+  "summary": "The launch route's key from the settings and WolvenKit's identity.",
+  "status": "both",
+  "replaces": [
+    "route-fingerprint"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:host-settings",
+    "operator:effective-cli"
+  ],
+  "output": {
+    "type": "string"
+  },
+  "pure": true
+}

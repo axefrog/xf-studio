@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "modules-set",
+  "owner": "shell",
+  "summary": "Set (modules): shows or hides a module in the layout.",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "modules.set",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {
+      "module": {
+        "type": "string"
+      },
+      "shown": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "module",
+      "shown"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a module a profile needs can't be hidden."
+  },
+  "effect": {
+    "commit": "Shows or hides a module in the layout."
+  },
+  "undo": "none"
+}

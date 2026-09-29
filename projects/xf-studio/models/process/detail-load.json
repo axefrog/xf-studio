@@ -1,0 +1,82 @@
+{
+  "kind": "process",
+  "id": "detail-load",
+  "owner": "character",
+  "summary": "Loading a prepared V's parts: reuse from the pool, fetch, verify, decode, build materials, upload in slices, then swap in one step.",
+  "status": "target",
+  "driver": "driver:v-details",
+  "work": "Loads every part the record names that the pool doesn't already hold, and swaps the new set into the scene.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "slots": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "done": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "total": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "slots",
+      "done",
+      "total"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "record": {
+        "type": "string"
+      },
+      "reused": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "loaded": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "record",
+      "reused",
+      "loaded"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "part-failed",
+              "hash-mismatch"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "A newer record supersedes it; parts already built stay in the pool.",
+  "cleanup": "Unclaimed parts wait in the pool until another V clears it.",
+  "deadline": "none",
+  "lane": "page, the person's own; uploads sliced across frames",
+  "x-friction": [
+    {
+      "gap": "The default V is about 100 MB over 80 files, fetched and decoded by reference.",
+      "capability": "binary-by-reference",
+      "closes": "Blob references with a residence and a demand-bound lifetime."
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "part-preset-list",
+  "owner": "expressions",
+  "summary": "List (part preset): raises the list-library request.",
+  "status": "both",
+  "replaces": [
+    "part-presets"
+  ],
+  "name": "partPreset.list",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "feature"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The preset changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:list-library"
+  },
+  "undo": "none"
+}

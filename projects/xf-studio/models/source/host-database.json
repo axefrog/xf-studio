@@ -1,0 +1,36 @@
+{
+  "kind": "source",
+  "id": "host-database",
+  "owner": "host",
+  "summary": "The library's SQLite database: the graph's events, snapshots and indexes, and the legacy tables read once by migration.",
+  "status": "both",
+  "replaces": [
+    "collection-store",
+    "library-store",
+    "part-preset-store"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "statement": {
+        "type": "string"
+      },
+      "rows": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "statement",
+      "rows"
+    ]
+  },
+  "adapter": "platform/graph-adapters/sqlite-store",
+  "simulated": "../../../strata/src/testing/sim-store",
+  "rate": "Per store operation."
+}

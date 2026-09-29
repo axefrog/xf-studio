@@ -1,0 +1,44 @@
+{
+  "kind": "request",
+  "id": "set-up-wolvenkit",
+  "owner": "setup",
+  "summary": "Have a usable WolvenKit CLI, downloading the pinned release only with consent.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "cli": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cli"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "consent": {
+        "$ref": "shapes.schema.json#/$defs/consent"
+      }
+    },
+    "required": []
+  },
+  "reasons": [
+    "consents",
+    "supplies",
+    "person"
+  ],
+  "servedBy": [
+    "driver:wolvenkit-setup"
+  ],
+  "faults": [
+    {
+      "code": "no-consent",
+      "when": "No consent to download exactly this release.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ]
+}

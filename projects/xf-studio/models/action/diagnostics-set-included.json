@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "diagnostics-set-included",
+  "owner": "diagnostics",
+  "summary": "Set included (diagnostics): changes the report in preparation (diagnostics.setIncluded).",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions"
+  ],
+  "name": "diagnostics.setIncluded",
+  "target": "type:problem-report",
+  "input": {
+    "type": "object",
+    "properties": {
+      "item": {
+        "type": "string"
+      },
+      "included": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "item",
+      "included"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a report is prepared locally and never sent."
+  },
+  "effect": {
+    "session": "Changes the report in preparation (diagnostics.setIncluded)."
+  },
+  "undo": "none"
+}

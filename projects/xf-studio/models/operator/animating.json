@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "animating",
+  "owner": "platform",
+  "summary": "Whether a scene animates this frame (idle, Play blink, camera settling, dangles, face transition, pending uploads).",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:scene",
+    "runtime:motion-rig"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

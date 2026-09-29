@@ -1,0 +1,58 @@
+{
+  "kind": "type",
+  "id": "look",
+  "owner": "platform",
+  "summary": "A combined look: which preset each creator row wears, by row key, shared rather than copied.",
+  "status": "target",
+  "replaces": [
+    "preset-collection"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The look's name.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    },
+    "rows": {
+      "kind": "map",
+      "of": {
+        "kind": "ref",
+        "to": [
+          "type:preset-eye-makeup",
+          "type:preset-expression"
+        ],
+        "clone": "share"
+      },
+      "doc": "Row key (the feature and its target, such as eye-makeup:own or expression:own) → the preset worn there."
+    }
+  },
+  "defaults": {
+    "rows": {}
+  },
+  "constants": [
+    {
+      "name": "empty",
+      "label": "Empty look",
+      "fields": {
+        "name": "Empty look",
+        "rows": {}
+      }
+    }
+  ],
+  "rules": [
+    "row-key-matches-preset-feature"
+  ],
+  "migration": {
+    "from": [
+      "each collection look (its parts)"
+    ],
+    "how": "A look node named after the collection look references the presets its parts became; row keys come from each part's feature."
+  }
+}

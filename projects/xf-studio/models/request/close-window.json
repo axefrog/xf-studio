@@ -1,0 +1,45 @@
+{
+  "kind": "request",
+  "id": "close-window",
+  "owner": "desktop",
+  "summary": "Close a desktop window once its changes are safe.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "closed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "closed"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:desktop-shell"
+  ],
+  "root": true,
+  "faults": [
+    {
+      "code": "unsafe",
+      "when": "Changes aren't acknowledged by the deadline.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ]
+}

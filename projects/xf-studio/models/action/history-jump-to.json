@@ -1,0 +1,42 @@
+{
+  "kind": "action",
+  "id": "history-jump-to",
+  "owner": "platform",
+  "summary": "Jump to (history): raises the undo request.",
+  "status": "both",
+  "replaces": [
+    "authoring-history",
+    "platform/core/look-history"
+  ],
+  "name": "history.jumpTo",
+  "target": "type:history-scope",
+  "input": {
+    "type": "object",
+    "properties": {
+      "entryId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "entryId"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The focused scope has a step to undo, redo or jump to, and no transaction is open in the window.",
+    "refusals": [
+      {
+        "code": "nothing",
+        "reason": "There is nothing to undo."
+      },
+      {
+        "code": "transaction-open",
+        "reason": "Finish or cancel the current adjustment first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:undo"
+  },
+  "undo": "none"
+}

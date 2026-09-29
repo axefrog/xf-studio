@@ -1,0 +1,364 @@
+{
+  "kind": "type",
+  "id": "preset-eye-makeup",
+  "owner": "eye-makeup",
+  "summary": "One eye makeup look: its layers in draw order, each a keyed record, with its export ID and the per-layer choice memory.",
+  "status": "both",
+  "replaces": [
+    "authoring-document",
+    "authoring-eye-makeup",
+    "platform/core/live-features",
+    "collection-workspace",
+    "collection-session"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "name": {
+      "kind": "value",
+      "doc": "The preset's name as the person sees it and the mod manager shows it.",
+      "shape": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    },
+    "exportId": {
+      "kind": "value",
+      "doc": "Six lower-case Crockford base32 characters naming the preset in built mods; a fork or clone gets its own.",
+      "inherit": false,
+      "unique": true,
+      "shape": {
+        "type": "string",
+        "pattern": "^[0-9a-hjkmnp-tv-z]{6}$"
+      }
+    },
+    "uv": {
+      "kind": "value",
+      "doc": "The UV convention the points are in.",
+      "shape": {
+        "enum": [
+          "gltf-uv0-top-left"
+        ]
+      }
+    },
+    "layers": {
+      "kind": "map",
+      "of": {
+        "kind": "map",
+        "of": {
+          "kind": "value"
+        }
+      },
+      "doc": "The layers by layer ID; each layer is a map from its member name to that member's value, so a fork overrides one member of one layer.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-f]{6}$"
+          },
+          "finish": {
+            "enum": [
+              "matte",
+              "regular",
+              "satin",
+              "metallic",
+              "shimmer",
+              "glitter",
+              "glossy",
+              "iridescent"
+            ]
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "feather": {
+            "type": "number",
+            "minimum": 0.0005,
+            "maximum": 0.06
+          },
+          "symmetry": {
+            "type": "boolean"
+          },
+          "pathMode": {
+            "enum": [
+              "catmull-rom",
+              "bezier"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "u": {
+                  "type": "number"
+                },
+                "v": {
+                  "type": "number"
+                },
+                "weight": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "feather": {
+                  "type": "number"
+                },
+                "handles": {
+                  "type": "object",
+                  "properties": {},
+                  "required": []
+                }
+              },
+              "required": [
+                "u",
+                "v",
+                "weight"
+              ]
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "u": {
+                  "type": "number"
+                },
+                "v": {
+                  "type": "number"
+                },
+                "du": {
+                  "type": "number"
+                },
+                "dv": {
+                  "type": "number"
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "u",
+                "v",
+                "du",
+                "dv",
+                "radius"
+              ]
+            },
+            "maxItems": 8
+          },
+          "strength": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "enum": [
+                  "legacy-nearest",
+                  "smooth-boundary"
+                ]
+              },
+              "blend": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "softness": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "enum": [
+                  "uniform",
+                  "boundary"
+                ]
+              },
+              "blend": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "flakes": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "description": "The glitter model's settings (classic, irregular or direct), named by the model."
+          },
+          "optics": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "enum": [
+                  "game-matched-1"
+                ]
+              },
+              "shift": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-f]{6}$"
+                  },
+                  "strength": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "color",
+                  "strength"
+                ]
+              }
+            },
+            "required": [
+              "model"
+            ]
+          },
+          "effects": {
+            "type": "object",
+            "properties": {
+              "mottle": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            },
+            "required": []
+          }
+        },
+        "required": [
+          "name",
+          "enabled",
+          "color",
+          "finish",
+          "opacity",
+          "feather",
+          "symmetry",
+          "pathMode",
+          "points",
+          "fields",
+          "strength",
+          "softness"
+        ],
+        "description": "One makeup layer, as eye makeup's part codec reads it; each member is a key of the layer's map so a fork can override one."
+      }
+    },
+    "order": {
+      "kind": "value",
+      "doc": "Layer IDs in draw order (bottom first); the same set as the keys of layers.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 32,
+        "uniqueItems": true
+      }
+    },
+    "choices": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Per layer, what the person last chose for each glitter model, so switching back restores it.",
+      "shape": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "description": "Glitter model name → that model's last settings."
+      }
+    }
+  },
+  "defaults": {
+    "uv": "gltf-uv0-top-left",
+    "layers": {},
+    "order": [],
+    "choices": {}
+  },
+  "constants": [
+    {
+      "name": "starter",
+      "label": "New look",
+      "fields": {
+        "name": "New look",
+        "uv": "gltf-uv0-top-left",
+        "layers": {},
+        "order": []
+      }
+    }
+  ],
+  "rules": [
+    "layers-within-limit",
+    "order-matches-layers",
+    "fine-glitter-inside-region",
+    "newer-data-read-only"
+  ],
+  "examples": [
+    {
+      "name": "Smoky wing",
+      "exportId": "p3xv9a",
+      "order": [
+        "l1"
+      ],
+      "layers": {
+        "l1": {
+          "name": "Wing",
+          "enabled": true,
+          "color": "#2b1d2a",
+          "finish": "matte",
+          "opacity": 0.8
+        }
+      }
+    }
+  ],
+  "migration": {
+    "from": [
+      "each collection's looks in the library's collection revisions (their eye makeup part)",
+      "the workspace's live recipe and its glitterChoices",
+      "the workspace's unsaved collection draft"
+    ],
+    "how": "Each look becomes a preset node with the look's UUID and a new export ID; its oldest revision is an import entry and each later revision one more entry at its original time; the unsaved draft is applied as the first autosave, marked as brought in.",
+    "dryRun": "Counts of looks and revisions read against planned, and every migrated part serialised to the same canonical bytes and identical raster masks at 512, 1K and 2K.",
+    "copy": "The library is copied beside itself before anything is written."
+  },
+  "x-friction": [
+    {
+      "gap": "Layers are a keyed map plus an order list; a move has to rewrite the whole list, and consumers keyed by position must be re-keyed by layer ID.",
+      "capability": "ordered-maps",
+      "closes": "A map field with an order and a move edit that keeps each layer's identity, reporting changes per key."
+    },
+    {
+      "gap": "A preset written by a newer build must be kept verbatim and locked, with unknown members written back unchanged.",
+      "capability": "unknown-data-kept",
+      "closes": "Nodes and fields of an unknown schema kept read-only and never folded, beside upcasting."
+    },
+    {
+      "gap": "Migrated revisions must keep the time they were saved, not the time of the migration.",
+      "capability": "original-times",
+      "closes": "Import entries carrying an original time apart from the append time."
+    }
+  ]
+}

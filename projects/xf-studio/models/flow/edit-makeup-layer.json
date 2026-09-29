@@ -1,0 +1,111 @@
+{
+  "kind": "flow",
+  "id": "edit-makeup-layer",
+  "owner": "eye-makeup",
+  "summary": "A pointer drag on a layer, from the press to one committed step, with the UV outline following every frame and the 3D view following each raster.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "source:pointer-input",
+      "does": "A press on the UV canvas or the head, then moves coalesced to one per animation frame."
+    },
+    {
+      "model": "driver:view-input",
+      "does": "Asks the view's editor runtime what is under the pointer, within the cycle."
+    },
+    {
+      "model": "operator:hit-target",
+      "does": "Answers with the layer and point or shape hit."
+    },
+    {
+      "model": "driver:dispatch",
+      "does": "Checks the gesture against the preset's capability in the same cycle."
+    },
+    {
+      "model": "driver:transaction",
+      "does": "Opens the window's one gesture on the preset and layer."
+    },
+    {
+      "model": "type:gesture",
+      "does": "Records the latest frame; nothing is kept per frame."
+    },
+    {
+      "model": "operator:eye-makeup-gesture",
+      "does": "Turns the frame into edits of the layer's keys over the working copy."
+    },
+    {
+      "model": "driver:raster",
+      "does": "Sees a change reported for that layer only, and asks for its raster at the current tier (latest wins; the running job for the layer is cancelled)."
+    },
+    {
+      "model": "process:raster-job",
+      "does": "Rasters the layer in the worker and returns the bundle by reference."
+    },
+    {
+      "model": "runtime:layer-textures",
+      "does": "Publishes the complete bundle for the raster key."
+    },
+    {
+      "model": "operator:plate-composite-input",
+      "does": "Changes, so the plate rebuilds in the scene's next draw."
+    },
+    {
+      "model": "driver:frame",
+      "does": "Draws every visible view whose scene wears the preset."
+    },
+    {
+      "model": "driver:history",
+      "does": "On release, records one look step labelled by the first frame that changed anything."
+    },
+    {
+      "model": "driver:store",
+      "does": "Appends the one commit and waits for its acknowledgement."
+    }
+  ],
+  "demand": "Every visible view and flat editor showing the preset; during the drag, the gesture's own consumers.",
+  "faults": [
+    {
+      "code": "stale-layer",
+      "when": "The layer was removed in another window during the drag.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "fine-glitter-outside-region",
+      "when": "The layer's fine glitter lies outside the eye region.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "worker-crashed",
+      "when": "The raster worker crashes.",
+      "fault": "owner",
+      "goesTo": "driver:raster-pool",
+      "then": "fallback"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "The UV outline follows every frame.",
+      "The 3D texture follows as soon as the worker finishes: the 2K reference recipe rasters in about 0.97 s for all layers.",
+      "No main-thread task over 50 ms."
+    ],
+    "memory": "Rasters up to 4096² per layer live on the GPU by reference; the working copy is the preset's value plus one frame of edits."
+  },
+  "invariants": [
+    "Exactly one committed step results from a drag, and none from a drag that changed nothing.",
+    "Escape leaves the preset exactly as before the press, with no step and no redo.",
+    "Only complete raster bundles are ever shown.",
+    "Only the dragged layer is re-rastered.",
+    "One gesture at most is open per window."
+  ],
+  "x-friction": [
+    {
+      "gap": "The drag's frames are edits every consumer must see before any commit.",
+      "capability": "uncommitted-edits",
+      "closes": "Uncommitted edits collapsed into one commit or dropped."
+    }
+  ]
+}

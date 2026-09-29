@@ -1,0 +1,35 @@
+{
+  "kind": "source",
+  "id": "graph-store",
+  "owner": "platform",
+  "summary": "The graph store's replies to the page: loaded snapshots and streams, acknowledged appends and the change counter.",
+  "status": "current",
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "operation": {
+        "enum": [
+          "list",
+          "load",
+          "readStream",
+          "append",
+          "changesSince",
+          "counter",
+          "putSnapshot",
+          "dropSnapshots",
+          "compact",
+          "purge"
+        ]
+      },
+      "result": {}
+    },
+    "required": [
+      "operation",
+      "result"
+    ]
+  },
+  "adapter": "platform/graph-adapters/browser-graph-store",
+  "simulated": "../../../strata/src/testing/sim-store",
+  "rate": "Per store operation."
+}

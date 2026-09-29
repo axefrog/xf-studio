@@ -1,0 +1,58 @@
+{
+  "kind": "source",
+  "id": "host-environment",
+  "owner": "host",
+  "summary": "The host's environment: its variables (the XFS configuration and developer overrides), free memory, platform and the user's folders.",
+  "status": "both",
+  "replaces": [
+    "../server",
+    "cc-catalogue-host",
+    "character-detail-host",
+    "desktop-app-host",
+    "diagnostics/host-report",
+    "diagnostics/host-roots",
+    "diagnostics/mod-identity",
+    "dotnet-runtime",
+    "eye-plate-prerequisite",
+    "facial-host",
+    "host-state",
+    "install-detection-host",
+    "local-settings-readiness",
+    "local-settings-server",
+    "local-settings-store",
+    "mod-makers",
+    "native-texture-export",
+    "native/oodle",
+    "package-server",
+    "process-tree",
+    "resolver-host",
+    "saves-host-sources",
+    "wolvenkit-cli",
+    "wolvenkit-setup-host"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "variables": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "freeMemory": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "platform": {
+        "type": "string"
+      },
+      "localAppData": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "At start; free memory on demand."
+}

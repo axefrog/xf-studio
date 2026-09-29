@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "idle-catalogue-read",
+  "owner": "motion",
+  "summary": "Reading the creator's preview idles for an installation.",
+  "status": "target",
+  "driver": "driver:idles",
+  "work": "Reads the idle clips' body tracks with the native animation reader.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "clips": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "clips"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "idle-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "host"
+}

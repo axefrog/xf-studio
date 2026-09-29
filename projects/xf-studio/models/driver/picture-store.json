@@ -1,0 +1,32 @@
+{
+  "kind": "driver",
+  "id": "picture-store",
+  "owner": "character",
+  "summary": "Derives the sources a choice picture is drawn from, and keeps drawn pictures on disk within the prepared-files budget.",
+  "status": "both",
+  "replaces": [
+    "choice-preview-host",
+    "choice-preview-server"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:derive-preview-source",
+    "request:store-picture"
+  ],
+  "demands": [
+    "source:host-files",
+    "sink:cache-touch"
+  ],
+  "creates": [],
+  "starts": [
+    "process:preview-source-derive",
+    "process:picture-store"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:prepare-v-on-host",
+    "request:fit-prepared"
+  ],
+  "faults": [],
+  "lifetime": "Per host."
+}

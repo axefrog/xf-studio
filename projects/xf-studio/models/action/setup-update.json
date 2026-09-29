@@ -1,0 +1,33 @@
+{
+  "kind": "action",
+  "id": "setup-update",
+  "owner": "setup",
+  "summary": "Update (setup): sets the host settings' keys.",
+  "status": "both",
+  "replaces": [
+    "local-setup-actions"
+  ],
+  "name": "setup.update",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {
+      "fields": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "fields"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The host is reachable; the verification copy's settings start as a fork of the real ones."
+  },
+  "effect": {
+    "commit": "Sets the host settings' keys."
+  },
+  "undo": "none"
+}

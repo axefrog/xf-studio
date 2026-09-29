@@ -1,0 +1,50 @@
+{
+  "kind": "process",
+  "id": "v-view-derive",
+  "owner": "character",
+  "summary": "Deriving a V's view (every row's current choice, links and what can't be honoured) from the installed catalogue.",
+  "status": "target",
+  "driver": "driver:catalogue",
+  "work": "Runs the pure character derivation over the V's choices and base.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "request": {
+        "$ref": "shapes.schema.json#/$defs/characterRequest"
+      }
+    },
+    "required": [
+      "view",
+      "request"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "catalogue-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "A newer V state supersedes it.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 2000,
+  "lane": "host, the person's own"
+}

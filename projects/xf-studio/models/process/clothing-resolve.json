@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "clothing-resolve",
+  "owner": "character",
+  "summary": "Resolving what a V wears into drawable components.",
+  "status": "target",
+  "driver": "driver:v-host",
+  "work": "Resolves each worn item's appearance and components on the route.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "components": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "components"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "item-unresolved"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "host, with its preparation"
+}

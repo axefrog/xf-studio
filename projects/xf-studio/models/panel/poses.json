@@ -1,0 +1,28 @@
+{
+  "kind": "panel",
+  "id": "poses",
+  "owner": "poses",
+  "summary": "Poses for the focused view's V: the catalogue for her body, filtered by what she wears, with favourites and one-click hold.",
+  "status": "both",
+  "replaces": [
+    "features/poses/view/panel"
+  ],
+  "binding": "the window's focus.view pointer's scene (type:scene)",
+  "reads": [
+    "operator:poses-for",
+    "operator:pose-filter",
+    "type:pose-favourites"
+  ],
+  "actions": [
+    "action:pose-clear",
+    "action:pose-favourite",
+    "action:pose-frame",
+    "action:pose-open-group",
+    "action:pose-retry",
+    "action:pose-select",
+    "action:pose-show-filtered",
+    "action:poses-load",
+    "action:poses-retry",
+    "action:poses-sample"
+  ]
+}

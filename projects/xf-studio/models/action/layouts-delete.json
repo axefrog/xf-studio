@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "layouts-delete",
+  "owner": "shell",
+  "summary": "Delete (layouts): moves the layout to the trash.",
+  "status": "both",
+  "replaces": [
+    "layout-library"
+  ],
+  "name": "layouts.delete",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; the factory layout can't be renamed or deleted."
+  },
+  "effect": {
+    "commit": "Moves the layout to the trash."
+  },
+  "undo": "none"
+}

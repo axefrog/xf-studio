@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "idle-face-solve",
+  "owner": "expressions",
+  "summary": "Solving an idle clip's face frames (663 of them for the creator idle).",
+  "status": "target",
+  "driver": "driver:face-host",
+  "work": "Solves each frame of the idle's face animation.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "frames": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "frames",
+      "data"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "face-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between frames.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "host, warming"
+}

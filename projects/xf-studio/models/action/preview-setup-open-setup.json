@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-open-setup",
+  "owner": "setup",
+  "summary": "Open setup (preview setup): moves the setup card (previewSetup.openSetup).",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.openSetup",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "session": "Moves the setup card (previewSetup.openSetup)."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,37 @@
+{
+  "kind": "driver",
+  "id": "frame",
+  "owner": "platform",
+  "summary": "Draws a window's dirty visible views in focus order under a per-frame budget, demanding the next frame only while something is dirty or animating.",
+  "status": "both",
+  "replaces": [
+    "platform/scene/scene-host",
+    "render-scheduler",
+    "studio-ui/app"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:draw-frame"
+  ],
+  "demands": [
+    "source:frames",
+    "source:element-size",
+    "operator:dirty-views",
+    "operator:draw-order",
+    "operator:animating"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [
+    "runtime:gl-renderer"
+  ],
+  "faults": [],
+  "lifetime": "Per window and GL context; demand for the next frame exists only while a view is dirty or a scene animates.",
+  "x-friction": [
+    {
+      "gap": "Coalescing next-frame demands, a 12 ms budget with the focused view first and half rate for others, and nothing drawn for hidden views.",
+      "capability": "frame-timing",
+      "closes": "Coalesced next-frame demand, a focus-ordered frame budget and frame-integrated state."
+    }
+  ]
+}

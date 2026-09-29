@@ -1,0 +1,45 @@
+{
+  "kind": "request",
+  "id": "migrate-library",
+  "owner": "library",
+  "summary": "Move a library onto the graph, once, losslessly.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "migrated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "migrated"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "library": {
+        "enum": [
+          "real",
+          "verification"
+        ]
+      },
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "library",
+      "workspace"
+    ]
+  },
+  "reasons": [
+    "blocks"
+  ],
+  "servedBy": [
+    "driver:migration"
+  ]
+}

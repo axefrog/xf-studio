@@ -1,0 +1,53 @@
+{
+  "kind": "process",
+  "id": "idle-clip-load",
+  "owner": "motion",
+  "summary": "Loading one idle clip's body animation.",
+  "status": "target",
+  "driver": "driver:motion-data",
+  "work": "Fetches the clip's sampled body tracks.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "clip": {
+        "type": "string"
+      },
+      "frames": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "clip",
+      "frames",
+      "data"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "clip-missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, warming"
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-consent-close",
+  "owner": "setup",
+  "summary": "Consent close (preview setup): moves the setup card (previewSetup.consentClose).",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.consentClose",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "session": "Moves the setup card (previewSetup.consentClose)."
+  },
+  "undo": "none"
+}

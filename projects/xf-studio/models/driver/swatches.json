@@ -1,0 +1,26 @@
+{
+  "kind": "driver",
+  "id": "swatches",
+  "owner": "character",
+  "summary": "Derives colour swatches in the background after a catalogue build, family by family, asked rows first.",
+  "status": "both",
+  "replaces": [
+    "cc-swatch",
+    "cc-swatch-host"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:derive-swatches"
+  ],
+  "demands": [
+    "operator:swatch-plan",
+    "operator:quiet-period"
+  ],
+  "creates": [],
+  "starts": [
+    "process:swatch-derive"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "After a catalogue build, until every family is derived."
+}

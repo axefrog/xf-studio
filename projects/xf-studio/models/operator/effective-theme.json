@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "effective-theme",
+  "owner": "shell",
+  "summary": "The theme drawn: the preference, or the system's colour scheme.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:preferences",
+    "source:display-environment"
+  ],
+  "output": {
+    "enum": [
+      "light",
+      "dark"
+    ]
+  },
+  "pure": true
+}

@@ -1,0 +1,58 @@
+{
+  "kind": "action",
+  "id": "transition-set",
+  "owner": "motion",
+  "summary": "Set (transition): sets the scene's motion key (transition.set).",
+  "status": "both",
+  "replaces": [
+    "motion-actions",
+    "platform/core/transition-settings"
+  ],
+  "name": "transition.set",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "enum": [
+          "expression"
+        ]
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "seconds": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 3
+      },
+      "easing": {
+        "enum": [
+          "linear",
+          "in",
+          "out",
+          "outStrong",
+          "inOut",
+          "inOutStrong"
+        ]
+      }
+    },
+    "required": [
+      "source"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene shows a V and motion is available for her body.",
+    "refusals": [
+      {
+        "code": "motion-unavailable",
+        "reason": "The installation has no creator idle for this body."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the scene's motion key (transition.set)."
+  },
+  "undo": "none"
+}

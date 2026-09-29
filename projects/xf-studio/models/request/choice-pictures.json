@@ -1,0 +1,36 @@
+{
+  "kind": "request",
+  "id": "choice-pictures",
+  "owner": "character",
+  "summary": "Have a picture for every choice an open row shows.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "pictures": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "pictures"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "row": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "row"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:choice-previews"
+  ]
+}

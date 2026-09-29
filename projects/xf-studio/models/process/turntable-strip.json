@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "turntable-strip",
+  "owner": "character",
+  "summary": "Drawing a hovered choice's turntable strip.",
+  "status": "target",
+  "driver": "driver:preview-worker",
+  "work": "Draws a strip of frames around the subject.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "strip": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "key",
+      "strip"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "draw-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The pointer leaving aborts it.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page preview worker, hovered first"
+}

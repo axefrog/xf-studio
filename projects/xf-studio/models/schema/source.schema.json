@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source.schema.json",
+  "title": "A source model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "environment",
+    "entry",
+    "adapter",
+    "simulated",
+    "rate"
+  ],
+  "properties": {
+    "kind": {
+      "const": "source"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "environment": {
+      "$ref": "common.schema.json#/$defs/environment"
+    },
+    "entry": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "adapter": {
+      "$ref": "common.schema.json#/$defs/adapter"
+    },
+    "simulated": {
+      "$ref": "common.schema.json#/$defs/adapter"
+    },
+    "rate": {
+      "$ref": "common.schema.json#/$defs/text"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "operator",
+  "id": "request-for-choice",
+  "owner": "character",
+  "summary": "The character request a choice would make, for preparing it ahead.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "choice": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "choice"
+    ]
+  },
+  "inputs": [
+    "operator:character-request",
+    "type:choice-row"
+  ],
+  "output": {
+    "$ref": "shapes.schema.json#/$defs/characterRequest"
+  },
+  "pure": true
+}

@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "dotnet-check",
+  "owner": "setup",
+  "summary": "Checking the .NET runtime WolvenKit needs.",
+  "status": "target",
+  "driver": "driver:wolvenkit-setup",
+  "work": "Probes the installed runtimes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "present": {
+        "type": "boolean"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "present",
+      "version"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "probe-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host"
+}

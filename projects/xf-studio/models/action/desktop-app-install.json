@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "desktop-app-install",
+  "owner": "setup",
+  "summary": "Install (desktop app): raises the offer-desktop-app request.",
+  "status": "both",
+  "replaces": [
+    "desktop-app"
+  ],
+  "name": "desktopApp.install",
+  "target": "type:consent",
+  "input": {
+    "type": "object",
+    "properties": {
+      "installer": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "installer"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The Studio runs on localhost (the desktop app has no offer).",
+    "refusals": [
+      {
+        "code": "installer-changed",
+        "reason": "The setup program changed since it was shown; look again."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:offer-desktop-app"
+  },
+  "undo": "none"
+}

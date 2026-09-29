@@ -1,0 +1,45 @@
+{
+  "kind": "action",
+  "id": "mod-install-review",
+  "owner": "install",
+  "summary": "Review (mod install): raises the plan-install request.",
+  "status": "both",
+  "replaces": [
+    "mod-install-actions"
+  ],
+  "name": "modInstall.review",
+  "target": "type:build",
+  "input": {
+    "type": "object",
+    "properties": {
+      "product": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "product"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A verified build exists and this is the person's own library, not the verification copy.",
+    "refusals": [
+      {
+        "code": "manager-running",
+        "reason": "Close Mod Organizer 2 first."
+      },
+      {
+        "code": "plan-changed",
+        "reason": "The plan changed since you reviewed it; review it again."
+      },
+      {
+        "code": "verification-library",
+        "reason": "The verification copy never installs mods."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:plan-install"
+  },
+  "undo": "none"
+}

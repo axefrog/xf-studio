@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "guidance-skip",
+  "owner": "shell",
+  "summary": "Skip (guidance): moves the tour (guidance.skip).",
+  "status": "both",
+  "replaces": [
+    "studio-ui/guidance/engine"
+  ],
+  "name": "guidance.skip",
+  "target": "type:tour-run",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The tour exists and its anchors are shown."
+  },
+  "effect": {
+    "session": "Moves the tour (guidance.skip)."
+  },
+  "undo": "none"
+}

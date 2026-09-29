@@ -1,0 +1,143 @@
+{
+  "kind": "source",
+  "id": "host-files",
+  "owner": "host",
+  "summary": "The host's file system: bytes, stats and stamps, and folder listings, read and written only through this source and its sinks.",
+  "status": "both",
+  "replaces": [
+    "archive-inventory-fs",
+    "cc-catalogue-host",
+    "cc-icon-host",
+    "cc-swatch-host",
+    "character-detail-host",
+    "character-detail-server",
+    "character-detail-service",
+    "choice-manifest",
+    "choice-preview-host",
+    "choice-preview-server",
+    "clothing-host",
+    "collection-store",
+    "dangle-host",
+    "derived-cache",
+    "desktop-app-host",
+    "diagnostics/host-endpoint",
+    "diagnostics/host-log",
+    "diagnostics/host-report",
+    "diagnostics/mod-identity",
+    "diagnostics/trace-window",
+    "dotnet-runtime",
+    "expressions-game-prerequisite",
+    "eye-plate-prerequisite",
+    "eye-plate-service",
+    "eye-plate-wolvenkit",
+    "facial-host",
+    "features/expressions/export/index",
+    "features/expressions/verify/index",
+    "features/eye-makeup/export/plate-input",
+    "features/eye-makeup/verify/verify-build",
+    "features/poses/host/preferences-store",
+    "features/save-explorer/host/saves-server",
+    "game-asset-export",
+    "game-asset-export-wolvenkit",
+    "grading-lut-host",
+    "host-code-identity",
+    "idle-host",
+    "install-detection-host",
+    "installation-registry",
+    "installation-snapshot",
+    "library-store",
+    "local-settings-readiness",
+    "local-settings-server",
+    "local-settings-store",
+    "mod-install-host",
+    "mod-install-transport",
+    "native-geometry-export",
+    "native-texture-export",
+    "native/archive-reader",
+    "native/oodle",
+    "package-bake",
+    "package-resource-builder",
+    "package-server",
+    "part-preset-store",
+    "plate-uv-footprint-io",
+    "platform/export/product-builder",
+    "platform/export/product-host",
+    "platform/export/product-verifier",
+    "pose-catalogue-host",
+    "prepared-answers",
+    "prepared-files",
+    "preview-core-host",
+    "preview-core-service",
+    "rdar-index-fs",
+    "resolver-host",
+    "route-fingerprint",
+    "runtime-diagnostic-promotion",
+    "runtime-diagnostic-stage",
+    "saves-host-sources",
+    "showroom/build",
+    "showroom/verify",
+    "source-discovery",
+    "tool-download",
+    "verifier-wolvenkit",
+    "vortex-host",
+    "wolvenkit-cli",
+    "wolvenkit-setup-host",
+    "zip-extract"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "bytes",
+          "stat",
+          "listing",
+          "written"
+        ]
+      },
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "stamp": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mtime": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "size",
+          "mtime"
+        ]
+      },
+      "entries": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "path",
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "Bursts of thousands at discovery; stamps re-checked on demand.",
+  "x-friction": [
+    {
+      "gap": "Cache validity rests on 10,209 file stamps that must be re-read to be known; each change the person asks for pays 55–90 ms of re-checking.",
+      "capability": "stamped-files",
+      "closes": "A stamped-files source checked on demand within a freshness window, with caches keyed by stamp sets."
+    }
+  ]
+}

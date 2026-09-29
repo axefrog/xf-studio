@@ -1,0 +1,54 @@
+{
+  "kind": "driver",
+  "id": "paint",
+  "owner": "shell",
+  "summary": "Updates the DOM once per frame for every binding that changed; heavy panels at most every 400 ms and never mid-gesture.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/app",
+    "studio-ui/components/direction-dial",
+    "studio-ui/components/listbox-keys",
+    "studio-ui/components/search-field",
+    "studio-ui/components/tree-view",
+    "studio-ui/controls",
+    "studio-ui/guidance/desktop-app-sheet",
+    "studio-ui/item-list",
+    "studio-ui/menu",
+    "studio-ui/panels/game-setup",
+    "studio-ui/panels/settings",
+    "studio-ui/reason-tip",
+    "studio-ui/runtime",
+    "studio-ui/scroll-anchor",
+    "studio-ui/view-state"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:paint-window"
+  ],
+  "demands": [
+    "source:frames",
+    "type:transient-ui",
+    "operator:paint-panel",
+    "operator:throttle",
+    "sink:page-conveniences"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [
+    "runtime:panel-dom"
+  ],
+  "faults": [],
+  "lifetime": "Per window.",
+  "x-friction": [
+    {
+      "gap": "With many cycles per frame, per-cycle effects would write the DOM many times.",
+      "capability": "frame-timing",
+      "closes": "Effects aligned to frames that read the latest values."
+    },
+    {
+      "gap": "Menus, popovers, hover and tooltips are high-churn state never stored.",
+      "capability": "short-lived-ui",
+      "closes": "Cheap per-window transient state."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "view-undo",
+  "owner": "views",
+  "summary": "Undo (view): raises the undo request.",
+  "status": "both",
+  "replaces": [
+    "view-actions"
+  ],
+  "name": "view.undo",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "raises": "request:undo"
+  },
+  "undo": "none"
+}

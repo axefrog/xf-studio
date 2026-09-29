@@ -1,0 +1,38 @@
+{
+  "kind": "request",
+  "id": "draw-frame",
+  "owner": "platform",
+  "summary": "Draw a window's dirty visible views in the next frame.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "drawn": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "drawn"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:frame"
+  ]
+}

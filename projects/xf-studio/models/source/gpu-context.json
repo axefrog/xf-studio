@@ -1,0 +1,39 @@
+{
+  "kind": "source",
+  "id": "gpu-context",
+  "owner": "platform",
+  "summary": "A window's WebGL context being lost or restored.",
+  "status": "both",
+  "replaces": [
+    "studio-environment"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "lost",
+          "restored"
+        ]
+      }
+    },
+    "required": [
+      "window",
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "Rare: on driver resets or memory pressure.",
+  "x-friction": [
+    {
+      "gap": "After a context loss every scene, view, texture and bake must be recreated by the runtimes that owned them.",
+      "capability": "host-objects-per-node",
+      "closes": "Host objects per node recreated after loss, with readiness published."
+    }
+  ]
+}

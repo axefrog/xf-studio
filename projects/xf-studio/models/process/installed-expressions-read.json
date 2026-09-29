@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "installed-expressions-read",
+  "owner": "expressions",
+  "summary": "Reading the installed photo-mode expressions as start points.",
+  "status": "target",
+  "driver": "driver:face-solve",
+  "work": "Fetches the list of installed expressions with their control vectors.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "expressions": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "expressions"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, warming"
+}

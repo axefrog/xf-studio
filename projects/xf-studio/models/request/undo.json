@@ -1,0 +1,57 @@
+{
+  "kind": "request",
+  "id": "undo",
+  "owner": "platform",
+  "summary": "Undo, redo or jump in one history scope.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "step": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "step"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "scope": {
+        "enum": [
+          "look",
+          "view-lighting",
+          "character",
+          "clothing"
+        ]
+      },
+      "members": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeRef"
+        }
+      },
+      "direction": {
+        "enum": [
+          "undo",
+          "redo",
+          "jump"
+        ]
+      },
+      "to": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "scope",
+      "direction"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:history"
+  ]
+}

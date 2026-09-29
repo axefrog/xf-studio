@@ -1,0 +1,39 @@
+{
+  "kind": "action",
+  "id": "saved-v-restore",
+  "owner": "character",
+  "summary": "Restore (saved v): restores a V's saved base.",
+  "status": "both",
+  "replaces": [
+    "saved-appearance-actions"
+  ],
+  "name": "savedV.restore",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A V is focused.",
+    "refusals": [
+      {
+        "code": "unreadable-save",
+        "reason": "That file isn't a save XF Studio can read."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Restores a V's saved base."
+  },
+  "undo": "character"
+}

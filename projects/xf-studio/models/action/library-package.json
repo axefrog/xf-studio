@@ -1,0 +1,34 @@
+{
+  "kind": "action",
+  "id": "library-package",
+  "owner": "library",
+  "summary": "Package (library): raises the build-mod request.",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "package",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "enum": [
+          "check",
+          "build"
+        ]
+      }
+    },
+    "required": [
+      "action"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "raises": "request:build-mod"
+  },
+  "undo": "none"
+}

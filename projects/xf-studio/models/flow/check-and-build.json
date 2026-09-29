@@ -1,0 +1,118 @@
+{
+  "kind": "flow",
+  "id": "check-and-build",
+  "owner": "export",
+  "summary": "Checking and building a mod, from the package panel to a build record tagging every preset it packed.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "action:package-check",
+      "does": "The person asks for a Check of the focused mod."
+    },
+    {
+      "model": "operator:package-snapshot",
+      "does": "Pins the mod and each preset it ships at its current entry."
+    },
+    {
+      "model": "driver:package",
+      "does": "Receives the request on the host; one Check and one Build at a time."
+    },
+    {
+      "model": "driver:prerequisites",
+      "does": "Supplies what each prerequisite last left (Check), or prepares them (Build)."
+    },
+    {
+      "model": "process:mod-check",
+      "does": "Checks in a fresh worker within its deadline."
+    },
+    {
+      "model": "type:build",
+      "does": "Records the Check: eligibility, omissions and identity keys."
+    },
+    {
+      "model": "action:package-build",
+      "does": "The person asks for a Build."
+    },
+    {
+      "model": "operator:build-readiness",
+      "does": "Must hold, else the refusal names the one next step."
+    },
+    {
+      "model": "process:eye-plate-cut",
+      "does": "Cuts the eye plate for each body the mod needs."
+    },
+    {
+      "model": "process:mod-build",
+      "does": "Stages, packs once with WolvenKit, verifies and promotes exactly once."
+    },
+    {
+      "model": "process:build-verify",
+      "does": "Verifies the candidate independently."
+    },
+    {
+      "model": "sink:dist-store",
+      "does": "Receives the promoted candidate, once, by candidate ID."
+    },
+    {
+      "model": "type:build",
+      "does": "Records the Build with every preset's entry, each also tagged on its own stream."
+    }
+  ],
+  "demand": "The person's request; the page follows the host's process.",
+  "faults": [
+    {
+      "code": "not-ready",
+      "when": "Settings, WolvenKit or the eye plate aren't ready.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "prerequisite-failed",
+      "when": "A prerequisite fails on the game files.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "gate-failed",
+      "when": "A compiler or verifier gate fails; nothing is promoted.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    },
+    {
+      "code": "deadline",
+      "when": "The run passes its deadline; a stale prerequisite gets one retry with the remaining time.",
+      "fault": "owner",
+      "goesTo": "driver:package",
+      "then": "fallback"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "No multi-second wait without progress in place (a Build takes seconds to minutes).",
+      "Check answers within its deadline."
+    ],
+    "memory": "Candidates live on disk; the build record carries only its ID and manifest summary."
+  },
+  "invariants": [
+    "Check and Build agree on the filtered snapshot and identities.",
+    "Nothing is promoted unless every gate passed.",
+    "A candidate is promoted at most once, even across a crash.",
+    "Every omitted layer or preset is reported in the record.",
+    "The authored mod and presets are never changed by a Check or Build."
+  ],
+  "x-friction": [
+    {
+      "gap": "Deadlines with the remaining time carried to a retry.",
+      "capability": "deadlines",
+      "closes": "Deadline-bound work."
+    },
+    {
+      "gap": "Build publishes no progress today.",
+      "capability": "streamed-results",
+      "closes": "Progress streamed from host work."
+    }
+  ]
+}

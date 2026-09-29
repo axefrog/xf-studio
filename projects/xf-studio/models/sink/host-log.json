@@ -1,0 +1,49 @@
+{
+  "kind": "sink",
+  "id": "host-log",
+  "owner": "diagnostics",
+  "summary": "The host's JSON Lines log and its rolling 30-minute trace window, fed by host failures and forwarded page batches.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/host-log",
+    "diagnostics/trace-window",
+    "diagnostics/host-endpoint"
+  ],
+  "environment": "host",
+  "input": {
+    "type": "object",
+    "properties": {
+      "level": {
+        "enum": [
+          "info",
+          "warn",
+          "error"
+        ]
+      },
+      "area": {
+        "type": "string"
+      },
+      "code": {
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "ref": {
+        "type": "string"
+      },
+      "detail": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "level",
+      "area",
+      "message"
+    ]
+  },
+  "adapter": "diagnostics/host-log",
+  "idempotency": "The entry's reference: a batch retried after a failure never writes an entry twice."
+}

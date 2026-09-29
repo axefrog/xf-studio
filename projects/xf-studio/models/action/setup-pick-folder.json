@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "setup-pick-folder",
+  "owner": "setup",
+  "summary": "Pick folder (setup): raises the pick-folder request.",
+  "status": "both",
+  "replaces": [
+    "local-setup-actions"
+  ],
+  "name": "setup.pickFolder",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {
+      "field": {
+        "enum": [
+          "gameRoot",
+          "mo2Root",
+          "manualModRoot",
+          "wolvenKitCli",
+          "savesDirectory"
+        ]
+      }
+    },
+    "required": [
+      "field"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The host is reachable; the verification copy's settings start as a fork of the real ones."
+  },
+  "effect": {
+    "raises": "request:pick-folder"
+  },
+  "undo": "none"
+}

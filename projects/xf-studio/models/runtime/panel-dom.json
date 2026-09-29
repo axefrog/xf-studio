@@ -1,0 +1,51 @@
+{
+  "kind": "runtime",
+  "id": "panel-dom",
+  "owner": "shell",
+  "summary": "A panel instance's DOM subtree, painted from its bindings.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/dock/dock-view"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window",
+    "type:layout"
+  ],
+  "factory": "planned",
+  "ready": "driver:layout",
+  "query": [
+    {
+      "name": "measure",
+      "input": {
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "element"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "number",
+            "minimum": 0
+          },
+          "height": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ]
+      }
+    }
+  ],
+  "linger": 0
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "request",
+  "id": "derive-preview-source",
+  "owner": "character",
+  "summary": "Derive what a choice picture is drawn from.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "v": {
+        "$ref": "shapes.schema.json#/$defs/characterRequest"
+      },
+      "choice": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "v",
+      "choice"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:picture-store"
+  ]
+}

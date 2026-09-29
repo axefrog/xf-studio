@@ -1,0 +1,44 @@
+{
+  "kind": "process",
+  "id": "lut-load",
+  "owner": "views",
+  "summary": "Loading the creator grade's cube into the context.",
+  "status": "target",
+  "driver": "driver:lut",
+  "work": "Fetches the decoded cube and uploads it as a 3D texture.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "lut-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "The texture is released.",
+  "deadline": 10000,
+  "lane": "page, warming"
+}

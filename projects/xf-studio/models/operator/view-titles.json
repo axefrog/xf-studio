@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "view-titles",
+  "owner": "views",
+  "summary": "Each view's tab title from the graph (\"3D view 1\") with its subject.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:view",
+    "type:scene",
+    "type:v"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "pure": true
+}

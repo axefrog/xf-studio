@@ -1,0 +1,35 @@
+{
+  "kind": "operator",
+  "id": "held-face-pose",
+  "owner": "expressions",
+  "summary": "A scene's held face pose: the V's look's expression presets combined, with the blink composed.",
+  "status": "both",
+  "replaces": [
+    "platform/api/facial"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:scene",
+    "type:look",
+    "type:preset-expression"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "controls": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "controls"
+    ]
+  },
+  "pure": true
+}

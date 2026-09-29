@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "pose-filter",
+  "owner": "poses",
+  "summary": "Poses filtered by what the V wears (garment tags from her record), and by favourites.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "operator:poses-for",
+    "type:pose-favourites"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

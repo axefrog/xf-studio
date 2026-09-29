@@ -1,0 +1,41 @@
+{
+  "kind": "driver",
+  "id": "choice-previews",
+  "owner": "character",
+  "summary": "A picture for every choice a row shows, in priority order: sources derived on the host, drawn in the preview worker, stored on the host; paused while the person's change is prepared.",
+  "status": "both",
+  "replaces": [
+    "choice-preview",
+    "choice-preview-service",
+    "studio-ui/components/choice-preview"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:choice-pictures"
+  ],
+  "demands": [
+    "type:choice-row",
+    "operator:preview-priority",
+    "operator:preview-key",
+    "operator:quiet-period"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [
+    "runtime:picture-urls"
+  ],
+  "raises": [
+    "request:derive-preview-source",
+    "request:draw-choice-picture",
+    "request:store-picture"
+  ],
+  "faults": [],
+  "lifetime": "Per open row.",
+  "x-friction": [
+    {
+      "gap": "Pictures pause while the person's own change is prepared and resume after.",
+      "capability": "pause-and-resume",
+      "closes": "Pausing background work for the person's work."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "game-push",
+  "owner": "bridge",
+  "summary": "Push the Studio's value of a fact to the running game.",
+  "status": "target",
+  "name": "game.push",
+  "target": "type:bridge-session",
+  "input": {
+    "type": "object",
+    "properties": {
+      "fact": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "fact"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A game with the bridge is running and the values disagree."
+  },
+  "effect": {
+    "raises": "request:bridge-command"
+  },
+  "undo": "none"
+}

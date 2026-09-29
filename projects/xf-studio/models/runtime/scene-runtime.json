@@ -1,0 +1,62 @@
+{
+  "kind": "runtime",
+  "id": "scene-runtime",
+  "owner": "views",
+  "summary": "One scene's GPU content: its Three scene, head rig, character renderer and feature renderers.",
+  "status": "both",
+  "replaces": [
+    "platform/scene/scene-host",
+    "browser-head-attachment",
+    "platform/scene/feature-renderers"
+  ],
+  "environment": "page",
+  "key": [
+    "type:scene",
+    "the body shown"
+  ],
+  "factory": "planned",
+  "ready": "driver:scene",
+  "query": [
+    {
+      "name": "bounds",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "max": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ]
+      }
+    }
+  ],
+  "linger": 2000,
+  "x-friction": [
+    {
+      "gap": "Host objects are created per node tuple, counted by demand and released whole on failure, but no engine registry keeps them; each is wired by hand today.",
+      "capability": "host-objects-per-node",
+      "closes": "A registry of host objects keyed by node tuples, with readiness published and plain synchronous queries."
+    }
+  ]
+}

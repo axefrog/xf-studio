@@ -1,0 +1,57 @@
+{
+  "kind": "process",
+  "id": "wolvenkit-run",
+  "owner": "host",
+  "summary": "One run of the WolvenKit CLI (export, pack, extract or verify).",
+  "status": "target",
+  "driver": "driver:wolvenkit",
+  "work": "Runs the CLI with its arguments in a staged folder and collects its output.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "line": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "line"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "exit": {
+        "type": "integer"
+      },
+      "output": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "exit",
+      "output"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "run-failed",
+              "wolvenkit-missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The process tree is killed.",
+  "cleanup": "The staged folder is swept.",
+  "deadline": "per run kind",
+  "lane": "host WolvenKit queue, one at a time"
+}

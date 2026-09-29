@@ -1,0 +1,45 @@
+{
+  "kind": "request",
+  "id": "load-nodes",
+  "owner": "platform",
+  "summary": "Load the nodes a window demands from the library.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "nodes": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeRef"
+        }
+      }
+    },
+    "required": [
+      "nodes"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "nodes": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeRef"
+        }
+      },
+      "types": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": []
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:store"
+  ]
+}

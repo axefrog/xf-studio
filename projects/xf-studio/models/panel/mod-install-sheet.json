@@ -1,0 +1,22 @@
+{
+  "kind": "panel",
+  "id": "mod-install-sheet",
+  "owner": "install",
+  "summary": "Add to my mod manager: the reviewed plan, the person's consent and the outcome.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/mod-install-sheet"
+  ],
+  "binding": "type:build",
+  "reads": [
+    "type:build",
+    "type:consent",
+    "operator:plan-valid",
+    "operator:installable"
+  ],
+  "actions": [
+    "action:mod-install-apply",
+    "action:mod-install-reveal",
+    "action:mod-install-review"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "theme-set",
+  "owner": "shell",
+  "summary": "Set (theme): sets the preferences key (theme.set).",
+  "status": "both",
+  "replaces": [
+    "ui-preferences"
+  ],
+  "name": "theme.set",
+  "target": "type:preferences",
+  "input": {
+    "type": "object",
+    "properties": {
+      "theme": {
+        "enum": [
+          "system",
+          "light",
+          "dark"
+        ]
+      }
+    },
+    "required": [
+      "theme"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "commit": "Sets the preferences key (theme.set)."
+  },
+  "undo": "none"
+}

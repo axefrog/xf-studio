@@ -1,0 +1,34 @@
+{
+  "kind": "panel",
+  "id": "setup-card",
+  "owner": "setup",
+  "summary": "The preview setup card: the one next step from nothing set up to an interactive head.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/preview-setup-card"
+  ],
+  "binding": "type:window",
+  "reads": [
+    "operator:setup-state",
+    "type:consent"
+  ],
+  "actions": [
+    "action:preview-setup-cancel-download",
+    "action:preview-setup-cancel",
+    "action:preview-setup-choose-route",
+    "action:preview-setup-consent-close",
+    "action:preview-setup-consent",
+    "action:preview-setup-dismiss",
+    "action:preview-setup-install-wolven-kit",
+    "action:preview-setup-open-link",
+    "action:preview-setup-open-setup",
+    "action:preview-setup-prepare-again",
+    "action:preview-setup-prepare",
+    "action:preview-setup-recheck-runtime",
+    "action:preview-setup-refresh",
+    "action:preview-setup-retry-head",
+    "action:preview-setup-show",
+    "action:preview-setup-use-detected-game",
+    "action:preview-setup-use-detected-wolven-kit"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "kind": "operator",
+  "id": "core-ready",
+  "owner": "preview",
+  "summary": "Whether a body's core preview is prepared for the installation.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "body"
+    ]
+  },
+  "inputs": [
+    "type:host-settings",
+    "operator:route-key"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

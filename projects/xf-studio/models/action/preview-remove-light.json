@@ -1,0 +1,47 @@
+{
+  "kind": "action",
+  "id": "preview-remove-light",
+  "owner": "views",
+  "summary": "Remove light (preview): edits the rig's keys (preview.removeLight).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups",
+    "studio-lighting",
+    "creator-lighting"
+  ],
+  "name": "preview.removeLight",
+  "target": "type:light-rig",
+  "input": {
+    "type": "object",
+    "properties": {
+      "light": {
+        "type": "string"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "light"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's rig is one of the person's own setups, or a built-in (a change to a built-in forks it into one of the person's own first).",
+    "refusals": [
+      {
+        "code": "limit",
+        "reason": "A setup has at most 16 lights and a few shadow casters."
+      },
+      {
+        "code": "built-in",
+        "reason": "A built-in setup can't be renamed or deleted."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the rig's keys (preview.removeLight)."
+  },
+  "undo": "view-lighting"
+}

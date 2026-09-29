@@ -1,0 +1,41 @@
+{
+  "kind": "action",
+  "id": "motion-set-paused",
+  "owner": "motion",
+  "summary": "Set paused (motion): sets the scene's motion key (motion.setPaused).",
+  "status": "both",
+  "replaces": [
+    "motion-actions",
+    "platform/core/transition-settings"
+  ],
+  "name": "motion.setPaused",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "paused": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "paused"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene shows a V and motion is available for her body.",
+    "refusals": [
+      {
+        "code": "motion-unavailable",
+        "reason": "The installation has no creator idle for this body."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Sets the scene's motion key (motion.setPaused)."
+  },
+  "undo": "none"
+}

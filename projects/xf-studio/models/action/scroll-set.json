@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "scroll-set",
+  "owner": "shell",
+  "summary": "Set (scroll): writes a per-viewer convenience to the page's own storage.",
+  "status": "both",
+  "replaces": [
+    "ui-preferences",
+    "studio-ui/view-state"
+  ],
+  "name": "scroll.set",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "anchor": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "key"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available."
+  },
+  "effect": {
+    "session": "Writes a per-viewer convenience to the page's own storage."
+  },
+  "undo": "none"
+}

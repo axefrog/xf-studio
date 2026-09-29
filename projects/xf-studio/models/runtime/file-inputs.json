@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "file-inputs",
+  "owner": "platform",
+  "summary": "The window's hidden file inputs used by pickers.",
+  "status": "both",
+  "replaces": [
+    "browser-file-device"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window"
+  ],
+  "factory": "browser-file-device",
+  "ready": "driver:files",
+  "query": [],
+  "linger": 0
+}

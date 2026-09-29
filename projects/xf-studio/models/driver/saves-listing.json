@@ -1,0 +1,28 @@
+{
+  "kind": "driver",
+  "id": "saves-listing",
+  "owner": "save-explorer",
+  "summary": "Lists the player's saves from the settings' saves folder while the Save Explorer or a V-from-save chooser is shown.",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/host/saves-server",
+    "saves-host-sources"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:list-saves"
+  ],
+  "demands": [
+    "type:host-settings",
+    "source:host-files",
+    "operator:saves-folder"
+  ],
+  "creates": [],
+  "starts": [
+    "process:saves-list",
+    "process:save-type-names"
+  ],
+  "runtimes": [],
+  "faults": [],
+  "lifetime": "While the Save Explorer or a chooser is shown."
+}

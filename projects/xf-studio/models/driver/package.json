@@ -1,0 +1,96 @@
+{
+  "kind": "driver",
+  "id": "package",
+  "owner": "export",
+  "summary": "Checks and builds a mod: Check in a fresh worker, Build in a bounded child process that stages, packs once, verifies and promotes, one of each at a time.",
+  "status": "both",
+  "replaces": [
+    "../desktop/check-worker",
+    "export-diagnostics",
+    "features/expressions/export/index",
+    "features/expressions/verify/index",
+    "features/eye-makeup/export/plate-input",
+    "features/eye-makeup/verify/verify-build",
+    "mod-branding",
+    "package-action",
+    "package-bake",
+    "package-filter",
+    "package-resource-builder",
+    "package-resources",
+    "package-server",
+    "plate-uv-footprint-io",
+    "platform/api/export",
+    "platform/export/check-runner",
+    "platform/export/manifest",
+    "platform/export/product-builder",
+    "platform/export/product-check",
+    "platform/export/product-host",
+    "platform/export/product-verifier",
+    "showroom/build",
+    "showroom/verify"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:check-mod",
+    "request:build-mod"
+  ],
+  "demands": [
+    "operator:package-snapshot",
+    "operator:package-plan",
+    "operator:eligibility",
+    "operator:identity-keys",
+    "operator:build-readiness",
+    "sink:dist-store"
+  ],
+  "creates": [],
+  "starts": [
+    "process:mod-check",
+    "process:mod-build",
+    "process:build-verify"
+  ],
+  "runtimes": [
+    "runtime:check-worker",
+    "runtime:builder-process"
+  ],
+  "raises": [
+    "request:prepare-prerequisites",
+    "request:run-wolvenkit",
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "not-ready",
+      "when": "Settings, WolvenKit or the eye plate aren't ready; the refusal names the one next step.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "gate-failed",
+      "when": "A compiler or verifier gate failed; nothing is promoted.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    },
+    {
+      "code": "deadline",
+      "when": "The run passed its deadline; a stale prerequisite gets one retry with the remaining time.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "Per request; one Check and one Build at a time per host.",
+  "x-friction": [
+    {
+      "gap": "Each run has a deadline, and a retry gets the remaining time.",
+      "capability": "deadlines",
+      "closes": "Deadline-bound work with its own abort reason and the remaining budget carried to a retry."
+    },
+    {
+      "gap": "Build takes seconds to minutes and publishes no progress; the page can't cancel it.",
+      "capability": "streamed-results",
+      "closes": "Progress streamed from host work, and cancellation by asking."
+    }
+  ]
+}

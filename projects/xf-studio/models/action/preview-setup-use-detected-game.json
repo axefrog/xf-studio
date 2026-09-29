@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-use-detected-game",
+  "owner": "setup",
+  "summary": "Use detected game (preview setup): sets the detected folder or CLI in the host settings.",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.useDetectedGame",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "commit": "Sets the detected folder or CLI in the host settings."
+  },
+  "undo": "none"
+}

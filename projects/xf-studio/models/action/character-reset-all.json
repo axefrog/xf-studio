@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "character-reset-all",
+  "owner": "character",
+  "summary": "Reset all (character): edits the V's keys through the creator apply operator (character.resetAll).",
+  "status": "both",
+  "replaces": [
+    "character-context-actions",
+    "character-context"
+  ],
+  "name": "character.resetAll",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A V is focused and the installation's creator catalogue for her body is built.",
+    "refusals": [
+      {
+        "code": "catalogue-unavailable",
+        "reason": "The character creator's choices aren't ready yet."
+      },
+      {
+        "code": "not-offered",
+        "reason": "This installation doesn't offer that choice."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the V's keys through the creator apply operator (character.resetAll)."
+  },
+  "undo": "character"
+}

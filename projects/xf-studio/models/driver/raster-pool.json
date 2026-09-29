@@ -1,0 +1,45 @@
+{
+  "kind": "driver",
+  "id": "raster-pool",
+  "owner": "eye-makeup",
+  "summary": "Runs raster jobs in the page's raster worker: the latest request per layer, cancellation into the worker, and recreation after a crash.",
+  "status": "both",
+  "replaces": [
+    "engines/layered-makeup/raster-processor",
+    "raster-client",
+    "raster-task-yield",
+    "raster-worker"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:run-raster-job"
+  ],
+  "demands": [
+    "source:page-workers",
+    "source:worker-clock"
+  ],
+  "creates": [],
+  "starts": [
+    "process:raster-job"
+  ],
+  "runtimes": [
+    "runtime:raster-worker"
+  ],
+  "faults": [
+    {
+      "code": "worker-crashed",
+      "when": "The worker died; it is recreated and the jobs re-run.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "Per window, while any raster is demanded; the worker lingers briefly after.",
+  "x-friction": [
+    {
+      "gap": "Latest request per slot, cancellation into the worker, only complete bundles published, and crash recovery are written by hand.",
+      "capability": "worker-pools",
+      "closes": "A worker pool with keyed latest-wins queues, cancellation into the worker and a crash policy."
+    }
+  ]
+}

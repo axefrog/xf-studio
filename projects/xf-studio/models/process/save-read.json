@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "save-read",
+  "owner": "save-explorer",
+  "summary": "Reading a save's bytes from the host.",
+  "status": "target",
+  "driver": "driver:open-save",
+  "work": "Fetches the save's bytes by reference.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "bytes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable-save",
+              "missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "page, the person's own"
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "action",
+  "id": "save-write",
+  "owner": "character",
+  "summary": "Write a V into a new save, or over one by its policy.",
+  "status": "target",
+  "name": "save.write",
+  "target": "type:save",
+  "input": {
+    "type": "object",
+    "properties": {
+      "v": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "save": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "route": {
+        "enum": [
+          "new-save",
+          "overwrite"
+        ]
+      }
+    },
+    "required": [
+      "v",
+      "save",
+      "route"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The write-back gate has passed its in-game session and the policy allows it."
+  },
+  "effect": {
+    "raises": "request:write-save"
+  },
+  "undo": "none"
+}

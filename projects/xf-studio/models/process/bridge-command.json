@@ -1,0 +1,57 @@
+{
+  "kind": "process",
+  "id": "bridge-command",
+  "owner": "bridge",
+  "summary": "One command to the running game through the bridge, paced and audited.",
+  "status": "target",
+  "driver": "driver:bridge",
+  "work": "Sends the command, records a write's reversal note first, and receives the reply.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "reply": {},
+      "asOf": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "reply",
+      "asOf"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "command-refused",
+              "rate-limited",
+              "no-bridge"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "An unsent command is dropped; a sent one runs to its reply.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "bridge pipe, 18 a second in bursts of 36",
+  "faults": [
+    {
+      "code": "rate-limited",
+      "when": "The bridge refused for pacing.",
+      "fault": "owner",
+      "goesTo": "driver:bridge",
+      "then": "fallback"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "http-server",
+  "owner": "host",
+  "summary": "The loopback HTTP server the pages talk to.",
+  "status": "both",
+  "replaces": [
+    "../server"
+  ],
+  "environment": "host",
+  "key": [
+    "driver:host"
+  ],
+  "factory": "../server",
+  "ready": "driver:host",
+  "query": [],
+  "linger": 0
+}

@@ -1,0 +1,47 @@
+{
+  "kind": "panel",
+  "id": "view",
+  "owner": "views",
+  "summary": "A 3D view: the scene through its camera, lit by its rig, with its tools, hint strip, link badges and the setup card when the preview isn't ready.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/panels/viewports",
+    "studio-ui/panels/preview"
+  ],
+  "binding": "the panel instance's view pointer (type:view)",
+  "reads": [
+    "type:view",
+    "runtime:view-runtime",
+    "operator:view-tools",
+    "operator:view-titles",
+    "operator:shared-slots",
+    "operator:input-hints",
+    "operator:setup-state"
+  ],
+  "actions": [
+    "action:camera-back",
+    "action:camera-body",
+    "action:camera-creator-framing",
+    "action:camera-end-fov-gesture",
+    "action:camera-forward",
+    "action:camera-front",
+    "action:camera-navigate",
+    "action:camera-restore",
+    "action:camera-set-fov",
+    "action:view-close",
+    "action:view-compare-lighting",
+    "action:view-duplicate",
+    "action:view-end-edit",
+    "action:view-link",
+    "action:view-new",
+    "action:view-redo",
+    "action:view-set-tool",
+    "action:view-undo",
+    "action:view-unlink",
+    "action:motion-play-blink",
+    "action:motion-set-idle-clip",
+    "action:motion-set-idle",
+    "action:preview-set-surface-controls",
+    "action:preview-set-wire"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "kind": "driver",
+  "id": "lut-host",
+  "owner": "views",
+  "summary": "Extracts the creator environment's colour grade that wins on the launch route, decodes it and keeps it content-addressed.",
+  "status": "both",
+  "replaces": [
+    "grading-lut-host"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:extract-lut"
+  ],
+  "demands": [
+    "source:host-files"
+  ],
+  "creates": [],
+  "starts": [
+    "process:lut-extract"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:decode-resource",
+    "request:open-installation"
+  ],
+  "faults": [],
+  "lifetime": "Per installation, while a view shows the game display."
+}

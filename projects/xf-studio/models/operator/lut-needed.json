@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "lut-needed",
+  "owner": "views",
+  "summary": "Whether any shown view's rig uses the game display.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:light-rig",
+    "type:view"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

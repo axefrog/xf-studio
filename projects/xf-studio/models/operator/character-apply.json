@@ -1,0 +1,44 @@
+{
+  "kind": "operator",
+  "id": "character-apply",
+  "owner": "character",
+  "summary": "A creator action (set an option, reset, clothing, own makeup, use default) as edits of the V's keys.",
+  "status": "both",
+  "replaces": [
+    "character-context"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "inputs": [
+    "type:v",
+    "the action's input"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  "pure": true
+}

@@ -1,0 +1,33 @@
+{
+  "kind": "panel",
+  "id": "command-palette",
+  "owner": "shell",
+  "summary": "The command palette: every action available in the window, searchable, with its capability.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/commands",
+    "studio-ui/shortcuts"
+  ],
+  "binding": "type:transient-ui",
+  "reads": [
+    "operator:actions-for",
+    "operator:capability",
+    "type:transient-ui"
+  ],
+  "actions": [
+    "action:input-hints-set",
+    "action:profile-switch",
+    "action:research-tools-set",
+    "action:theme-set",
+    "action:layout-set",
+    "action:layouts-delete",
+    "action:layouts-duplicate",
+    "action:layouts-insert",
+    "action:layouts-rename",
+    "action:layouts-revert",
+    "action:layouts-save-as",
+    "action:layouts-switch",
+    "action:layouts-update",
+    "action:modules-set"
+  ]
+}

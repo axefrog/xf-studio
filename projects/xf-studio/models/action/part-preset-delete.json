@@ -1,0 +1,45 @@
+{
+  "kind": "action",
+  "id": "part-preset-delete",
+  "owner": "expressions",
+  "summary": "Delete (part preset): moves the preset to the trash, restorable for 30 days.",
+  "status": "both",
+  "replaces": [
+    "part-presets"
+  ],
+  "name": "partPreset.delete",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "feature",
+      "id",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The preset changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Moves the preset to the trash, restorable for 30 days."
+  },
+  "undo": "none"
+}

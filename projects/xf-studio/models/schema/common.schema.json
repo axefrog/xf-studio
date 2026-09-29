@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.schema.json",
+  "title": "Members and definitions shared by every model kind",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Kebab-case, unique within its kind."
+    },
+    "ref": {
+      "type": "string",
+      "pattern": "^(type|source|sink|operator|driver|process|runtime|request|action|panel|flow):[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "A reference to another model: <kind>:<id>."
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "The module that owns the model, or platform."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 12,
+      "pattern": "^[^\\n]+$",
+      "description": "One plain sentence."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[^\\n]+$"
+    },
+    "status": {
+      "enum": [
+        "current",
+        "target",
+        "both"
+      ]
+    },
+    "module": {
+      "type": "string",
+      "pattern": "^(\\.\\./)*[a-z0-9][a-z0-9_./-]*$",
+      "description": "A module path under projects/xf-studio/authoring/src/, without .ts."
+    },
+    "replaces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/module"
+      },
+      "uniqueItems": true,
+      "description": "The legacy modules this model takes over."
+    },
+    "environment": {
+      "enum": [
+        "page",
+        "host",
+        "desktop",
+        "worker",
+        "bridge"
+      ]
+    },
+    "jsonSchema": {
+      "type": "object",
+      "description": "A JSON Schema (draft 2020-12 subset) describing plain data."
+    },
+    "fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "code",
+        "when",
+        "fault",
+        "goesTo",
+        "then"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "when": {
+          "$ref": "#/$defs/text"
+        },
+        "fault": {
+          "enum": [
+            "requester",
+            "owner",
+            "shared"
+          ]
+        },
+        "goesTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ref"
+            },
+            {
+              "enum": [
+                "person",
+                "diagnostics"
+              ]
+            }
+          ]
+        },
+        "then": {
+          "enum": [
+            "suspend",
+            "fallback",
+            "fail"
+          ]
+        }
+      }
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fault"
+      }
+    },
+    "adapter": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/module"
+        },
+        {
+          "const": "planned"
+        }
+      ],
+      "description": "A module path, or planned when no adapter exists yet."
+    },
+    "fieldKind": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "properties": {
+        "kind": {
+          "enum": [
+            "value",
+            "ref",
+            "refs",
+            "entry",
+            "map"
+          ]
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(type):[a-z0-9]+(-[a-z0-9]+)*$"
+            },
+            {
+              "const": "*"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(type):[a-z0-9]+(-[a-z0-9]+)*$"
+              },
+              "minItems": 1
+            }
+          ]
+        },
+        "clone": {
+          "enum": [
+            "follow",
+            "share"
+          ]
+        },
+        "follows": {
+          "const": true
+        },
+        "of": {
+          "$ref": "#/$defs/fieldKind"
+        },
+        "inherit": {
+          "const": false
+        },
+        "unique": {
+          "const": true
+        },
+        "doc": {
+          "$ref": "#/$defs/text"
+        },
+        "shape": {
+          "$ref": "#/$defs/jsonSchema"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "ref",
+                  "refs"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "to",
+              "clone"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "map"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "of"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

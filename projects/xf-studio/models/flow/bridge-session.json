@@ -1,0 +1,84 @@
+{
+  "kind": "flow",
+  "id": "bridge-session",
+  "owner": "bridge",
+  "summary": "Working with the running game through XF's bridge: facts read with their age, commands paced, writes audited and reversible.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "source:bridge",
+      "does": "The game writes its session file; replies and captures arrive by reference."
+    },
+    {
+      "model": "driver:bridge",
+      "does": "Connects while something demands game facts or a scripted session runs."
+    },
+    {
+      "model": "type:bridge-session",
+      "does": "Records the session, its process and pacing."
+    },
+    {
+      "model": "process:bridge-command",
+      "does": "Runs each command at up to 18 a second in bursts of 36."
+    },
+    {
+      "model": "operator:game-disagreement",
+      "does": "Compares game facts (with their age) to the Studio's values."
+    },
+    {
+      "model": "panel:game-link",
+      "does": "Shows disagreements with Push to the game and Adopt."
+    },
+    {
+      "model": "sink:game-writes",
+      "does": "Records each write's reversal note before sending it."
+    },
+    {
+      "model": "process:bridge-capture",
+      "does": "Returns captures by reference."
+    }
+  ],
+  "demand": "Any node consuming game facts; a scripted session's run.",
+  "faults": [
+    {
+      "code": "no-bridge",
+      "when": "No game with XF's bridge is running.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "rate-limited",
+      "when": "The bridge refuses for pacing; retried within 4 s.",
+      "fault": "owner",
+      "goesTo": "driver:bridge",
+      "then": "fallback"
+    },
+    {
+      "code": "command-refused",
+      "when": "The game refuses a command.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "18 requests a second; commands never block the interface.",
+      "game.wait is a long-running process with a signal."
+    ],
+    "memory": "Captures by reference; the pipe lingers briefly after its last consumer."
+  },
+  "invariants": [
+    "Every write is audited with its reversal note before it is sent.",
+    "A stale game fact shows as a disagreement with its age, never as an error.",
+    "A new session ID reconnects; nothing is sent to an old session."
+  ],
+  "x-friction": [
+    {
+      "gap": "Pacing, retries and ages on observations.",
+      "capability": "paced-requests",
+      "closes": "Paced request sources with an age on each observation."
+    }
+  ]
+}

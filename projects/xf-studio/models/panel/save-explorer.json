@@ -1,0 +1,25 @@
+{
+  "kind": "panel",
+  "id": "save-explorer",
+  "owner": "save-explorer",
+  "summary": "The Save Explorer: the player's saves, and any number of open saves as read-only trees.",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/view/panel"
+  ],
+  "binding": "type:open-save",
+  "reads": [
+    "operator:save-tree",
+    "operator:saves-folder",
+    "request:list-saves"
+  ],
+  "actions": [
+    "action:saves-close",
+    "action:saves-inspect",
+    "action:saves-open-file",
+    "action:saves-open",
+    "action:saves-refresh",
+    "action:saves-select-node",
+    "action:saves-set-view"
+  ]
+}

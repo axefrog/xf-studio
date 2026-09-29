@@ -1,0 +1,56 @@
+{
+  "kind": "action",
+  "id": "part-preset-rename",
+  "owner": "expressions",
+  "summary": "Rename (part preset): creates or renames an expression preset (partPreset.rename).",
+  "status": "both",
+  "replaces": [
+    "part-presets"
+  ],
+  "name": "partPreset.rename",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "revision": {
+        "type": "integer"
+      },
+      "part": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "feature",
+      "id",
+      "name",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The preset changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Creates or renames an expression preset (partPreset.rename)."
+  },
+  "undo": "none"
+}

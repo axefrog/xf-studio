@@ -1,0 +1,20 @@
+{
+  "kind": "panel",
+  "id": "shape",
+  "owner": "eye-makeup",
+  "summary": "Shape for the active layer: symmetry, path mode and whole-shape transforms.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/view/inspector"
+  ],
+  "binding": "the focused preset's active layer (type:editor-session)",
+  "reads": [
+    "type:preset-eye-makeup",
+    "operator:eye-makeup-capability"
+  ],
+  "actions": [
+    "action:layer-set-symmetry",
+    "action:path-edit",
+    "action:shape-transform"
+  ]
+}

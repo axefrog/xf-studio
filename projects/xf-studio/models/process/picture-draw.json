@@ -1,0 +1,49 @@
+{
+  "kind": "process",
+  "id": "picture-draw",
+  "owner": "character",
+  "summary": "Drawing one choice's picture on a subject head in the preview worker.",
+  "status": "target",
+  "driver": "driver:preview-worker",
+  "work": "Draws the choice from its derived sources and encodes a picture.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "picture": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "key",
+      "picture"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "draw-failed",
+              "worker-crashed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "A superseded picture is dropped before it starts.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "page preview worker, row priority order"
+}

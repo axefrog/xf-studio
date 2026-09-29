@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "setup-restore-previous",
+  "owner": "setup",
+  "summary": "Restore previous (setup): reverts the settings to their previous entry.",
+  "status": "both",
+  "replaces": [
+    "local-setup-actions"
+  ],
+  "name": "setup.restorePrevious",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The host is reachable; the verification copy's settings start as a fork of the real ones."
+  },
+  "effect": {
+    "commit": "Reverts the settings to their previous entry."
+  },
+  "undo": "none"
+}

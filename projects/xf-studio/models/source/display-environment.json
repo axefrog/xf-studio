@@ -1,0 +1,45 @@
+{
+  "kind": "source",
+  "id": "display-environment",
+  "owner": "platform",
+  "summary": "The display's device pixel ratio and colour scheme, and the GPU's limits (WebGL2 support, largest texture).",
+  "status": "both",
+  "replaces": [
+    "device-pixel-ratio",
+    "stage-theme-binding"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "pixelRatio": {
+        "type": "number",
+        "minimum": 0
+      },
+      "colourScheme": {
+        "enum": [
+          "light",
+          "dark"
+        ]
+      },
+      "webgl2": {
+        "type": "boolean"
+      },
+      "maxTextureSize": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": []
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "At start and whenever one changes (moving the window to another screen).",
+  "x-friction": [
+    {
+      "gap": "Pixel ratio, colour scheme and GPU limits are read by scattered media queries and renderer probes; a change doesn't re-demand anything.",
+      "capability": "environment-changes",
+      "closes": "Environment facts as sources whose changes re-demand what depends on them."
+    }
+  ]
+}

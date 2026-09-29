@@ -1,0 +1,59 @@
+{
+  "kind": "process",
+  "id": "update-download",
+  "owner": "desktop",
+  "summary": "Downloading an update.",
+  "status": "target",
+  "driver": "driver:updates",
+  "work": "Downloads and verifies the update package.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "total": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "bytes",
+      "total"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "package": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "package"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "network",
+              "hash-mismatch"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "The partial download is removed.",
+  "deadline": "none",
+  "lane": "desktop, background"
+}

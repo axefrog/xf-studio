@@ -1,0 +1,34 @@
+{
+  "kind": "action",
+  "id": "diagnostics-set-mode",
+  "owner": "diagnostics",
+  "summary": "Set mode (diagnostics): sets the host settings' diagnostic mode.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions"
+  ],
+  "name": "diagnostics.setMode",
+  "target": "type:problem-report",
+  "input": {
+    "type": "object",
+    "properties": {
+      "mode": {
+        "enum": [
+          "normal",
+          "deep"
+        ]
+      }
+    },
+    "required": [
+      "mode"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; a report is prepared locally and never sent."
+  },
+  "effect": {
+    "commit": "Sets the host settings' diagnostic mode."
+  },
+  "undo": "none"
+}

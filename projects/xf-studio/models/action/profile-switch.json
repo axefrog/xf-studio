@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "profile-switch",
+  "owner": "platform",
+  "summary": "Switch the window to another profile (navigation; nothing is edited).",
+  "status": "target",
+  "name": "profile.switch",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {
+      "profile": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "profile"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The profile exists."
+  },
+  "effect": {
+    "session": "Points the window at the profile."
+  },
+  "undo": "none"
+}

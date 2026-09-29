@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "operator.schema.json",
+  "title": "A operator model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "nodeKind",
+    "params",
+    "inputs",
+    "output",
+    "pure"
+  ],
+  "properties": {
+    "kind": {
+      "const": "operator"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "nodeKind": {
+      "enum": [
+        "combinator",
+        "effect"
+      ]
+    },
+    "params": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "common.schema.json#/$defs/ref"
+          },
+          {
+            "$ref": "common.schema.json#/$defs/text"
+          }
+        ]
+      }
+    },
+    "output": {
+      "$ref": "common.schema.json#/$defs/jsonSchema"
+    },
+    "pure": {
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

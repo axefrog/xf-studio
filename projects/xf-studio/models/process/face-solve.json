@@ -1,0 +1,50 @@
+{
+  "kind": "process",
+  "id": "face-solve",
+  "owner": "expressions",
+  "summary": "Solving a held expression into control poses on the host.",
+  "status": "target",
+  "driver": "driver:face-solve",
+  "work": "Sends the expression's controls and receives the solved pose.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "pose": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "for": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "pose",
+      "for"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "face-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Never aborted when superseded: it is cheap to finish, and the newest state is solved next.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 2000,
+  "lane": "page, the person's own; one in flight"
+}

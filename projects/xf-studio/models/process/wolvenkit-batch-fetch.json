@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "wolvenkit-batch-fetch",
+  "owner": "host",
+  "summary": "Extracting a batch of resources with one WolvenKit run.",
+  "status": "target",
+  "driver": "driver:wolvenkit",
+  "work": "Coalesces fetches asked within a short window into one extraction.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "resources": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "resources"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "run-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Each asker's share ends; the run ends when the last does.",
+  "cleanup": "The extraction folder is swept.",
+  "deadline": 120000,
+  "lane": "host WolvenKit queue"
+}

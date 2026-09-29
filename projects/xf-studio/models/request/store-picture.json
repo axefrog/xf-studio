@@ -1,0 +1,39 @@
+{
+  "kind": "request",
+  "id": "store-picture",
+  "owner": "character",
+  "summary": "Store a drawn choice picture on the host.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "url"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "picture": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "key",
+      "picture"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:picture-store"
+  ]
+}

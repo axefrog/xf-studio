@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "builder-process",
+  "owner": "export",
+  "summary": "The bounded child process of one Build.",
+  "status": "both",
+  "replaces": [
+    "platform/export/product-builder"
+  ],
+  "environment": "host",
+  "key": [
+    "process:mod-build"
+  ],
+  "factory": "platform/export/product-builder",
+  "ready": "driver:package",
+  "query": [],
+  "linger": 0
+}

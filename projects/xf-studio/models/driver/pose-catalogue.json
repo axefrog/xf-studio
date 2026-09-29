@@ -1,0 +1,33 @@
+{
+  "kind": "driver",
+  "id": "pose-catalogue",
+  "owner": "poses",
+  "summary": "Builds the photo-mode pose catalogue per body gender, installation and language, and reads pose clips.",
+  "status": "both",
+  "replaces": [
+    "pose-catalogue",
+    "pose-catalogue-host",
+    "pose-catalogue-server",
+    "pose-endpoint"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:load-pose-catalogue"
+  ],
+  "demands": [
+    "source:host-files"
+  ],
+  "creates": [],
+  "starts": [
+    "process:pose-catalogue-build",
+    "process:pose-clip-read"
+  ],
+  "runtimes": [
+    "runtime:pose-set-index"
+  ],
+  "raises": [
+    "request:open-installation"
+  ],
+  "faults": [],
+  "lifetime": "Per gender and installation, while Poses is shown or a pose is held."
+}

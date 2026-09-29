@@ -1,0 +1,31 @@
+{
+  "kind": "operator",
+  "id": "draw-order",
+  "owner": "platform",
+  "summary": "The order and subset of dirty views that fit this frame's budget: focused first, others round-robin at half rate when animating.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "budgetMs": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "budgetMs"
+    ]
+  },
+  "inputs": [
+    "operator:dirty-views",
+    "type:window"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

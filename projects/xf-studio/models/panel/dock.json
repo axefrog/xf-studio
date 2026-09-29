@@ -1,0 +1,28 @@
+{
+  "kind": "panel",
+  "id": "dock",
+  "owner": "shell",
+  "summary": "The dock itself: panel groups, tabs, floating windows and their sizes, saved per size class.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/dock/dock-view",
+    "studio-ui/dock/persist"
+  ],
+  "binding": "type:layout",
+  "reads": [
+    "type:layout",
+    "type:window",
+    "operator:layout-for",
+    "operator:shown-modules",
+    "operator:effective-theme"
+  ],
+  "actions": [
+    "action:choice-layout-set",
+    "action:choice-size-set",
+    "action:control-size-set",
+    "action:easing-set",
+    "action:expanded-set",
+    "action:scroll-set",
+    "action:size-set"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "kind": "type",
+  "id": "problem-report",
+  "owner": "diagnostics",
+  "summary": "A Report a problem in preparation: its manifest, the items included, the person's description and whether they confirmed sharing.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/actions",
+    "diagnostics/report",
+    "diagnostics/model"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window.",
+      "inherit": false
+    },
+    "manifest": {
+      "kind": "value",
+      "doc": "What the report would contain, item by item.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "type": "string"
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "item",
+            "size"
+          ]
+        }
+      }
+    },
+    "included": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Item → included.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "description": {
+      "kind": "value",
+      "doc": "The person's own words.",
+      "shape": {
+        "type": "string",
+        "maxLength": 4000
+      }
+    },
+    "confirmed": {
+      "kind": "value",
+      "doc": "Whether the person confirmed what will be shared.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "file": {
+      "kind": "value",
+      "doc": "The prepared archive, by reference.",
+      "shape": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "type",
+  "id": "tour-run",
+  "owner": "shell",
+  "summary": "A guided tour in progress in one window: which tour and which step.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/guidance/controller",
+    "studio-ui/guidance/overlay",
+    "studio-ui/guidance/engine"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "window": {
+      "kind": "ref",
+      "to": "type:window",
+      "clone": "share",
+      "doc": "The window.",
+      "inherit": false
+    },
+    "tour": {
+      "kind": "value",
+      "doc": "The tour ID.",
+      "shape": {
+        "type": "string"
+      }
+    },
+    "step": {
+      "kind": "value",
+      "doc": "The step index.",
+      "shape": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "kind": "process",
+  "id": "install-plan",
+  "owner": "install",
+  "summary": "Planning where a build goes: the MO2 folder and separator placement, or the game folder, with a token for the person's review.",
+  "status": "target",
+  "driver": "driver:install",
+  "work": "Decides every path and the mod list change, and hashes the plan into a token.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "token": {
+        "type": "string"
+      },
+      "plan": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "token",
+      "plan"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "manager-running",
+              "not-installable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host, the person's own"
+}

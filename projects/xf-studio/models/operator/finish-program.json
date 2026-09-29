@@ -1,0 +1,37 @@
+{
+  "kind": "operator",
+  "id": "finish-program",
+  "owner": "eye-makeup",
+  "summary": "Which shader program or uniform a finish needs on the plate, so programs can be compiled ahead.",
+  "status": "both",
+  "replaces": [
+    "engines/layered-makeup/finish"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:preset-eye-makeup"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "program": {
+        "type": "string"
+      },
+      "uniforms": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "program",
+      "uniforms"
+    ]
+  },
+  "pure": true
+}

@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "check-worker",
+  "owner": "export",
+  "summary": "A fresh Bun worker for one Check.",
+  "status": "both",
+  "replaces": [
+    "platform/export/check-runner"
+  ],
+  "environment": "host",
+  "key": [
+    "process:mod-check"
+  ],
+  "factory": "platform/export/check-runner",
+  "ready": "driver:package",
+  "query": [],
+  "linger": 0
+}

@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "asset-export",
+  "owner": "host",
+  "summary": "Exporting a game resource as GLB, PNG or mask into the prepared files.",
+  "status": "target",
+  "driver": "driver:asset-export",
+  "work": "Decodes the resource and writes its export, staged and published atomically.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "file": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "key",
+      "file"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "export-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Each asker's share ends; the export ends when the last does.",
+  "cleanup": "The staged work folder is removed.",
+  "deadline": 120000,
+  "lane": "host, by the asker's priority"
+}

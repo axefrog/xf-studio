@@ -1,0 +1,37 @@
+{
+  "kind": "action",
+  "id": "saves-open",
+  "owner": "save-explorer",
+  "summary": "Open (saves): raises the open-save request.",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/actions"
+  ],
+  "name": "saves.open",
+  "target": "type:open-save",
+  "input": {
+    "type": "object",
+    "properties": {
+      "folder": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "folder"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The saves folder is known.",
+    "refusals": [
+      {
+        "code": "folder-missing",
+        "reason": "Choose where your saves are in Settings › Saves."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:open-save"
+  },
+  "undo": "none"
+}

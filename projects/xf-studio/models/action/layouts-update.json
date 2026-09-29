@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "layouts-update",
+  "owner": "shell",
+  "summary": "Update (layouts): edits the layout (layouts.update).",
+  "status": "both",
+  "replaces": [
+    "layout-library"
+  ],
+  "name": "layouts.update",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; the factory layout can't be renamed or deleted."
+  },
+  "effect": {
+    "commit": "Edits the layout (layouts.update)."
+  },
+  "undo": "none"
+}

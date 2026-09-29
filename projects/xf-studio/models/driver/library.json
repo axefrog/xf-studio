@@ -1,0 +1,33 @@
+{
+  "kind": "driver",
+  "id": "library",
+  "owner": "platform",
+  "summary": "The library's graph store on the host: appends, loads, snapshots, compaction and purge over SQLite, for every window on that library.",
+  "status": "both",
+  "replaces": [
+    "platform/graph-adapters/graph-host",
+    "platform/graph-adapters/sqlite-store"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:store-operation"
+  ],
+  "demands": [
+    "source:host-database"
+  ],
+  "creates": [],
+  "starts": [],
+  "runtimes": [
+    "runtime:sqlite-connection"
+  ],
+  "faults": [
+    {
+      "code": "database-locked",
+      "when": "Another process holds the library.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per library, while the host runs."
+}

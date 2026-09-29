@@ -1,0 +1,21 @@
+{
+  "kind": "sink",
+  "id": "clipboard",
+  "owner": "platform",
+  "summary": "Text copied for the person, such as a report's summary.",
+  "status": "target",
+  "environment": "page",
+  "input": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text"
+    ]
+  },
+  "adapter": "planned",
+  "idempotency": "none"
+}

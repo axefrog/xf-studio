@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "pose-catalogue-build",
+  "owner": "poses",
+  "summary": "Building the photo-mode pose catalogue for a body gender.",
+  "status": "target",
+  "driver": "driver:pose-catalogue",
+  "work": "Reads the pose sets and their names in the game's language.",
+  "progress": {
+    "$ref": "shapes.schema.json#/$defs/percent"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "poses": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "poses"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "catalogue-unavailable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between sets.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "host"
+}

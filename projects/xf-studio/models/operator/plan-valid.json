@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "plan-valid",
+  "owner": "install",
+  "summary": "Whether the person's reviewed plan token still matches the plan now.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:consent",
+    "process:install-plan"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

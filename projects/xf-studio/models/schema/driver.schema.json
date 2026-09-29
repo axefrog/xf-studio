@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "driver.schema.json",
+  "title": "A driver model",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "summary",
+    "status",
+    "environment",
+    "serves",
+    "demands",
+    "creates",
+    "starts",
+    "runtimes",
+    "faults",
+    "lifetime"
+  ],
+  "properties": {
+    "kind": {
+      "const": "driver"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "owner": {
+      "$ref": "common.schema.json#/$defs/owner"
+    },
+    "summary": {
+      "$ref": "common.schema.json#/$defs/summary"
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/status"
+    },
+    "replaces": {
+      "$ref": "common.schema.json#/$defs/replaces"
+    },
+    "environment": {
+      "$ref": "common.schema.json#/$defs/environment"
+    },
+    "serves": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(request):[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "demands": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/ref"
+      },
+      "uniqueItems": true
+    },
+    "creates": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/text"
+      },
+      "uniqueItems": true
+    },
+    "starts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(process):[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "uniqueItems": true
+    },
+    "runtimes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(runtime):[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "uniqueItems": true
+    },
+    "raises": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(request):[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "uniqueItems": true
+    },
+    "faults": {
+      "$ref": "common.schema.json#/$defs/faults"
+    },
+    "lifetime": {
+      "$ref": "common.schema.json#/$defs/text"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "both"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "replaces"
+        ],
+        "properties": {
+          "replaces": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

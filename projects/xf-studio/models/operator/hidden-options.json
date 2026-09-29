@@ -1,0 +1,24 @@
+{
+  "kind": "operator",
+  "id": "hidden-options",
+  "owner": "character",
+  "summary": "Creator options hidden in the preview (headwear while editing makeup, the V's own makeup).",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:v",
+    "type:display"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

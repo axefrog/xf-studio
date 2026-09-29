@@ -1,0 +1,48 @@
+{
+  "kind": "action",
+  "id": "field-replace",
+  "owner": "eye-makeup",
+  "summary": "Replace (field): adds a frame to the open gesture (field.replace); the gesture commits once when it ends.",
+  "status": "both",
+  "replaces": [
+    "authoring-gestures",
+    "eye-makeup-descriptors"
+  ],
+  "name": "field.replace",
+  "target": "type:gesture",
+  "input": {
+    "type": "object",
+    "properties": {
+      "fieldId": {
+        "type": "string"
+      },
+      "next": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "fieldId",
+      "next"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A gesture is open in this window on the preset and layer named.",
+    "refusals": [
+      {
+        "code": "no-gesture",
+        "reason": "There is no open gesture to add a frame to."
+      },
+      {
+        "code": "stale-layer",
+        "reason": "The layer was removed during the gesture."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Adds a frame to the open gesture (field.replace); the gesture commits once when it ends."
+  },
+  "undo": "look"
+}

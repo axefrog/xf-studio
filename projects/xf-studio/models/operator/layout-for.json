@@ -1,0 +1,23 @@
+{
+  "kind": "operator",
+  "id": "layout-for",
+  "owner": "shell",
+  "summary": "The dock tree for the window's size class.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:layout",
+    "type:window"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "pure": true
+}

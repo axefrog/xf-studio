@@ -1,0 +1,45 @@
+{
+  "kind": "request",
+  "id": "prepare-prerequisites",
+  "owner": "export",
+  "summary": "Prepare what a Build needs from the game.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "ready": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "ready"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "needs": {
+        "type": "array",
+        "items": {
+          "enum": [
+            "eye-plate",
+            "expression-table"
+          ]
+        }
+      }
+    },
+    "required": [
+      "needs"
+    ]
+  },
+  "reasons": [
+    "blocks",
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:prerequisites"
+  ]
+}

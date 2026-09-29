@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "picture-store",
+  "owner": "character",
+  "summary": "Storing a drawn choice picture on the host.",
+  "status": "target",
+  "driver": "driver:picture-store",
+  "work": "Writes the picture under its key within the prepared-files budget.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key",
+      "url"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "write-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "host, background"
+}

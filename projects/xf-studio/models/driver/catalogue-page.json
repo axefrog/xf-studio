@@ -1,0 +1,48 @@
+{
+  "kind": "driver",
+  "id": "catalogue-page",
+  "owner": "character",
+  "summary": "Loads the Character panel's catalogue pages, searches and swatch rows for an open row or search.",
+  "status": "both",
+  "replaces": [
+    "browser-cc-catalogue-device",
+    "cc-panel",
+    "cc-presentation",
+    "cc-swatch-display",
+    "character-panel-sections",
+    "creator-names",
+    "studio-ui/panels/character",
+    "studio-ui/panels/character-choices"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:catalogue-page"
+  ],
+  "demands": [
+    "type:choice-row",
+    "type:v",
+    "operator:panel-page",
+    "operator:swatch-row",
+    "source:host-answers"
+  ],
+  "creates": [],
+  "starts": [
+    "process:catalogue-page-load",
+    "process:catalogue-search"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:derive-v-view",
+    "request:build-catalogue",
+    "request:open-choice-row"
+  ],
+  "faults": [],
+  "lifetime": "Per open row or search.",
+  "x-friction": [
+    {
+      "gap": "The V's view (every row's current choice, what can't be honoured) is computed on the host from the installed catalogue; the panel must never show a view of an older state against newer choices.",
+      "capability": "cross-process-work",
+      "closes": "Derived values computed in another process, glitch-free with local ones."
+    }
+  ]
+}

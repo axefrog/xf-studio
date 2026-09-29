@@ -1,0 +1,63 @@
+{
+  "kind": "action",
+  "id": "preview-set-creator-lighting",
+  "owner": "views",
+  "summary": "Set creator lighting (preview): edits the rig's keys (preview.setCreatorLighting).",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups",
+    "studio-lighting",
+    "creator-lighting"
+  ],
+  "name": "preview.setCreatorLighting",
+  "target": "type:light-rig",
+  "input": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "enum": [
+          "intensity",
+          "cone",
+          "exposure"
+        ]
+      },
+      "value": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key",
+      "value"
+    ],
+    "additionalProperties": false,
+    "description": "One of the variants: intensity, cone, exposure."
+  },
+  "capability": {
+    "when": "The view's rig is one of the person's own setups, or a built-in (a change to a built-in forks it into one of the person's own first).",
+    "refusals": [
+      {
+        "code": "limit",
+        "reason": "A setup has at most 16 lights and a few shadow casters."
+      },
+      {
+        "code": "built-in",
+        "reason": "A built-in setup can't be renamed or deleted."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the rig's keys (preview.setCreatorLighting)."
+  },
+  "undo": "view-lighting"
+}

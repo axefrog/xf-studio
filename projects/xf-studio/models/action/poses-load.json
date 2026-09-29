@@ -1,0 +1,34 @@
+{
+  "kind": "action",
+  "id": "poses-load",
+  "owner": "poses",
+  "summary": "Load (poses): raises the load-pose-catalogue request.",
+  "status": "both",
+  "replaces": [
+    "pose-actions"
+  ],
+  "name": "poses.load",
+  "target": "type:scene",
+  "input": {
+    "type": "object",
+    "properties": {
+      "bodyGender": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "bodyGender"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The scene shows a V."
+  },
+  "effect": {
+    "raises": "request:load-pose-catalogue"
+  },
+  "undo": "none"
+}

@@ -1,0 +1,49 @@
+{
+  "kind": "driver",
+  "id": "save-writer",
+  "owner": "character",
+  "summary": "Writes a V back to a new save or, by the save's policy, over an existing one after copying it into the save backups.",
+  "status": "target",
+  "environment": "host",
+  "serves": [
+    "request:write-save"
+  ],
+  "demands": [
+    "type:save",
+    "type:save-policy",
+    "type:v",
+    "type:consent"
+  ],
+  "creates": [],
+  "starts": [
+    "process:save-write"
+  ],
+  "runtimes": [],
+  "raises": [
+    "request:store-commits"
+  ],
+  "faults": [
+    {
+      "code": "policy-never",
+      "when": "The save's policy is Never overwrite; the fix is to change this save's setting.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "save-changed",
+      "when": "The save changed on disk since it was read.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per request, behind the write-back design's in-game gate.",
+  "x-friction": [
+    {
+      "gap": "Overwriting a save must happen once, after its backup copy, even across a crash.",
+      "capability": "once-only-effects",
+      "closes": "Outside effects with an idempotency key and recorded outcome."
+    }
+  ]
+}

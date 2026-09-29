@@ -1,0 +1,38 @@
+{
+  "kind": "request",
+  "id": "maintain-views",
+  "owner": "views",
+  "summary": "Keep the window's view graph consistent and perform view commands.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "views": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeRef"
+        }
+      }
+    },
+    "required": [
+      "views"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "maintains"
+  ],
+  "servedBy": [
+    "driver:views"
+  ]
+}

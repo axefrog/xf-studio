@@ -1,0 +1,128 @@
+{
+  "kind": "type",
+  "id": "history-scope",
+  "owner": "platform",
+  "summary": "An Undo history over a set of nodes and fields: look (a preset's parts), view and lighting, a V's creator choices, or its clothing.",
+  "status": "both",
+  "replaces": [
+    "platform/core/look-history",
+    "authoring-history",
+    "history-labels",
+    "platform/core/chunk-store",
+    "platform/core/view-graph",
+    "character-context-actions"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "kind": {
+      "kind": "value",
+      "doc": "Which history.",
+      "shape": {
+        "enum": [
+          "look",
+          "view-lighting",
+          "character",
+          "clothing"
+        ]
+      }
+    },
+    "members": {
+      "kind": "refs",
+      "to": "*",
+      "clone": "share",
+      "doc": "The nodes it covers."
+    },
+    "fields": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Member node → the fields it covers (absent: all).",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "steps": {
+      "kind": "value",
+      "doc": "Step IDs, oldest first; each names the commits it made and its label.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "commits": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "label": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "commits",
+            "label",
+            "at"
+          ]
+        }
+      }
+    },
+    "redo": {
+      "kind": "value",
+      "doc": "Steps undone and still redoable; cleared by any other commit in the scope.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "depth": {
+      "kind": "value",
+      "doc": "How many steps are kept (80 for looks).",
+      "shape": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "kept": {
+      "kind": "value",
+      "doc": "How many of the latest steps survive a reload (look history today).",
+      "shape": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "migration": {
+    "from": [
+      "the workspace's look history (LookHistoryData)"
+    ],
+    "how": "The kept steps are replayed as the look scope's first steps for the migrated preset; View and lighting and character history start empty, as they are session-only today."
+  },
+  "x-friction": [
+    {
+      "gap": "Look history spans a preset's parts, keeps 80 steps chunked, allows Redo only while the look is exactly what the last Undo left, and jumps to any step; the engine's undo is per commit.",
+      "capability": "undo-groups",
+      "closes": "Undo over named sets of nodes and fields, steps of several commits, redo cleared by other commits in the set, bounded depth by compaction, and jumps."
+    },
+    {
+      "gap": "A few steps of a session history are kept across a reload, the rest dropped.",
+      "capability": "undo-groups",
+      "closes": "Selective recording of a session stream: keep the last N steps."
+    }
+  ]
+}

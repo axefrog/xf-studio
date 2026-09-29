@@ -1,0 +1,52 @@
+{
+  "kind": "action",
+  "id": "part-preset-set-set-members",
+  "owner": "expressions",
+  "summary": "Set members (part preset set): edits the expression mod (partPresetSet.setMembers).",
+  "status": "both",
+  "replaces": [
+    "part-presets",
+    "part-preset-sets"
+  ],
+  "name": "partPresetSet.setMembers",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "members": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "revision": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "feature",
+      "id",
+      "members",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable and the set exists.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The set changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression mod (partPresetSet.setMembers)."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,141 @@
+{
+  "kind": "type",
+  "id": "scene",
+  "owner": "views",
+  "summary": "What a view shows: for a character scene, which V, the eye shape and studies, the subject's motion and animated transitions.",
+  "status": "both",
+  "replaces": [
+    "preview-view-graph",
+    "motion-actions",
+    "platform/core/transition-settings",
+    "preview-motion"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "kind": {
+      "kind": "value",
+      "doc": "The scene kind: character, or a module's own (location, asset).",
+      "shape": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+$"
+      }
+    },
+    "v": {
+      "kind": "ref",
+      "to": "type:v",
+      "clone": "share",
+      "doc": "The V a character scene shows."
+    },
+    "eyeShape": {
+      "kind": "value",
+      "doc": "The eye shape index shown (0–21).",
+      "shape": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 21
+      }
+    },
+    "studies": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Material study → on (eye roughness, normals, eye optics).",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "uncensored": {
+      "kind": "value",
+      "doc": "Whether the opt-in uncensored mode applies to this scene.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "motion": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Motion setting → value: idle, clip, body, face, paused, blink amount, physics."
+    },
+    "pose": {
+      "kind": "value",
+      "doc": "The held photo-mode pose, or null.",
+      "shape": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "bodyGender": {
+                "enum": [
+                  "female",
+                  "male"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "bodyGender"
+            ]
+          }
+        ]
+      }
+    },
+    "transitions": {
+      "kind": "map",
+      "of": {
+        "kind": "value"
+      },
+      "doc": "Source (expression) → whether changes ease, over how long and along which curve.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "easing": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "seconds",
+          "easing"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "kind": "character",
+    "eyeShape": 0,
+    "studies": {},
+    "uncensored": false,
+    "motion": {
+      "idle": true,
+      "paused": false,
+      "blink": 1,
+      "physics": true,
+      "body": true,
+      "face": true
+    },
+    "pose": null,
+    "transitions": {}
+  },
+  "rules": [
+    "scene-v-missing"
+  ]
+}

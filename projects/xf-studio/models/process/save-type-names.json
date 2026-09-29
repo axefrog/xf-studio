@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "save-type-names",
+  "owner": "save-explorer",
+  "summary": "Loading the type names the Save Explorer shows.",
+  "status": "target",
+  "driver": "driver:saves-listing",
+  "work": "Reads the RTTI type names.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "types": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "types"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host"
+}

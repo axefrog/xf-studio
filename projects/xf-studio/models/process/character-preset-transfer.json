@@ -1,0 +1,53 @@
+{
+  "kind": "process",
+  "id": "character-preset-transfer",
+  "owner": "character",
+  "summary": "Importing or exporting a V's portable character preset.",
+  "status": "both",
+  "replaces": [
+    "cc-preset"
+  ],
+  "driver": "driver:files",
+  "work": "Reads a character preset into a V's choices, or writes a V's choices as one.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "choices": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "missing": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "choices",
+      "missing"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable-file"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "page, the person's own"
+}

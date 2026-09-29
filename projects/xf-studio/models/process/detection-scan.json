@@ -1,0 +1,58 @@
+{
+  "kind": "process",
+  "id": "detection-scan",
+  "owner": "setup",
+  "summary": "Finding Cyberpunk 2077 installs and MO2 instances.",
+  "status": "target",
+  "driver": "driver:detection",
+  "work": "Queries the registry and reads bounded files to find installs and instances.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "games": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      "instances": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "games",
+      "instances"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "scan-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 15000,
+  "lane": "host"
+}

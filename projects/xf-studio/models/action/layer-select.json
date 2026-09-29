@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "layer-select",
+  "owner": "eye-makeup",
+  "summary": "Select (layer): sets the editor session's selection (layer.select); nothing is stored.",
+  "status": "both",
+  "replaces": [
+    "authoring-document",
+    "editor-actions"
+  ],
+  "name": "layer.select",
+  "target": "type:editor-session",
+  "input": {
+    "type": "object",
+    "properties": {
+      "layerId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "layerId"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A preset is open for editing in this window and the layer, point or field exists.",
+    "refusals": [
+      {
+        "code": "missing",
+        "reason": "That layer, point or field no longer exists."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Sets the editor session's selection (layer.select); nothing is stored."
+  },
+  "undo": "none"
+}

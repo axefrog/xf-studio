@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "plan-install",
+  "owner": "install",
+  "summary": "Plan where a build would go, for the person to review.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "token": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "token"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "build": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "build"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:install"
+  ]
+}

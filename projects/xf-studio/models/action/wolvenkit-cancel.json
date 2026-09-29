@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "wolvenkit-cancel",
+  "owner": "setup",
+  "summary": "Cancel (wolvenkit): raises the set-up-wolvenkit request.",
+  "status": "both",
+  "replaces": [
+    "wolvenkit-setup"
+  ],
+  "name": "wolvenkit.cancel",
+  "target": "type:consent",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "WolvenKit isn't usable yet, or a download is running (for cancel).",
+    "refusals": [
+      {
+        "code": "no-consent",
+        "reason": "Agree to download this WolvenKit release first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:set-up-wolvenkit"
+  },
+  "undo": "none"
+}

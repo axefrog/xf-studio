@@ -1,0 +1,52 @@
+{
+  "kind": "request",
+  "id": "prefetch-row",
+  "owner": "character",
+  "summary": "Prepare an open row's visible choices ahead.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "states": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "states"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "requester": {
+        "type": "string"
+      },
+      "v": {
+        "$ref": "shapes.schema.json#/$defs/characterRequest"
+      },
+      "option": {
+        "type": "string"
+      },
+      "choices": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "requester",
+      "v",
+      "option",
+      "choices"
+    ]
+  },
+  "reasons": [
+    "warms"
+  ],
+  "servedBy": [
+    "driver:prefetch"
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "kind": "type",
+  "id": "camera",
+  "owner": "views",
+  "summary": "Where a view looks from: its kind and pose in the scene's neutral subject space; aspect belongs to each view.",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "camera-navigation",
+    "camera-framing"
+  ],
+  "class": "authored",
+  "schema": "1",
+  "stream": "value",
+  "fields": {
+    "kind": {
+      "kind": "value",
+      "doc": "orbit now; fly for locations and game (fed by the bridge) later.",
+      "shape": {
+        "enum": [
+          "orbit",
+          "fly",
+          "game"
+        ]
+      }
+    },
+    "pose": {
+      "kind": "value",
+      "doc": "Position, target and vertical field of view.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "target": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "fov": {
+            "type": "number",
+            "minimum": 10,
+            "maximum": 90
+          }
+        },
+        "required": [
+          "position",
+          "target",
+          "fov"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "kind": "orbit",
+    "pose": {
+      "position": [
+        0,
+        1.67,
+        -0.6
+      ],
+      "target": [
+        0,
+        1.67,
+        0.005
+      ],
+      "fov": 30
+    }
+  },
+  "x-friction": [
+    {
+      "gap": "Orbiting writes the pose every frame, shared by linked views, yet must leave no history and only a settled checkpoint stored.",
+      "capability": "uncommitted-edits",
+      "closes": "Uncommitted edits seen by every consumer at frame rate, collapsed into one stored entry when the camera settles."
+    }
+  ]
+}

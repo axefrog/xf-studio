@@ -1,0 +1,62 @@
+{
+  "kind": "flow",
+  "id": "choose-finish",
+  "owner": "eye-makeup",
+  "summary": "Choosing a finish for a layer, from the click to the view drawn with it.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "action:layer-set-finish",
+      "does": "The person clicks a finish in Colour & finish, or runs it from the palette or a tour."
+    },
+    {
+      "model": "driver:dispatch",
+      "does": "Checks its capability (offered, exportable or preview only) and commits the finish key."
+    },
+    {
+      "model": "driver:history",
+      "does": "Records one look step."
+    },
+    {
+      "model": "operator:optical-key",
+      "does": "Changes when the finish needs new optics (Shimmer, Glitter)."
+    },
+    {
+      "model": "driver:raster",
+      "does": "Re-rasters that layer's optics only when its optical key changed."
+    },
+    {
+      "model": "operator:finish-program",
+      "does": "Names the program or uniform the finish needs; the program was compiled ahead."
+    },
+    {
+      "model": "driver:frame",
+      "does": "Draws the views that show the preset."
+    },
+    {
+      "model": "operator:layer-export",
+      "does": "Updates the package panel's label (preview only, experimental export)."
+    }
+  ],
+  "demand": "The views showing the preset, and the package panel if open.",
+  "faults": [
+    {
+      "code": "link-on-first-use",
+      "when": "A finish's program wasn't compiled ahead and links on first use.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Click to drawn under 100 ms (met today: 13–18 ms for every finish, also while a hairstyle loads)."
+    ],
+    "memory": "No new memory unless optics re-raster."
+  },
+  "invariants": [
+    "One commit and one look step per click.",
+    "A finish that needs no new optics starts no raster job.",
+    "The package panel's label always matches the finish shown."
+  ]
+}

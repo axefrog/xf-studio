@@ -1,0 +1,61 @@
+{
+  "kind": "operator",
+  "id": "eye-makeup-apply",
+  "owner": "eye-makeup",
+  "summary": "Eye makeup's action as edits at key granularity (one layer member at a time), never a whole new recipe.",
+  "status": "both",
+  "replaces": [
+    "authoring-eye-makeup",
+    "engines/layered-makeup/recipe-actions",
+    "features/eye-makeup/core"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "inputs": [
+    "type:preset-eye-makeup",
+    "the action's input"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "set",
+            "reset",
+            "tombstone"
+          ]
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    }
+  },
+  "pure": true,
+  "x-friction": [
+    {
+      "gap": "Today apply returns a whole new recipe plus a hint naming the changed slot by index; consumers need changes reported per layer key.",
+      "capability": "ordered-maps",
+      "closes": "Edits emitted per map key, with change reports naming the keys."
+    }
+  ]
+}

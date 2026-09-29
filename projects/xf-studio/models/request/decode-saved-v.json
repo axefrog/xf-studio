@@ -1,0 +1,47 @@
+{
+  "kind": "request",
+  "id": "decode-saved-v",
+  "owner": "character",
+  "summary": "Decode a save's creator state and loadout for a V.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "saved": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "saved"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "bytes"
+    ]
+  },
+  "reasons": [
+    "person",
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:open-save"
+  ],
+  "faults": [
+    {
+      "code": "unreadable-save",
+      "when": "The bytes aren't a readable save.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ]
+}

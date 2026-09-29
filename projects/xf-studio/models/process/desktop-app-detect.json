@@ -1,0 +1,52 @@
+{
+  "kind": "process",
+  "id": "desktop-app-detect",
+  "owner": "setup",
+  "summary": "Finding whether the desktop app is installed, built here, or published.",
+  "status": "target",
+  "driver": "driver:desktop-offer",
+  "work": "Checks the install location, the local build and the site's release.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "installed": {
+        "type": "boolean"
+      },
+      "built": {
+        "type": "boolean"
+      },
+      "published": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "installed",
+      "built",
+      "published"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "probe-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host"
+}

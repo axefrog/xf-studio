@@ -1,0 +1,36 @@
+{
+  "kind": "request",
+  "id": "derive-icons",
+  "owner": "character",
+  "summary": "Derive icon sheets for the catalogue.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "sheets": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "sheets"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "reasons": [
+    "warms"
+  ],
+  "servedBy": [
+    "driver:icons"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "request",
+  "id": "prepare-face",
+  "owner": "expressions",
+  "summary": "Have the face rig prepared for the installation.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "bodyGender": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "bodyGender"
+    ]
+  },
+  "reasons": [
+    "supplies",
+    "warms"
+  ],
+  "servedBy": [
+    "driver:face-host"
+  ]
+}

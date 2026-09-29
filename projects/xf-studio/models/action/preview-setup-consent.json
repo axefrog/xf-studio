@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "preview-setup-consent",
+  "owner": "setup",
+  "summary": "Consent (preview setup): raises the set-up-wolvenkit request.",
+  "status": "both",
+  "replaces": [
+    "preview-setup"
+  ],
+  "name": "previewSetup.consent",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The setup card or the head pane is shown."
+  },
+  "effect": {
+    "raises": "request:set-up-wolvenkit"
+  },
+  "undo": "none"
+}

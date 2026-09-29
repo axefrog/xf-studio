@@ -1,0 +1,59 @@
+{
+  "kind": "driver",
+  "id": "v-details",
+  "owner": "character",
+  "summary": "Loads what a prepared V's record names into its scene: reusing unchanged parts from the pool, fetching, verifying and decoding the rest, and swapping in one step.",
+  "status": "both",
+  "replaces": [
+    "brow-material",
+    "browser-character-detail-device",
+    "character-detail-loader",
+    "character-material-adapters",
+    "core-detail-loader",
+    "eye-material",
+    "face-decal-material",
+    "hair-shading",
+    "layered-material",
+    "material-template",
+    "metal-base-material",
+    "mouth-occlusion",
+    "platform/scene/character-renderer",
+    "render-detail",
+    "render-templates",
+    "skin",
+    "skin-material"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:load-v-details"
+  ],
+  "demands": [
+    "operator:parts-to-load",
+    "operator:slot-status",
+    "source:host-answers"
+  ],
+  "creates": [],
+  "starts": [
+    "process:detail-load"
+  ],
+  "runtimes": [
+    "runtime:detail-part-pool"
+  ],
+  "faults": [
+    {
+      "code": "part-failed",
+      "when": "A part failed to load or verify; that slot reports a problem, the rest show.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per scene runtime and record; a newer record supersedes the load.",
+  "x-friction": [
+    {
+      "gap": "Superseded loads keep what they built in the pool for a later claim; another V clears it.",
+      "capability": "keep-after-use",
+      "closes": "Results kept after their demand ends, claimed by a later demand, with an eviction rule."
+    }
+  ]
+}

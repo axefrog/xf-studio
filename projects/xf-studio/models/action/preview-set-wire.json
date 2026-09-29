@@ -1,0 +1,34 @@
+{
+  "kind": "action",
+  "id": "preview-set-wire",
+  "owner": "views",
+  "summary": "Set wire (preview): sets the view's tool (preview.setWire).",
+  "status": "both",
+  "replaces": [
+    "preview-actions"
+  ],
+  "name": "preview.setWire",
+  "target": "type:tools",
+  "input": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view's scene shows a preset eye makeup can edit."
+  },
+  "effect": {
+    "commit": "Sets the view's tool (preview.setWire)."
+  },
+  "undo": "none"
+}

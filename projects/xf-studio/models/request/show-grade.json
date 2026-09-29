@@ -1,0 +1,35 @@
+{
+  "kind": "request",
+  "id": "show-grade",
+  "owner": "views",
+  "summary": "Show the creator's colour grade on views using the game display.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:lut"
+  ]
+}

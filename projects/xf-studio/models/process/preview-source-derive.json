@@ -1,0 +1,44 @@
+{
+  "kind": "process",
+  "id": "preview-source-derive",
+  "owner": "character",
+  "summary": "Deriving the sources a choice picture is drawn from.",
+  "status": "target",
+  "driver": "driver:picture-store",
+  "work": "Prepares the choice's parts and writes the source index entry.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "preparation-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 30000,
+  "lane": "host, background"
+}

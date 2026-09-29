@@ -1,0 +1,46 @@
+{
+  "kind": "source",
+  "id": "host-requests",
+  "owner": "host",
+  "summary": "Requests arriving at the host from pages and tools, each with its route, its requester and a lifetime that ends when the request does.",
+  "status": "both",
+  "replaces": [
+    "../desktop/server",
+    "../server"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "route": {
+        "type": "string"
+      },
+      "requester": {
+        "type": "string"
+      },
+      "body": {},
+      "library": {
+        "enum": [
+          "real",
+          "verification"
+        ]
+      }
+    },
+    "required": [
+      "route",
+      "requester",
+      "body",
+      "library"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "planned",
+  "rate": "Tens per second at start; a few per interaction after.",
+  "x-friction": [
+    {
+      "gap": "An HTTP request's own abort isn't tied to the work it starts, so a page leaving doesn't stop host work; long work is polled by key instead.",
+      "capability": "reasons-for-work",
+      "closes": "Requests carrying who asked and a lifetime, with supersession scoped to the requester."
+    }
+  ]
+}

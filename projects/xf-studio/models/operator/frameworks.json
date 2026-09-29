@@ -1,0 +1,39 @@
+{
+  "kind": "operator",
+  "id": "frameworks",
+  "owner": "setup",
+  "summary": "The frameworks on the route with installed and current versions and where to update.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "process:framework-check"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "installed": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "installed",
+        "current"
+      ]
+    }
+  },
+  "pure": true
+}

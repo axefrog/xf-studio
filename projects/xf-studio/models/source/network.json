@@ -1,0 +1,36 @@
+{
+  "kind": "source",
+  "id": "network",
+  "owner": "host",
+  "summary": "The outside network: the WolvenKit release and download, the site's status, and the update feed.",
+  "status": "both",
+  "replaces": [
+    "../desktop/update-service",
+    "tool-download",
+    "wolvenkit-release"
+  ],
+  "environment": "host",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string"
+      },
+      "status": {
+        "type": "integer"
+      },
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "progress": {
+        "$ref": "shapes.schema.json#/$defs/percent"
+      }
+    },
+    "required": [
+      "url"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "Rare: on consent or a scheduled check."
+}

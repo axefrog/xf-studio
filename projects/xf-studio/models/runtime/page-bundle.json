@@ -1,0 +1,18 @@
+{
+  "kind": "runtime",
+  "id": "page-bundle",
+  "owner": "host",
+  "summary": "The page bundle built at start and served.",
+  "status": "both",
+  "replaces": [
+    "../browser-build"
+  ],
+  "environment": "host",
+  "key": [
+    "driver:host"
+  ],
+  "factory": "../browser-build",
+  "ready": "driver:host",
+  "query": [],
+  "linger": 0
+}

@@ -1,0 +1,44 @@
+{
+  "kind": "request",
+  "id": "preload-choice",
+  "owner": "character",
+  "summary": "Preload a hovered choice's parts.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "parts": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "parts"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "v": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "option": {
+        "type": "string"
+      },
+      "choice": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "v",
+      "option",
+      "choice"
+    ]
+  },
+  "reasons": [
+    "warms"
+  ],
+  "servedBy": [
+    "driver:detail-preload"
+  ]
+}

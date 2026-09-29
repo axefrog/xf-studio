@@ -1,0 +1,41 @@
+{
+  "kind": "source",
+  "id": "element-size",
+  "owner": "platform",
+  "summary": "The size of each view host and panel element, and the window's size class.",
+  "status": "both",
+  "replaces": [
+    "canvas-resolution",
+    "studio-ui/dock/dock-view",
+    "viewport-size"
+  ],
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "element": {
+        "type": "string"
+      },
+      "width": {
+        "type": "number",
+        "minimum": 0
+      },
+      "height": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "window",
+      "element",
+      "width",
+      "height"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "On resize, coalesced per frame."
+}

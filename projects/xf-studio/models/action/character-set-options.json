@@ -1,0 +1,48 @@
+{
+  "kind": "action",
+  "id": "character-set-options",
+  "owner": "character",
+  "summary": "Set options (character): edits the V's keys through the creator apply operator (character.setOptions).",
+  "status": "both",
+  "replaces": [
+    "character-context-actions",
+    "character-context"
+  ],
+  "name": "character.setOptions",
+  "target": "type:v",
+  "input": {
+    "type": "object",
+    "properties": {
+      "changes": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "label": {
+        "type": "string",
+        "maxLength": 80
+      }
+    },
+    "required": [
+      "changes"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A V is focused and the installation's creator catalogue for her body is built.",
+    "refusals": [
+      {
+        "code": "catalogue-unavailable",
+        "reason": "The character creator's choices aren't ready yet."
+      },
+      {
+        "code": "not-offered",
+        "reason": "This installation doesn't offer that choice."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the V's keys through the creator apply operator (character.setOptions)."
+  },
+  "undo": "character"
+}

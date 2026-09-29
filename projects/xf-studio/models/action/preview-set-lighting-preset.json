@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "preview-set-lighting-preset",
+  "owner": "views",
+  "summary": "Set lighting preset (preview): points the view's lights at the chosen setup's rig.",
+  "status": "both",
+  "replaces": [
+    "preview-actions",
+    "lighting-setups"
+  ],
+  "name": "preview.setLightingPreset",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "preset": {
+        "enum": [
+          "studio",
+          "creator"
+        ]
+      },
+      "view": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "preset"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "commit": "Points the view's lights at the chosen setup's rig."
+  },
+  "undo": "view-lighting"
+}

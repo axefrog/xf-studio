@@ -1,0 +1,56 @@
+{
+  "kind": "action",
+  "id": "part-preset-set-set-export",
+  "owner": "expressions",
+  "summary": "Set export (part preset set): edits the expression mod (partPresetSet.setExport).",
+  "status": "both",
+  "replaces": [
+    "part-presets",
+    "part-preset-sets"
+  ],
+  "name": "partPresetSet.setExport",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "feature": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "integer"
+      },
+      "modName": {
+        "type": "string",
+        "maxLength": 80
+      },
+      "table": {
+        "enum": [
+          "installed",
+          "sharing"
+        ]
+      }
+    },
+    "required": [
+      "feature",
+      "id",
+      "revision"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable and the set exists.",
+    "refusals": [
+      {
+        "code": "stale",
+        "reason": "The set changed elsewhere; reload it first."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression mod (partPresetSet.setExport)."
+  },
+  "undo": "none"
+}

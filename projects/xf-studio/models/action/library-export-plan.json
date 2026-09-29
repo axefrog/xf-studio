@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "library-export-plan",
+  "owner": "library",
+  "summary": "Export plan (library): raises the export-file request.",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "exportPlan",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "raises": "request:export-file"
+  },
+  "undo": "none"
+}

@@ -1,0 +1,31 @@
+{
+  "kind": "action",
+  "id": "preparation-cancel",
+  "owner": "preview",
+  "summary": "Cancel (preview): raises the prepare-core request.",
+  "status": "both",
+  "replaces": [
+    "preview-preparation"
+  ],
+  "name": "preview.cancel",
+  "target": "type:host-settings",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The game folder is known.",
+    "refusals": [
+      {
+        "code": "no-game-folder",
+        "reason": "Choose your Cyberpunk 2077 folder first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:prepare-core"
+  },
+  "undo": "none"
+}

@@ -1,0 +1,44 @@
+{
+  "kind": "request",
+  "id": "show-scene",
+  "owner": "views",
+  "summary": "Have a scene's GPU content ready for the views that reference it.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "ready": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "ready"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "scene"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:scene"
+  ],
+  "faults": [
+    {
+      "code": "masculine-core-unavailable",
+      "when": "The masculine core can't be prepared.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fallback"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "kind": "panel",
+  "id": "layers",
+  "owner": "eye-makeup",
+  "summary": "The focused preset's layers in draw order, with enable, reorder and the layer menu.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/view/layers",
+    "features/eye-makeup/view/layer-menu"
+  ],
+  "binding": "the profile's focus.preset pointer (type:preset-eye-makeup)",
+  "reads": [
+    "type:preset-eye-makeup",
+    "type:editor-session",
+    "operator:raster-readiness",
+    "operator:actions-for"
+  ],
+  "actions": [
+    "action:layer-edit",
+    "action:layer-select",
+    "action:layer-set-enabled"
+  ]
+}

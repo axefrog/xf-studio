@@ -1,0 +1,45 @@
+{
+  "kind": "process",
+  "id": "diagnostics-forward",
+  "owner": "diagnostics",
+  "summary": "Forwarding a bounded batch of page faults to the host log.",
+  "status": "target",
+  "driver": "driver:diagnostics",
+  "work": "Sends up to a batch of redacted fault records to the host log.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "sent": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "sent"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreachable"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The window closing aborts it; unsent records are dropped (never relied on).",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 2000,
+  "lane": "page, background, every 250 ms at most"
+}

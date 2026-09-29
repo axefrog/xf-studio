@@ -1,0 +1,30 @@
+{
+  "kind": "request",
+  "id": "run-desktop-shell",
+  "owner": "desktop",
+  "summary": "Run the desktop app's windows.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "running": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "running"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:desktop-shell"
+  ],
+  "root": true
+}

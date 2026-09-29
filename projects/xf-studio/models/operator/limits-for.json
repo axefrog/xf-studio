@@ -1,0 +1,39 @@
+{
+  "kind": "operator",
+  "id": "limits-for",
+  "owner": "platform",
+  "summary": "An action's input limits and units on a target.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "inputs": [
+    "the target node",
+    "the action catalogue"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "min": {
+        "type": "number"
+      },
+      "max": {
+        "type": "number"
+      },
+      "unit": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "pure": true
+}

@@ -1,0 +1,39 @@
+{
+  "kind": "action",
+  "id": "saves-inspect",
+  "owner": "save-explorer",
+  "summary": "Inspect (saves): changes the open save's view (saves.inspect).",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/actions"
+  ],
+  "name": "saves.inspect",
+  "target": "type:open-save",
+  "input": {
+    "type": "object",
+    "properties": {
+      "ref": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "ref"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The saves folder is known.",
+    "refusals": [
+      {
+        "code": "folder-missing",
+        "reason": "Choose where your saves are in Settings › Saves."
+      }
+    ]
+  },
+  "effect": {
+    "session": "Changes the open save's view (saves.inspect)."
+  },
+  "undo": "none"
+}

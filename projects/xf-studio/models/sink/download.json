@@ -1,0 +1,32 @@
+{
+  "kind": "sink",
+  "id": "download",
+  "owner": "platform",
+  "summary": "A file handed to the person to save: an exported recipe, collection, plan, save V or character preset, or a report.",
+  "status": "both",
+  "replaces": [
+    "browser-file-device"
+  ],
+  "environment": "page",
+  "input": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "type": {
+        "type": "string"
+      },
+      "bytes": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "name",
+      "type",
+      "bytes"
+    ]
+  },
+  "adapter": "browser-file-device",
+  "idempotency": "none"
+}

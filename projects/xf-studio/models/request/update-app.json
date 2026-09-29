@@ -1,0 +1,44 @@
+{
+  "kind": "request",
+  "id": "update-app",
+  "owner": "desktop",
+  "summary": "Check for, download or apply an update of the desktop app.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "phase": {
+        "enum": [
+          "checked",
+          "downloaded",
+          "applied"
+        ]
+      }
+    },
+    "required": [
+      "phase"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "step": {
+        "enum": [
+          "check",
+          "download",
+          "apply"
+        ]
+      }
+    },
+    "required": [
+      "step"
+    ]
+  },
+  "reasons": [
+    "person",
+    "maintains"
+  ],
+  "servedBy": [
+    "driver:updates"
+  ]
+}

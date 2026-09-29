@@ -1,0 +1,70 @@
+{
+  "kind": "type",
+  "id": "bridge-session",
+  "owner": "bridge",
+  "summary": "The live connection to a running game's XF bridge: its session ID, process, connection state and pacing.",
+  "status": "target",
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "sid": {
+      "kind": "value",
+      "doc": "The session ID the bridge wrote.",
+      "shape": {
+        "type": "string"
+      },
+      "inherit": false
+    },
+    "pid": {
+      "kind": "value",
+      "doc": "The game's process ID.",
+      "shape": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "connected": {
+      "kind": "value",
+      "doc": "Whether the pipe is open.",
+      "shape": {
+        "type": "boolean"
+      }
+    },
+    "pace": {
+      "kind": "value",
+      "doc": "Requests per second allowed and the burst size.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "rate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "burst": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "rate",
+          "burst"
+        ]
+      }
+    },
+    "lastSeen": {
+      "kind": "value",
+      "doc": "When the game last answered.",
+      "shape": {
+        "type": "number"
+      }
+    }
+  },
+  "x-friction": [
+    {
+      "gap": "The bridge refuses more than 20 requests a second, and game facts are read by command with no push, so they are stale by some age.",
+      "capability": "paced-requests",
+      "closes": "Paced request sources with retries and reconnection, and an age on every observation."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "library-initialize",
+  "owner": "library",
+  "summary": "Initialize (library): raises the list-library request.",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "initialize",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "raises": "request:list-library"
+  },
+  "undo": "none"
+}

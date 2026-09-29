@@ -1,0 +1,28 @@
+{
+  "kind": "panel",
+  "id": "expression-controls",
+  "owner": "expressions",
+  "summary": "The Expression drawer: control weights, links, mirror, start points and the menu label of the focused V's expression.",
+  "status": "both",
+  "replaces": [
+    "features/expressions/view/drawer"
+  ],
+  "binding": "the focused V's look's expression:own row (type:preset-expression)",
+  "reads": [
+    "type:preset-expression",
+    "operator:held-face-pose",
+    "operator:expression-apply",
+    "process:installed-expressions-read"
+  ],
+  "actions": [
+    "action:expression-intensity",
+    "action:expression-link-pair",
+    "action:expression-mirror",
+    "action:expression-reset",
+    "action:expression-set-axis",
+    "action:expression-set-control",
+    "action:expression-set-label",
+    "action:expression-set-links",
+    "action:expression-start-from"
+  ]
+}

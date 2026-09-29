@@ -1,0 +1,42 @@
+{
+  "kind": "request",
+  "id": "check-mod",
+  "owner": "export",
+  "summary": "Check a mod: what would ship, what is omitted and why, and its identity.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "build": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "build"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "mod": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "presets": {
+        "type": "array",
+        "items": {
+          "$ref": "shapes.schema.json#/$defs/nodeAt"
+        }
+      }
+    },
+    "required": [
+      "mod",
+      "presets"
+    ]
+  },
+  "reasons": [
+    "person"
+  ],
+  "servedBy": [
+    "driver:package"
+  ]
+}

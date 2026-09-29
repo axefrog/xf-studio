@@ -1,0 +1,47 @@
+{
+  "kind": "process",
+  "id": "running-apps-check",
+  "owner": "install",
+  "summary": "Checking whether a mod manager or the game is running.",
+  "status": "target",
+  "driver": "driver:install",
+  "work": "Lists running processes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "running": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "running"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "probe-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "host"
+}

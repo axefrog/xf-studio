@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "answer-valid",
+  "owner": "character",
+  "summary": "Whether a kept preparation answer still holds (route key, host code, stamps, record present).",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "runtime:preparation-cache",
+    "operator:installation-valid"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

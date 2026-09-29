@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "layouts-save-as",
+  "owner": "shell",
+  "summary": "Save as (layouts): edits the layout (layouts.saveAs).",
+  "status": "both",
+  "replaces": [
+    "layout-library"
+  ],
+  "name": "layouts.saveAs",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "maxLength": 60
+      },
+      "remember": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "name",
+      "remember"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; the factory layout can't be renamed or deleted."
+  },
+  "effect": {
+    "commit": "Edits the layout (layouts.saveAs)."
+  },
+  "undo": "none"
+}

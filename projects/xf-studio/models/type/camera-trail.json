@@ -1,0 +1,96 @@
+{
+  "kind": "type",
+  "id": "camera-trail",
+  "owner": "views",
+  "summary": "Where a camera was before each jump or long navigation, so Back and Forward return to it; shared by every view on that camera.",
+  "status": "both",
+  "replaces": [
+    "platform/core/view-graph"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "camera": {
+      "kind": "ref",
+      "to": "type:camera",
+      "clone": "share",
+      "doc": "The camera.",
+      "inherit": false
+    },
+    "back": {
+      "kind": "value",
+      "doc": "Poses to go back to, most recent last (at most 20).",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "target": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "fov": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "position",
+            "target",
+            "fov"
+          ]
+        },
+        "maxItems": 20
+      }
+    },
+    "forward": {
+      "kind": "value",
+      "doc": "Poses to go forward to.",
+      "shape": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "target": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "fov": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "position",
+            "target",
+            "fov"
+          ]
+        },
+        "maxItems": 20
+      }
+    }
+  }
+}

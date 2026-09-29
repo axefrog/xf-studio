@@ -1,0 +1,80 @@
+{
+  "kind": "process",
+  "id": "v-prepare",
+  "owner": "character",
+  "summary": "Following the host's preparation of a V from the page, until its record is ready.",
+  "status": "target",
+  "driver": "driver:v-preparation",
+  "work": "Asks the host to prepare a character request and follows the run by key until a record key, a failure or a need arrives.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "stage": {
+        "type": "string"
+      },
+      "done": {
+        "type": "number",
+        "minimum": 0
+      },
+      "total": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "stage",
+      "done",
+      "total"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "record": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "record"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "preparation-failed",
+              "needs-wolvenkit",
+              "unknown"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The page's token ends its interest; the host is asked to cancel the preparation, and only this requester's share of the run ends.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "page, the person's own",
+  "faults": [
+    {
+      "code": "needs-wolvenkit",
+      "when": "The host reports it needs WolvenKit.",
+      "fault": "owner",
+      "goesTo": "request:set-up-wolvenkit",
+      "then": "suspend"
+    }
+  ],
+  "x-friction": [
+    {
+      "gap": "The work runs on the host; the page follows it by polling with backoff and re-asks if the host restarted.",
+      "capability": "cross-process-work",
+      "closes": "Work in another process mirrored here as a process, resumed after restarts and cancelled by asking."
+    }
+  ]
+}

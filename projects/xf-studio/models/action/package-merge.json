@@ -1,0 +1,42 @@
+{
+  "kind": "action",
+  "id": "package-merge",
+  "owner": "library",
+  "summary": "Merge (package): edits the mod's name, products or selector presets (package.merge); a removed preset goes to the trash, restorable for 30 days.",
+  "status": "both",
+  "replaces": [
+    "collection-actions",
+    "collection-application"
+  ],
+  "name": "package.merge",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "productId": {
+        "type": "string"
+      },
+      "intoId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "productId",
+      "intoId"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A mod is focused and the preset or product named exists.",
+    "refusals": [
+      {
+        "code": "missing",
+        "reason": "That preset or product no longer exists."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the mod's name, products or selector presets (package.merge); a removed preset goes to the trash, restorable for 30 days."
+  },
+  "undo": "none"
+}

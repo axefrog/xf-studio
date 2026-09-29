@@ -1,0 +1,20 @@
+{
+  "kind": "operator",
+  "id": "installation-valid",
+  "owner": "host",
+  "summary": "Whether an opened installation's stamps are unchanged.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "process:stamp-check"
+  ],
+  "output": {
+    "type": "boolean"
+  },
+  "pure": true
+}

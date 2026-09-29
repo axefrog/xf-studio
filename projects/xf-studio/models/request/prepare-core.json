@@ -1,0 +1,46 @@
+{
+  "kind": "request",
+  "id": "prepare-core",
+  "owner": "preview",
+  "summary": "Have the core preview for a body prepared.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      }
+    },
+    "required": [
+      "body"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      },
+      "rebuild": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "body"
+    ]
+  },
+  "reasons": [
+    "shows",
+    "supplies",
+    "person"
+  ],
+  "servedBy": [
+    "driver:core"
+  ]
+}

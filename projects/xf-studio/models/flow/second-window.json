@@ -1,0 +1,66 @@
+{
+  "kind": "flow",
+  "id": "second-window",
+  "owner": "platform",
+  "summary": "A second window on the same library (or on the verification copy) seeing the first's changes live.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "driver:window",
+      "does": "Starts with its own actor, on the same library or the verification one."
+    },
+    {
+      "model": "driver:store",
+      "does": "Loads the same nodes."
+    },
+    {
+      "model": "source:host-push",
+      "does": "Tells each window that the other committed."
+    },
+    {
+      "model": "process:store-sync",
+      "does": "Pulls the other window's entries."
+    },
+    {
+      "model": "driver:views",
+      "does": "Keeps this window's views; focus, editor sessions, gestures and GL runtimes are per window."
+    },
+    {
+      "model": "driver:v-host",
+      "does": "Prepares per requester, so two windows showing different Vs don't cancel each other."
+    }
+  ],
+  "demand": "Each window's visible views and panels.",
+  "faults": [
+    {
+      "code": "stale",
+      "when": "A commit was made against a head the other window moved.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "A change in one window shows in the other within 250 ms of its acknowledgement (proposed)."
+    ],
+    "memory": "Rasters and GL objects are per window unless shared through a host cache."
+  },
+  "invariants": [
+    "No window's commit is lost or silently overwritten by the other's.",
+    "A gesture in one window never blocks the other.",
+    "The desktop's close handshake runs per window."
+  ],
+  "x-friction": [
+    {
+      "gap": "No push exists today; two tabs overwrite one workspace.",
+      "capability": "live-sync",
+      "closes": "Commits pushed to every window on the library."
+    },
+    {
+      "gap": "The verification copy is chosen per window by URL.",
+      "capability": "separate-libraries",
+      "closes": "Several graphs side by side, chosen per window."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "kind": "action",
+  "id": "view-close",
+  "owner": "views",
+  "summary": "Close a view; its unshared nodes go with it and it can be reopened.",
+  "status": "target",
+  "name": "view.close",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {
+      "view": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "view"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view isn't the main view."
+  },
+  "effect": {
+    "commit": "Removes the view; unreferenced nodes are collected."
+  },
+  "undo": "view-lighting"
+}

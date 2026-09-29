@@ -1,0 +1,81 @@
+{
+  "kind": "flow",
+  "id": "load-v-from-save",
+  "owner": "character",
+  "summary": "Making a V from a save: its bytes decoded off the main thread, the previous V leaving at once, the new one prepared and shown.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "driver:saves-listing",
+      "does": "Lists the player's saves (or the person picks a file)."
+    },
+    {
+      "model": "driver:open-save",
+      "does": "Reads the save's bytes by reference and decodes its creator state and loadout in a worker."
+    },
+    {
+      "model": "process:saved-v-decode",
+      "does": "Returns the small plain SavedV."
+    },
+    {
+      "model": "action:v-from-save",
+      "does": "Commits a new V forked from the Default V with the save's base, or changes the focused V's base (one character step); a save node is made on first use."
+    },
+    {
+      "model": "operator:character-request",
+      "does": "Changes, and it is another V: the old one's parts leave at once."
+    },
+    {
+      "model": "driver:v-preparation",
+      "does": "Asks for the new V (cold 20–29 s, warm 1–3 s), with progress in place."
+    },
+    {
+      "model": "driver:scene",
+      "does": "Re-keys to the male body for a masculine save, preparing that core on first use."
+    },
+    {
+      "model": "driver:v-details",
+      "does": "Loads and swaps in the new V."
+    },
+    {
+      "model": "operator:suggested-eye-shape",
+      "does": "Offers the scene the save's eye shape."
+    }
+  ],
+  "demand": "The view showing the scene that references the V.",
+  "faults": [
+    {
+      "code": "unreadable-save",
+      "when": "The file isn't a readable save.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "not-offered",
+      "when": "Choices the installed game can't honour show in the V's view as conflicts with fix routes.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "masculine-core-unavailable",
+      "when": "The male core can't be prepared; the feminine head shows with a notice.",
+      "fault": "owner",
+      "goesTo": "driver:scene",
+      "then": "fallback"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Decoding off the main thread: no task over 50 ms, for saves up to 128 MB.",
+      "The previous V leaves in the same cycle, and progress shows in place."
+    ],
+    "memory": "Save bytes up to 128 MB by reference in a worker; only the decoded SavedV (small) enters the V node."
+  },
+  "invariants": [
+    "The V is detached from the file: showing and editing her never reads the save again.",
+    "The Character panel's Undo survives the body change (it belongs to the V, not the GPU scene).",
+    "A save node is made only when the save is used, never by listing."
+  ]
+}

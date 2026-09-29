@@ -1,0 +1,50 @@
+{
+  "kind": "runtime",
+  "id": "decoded-save",
+  "owner": "save-explorer",
+  "summary": "A decoded save's node model, large and in memory.",
+  "status": "both",
+  "replaces": [
+    "features/save-explorer/explorer"
+  ],
+  "environment": "page",
+  "key": [
+    "type:open-save"
+  ],
+  "factory": "planned",
+  "ready": "driver:open-save",
+  "query": [
+    {
+      "name": "node",
+      "input": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": [
+          "type",
+          "fields"
+        ]
+      }
+    }
+  ],
+  "linger": 0
+}

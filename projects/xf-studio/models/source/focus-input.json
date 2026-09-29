@@ -1,0 +1,36 @@
+{
+  "kind": "source",
+  "id": "focus-input",
+  "owner": "platform",
+  "summary": "Element focus and blur, window focus and blur, and page visibility.",
+  "status": "target",
+  "environment": "page",
+  "entry": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "focus",
+          "blur",
+          "window-focus",
+          "window-blur",
+          "visible",
+          "hidden"
+        ]
+      },
+      "target": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window",
+      "kind"
+    ]
+  },
+  "adapter": "planned",
+  "simulated": "../../../strata/src/testing/sim-sources",
+  "rate": "On change; a few per interaction."
+}

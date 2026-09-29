@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "view-end-edit",
+  "owner": "views",
+  "summary": "End edit (view): closes the open View and lighting step, so the next change starts a new one.",
+  "status": "both",
+  "replaces": [
+    "view-actions"
+  ],
+  "name": "view.endEdit",
+  "target": "type:view",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The view exists."
+  },
+  "effect": {
+    "session": "Closes the open View and lighting step, so the next change starts a new one."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,34 @@
+{
+  "kind": "driver",
+  "id": "warm-start",
+  "owner": "character",
+  "summary": "At start, fetches and decodes the files of the V the window showed last, while the head loads, until the V's first load claims them.",
+  "status": "both",
+  "replaces": [
+    "character-warm-start"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:warm-v"
+  ],
+  "demands": [
+    "source:page-storage",
+    "source:host-answers"
+  ],
+  "creates": [],
+  "starts": [
+    "process:warm-read"
+  ],
+  "runtimes": [
+    "runtime:warm-files"
+  ],
+  "faults": [],
+  "lifetime": "From the window's start until the first load claims the files or the keep time passes.",
+  "x-friction": [
+    {
+      "gap": "Warm files are held for a claim, then released after a keep time.",
+      "capability": "keep-after-use",
+      "closes": "Results kept for a later claim with a release delay."
+    }
+  ]
+}

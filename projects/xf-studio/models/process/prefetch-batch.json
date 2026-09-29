@@ -1,0 +1,62 @@
+{
+  "kind": "process",
+  "id": "prefetch-batch",
+  "owner": "character",
+  "summary": "Preparing a batch of a row's choices ahead.",
+  "status": "target",
+  "driver": "driver:prefetch",
+  "work": "Prepares the next choices in priority order, one state per choice.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "states": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "required": [
+      "states"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "prepared": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "prepared"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "preparation-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Paused, not aborted, while the person's request runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": "none",
+  "lane": "host, background",
+  "x-friction": [
+    {
+      "gap": "The batch pauses while the person's request runs and resumes after quiet.",
+      "capability": "pause-and-resume",
+      "closes": "Suspending and resuming a running process for priority."
+    }
+  ]
+}

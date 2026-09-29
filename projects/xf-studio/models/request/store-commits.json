@@ -1,0 +1,52 @@
+{
+  "kind": "request",
+  "id": "store-commits",
+  "owner": "platform",
+  "summary": "Store commits in the library and have them acknowledged.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "acknowledged": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "acknowledged"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "commits": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    "required": [
+      "commits"
+    ]
+  },
+  "reasons": [
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:store"
+  ],
+  "faults": [
+    {
+      "code": "stale",
+      "when": "A commit was made against an old head.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ]
+}

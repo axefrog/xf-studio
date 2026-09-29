@@ -1,0 +1,46 @@
+{
+  "kind": "driver",
+  "id": "legacy-mirror",
+  "owner": "platform",
+  "summary": "Writes the legacy workspace document as a projection of the focused profile, debounced, only when it changed and within the storage budget, so the older release still opens it.",
+  "status": "both",
+  "replaces": [
+    "browser-workspace-device",
+    "workspace-budget",
+    "workspace-composer",
+    "workspace-persistence",
+    "workspace-state"
+  ],
+  "environment": "page",
+  "serves": [
+    "request:mirror-workspace"
+  ],
+  "demands": [
+    "operator:legacy-mirror",
+    "operator:fit-workspace",
+    "type:profile",
+    "sink:legacy-workspace"
+  ],
+  "creates": [],
+  "starts": [
+    "process:mirror-write"
+  ],
+  "runtimes": [],
+  "faults": [
+    {
+      "code": "quota",
+      "when": "The page's storage refuses the write even after trimming.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    }
+  ],
+  "lifetime": "Per window while the window runs; a final write when it closes.",
+  "x-friction": [
+    {
+      "gap": "A derived value written out, debounced, only when changed, within a size budget.",
+      "capability": "derived-outputs",
+      "closes": "Outputs fed by derived values."
+    }
+  ]
+}

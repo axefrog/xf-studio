@@ -1,0 +1,96 @@
+{
+  "kind": "flow",
+  "id": "add-to-mod-manager",
+  "owner": "install",
+  "summary": "Placing a verified build into the person's mod manager, only after they accepted exactly the plan they reviewed.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "action:mod-install-review",
+      "does": "The person opens the review after a Build."
+    },
+    {
+      "model": "driver:install",
+      "does": "Plans every path: the MO2 folder and separator placement, or the game folder."
+    },
+    {
+      "model": "process:running-apps-check",
+      "does": "Checks whether a mod manager or the game is running."
+    },
+    {
+      "model": "process:install-plan",
+      "does": "Returns the plan and its token."
+    },
+    {
+      "model": "type:consent",
+      "does": "Waits for the person to accept exactly that plan."
+    },
+    {
+      "model": "action:mod-install-apply",
+      "does": "The person accepts."
+    },
+    {
+      "model": "operator:plan-valid",
+      "does": "Re-plans and compares with the token."
+    },
+    {
+      "model": "process:install-apply",
+      "does": "Copies with hash checks under the restart lease, writes the receipt and places the mod in the list."
+    },
+    {
+      "model": "sink:mod-manager-folders",
+      "does": "Receives the files, once, keyed by the plan token and each file's hash."
+    },
+    {
+      "model": "type:install",
+      "does": "Records the receipt."
+    },
+    {
+      "model": "process:reveal-build",
+      "does": "Shows it in the file browser when asked."
+    }
+  ],
+  "demand": "The person's review and consent.",
+  "faults": [
+    {
+      "code": "manager-running",
+      "when": "Mod Organizer 2 is running.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "plan-changed",
+      "when": "The plan changed since the review.",
+      "fault": "shared",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "copy-failed",
+      "when": "A copy fails its hash check.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "verification-library",
+      "when": "The verification library never installs.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Review and apply never freeze the page; progress shows if copying takes more than a moment."
+    ],
+    "memory": "Files are copied on the host; nothing large reaches the page."
+  },
+  "invariants": [
+    "Nothing is placed without a consent whose token matches the plan now.",
+    "The user's frameworks and mod list organisation are never changed beyond adding this mod.",
+    "No install runs while an app restart is reserved, and no restart while an install runs.",
+    "A crash mid-install resumes from the recorded outcome; nothing is copied twice."
+  ]
+}

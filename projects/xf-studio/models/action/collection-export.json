@@ -1,0 +1,35 @@
+{
+  "kind": "action",
+  "id": "collection-export",
+  "owner": "platform",
+  "summary": "Export (collection): raises the export-file request.",
+  "status": "both",
+  "replaces": [
+    "studio-file-operations"
+  ],
+  "name": "collection.export",
+  "target": "type:window",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "No other picker is open in the window.",
+    "refusals": [
+      {
+        "code": "picker-busy",
+        "reason": "Another file is being picked."
+      },
+      {
+        "code": "not-ready",
+        "reason": "Build needs its settings, WolvenKit and the eye plate first."
+      }
+    ]
+  },
+  "effect": {
+    "raises": "request:export-file"
+  },
+  "undo": "none"
+}

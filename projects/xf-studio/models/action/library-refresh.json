@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "library-refresh",
+  "owner": "library",
+  "summary": "Refresh (library): raises the list-library request.",
+  "status": "both",
+  "replaces": [
+    "collection-service"
+  ],
+  "name": "refresh",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The library is reachable."
+  },
+  "effect": {
+    "raises": "request:list-library"
+  },
+  "undo": "none"
+}

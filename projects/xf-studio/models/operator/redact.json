@@ -1,0 +1,23 @@
+{
+  "kind": "operator",
+  "id": "redact",
+  "owner": "diagnostics",
+  "summary": "Removes private paths and identifiers from text before it leaves the page or goes into a report.",
+  "status": "both",
+  "replaces": [
+    "diagnostics/redact"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the text"
+  ],
+  "output": {
+    "type": "string"
+  },
+  "pure": true
+}

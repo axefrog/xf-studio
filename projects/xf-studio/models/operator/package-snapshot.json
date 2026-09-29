@@ -1,0 +1,28 @@
+{
+  "kind": "operator",
+  "id": "package-snapshot",
+  "owner": "export",
+  "summary": "The mod and every preset it ships, pinned at their current entries: the package-only copy.",
+  "status": "both",
+  "replaces": [
+    "package-filter"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:mod",
+    "type:preset-eye-makeup",
+    "type:preset-expression"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "$ref": "shapes.schema.json#/$defs/nodeAt"
+    }
+  },
+  "pure": true
+}

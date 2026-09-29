@@ -1,0 +1,25 @@
+{
+  "kind": "runtime",
+  "id": "native-decoders",
+  "owner": "host",
+  "summary": "The route's native decode worker threads, in lanes by free memory.",
+  "status": "both",
+  "replaces": [
+    "native/native-decode"
+  ],
+  "environment": "host",
+  "key": [
+    "the route key"
+  ],
+  "factory": "native/native-decode",
+  "ready": "driver:decode-pool",
+  "query": [],
+  "linger": 15000,
+  "x-friction": [
+    {
+      "gap": "Lanes follow free memory; workers exit after 15 s idle and trim after 5 s.",
+      "capability": "worker-pools",
+      "closes": "Worker pools sized from free memory with idle exit."
+    }
+  ]
+}

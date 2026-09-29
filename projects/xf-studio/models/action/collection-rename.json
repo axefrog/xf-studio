@@ -1,0 +1,38 @@
+{
+  "kind": "action",
+  "id": "collection-rename",
+  "owner": "library",
+  "summary": "Rename (collection): edits the mod's name, products or selector presets (collection.rename); a removed preset goes to the trash, restorable for 30 days.",
+  "status": "both",
+  "replaces": [
+    "collection-actions",
+    "collection-application"
+  ],
+  "name": "collection.rename",
+  "target": "type:mod",
+  "input": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "A mod is focused and the preset or product named exists.",
+    "refusals": [
+      {
+        "code": "missing",
+        "reason": "That preset or product no longer exists."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the mod's name, products or selector presets (collection.rename); a removed preset goes to the trash, restorable for 30 days."
+  },
+  "undo": "none"
+}

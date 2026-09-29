@@ -1,0 +1,89 @@
+{
+  "kind": "runtime",
+  "id": "gl-renderer",
+  "owner": "views",
+  "summary": "The window's one WebGL2 context and frame target, shared by every scene and view in it.",
+  "status": "both",
+  "replaces": [
+    "platform/scene/scene-host",
+    "render-scheduler"
+  ],
+  "environment": "page",
+  "key": [
+    "type:window"
+  ],
+  "factory": "planned",
+  "ready": "source:gpu-context",
+  "query": [
+    {
+      "name": "capabilities",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "webgl2": {
+            "type": "boolean"
+          },
+          "maxTextureSize": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parallelCompile": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "webgl2",
+          "maxTextureSize",
+          "parallelCompile"
+        ]
+      }
+    },
+    {
+      "name": "frameTiming",
+      "input": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "median": {
+            "type": "number",
+            "minimum": 0
+          },
+          "p95": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "median",
+          "p95"
+        ]
+      }
+    }
+  ],
+  "linger": 0,
+  "x-friction": [
+    {
+      "gap": "Host objects are created per node tuple, counted by demand and released whole on failure, but no engine registry keeps them; each is wired by hand today.",
+      "capability": "host-objects-per-node",
+      "closes": "A registry of host objects keyed by node tuples, with readiness published and plain synchronous queries."
+    },
+    {
+      "gap": "Texture capacity belongs to the context while the tier is a preference; a demanded value depends on a runtime's capability.",
+      "capability": "environment-changes",
+      "closes": "Runtime capabilities published as sources."
+    }
+  ]
+}

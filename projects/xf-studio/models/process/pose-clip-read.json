@@ -1,0 +1,48 @@
+{
+  "kind": "process",
+  "id": "pose-clip-read",
+  "owner": "poses",
+  "summary": "Reading one pose's clip and sampling it.",
+  "status": "target",
+  "driver": "driver:pose-catalogue",
+  "work": "Reads the pose's animation and samples its tracks.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "data": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      }
+    },
+    "required": [
+      "id",
+      "data"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "pose-missing"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The token is aborted; nothing else runs.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 10000,
+  "lane": "host, the person's own"
+}

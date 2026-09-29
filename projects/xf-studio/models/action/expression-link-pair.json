@@ -1,0 +1,43 @@
+{
+  "kind": "action",
+  "id": "expression-link-pair",
+  "owner": "expressions",
+  "summary": "Link pair (expression): edits the expression's control or link keys through the expression apply operator (expression.linkPair).",
+  "status": "both",
+  "replaces": [
+    "features/expressions/core"
+  ],
+  "name": "expression.linkPair",
+  "target": "type:preset-expression",
+  "input": {
+    "type": "object",
+    "properties": {
+      "pair": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 96
+      },
+      "linked": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "pair",
+      "linked"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "An expression preset is worn by the focused V's look and the face rig is prepared.",
+    "refusals": [
+      {
+        "code": "face-unavailable",
+        "reason": "The face rig isn't ready for this installation yet."
+      }
+    ]
+  },
+  "effect": {
+    "commit": "Edits the expression's control or link keys through the expression apply operator (expression.linkPair)."
+  },
+  "undo": "look"
+}

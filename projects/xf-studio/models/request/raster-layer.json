@@ -1,0 +1,49 @@
+{
+  "kind": "request",
+  "id": "raster-layer",
+  "owner": "eye-makeup",
+  "summary": "Have a layer's raster current at a tier, for the views that show it.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "$ref": "shapes.schema.json#/$defs/rasterKey"
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "preset": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      },
+      "layer": {
+        "type": "string"
+      },
+      "tier": {
+        "enum": [
+          512,
+          1024,
+          2048,
+          4096
+        ]
+      }
+    },
+    "required": [
+      "preset",
+      "layer",
+      "tier"
+    ]
+  },
+  "reasons": [
+    "shows",
+    "supplies"
+  ],
+  "servedBy": [
+    "driver:raster"
+  ]
+}

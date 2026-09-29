@@ -1,0 +1,67 @@
+{
+  "kind": "process",
+  "id": "close-handshake",
+  "owner": "desktop",
+  "summary": "Closing a desktop window safely: the page makes its changes safe, the host confirms, then the window closes.",
+  "status": "both",
+  "replaces": [
+    "../desktop/workspace-close"
+  ],
+  "driver": "driver:desktop-shell",
+  "work": "Asks the window to flush, waits for the store to acknowledge every pending commit, then closes.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "stage": {
+        "enum": [
+          "flushing",
+          "acknowledging",
+          "closing"
+        ]
+      }
+    },
+    "required": [
+      "stage"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "closed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "closed"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "flush-timed-out",
+              "store-refused"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The person cancels the close; the window stays open.",
+  "cleanup": "Nothing to clean up.",
+  "deadline": 5000,
+  "lane": "desktop, the person's own",
+  "x-friction": [
+    {
+      "gap": "The close waits on the store's pending state, with a deadline and a fallback question.",
+      "capability": "durable-pending",
+      "closes": "Pending changes observable and durable until acknowledged."
+    }
+  ]
+}

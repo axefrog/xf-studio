@@ -1,0 +1,38 @@
+{
+  "kind": "request",
+  "id": "lay-out-window",
+  "owner": "shell",
+  "summary": "Make a window's panel instances from its layout.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "panels": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "panels"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "window": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "window"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:layout"
+  ]
+}

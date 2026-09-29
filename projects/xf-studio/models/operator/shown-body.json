@@ -1,0 +1,36 @@
+{
+  "kind": "operator",
+  "id": "shown-body",
+  "owner": "views",
+  "summary": "The body a scene's head is drawn with: the V's, or the feminine fallback while the masculine core can't be prepared.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:scene",
+    "type:v"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "body": {
+        "enum": [
+          "female",
+          "male"
+        ]
+      },
+      "fallback": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "body",
+      "fallback"
+    ]
+  },
+  "pure": true
+}

@@ -1,0 +1,57 @@
+{
+  "kind": "driver",
+  "id": "wolvenkit-setup",
+  "owner": "setup",
+  "summary": "Sets up the WolvenKit CLI with the person's consent: .NET check, download, verify, unpack, verify, publish, with retries.",
+  "status": "both",
+  "replaces": [
+    "dotnet-runtime",
+    "studio-ui/wolvenkit-step",
+    "tool-download",
+    "wolvenkit-release",
+    "wolvenkit-setup-host",
+    "wolvenkit-setup-server"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:set-up-wolvenkit"
+  ],
+  "demands": [
+    "type:consent",
+    "source:network",
+    "source:host-files",
+    "source:host-processes",
+    "operator:effective-cli"
+  ],
+  "creates": [],
+  "starts": [
+    "process:dotnet-check",
+    "process:wolvenkit-download",
+    "process:wolvenkit-unpack"
+  ],
+  "runtimes": [],
+  "faults": [
+    {
+      "code": "no-consent",
+      "when": "No consent to download exactly this release.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "download-stalled",
+      "when": "The download stalled or the hash didn't match after retries.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "dotnet-missing",
+      "when": "The .NET runtime WolvenKit needs isn't installed.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "suspend"
+    }
+  ],
+  "lifetime": "Per host: from consent or a consumer's need until the CLI is usable or the person cancels."
+}

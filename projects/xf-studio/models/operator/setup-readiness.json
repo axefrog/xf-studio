@@ -1,0 +1,35 @@
+{
+  "kind": "operator",
+  "id": "setup-readiness",
+  "owner": "setup",
+  "summary": "Settings readiness: what is set, found and usable, and the one next step.",
+  "status": "both",
+  "replaces": [
+    "local-settings-readiness"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:host-settings",
+    "source:host-files"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {
+      "ready": {
+        "type": "boolean"
+      },
+      "step": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "ready"
+    ]
+  },
+  "pure": true
+}

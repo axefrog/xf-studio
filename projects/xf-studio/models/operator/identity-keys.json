@@ -1,0 +1,27 @@
+{
+  "kind": "operator",
+  "id": "identity-keys",
+  "owner": "export",
+  "summary": "The identity keys a mod projects to (archives, namespaces, options, slots, names), without building.",
+  "status": "both",
+  "replaces": [
+    "mod-branding"
+  ],
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:mod",
+    "operator:package-snapshot"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

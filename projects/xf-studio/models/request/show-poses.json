@@ -1,0 +1,36 @@
+{
+  "kind": "request",
+  "id": "show-poses",
+  "owner": "poses",
+  "summary": "Serve the Poses panel for the shown V.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "poses": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "poses"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "scene": {
+        "$ref": "shapes.schema.json#/$defs/nodeRef"
+      }
+    },
+    "required": [
+      "scene"
+    ]
+  },
+  "reasons": [
+    "shows"
+  ],
+  "servedBy": [
+    "driver:poses"
+  ]
+}

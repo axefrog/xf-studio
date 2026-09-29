@@ -1,0 +1,36 @@
+{
+  "kind": "action",
+  "id": "layouts-rename",
+  "owner": "shell",
+  "summary": "Rename (layouts): edits the layout (layouts.rename).",
+  "status": "both",
+  "replaces": [
+    "layout-library"
+  ],
+  "name": "layouts.rename",
+  "target": "type:layout",
+  "input": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string",
+        "maxLength": 60
+      }
+    },
+    "required": [
+      "id",
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "Always available; the factory layout can't be renamed or deleted."
+  },
+  "effect": {
+    "commit": "Edits the layout (layouts.rename)."
+  },
+  "undo": "none"
+}

@@ -1,0 +1,59 @@
+{
+  "kind": "process",
+  "id": "save-open-decode",
+  "owner": "save-explorer",
+  "summary": "Decoding a whole save into its node tree, in slices, for the Save Explorer.",
+  "status": "target",
+  "driver": "driver:open-save",
+  "work": "Decompresses and parses the save package by package.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "packages": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "total": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "packages",
+      "total"
+    ]
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "nodes": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "nodes"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "unreadable-save"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "Checked between slices.",
+  "cleanup": "The partial model is dropped.",
+  "deadline": "none",
+  "lane": "page worker, the person's own"
+}

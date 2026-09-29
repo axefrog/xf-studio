@@ -1,0 +1,30 @@
+{
+  "kind": "operator",
+  "id": "paint-panel",
+  "owner": "shell",
+  "summary": "Writes one panel instance's changed bindings into its DOM, aligned to the next frame.",
+  "status": "target",
+  "nodeKind": "effect",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the panel's view model",
+    "source:frames"
+  ],
+  "output": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "pure": false,
+  "x-friction": [
+    {
+      "gap": "Paint must happen once per frame with the latest values, however many cycles ran.",
+      "capability": "frame-timing",
+      "closes": "Effects aligned to frames."
+    }
+  ]
+}

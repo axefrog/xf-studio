@@ -1,0 +1,32 @@
+{
+  "kind": "sink",
+  "id": "cache-touch",
+  "owner": "host",
+  "summary": "Marks that a cached export or picture was just used, so eviction keeps it.",
+  "status": "both",
+  "replaces": [
+    "game-asset-export"
+  ],
+  "environment": "host",
+  "input": {
+    "type": "object",
+    "properties": {
+      "cache": {
+        "enum": [
+          "exports",
+          "pictures",
+          "prepared"
+        ]
+      },
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cache",
+      "key"
+    ]
+  },
+  "adapter": "game-asset-export",
+  "idempotency": "The key: repeated marks are harmless."
+}

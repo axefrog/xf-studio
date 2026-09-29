@@ -1,0 +1,27 @@
+{
+  "kind": "panel",
+  "id": "report-dialog",
+  "owner": "diagnostics",
+  "summary": "Report a problem: what would be included, the person's words, and a file prepared locally.",
+  "status": "both",
+  "replaces": [
+    "studio-ui/diagnostics/report-dialog"
+  ],
+  "binding": "type:problem-report",
+  "reads": [
+    "type:problem-report",
+    "operator:report-manifest",
+    "operator:redact"
+  ],
+  "actions": [
+    "action:diagnostics-close-report",
+    "action:diagnostics-confirm-sharing",
+    "action:diagnostics-copy-summary",
+    "action:diagnostics-open-issue",
+    "action:diagnostics-prepare-report",
+    "action:diagnostics-save-report",
+    "action:diagnostics-set-description",
+    "action:diagnostics-set-included",
+    "action:diagnostics-set-mode"
+  ]
+}

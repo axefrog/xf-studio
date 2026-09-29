@@ -1,0 +1,46 @@
+{
+  "kind": "runtime",
+  "id": "plate-composite",
+  "owner": "eye-makeup",
+  "summary": "The eye plate's merged decal composite and lit finish programs in one scene.",
+  "status": "both",
+  "replaces": [
+    "features/eye-makeup/render/index",
+    "decal-underlay"
+  ],
+  "environment": "page",
+  "key": [
+    "type:scene",
+    "the eye makeup renderer"
+  ],
+  "factory": "features/eye-makeup/render/index",
+  "ready": "driver:scene",
+  "query": [
+    {
+      "name": "programs",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "compiled": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "compiled",
+          "pending"
+        ]
+      }
+    }
+  ],
+  "linger": 0
+}

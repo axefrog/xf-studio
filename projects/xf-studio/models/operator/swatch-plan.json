@@ -1,0 +1,23 @@
+{
+  "kind": "operator",
+  "id": "swatch-plan",
+  "owner": "character",
+  "summary": "Which swatch families to derive, asked rows first.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "process:catalogue-build"
+  ],
+  "output": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "pure": true
+}

@@ -1,0 +1,55 @@
+{
+  "kind": "process",
+  "id": "live-turn",
+  "owner": "character",
+  "summary": "Turning a choice live under a drag, up to 30 frames a second.",
+  "status": "target",
+  "driver": "driver:preview-worker",
+  "work": "Draws frames at the angle the drag asks, one requested at a time.",
+  "progress": {
+    "type": "object",
+    "properties": {
+      "frame": {
+        "$ref": "shapes.schema.json#/$defs/blob"
+      },
+      "angle": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "frame",
+      "angle"
+    ]
+  },
+  "result": {
+    "type": "null"
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "worker-crashed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The drag ending aborts it.",
+  "cleanup": "Frame bitmaps are closed.",
+  "deadline": "none",
+  "lane": "page preview worker, the person's own",
+  "x-friction": [
+    {
+      "gap": "The frames are a stream of results by reference, steered by the drag, with one frame in flight.",
+      "capability": "streamed-results",
+      "closes": "Streamed process results with backpressure."
+    }
+  ]
+}

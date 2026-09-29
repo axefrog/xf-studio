@@ -1,0 +1,128 @@
+{
+  "kind": "type",
+  "id": "window",
+  "owner": "platform",
+  "summary": "One open window of the Studio: its actor, which library it works in, its profile, the focused view, the live dock arrangement and the input modifiers.",
+  "status": "both",
+  "replaces": [
+    "studio-startup",
+    "studio-main",
+    "trusted-studio-bootstrap",
+    "trusted-authoring-core",
+    "compose/modules",
+    "compose/views"
+  ],
+  "class": "session",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "actor": {
+      "kind": "value",
+      "doc": "The window's actor ID, from the random source at start; every entry it writes carries it.",
+      "shape": {
+        "type": "string"
+      },
+      "inherit": false
+    },
+    "library": {
+      "kind": "value",
+      "doc": "Which library the window works in: the person's own, or the isolated verification copy.",
+      "shape": {
+        "enum": [
+          "real",
+          "verification"
+        ]
+      }
+    },
+    "profile": {
+      "kind": "ref",
+      "to": "type:profile",
+      "clone": "share",
+      "doc": "The profile the window shows."
+    },
+    "focusView": {
+      "kind": "ref",
+      "to": "type:view",
+      "clone": "share",
+      "doc": "The last view to receive a pointer press or keyboard focus."
+    },
+    "focusPanel": {
+      "kind": "value",
+      "doc": "The panel instance with keyboard focus, which decides what Undo acts on.",
+      "shape": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "arrangement": {
+      "kind": "value",
+      "doc": "The live dock arrangement until it is saved into a layout.",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "tree": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        "required": []
+      }
+    },
+    "modifiers": {
+      "kind": "value",
+      "doc": "Held modifier keys (Shift, Ctrl, Alt).",
+      "shape": {
+        "type": "object",
+        "properties": {
+          "shift": {
+            "type": "boolean"
+          },
+          "ctrl": {
+            "type": "boolean"
+          },
+          "alt": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "shift",
+          "ctrl",
+          "alt"
+        ]
+      }
+    },
+    "sizeClass": {
+      "kind": "value",
+      "doc": "The window's size class.",
+      "shape": {
+        "enum": [
+          "narrow",
+          "medium",
+          "wide"
+        ]
+      }
+    }
+  },
+  "migration": {
+    "from": [
+      "the verify URL parameter",
+      "uiPreferences.layout (the live arrangement)"
+    ],
+    "how": "The library follows the URL at window start; the live arrangement is read from the workspace once, then kept per window."
+  },
+  "x-friction": [
+    {
+      "gap": "The verification scope is a whole separate library, settings and workspace chosen by URL: neither a profile nor a fork but a second graph.",
+      "capability": "separate-libraries",
+      "closes": "Several graphs side by side on one host, chosen per window."
+    },
+    {
+      "gap": "Two windows on one library must see each other's commits live; today the second tab overwrites the first's workspace.",
+      "capability": "live-sync",
+      "closes": "Commits pushed from the host to every window on the same library."
+    }
+  ]
+}

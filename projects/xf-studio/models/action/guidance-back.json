@@ -1,0 +1,25 @@
+{
+  "kind": "action",
+  "id": "guidance-back",
+  "owner": "shell",
+  "summary": "Back (guidance): moves the tour (guidance.back).",
+  "status": "both",
+  "replaces": [
+    "studio-ui/guidance/engine"
+  ],
+  "name": "guidance.back",
+  "target": "type:tour-run",
+  "input": {
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "capability": {
+    "when": "The tour exists and its anchors are shown."
+  },
+  "effect": {
+    "session": "Moves the tour (guidance.back)."
+  },
+  "undo": "none"
+}

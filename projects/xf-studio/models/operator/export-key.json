@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "export-key",
+  "owner": "host",
+  "summary": "An export's cache key from the depot hash, the archive's identity and the reader's.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "the resource",
+    "operator:route-key"
+  ],
+  "output": {
+    "type": "string"
+  },
+  "pure": true
+}

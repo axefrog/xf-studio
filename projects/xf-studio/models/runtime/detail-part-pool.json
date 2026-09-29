@@ -1,0 +1,51 @@
+{
+  "kind": "runtime",
+  "id": "detail-part-pool",
+  "owner": "character",
+  "summary": "GPU parts of V details kept for reuse, keyed by component content, so unchanged and preloaded parts cost nothing.",
+  "status": "both",
+  "replaces": [
+    "character-detail-loader"
+  ],
+  "environment": "page",
+  "key": [
+    "runtime:gl-renderer"
+  ],
+  "factory": "character-detail-loader",
+  "ready": "driver:v-details",
+  "query": [
+    {
+      "name": "has",
+      "input": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "component"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "held": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "held"
+        ]
+      }
+    }
+  ],
+  "linger": 30000,
+  "x-friction": [
+    {
+      "gap": "Parts outlive the load that made them and are claimed later; another V clears the pool.",
+      "capability": "keep-after-use",
+      "closes": "Results kept for a later claim with an eviction rule."
+    }
+  ]
+}

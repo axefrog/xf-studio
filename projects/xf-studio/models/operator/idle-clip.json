@@ -1,0 +1,21 @@
+{
+  "kind": "operator",
+  "id": "idle-clip",
+  "owner": "motion",
+  "summary": "The idle clip a scene plays, from its motion settings and the catalogue.",
+  "status": "target",
+  "nodeKind": "combinator",
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "inputs": [
+    "type:scene",
+    "process:idle-catalogue-load"
+  ],
+  "output": {
+    "type": "string"
+  },
+  "pure": true
+}

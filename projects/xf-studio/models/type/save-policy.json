@@ -1,0 +1,35 @@
+{
+  "kind": "type",
+  "id": "save-policy",
+  "owner": "character",
+  "summary": "Whether a save may be overwritten: never, after asking, or without asking; layered so save defaults reach every save without its own setting.",
+  "status": "target",
+  "class": "authored",
+  "schema": "1",
+  "stream": "delta",
+  "fields": {
+    "overwrite": {
+      "kind": "value",
+      "doc": "The policy.",
+      "shape": {
+        "enum": [
+          "never",
+          "ask",
+          "allow"
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "overwrite": "never"
+  },
+  "constants": [
+    {
+      "name": "never",
+      "label": "Never overwrite",
+      "fields": {
+        "overwrite": "never"
+      }
+    }
+  ]
+}
