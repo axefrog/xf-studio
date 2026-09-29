@@ -5,7 +5,7 @@
  * `tools/native-mask-oracle.ts` (every mask WolvenKit exported into a cache, texel for texel).
  */
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { depotHash } from "../src/depot-path";
@@ -16,6 +16,7 @@ import { decodeMaskAtlas, decodeMaskLayers, type MaskLayout } from "../src/nativ
 import { InProcessDecoder, WorkerDecoder } from "../src/native/native-decode";
 import { decodeMaskFromPool } from "../src/native/texture-decode";
 import { decodePng } from "../src/png";
+import { evictPrepared, STALE_WORK_MS, sweepStaleWork } from "../src/prepared-files";
 import { fakeDecompress, syntheticArchive } from "./fixtures/native-archive";
 import { Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
 
@@ -231,4 +232,38 @@ test("a resource several requests want is decoded once, by one lane, and answers
   expect(decoded.length).toBe(2);
   for (const answer of answers) for (const path of masks) expect(answer.masks.get(path)!.layers.length).toBe(2);
   expect(answers[0]!.masks.get(masks[0]!)!.layers).toEqual(answers[1]!.masks.get(masks[0]!)!.layers);
+});
+
+test("a cancelled export waits for every lane before removing its work folders, so none is left behind (PREV-198)", async () => {
+  const archive = maskArchive({ "base\m\a.mlmask": maskResource(), "base\m\b.mlmask": maskResource(), "base\m\c.mlmask": maskResource(),
+    "base\m\d.mlmask": maskResource() });
+  const cacheRoot = join(tempRoot(), "exports");
+  const inner: GameAssetExporter = { tool: { key: "wk", label: "WolvenKit" }, open() { throw new Error("not used"); },
+    async exportAll(requests) { return requests.map((): ExportAnswer => ({ geometry: new Map(), textures: new Map(), masks: new Map() })); } };
+  const pool = new NativeArchivePool(fakeDecompress);
+  // Lane 0 decodes quickly and meets the cancellation between jobs; lane 1 is still decoding then, and writes its work folder after.
+  const slow = (ms: number): TextureDecoder => ({ decodeMask: async request => { await Bun.sleep(ms); return decodeMaskFromPool(pool, fakeDecompress, request); } });
+  const exporter = createNativeFirstExporter(inner, { cacheRoot, maxSide: 4, decoder: async (_, lane) => slow(lane === 0 ? 20 : 200), lanes: () => 2, onFallback: () => {} });
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 50);
+  const masks = ["base\m\a.mlmask", "base\m\b.mlmask", "base\m\c.mlmask", "base\m\d.mlmask"];
+  const outcome = await exporter.exportAll!([{ source: archiveExportSource(archive, tempRoot()), geometry: [], textures: [], masks }], controller.signal)
+    .then(() => "finished", (error: { code?: string }) => error.code);
+  expect(outcome).toBe("cancelled");
+  await Bun.sleep(250);
+  expect(readdirSync(cacheRoot).filter(name => name.startsWith(".work-"))).toEqual([]);
+});
+
+test("work folders left over by a crash are swept once they are an hour old; newer ones are kept (PREV-198)", async () => {
+  const exports = tempRoot();
+  const old = join(exports, ".work-old"), recent = join(exports, ".work-recent");
+  for (const folder of [old, recent]) { mkdirSync(folder); writeFileSync(join(folder, "layer.png"), "png"); }
+  const hourAgo = (Date.now() - STALE_WORK_MS - 60_000) / 1000;
+  utimesSync(old, hourAgo, hourAgo);
+  expect(await sweepStaleWork(exports)).toBe(1);
+  expect(readdirSync(exports)).toEqual([".work-recent"]);
+  // The budget check sweeps them too, even under budget.
+  mkdirSync(old); utimesSync(old, hourAgo, hourAgo);
+  await evictPrepared({ exports, resolver: tempRoot(), store: tempRoot(), manifests: tempRoot() }, Infinity);
+  expect(readdirSync(exports)).toEqual([".work-recent"]);
 });

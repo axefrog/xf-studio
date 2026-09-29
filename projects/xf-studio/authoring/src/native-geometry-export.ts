@@ -102,7 +102,9 @@ export function createNativeGeometryExporter(inner: GameAssetExporter, options: 
   const sameBase = (depotPath: string, source: ExportSource, base: ExportBase | undefined, metaFile?: string): boolean => {
     if (!/\.morphtarget$/i.test(depotPath)) return true;
     try {
-      const meta = JSON.parse(readFileSync(metaFile ?? join(cache.entryDirectory(depotPath, source), "geometry.json"), "utf8")) as GeometryMeta;
+      const file = metaFile ?? cache.filePath(depotPath, source, "geometry.json");
+      if (!file) return false;
+      const meta = JSON.parse(readFileSync(file, "utf8")) as GeometryMeta;
       return (meta.baseKey ?? "own") === baseKeyOf(base, source.gameRoot);
     } catch { return false; }
   };

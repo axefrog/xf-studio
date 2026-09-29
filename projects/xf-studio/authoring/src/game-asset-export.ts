@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DerivedCache, fileSha256, writeFileAtomic } from "./derived-cache";
 import { depotHash, sanitizeDepotPath } from "./depot-path";
 import { hostFailure, hostTrace } from "./diagnostics/host-log";
+import { hostClock } from "./platform/graph-adapters/host-sources";
 import type { LowPriority } from "./process-tree";
 
 /**
@@ -283,7 +284,21 @@ type EntryMeta = { schema: "xfs/game-asset-export-1"; version: number; depotPath
    * export; PIPE-106). An entry without it that holds a materials file came from a launch with the game folder, where WolvenKit may have
    * exported the base game's copy of an overridden resource: it answers only a request for materials (the core preview's own content).
    */
-  rawChecked?: boolean };
+  rawChecked?: boolean;
+  /**
+   * The folder inside the entry that holds its files (PREV-200), or absent for an entry written before generations (its files beside
+   * `entry.json`). A rewrite puts its files in a new generation and switches `entry.json` to it atomically, so paths a reader already
+   * holds stay valid; a superseded generation is removed once `RETIRED_GENERATION_MS` has passed.
+   */
+  generation?: string };
+/**
+ * How long a superseded generation of an entry is kept (PREV-200): a reader that was handed its paths (another export of the same
+ * resource running beside the rewrite, a warm-up beside a prefetch) finishes with them within one preparation, seconds to a minute.
+ */
+export const RETIRED_GENERATION_MS = 15 * 60 * 1000;
+const GENERATION = /^g-[0-9a-z]+-[0-9a-z]+$/;
+/** This process's generation counter: generation names are the process ID and the counter, so no two live processes share one. */
+let generations = 0;
 /** Clean runs that exported a mesh without its materials file before the partial export is served from the cache. */
 export const PARTIAL_RUNS = 2;
 /** Paths this process already marked as used (the disk budget evicts the least recently used by their modification time). */
@@ -305,8 +320,11 @@ export class GameAssetExportCache extends DerivedCache {
    * one is never blocked by what an exporter without it settled.
    */
   readonly lastingIdentity: string;
-  constructor(root: string, private readonly tool: ExportTool = UNKNOWN_TOOL, repairKey = "none") {
+  /** How long a superseded generation is kept (`RETIRED_GENERATION_MS`; tests shorten it). */
+  private readonly retiredMs: number;
+  constructor(root: string, private readonly tool: ExportTool = UNKNOWN_TOOL, repairKey = "none", options: { retiredMs?: number } = {}) {
     super(root, "game asset export");
+    this.retiredMs = options.retiredMs ?? RETIRED_GENERATION_MS;
     this.lastingIdentity = `${tool.key}|repair:${repairKey}`;
   }
   /** A meta's partial run count under the current identity: a complete entry counts as settled, another identity's partial count as 0. */
@@ -338,9 +356,10 @@ export class GameAssetExportCache extends DerivedCache {
     try {
       const meta = this.meta(depotPath, source);
       if (!meta || !this.current(meta) || this.runsOf(meta) < PARTIAL_RUNS) return null;
+      const folder = filesFolder(directory, meta);
       const out: Record<string, string> = {};
       for (const [name, file] of Object.entries(meta.files)) {
-        const path = join(directory, name);
+        const path = join(folder, name);
         if (!existsSync(path) || statSync(path).size !== file.bytes || fileSha256(path) !== file.sha256) return null;
         out[name] = path;
       }
@@ -361,8 +380,13 @@ export class GameAssetExportCache extends DerivedCache {
     if (this.settledNone(depotPath, source)) return true;
     const meta = this.meta(depotPath, source);
     if (!meta || !this.current(meta) || this.runsOf(meta) < PARTIAL_RUNS || !required.every(name => meta.files[name])) return false;
-    const directory = this.entryDirectory(depotPath, source);
-    return Object.entries(meta.files).every(([name, file]) => { try { return statSync(join(directory, name)).size === file.bytes; } catch { return false; } });
+    const folder = filesFolder(this.entryDirectory(depotPath, source), meta);
+    return Object.entries(meta.files).every(([name, file]) => { try { return statSync(join(folder, name)).size === file.bytes; } catch { return false; } });
+  }
+  /** Where an entry's file `name` is (not checked: `read` checks), or null when the entry doesn't list it. */
+  filePath(depotPath: string, source: ExportSource, name: string): string | null {
+    const meta = this.meta(depotPath, source);
+    try { return meta?.files[name] ? join(filesFolder(this.entryDirectory(depotPath, source), meta), name) : null; } catch { return null; }
   }
   private noneFile(depotPath: string, source: ExportSource) { return `${this.entryDirectory(depotPath, source)}.none.json`; }
   /**
@@ -394,37 +418,86 @@ export class GameAssetExportCache extends DerivedCache {
     const meta = this.meta(depotPath, source);
     return meta?.partialRuns !== undefined ? this.runsOf(meta) : 0;
   }
-  /** Copy `files` (name → source path) into a new entry, replacing any older one atomically. `partialRuns` marks a partial geometry export. */
+  /**
+   * Copy `files` (name → source path) into a new entry, replacing any older one atomically. `partialRuns` marks a partial geometry export.
+   * The files go into a new generation folder and `entry.json` is switched to it in one rename (PREV-200): the files of the entry it
+   * replaces stay where they are, so a reader that already holds their paths (another export of the same resource beside this one, in
+   * this process or another) can still read them; superseded generations are removed on a later write once `RETIRED_GENERATION_MS` has
+   * passed.
+   */
   write(depotPath: string, source: ExportSource, files: Record<string, string>, partialRuns?: number, rawChecked = true): Record<string, string> {
     const directory = this.entryDirectory(depotPath, source);
     // A verified entry of the same resource, source and identity already holds these files (another decode lane or export published it
-    // first): keep it. Replacing it would delete files that export may still be reading, and on Windows the rename then fails (EPERM).
-    // Partial geometry counts and raw checks are updated by rewriting, so those always write.
+    // first): keep it rather than copy the same files again. Partial geometry counts and raw checks are updated by rewriting, so those
+    // always write.
     if (partialRuns === undefined && !files.raw && !files[REPAIR_NOTE]) {
       const kept = this.read(depotPath, source);
       if (kept && Object.keys(files).every(name => name in kept) && Object.keys(kept).length === Object.keys(files).length) return kept;
     }
-    const staging = `${directory}.${process.pid}.${Date.now()}.tmp`;
-    mkdirSync(staging, { recursive: true, mode: 0o700 });
+    this.ensure();
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    let previous: EntryMeta | null = null;
+    try { previous = this.readJson(join(directory, "entry.json")) as EntryMeta; } catch { /* None yet, or unreadable: nothing to retire by name. */ }
+    let generation: string, folder: string;
+    for (;;) {
+      generation = `g-${process.pid.toString(36)}-${(++generations).toString(36)}`;
+      folder = join(directory, generation);
+      try { mkdirSync(folder, { mode: 0o700 }); break; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; /* An earlier process's: take the next name. */ }
+    }
     const meta: EntryMeta = { schema: "xfs/game-asset-export-1", version: GAME_ASSET_EXPORT_VERSION, depotPath, hash: depotHash(depotPath),
       source: this.sourceKey(source), files: {}, ...(partialRuns ? { partialRuns, partialIdentity: this.lastingIdentity } : {}),
-      ...(files[REPAIR_NOTE] ? { repairIdentity: this.lastingIdentity } : {}), ...(files.raw && rawChecked ? { rawChecked: true } : {}) };
-    for (const [name, from] of Object.entries(files)) {
-      copyFileSync(from, join(staging, name));
-      meta.files[name] = { sha256: fileSha256(from), bytes: statSync(from).size };
-    }
-    this.writeJson(join(staging, "entry.json"), meta);
-    if (existsSync(directory)) this.remove(directory);
-    try { renameSync(staging, directory); }
-    catch (error) {
-      // Another export of the same resource (a prefetch beside a person's own change) published it first: keep theirs.
-      this.remove(staging);
-      if (!existsSync(join(directory, "entry.json"))) throw error;
+      ...(files[REPAIR_NOTE] ? { repairIdentity: this.lastingIdentity } : {}), ...(files.raw && rawChecked ? { rawChecked: true } : {}), generation };
+    try {
+      for (const [name, from] of Object.entries(files)) {
+        copyFileSync(from, join(folder, name));
+        meta.files[name] = { sha256: fileSha256(from), bytes: statSync(from).size };
+      }
+      // What `entry.json` names now is retired (its time starts the grace period), then the entry switches to the new generation.
+      const now = hostClock().now();
+      this.retire(directory, previous, now);
+      writeFileAtomic(join(directory, "entry.json"), JSON.stringify(meta, null, 2) + "\n");
+      this.sweepRetired(directory, generation, now);
+    } catch (error) {
+      try { this.remove(folder); } catch { /* Swept by a later write. */ }
+      throw error;
     }
     touched.delete(join(directory, "entry.json"));
     touchUsed(join(directory, "entry.json"));
-    return Object.fromEntries(Object.keys(files).map(name => [name, join(directory, name)]));
+    return Object.fromEntries(Object.keys(files).map(name => [name, join(folder, name)]));
   }
+  /** Mark the files an entry named as superseded now: their generation folder's time (or, for an entry from before generations, each file's). */
+  private retire(directory: string, previous: EntryMeta | null, now: number): void {
+    if (!previous || typeof previous !== "object") return;
+    const when = new Date(now);
+    try {
+      if (typeof previous.generation === "string" && GENERATION.test(previous.generation)) utimesSync(join(directory, previous.generation), when, when);
+      else for (const name of Object.keys(previous.files ?? {})) if (!/[\\/]/.test(name) && name !== "entry.json") utimesSync(join(directory, name), when, when);
+    } catch { /* Gone already: nothing to keep. */ }
+  }
+  /**
+   * Remove what the entry no longer names once it has been superseded for `retiredMs`: older generations, and the files an entry from
+   * before generations kept beside `entry.json`. A generation another export is writing now is newer than that, so it is kept.
+   */
+  private sweepRetired(directory: string, current: string, now: number): void {
+    let names: string[];
+    try { names = readdirSync(directory); } catch { return; }
+    for (const name of names) {
+      if (name === "entry.json" || name === current) continue;
+      const path = join(directory, name);
+      try {
+        if (now - statSync(path).mtimeMs < this.retiredMs) continue;
+        this.remove(path);
+      } catch { /* In use, or gone: tried at the next write. */ }
+    }
+  }
+}
+
+/** The folder an entry's files are in: its generation, or the entry's own folder for one written before generations. */
+function filesFolder(directory: string, meta: EntryMeta): string {
+  if (meta.generation === undefined) return directory;
+  if (typeof meta.generation !== "string" || !GENERATION.test(meta.generation)) throw Error("The cache entry names an unexpected folder.");
+  return join(directory, meta.generation);
 }
 
 /** Most archives one `exportAll` launch reads (their paths share the command line with the selection). */

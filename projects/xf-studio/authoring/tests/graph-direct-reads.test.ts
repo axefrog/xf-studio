@@ -91,7 +91,7 @@ const GRANDFATHERED: Readonly<Record<string, Readonly<Record<string, number>>>> 
   "features/save-explorer/actions": { clock: 1, timers: 2 },
   "features/save-explorer/host/saves-server": { files: 1 },
   "features/save-explorer/view/panel": { timers: 1 },
-  "game-asset-export": { clock: 3, files: 1 },
+  "game-asset-export": { clock: 2, files: 1 },
   "game-asset-export-wolvenkit": { files: 1 },
   "game-blink": { timers: 1 },
   "grading-lut-host": { clock: 1, files: 2 },
