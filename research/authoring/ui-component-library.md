@@ -34,7 +34,7 @@ All of XF Studio's UI is composed from one component library, documented in the 
 
 | Category | Components |
 |---|---|
-| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover` / `openConfirmPopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `SizeBar`, `FolderSetting`, `RecordList`, `menuCapability`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
+| General | `button` / `applyCapability` / `setButtonLabel` / `setButtonVariant`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover` / `openConfirmPopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `SizeBar`, `FolderSetting`, `RecordList`, `menuCapability`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
 | Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView`, `Splitter` |
 | Feature-specific | `LightList`, `DirectionDial` (lighting setups), `modLine` (mod packaging) |
 
@@ -62,6 +62,8 @@ Comments and prose don't count (markup counts only inside a string). UI-121 clos
 - A file may not exceed its allowance, and a file missing from the allowlist is allowed none. A new one-off control fails with a pointer to the library.
 - An allowance must equal its file's count. When a control moves into the library, its file's allowance must be lowered in the same change, so the debt only shrinks.
 - The scan itself is tested on prose and code.
+
+The same test refuses, with no allowance, a composition file that reaches inside a library button: looking up its label `span` to relabel it, or toggling its `primary`/`quiet`/`danger`/`ghost` class. `setButtonLabel` and `setButtonVariant` change a button's words and weight in place (UI-173; style guide `lib-button-in-place`).
 
 Debt at introduction (27 September 2026, after the first consolidation round and the merge of `main` that brought the expressions drawer and the Settings links in Help): 88 ad hoc controls in 18 files. The table lists what is left; the expressions drawer was cleared by UI-108 (81 in 17 files).
 

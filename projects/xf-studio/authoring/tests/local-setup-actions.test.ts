@@ -46,7 +46,7 @@ test("a refresh asked for while busy runs once the request in flight finishes", 
 test("while the host is still checking its build tools, the page asks again until Build's answer is final", async () => {
   let gets = 0;
   const build = (checking: boolean) => ({ ready: !checking, limits: [],
-    issues: checking ? [{ code: BUILD_TOOLS_CHECKING, reason: "XF Studio is still checking your build tools. Try again in a moment." }] : [] });
+    issues: checking ? [{ code: BUILD_TOOLS_CHECKING, reason: "XF Studio is checking its build tools…" }] : [] });
   const actions = new LocalSetupActions(async () => {
     gets++;
     return { ok: true, status: 200, data: { revision: 1, source: "primary", overridden: [], fields: {} as LocalSetupFields,

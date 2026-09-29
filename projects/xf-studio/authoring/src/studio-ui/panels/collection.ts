@@ -1,7 +1,7 @@
 import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
 import { EYE_MAKEUP_MOD, MOD_NAME_HINT } from "../../mod-branding";
 import type { ReadonlyDeep } from "../../read-only";
-import { applyCapability, badge, button, emptyState, note, section } from "../controls";
+import { applyCapability, badge, button, setButtonLabel, emptyState, note, section } from "../controls";
 import { h, setAttr, setText, setValue } from "../dom";
 import { helpTip, setHelp } from "../help-tip";
 import type { Command } from "../commands";
@@ -146,7 +146,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       applyCapability(addButton, port.library.capability({ kind: "preset.edit", command: { kind: "add" } }));
       const removed = draft?.removed.at(-1);
       restore.hidden = !removed;
-      if (removed) setText(restore.querySelector("span")!, `Restore “${removed.name}”`);
+      if (removed) setButtonLabel(restore, `Restore “${removed.name}”`);
       applyCapability(restore, port.library.capability({ kind: "preset.edit", command: { kind: "restore" } }));
       applyCapability(importRecipe, port.files.capability({ kind: "recipe.import" }));
       // A "…" whose menu would hold nothing to act on is unavailable with its reason, never a button that does nothing (UI-139). Asked
@@ -422,7 +422,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       // The install rows follow every paint: availability, and what happened last.
       const installs = frame.modInstall, route = frame.localSetup.view?.fields.launchRoute;
       for (const [product, row] of installRows) {
-        setText(row.add.querySelector("span")!, modInstallLabel(route));
+        setButtonLabel(row.add, modInstallLabel(route));
         applyCapability(row.add, port.modInstall.capability({ kind: "modInstall.review", product }));
         applyCapability(row.show, port.modInstall.capability({ kind: "modInstall.reveal", product }));
         const outcome = installs.outcomes[product];
@@ -456,7 +456,7 @@ function failureCard(rt: StudioRuntime, failed: ReadonlyDeep<{ kind: string; cod
 function technicalDetails(rows: [string, string][], footnote?: string) {
   const text = rows.map(([label, value]) => `${label}: ${value}`).join("\n");
   const copy = button({ label: "Copy details", icon: "duplicate", small: true, variant: "quiet", onClick: () => {
-    void navigator.clipboard?.writeText(text).then(() => setText(copy.querySelector("span")!, "Copied"), () => {});
+    void navigator.clipboard?.writeText(text).then(() => setButtonLabel(copy, "Copied"), () => {});
   } });
   return h("details", { class: "result-details" }, h("summary", { text: "Details" }),
     h("dl", { class: "facts" }, ...rows.flatMap(([label, value]) => [h("dt", { text: label }), h("dd", {}, h("code", { class: "hash", text: value }))])),

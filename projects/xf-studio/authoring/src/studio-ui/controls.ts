@@ -337,7 +337,11 @@ export class SelectField<T extends string> {
   }
 }
 
-export function button(options: { label: string; icon?: IconName; variant?: "primary" | "quiet" | "danger" | "ghost";
+/** A library button's weight: primary (the one commitment in a region), quiet, danger or ghost; none is the default button. */
+export type ButtonVariant = "primary" | "quiet" | "danger" | "ghost";
+const BUTTON_VARIANTS: readonly ButtonVariant[] = ["primary", "quiet", "danger", "ghost"];
+
+export function button(options: { label: string; icon?: IconName; variant?: ButtonVariant;
   onClick(event: MouseEvent): void; title?: string; iconOnly?: boolean; small?: boolean;
   /** Opens a menu (`aria-haspopup="menu"`). */
   menu?: boolean; className?: string }) {
@@ -349,6 +353,24 @@ export function button(options: { label: string; icon?: IconName; variant?: "pri
     onclick: (event: MouseEvent) => { if (!isUnavailable(element)) options.onClick(event); } },
     options.icon ? icon(options.icon) : null, options.iconOnly ? null : h("span", { text: options.label }));
   return element;
+}
+/**
+ * A library button's label, changed in place (UI-173): the element, its icon, focus and handlers stay, only the words change. An
+ * icon-only button's label is its accessible name, and its tip too when the tip was the label. Callers never edit the inner span.
+ */
+export function setButtonLabel(element: HTMLElement, label: string) {
+  if (element.classList.contains("icon-only")) {
+    const before = element.getAttribute("aria-label");
+    setAttr(element, "aria-label", label);
+    if (element.title === before) { element.title = label; element.dataset.title = label; }
+    return;
+  }
+  const span = [...element.children].find(child => child.tagName.toLowerCase() === "span");
+  if (span) setText(span, label); else element.append(h("span", { text: label }));
+}
+/** A library button's weight, changed in place (UI-173): exactly one variant, or none for the default button. */
+export function setButtonVariant(element: HTMLElement, variant: ButtonVariant | undefined) {
+  for (const name of BUTTON_VARIANTS) if (element.classList.contains(name) !== (name === variant)) element.classList.toggle(name, name === variant);
 }
 /**
  * A main action's availability from a capability (UI-84): unavailable, it stays focusable with `aria-disabled` and its

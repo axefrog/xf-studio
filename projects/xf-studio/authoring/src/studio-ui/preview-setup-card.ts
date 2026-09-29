@@ -2,7 +2,7 @@ import type { InstallRoute, PreviewSetupAction, PreviewSetupButton } from "../pr
 import type { ReadonlyDeep } from "../read-only";
 import type { WolvenKitLink } from "../wolvenkit-setup";
 import { progressBar } from "./components/progress";
-import { applyCapability, button, Segmented } from "./controls";
+import { applyCapability, button, setButtonLabel, Segmented } from "./controls";
 import { h, setText, uid } from "./dom";
 import type { Frame, StudioRuntime } from "./runtime";
 
@@ -70,7 +70,7 @@ export function previewSetupCard(rt: StudioRuntime) {
     control.hidden = !value;
     control.dataset.action = value?.action.kind ?? "";
     if (!value) return undefined;
-    setText(control.querySelector("span")!, value.label);
+    setButtonLabel(control, value.label);
     applyCapability(control, port.previewSetup.capability(value.action as PreviewSetupAction));
     return value.action as PreviewSetupAction;
   }

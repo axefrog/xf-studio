@@ -1,6 +1,6 @@
 import type { DesktopAppState } from "../../desktop-app";
 import type { ReadonlyDeep } from "../../read-only";
-import { applyCapability, button, note } from "../controls";
+import { applyCapability, button, setButtonLabel, note } from "../controls";
 import { iconButton } from "../components/icon-button";
 import { h, setText, uid } from "../dom";
 import { icon } from "../icons";
@@ -80,7 +80,7 @@ export function openDesktopAppSheet(rt: StudioRuntime) {
   }
   const command = (text: string) => {
     const copy = button({ label: "Copy", icon: "duplicate", small: true, variant: "quiet", onClick: () => {
-      void navigator.clipboard?.writeText(text).then(() => setText(copy.querySelector("span")!, "Copied"), () => {}); } });
+      void navigator.clipboard?.writeText(text).then(() => setButtonLabel(copy, "Copied"), () => {}); } });
     return h("div", { class: "desktop-app-command" }, h("code", { text }), copy);
   };
   function render() {
@@ -117,7 +117,7 @@ export function openDesktopAppSheet(rt: StudioRuntime) {
         setText(lead, "The desktop app isn't installed on this computer yet.");
         detail.replaceChildren(...[build, releaseLink ?? h("p", { class: "muted small", text: "Downloads from GitHub start with the first release." })].filter((node): node is NonNullable<typeof node> => !!node));
       }
-      setText(primary.querySelector("span")!, installed?.canOpen ? "Open the desktop app" : "Install from your build");
+      setButtonLabel(primary, installed?.canOpen ? "Open the desktop app" : "Install from your build");
     }
     const busy = state.busy;
     const action = found?.installed?.canOpen ? { kind: "desktopApp.open" as const } : { kind: "desktopApp.install" as const, installer: found?.installer?.id ?? "" };

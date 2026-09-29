@@ -34,21 +34,25 @@ const inside = (path: string, root: string) => {
 };
 export type WolvenKitProbe = (path: string) => string | null;
 export type BunProbe = (path: string) => string | null;
-/** Shown while the first tool check runs in the background; readiness requests never wait for it. */
-export const PROBE_PENDING = "XF Studio is still checking your build tools. Try again in a moment.";
-const bunCache = new Map<string, { issue: string | null; until: number }>();
+/** Shown while the first tool check runs in the background; readiness requests never wait for it. It promises nothing (DESK-15). */
+export const PROBE_PENDING = "XF Studio is checking its build tools…";
+/**
+ * The Bun probe's answer per file stamp (path, size, modification time), kept until the file changes: a failure too (DESK-15), since
+ * XF Studio's own runtime doesn't mend itself, and re-checking every few seconds only made Build's reason flicker between checking and
+ * the failure.
+ */
+const bunCache = new Map<string, string | null>();
 /** Execute code, rather than trusting a filename or the Electrobun main path. */
 export function probeBun(path: string): string | null {
   try {
     const stamp = statSync(path);
     const key = `${path}|${stamp.size}|${stamp.mtimeMs}`;
-    const cached = bunCache.get(key);
-    if (cached && Date.now() < cached.until) return cached.issue;
+    if (bunCache.has(key)) return bunCache.get(key) ?? null;
     const run = spawnSync(path, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"],
       { encoding: "utf8", timeout: 5000, windowsHide: true, maxBuffer: 4096 });
     const issue = run.error || run.status !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(run.stdout || "")
       ? "XF Studio's build runtime cannot run the packaged build tools. Reinstall XF Studio to repair it." : null;
-    bunCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
+    bunCache.set(key, issue);
     return issue;
   } catch { return "XF Studio's build runtime could not be checked. Restart XF Studio and try again."; }
 }
@@ -78,29 +82,39 @@ export async function warmBuildProbes(settings: Pick<LocalSettings, "wolvenKitCl
   // WolvenKit is checked by the shared runner, which keeps one cache and one run per file.
   if (settings.wolvenKitCli && file(settings.wolvenKitCli)) jobs.push(probeWolvenKitCliAsync(settings.wolvenKitCli).then(() => {}));
   if (file(bun)) {
-    const key = stampKey(bun), cached = bunCache.get(key);
-    if (!cached || Date.now() >= cached.until) jobs.push(once(`bun:${key}`, async () => {
+    const key = stampKey(bun);
+    if (!bunCache.has(key)) jobs.push(once(`bun:${key}`, async () => {
       let issue: string | null = null;
       try {
         // The shared process runner stops the whole tree when the probe overruns.
         const result = await runProcessTree(bun, ["-e", "process.stdout.write('XFS_BUN_OK:' + Bun.version)"], { timeoutMs: 5000, keep: 4096 });
         if (result.exitCode !== 0 || !/^XFS_BUN_OK:\d+\.\d+\.\d+/.test(result.stdout)) issue = "XF Studio's build runtime cannot run the packaged build tools. Reinstall XF Studio to repair it.";
       } catch { issue = "XF Studio's build runtime could not be checked. Restart XF Studio and try again."; }
-      bunCache.set(key, { issue, until: issue ? Date.now() + 10_000 : Infinity });
+      bunCache.set(key, issue);
     }));
   }
   await Promise.all(jobs);
 }
-/** Readiness-path probes: answer from the cache, or start a background check and say so. */
+/** WolvenKit's last failure per file stamp: shown while a retry runs, so its reason never falls back to "checking" (DESK-15). */
+const wolvenKitFailures = new Map<string, string>();
+/**
+ * Readiness-path probes: answer from the cache, or start a background check and say so. Only a tool never checked is "checking": a
+ * WolvenKit failure is retried in the background (its cause, such as a missing runtime, can be fixed without touching the file) while
+ * readiness keeps answering with that failure.
+ */
 export const cachedWolvenKitProbe: WolvenKitProbe = path => {
   const cached = cachedWolvenKitProbeResult(path);
-  if (cached) return cached.ok ? null : cached.issue;
-  void probeWolvenKitCliAsync(path).catch(() => {});
-  return PROBE_PENDING;
+  const key = (() => { try { return stampKey(path); } catch { return path; } })();
+  if (cached) {
+    if (cached.ok) wolvenKitFailures.delete(key); else wolvenKitFailures.set(key, cached.issue);
+    return cached.ok ? null : cached.issue;
+  }
+  void probeWolvenKitCliAsync(path).then(result => { if (result.ok) wolvenKitFailures.delete(key); else wolvenKitFailures.set(key, result.issue); }, () => {});
+  return wolvenKitFailures.get(key) ?? PROBE_PENDING;
 };
 export const cachedBunProbe: BunProbe = path => {
-  const cached = bunCache.get(stampKey(path));
-  if (cached && Date.now() < cached.until) return cached.issue;
+  const key = stampKey(path);
+  if (bunCache.has(key)) return bunCache.get(key) ?? null;
   void warmBuildProbes({ wolvenKitCli: null }, path).catch(() => {});
   return PROBE_PENDING;
 };
