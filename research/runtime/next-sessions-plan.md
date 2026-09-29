@@ -1,55 +1,56 @@
 # Next in-game sessions: ranked plan
 
-**Status (28 September 2026): session 4 ([experiment 029](../../experiments/029-session-4/README.md#3-results)) ran on bridge 0.4.1.**
-- **Rows answered and removed** (results on the experiment page and the source pages, summarised under [results so far](#results-so-far)): all of N1 (the autonomy checks through the 0.4.1 preflight; the Gloss verdict), N13 (the cheek check), and from N5, N6 and N7 the rows that ran cleanly.
-- **Rows that ran but must repeat** stay below with a note: Ultra+ confounded the skin rows, the tone rows used the wrong tones, and the headgear row was hidden by Thread Locker. Ultra+, Thread Locker and Body Toggles are now disabled in the test profile.
-- **Next session** opens with an alpha.2-built export staged for N2's headgear row, then N3 (Glitter) and N4 (piercings).
+**Status (29 September 2026): sessions 5 and 6 ([experiment 032](../../experiments/032-sessions-5-6/README.md)) ran on bridges 0.5.1 and 0.5.2.**
+- **Settled and removed** (one line each under [results so far](#results-so-far)): N14's fidelity check, spawning and cleanup (the showroom is a fair stand-in for V, so finish verdicts now come from showroom close-ups); the Shimmer grain check (it reads as glossy vinyl: Fail); N3's Glitter question as far as the board's candidate A goes (printed flecks: Fail); Gloss A against C (they separate at a close-up); the bridge's creator route (works away from mirrors, no CCA).
+- **Reworked:** Shimmer and Glitter go back to the finishes rework, and N14 now judges its candidates; N3 is folded into N14.
+- **Not yet run:** N2's headgear row. In sessions 5 and 6 an active outfit in the test save hid anything equipped only through the inventory, and V still wore the session 2 build; it can run now, with the helmet equipped through the wardrobe screen and an `hx_` build staged.
+- **Next session** opens with the bridge preflight for the staged build (the test card's [session-7 checks](runtime-bridge-test-card.md#session-7-checks-bridge-053) for 0.5.3), then N2 and N4; N14 follows as soon as the finishes rework has a showroom build.
 
 This plan gathers every open in-game ask into sittings of 20–30 minutes, driven by the coordinator through the [XF Runtime Bridge](../../projects/xf-runtime-bridge/README.md). Sittings are ordered by value per minute and grouped by shared setup. When a sitting has run, record its results on the source pages and delete its rows here once their answers are there; rows that must repeat keep a note saying why. The bridge's conventions, failure handling and kill switch are on the [test card](runtime-bridge-test-card.md).
 
-**Who does what.** The maintainer (**M**) starts MO2 and the game, loads the save, makes the safety save, opens the creator when asked (F12 with Character Customization Anywhere; the bridge's `cc.open` misbehaves away from a mirror), and does anything in MO2 or the game's settings. The coordinator (**C**) drives everything else with the bridge: MCP tools, or `bun tools/bridge-client.ts run <command>` (dotted names) in `projects/xf-runtime-bridge`. Scripted runs use `bun tools/session.ts <script> --out <folder> [--from <label>]`; run them in the foreground (a stopped background run kept driving the game in session 4). Agents never launch the game or MO2.
+**Who does what.** The maintainer (**M**) starts MO2 and the game, loads the save, makes the safety save, keeps the game window in front when C opens photo mode (a background open fails; every other command works with the game behind), equips clothing through the wardrobe screen, lights heads by hand for finish verdicts, and does anything in MO2 or the game's settings. The coordinator (**C**) drives everything else with the bridge, including opening the creator (`cc_open` works from the street, away from any mirror, with no Character Customization Anywhere): MCP tools, or `bun tools/bridge-client.ts run <command>` (dotted names) in `projects/xf-runtime-bridge`. Scripted runs use `bun tools/session.ts <script> --out <folder> [--from <label>]`; run them in the foreground (a stopped background run kept driving the game in session 4). Agents never launch the game or MO2.
 
 ## Order at a glance
 
 | # | Sitting | Min | Top asks | Needs beyond the staged setup |
 |---|---|---:|---|---|
-| [N2](#n2-finish-close-out-headgear-kill-switch) | Headgear, kill switch | 7 | 2.6 on the `hx_` build | **An alpha.2-built export staged** in place of the session 2 build; a mod item with `hide_Head` in V's inventory |
-| [N3](#n3-glitter-board) | Glitter board | 25 | [Experiment 021](../../experiments/021-glitter-board/README.md#test-card) steps 1–9 | **Restage**: the Glitter board beside or in place of the export (after N2), relaunch |
+| [N2](#n2-finish-close-out-headgear-kill-switch) | Headgear, kill switch | 7 | 2.6 on the `hx_` build | **An `hx_` export staged** in place of the session 2 build; M equips a helmet and a mod item with `hide_Head` **through the wardrobe screen** |
+| [N14](#n14-finish-verdicts-in-the-showroom) | Finish verdicts in the showroom | 25 | The reworked Shimmer and Glitter; Gloss B and D; Glitter in motion, under DLAA and in the dark | **The finishes rework's showroom build** (not built yet), restaged with the current bridge; M lights by hand for the verdicts |
 | [N4](#n4-xf-piercings-probe) | XF Piercings Probe | 30 | [Experiment 024](../../experiments/024-ccxl-piercings/README.md#test-card-the-12-checks) checks 1–10, 12 | **Enable `XF Piercings Probe`** (staged, not enabled) |
 | [N7](#n7-photo-mode-parity-eye-and-skin-light-the-repeats) | Photo mode: parity, eye and skin light (the repeats) | 20 | SSS quality without Ultra+; the light pair; cornea and iris | M changes SSS quality once |
 | [N5](#n5-creator-sweep-a-colour-encoding-and-layered-materials) | Creator sweep A: the remaining colour checks | 20 | Tint encoding on the right tones; ray tracing off; decal order with XF Off | M turns ray tracing off once |
 | [N6](#n6-creator-sweep-b-rows-links-hair-calibration-body-blink) | Creator sweep B: what remains | 25 | Hands on the tone link, lip colour carry-over, brows, bald style, lash frame, teeth, blink | M switches the Character Rendering Editor preset once |
 | [N11](#n11-xf-expressions-set-in-photo-mode-r4r5) | XF Expressions set in photo mode (R4–R5) | 25 | Listed, plays as the preview, Mega Pack faces still work | **Stage** one expression-set build by hand (M, MO2 closed), relaunch; after the preview's switch to the male facial setup (R1) |
-| [N14](#n14-xf-finish-showroom) | XF Finish Showroom: fidelity check, then the lineup | 30 | Does a showroom head show a preset as V does; then Gloss A–D, the Shimmer grain and Glitter side by side under identical light, with turntable sweeps | **Stage** bridge 0.5.0 -writes, XF Finish Showroom (two archives) and an XF Eye Artistry build of session 2's collection from the same commit; Codeware in the profile; relaunch |
 | [N8](#n8-photo-mode-vanilla-finishes-under-a-sweep) | Photo mode: vanilla finishes under a sweep | 25 | Lip finishes, metallic blush, brow gloss, hair ambient | The reference save for 8.4 |
 | [N9](#n9-relaunch-missing-mods-and-mod-over-base) | Relaunch: missing mods and mod-over-base | 20 + 2 launches | Probe missing-mod check, removed-colour fallback, `.hp` and complexion winners | Throwaway saves from N4 and N6; five mods toggled |
-| [N10](#n10-inventory-cyberware-bare-body-clothing) | Inventory: cyberware, bare body, clothing | 30 | Gorilla Arms, holster state, garment hide tags | A save with Gorilla Arms; tagged mod garments |
+| [N10](#n10-inventory-cyberware-bare-body-clothing) | Inventory: cyberware, bare body, clothing | 30 | Gorilla Arms, holster state, garment hide tags | A save with Gorilla Arms; tagged mod garments; the outfit question settled first ([worn clothing](../../knowledge/clothing.md#in-game-results-sessions-5-and-6)) |
 | [N12](#n12-masculine-v-xf-eye-artistry-for-him) | Masculine V: XF Eye Artistry for him | 30 | Male V plan §6 checks 1–4 and 5–7 | **A masculine save made in a new game** (none exists yet; M makes and keeps it); a both-body build staged in place of the alpha.2 export |
 
 **Why this order.**
-- **N2** is the last open check on the alpha.2 export: its headgear row can finally run now that Thread Locker is off.
-- **N3** decides the Glitter route, the next finish for XF Eye Artistry.
+- **N2** is the last open check on the alpha.2 export. Sessions 4–6 couldn't run it (Thread Locker, then an active outfit hid the helmet); equipping through the wardrobe screen makes it a 7-minute row.
+- **N14** decides the two finishes the export still lacks (Shimmer and Glitter): it runs as soon as the rework's build exists, and can share a launch with N2.
 - **N4** answers the attachment questions for piercings, the next feature.
-- **N7, N5 and N6** finish the preview-parity questions session 4 left open, mostly without player steps once the creator or photo mode is open.
-- **N14** (after N3, on the same staging relaunch if possible) replaces per-finish creator visits with a lineup under one light; its fidelity check decides whether later finish verdicts can come from the showroom.
+- **N7, N5 and N6** finish the preview-parity questions session 4 left open, mostly without player steps now that the bridge opens the creator itself.
 - **N11** waits for the preview to solve with the male player setup that R1 found live, so its "plays as the preview" comparison is fair.
 - **N9, N10 and N12** cost the most player time, and N12 also needs a new-game masculine save.
 
-**Launches.** One evening can hold N2, N4, N7, N5 and N6 on one launch. Enable the probe beforehand: it only adds two rows. N3 needs a restage and a relaunch. N9 is two launches by design.
+**Launches.** One evening can hold the bridge preflight, N2, N4, N7, N5 and N6 on one launch. Enable the probe beforehand: it only adds two rows. N14 needs the rework's showroom build staged (a relaunch unless it is staged with N2's `hx_` build). N9 is two launches by design.
 
 ## Before every sitting (C, offline)
 
-1. **Bridge:** the profile holds **0.4.1 `-writes`** (`911ad89`; [build record](runtime-bridge-test-card.md#build-record-bridge-041-branch-build-not-staged)). Check that the plugin log shows `script_calls=on`. The inventory write class was approved for session 4 only; ask again.
+1. **Bridge:** the profile held **0.5.2 `-writes` with inventory** (`7b9c864`) in session 6; 0.5.3 is built, not staged ([build records](runtime-bridge-test-card.md#build-record-bridge-053-branch-build-not-staged)). Stage the newest build the test card lists and run its preflight first. Check that the plugin log shows `script_calls=on`. **Codeware** stays in the profile (the showroom spawns through it).
 2. **Profile `XF Studio diagnostic 2026-09-25`:**
-   - **XF Eye Artistry** holds the session 2 diagnostic build until an alpha.2-built export replaces it for N2.
+   - **XF Eye Artistry** still holds session 2's collection (selector `xfs_c0200a5e…`, the pre-`hx_` component) until an `hx_` export replaces it for N2.
+   - **XF Finish Showroom** holds the two showroom archives rebuilt at 0.5.2 (session 2's collection and the Glitter board); N14 replaces them with the rework's build.
    - **XF Piercings Probe:** enabled in the profile, with hashes matching the build record (checked 27 September; [staging](../../experiments/024-ccxl-piercings/README.md#staging)).
    - **XF Expressions:** at most one set enabled. Session 4's "Cheek check" set is done; disable it before N11's set is staged.
-   - These are already enabled: PRC's framework plus two item packs, Realistic Complexion III, the KS UV framework, Alliekat's Natural Hair Tones, the Photomode Facial Expression Mega Pack, Character Customization Anywhere, the Character Rendering Editor and Winterkissed.
+   - These are already enabled: PRC's framework plus two item packs, Realistic Complexion III, the KS UV framework, Alliekat's Natural Hair Tones, the Photomode Facial Expression Mega Pack, the Character Rendering Editor, Winterkissed, CharLi and EquipmentEx. **Character Customization Anywhere** was disabled for session 6's T8 and isn't needed: the bridge opens the creator itself.
    - **The confounders stay disabled:**
      - the legacy **XF Eye Artistry CCXL - Dev**;
      - **Ultra+**, which rewrites the SSS quality and the skin tuning per tier and mode and adds CAS sharpening and rim enhancement ([experiment 029 §1](../../experiments/029-session-4/README.md#1-setup));
      - **Thread Locker**, which hides equipped headwear;
-     - **Hide Body Parts - Body Toggles**, whose head item doesn't hide the head and only confuses the headgear row.
+     - **Hide Body Parts - Body Toggles**, whose head item doesn't hide the head and only confuses the headgear row;
+     - disabled after session 5 while tracing the hidden helmet: both Immersive Third Person camera mods, Shattered Chrome, Chrome Plating, Street Sense, Flesh And Chrome, Hot-Sampled Photomode Renders (IGPT) and Sun Moon And Stars Tattoo.
 
      Check MO2's list for any other graphics or camera mod enabled since, and record it.
    - Re-run the [framework check](runtime-bridge-test-card.md#before-the-session-coordinator) if a sitting slips a day.
@@ -59,19 +60,19 @@ This plan gathers every open in-game ask into sittings of 20–30 minutes, drive
    - Put one runner `--out` folder per sitting under a private, ignored location. Captures are never committed; copy them to `experiments/<id>/generated/captures/` afterwards.
    - Every result keeps its bridge JSON, and the manifest records the build commit.
 5. **Scripts:**
-   - N2 uses [`session-2.json`](../../projects/xf-runtime-bridge/tools/sessions/session-2.json); N3 uses [`session-3.json`](../../projects/xf-runtime-bridge/tools/sessions/session-3.json) part A.
+   - N2 uses [`session-2.json`](../../projects/xf-runtime-bridge/tools/sessions/session-2.json); N14's Glitter rows can reuse [`session-3.json`](../../projects/xf-runtime-bridge/tools/sessions/session-3.json) part A's burst steps.
    - The other sittings run as MCP calls from the tables below, or as scripts generated with `tools/sessions/make-sessions.py`: write those before the sitting.
 6. **Tell M:**
-   - Use borderless windowed mode, with the game window in front. Don't type into the game while the bridge opens photo mode: it sends the photo-mode key.
+   - Use borderless windowed mode, with the game window in front whenever C opens photo mode (a background open times out). Don't type into the game while the bridge opens photo mode: it sends the photo-mode key.
    - Stand V in the apartment's living room facing the room. Framing worked there; in the bathroom the camera sat in the wall.
-   - Open the creator with F12.
+   - Equip any clothing a row needs through the wardrobe screen: the test save's active outfit hides anything equipped only in the inventory.
    - Make a new manual safety save before the first change, and load it at the end.
 
 **Index convention.** Creator labels in the source asks (style 5, colour 24, tone 3) are not always `cc_apply` indices, which count from 0. C reads each row with `player_appearance {option: …}` first and maps the label to its index.
 - **Piercings:** for vanilla `piercings`, style *N* is index *N*.
 - **Eye shape** (`eyes`): label `01` is index 0 (`None`), `02` is `h011`, `10` is `h091` and `12` is `h111`.
 - **Skin tone** (`skin_color`): tone label *N* is index *N* − 1 (index 0 pale, 1 warm ivory, 2 limestone, 3 limestone beige, 4 senna, 5 senna amber). Session 4 applied labels as indices and photographed the wrong tones. Name a tone by its value (`03_ca_senna`) in a card.
-- **Photo-mode expressions:** the menu selects by its option value, which is a list position, not the faceId (the table index). Read `photo_state {options: true}` key 28 and select by `data`.
+- **Photo-mode expressions:** the menu selects by its option value, which is a list position, not the faceId (the table index). Since 0.5.2 `photo_state {options: true}` key 28 gives each option's `table_index`, verified from the records' names (Sleeping is menu 56, faceId 60; the cheek-check set 208–209 is 218–219 on this install); select by label, or by faceId with `photo_expression_index`.
 
 A capture is `capture_screenshot {region, name}` after a 1.5 s wait, unless stated otherwise. The `eyes` region currently sits the eyes at its bottom edge, so use `face` or `full` plus a recrop for eyes until the bridge fixes it.
 
@@ -79,7 +80,10 @@ A capture is `capture_screenshot {region, name}` after a 1.5 s wait, unless stat
 - Reset V's placement (`photo_camera_set`) before each `photo_frame`, so the framer doesn't drift.
 - Seed face captures at a portrait lens (FOV 22, close/far −1.2, which converges near 9°) rather than the default, a selfie lens of about 66° at 35 cm.
 - Place light 1 about V (`place: {azimuth, elevation, distance}`) at brightness 45 or less at 1 m; 60 overexposes.
-- `world_time_set` refuses in photo mode: set the clock before opening it.
+- Since 0.5.1 `world_time_set` in photo mode sets photo mode's own clock (the world's clock comes back on exit).
+- Exposure is `photo_camera_set {exposure}` (−2.2 to 2.2); exposure 1 nearly doubled a dim frame's mean luminance (18.5 → 34.1).
+- Photo mode's camera can't be placed directly (`photo_camera_place` doesn't hold); frame by moving V (`photo_frame`), or put showroom heads where the camera already looks.
+- **Showroom close-ups:** one head at a time, `distance_m` 1.3 from the camera with `height_m` 1.9 (the default height is about 0.18 m too high until the bridge fixes it), the creator rig, `showroom_rotate` sweep −30/0/+30. A lineup goes beside V at V's framing distance; a nine-head arc under the key light is too dark to judge.
 
 ## N2. Finish close-out, headgear, kill switch
 
@@ -87,40 +91,30 @@ Opens the next session. Sources: [experiment 020 steps 2–4 and 6–8](../../ex
 
 | # | Ask | Settles → unblocks | Drive | Min | Evidence | Pass / fail |
 |---|---|---|---|---:|---|---|
-| 2.6 | **Session 4 couldn't test it:** the session 2 build was still staged, Thread Locker hid the vanilla helmet, and the Body Toggles head item isn't a `hide_Head` garment ([experiment 029 §3.3](../../experiments/029-session-4/README.md#33-headgear-plan-26)). Thread Locker is now off. Headgear over XF makeup, on an alpha.2-built (`hx_`) export | Whether the `hx_xfs_c<key>_makeup` component hides with the head under ArchiveXL's `hide_Head`, as the source says ([pipeline guide](../authoring/studio-to-mod-pipeline.md#how-those-maps-become-game-resources)); and that a vanilla helmet covers it | Needs the `hx_` build staged (the session 2 build still has `xfs_c<key>_makeup` and is expected to float). **Vanilla helmet:** in the CET console, `Game.AddToInventory("Items.Helmet_01_basic_01", 1)`, then M equips it (or the bridge 0.4 `inventory_equip {item: "Items.Helmet_01_basic_01", add_if_missing: true}` with the inventory class approved; its P13). **`hide_Head` item:** no vanilla item has one (neither the 2.31 TweakDB nor the cooked visual-tag preset holds the string), so M picks an installed mod item whose `.app` lists `hide_Head` and adds it the same way with its record name, `Game.AddToInventory("Items.<record>", 1)`. C: `photo_open`, `photo_frame {target:"face"}`, capture each, `photo_exit` | 4 | Two captures, the mod item's record name | Pass: the makeup hides with the head under the mod item and stays covered, not clipping, under the helmet. Fail: it floats; record the item and whether ArchiveXL logged the tag |
+| 2.6 | **Sessions 4–6 couldn't test it:** the session 2 build was still staged; in session 4 Thread Locker hid the vanilla helmet; in sessions 5 and 6 an active outfit hid every clothing area, so a helmet equipped through the inventory (or the bridge) didn't draw, while one equipped through the wardrobe screen does ([experiment 032 §3.3](../../experiments/032-sessions-5-6/README.md#33-headgear-a13), [worn clothing](../../knowledge/clothing.md#in-game-results-sessions-5-and-6)). Headgear over XF makeup, on an `hx_` export | Whether the `hx_xfs_c<key>_makeup` component hides with the head under ArchiveXL's `hide_Head`, as the source says ([pipeline guide](../authoring/studio-to-mod-pipeline.md#how-those-maps-become-game-resources)); and that a vanilla helmet covers it | Needs the `hx_` build staged (the session 2 build still has `xfs_c<key>_makeup` and is expected to float). **Vanilla helmet:** C adds it (`inventory_equip {item: "Items.Helmet_01_basic_01", add_if_missing: true}`, or in the CET console `Game.AddToInventory("Items.Helmet_01_basic_01", 1)`), then **M equips it through the wardrobe screen** (the bridge's wardrobe writes don't draw it yet). **`hide_Head` item:** no vanilla item has one (neither the 2.31 TweakDB nor the cooked visual-tag preset holds the string), so M picks an installed mod item whose `.app` lists `hide_Head`, adds it the same way with its record name (`Game.AddToInventory("Items.<record>", 1)`) and equips it through the wardrobe screen. C: `photo_open`, `photo_frame {target:"face"}`, capture each, `photo_exit` | 4 | Two captures, the mod item's record name | Pass: the makeup hides with the head under the mod item and stays covered, not clipping, under the helmet. Fail: it floats; record the item and whether ArchiveXL logged the tag |
 | 2.7 | Kill switch with the cursor hidden (card 20–22) | Kill switch restores the cursor | C: `photo_open`, `photo_hud_hide`, `bridge_kill`. M: leave photo mode, load the safety save, quit | 3 | Log `RestoreAfterKill … "cursor_shown":true`; `bridge-phase2-post` capture | Pass: the menu and cursor return, and the save lock is kept until the load |
 
 After N2, results go to [clothing](../../knowledge/clothing.md#open-questions) question 5 and the [pipeline guide](../authoring/studio-to-mod-pipeline.md#how-those-maps-become-game-resources).
 
 ### Shimmer grain check
 
-Shimmer's facet bake is replaced by *shimmer-grain-1*: a uniform pearly surface with a one-texel sparkle grain ([Shimmer design](../materials/finish-designs/shimmer.md), [experiment 030](../../experiments/030-shimmer-grain/README.md)). Run it with 1.5's controlled light, but only after 1.5's Gloss verdict: the rebuild also carries today's flat-finish values, so it cannot stand in for the session 2 build's Gloss A. **Build:** rebuild experiment 020's `session-2.collection.json` with the grain code (`--diagnostics`) and stage it in place of the session 2 build on the relaunch after N2. The preset is XF row **9, *Shimmer · strong***, with its recipe unchanged: each lid holds a Satin control, a fine Shimmer (density 0.65, tilt 0.65) and a strong Shimmer (density 0.8, tilt 1).
+**Ran in session 6, Fail.** *Shimmer · strong* on the grain build (*shimmer-grain-1*), in showroom close-ups under the creator rig and then lit by hand: no dots or grid any more, but in the maintainer's words it "reads more like a glossy vinyl than a shimmer" ([experiment 032 §4.3](../../experiments/032-sessions-5-6/README.md#43-finish-verdicts-the-maintainers-words)). The uniform covered surface dominates the sparse grain. The reworked Shimmer is [N14](#n14-finish-verdicts-in-the-showroom) 14.1.
 
-| # | Ask | Settles → unblocks | Drive | Min | Evidence | Pass / fail |
-|---|---|---|---|---:|---|---|
-| 2.8 | *Shimmer · strong* on the grain build: face framing, then the eyes framing, then DLAA | Whether the grain reads as shimmer → Shimmer leaves experimental or falls back | C: `cc_apply {option:"XF",index:9}`, `photo_frame` face then eyes, `photo_frame {yaw_offset: ±15, ±30}` under the same light, `capture_burst {region:"eyes",frames:10}` at the eyes framing; M switches DLSS to DLAA and back for one repeat of the eyes burst | 8 | Face and eyes captures at 0° and ±15°/±30°, two eyes bursts (DLSS, DLAA) | **Pass:** at face framing neither Shimmer stripe shows any dots or grid; both read as a smooth sheen that is softer, brighter and slightly pigment-tinted beside the Satin stripe, and it moves with the light. At the eyes framing there is a fine, pinpoint sparkle that changes as the light turns, with nothing that stays put. **Fail:** dots at face framing means the build is not the grain (check the staged hashes). Shimmer identical to Satin means the grain or tint is too weak. A hard, plastic-looking lid is the SSS switch (fall back to metalness 0.08). A crawl while V and the light are still is the upscaler: compare with DLAA |
+## N14. Finish verdicts in the showroom
 
-## N3. Glitter board
+XF Finish Showroom's fidelity check passed in session 5 (the maintainer: "you pretty well nailed the mannequin head's materials"), so finish verdicts come from showroom heads rather than per-finish creator visits ([experiment 032](../../experiments/032-sessions-5-6/README.md#32-xf-finish-showroom-n14), [knowledge](../../knowledge/skin-on-spawned-objects.md#43-the-fidelity-check)). The showroom's steps and commands are the test card's [finish showroom checks](runtime-bridge-test-card.md#finish-showroom-checks-bridge-050); use the close-up protocol that worked in session 6 (under photo-mode framing above), then clear the rig alone (`showroom_clear {what: "lights"}` keeps the heads) and hand over: **M lights the head by hand** with photo mode's lights (CharLi) and gives the verdict. N3 (the Glitter board) is folded in: its candidate A was judged in session 6, and its remaining route questions run on the rework's candidate.
 
-The coordinator stages [experiment 021](../../experiments/021-glitter-board/README.md)'s candidate after N2, replacing the session 2 pair, and records the promotion receipt; M relaunches. Script: `session-3.json` part `a` ([session 3 Part A](../../experiments/022-session-3/README.md#part-a-glitter-board)). M opens the creator 7 times, switches the upscaler to DLAA and back, and answers the dark-scene and motion verdicts. Winterkissed is enabled, so step 9 can run: C `cc_apply` Golden Girl instead of M equipping it.
+**Stage:** the finishes rework's showroom build (the reworked Shimmer and Glitter beside session 2's Gloss presets), built with the current bridge's showroom column; record its SHA-256. Not built yet; the rework's designs are in [finish designs](../materials/finish-designs/README.md).
 
 | # | Ask | Settles → unblocks | Min | Evidence | Pass / fail |
 |---|---|---|---:|---|---|
-| 3.1 | Steps 1–4: flake points, nested against box mips | Flake size and mip scheme → the Glitter export route ([Glitter in game](../../knowledge/glitter-in-game.md)) | 10 | Sweep and orbit captures, pull-back bursts | Pass: points switch on and off on the left lid, and nested mips keep them longer than box |
-| 3.2 | Step 5: DLSS against DLAA | Whether the upscaler eats the finest stripe | 5 | Same framings in both modes | Record where points vanish |
-| 3.3 | Steps 6–8: shine, tilt, accent, clearing | Decal open question 1 (`MaterialModifiersConsts[2].x` on a CCXL component) | 8 | Captures in normal light and in the dark; E → A → Off | Pass: accent points visible in the dark and none left after Off. "Accent absent" is itself the answer |
-| 3.4 | Step 9: Winterkissed Golden Girl | A community reference at the same framings | 2 | Two captures | — |
+| 14.1 | The reworked **Shimmer** | Whether Shimmer leaves experimental | 6 | Creator-rig close-ups at −30/0/+30; M's hand-lit verdict in words | **Pass:** it reads as shimmer by the agreed definition (dense, fine platelets lying mostly flat: a coherent sliding sheen, faint pinpoints, an interference tint), not as glossy vinyl (session 6's grain) and not as dots (session 4's facets) |
+| 14.2 | The reworked **Glitter** beside the Studio's own glitter preview of the same preset | The Glitter export route | 8 | Close-ups; M's verdict; the Studio's render of the preset whose model M liked | **Pass:** distinct flashes that answer the light as the head turns, as in the Studio's good models, not flecks printed on the base (session 6's board A) |
+| 14.3 | Gloss B and D close-ups beside A and C | Whether the Gloss presets give distinct finishes, not only A against C | 4 | Close-ups | Record which separate; A and C already do |
+| 14.4 | Glitter in motion and under the upscaler (board steps 1–5, card L4): `capture_burst {region: "face", frames: 10}` at 0° and after `showroom_rotate {yaw_deg: 10}`; M switches DLSS to DLAA and back for one repeat | Flake size and mips; whether the upscaler eats the points | 5 | Bursts, both modes | Points change with the turn and not while still; record where they vanish |
+| 14.5 | Glitter in the dark and cleared (board steps 6–8), if the rework keeps an accent | Decal open question 1 (`MaterialModifiersConsts[2].x` on a CCXL component) | 3 | Captures in normal light and in the dark; the preset, then Off on V | Accent points visible in the dark, and none left after Off. "Accent absent" is itself the answer |
 
-## N14. XF Finish Showroom
-
-XF Finish Showroom sets mannequin heads wearing the presets side by side in front of the camera, each lit by the creator's own rig or its key light in its own frame, and turns them for highlight sweeps ([pipeline guide](../authoring/studio-to-mod-pipeline.md#xf-finish-showroom-a-test-mod-of-mannequin-heads), [knowledge](../../knowledge/skin-on-spawned-objects.md)). The steps, staging and fallbacks are the test card's [finish showroom checks](runtime-bridge-test-card.md#finish-showroom-checks-bridge-050). M loads the save and gives one verdict; C drives the rest.
-
-| # | Ask | Settles → unblocks | Min | Evidence | Pass / fail |
-|---|---|---|---:|---|---|
-| 14.1 | F1–F4: the head spawns (in normal play, then in photo mode) and stands right | Whether static heads on the player head's rig draw at all; whether spawning works in photo mode | 6 | Captures of the first head; `showroom_state` | Pass: head on its pedestal, facing V or the camera, lashes and eyes present, the preset on its lids |
-| 14.2 | F5–F8: fidelity, the head beside V under the same key and creator rig | Whether showroom verdicts stand in for verdicts on V → the lineup, and later finish work | 10 | The fidelity sheet and sweep | Pass: M judges Gloss A the same on both. Fail: record what differs (sheen, colour, edges, brightness) |
-| 14.3 | L1–L4: the lineup, key-lit sweep, creator-lit close-ups, Glitter burst | Gloss A–D separation, the Shimmer grain, Glitter points, under identical light → the finish backlog | 12 | Lineup sheet, per-preset strips, burst manifest | Record per preset; the Shimmer and Glitter verdicts follow the Shimmer and Glitter rows' criteria |
-| 14.4 | K1–K2: the kill switch and a load leave nothing | The showroom's cleanup promise | 2 | Before and after captures | Pass: nothing remains |
+Afterwards: the verdicts go to the [finish designs](../materials/finish-designs/README.md) and [Glitter in game](../../knowledge/glitter-in-game.md); `showroom_clear {}` and a load leave nothing (session 6).
 
 ## N4. XF Piercings Probe
 
@@ -128,11 +122,11 @@ Female V, with the probe enabled. Run it after N2, on the same launch or a later
 
 | # | Checks | Settles → unblocks | Drive | Min | Pass / fail (summary; full criteria on the card) |
 |---|---|---|---|---:|---|
-| 4.1 | 1 (registration) | Rows per area appear after Piercings; nothing replaced | M: F12. C: `player_appearance` for both XF rows and `piercings` | 2 | Off + 2 and Off + 3; vanilla Off + 14, with PRC's option 12 intact |
+| 4.1 | 1 (registration) | Rows per area appear after Piercings; nothing replaced | C: `cc_open`, `player_appearance` for both XF rows and `piercings` | 2 | Off + 2 and Off + 3; vanilla Off + 14, with PRC's option 12 intact |
 | 4.2 | 2, 3, 12 (layering, mix, PRC) | Own rows coexist with vanilla and PRC | C: `cc_apply` only | 4 | All pieces visible together; each row changes independently |
 | 4.3 | 4, 5 (sliders; ear-only hoop against the jaw) | Rigid anchor copy against per-vertex transfer; which regions a piece needs → **attachment-solver defaults** | C: `cc_apply` ×25 with captures, then restore | 7 | Pieces stay seated; the ear-only hoop drifts under `jaw` |
 | 4.4 | 6, 7, 8 (skinning, materials, photo mode) | Skinning through expressions; vanilla `.mi` on our UVs | C: `cc_confirm`, `photo_open`, `photo_frame` ±60°, `photo_expression_set` ×2, `photo_exit`; M reopens the creator once | 8 | No gap or penetration; gold and silver read like the vanilla metals |
-| 4.5 | 9 (persistence, Off, Back) | Save round trip | M: save, reload, F12. C: reads, `cc_apply` Off, `cc_back` | 3 | Looks persist; Off clears both; Back discards |
+| 4.5 | 9 (persistence, Off, Back) | Save round trip | M: save, reload. C: `cc_open`, reads, `cc_apply` Off, `cc_back` | 3 | Looks persist; Off clears both; Back discards |
 | 4.6 | 10 (headgear) | Whether a visual-tag task is needed | M equips a helmet and then a mask; C frames and captures | 4 | Record whether the XF pieces hide when vanilla 06 hides |
 | 4.7 | Prepare check 11 for N9 | — | M: a **throwaway** save with ears 1 and nose 3 | 1 | — |
 
@@ -149,7 +143,7 @@ This sitting is one creator visit, driven by `cc_apply` and captures, and is nev
 | 5.4 | Head CC 10, first half: iris axis and orientation | Sign of the per-eye axis; texture-iris orientation | Light blue straight on; one graphic texture eye (options 62–71) | 2 | Eyes close-ups | Compare with the preview at 5° outward and 5° inward; the iris should be the same way up as in the preview |
 | 5.6 | **Repeat with XF Off** (session 4 had XF Metal on V; tattoos drew over the blush, the lower lid and brow tail weren't readable). Decal order: head CC 3, tattoos 1, face makeup 2, brows 3 | Draw order within a priority → preview decal stacking | `makeupEyes` 5 black, `makeupCheeks` 10, `facial_tattoo` at both choice 2 and choice 8 (`facial_tattoo_02`; the two asks number it differently), brows 1 | 3 | Face and eyes captures | Record which draws on top at the lower lid, the cheekbone and the brow tail |
 | 5.7 | **Blush half open:** cheek choice 1 is a freckle pattern, so pick two blush choices; tattoo 2 read slightly stronger than 9 in session 4. Face makeup 3 and tattoos 5: strength anchors | Preview alpha clamp and tattoo opacity | Blush 5 against blush 1 in one colour; face tattoos 9 and 2 on tone 1 and a dark tone | 3 | Face captures | Record the strengths. Both tattoos should look partly transparent, with 2 slightly stronger |
-| 5.9 | **Now the metal step:** session 4's silver ring body read 58–95/255, not near black, with ray tracing and Ultra+ on. Creator lighting 3: ray tracing off (only if RT is on) | Ray-traced self-bounce on metal | M: RT off in the settings, then F12. C: 5.5's silver frame. M: RT back on | 3 | One capture | Any difference is ray-traced |
+| 5.9 | **Now the metal step:** session 4's silver ring body read 58–95/255, not near black, with ray tracing and Ultra+ on. Creator lighting 3: ray tracing off (only if RT is on) | Ray-traced self-bounce on metal | M: RT off in the settings. C: `cc_open`, 5.5's silver frame. M: RT back on | 3 | One capture | Any difference is ray-traced |
 
 ## N6. Creator sweep B: rows, links, hair calibration, body, blink
 
@@ -180,7 +174,7 @@ Use photo mode throughout, with XF Off. R1, R2, the back-lit ear and the parting
 
 ## N8. Photo mode: vanilla finishes under a sweep
 
-Three creator visits, each changing lips, cheeks and brows at once (they don't overlap), then `cc_confirm` → `photo_open` → face framing, light 1 on, yaw ±30, with lip, cheek and brow crops through `capture_recrop`. M presses F12 per visit. Sources: [head CC 4 and 13](../../knowledge/head-cc-rendering.md#in-game-test-asks), [face makeup 1](../../knowledge/face-makeup.md#in-game-test-asks), [brows 2](../../knowledge/brows.md#in-game-test-asks) and [shader-hair 3](../materials/shader-hair.md#13-in-game-test-asks-batch-into-the-prepared-session).
+Three creator visits, each changing lips, cheeks and brows at once (they don't overlap), then `cc_confirm` → `photo_open` → face framing, light 1 on, yaw ±30, with lip, cheek and brow crops through `capture_recrop`. C opens each visit with `cc_open`. Sources: [head CC 4 and 13](../../knowledge/head-cc-rendering.md#in-game-test-asks), [face makeup 1](../../knowledge/face-makeup.md#in-game-test-asks), [brows 2](../../knowledge/brows.md#in-game-test-asks) and [shader-hair 3](../materials/shader-hair.md#13-in-game-test-asks-batch-into-the-prepared-session).
 
 | # | Ask | Settles → unblocks | Drive | Min | Pass / fail |
 |---|---|---|---|---:|---|
@@ -196,7 +190,7 @@ This sitting needs two throwaway saves, T1 (probe looks, from 4.7) and T2 (a pac
 
 | # | Ask | Settles → unblocks | Drive | Min | Pass / fail |
 |---|---|---|---|---:|---|
-| 9.1 | Load T1: face and piercing rows, load warning | Whether the probe needs tombstones | M loads T1 and presses F12. C: `player_appearance` for `piercings` and both XF rows, then capture | 4 | Record what shows and any warning. A warning that doesn't name its mod means splitting the toggles next time |
+| 9.1 | Load T1: face and piercing rows, load warning | Whether the probe needs tombstones | M loads T1. C: `cc_open`, `player_appearance` for `piercings` and both XF rows, then capture | 4 | Record what shows and any warning. A warning that doesn't name its mod means splitting the toggles next time |
 | 9.2 | Load T2: eyes and hair, mirror state | Removed-colour fallback | Same, for `eyes_color` and `hair_color` | 4 | Record it (black, blonde or other) |
 | 9.3 | Hairstyle 1 brown liquorice, 5 blonde platinum, lashes 05 brown liquorice | `.hp` mod-over-base in game | C: `cc_apply` and captures against 6.7's frames | 3 | A visible change confirms mod over base |
 | 9.4 | Skin type 5, warm ivory (`skin_color` index 1) | Complexion replacer over base albedo | Against 5.2's frame at the same index | 1 | A visible change confirms it |
@@ -260,6 +254,14 @@ Afterwards M may leave the both-body build staged (it replaces the alpha.2 expor
 
 Answered rows move here from their sittings, with one line each; the detail is on the linked pages.
 
+**Sessions 5 and 6** (29 September 2026, bridges 0.5.1 and 0.5.2, [experiment 032](../../experiments/032-sessions-5-6/README.md)):
+- **N14's spawn, fidelity and cleanup rows, the showroom.** Heads spawn in normal play and in photo mode, face V or the camera and wear eyes, lashes and makeup; since 0.5.2 the neck sits in its pedestal. **Fidelity: Pass** (the maintainer: "you pretty well nailed the mannequin head's materials"). The kill switch and a load leave nothing ([skin on spawned objects §4.3](../../knowledge/skin-on-spawned-objects.md#43-the-fidelity-check)). The lineup under one key light was too dark and too wide to judge; one head at a time in close-up works.
+- **1.5, Gloss A against C, in close-up.** They now separate clearly (A wet streaks, C flat). B and D not yet close-upped (14.3).
+- **2.8, Shimmer grain:** Fail, "reads more like a glossy vinyl than a shimmer" ([above](#shimmer-grain-check)).
+- **N3, Glitter board candidate A** (in the showroom, hand-lit): Fail, "the flecks just look printed on top of the purple base"; the Studio's own good glitter models are the target. The board's route rows move to N14.
+- **Bridge.** The creator opens from the street, away from any mirror, with either edit tag (the game reports NewGame) and without CCA ([runtime access §5](../../knowledge/runtime-access.md#5-phase-2-commands-writes-and-captures)); photo mode opens only with the game in front; framing is stable; photo mode's own clock, exposure and expressions by faceId work; loads no longer crash ([game crashes §2.3](../../knowledge/game-crashes.md#23-calling-scripts-while-a-save-loads)). Photo mode's camera can't be placed directly.
+- **2.6 headgear, again blocked:** an active outfit hides everything equipped only through the inventory; the helmet draws when equipped through the wardrobe screen ([worn clothing](../../knowledge/clothing.md#in-game-results-sessions-5-and-6)).
+
 **Session 4** (28 September 2026, bridge 0.4.1, [experiment 029](../../experiments/029-session-4/README.md#3-results)):
 - **N1, bridge autonomy.** The 0.4.1 preflight passed P1–P3, P6 (a light placed about V holds and lights the face) and P11b. It failed P7 (a light re-placed at the camera) and P9 (`cc.open` away from a mirror); F12 opens a creator whose Confirm keeps the look ([photo mode §3.1](../../knowledge/photo-mode.md#31-how-character-customization-anywhere-opens-it)).
 - **1.5, Gloss A–D** under a controlled neutral light. Gloss C is clearly the flattest, so the written roughness drives the shine. A, B and D look wet, and the stripes don't separate at face framing. Shimmer · strong is a regular grid of dots, far too large ([decal reference §13](../materials/shader-decal.md#13-in-game-test-asks-batch-into-the-prepared-session)).
@@ -278,7 +280,7 @@ Answered rows move here from their sittings, with one line each; the detail is o
 | Hair in ambient light in the preview (compare 8.4) | [Shader-hair §11](../materials/shader-hair.md) | The **hair bake and ambient** work in the same head-completeness track. The game captures can be taken now |
 | "Add to my mod manager" hands-on test (a Studio test, not in game) | [Code health INSTALL-01](../authoring/code-health.md) | The **install fix** (cleanup-install track, running). Until it lands, nobody presses Add |
 | Legacy makeup rows Off; legacy layers in head CC 13 | [CC file chain 12](../../knowledge/cc-file-chain.md#in-game-test-asks), [session 3 C4](../../experiments/022-session-3/README.md#part-c-creator-and-piercings) | The legacy build is disabled in the test profile (enabling it adds a second selector). Needs a decision: a separate profile, or drop the ask |
-| Creator rows in a new game; creator against the mirror | [CC file chain 10](../../knowledge/cc-file-chain.md#in-game-test-asks), [creator lighting 4](../../knowledge/creator-lighting.md#indirect-light-checks-same-session-four-short-steps) | A new-game start (the bridge doesn't drive the new-game creator). Run them in [N12](#n12-masculine-v-xf-eye-artistry-for-him)'s new-game creator, before 12.2 |
+| Creator rows in a new game; creator against the mirror | [CC file chain 10](../../knowledge/cc-file-chain.md#in-game-test-asks), [creator lighting 4](../../knowledge/creator-lighting.md#indirect-light-checks-same-session-four-short-steps) | A new-game start (the bridge doesn't drive the new-game creator; its own creator reports NewGame and the new-game editable set, so a row listing there is a useful first look, but not the reference). Run them in [N12](#n12-masculine-v-xf-eye-artistry-for-him)'s new-game creator, before 12.2 |
 | Brow and cheek build asks; the hair colour probe (items 1–5, 7–9, 11–13) | [Brow editor §7](../brows/brow-editor-design.md#7-open-facts-and-runtime-test-asks), [brows and cheeks brief](../backlog/brows-and-cheeks-brief.md#runtime-questions-to-batch-into-a-future-session), [hair colour §6](../hair/hair-colour-authoring-feasibility.md#6-in-game-checklist) | Their builds (not started; brows, cheeks and hair colour are awaiting discussion) |
 | Expressions R3; R1 without the Mega Pack, and R1 in the creator and gameplay; R6–R8 | [Expression editor §8](../animation/expression-editor-design.md#8-runtime-questions-r1r5-through-the-bridge), [expressions brief](../backlog/expressions-and-idles-brief.md#runtime-questions-for-one-batched-session) | A test archive (R3; export no longer needs it) and a throwaway profile. R4–R5 are now [N11](#n11-xf-expressions-set-in-photo-mode-r4r5). Session 3 Part D's CET lines are superseded by the bridge's R1 and R2 (answered in session 4); keep them only as a fallback |
 | CET hair-option dump | [Shader-hair 1](../materials/shader-hair.md#13-in-game-test-asks-batch-into-the-prepared-session) | Runnable now by M pasting into the CET console (2 min, add to N6 6.7), or by the bridge (suggestion B6) |
@@ -293,7 +295,7 @@ Player steps this plan still needs, and what would remove them. B1, B2, B3, B6, 
 
 | # | Capability | Removes | Plan rows |
 |---|---|---|---|
-| B1 | **`cc.open`** (autonomy rank 4) | Every "open the creator" ask: about 30 across N1–N8 | 1.5, 2.1–2.4, N3, 4.4, 5.8, 8.1–8.5 |
+| B1 | **`cc.open`** (autonomy rank 4): **works in game** since 0.5.1 (sessions 5–6), away from mirrors and without CCA | Every "open the creator" ask: about 30 across N1–N8 | 4.1, 4.4, 4.5, N5, N6, 8.1–8.5, 9.1 |
 | B2 | `world.time.set` while the appearance screen is open, or photo mode's time attribute (rank 7) | Leaving and reopening the creator twice | 5.8 |
 | B3 | Session scripts use `cc_apply` for piercings, eye colour, eye shape and hairstyle (a script generator change only) | 12 hand asks in `session-2.json` p3 and `session-3.json` B–C | 5.5, 6.4, 6.10 |
 | B4 | A read (then write) of graphics settings: upscaler, DLAA, RT and PT, SSS quality | The setup notes and the DLAA and SSS switches; E0 recorded automatically | 2.5, 3.2, 5.1, 5.9, 7.6 |
