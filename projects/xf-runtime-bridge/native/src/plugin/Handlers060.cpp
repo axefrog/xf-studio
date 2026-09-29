@@ -16,6 +16,7 @@
 
 #include "core/Behaviours.hpp"
 #include "core/Events.hpp"
+#include "core/Params.hpp"
 #include "core/Player.hpp"
 #include "core/Scene.hpp"
 #include "core/Writes.hpp"
@@ -336,6 +337,81 @@ json PlayerAction(const MethodContext& aContext)
     return out;
 }
 
+// --- photo.camera.preset (research) ---------------------------------------------------------------
+
+// Reads the preset's flats (the undo's values), writes the given ones and rebuilds the record, selects the preset (through
+// Customization first, so photo mode applies it again), waits four ticks and reads the camera back.
+json PhotoCameraPreset(const MethodContext& aContext)
+{
+    const auto request = scene::ParsePreset(aContext.params);
+    const auto cid = aContext.cid;
+    auto& queue = Get().queue;
+    const int32_t preset = request.preset;
+    const auto before = Game(
+        [cid, preset] {
+            int32_t p = preset;
+            return ScriptCall("XFPresetRewrite", "Read", {"Int32"}, {&p}, cid);
+        },
+        "photo.camera.preset.read");
+    const auto cameraBefore = Game([cid] { return ScriptCall("XFPhoto", "CameraReading", {}, {}, cid); }, "photo.camera.read");
+    json written = json::object();
+    if (!request.values.empty())
+    {
+        TheDispatcher().RequireWritesOpen();
+        Game(
+            [cid, preset, values = request.values] {
+                for (const auto& [name, value] : values)
+                {
+                    int32_t p = preset;
+                    RED4ext::CString flat(name.c_str());
+                    float v = value;
+                    ScriptCall("XFPresetRewrite", "Write", {"Int32", "String", "Float"}, {&p, &flat, &v}, cid);
+                }
+                int32_t p = preset;
+                return ScriptCall("XFPresetRewrite", "Commit", {"Int32"}, {&p}, cid);
+            },
+            "photo.camera.preset.write");
+        for (const auto& [name, value] : request.values)
+        {
+            written[name] = value;
+        }
+    }
+    json selected = nullptr;
+    const int32_t choose = request.selectAfter >= 0 ? request.selectAfter : request.select ? preset : -1;
+    if (choose >= 0)
+    {
+        TheDispatcher().RequireWritesOpen();
+        selected = Game(
+            [cid, choose] {
+                int32_t key = params::key::kCameraPreset;
+                float none = 0.0f;
+                auto first = ScriptCall("XFPhoto", "SetAttribute", {"Int32", "Float"}, {&key, &none}, cid);
+                float wanted = static_cast<float>(choose);
+                auto then = ScriptCall("XFPhoto", "SetAttribute", {"Int32", "Float"}, {&key, &wanted}, cid);
+                then["before"] = first.value("before", json());
+                return then;
+            },
+            "photo.camera.preset.select");
+        if (!writes::WaitTicks(queue, 4, GameTimeout()))
+        {
+            throw MethodError("timeout", "the game didn't tick after the preset was selected; photo.subject shows where the camera is");
+        }
+    }
+    const auto cameraAfter = Game([cid] { return ScriptCall("XFPhoto", "CameraReading", {}, {}, cid); }, "photo.camera.read");
+    const auto p0 = cameraBefore.value("position", json::object()), p1 = cameraAfter.value("position", json::object());
+    const double moved = std::hypot(p1.value("x", 0.0) - p0.value("x", 0.0), p1.value("y", 0.0) - p0.value("y", 0.0), p1.value("z", 0.0) - p0.value("z", 0.0));
+    json undoParams{{"preset", preset}, {"values", before.value("flats", json::object())}, {"select", false}};
+    if (selected.is_object() && selected.contains("before") && selected["before"].is_number())
+    {
+        undoParams["camera_preset"] = static_cast<int32_t>(std::lround(selected["before"].get<double>()));
+    }
+    return json{{"preset", preset}, {"before", before.value("flats", json())}, {"written", written}, {"selected", selected},
+                {"camera_before", cameraBefore}, {"camera_after", cameraAfter}, {"camera_moved_m", std::round(moved * 1000.0) / 1000.0},
+                {"note", "research: whether photo mode reads the preset's record when it is selected is what camera_moved_m and camera_after show"},
+                {"undo", {{"method", "photo.camera.preset"}, {"params", undoParams}}},
+                {"undo_note", "writes the preset's earlier values back and selects the earlier preset; the values also go when the game restarts"}};
+}
+
 // --- input.probe --------------------------------------------------------------------------------
 
 std::string NameOf(RED4ext::CName aName)
@@ -581,6 +657,8 @@ void RegisterMethods060(Dispatcher& aDispatcher)
     aDispatcher.Register({"player.stop", Access::Control, RunOn::BridgeThread, "Stops every motion and lifts every effect the bridge put on V.", &PlayerStop});
     aDispatcher.Register({"player.interact.list", Access::Read, RunOn::GameThread, "What the HUD offers to interact with.", &PlayerInteractList});
     aDispatcher.Register({"player.action", Access::WritePlayer, RunOn::GameThread, "A system-driven action: crouch, stand, weapons, menus.", &PlayerAction});
+    aDispatcher.Register(MarkedWrite("photo.camera.preset", Access::WritePhoto, RunOn::BridgeThread,
+                                     "Research: rewrites a photo-mode camera preset through TweakXL, selects it and reads the camera back.", &PhotoCameraPreset));
     aDispatcher.Register({"input.probe", Access::Read, RunOn::GameThread, "Read-only probe of the game's test input system and the pad import.", &InputProbe});
 }
 } // namespace xfb::plugin

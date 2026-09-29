@@ -31,7 +31,7 @@ import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
-import { BEHAVE_COMMANDS, PLAYER_COMMANDS, SCENE_COMMANDS, withOverlayCleared } from "./catalogue060.ts";
+import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, withOverlayCleared } from "./catalogue060.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
 import { readFileSync } from "node:fs";
@@ -957,6 +957,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     undo: "the result's undo puts the camera back where it was, looking the same way; closing photo mode resets the camera anyway.",
     local: runCameraPlace,
   },
+  PRESET_COMMAND,
   {
     name: "photo.light.set",
     title: "Adjust a photo-mode light",

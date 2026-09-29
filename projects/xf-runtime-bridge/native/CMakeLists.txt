@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.5.3
+  VERSION 0.6.0
   LANGUAGES CXX RC
 )
 

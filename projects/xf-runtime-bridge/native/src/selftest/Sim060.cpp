@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <mutex>
 
 #include "core/Log.hpp"
@@ -63,7 +64,7 @@ struct Camera
 // A static occluder: a wall box between the camera's side and the far NPC.
 bool Blocked(const Vec3& aFrom, const Vec3& aTo, Vec3& aHit)
 {
-    const Vec3 lo{103.0, 199.0, 9.0}, hi{106.0, 199.4, 13.0};
+    const Vec3 lo{100.8, 199.0, 9.0}, hi{103.0, 199.4, 13.0};
     double t0 = 0.0, t1 = 1.0;
     const Vec3 d = Sub(aTo, aFrom);
     for (int i = 0; i < 3; ++i)
@@ -138,6 +139,9 @@ struct Sim060::State
     // A look-at in progress: the camera turns towards the point over the duration.
     bool looking = false;
     double lookFromYaw = 0, lookFromPitch = 0, lookToYaw = 0, lookToPitch = 0, lookT = 0, lookDuration = 1;
+    // photo.camera.preset: each preset's flats and the selected preset (0: Customization).
+    std::map<int32_t, std::map<std::string, double>> presets;
+    int32_t selectedPreset = 0;
 };
 
 Sim060::Sim060(Dispatcher& aDispatcher, GameThreadQueue& aQueue, const Config& aConfig, SimHooks aHooks)
@@ -642,6 +646,57 @@ void Sim060::Register()
                                            {"game_in_front", false},
                                            {"xinput_imports", json::array({{{"dll", "XINPUT9_1_0.dll"}, {"function", "XInputGetState"}, {"resolves_to", "XINPUT9_1_0.dll"}}})}};
                            }});
+    // photo.camera.preset (research): the simulated TweakDB holds each preset's flats; selecting a preset puts the simulated
+    // camera at its distance (the answer's camera readings), as the game might if photo mode reads the record on selection.
+    m_dispatcher.Register(marked("photo.camera.preset", Access::WritePhoto, RunOn::BridgeThread, "Rewrites a camera preset (simulated).", [self](const MethodContext& aContext) {
+        const auto request = scene::ParsePreset(aContext.params);
+        if (self->m_hooks.phase() != "photo_mode")
+        {
+            throw MethodError("not_in_photo_mode", "simulated: photo mode is not open");
+        }
+        std::scoped_lock _(self->m_state->mutex);
+        auto& s = *self->m_state;
+        auto& flats = s.presets[request.preset];
+        if (flats.empty())
+        {
+            for (const auto& [name, range] : scene::PresetFlats())
+            {
+                flats[name] = name == "dist" ? -1.8 : name == "fov" ? 25.0 : 0.0;
+            }
+        }
+        json before = json::object();
+        for (const auto& [name, value] : flats)
+        {
+            before[name] = value;
+        }
+        json written = json::object();
+        for (const auto& [name, value] : request.values)
+        {
+            flats[name] = value;
+            written[name] = value;
+        }
+        const auto cameraOf = [&](int32_t aPreset) {
+            const double dist = aPreset > 0 ? -s.presets[aPreset]["dist"] : 1.0;
+            return json{{"position", {{"x", 100.0}, {"y", 200.5 - dist}, {"z", 11.7}}}, {"forward", {{"x", 0.0}, {"y", 1.0}, {"z", 0.0}}}, {"fov", 30.0}};
+        };
+        const auto cameraBefore = cameraOf(s.selectedPreset);
+        const int32_t earlier = s.selectedPreset;
+        const int32_t choose = request.selectAfter >= 0 ? request.selectAfter : request.select ? request.preset : -1;
+        if (choose >= 0)
+        {
+            s.selectedPreset = choose;
+        }
+        const auto cameraAfter = cameraOf(s.selectedPreset);
+        json undoParams{{"preset", request.preset}, {"values", before}, {"select", false}};
+        if (choose >= 0)
+        {
+            undoParams["camera_preset"] = earlier;
+        }
+        self->m_hooks.takeSaveLock();
+        const double moved = std::abs(cameraAfter["position"]["y"].get<double>() - cameraBefore["position"]["y"].get<double>());
+        return json{{"preset", request.preset}, {"before", before}, {"written", written}, {"camera_before", cameraBefore}, {"camera_after", cameraAfter},
+                    {"camera_moved_m", moved}, {"undo", {{"method", "photo.camera.preset"}, {"params", undoParams}}}};
+    }));
     // selftest.player: V's simulated state (busy with a refusal code, a position).
     m_dispatcher.Register({"selftest.player", Access::Read, RunOn::BridgeThread, "Sets V's simulated state (self-test only).", [self](const MethodContext& aContext) {
                                std::scoped_lock _(self->m_state->mutex);
@@ -706,7 +761,10 @@ void Sim060::OnDetach()
 
 void Sim060::RestoreAfterKill(json& aOut)
 {
+    // As the plugin, whose next Running tick runs every behaviour's stop step after the kill switch (the self-test host
+    // stops pumping once its listener has closed, so the step runs here).
     m_behaviours.StopAll("kill_switch");
+    m_behaviours.Tick(0.0, m_ops, m_hooks.scriptsReady());
     std::scoped_lock _(m_state->mutex);
     if (!m_state->effects.empty())
     {

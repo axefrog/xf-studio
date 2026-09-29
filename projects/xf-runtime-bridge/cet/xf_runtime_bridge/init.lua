@@ -237,6 +237,12 @@ local function runAction(action)
       state.messageOk = true
     end
     log("info", cid, "panel: writes paused=" .. tostring(answer and answer.writes_paused))
+  elseif action.name == "mark" then
+    -- 0.6: a marker in the session's event stream, for the coordinator to find (session.log); changes nothing.
+    local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF panel")
+    state.message = (ok and noted) and "Marked: the session log has a marker at this moment." or "Couldn't add the marker."
+    state.messageOk = ok and noted
+    log("info", cid, "panel: marker noted=" .. tostring(ok and noted))
   elseif action.name == "kill" then
     local ok, killed = callNative("XFBridge_Kill", "cet-panel")
     state.message = (ok and killed) and "The bridge is stopped. Reconnect starts it again." or "The bridge wasn't running."
@@ -386,7 +392,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.5.3",
+  version = "0.6.0",
   -- For other CET mods: GetMod("xf_runtime_bridge").info()
   info = function() return state.info end,
 }

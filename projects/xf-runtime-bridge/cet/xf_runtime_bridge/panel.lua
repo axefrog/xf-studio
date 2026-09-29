@@ -9,6 +9,7 @@
 --     by themselves).
 --   * Pause and resume changes, where this build allows changes at all (XFBridge_PauseWrites). Pausing can
 --     only take access away: resuming gives back exactly what the bridge's config.ini allows.
+--   * Mark this moment (0.6): a marker in the session's event stream (XFBridge_Note), for the coordinator's session.log.
 --   * Stop the bridge (the kill switch), while it listens.
 -- Buttons only queue an action; init.lua carries it out in onUpdate, never while drawing.
 
@@ -109,6 +110,10 @@ function panel.draw(state, queue)
         end
         ImGui.SameLine()
       end
+      if ImGui.Button("Mark this moment") then
+        queue("mark")
+      end
+      ImGui.SameLine()
       if ImGui.Button("Stop the bridge") then
         queue("kill")
       end

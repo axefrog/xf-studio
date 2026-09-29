@@ -58,6 +58,54 @@ ReadRequest ParseRead(const json& aParams)
     return request;
 }
 
+const std::vector<std::pair<std::string, std::pair<double, double>>>& PresetFlats()
+{
+    // Ranges wide enough for Portrait Enhancer's and the XF presets' values (knowledge/photo-mode.md section 4), narrow enough
+    // to refuse nonsense.
+    static const std::vector<std::pair<std::string, std::pair<double, double>>> flats{
+        {"dist", {-20.0, 20.0}},      {"pitchDeg", {-89.0, 89.0}},   {"yawDeg", {-180.0, 180.0}}, {"rollDeg", {-180.0, 180.0}},
+        {"distUpDown", {-5.0, 5.0}}, {"distLeftRight", {-5.0, 5.0}}, {"fov", {1.0, 120.0}}};
+    return flats;
+}
+
+PresetRequest ParsePreset(const json& aParams)
+{
+    params::RequireOnly(aParams, {"preset", "values", "select", "camera_preset"});
+    PresetRequest request;
+    request.preset = static_cast<int32_t>(params::CheckInteger(aParams, "preset", 1, 9).value_or(9));
+    if (const auto it = aParams.find("values"); it != aParams.end() && !it->is_null())
+    {
+        if (!it->is_object())
+        {
+            params::CheckFail("'values' must be {dist, pitchDeg, yawDeg, rollDeg, distUpDown, distLeftRight, fov}");
+        }
+        for (const auto& [key, value] : it->items())
+        {
+            if (std::none_of(PresetFlats().begin(), PresetFlats().end(), [&](const auto& aFlat) { return aFlat.first == key; }))
+            {
+                params::CheckFail("'values." + key.substr(0, 32) + "' isn't a camera preset value (dist, pitchDeg, yawDeg, rollDeg, distUpDown, distLeftRight, fov)");
+            }
+        }
+        for (const auto& [name, range] : PresetFlats())
+        {
+            if (const auto value = params::CheckNumber(*it, name.c_str(), range.first, range.second))
+            {
+                request.values.emplace_back(name, static_cast<float>(*value));
+            }
+        }
+    }
+    request.select = params::CheckBoolean(aParams, "select").value_or(true);
+    if (const auto after = params::CheckInteger(aParams, "camera_preset", 0, 9))
+    {
+        request.selectAfter = static_cast<int32_t>(*after);
+    }
+    if (request.values.empty() && !request.select && request.selectAfter < 0)
+    {
+        params::CheckFail("give values to write, select: true, or camera_preset");
+    }
+    return request;
+}
+
 std::string PartsText(const ReadRequest& aRequest)
 {
     std::string out;

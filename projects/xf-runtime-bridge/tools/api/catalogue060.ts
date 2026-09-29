@@ -518,3 +518,33 @@ export const PLAYER_COMMANDS: CommandDef[] = [
   },
 ];
 
+
+const presetValue = (what: string, min: number, max: number) => num(`${what}, ${min} to ${max}.`, min, max);
+
+/** photo.camera.preset (research): the second route to placing photo mode's camera (session 6: moving its entity didn't hold). */
+export const PRESET_COMMAND: CommandDef = {
+  name: "photo.camera.preset",
+  title: "Rewrite a photo-mode camera preset (research)",
+  description:
+    "Research, for placing photo mode's camera where the bridge wants it: rewrites one of photo mode's camera presets (1-9; the XF test profile's own are 6-9) in the running game through TweakXL (values: dist, pitchDeg, yawDeg, rollDeg, distUpDown, distLeftRight, fov), selects it (through Customization first, so photo mode applies it again) and reads the camera back four frames later: camera_moved_m and camera_after say whether photo mode read the new values. Nothing is saved; the undo writes the earlier values back and selects the earlier preset. Needs TweakXL (detected, never installed).",
+  permission: "write-photo",
+  input: obj({
+    preset: int("The camera preset, 1 to 9. Default 9.", 1, 9),
+    values: {
+      description: "The preset's values to write (any of them).",
+      ...obj({
+        dist: presetValue("Distance (the game's presets use negative values, in front of V)", -20, 20),
+        pitchDeg: presetValue("Pitch, degrees", -89, 89),
+        yawDeg: presetValue("Yaw, degrees", -180, 180),
+        rollDeg: presetValue("Roll, degrees", -180, 180),
+        distUpDown: presetValue("Up/down offset", -5, 5),
+        distLeftRight: presetValue("Left/right offset", -5, 5),
+        fov: presetValue("Field of view, degrees", 1, 120),
+      }),
+    },
+    select: bool("Select the preset afterwards (default true)."),
+    camera_preset: int("Select this preset instead (the undo; 0 is Customization).", 0, 9),
+  }),
+  undo: "The result's undo writes the earlier values back and selects the earlier preset; restarting the game drops the changes too.",
+  bridge: { method: "photo.camera.preset", timeoutMs: () => 10000 },
+};
