@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CharacterDetailHost, installationFingerprint, characterRequestKey, type CharacterDetailSettings } from "../src/character-detail-host";
-import { codeIdentityOf } from "../src/host-code-identity";
+import { codeIdentityOf, hostCodeIdentity, includeHostCode, memoisedRead } from "../src/host-code-identity";
 import { InstallationRegistry, installationRouteKey } from "../src/installation-registry";
 import { DiscoverySnapshots, watchDigest, watchUnchanged } from "../src/installation-snapshot";
 import { KEEP_ANSWERS, PreparedAnswers } from "../src/prepared-answers";
@@ -98,6 +98,32 @@ describe("a route's kept discovery", () => {
     expect(await snapshots.read(g.options.cacheDir, route)).toBeNull();
   });
 
+  test("a discovery that met a read failure is neither kept nor reused; an unreadable code identity is a walk (PIPE-127, PIPE-128)", async () => {
+    const g = game();
+    const route = { route: routeIdentity(g.options), limits: DISCOVERY_LIMITS };
+    const snapshots = new DiscoverySnapshots({ code: async () => "code" });
+    const walked = discoverRoute(g.options);
+    const failed = { ...walked, complete: false, issues: [...walked.issues, { code: "entry_unreadable", detail: "direct entry could not be inspected.", blocking: true }] };
+    await snapshots.write(g.options.cacheDir, route, failed);
+    expect(await snapshots.read(g.options.cacheDir, route)).toBeNull();
+    // A snapshot an earlier version kept with such an issue is not reused either.
+    await snapshots.write(g.options.cacheDir, route, walked);
+    expect(await snapshots.read(g.options.cacheDir, route)).not.toBeNull();
+    const folder = join(g.options.cacheDir, "discovery");
+    for (const name of readdirSync(folder)) {
+      const kept = JSON.parse(readFileSync(join(folder, name), "utf8"));
+      kept.discovery.issues.push({ code: "directory_unreadable", detail: "x", blocking: true });
+      writeFileSync(join(folder, name), JSON.stringify(kept));
+    }
+    expect(await snapshots.read(g.options.cacheDir, route)).toBeNull();
+    // The code identity can't be read: nothing is kept or read, and nothing throws.
+    const broken = new DiscoverySnapshots({ code: async () => { throw new Error("stat failed"); } });
+    expect(await broken.read(g.options.cacheDir, route)).toBeNull();
+    await broken.write(g.options.cacheDir, route, walked);
+    const answers = new PreparedAnswers(temporary(), { code: async () => { throw new Error("stat failed"); }, recordSchema: CHARACTER_DETAIL_SCHEMA, recordExists: () => true });
+    expect(await answers.find("route", REQUEST_A)).toBeNull();
+  });
+
   test("the registry opens from the kept discovery on a later start, and walks again once a mod changed", async () => {
     const g = game();
     const seen: ("kept" | "walked")[] = [];
@@ -130,11 +156,35 @@ describe("the host code identity", () => {
     expect(await codeIdentityOf(main)).toBe(first);
     put(other, "export const a = 2;");
     expect(await codeIdentityOf(main)).not.toBe(first);
+    // Data the code loads (the resource reader's tables, the eye plate's recipe) is part of it (PIPE-129).
+    const withJson = await codeIdentityOf(main);
+    put(join(root, "native", "rtti-subset.json"), "{}");
+    expect(await codeIdentityOf(main)).not.toBe(withJson);
     const bundle = join(root, "host.js");
     put(bundle, "bundle 1");
     const built = await codeIdentityOf(bundle);
     put(bundle, "bundle 22");
     expect(await codeIdentityOf(bundle)).not.toBe(built);
+    // A packaged host's decode worker bundle counts beside the main bundle.
+    const worker = join(root, "native-decode-worker.js");
+    put(worker, "worker 1");
+    const withWorker = await codeIdentityOf(bundle, [worker]);
+    expect(withWorker).not.toBe(await codeIdentityOf(bundle));
+    put(worker, "worker 22");
+    expect(await codeIdentityOf(bundle, [worker])).not.toBe(withWorker);
+  });
+
+  test("a failed read of the host's identity is not remembered; a counted worker bundle reads it again (PIPE-128, PIPE-129)", async () => {
+    let calls = 0;
+    const read = memoisedRead(async () => { if (++calls === 1) throw new Error("stat failed"); return `identity ${calls}`; });
+    await expect(read.get()).rejects.toThrow("stat failed");
+    expect(await read.get()).toBe("identity 2");
+    expect(await read.get()).toBe("identity 2");
+    expect(calls).toBe(2);
+    const first = await hostCodeIdentity();
+    expect(await hostCodeIdentity()).toBe(first);
+    includeHostCode(join(temporary(), "worker.js"));
+    expect(await hostCodeIdentity()).not.toBe(first);
   });
 });
 

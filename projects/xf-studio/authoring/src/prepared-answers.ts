@@ -55,8 +55,11 @@ export class PreparedAnswers {
   async find(route: string, request: CharacterRequest): Promise<KeptAnswer | null> {
     let answer: PreparedAnswer;
     try { answer = JSON.parse(await readFile(this.file(route, request), "utf8")) as PreparedAnswer; } catch { return null; }
+    let code: string;
+    // The host code identity unreadable (PIPE-128): no kept answer is served; the request prepares as before.
+    try { code = await this.options.code(); } catch { return null; }
     if (answer?.schema !== PREPARED_ANSWER_SCHEMA || answer.route !== route || answer.request !== canonicalJson(request)
-      || answer.recordSchema !== this.options.recordSchema || answer.code !== await this.options.code()
+      || answer.recordSchema !== this.options.recordSchema || answer.code !== code
       || typeof answer.record !== "string" || typeof answer.watch !== "string" || !this.options.recordExists(answer.record)) return null;
     let watch: WatchedPath[];
     try { watch = JSON.parse(await readFile(this.watchFile(answer.watch), "utf8")) as WatchedPath[]; } catch { return null; }
