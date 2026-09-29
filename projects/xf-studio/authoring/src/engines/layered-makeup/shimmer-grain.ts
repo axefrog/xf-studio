@@ -1,27 +1,32 @@
-// Shimmer's game-matched surface ("shimmer-grain-1"): a pearly sheen with a fine sparkle grain. Pure: no IO.
+// Shimmer's game-matched surface ("shimmer-grain-2"): dense pearl specks over a satin base. Pure: no IO.
 //
-// Why it looks like this (research/materials/finish-designs/shimmer.md): pearl and shimmer pigments are tens of
-// micrometres across, far below one screen pixel at any in-game framing, and REDengine's G-buffer holds one
-// normal, one roughness and one metalness per pixel (no anisotropy, sheen or second lobe on skin). So the finish
-// is built sheen-first:
+// Why it looks like this (research/materials/finish-designs/shimmer.md): pearl and shimmer pigments are dense, fine
+// platelets lying mostly flat, tens of micrometres across, far below one screen pixel at any in-game framing, and
+// REDengine's G-buffer holds one normal, one roughness and one metalness per pixel (no anisotropy, sheen or second lobe
+// on skin). Shimmer reads as a coherent sliding sheen, faint pinpoints up close and a slight tint.
 //
-// - Surface. Every covered texel writes the same roughness and metalness: a soft lobe whose reflection the
-//   pigment tints. Nothing static varies from texel to texel, so no pattern can show that does not move with
-//   the light (the retired facet bake wrote metalness and roughness per facet: static dots).
-// - Grain. A share of texels tilt their normal by 12° or more, at random azimuths; the rest are flat, so
-//   `NormalsBlendingMode` 1 writes nothing there and the skin's own normal stays. 12° clears the mode-1 gate
-//   saturate(50 − 50z) (full weight from about 11.5°), so a grain is never faded into a ripple. Grains are
-//   independent per cell (white noise at the cell pitch): no lattice, no discs.
+// - Specks. Nearly every texel (70 % + 25 % × the layer's density; 86 % by default) is a speck: its normal tilts by a
+//   narrow 13–(13 + 8 × tilt)° at a random azimuth. 13° clears the mode-1 gate saturate(50 − 50z) (full weight from about
+//   11.5°) with room for BC5's ≈ 1° error, so no speck fades into a ripple; the narrow band keeps the specks' mean on the
+//   surface normal, so together they make one coherent lobe that slides with the light. Specks are glossy and a little
+//   metallic (roughness 0.26, metalness 0.35): each is a pinpoint when it mirrors the light, tinted by the pigment.
+// - Base. The remaining texels are flat, so `NormalsBlendingMode` 1 writes nothing there and the skin's own normal stays,
+//   under a rougher satin surface (roughness 0.5, metalness 0.05, below the 0.1 at which skin loses its scattering).
+//   shimmer-grain-1 wrote one glossy surface everywhere (0.32, 0.3) under a sparse 26 % grain; in game it read as glossy
+//   vinyl (session 6), because the uniform lobe dominated and a lone one-texel grain is what temporal filtering removes.
+// - White noise. Specks are independent per cell (white noise at the cell pitch): no lattice, no discs. The one static
+//   variation, speck against base, is one texel wide, so it averages away one mip down.
 // - Scale. One grain cell is about the plate window's texel (4096 cells per unit of head UV: about 0.14 × 0.10 mm
-//   on the lids; the 2048 × 512 window texel is 0.13 × 0.12 mm). Close up, grains are a pixel or two and twinkle as
+//   on the lids; the 2048 × 512 window texel is 0.13 × 0.12 mm). Close up, specks are a pixel or two and twinkle as
 //   the light or view moves; from face framing they are sub-pixel, the mip chain averages them away and their
-//   slope variance widens the roughness (route-mip-chains.ts), so the far look is a broader, brighter sheen.
+//   slope variance widens the roughness (route-mip-chains.ts), so the far look is a broad, soft, tinted sheen.
 //
 // A map whose texels are coarser than a grain cell (a head-UV atlas diagnostic) holds the mean of its cells: the
-// mean tilt, and roughness widened by the variance of the cells inside the texel, the same α'² = α² + v rule as
-// the export's lower mips. From 16 cells per texel the mean tilt is only a few degrees, below the gate, so the
-// texel is written flat with the full expected variance. The browser preview never takes that path: it bakes the
-// grain one cell per texel over the region's optics window (`previewGrainGrid`).
+// mean tilt, the mean roughness widened by the variance of the cells inside the texel (the same α'² = ᾱ² + v rule as
+// the export's lower mips, ᾱ from the mean roughness), and the mean metalness. From 16 cells per texel the mean tilt is
+// only a few degrees, below the gate, so the texel is written flat with the full expected variance and the expected
+// surface. The browser preview never takes that path: it bakes the grain one cell per texel over the region's optics
+// window (`previewGrainGrid`).
 //
 // Determinism. The bytes are a pure function of the settings and the grid on every platform: the hash is 32-bit
 // integer arithmetic, and the only real-valued operations on the byte path are +, −, ×, ÷ and square roots, which
@@ -32,19 +37,21 @@ import type { FlakeMaps, LegacyFlakes } from "./finish";
 import { HEAD_UV_WINDOW, type UvWindow } from "./plate-uv-window";
 
 export const SHIMMER_GRAIN = Object.freeze({
-  model: "shimmer-grain-1",
+  model: "shimmer-grain-2",
   /** Grain cells per unit of head UV along each axis. */
   cellsPerUv: 4096,
-  /** Smallest grain tilt: above the ≈ 11.5° at which mode 1 writes a normal at full weight. */
-  tiltFloorDeg: 12,
-  /** Tilt range above the floor at the layer's tilt 1 (default 0.65: grains tilt 12–23.7°). */
-  tiltSpanDeg: 18,
-  /** Share of grain cells that tilt at the layer's density 1 (default 0.65: 26 %). */
-  shareMax: .4,
-  /** Written by every covered texel. Metalness above 0.1 also skips the skin's subsurface scattering under the
-   * makeup, as the game's own gold and silver blush does. */
-  roughness: .32,
-  metalness: .3,
+  /** Smallest speck tilt: above the ≈ 11.5° at which mode 1 writes a normal at full weight, with room for BC5's ≈ 1°. */
+  tiltFloorDeg: 13,
+  /** Tilt range above the floor at the layer's tilt 1 (default 0.65: specks tilt 13–18.2°): narrow, so the sheen stays coherent. */
+  tiltSpanDeg: 8,
+  /** Share of grain cells that are specks: shareBase + shareSpan × the layer's density (default 0.65: 86 %). */
+  shareBase: .7,
+  shareSpan: .25,
+  /** A speck's surface: glossy, and metallic enough for the pigment to tint its pinpoint. Metalness above 0.1 skips the skin's
+   * subsurface scattering on that texel, as the game's own gold and silver blush does. */
+  speck: Object.freeze({ roughness: .26, metalness: .35 }),
+  /** The flat texels between specks: a rougher satin, below the 0.1 metalness at which skin loses its scattering. */
+  base: Object.freeze({ roughness: .5, metalness: .05 }),
   /** From this many cells per texel the mean tilt is written flat (see the header). */
   analyticCells: 16,
   /** Largest preview grain grid (texels): the bound `assessPreviewQuality` counts and `previewGrainGrid` enforces. */
@@ -110,10 +117,15 @@ function hash(x: number, y: number, key: number) {
   return (h >>> 0) / 4294967296;
 }
 
-/** The share of grain cells that tilt, and the tilt range (radians), for a layer's classic flake settings. */
+/** The share of grain cells that are specks, and the speck tilt range (radians), for a layer's classic flake settings. */
 export function grainSettings(p: Pick<LegacyFlakes, "density" | "tilt">) {
   const low = radians(SHIMMER_GRAIN.tiltFloorDeg), high = radians(SHIMMER_GRAIN.tiltFloorDeg + SHIMMER_GRAIN.tiltSpanDeg * p.tilt);
-  return { share: SHIMMER_GRAIN.shareMax * p.density, low, high };
+  return { share: SHIMMER_GRAIN.shareBase + SHIMMER_GRAIN.shareSpan * p.density, low, high };
+}
+/** The expected surface of one grain cell: the speck share's mean roughness and metalness (what averaging keeps). */
+export function grainMeanSurface(p: Pick<LegacyFlakes, "density" | "tilt">) {
+  const { share } = grainSettings(p), { speck, base } = SHIMMER_GRAIN;
+  return { roughness: share * speck.roughness + (1 - share) * base.roughness, metalness: share * speck.metalness + (1 - share) * base.metalness };
 }
 
 /** Expected slope variance E[x² + y²] of one grain cell: share × E[sin²θ] for θ uniform on [low, high]. */
@@ -194,8 +206,10 @@ export function createShimmerGrainJob(p: LegacyFlakes, width: number, height = w
   if (!validSettings(p) || !Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 4096 || height > 4096)
     throw Error("Invalid Shimmer grain settings.");
   const settings = grainSettings(p), keys = keysOf(p.seed), cells = grainCellsPerTexel(width, height, area), n = cells.u * cells.v;
-  const analytic = n >= SHIMMER_GRAIN.analyticCells, r2 = SHIMMER_GRAIN.roughness * SHIMMER_GRAIN.roughness, alpha2 = r2 * r2;
-  const metal = toByte(SHIMMER_GRAIN.metalness), rough = toByte(quarterPower(alpha2)), full = toByte(quarterPower(alpha2 + grainVariance(p)));
+  const analytic = n >= SHIMMER_GRAIN.analyticCells, { speck, base } = SHIMMER_GRAIN, mean = grainMeanSurface(p);
+  const speckBytes = [toByte(speck.roughness), toByte(speck.metalness)], baseBytes = [toByte(base.roughness), toByte(base.metalness)];
+  const alpha2 = (r: number) => (r * r) * (r * r);
+  const full = toByte(quarterPower(alpha2(mean.roughness) + grainVariance(p))), meanMetal = toByte(mean.metalness);
   const normal = new Uint8Array(width * height * 2), surface = new Uint8Array(width * height * 2), g = new Float64Array(2);
   const texels = width * height;
   let texel = 0, done = false;
@@ -206,22 +220,24 @@ export function createShimmerGrainJob(p: LegacyFlakes, width: number, height = w
       while (!done && work < maxWork) {
         const x = texel % width, y = (texel - x) / width, o = texel * 2;
         if (analytic) {
-          normal[o] = normal[o + 1] = 128; surface[o] = full; surface[o + 1] = metal; work++;
+          normal[o] = normal[o + 1] = 128; surface[o] = full; surface[o + 1] = meanMetal; work++;
         } else if (n === 1) {
-          // One cell per texel (the export window, the preview): the grain itself on the uniform surface.
+          // One cell per texel (the export window, the preview): a speck on its glossy surface, or the flat satin base.
           grainInto(x, y, keys, settings, g);
-          normal[o] = toByte(g[0] * .5 + .5); normal[o + 1] = toByte(g[1] * .5 + .5); surface[o] = rough; surface[o + 1] = metal; work++;
+          const own = g[0] || g[1] ? speckBytes : baseBytes;
+          normal[o] = toByte(g[0] * .5 + .5); normal[o + 1] = toByte(g[1] * .5 + .5); surface[o] = own[0]; surface[o + 1] = own[1]; work++;
         } else {
-          let sx = 0, sy = 0, s2 = 0;
+          let sx = 0, sy = 0, s2 = 0, specks = 0;
           for (let j = 0; j < cells.v; j++) for (let i = 0; i < cells.u; i++) {
             grainInto(x * cells.u + i, y * cells.v + j, keys, settings, g);
             const gx = g[0], gy = g[1];
-            if (gx || gy) { sx += gx; sy += gy; s2 += gx * gx + gy * gy; }
+            if (gx || gy) { sx += gx; sy += gy; s2 += gx * gx + gy * gy; specks++; }
           }
           work += n;
-          const mx = sx / n, my = sy / n, inner = Math.max(0, s2 / n - mx * mx - my * my);
+          const mx = sx / n, my = sy / n, inner = Math.max(0, s2 / n - mx * mx - my * my), f = specks / n;
+          const r = f * speck.roughness + (1 - f) * base.roughness, m = f * speck.metalness + (1 - f) * base.metalness;
           normal[o] = toByte(mx * .5 + .5); normal[o + 1] = toByte(my * .5 + .5);
-          surface[o] = toByte(quarterPower(alpha2 + inner)); surface[o + 1] = metal;
+          surface[o] = toByte(quarterPower(alpha2(r) + inner)); surface[o + 1] = toByte(m);
         }
         if (++texel === texels) done = true;
       }

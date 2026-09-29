@@ -1,120 +1,145 @@
 # Glitter diagnostic board: the resolved-flake route, built and verified offline
 
-**Status:** built through the production pipeline with the diagnostic `glitter` knob and passed the independent verifier, 26 September 2026; rebuilt the same day after the route's code-health cleanup (regions sized from their layers' outline bounds, a stronger verifier), which changed its textures; rebuilt again on 27 September with the accent's `EmissiveEV` at 1 instead of 0 (the finish-defaults change), which changed only the plate mesh. **Not staged and not seen in game.** It is the board [experiment 018](../018-glitter-route/README.md#diagnostic-board) designed; the consolidated reading is in [Glitter in game](../../knowledge/glitter-in-game.md), and the pipeline contract is [the diagnostic Glitter route](../../research/authoring/studio-to-mod-pipeline.md#the-diagnostic-glitter-route). The production Glitter guard is unchanged: a Glitter layer in any collection is still omitted with its reason.
+**Status (29 September 2026): board 2 is built through the production pipeline and passed the independent verifier; built into XF Finish Showroom; not yet seen in game.**
+- **Board 1** (26–27 September) was judged in session 6 (29 September): "doesn't seem much like glitter" ([below](#board-1-and-its-verdict)).
+- **Board 2** reproduces the Studio's glint models with *glitter flakes 2*: every flake above the decal's normal fade, per-flake surfaces, a large population, clustering and the models' own density ([experiment 032](../032-finishes-rework/README.md)).
+
+The production Glitter guard is unchanged: a Glitter layer in any collection is still omitted with its reason, and **Glitter ships in 1.0 only if board 2 passes**. The consolidated reading is in [Glitter in game](../../knowledge/glitter-in-game.md); the pipeline contract is [the diagnostic Glitter route](../../research/authoring/studio-to-mod-pipeline.md#the-diagnostic-glitter-route).
 
 Evidence grades as in the knowledge base: **[source]** compiled programs or tool source; **[resource]** installed game or tool output; **[offline]** measured here; **[runtime]** seen in game; **[hypothesis]** not established.
 
 ## What was built
 
-- **The route** ([`glitter-route.ts`](../../projects/xf-studio/authoring/src/glitter-route.ts)): knowledge §3's primary route. One `@glitter` `mesh_decal` entry with the plate window's UV transform, `NormalAlphaTex` flake mask, `UseNormalAlphaTex` 1 and `NormalsBlendingMode` 1; five 4096 × 1024 maps (diffuse, roughness, metalness, normal, flakes) with full 13-level non-square chains drawn per level as nested flake mips.
-- **The accent** (knowledge §4): a second plate render chunk at the same 0.4 mm lift, bound to an `@accent_<preset>` entry on `mesh_decal_emissive_subsurface.mt` with a 2048² head-UV mask of the lowest-key 8 % of the left lid's flakes and `EmissiveEV` 1. Every other preset binds that chunk to `xfs_hidden`.
-- **The way in:** the diagnostic `glitter` knob in `xfs/export-diagnostics-1`, on presets whose layers are flat-finish pigment (here Satin patches). Each region names one pigment layer and gives its flake statistics, or mirrors another region's flakes; `mips: "box"` gives a region plain BOX mips below level 0 for the comparison. A region's flakes are drawn over its layer's outline bounds (knots, handles and half the feather), clipped to the plate window, at most 200,000 per region. The Studio never writes the knob, both hosts drop it, and the CLI honours it only with `--diagnostics`.
-- **The verifier** ([`glitter-checks.ts`](../../projects/xf-studio/authoring/src/features/eye-makeup/verify/glitter-checks.ts)) restates the route, the materials, the accent chunk and the chains' published properties; see [item 4 of the pipeline guide](../../research/authoring/studio-to-mod-pipeline.md#what-check-build-and-verify-each-prove).
+- **The route** ([`glitter-route.ts`](../../projects/xf-studio/authoring/src/glitter-route.ts)): knowledge §3's primary route. One `@glitter` `mesh_decal` entry with the plate window's UV transform, `NormalAlphaTex` flake mask, `UseNormalAlphaTex` 1 and `NormalsBlendingMode` 1. Five 4096 × 1024 maps (diffuse, roughness, metalness, normal, flakes) carry full 13-level non-square chains, drawn per level as nested flake mips.
+- **Glitter flakes 2** (optional fields of a region's flakes; [`export-diagnostics.ts`](../../projects/xf-studio/authoring/src/export-diagnostics.ts)):
+  - a tilt floor (`tiltMinDeg`);
+  - per-flake roughness and metalness ranges (`roughnessMax`, `metalnessMin`);
+  - a large population (`largeShare`, `largeSizeMm`);
+  - a cluster envelope (`clusterMm`, `clusterFloor`).
+
+  [`glitter-studio-flakes.ts`](../../projects/xf-studio/authoring/src/glitter-studio-flakes.ts) derives them from a Studio glint layer's settings. A region without them draws exactly board 1's catalogue.
+- **The accent** (knowledge §4): a second plate render chunk at the same 0.4 mm lift, bound to an `@accent_<preset>` entry on `mesh_decal_emissive_subsurface.mt`. It carries a 2048² head-UV mask of the lowest-key 8 % of the left lid's flakes at `EmissiveEV` 1. Every other preset binds that chunk to `xfs_hidden`.
+- **The way in:** the diagnostic `glitter` knob in `xfs/export-diagnostics-1`, on presets whose layers are flat-finish pigment (here Satin patches).
+  - Each region names one pigment layer and gives its flake statistics, or mirrors another region's flakes. `mips: "box"` gives a region plain BOX mips below level 0.
+  - A region's flakes are drawn over its layer's outline bounds, clipped to the plate window, at most 200,000 per region.
+  - The Studio never writes the knob, both hosts drop it, and the CLI honours it only with `--diagnostics`.
+- **The verifier** ([`glitter-checks.ts`](../../projects/xf-studio/authoring/src/features/eye-makeup/verify/glitter-checks.ts)) restates the route, the materials, the accent chunk and the chains' published properties. It restates flakes-2's draw order and envelope flake for flake, and checks that **no fully covered flake texel tilts less than its floor**; see [item 4 of the pipeline guide](../../research/authoring/studio-to-mod-pipeline.md#what-check-build-and-verify-each-prove).
 
 ## The board
 
-[`glitter-board.collection.json`](glitter-board.collection.json), generated by [`make-board.ts`](make-board.ts). Six presets plus Off in the **XF** selector; names are 16–19 characters. Every patch is the plum pigment `#6d4a7e` (Satin layers, base roughness 0.50, metalness 0 from the knob) with gold flakes `#e8c46a`. Lid rectangles are the finish board's (glTF UV0; left lid u 0.300–0.444, v 0.211–0.248, three stripes outer to inner; right lid mirrored). The base recipe is 0.2 mm (σ 0.35), 15 % cover, tilt 25°/50°, roughness 0.22, metalness 0.85.
+[`glitter-board.collection.json`](glitter-board.collection.json), generated by [`make-board.ts`](make-board.ts). Six presets plus Off in the **XF** selector; names are 16–22 characters. Lid rectangles are the finish board's (glTF UV0; left lid u 0.300–0.444, v 0.211–0.248; right lid mirrored). Every pigment is a Satin patch whose surface the knob sets to the Studio's glint base: roughness 0.55, metalness 0.
 
 | # | Preset | Left lid | Right lid | Tests |
 |---|---|---|---|---|
-| 1 | **Glitter A · base** | Base recipe, nested mips | Same pigment, no flakes (Satin control) | Does it read as glitter: points that flash and go dark with the light close up, some points at face framing, a sheen far away? |
-| 2 | **Glitter B · mips** | Base recipe, nested mips | The same flakes mirrored (identical level 0), plain BOX mips | Does the nested chain keep points to face framing where BOX turns to mottle? |
-| 3 | **Glitter C · size** | 0.12 · 0.25 · 0.5 mm | Mirrored stripes, other seeds | Is the 2-pixel rule real under DLSS? The 0.12 mm stripe should lose points first close up |
-| 4 | **Glitter D · surface** | Roughness 0.12 · 0.22 · 0.35 | Metalness 1.0 · 0.6 · 0.25 | Sharp and rare against broad and frequent glints; do metal 1.0 flakes read as dark dots when unlit? |
-| 5 | **Glitter E · accent** | Base recipe plus the emissive accent (8 % of flakes, `EmissiveEV` 1) | Base recipe (mirrored flakes) | Does the accent add readable sparkle at face framing? How does it look in dim light? |
-| 6 | **Glitter F · tilt** | Tilt σ/max 10°/20° · 25°/50° · 40°/70° | Mirrored stripes, other seeds | How glint frequency and orbit behaviour depend on tilt spread |
+| 1 | **Glitter A · reference** | The maintainer's reference model: the Studio's Dense fine speckles at density 0.88, fine share 0.88 and strength 16, pink `#fa006c` flakes over wine `#620422` | Same flakes, mirrored | Does the Studio model read as glitter in game: points that flash on their own as the light or view moves? |
+| 2 | **Glitter B · 1 vs 2** | Board 1's Glitter A recipe (what session 6 judged): gold over plum, 0.2 mm, 15 %, \|N(0, 25°)\| to 50° | The same sizes, cover and colours with flakes-2's tilts (14° floor, \|N(0, 16°)\| to 65°), per-flake surfaces and clustering | Isolates the normals and surfaces: does the right lid lose the "printed" look? |
+| 3 | **Glitter C · direct** | The Studio's Direct-light glints at its defaults (champagne `#eac8ae` over plum) | Mirrored | The Studio's default Glitter model, as the export draws it |
+| 4 | **Glitter D · clustered** | The Studio's Clustered fine glints at its defaults | Mirrored | Sparse, patchy glints |
+| 5 | **Glitter E · mips** | The reference flakes, nested mips | The same flakes mirrored (identical level 0), plain BOX mips | Does the nested chain keep points to face framing where BOX turns to mottle? |
+| 6 | **Glitter F · accent** | The reference flakes plus the emissive accent (8 % of flakes, `EmissiveEV` 1) | The reference flakes (mirrored) | Does the accent add readable sparkle at face framing? How does it look in dim light? |
 
-**Differences from experiment 018's fixture, all deliberate:**
-
-- The flakes come from an independent TypeScript generator with its own seeded random stream, so the individual flakes differ from `make_maps.py`'s; the statistics and nesting rules are the same.
-- The window is the production one Build derives from the plate (stored U 0.2659–0.7339, V 0.6739–0.8236), not 018's hand-picked window; texels are 0.065 × 0.059 mm at level 0.
-- Each stripe has its own seed (2077, 2078, 2079 left; 4242–4244 right), so neighbouring stripes do not repeat one flake layout at another size.
-- **The accent's `EmissiveEV` is 1.** The first builds wrote 0, until the [decal reference §5.4](../../research/materials/shader-decal.md#54-emissive-decals) showed that this template writes `EmissiveEV × EmissiveColor` as a plain product (not `2^EV`), so 0 was black. At 1 the accent writes the flake colour itself (`#e8c46a`), the brightest value that keeps every channel inside the colour's own 0–1 range: visible wherever it draws, with no over-range value for bloom to pick up; below 1 only dims it (the coordinator decisions under [decal reference §10](../../research/materials/shader-decal.md#10-recommended-changes-ranked)). The knob and the verifier now refuse an accent at 0 or below. Its opacity is still an engine modifier times the mask, so "no accent at all" remains a possible outcome (test card step 7).
-
-Represented flakes per level on the left lid of *A* (the compiler's record, [`result.json`](result.json)) [offline]:
+What the compiler drew on the left lid of *A* ([`result.json`](result.json), from [`summarize.ts`](summarize.ts)) [offline]:
 
 | Level | Texel (mm) | Flakes drawn | Mask mean |
 |---|---|---:|---:|
-| 0 (4096 × 1024) | 0.065 × 0.059 | 5,263 of 5,266 | 12.2 % |
-| 1 | 0.13 × 0.12 | 3,515 | 12.1 % |
-| 2 | 0.26 × 0.24 | 695 | 8.6 % |
-| 3 | 0.52 × 0.47 | 121 | 6.1 % |
+| 0 (4096 × 1024) | 0.065 × 0.059 | 19,665 of 21,819 | 20.6 % |
+| 1 | 0.13 × 0.12 | 4,908 | 15.0 % |
+| 2 | 0.26 × 0.24 | 875 | 10.9 % |
+| 3 | 0.52 × 0.47 | 154 | 7.4 % |
 | 4 and coarser | ≥ 1.04 | 0 (sheen only) | 0 |
 
-The mask mean here is over the region's whole rectangle, whose feathered rim holds fewer flakes; over fully covered texels it is 13.9 % (item 4). The accent holds 434 flakes at level 0, 75 at level 1 and none coarser (a 2-texel accent flake would exceed 1.2 mm).
+The authored cover is 27 %. The mask mean is over the region's whole rectangle, whose feathered rim holds fewer flakes; over fully covered texels it is 23.3 % (item 4 below). The other presets' figures are in [`result.json`](result.json); B's lids match board 1's (5,263 and 5,240 flakes at level 0).
 
 ## Offline checks before a session
 
-All four prerequisites from experiment 018 were run on this build ([`result.json`](result.json), from [`summarize.ts`](summarize.ts); WolvenKit CLI 9.0.1's own BC decode) [offline]:
+On this build ([`result.json`](result.json), WolvenKit CLI 9.0.1's own BC decode) [offline]:
 
-1. **V sign on a decoded export.** The verifier decodes a stored BC4 level of every preset itself and finds it is the export with its rows reversed, then maps the decoded diffuse coverage through the packaged transform at 19,680 plate points per chunk. Every preset matches its authored head-UV coverage (mean error 0.0013–0.0019, no point off by more than 0.5, offset estimate 0 or 1/16 texel). [`uv-window-probe.ts`](../../projects/xf-studio/authoring/tools/uv-window-probe.ts) on the same build shows the wrong alternatives fail: V offset sign flipped or V mirrored give mean errors of 0.89, rows not reversed 0.89, and 2- and 8-texel shifts are caught by the offset estimate.
-2. **BC5 on 3-texel flakes.** The angle between supplied and decoded normals on level-0 flake texels (mask ≥ ½) is 0.13–0.16° on average, 0.78–1.0° at the 95th percentile and at most 5.3–12.4° (a few edge texels). The flake mask's BC4 error on antialiased edges is 0.017 on average, 0.051–0.055 at the 95th percentile. So block compression keeps the flakes' tilts and shapes.
-3. **WolvenKit keeps the supplied nested chains** for the non-square 4096 × 1024 maps and the 2048² accent. Every supplied DDS equals the compiled chain byte for byte, and the decoded levels 1–3 of the flake mask sit 0.002–0.016 (mean absolute) from the supplied nested levels against 0.10–0.26 from a BOX chain of level 0; no decoded level differs from its supplied level by more than 0.0013 on average in any channel.
-4. **The independent verifier** passed with every glitter check: diffuse alpha is the pigment's coverage chain exactly; flakes lie only inside the pigment and near their regions; the smallest fully covered flake component holds 2.63–2.94 texels² (a 2-texel flake holds 2.6, a 1-texel speck 1); 70–81 % of each coarser level's component centroids land on a finer-level flake (an independently drawn level would score near its 15 % cover); tilts stay within each knob's maximum; level-0 mask means are 13.9–15.9 % against 15 % authored; *B*'s BOX lid equals the BOX chain byte for byte (980,704 texels); flake-free levels carry the restated sheen within one byte. The flakes' contents: on 25,500–51,100 fully covered flake texels per preset, roughness, metalness and colour are the region's flake values, 98.7–99.6 % are tilted, and every one carries the tangent of a nearby flake of the verifier's own restated catalogue; 389,000–498,000 level-0 pigment texels carry the plum and the base surface with the restated sheen. For the accent, 85 % of its 160 level-0 components away from the feathered edge (291 in all) sit within one window texel of a flake; its stored rows are reversed; and sampled at 551,060 points of the plate (91 per triangle), none of its drawn mass lies outside its layer.
+1. **V sign on a decoded export.** The verifier decodes a stored BC4 level of every preset. Mapped through the packaged transform at 19,680 plate points per chunk, every preset matches its authored head-UV coverage: mean error 0.0009–0.0020, no point off by more than 0.5, offset estimate 0 or 1/16 texel.
+2. **BC5 on the flakes.**
+   - The angle between supplied and decoded normals on level-0 flake texels (mask ≥ ½) is 0.15–0.75° on average and 0.98–2.5° at the 95th percentile. The reference model's two-texel flakes put more distinct normals in each 4 × 4 block than board 1's.
+   - **Of every fully covered flake texel supplied at 14° or steeper, 99.98–100 % keep mode 1's full weight after BC5, and none falls below half** (mean tilt loss 0.006–0.017°; [bc5-result.json](../032-finishes-rework/bc5-result.json), [`bc5-fade.ts`](../032-finishes-rework/bc5-fade.ts)).
+   - The flake mask's BC4 error on antialiased edges is 0.017–0.021 on average and 0.051–0.059 at the 95th percentile.
+3. **WolvenKit keeps the supplied nested chains** for the 4096 × 1024 maps and the 2048² accent. The decoded levels 1–3 of the flake mask sit 0.001–0.017 (mean absolute) from the supplied nested levels, against 0.10–0.30 from a BOX chain of level 0.
+4. **The independent verifier** passed with every glitter check:
+   - diffuse alpha is the pigment's coverage chain exactly, and flakes lie only inside the pigment and near their regions;
+   - the smallest fully covered flake component holds 2.56–2.94 texels² (a 2-texel flake holds 2.6);
+   - 66–85 % of each coarser level's component centroids land on a finer-level flake;
+   - tilts stay within each knob's maximum;
+   - **the least tilt of a fully covered flake texel is sine 0.238 (13.8°, the 14° floor less byte rounding)**;
+   - level-0 mask means are 6.4–23.3 % against 7–27 % authored;
+   - *E*'s BOX lid equals the BOX chain byte for byte (980,704 texels).
 
-## Build record (27 September 2026)
+   The flakes' contents: on 15,000–62,000 fully covered flake texels per preset, roughness and metalness lie in the region's per-flake ranges, colour is the region's flake colour, all are tilted, and every one carries the tangent of a nearby flake of the verifier's own restated catalogue. For the accent, 77 % of its 86 level-0 components away from the feathered edge sit within one window texel of a flake; its stored rows are reversed; and at 551,060 plate points none of its drawn mass lies outside its layer.
 
-Built with `bun tools/build_collection_package.ts --diagnostics` from the authoring directory, WolvenKit CLI 9.0.1, game 2.31 and the built-in plate (mesh `58081caf…ed26`, morph `b8b7c055…0131`), on the finish-defaults change (claude/finish-defaults). The build took about 1.5 minutes, verification included. It is private and ignored: the intermediate is in the building checkout's `projects/xf-studio/build/` and the candidate in `projects/xf-studio/dist/xfs_c0210a5e52e554c029d0b0000000000b0-1790434366284637600/`. The product builder now writes an `xfs/local-package-2` manifest, so its recorded hashes are named differently from the first builds'.
+## Build record (29 September 2026)
+
+Built as part of XF Finish Showroom (`bun tools/build_showroom_package.ts … --diagnostics`) on `claude/finishes-rework` (code as committed in `1e28c7f`), with WolvenKit CLI 9.0.1, game 2.31 and the built-in plate (mesh `58081caf…ed26`, morph `b8b7c055…0131`). The showroom's eye build is the eye-makeup pipeline unchanged. Private and ignored.
 
 | Item | Value |
 |---|---|
-| Archive `xfs_c0210a5e52e554c029d0b0000000000b0.archive` | 7,725,056 bytes, SHA-256 `f24639fe6335e5246be2b5086122d333901f7d42e18873ebf373a0a65c88c91b` |
-| `.archive.xl` | 286 bytes, SHA-256 `b0f1f3a639aa45b4960f4bd3e1fefdba9b7bda0bd5b167b40f13e095ad661607` (unchanged) |
-| Collection file | SHA-256 `a256b44cc5d41296ef19614e3b5371f190a15600f196e8f0b7a5305473ba82da` |
-| Packaged feature content | SHA-256 `28a8b0a442694d499d680540310f4fb34f7393f555448b0b7a3c04f1a14b1a49`; plan `4b48506ace93a596f1071c8cf48be84674398d04b876375222b89cb7ca53a094` |
-| Plate mesh member | SHA-256 `1afa6719f64e8c15c35c1affd03fd313e19c70eb1fd9977c55a36fb4da7032bc` (was `481c9d47…4ab8`) |
-| Members | 35: 31 textures (6 × 5 plus the accent), the plate mesh and morph, the `.app` and the customization |
-| Plate | two render chunks, both lifted 0.4 mm (`plateLiftsMm` `[0.4, 0.4]`, accent chunk 1); three material entries (`@glitter`, `@accent_…05`, `xfs_hidden`) |
+| Eye-build archive (inside the showroom) | 10,579,968 bytes, SHA-256 `7730c81179217ab8708b4320838db6a917cf4ab1ce66f99837a2274178f3eb61`; 35 members: 31 textures, the plate mesh and morph, the `.app` and the customization; two render chunks lifted 0.4 mm; three material entries (`@glitter`, `@accent_…06`, `xfs_hidden`) |
+| Showroom archive `xfs_showroom_d11f5a7fd3192b9e4f6dd14f343578b8.archive` | 9,875,456 bytes, SHA-256 `998d4bf55d6e5f270ae29a68248bdc04ee6ad080f633329ba2d359974c7fe05d`, 36 members |
+| Collection file | SHA-256 `54470576815221ff2f48d63c1548e8073b10f996ea6f67ae2bf155eef47952c1` |
 
-`tools/compare-package-candidates.ts` against the previous candidate (`…-1790380212678492199`, 26 September) finds 34 of 35 members and the `.archive.xl` byte-identical. The one different member is the plate mesh, whose serialized JSON differs only in the accent material's `EmissiveEV` (0 → 1, in the local material buffer and its raw copy). Every number in [`result.json`](result.json) except the archive hash is unchanged ([`summarize.ts`](summarize.ts) now also reads the product builder's per-feature layout). The archive hash changes on every build because WolvenKit writes build times into its index; the members and the `.archive.xl` are reproducible. GPU memory, block-compressed with full chains: about 19 MiB per glitter preset and 2.7 MiB for the accent mask.
+GPU memory, block-compressed with full chains: about 19 MiB per glitter preset and 2.7 MiB for the accent mask. An archive's hash changes on every build because WolvenKit writes build times into its index; the members are reproducible.
 
-The two builds of 26 September (6,905,856 and 7,725,056 bytes) differed in all 31 textures: the cleanup drew each region over its layer's outline bounds, which reach half the 0.004 feather beyond the knots, so every catalogue grew (the left lid of *A*: 5,266 flakes, was 4,624).
+## Board 1 and its verdict
+
+Board 1 was built on 26–27 September (archive `f24639fe…1b`, collection `a256b44c…da`; its generator and README are in git history). All six presets used experiment 018's base recipe: gold over plum, 0.2 mm, 15 %, |N(0, 25°)| to 50°, roughness 0.22, metalness 0.85. The variants were A base, B mips, C size, D surface, E accent and F tilt.
+
+**Session 6 (29 September)** [runtime]: in showroom close-ups under the creator rig (height 1.9 m, sweep −30°/0°/+30°), Glitter A showed a fine sparkle grain. Judged by hand with movable lights: "doesn't seem much like glitter". The flecks looked printed on top of the purple base, with very limited light response.
+
+Offline, the reason is the tilt distribution [offline] ([experiment 032](../032-finishes-rework/README.md#offline-evidence)):
+- 37 % of board 1's flake texels tilted less than mode 1's ≈ 11.5° fade, so they wrote no normal.
+- A third of the flakes were brightest exactly where the skin's own highlight is.
+- Up to 43 % lit under one light.
+
+Board 1's A recipe survives unchanged as the left lid of board 2's B.
 
 ## Consistency
 
-- **Session 2 unchanged.** The [experiment 020](../020-session-2/README.md) collection rebuilt with this code through the same tool (now with `--diagnostics`, which its knobs require): all 41 archive members are byte-identical to the staged build's, and so are the `.archive.xl` (`f261ddc2…`), the packaged collection hash (`3f5e0b34…`) and the archive size (1,286,144 bytes).
-- **Ordinary builds.** The [finish board](../016-finish-board/README.md) (flat, faceted and Fresnel presets) rebuilt with the route's first code gave 21 of 21 members byte-identical to the latest build from `main`. Since the cleanup, a golden test pins every committed ordinary collection's plan, plate materials, appearances and `.archive.xl`, and the finish board's and session 2's baked maps ([`ordinary-package-golden.test.ts`](../../projects/xf-studio/authoring/tests/ordinary-package-golden.test.ts)). The finish-defaults change updated it deliberately: Matte's roughness maps and the Colour-shifting materials changed, nothing else ([finish board](../016-finish-board/README.md)).
+- **Ordinary builds.** A golden test pins every committed ordinary collection's plan, plate materials, appearances and `.archive.xl`, and the finish board's and session 2's baked maps ([`ordinary-package-golden.test.ts`](../../projects/xf-studio/authoring/tests/ordinary-package-golden.test.ts)). This rework updated it deliberately for Shimmer's grain-2 maps only.
+- **Board 1's flakes are unchanged** when a region sets none of flakes-2's fields: the builder's and the verifier's catalogues and tilt variances are pinned against the first recipe in [`glitter-checks.test.ts`](../../projects/xf-studio/authoring/tests/glitter-checks.test.ts).
 
 ## Test card
 
-**Staging** (the coordinator does this after session 2; nothing here writes to MO2). Stage the candidate pair above as the **XF Eye Artistry** mod in the diagnostic MO2 profile with the existing promotion tool, replacing session 2's pair rather than adding a second selector beside it. Record the promotion receipt. Load a save, make a new manual save first (this profile shares the save folder), then use a mirror's appearance screen to pick presets and photo mode to look at them. Load the safety save afterwards.
+Session 7 runs board 2 in XF Finish Showroom, not in the creator: the finishes row of the [session-7 checks](../../research/runtime/runtime-bridge-test-card.md#session-7-checks-bridge-053). Close-ups at height 1.9 m under the creator rig, then judging by hand with movable lights.
+- **Pass for Glitter:** on A, and on C or D, individual points switch on and off as the light or the head moves, with the pigment visible between them. On B, the right lid shows that more clearly than the left.
+- **Also answered:** E and F, as board 1's test card asked (nested against BOX at pull-back; the accent in the dark and whether it clears).
 
-1. **Record the setup.** Game version; upscaler and mode (DLSS Auto, Transformer); ray tracing and path tracing state; resolution. In photo mode, turn film grain, chromatic aberration and depth of field **off** for the captures. Keep the ArchiveXL log. The **XF** selector lists Off plus six presets with the names readable.
-2. **A, close-up** (eyes fill the frame, fixed camera). Sweep one photo-mode key light slowly across the lids and take three screenshots at different light angles; a short clip if possible. Then orbit the camera with the light fixed. *Expect:* individual gold points on the left lid that switch on and off as the light moves, with the right lid smooth. Also check that the plum patches sit where session 2's patches sat (the same window placement).
-3. **A, face framing, then about 1 m.** *Expect:* a handful of points at face framing, sheen only at 1 m.
-4. **B.** From close-up, pull back slowly to face framing. Note when each lid's points disappear. *Expect:* the left (nested) keeps points longer; the right (BOX) turns to a mottled sheen.
-5. **C**, close-up and face framing, first with DLSS as set, then with **DLAA** (or the highest-quality mode) at the same framings. *Expect:* the 0.12 mm stripe (outermost) loses points first under DLSS; DLAA narrows the gap.
-6. **D and F**, close-up light sweep. Note which stripes give crisp points, broad patches or dark dots.
-7. **E**, face framing under normal light, then in a dark scene or with lights off. *Expect:* the left lid's accent points, in the flake gold, stay visible even in the dark. Is that acceptable as a labelled stylised option? Does it bloom? **Accent opacity check:** the accent draws at `MaterialModifiersConsts[2].x` × its mask, and the engine sets that modifier per draw; the mod cannot. If no accent points appear at all, even in the dark and close up, record "accent absent": it means the engine leaves the modifier at 0 on a CCXL head component (open question 1 of the [decal reference](../../research/materials/shader-decal.md#12-open-questions)), not that the mask or `EmissiveEV` is wrong, and a rebuild at a higher value would not change it. If points appear but are too faint or too strong, note which, for the next value.
-8. **A**, blink and slow head turn. Then switch E → A → Off to check that the accent chunk clears (no glowing points left on A or Off).
-9. **Optional reference.** If *Winterkissed* is already enabled in the profile (do not change the mod list for this), equip "Golden Girl" and take the same close-up and face-framing shots.
-
-Send the screenshots with a short note per step.
+The board can also be staged as XF Eye Artistry, as board 1's card planned (`--diagnostics` build, the diagnostic MO2 profile, replacing the session-2 pair).
 
 ## Proven offline, and not
 
 | Established offline | Not established |
 |---|---|
-| The route's resources, constants, chunk bindings and texture sizes, re-derived independently | Any glint, sheen or accent glow in game [hypothesis] |
-| The window's placement and V sign on the decoded maps, at the plate's own UVs | That the game samples the 4096 × 1024 window as the decompiled program says (session 2's placement pair is the first runtime check of the window) |
-| Nested chains kept by WolvenKit; BC5 and BC4 keep flake tilts and shapes | How the game's anisotropic filtering, TAA and DLSS treat 2–3 pixel flakes; any upscaler mip bias |
-| Every flake at least 2 texels wide on every level that draws flakes | Whether 2 texels survive on screen at the framings the card uses (018's estimates) |
-| The accent's mask, entry and chunk, with the other presets hiding the chunk; its `EmissiveEV` above 0 | Whether the engine lets the accent draw at all (`MaterialModifiersConsts[2].x`), what `mesh_decal_emissive_subsurface` looks like over skin, its brightness at EV 1, and whether it blooms or clears correctly on A → Off |
+| The route's resources, constants, chunk bindings and texture sizes, re-derived independently | Any glint, sheen or accent glow of board 2 in game [hypothesis] |
+| The window's placement and V sign on the decoded maps (session 2 saw the window hold in game) | How the game's anisotropic filtering, TAA and DLSS treat 2–3 pixel flakes; any upscaler mip bias |
+| Every flake at least 2 texels wide on every level that draws flakes, and at least its tilt floor, before and (99.98 %) after BC5 | Whether 2 texels survive on screen at the framings the card uses |
+| Nested chains kept by WolvenKit | Whether the accent draws at all (`MaterialModifiersConsts[2].x`) and how it looks |
 
 ## Reproduce
 
 ```powershell
 bun experiments/021-glitter-board/make-board.ts
 cd projects/xf-studio/authoring
-bun tools/build_collection_package.ts --collection ../../../experiments/021-glitter-board/glitter-board.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game> --diagnostics
-bun tools/uv-window-probe.ts ../build/<build>          # the V sign against wrong alternatives
+bun tools/build_showroom_package.ts --collection ../../../experiments/021-glitter-board/glitter-board.collection.json --plate <plate>/resources --plate-manifest <plate>/plate-manifest.json --wolvenkit <WolvenKit.CLI.exe> --gamepath <game> --diagnostics
 cd ../../..
-bun experiments/021-glitter-board/summarize.ts projects/xf-studio/build/<build> --json experiments/021-glitter-board/result.json
+bun experiments/021-glitter-board/summarize.ts <showroom build>/eye-build/<eye build> --json experiments/021-glitter-board/result.json
+bun experiments/032-finishes-rework/bc5-fade.ts <showroom build>/eye-build/<eye build> <game>
 ```
+
+`bun tools/build_collection_package.ts … --diagnostics` builds the same eye makeup as XF Eye Artistry for the creator.
 
 ## Provenance
 
-- **Game resources.** CD PROJEKT RED's installed game 2.31, read-only: the plate derived from the player head, and the template parameters of `mesh_decal.mt` and `mesh_decal_emissive_subsurface.mt` (default `SecondaryMask` white, `EmissiveMaskChannel` a Vector4) from their serialized templates.
+- **Game resources.** CD PROJEKT RED's installed game 2.31, read-only: the plate derived from the player head, and the template parameters of `mesh_decal.mt` and `mesh_decal_emissive_subsurface.mt`.
 - **Tools.** WolvenKit CLI 9.0.1 for import, serialization, export and packing.
-- **Design.** Experiment 018's measured recipe and nesting rules, independently reimplemented; redacted-c01's lesson that facets need visibly varied tilts shaped the tilt distribution; *Winterkissed* (Limerence with AllieKat) remains the in-game reference only. Both are credited in the [community credits](../../docs/community-credits.md).
+- **Design.**
+  - Experiment 018's measured recipe and nesting rules, independently reimplemented.
+  - The Studio's own glint models for flakes 2.
+  - redacted-c01's lesson that facets need visibly varied tilts shaped the tilt distribution.
+  - *Winterkissed* (Limerence with AllieKat) remains the in-game reference only.
+
+  Both community sources are credited in the [community credits](../../docs/community-credits.md).
 - Everything tracked here (generator, summary script, numbers) is asset-free.

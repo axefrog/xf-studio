@@ -154,10 +154,12 @@ const grid = (t: Target) => ({ width: t.width, height: t.height, ...(t.head ? { 
 function shimmerNote(t: Target) {
   const cells = grainCellsPerTexel(t.width, t.height, t.window), pitch = grainPitch(t.width, t.height, t.window);
   const grid = cells.u === 1 && cells.v === 1 ? "one grain per texel" : `the mean of ${cells.u} × ${cells.v} grains per texel`;
-  return `Experimental Shimmer (${SHIMMER_GRAIN.model}): a uniform surface (roughness ${SHIMMER_GRAIN.roughness}, metalness ${SHIMMER_GRAIN.metalness}) ` +
-    `with a fine grain of tilted normals, ${grid} (${Math.round(pitch.u)} × ${Math.round(pitch.v)} grains per unit of head UV). ` +
-    `As compiled, every tilted grain (${SHIMMER_GRAIN.tiltFloorDeg} degrees or more) clears NormalsBlendingMode 1's fade; ` +
-    "BC5 compression lowers a few (WolvenKit 9.0.1, measured offline: about 2 % below full weight).";
+  const { speck, base } = SHIMMER_GRAIN;
+  return `Experimental Shimmer (${SHIMMER_GRAIN.model}): dense pearl specks (roughness ${speck.roughness}, metalness ${speck.metalness}) ` +
+    `on nearly every texel over a satin base (roughness ${base.roughness}, metalness ${base.metalness}), ${grid} ` +
+    `(${Math.round(pitch.u)} × ${Math.round(pitch.v)} grains per unit of head UV). ` +
+    `As compiled, every speck (${SHIMMER_GRAIN.tiltFloorDeg} degrees or more) clears NormalsBlendingMode 1's fade; ` +
+    "BC5 compression lowers a few (WolvenKit 9.0.1, measured offline).";
 }
 const spaceNote = (t: Target) => t.head ? [] : [
   "Plate-local UV window: the texture covers only the plate's UV rectangle; the material's UVScale/UVOffset map the plate's stored UVs onto it."];

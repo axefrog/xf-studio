@@ -1,0 +1,116 @@
+{
+  "texture": {
+    "path": "base\\surfaces\\materials\\paint\\car_paint\\car_paint_01_n.xbm",
+    "sha256": "29fa5da34321be8ee0ee8e243fc7baf755eec44df0a7132445017cdc9d399010",
+    "format": "bc5",
+    "width": 512,
+    "height": 512,
+    "mips": 10
+  },
+  "template": {
+    "path": "base\\surfaces\\materials\\paint\\car_paint\\car_paint_metallic_01.mltemplate",
+    "tilingMultiplier": 4,
+    "normalStrength": 0.66,
+    "roughLevelsOut": [
+      0.2667,
+      0
+    ],
+    "metalLevelsOut": [
+      0,
+      1
+    ]
+  },
+  "setup": {
+    "path": "…\\ml_v_standard2_chevalier_thrax_exterior_carpaint_clean_01.mlsetup",
+    "matTile": 15,
+    "tilesPerUv": 60
+  },
+  "modeOneFadeDeg": 11.48,
+  "levels": [
+    {
+      "level": 0,
+      "width": 512,
+      "height": 512,
+      "rawTiltDeg": {
+        "median": 9.58,
+        "p90": 13.4
+      },
+      "tiltDeg": {
+        "median": 6.36,
+        "p90": 8.93,
+        "max": 10.81
+      },
+      "shareAboveModeOneFade": 0,
+      "correlationLag1": 0.095,
+      "flakeHalfWidthTexels": 0
+    },
+    {
+      "level": 1,
+      "width": 256,
+      "height": 256,
+      "rawTiltDeg": {
+        "median": 4.81,
+        "p90": 8.87
+      },
+      "tiltDeg": {
+        "median": 3.18,
+        "p90": 5.88,
+        "max": 10
+      },
+      "shareAboveModeOneFade": 0,
+      "correlationLag1": 0.047,
+      "flakeHalfWidthTexels": 0
+    },
+    {
+      "level": 2,
+      "width": 128,
+      "height": 128,
+      "rawTiltDeg": {
+        "median": 2.56,
+        "p90": 4.86
+      },
+      "tiltDeg": {
+        "median": 1.69,
+        "p90": 3.21,
+        "max": 6.44
+      },
+      "shareAboveModeOneFade": 0,
+      "correlationLag1": 0.022,
+      "flakeHalfWidthTexels": 0
+    },
+    {
+      "level": 3,
+      "width": 64,
+      "height": 64,
+      "rawTiltDeg": {
+        "median": 1.31,
+        "p90": 2.86
+      },
+      "tiltDeg": {
+        "median": 0.86,
+        "p90": 1.89,
+        "max": 3.5
+      },
+      "shareAboveModeOneFade": 0,
+      "correlationLag1": 0.032,
+      "flakeHalfWidthTexels": 0
+    },
+    {
+      "level": 4,
+      "width": 32,
+      "height": 32,
+      "rawTiltDeg": {
+        "median": 1.15,
+        "p90": 1.71
+      },
+      "tiltDeg": {
+        "median": 0.76,
+        "p90": 1.13,
+        "max": 1.94
+      },
+      "shareAboveModeOneFade": 0,
+      "correlationLag1": 0.015,
+      "flakeHalfWidthTexels": 0
+    }
+  ]
+}

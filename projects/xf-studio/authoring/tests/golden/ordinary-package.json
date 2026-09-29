@@ -1,5 +1,5 @@
 {
- "capturedFrom": "8413f25; finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only); Shimmer grain (shimmer-grain-1) recaptured on claude/shimmer-rework (Shimmer presets' maps and packages only); Shimmer seed streams re-keyed (PREV-185: presets with a seed other than 2077) and the Shimmer manifest note given the grain's real pitch and the BC5 measurement (PIPE-124, PIPE-125) on claude/cleanup-review5-studio (Shimmer presets' normal maps and compiled records only); FresnelColor written sRGB-encoded (the engine sRGB-decodes Color parameters, materials open question 11) on claude/preview-tint-srgb (Colour-shifting presets' material constants, notes and package digests only)",
+ "capturedFrom": "8413f25; finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; plans recaptured on claude/export-alpha2 for the hx_ makeup component prefix (plan digests only); Shimmer grain (shimmer-grain-1) recaptured on claude/shimmer-rework (Shimmer presets' maps and packages only); Shimmer seed streams re-keyed (PREV-185: presets with a seed other than 2077) and the Shimmer manifest note given the grain's real pitch and the BC5 measurement (PIPE-124, PIPE-125) on claude/cleanup-review5-studio (Shimmer presets' normal maps and compiled records only); FresnelColor written sRGB-encoded (the engine sRGB-decodes Color parameters, materials open question 11) on claude/preview-tint-srgb (Colour-shifting presets' material constants, notes and package digests only); Shimmer grain 2 (shimmer-grain-2: dense specks over a satin base) recaptured on claude/finishes-rework (Shimmer presets' maps, compiled records and package digests only)",
  "fixtures": {
   "005-preset-collection/collection.json": {
    "plan": "3bb563e5e8ed96631ec08a9d2b12338f51b9f3f3f2cbf8285cc9005aec2b9bc3",
@@ -24,9 +24,9 @@
     "xfs_p7a6d3c101f014a519c3e000000000001_metalness.raw": "bfe3ecb6b63d74937591bc5b96a36e4ea792ed3f11b378f5449a55c8e69920e9",
     "xfs_p7a6d3c101f014a519c3e000000000001_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p7a6d3c101f014a519c3e000000000002_diffuse.raw": "ebf49bace6d38f10eb42f2fc643b166fecdb269b1412e9e2a7724e012cdaacc9",
-    "xfs_p7a6d3c101f014a519c3e000000000002_roughness.raw": "044171717e3a1591348dc5fc2c868b2e33f4b626e91300c6c31d7c3e188aa580",
-    "xfs_p7a6d3c101f014a519c3e000000000002_metalness.raw": "1cb440059ca352bf8b8eae0ea44bf8cf07400289825822c68bd4065d1496980a",
-    "xfs_p7a6d3c101f014a519c3e000000000002_normal.raw": "10c3b1f7c637b085913add7d58e04d2b504d7930cb858fc29b01cbe2c411314b",
+    "xfs_p7a6d3c101f014a519c3e000000000002_roughness.raw": "e1f6eb4ae4340197a701e78d260e19a5e4eed1810de283ad920f540950d20e42",
+    "xfs_p7a6d3c101f014a519c3e000000000002_metalness.raw": "02a4638e6432fcebbed53bfcee2f57d801ae00982d94637c8ab11b30b6ba93db",
+    "xfs_p7a6d3c101f014a519c3e000000000002_normal.raw": "f4d6e8b6897a8a4a56c91be8b445cec581ad5a3f59152ea4908bb9be791c6ef5",
     "xfs_p7a6d3c101f014a519c3e000000000002_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p7a6d3c101f014a519c3e000000000003_mask.raw": "641d7f293f33ddea819b1b88a36563a08f503ecb2bfe66aee0225213d41a2824",
     "xfs_p7a6d3c101f014a519c3e000000000003_gradient.raw": "3150db30922aa90d33af755f3f1c8bf0bb19ebb189d38cba55051fc7a88189b5",
@@ -41,7 +41,7 @@
     "xfs_p7a6d3c101f014a519c3e000000000006_metalness.raw": "7a34ef8a555aa2d774268facf62792d7b884b191d9e0bbd29bd1447fa9618b0e",
     "xfs_p7a6d3c101f014a519c3e000000000006_reference.raw": "05670663fcd19e11e113f35f203253833a73d2dae6042d670f99e9505533ec34"
    },
-   "compiled": "0c011ff72128e5534704f9b914b2127bccea187e5e2495f2abb4fb8a4b2c3a56"
+   "compiled": "8ae28f4d2154d2101b325fcb163706aeaa26d3d477b2bc6fa92f5619ac3f26ee"
   },
   "017-plate-depth/depth-candidate.collection.json": {
    "plan": "67627709595728f5765f07e0cd77ed3da4a2cf025eb802e46dcf49ab4f1f70a9",
@@ -94,9 +94,9 @@
     "xfs_p0170d3e01f014a519c3e000000000008_metalness.raw": "bfe3ecb6b63d74937591bc5b96a36e4ea792ed3f11b378f5449a55c8e69920e9",
     "xfs_p0170d3e01f014a519c3e000000000008_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p0170d3e01f014a519c3e000000000009_diffuse.raw": "ebf49bace6d38f10eb42f2fc643b166fecdb269b1412e9e2a7724e012cdaacc9",
-    "xfs_p0170d3e01f014a519c3e000000000009_roughness.raw": "30888a6b81731405448bf3b5dc1758145dce2b3e74a7a6671c67752cd8458670",
-    "xfs_p0170d3e01f014a519c3e000000000009_metalness.raw": "22c93163d16034d4ef24b981de80b3d2a16d3bff4aec0fd046f31efb46f28218",
-    "xfs_p0170d3e01f014a519c3e000000000009_normal.raw": "865825d643ca3ec39313966ebb46802c16ef61e89b95245ed4eae68be64bb268",
+    "xfs_p0170d3e01f014a519c3e000000000009_roughness.raw": "8d9426622f2f9d91489c6ec8473adabab55a1dab6d7325eeb833e31b95affea9",
+    "xfs_p0170d3e01f014a519c3e000000000009_metalness.raw": "66fe7050c0d176b35dbc19e7104a224f208e76d96047903141e2bb328a362caf",
+    "xfs_p0170d3e01f014a519c3e000000000009_normal.raw": "95554682b1f1a625d63e306b118bcb46177c973a3c9528e9ce963bbcce39fab8",
     "xfs_p0170d3e01f014a519c3e000000000009_reference.raw": "b02d266c9ffa8853d30427bf7c68fe9f9fa082d428f0070e9f3ad86bdffaeb4a",
     "xfs_p0170d3e01f014a519c3e000000000010_diffuse.raw": "9de670284b2fbc25f30912f5062753cde333e2680a112221c01113bdd11e8451",
     "xfs_p0170d3e01f014a519c3e000000000010_roughness.raw": "d635daede8ff4b609e403320a1be44e619857ec6f2a0c71a2318f33edd36144d",
@@ -110,7 +110,7 @@
     "xfs_p019a0b1c2d3e4f508a6b000000000002_roughness.raw": "e2d36a52f19ecbe42505b5243f382666f4de2389cb81846d40cf0920bc6db884",
     "xfs_p019a0b1c2d3e4f508a6b000000000002_metalness.raw": "30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58"
    },
-   "compiled": "a71002c2e7c47443047aa7854d5df758d223f8666d9a7ab89befc0de835cbfaf"
+   "compiled": "8b04781eb10696c2e2e59e463df4432c89d9b6425d77c6a99a433c52faf30ba3"
   }
  }
 }

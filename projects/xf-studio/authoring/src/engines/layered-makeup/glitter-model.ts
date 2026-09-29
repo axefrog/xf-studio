@@ -14,6 +14,14 @@ export type ShiftSettings = { color: string; strength: number };
 export type LayerChoices = Partial<Record<GlitterModel, GlitterSettings>> & { shift?: ShiftSettings };
 export type GlitterChoices = Record<string, LayerChoices>;
 export const glitterModels: readonly GlitterModel[] = ["classic", "irregular", "direct", "clustered", "fine"];
+/**
+ * The model a layer takes when it becomes Glitter (29 September 2026, after session 6): the Studio's direct-light glints,
+ * sparse facets with occasional larger flashes, the closest to the agreed physical Glitter (sparse, larger flakes at random
+ * angles, each flashing on its own). The classic macro dots stay a research model (the seed of the banked Pattern finish).
+ */
+export const DEFAULT_GLITTER_MODEL: GlitterModel = "direct";
+/** Models offered to everyone; the others show only with research tools on (or on a layer already using one). */
+export const researchGlitterModels: readonly GlitterModel[] = ["classic", "irregular"];
 
 export function glitterModel(flakes: Layer["flakes"]): GlitterModel {
   if (isIrregular(flakes)) return "irregular";
@@ -57,7 +65,8 @@ export function parseGlitterChoices(value: unknown): GlitterChoices {
   return result;
 }
 
-function defaults(model: GlitterModel): GlitterSettings {
+/** The settings a layer starts with in `model`. */
+export function glitterModelDefaults(model: GlitterModel): GlitterSettings {
   return model === "classic" ? defaultFlakes() : model === "irregular" ? defaultStudioIrregularFlakes() :
     model === "direct" ? defaultDirectGlintFlakes() : model === "clustered" ? defaultClusteredGlintFlakes() : defaultFineSpeckleFlakes();
 }
@@ -74,7 +83,7 @@ export function selectGlitterModel(recipe: Recipe, layerId: string, model: Glitt
   const previous = glitterModel(layer.flakes);
   remembered[previous] = structuredClone(layer.flakes ?? defaultFlakes());
   const saved = remembered[model];
-  const flakes = saved && validGlitterSettings(model, saved) ? structuredClone(saved) : defaults(model);
+  const flakes = saved && validGlitterSettings(model, saved) ? structuredClone(saved) : glitterModelDefaults(model);
   const layers = recipe.layers.map((entry, i) => i === index ? {...entry, flakes} : entry);
   return {...recipe, layers};
 }

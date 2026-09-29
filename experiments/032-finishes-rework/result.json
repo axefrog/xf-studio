@@ -1,0 +1,376 @@
+{
+  "window": {
+    "glitter": "4096 × 1024",
+    "shimmer": "2048 × 512",
+    "plate": "built-in (game 2.31)"
+  },
+  "framings": [
+    {
+      "id": "eye-close-up",
+      "mmPerPixel": 0.1
+    },
+    {
+      "id": "face-framing",
+      "mmPerPixel": 0.22
+    }
+  ],
+  "glitter": {
+    "sweep": "168 lights: elevation 10–70° in 10° steps, azimuth every 15°; flash = flake mean luminance > 5 × the base's mean under that light",
+    "views": [
+      0,
+      15,
+      30
+    ],
+    "board-1": {
+      "preset": "Glitter B · 1 vs 2",
+      "lid": "left",
+      "flakes": 1879,
+      "flakeCover": 0.1393,
+      "fadedFlakeTexelShare": 0.3737,
+      "flakeTiltDeg": {
+        "p10": 2.563,
+        "median": 16.009,
+        "p90": 38.315
+      },
+      "macro": {
+        "lod": 0.135,
+        "staticContrast": 0.575,
+        "staticFlakeToBase": 2.943,
+        "flashingShareMean": 0.1703,
+        "flashingSharePeak": 0.4327,
+        "everFlashed": 1,
+        "lightsPerFlake": 0.1703,
+        "twinkle15deg": 0.2528,
+        "peakWithSkinHighlight": 0.3241,
+        "viewTwinkle": 0.8761
+      },
+      "eye-close-up": {
+        "lod": 0.756,
+        "staticContrast": 0.497,
+        "staticFlakeToBase": 2.261,
+        "flashingShareMean": 0.1033,
+        "flashingSharePeak": 0.2794,
+        "everFlashed": 0.7302,
+        "lightsPerFlake": 0.1033,
+        "twinkle15deg": 0.2737,
+        "peakWithSkinHighlight": 0.5109,
+        "viewTwinkle": 0.9088
+      },
+      "face-framing": {
+        "lod": 1.894,
+        "staticContrast": 0.387,
+        "staticFlakeToBase": 1.28,
+        "flashingPixels": 0.0082,
+        "flashingPixelsAfterTemporal": 0.0078
+      }
+    },
+    "board-1-sizes-flakes-2-normals": {
+      "preset": "Glitter B · 1 vs 2",
+      "lid": "right",
+      "flakes": 1799,
+      "flakeCover": 0.1387,
+      "fadedFlakeTexelShare": 0,
+      "flakeTiltDeg": {
+        "p10": 16.129,
+        "median": 24.317,
+        "p90": 40.343
+      },
+      "macro": {
+        "lod": 0.135,
+        "staticContrast": 0.552,
+        "staticFlakeToBase": 2.744,
+        "flashingShareMean": 0.145,
+        "flashingSharePeak": 0.2107,
+        "everFlashed": 0.9994,
+        "lightsPerFlake": 0.145,
+        "twinkle15deg": 0.3746,
+        "peakWithSkinHighlight": 0.0122,
+        "viewTwinkle": 0.643
+      },
+      "eye-close-up": {
+        "lod": 0.756,
+        "staticContrast": 0.494,
+        "staticFlakeToBase": 2.247,
+        "flashingShareMean": 0.1007,
+        "flashingSharePeak": 0.1401,
+        "everFlashed": 0.7326,
+        "lightsPerFlake": 0.1007,
+        "twinkle15deg": 0.3764,
+        "peakWithSkinHighlight": 0.2696,
+        "viewTwinkle": 0.6856
+      },
+      "face-framing": {
+        "lod": 1.894,
+        "staticContrast": 0.389,
+        "staticFlakeToBase": 1.286,
+        "flashingPixels": 0.0081,
+        "flashingPixelsAfterTemporal": 0.0074
+      }
+    },
+    "reference": {
+      "preset": "Glitter A · reference",
+      "lid": "left",
+      "flakes": 3946,
+      "flakeCover": 0.2317,
+      "fadedFlakeTexelShare": 0,
+      "flakeTiltDeg": {
+        "p10": 15.889,
+        "median": 24.811,
+        "p90": 40.485
+      },
+      "macro": {
+        "lod": 0.135,
+        "staticContrast": 0.373,
+        "staticFlakeToBase": 1.96,
+        "flashingShareMean": 0.0918,
+        "flashingSharePeak": 0.1521,
+        "everFlashed": 0.998,
+        "lightsPerFlake": 0.0918,
+        "twinkle15deg": 0.4748,
+        "peakWithSkinHighlight": 0.019,
+        "viewTwinkle": 0.8789
+      },
+      "eye-close-up": {
+        "lod": 0.756,
+        "staticContrast": 0.282,
+        "staticFlakeToBase": 1.404,
+        "flashingShareMean": 0.0286,
+        "flashingSharePeak": 0.0451,
+        "everFlashed": 0.4014,
+        "lightsPerFlake": 0.0286,
+        "twinkle15deg": 0.4874,
+        "peakWithSkinHighlight": 0.5781,
+        "viewTwinkle": 0.8862
+      },
+      "face-framing": {
+        "lod": 1.894,
+        "staticContrast": 0.245,
+        "staticFlakeToBase": 1.077,
+        "flashingPixels": 0.0075,
+        "flashingPixelsAfterTemporal": 0.0067
+      }
+    }
+  },
+  "shimmer": {
+    "grain1EqualsPinnedBytes": true,
+    "lightsDeg": {
+      "near": "8° off the normal",
+      "oblique": "35° off, azimuth 30° (moved: 40°)"
+    },
+    "profileLightOffNormalDeg": [
+      0,
+      8,
+      16,
+      24,
+      32
+    ],
+    "shimmer-grain-1": {
+      "satin": {
+        "eye-close-up": {
+          "lod": -0.244,
+          "staticContrast": 0,
+          "speckleNearMirror": 0,
+          "speckleNearMirrorAfterTemporal": 0,
+          "pinpoints": 0,
+          "pinpointsAfterTemporal": 0,
+          "twinkle10deg": 0,
+          "sheenProfile": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ]
+        },
+        "face-framing": {
+          "lod": 0.894,
+          "staticContrast": 0,
+          "speckleNearMirror": 0,
+          "speckleNearMirrorAfterTemporal": 0,
+          "pinpoints": 0,
+          "pinpointsAfterTemporal": 0,
+          "twinkle10deg": 0,
+          "sheenProfile": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ]
+        }
+      },
+      "fine": {
+        "eye-close-up": {
+          "lod": -0.244,
+          "staticContrast": 0,
+          "speckleNearMirror": 0.362,
+          "speckleNearMirrorAfterTemporal": 0.33,
+          "pinpoints": 0.0143,
+          "pinpointsAfterTemporal": 0.01,
+          "twinkle10deg": 0.056,
+          "sheenProfile": [
+            1.4681,
+            0.8066,
+            0.3548,
+            0.2057,
+            0.1366
+          ]
+        },
+        "face-framing": {
+          "lod": 0.894,
+          "staticContrast": 0,
+          "speckleNearMirror": 0.223,
+          "speckleNearMirrorAfterTemporal": 0.21,
+          "pinpoints": 0.0002,
+          "pinpointsAfterTemporal": 0,
+          "twinkle10deg": 0.003,
+          "sheenProfile": [
+            0.9258,
+            0.6259,
+            0.3257,
+            0.194,
+            0.1331
+          ]
+        }
+      },
+      "strong": {
+        "eye-close-up": {
+          "lod": -0.244,
+          "staticContrast": 0,
+          "speckleNearMirror": 0.475,
+          "speckleNearMirrorAfterTemporal": 0.445,
+          "pinpoints": 0.0261,
+          "pinpointsAfterTemporal": 0.0207,
+          "twinkle10deg": 0.094,
+          "sheenProfile": [
+            1.2937,
+            0.7361,
+            0.3433,
+            0.2095,
+            0.1449
+          ]
+        },
+        "face-framing": {
+          "lod": 0.894,
+          "staticContrast": 0,
+          "speckleNearMirror": 0.288,
+          "speckleNearMirrorAfterTemporal": 0.27,
+          "pinpoints": 0.0002,
+          "pinpointsAfterTemporal": 0,
+          "twinkle10deg": 0.006,
+          "sheenProfile": [
+            0.7025,
+            0.5185,
+            0.3027,
+            0.1911,
+            0.1345
+          ]
+        }
+      }
+    },
+    "shimmer-grain-2": {
+      "satin": {
+        "eye-close-up": {
+          "lod": -0.244,
+          "staticContrast": 0,
+          "speckleNearMirror": 0,
+          "speckleNearMirrorAfterTemporal": 0,
+          "pinpoints": 0,
+          "pinpointsAfterTemporal": 0,
+          "twinkle10deg": 0,
+          "sheenProfile": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ]
+        },
+        "face-framing": {
+          "lod": 0.894,
+          "staticContrast": 0,
+          "speckleNearMirror": 0,
+          "speckleNearMirrorAfterTemporal": 0,
+          "pinpoints": 0,
+          "pinpointsAfterTemporal": 0,
+          "twinkle10deg": 0,
+          "sheenProfile": [
+            0.7185,
+            0.5087,
+            0.2817,
+            0.1819,
+            0.1352
+          ]
+        }
+      },
+      "fine": {
+        "eye-close-up": {
+          "lod": -0.244,
+          "staticContrast": 0.022,
+          "speckleNearMirror": 0.995,
+          "speckleNearMirrorAfterTemporal": 0.862,
+          "pinpoints": 0.0413,
+          "pinpointsAfterTemporal": 0.0348,
+          "twinkle10deg": 0.186,
+          "sheenProfile": [
+            1.0824,
+            0.6299,
+            0.3603,
+            0.2644,
+            0.1686
+          ]
+        },
+        "face-framing": {
+          "lod": 0.894,
+          "staticContrast": 0.011,
+          "speckleNearMirror": 0.161,
+          "speckleNearMirrorAfterTemporal": 0.14,
+          "pinpoints": 0.0011,
+          "pinpointsAfterTemporal": 0.0002,
+          "twinkle10deg": 0.01,
+          "sheenProfile": [
+            0.4581,
+            0.394,
+            0.2761,
+            0.1882,
+            0.1356
+          ]
+        }
+      },
+      "strong": {
+        "eye-close-up": {
+          "lod": -0.244,
+          "staticContrast": 0.019,
+          "speckleNearMirror": 1.109,
+          "speckleNearMirrorAfterTemporal": 0.962,
+          "pinpoints": 0.0487,
+          "pinpointsAfterTemporal": 0.0433,
+          "twinkle10deg": 0.271,
+          "sheenProfile": [
+            0.9987,
+            0.5811,
+            0.3392,
+            0.2576,
+            0.1838
+          ]
+        },
+        "face-framing": {
+          "lod": 0.894,
+          "staticContrast": 0.01,
+          "speckleNearMirror": 0.174,
+          "speckleNearMirrorAfterTemporal": 0.152,
+          "pinpoints": 0.0022,
+          "pinpointsAfterTemporal": 0.0002,
+          "twinkle10deg": 0.014,
+          "sheenProfile": [
+            0.4042,
+            0.356,
+            0.2624,
+            0.1857,
+            0.1358
+          ]
+        }
+      }
+    }
+  }
+}

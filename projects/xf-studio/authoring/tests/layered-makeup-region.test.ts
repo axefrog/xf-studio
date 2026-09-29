@@ -35,7 +35,7 @@ test("eye makeup's region is what the engine used to hard-code", () => {
   expect(finishCatalogue(EYE_MAKEUP_REGION.wording).find(item => item.id === "iridescent")!.description)
     .toBe("The colour turns toward a chosen shift colour as the lid curves away from view.");
   expect(glitterModelCatalogue(EYE_MAKEUP_REGION.wording).find(item => item.id === "irregular")!.summary)
-    .toBe("Irregular flakes are baked into a texture. Dense settings cover the eye UV area and can lose sparkle at face distance.");
+    .toBe("Flakes of varied shape and size. Dense settings cover the eye UV area and can lose their sparkle from further away.");
   expect(rasterRegion(EYE_MAKEUP_REGION)).toEqual({ mirror: EYE_MAKEUP_REGION.mirror, skin: EYE_MAKEUP_REGION.skin,
     fineGlitter: EYE_MAKEUP_REGION.fineGlitter, opticsWindow: EYE_MAKEUP_REGION.opticsWindow, wording: { area: "the eye UV area" } });
   // Mottle's skin scale: the plate measure the glitter route uses, and the plate window's texel.

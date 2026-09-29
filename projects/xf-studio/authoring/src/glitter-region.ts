@@ -22,7 +22,7 @@ export const HEX_AREA = 3 * Math.sqrt(3) / 8;
 
 export type RectUv = { u0: number; v0: number; u1: number; v1: number };
 type RegionLayer = Pick<Layer, "id" | "points" | "symmetry" | "feather" | "fields">;
-type FlakeSize = { sizeMm: number; sizeSigma: number; cover: number };
+type FlakeSize = { sizeMm: number; sizeSigma: number; cover: number; largeShare?: number; largeSizeMm?: number };
 
 /** The UV rectangle a layer's coverage can reach (the rule above). A mirrored (symmetry) layer is refused. */
 export function layerOutlineBounds(layer: RegionLayer): RectUv {
@@ -59,9 +59,13 @@ export function rectMm(rect: RectUv, window: RectUv) {
   const y0 = (rect.v0 - window.v0) * MM_PER_UV.v, y1 = (rect.v1 - window.v0) * MM_PER_UV.v;
   return { x0, x1, y0, y1, area: (x1 - x0) * (y1 - y0) };
 }
-/** Flakes a region's catalogue holds: its cover over the rectangle's area, in flakes of the mean (log-normal, hexagon-like) area. */
+/**
+ * Flakes a region's catalogue holds: its cover over the rectangle's area, in flakes of the mean (log-normal, hexagon-like) area.
+ * A large population (`largeShare` of the flakes at median `largeSizeMm`) scales the mean area by its share of the squared width.
+ */
 export function flakeCount(rect: RectUv, window: RectUv, f: FlakeSize): number {
-  const meanArea = HEX_AREA * f.sizeMm ** 2 * Math.exp(2 * f.sizeSigma ** 2) * 1.2;
+  const large = f.largeShare ? (1 - f.largeShare) + f.largeShare * (f.largeSizeMm! / f.sizeMm) ** 2 : 1;
+  const meanArea = HEX_AREA * f.sizeMm ** 2 * Math.exp(2 * f.sizeSigma ** 2) * 1.2 * large;
   return Math.round(f.cover * rectMm(rect, window).area / meanArea);
 }
 
