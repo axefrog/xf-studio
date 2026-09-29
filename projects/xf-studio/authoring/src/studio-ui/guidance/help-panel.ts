@@ -1,7 +1,7 @@
 import { shortcutLabel } from "../../input-bindings";
 import type { ProjectLink } from "../../project-links";
-import { badge, button, emptyState, section } from "../controls";
-import { h, setText, uid } from "../dom";
+import { applyCapability, badge, button, emptyState, section } from "../controls";
+import { h, isUnavailable, setText, uid } from "../dom";
 import type { PanelController } from "../panels/collection";
 import { PANEL_META } from "../panel-meta";
 import type { Frame, StudioRuntime } from "../runtime";
@@ -11,6 +11,7 @@ import type { Tour } from "./types";
 import type { TourRecord } from "../../ui-preferences";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./desktop-app-sheet";
+import { checkForUpdatesNow, checkingForUpdates, updateCheckLine } from "../update-check";
 
 export type HelpGuidance = { tours(): readonly Tour[]; status(tourId: string): TourRecord | undefined; start(tourId: string): boolean };
 /**
@@ -46,14 +47,30 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     return { element: h("li", {}, label, detail), render() { const entry = desktopAppEntry(rt.port.desktopApp.snapshot()); setText(label, entry.label); setText(detail, entry.detail); } };
   })() : null;
   desktop?.render();
+  // Check for updates (release-readiness-audit.md item 22): checks in place and says what it found; the releases link is the next row.
+  // While it checks, the row says so on its button and keeps the last detail until the answer arrives, so nothing below it moves.
+  const updateDetail = h("small", { class: "muted help-updates-detail", role: "status" });
+  const linkRows: { label: string; detail: string | HTMLElement; run(): void; className?: string }[] = [
+    { label: "Check for updates", detail: updateDetail, className: "help-check-updates",
+      run: () => { if (!isUnavailable(updateButton)) void checkForUpdatesNow(rt, false); } },
+    ...HELP_LINKS.map(item => ({ label: item.label, detail: item.detail, run: () => void open(item.link) }))];
   // Settings, where everything about this computer is chosen (UI-109).
   const settings = h("li", {}, h("button", { class: "link-button help-settings", type: "button", text: "Settings", onclick: () => rt.settings.open() }),
     h("small", { class: "muted", text: "Your game, mod manager, saves, tools, appearance and diagnostics." }));
   const links = h("ul", { class: "help-links" }, settings, about, desktop?.element ?? null, h("li", {},
     h("button", { class: "link-button", type: "button", text: "Report a problem…", onclick: () => { openReportDialog(rt, null); } }),
-    h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), HELP_LINKS.map(item => h("li", {},
-    h("button", { class: "link-button", type: "button", text: item.label, onclick: () => void open(item.link) }),
-    h("small", { class: "muted", text: item.detail }))));
+    h("small", { class: "muted", text: "Prepares a report you review, save and attach. Nothing is sent by itself." })), linkRows.map(item => h("li", {},
+    h("button", { class: item.className ? `link-button ${item.className}` : "link-button", type: "button", text: item.label, onclick: item.run }),
+    typeof item.detail === "string" ? h("small", { class: "muted", text: item.detail }) : item.detail)));
+  const updateButton = links.querySelector<HTMLButtonElement>(".help-check-updates")!;
+  const renderUpdates = () => {
+    const state = rt.port.updates.snapshot(), checking = checkingForUpdates(state);
+    setText(updateButton, checking ? "Checking for updates…" : "Check for updates");
+    applyCapability(updateButton, rt.port.updates.capability({ kind: "updates.check" }));
+    if (!checking) setText(updateDetail, updateCheckLine(state, { releasesBelow: true })?.text
+      ?? "Looks for a newer XF Studio on GitHub, where each new version is published.");
+  };
+  renderUpdates();
   const toursSection = section("Guided tours", tours), topicsSection = section("Questions and answers", topics);
   const referenceSection = section("Keyboard & mouse", h("p", { class: "note muted", text: `${shortcutLabel("shell.shortcuts")} opens this list anywhere.` }), reference);
   const empty = emptyState("Nothing matches", "Try fewer or different words, or browse the sections below once the search is cleared.",
@@ -114,6 +131,7 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
         if (app.offered() && !app.snapshot().status && app.capability({ kind: "desktopApp.refresh" }).available) void app.dispatch({ kind: "desktopApp.refresh" });
       } else renderTours(search.value.trim());
       desktop?.render();
+      renderUpdates();
     },
     focusSearch() { if (!rendered) { rendered = true; render(); } search.focus(); search.select(); },
   };

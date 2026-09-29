@@ -2,7 +2,7 @@
   "kind": "panel",
   "id": "help",
   "owner": "shell",
-  "summary": "Help: tours, answers, shortcuts, About and the desktop app offer.",
+  "summary": "Help: tours, answers, shortcuts, About, Check for updates and the desktop app offer.",
   "status": "both",
   "replaces": [
     "studio-ui/guidance/desktop-app-sheet"
@@ -11,7 +11,8 @@
   "reads": [
     "type:preferences",
     "type:tour-run",
-    "request:offer-desktop-app"
+    "request:offer-desktop-app",
+    "request:check-for-release"
   ],
   "actions": [
     "action:guidance-back",
@@ -22,6 +23,9 @@
     "action:desktop-app-install",
     "action:desktop-app-open",
     "action:desktop-app-refresh",
-    "action:tours-record"
+    "action:tours-record",
+    "action:updates-check",
+    "action:updates-startup-check",
+    "action:updates-skip-version"
   ]
 }

@@ -2,6 +2,7 @@ import type { CollectionRequest } from "./collection-service";
 import { CONE_READINGS, CREATOR_EXPOSURE_RANGE, CREATOR_PAGE_DISTANCE, INTENSITY_FORMS, LIGHTING_PRESETS } from "./creator-lighting";
 import type { InstallDetectionAction } from "./install-detection-actions";
 import type { DesktopAppAction } from "./desktop-app";
+import type { UpdateCheckAction } from "./update-check-actions";
 import type { ModInstallAction } from "./mod-install-actions";
 import type { PoseAction } from "./pose-actions";
 import { STUDIO_KEY_ANGLE_RANGE } from "./studio-lighting";
@@ -202,6 +203,17 @@ export const DESKTOP_APP_DESCRIPTORS = {
   "desktopApp.install": request("host", "launch", { installer: target("string") }),
   "desktopApp.open": request("host", "launch"),
 } satisfies Record<DesktopAppAction["kind"], RequestDescriptor>;
+
+/**
+ * Checking for a newer XF Studio (`update-check-actions.ts`; release-readiness-audit.md item 22). `startupCheck` is the check at start,
+ * which the host skips when Settings turns it off; `check` is the person's own; `skipVersion` stops the check at start announcing a
+ * version. Each reads or keeps only what the host found; none changes a recipe, the library or Undo. The page asks after first paint.
+ */
+export const UPDATE_CHECK_DESCRIPTORS = {
+  "updates.startupCheck": request("host", "read", {}, true),
+  "updates.check": request("host", "read", {}, true),
+  "updates.skipVersion": request("host", "save", { version: target("string") }),
+} satisfies Record<UpdateCheckAction["kind"], RequestDescriptor>;
 
 /**
  * "Add to my mod manager" after Build (UI-82; `StudioPresentationPort.modInstall`). `review` reads the host's plan; `apply` is the

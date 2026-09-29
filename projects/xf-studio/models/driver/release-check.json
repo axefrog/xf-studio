@@ -1,0 +1,46 @@
+{
+  "kind": "driver",
+  "id": "release-check",
+  "owner": "setup",
+  "summary": "Checks XF Studio's GitHub releases for a newer version: once at start unless Settings turns it off (reusing an answer from the last few hours), and whenever the person asks.",
+  "status": "both",
+  "replaces": [
+    "update-check",
+    "update-check-host",
+    "update-check-github",
+    "browser-update-check-device"
+  ],
+  "environment": "host",
+  "serves": [
+    "request:check-for-release"
+  ],
+  "demands": [
+    "type:host-settings",
+    "source:network",
+    "source:host-clock",
+    "source:host-files"
+  ],
+  "creates": [],
+  "starts": [
+    "process:release-check-fetch"
+  ],
+  "runtimes": [],
+  "faults": [
+    {
+      "code": "offline",
+      "when": "GitHub can't be reached.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "rate-limited",
+      "when": "GitHub asks for fewer requests; the check at start waits a few hours.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "lifetime": "Per start: the check at start after first paint, and each check the person asks for.",
+  "x-notes": "The check at start fails silently; the person's own check says it couldn't check and offers the releases page. The desktop app's own updater (driver:updates) stays switched off."
+}

@@ -9,6 +9,7 @@ import type { ViewContext } from "../views/panels";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { PanelController } from "./collection";
 import { gameSetupForm, wantsWolvenKitStep } from "./game-setup";
+import { checkForUpdatesNow, checkingForUpdates, openReleasesPage, updateCheckLine } from "../update-check";
 
 /** A size in the person's terms ("1.2 GB", "340 MB"). */
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
@@ -17,8 +18,8 @@ type Theme = "system" | "light" | "dark";
 
 /**
  * Settings (UI-109): everything a person configures, in one panel with plain groups: Game (game folder, mod manager and profile, the eye
- * plate head), Saves (where the Save Explorer reads saves), Tools (WolvenKit), Appearance (theme, input hints, research tools) and
- * Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
+ * plate head), Saves (where the Save Explorer reads saves), Tools (WolvenKit), Appearance (theme, input hints, research tools), Updates
+ * (the check at start, and checking now) and Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
  * made, through its own typed port (local settings, UI preferences, diagnostics). Opened from the header's Settings button, the command
  * palette ("Settings", "Game folder and mod manager", "Where are my saves?"), Help and every "Open Settings" next step (`rt.settings.open`).
  */
@@ -44,6 +45,21 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     rt.changed();
   }
 
+  // Updates: the check at start is a saved setting (on by default); Check now runs the person's own check in place.
+  const checkOnStart = new Toggle({ label: "Check for updates when XF Studio starts",
+    help: "XF Studio asks GitHub, where each new version is published, whether there's a newer one. Nothing about you or your looks is sent.",
+    onChange: on => { void saveCheckOnStart(on); } });
+  async function saveCheckOnStart(on: boolean) {
+    const outcome = await port.localSetup.dispatch({ kind: "setup.update", fields: { checkForUpdates: on } });
+    if (outcome.ok) rt.feedback.record("info", "Updates", on ? "XF Studio will check for updates when it starts." : "XF Studio won't check for updates when it starts.");
+    else rt.feedback.toast("warning", "Updates", outcome.message);
+    rt.changed();
+  }
+  const checkNow = button({ label: "Check now", icon: "refresh", small: true, onClick: () => void checkForUpdatesNow(rt, false) });
+  const checkNowLabel = checkNow.querySelector("span")!;
+  const updateText = h("span", { class: "muted small", role: "status" });
+  const releases = button({ label: "Open the releases page", icon: "link", small: true, variant: "quiet", onClick: () => void openReleasesPage(rt) });
+
   // WolvenKit's one next step, beside the Game line that says it's needed (release-readiness-audit.md item 14; UI-161: once, there).
   const gameStep = wolvenKitStepButton(rt);
   // The game files prepared for the 3D view on this computer, and clearing them: cache upkeep, so it lives here and in the palette
@@ -67,6 +83,8 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       "The 3D view is built from files XF Studio prepares from your game. Clearing them frees the space; they're prepared again when needed."],
     form.tools, prepared),
     appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, h("div", { class: "row wrap gap-s" }, reference)),
+    updates: group("updates", "New versions are published on GitHub. XF Studio tells you when there's one; you download and install it yourself.",
+      checkOnStart.element, h("div", { class: "row wrap gap-s align-center" }, checkNow, updateText, releases)),
     privacy: group("privacy", "Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself.",
       deep.element, h("div", { class: "row wrap gap-s" }, report)),
   };
@@ -97,6 +115,23 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
         : files.bytes === null ? "Prepared game files: checking their size…"
           : `Prepared game files: ${files.bytes ? size(files.bytes) : "none"}${files.freed ? ` · cleared ${size(files.freed)}` : ""}`);
       applyCapability(clearPrepared, port.authoring.capability({ kind: "character.clearPreparedFiles" }));
+      const setupView = frame.localSetup.view;
+      checkOnStart.update(setupView?.fields.checkForUpdates ?? true, { disabled: !setupView || setupView.source === "backup",
+        reason: !setupView ? "Reading your settings…" : setupView.source === "backup" ? "Restore your previous settings first." : undefined });
+      // While checking, the button says so (and waits); the line and the releases button keep the last result, so the row never
+      // reflows. A newer version makes the releases page the main action and Check now the quiet one.
+      const state = port.updates.snapshot(), checking = checkingForUpdates(state);
+      setText(checkNowLabel, checking ? "Checking…" : "Check now");
+      applyCapability(checkNow, port.updates.capability({ kind: "updates.check" }));
+      if (!checking) {
+        const line = updateCheckLine(state);
+        setText(updateText, line?.text ?? "");
+        releases.hidden = !line?.releases;
+        const newer = state.answer?.result === "newer" && !!line?.releases && !state.unreachable;
+        checkNow.classList.toggle("quiet", newer);
+        releases.classList.toggle("primary", newer);
+        releases.classList.toggle("quiet", !newer);
+      }
       theme.update(appearance.theme());
       hints.update(appearance.hints());
       research.update(appearance.research());

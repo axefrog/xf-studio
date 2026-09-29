@@ -1,0 +1,52 @@
+{
+  "kind": "request",
+  "id": "check-for-release",
+  "owner": "setup",
+  "summary": "Find whether a newer XF Studio is published, at start or when the person asks, or stop announcing a version.",
+  "status": "target",
+  "goal": {
+    "type": "object",
+    "properties": {
+      "result": {
+        "enum": [
+          "newer",
+          "current",
+          "failed",
+          "skipped"
+        ]
+      },
+      "announce": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "result",
+      "announce"
+    ]
+  },
+  "accepts": {
+    "type": "object",
+    "properties": {
+      "step": {
+        "enum": [
+          "startup",
+          "check",
+          "skip"
+        ]
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "step"
+    ]
+  },
+  "reasons": [
+    "person",
+    "maintains"
+  ],
+  "servedBy": [
+    "driver:release-check"
+  ]
+}
