@@ -3,6 +3,10 @@
 **Current as of 26 September 2026.** This is the single ranked queue for XF Studio (`projects/xf-studio`) and related research. Each row links to the owner document that holds the detailed requirements and open/done state. Tracks marked *parallel* are independent enough to run as separate subagents on their own `claude/` branches and worktrees; the coordinator reviews, merges and updates shared status.
 
 
+### 1.0 connective tissue: profiles, Vs, saves and presets (design for discussion, 29 September 2026)
+
+Part of 1.0 polish, not a new feature. One reactive **setup graph** of top-level entities in the player's library (presets of every feature, V profiles, mods, layouts and profiles), with profiles as rewirings: loading a save's V converges with the Save Explorer (several saves at once), V profiles remember their origin save for write-back (always to a new save folder, Apply in game first), presets autosave into the library and are shared by any number of Vs and mods, short export IDs with deployment-conflict warnings, a world profile with V editing off, conflicts that block only the operations they affect with undoable auto-fix routes, and a graph inspector panel. Migration keeps alpha.2 libraries readable and migrated exports byte-identical. Eight slices (G1–G8), about 33 agent-days; eight questions for the maintainer. Nothing built: [profiles and graph design](../authoring/profiles-and-graph-design.md).
+
 ### Queued R&D: in-game overlay and UI (set 29 September 2026)
 
 Two halves, research first:
