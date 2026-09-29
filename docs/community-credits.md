@@ -108,6 +108,10 @@ By Hans-Kristian Arntzen. [GitHub](https://github.com/HansKristian-Work/dxil-spi
 
 By Andrey Sitnik and contributors. [Website](https://easings.net), [GitHub](https://github.com/ai/easings.net). Its cubic Bézier forms of the cubic easings are the control points of XF Studio's Strong ease in-out and Strong ease out curves.
 
+### cyrb53
+
+By bryc. [cyrb53](https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js), a public-domain 53-bit string hash. XF Strata derives stable identities from canonical data with it (conflict IDs, the seeds of its random streams).
+
 ### Electrobun and Hutch
 
 By Blackboard Technologies Inc. and contributors. [Electrobun](https://github.com/blackboardsh/electrobun), [Hutch](https://github.com/blackboardsh/hutch). Electrobun's documentation shaped XF Studio's desktop packaging, update, shutdown and uninstall design, and it is the framework for our desktop packaging trial. Electrobun is MIT-licensed and its notice must accompany any distributed build, together with the notices of its bundled dependencies.
@@ -123,6 +127,10 @@ By the USC Institute for Creative Technologies. [GitHub](https://github.com/ICT-
 ### Inno Setup
 
 By Jordan Russell and Martijn Laan. [Website](https://jrsoftware.org/isinfo.php), [source](https://github.com/jrsoftware/issrc). XF Studio's downloadable Windows setup is one Inno Setup program that carries Electrobun's setup and runs it. The setup runtime it redistributes is under the Inno Setup License, whose notice ships with the app's third-party notices.
+
+### JSON Schema
+
+The [JSON Schema](https://json-schema.org/) specification (draft 2020-12). XF Strata publishes its graph-model format as a JSON Schema, so scripts, tools and a second engine can check a declared subsystem before it is built.
 
 ### JSON for Modern C++
 
@@ -160,6 +168,10 @@ By Benoit Giannangeli, Daurnimator and contributors. [GitHub](https://github.com
 
 By Microsoft. The DirectX shader compiler and [DXIL reference](https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/DXIL.rst) let us read the game's compiled shaders, the [Xbox store listing](https://www.xbox.com/en-us/games/store/cyberpunk-2077/bx3m8l83bbrw) and [Xbox Wire](https://news.xbox.com/en-us/2026/03/03/xbox-game-pass-march-2026-wave-1/) showed that Cyberpunk 2077 has no Xbox app edition for Windows, and the [WebView2 debugging documentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-visual-studio-code) enabled automated testing of the packaged desktop window. WebView2 is a platform dependency of the desktop app; its [distribution guidance](https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution) shaped the one-click install, and the installer includes Microsoft's unmodified Evergreen WebView2 bootstrapper, packaged as that guidance allows.
 
+### PractRand (sfc32)
+
+By Chris Doty-Humphrey. [PractRand](https://pracrand.sourceforge.net/) and its small fast counting generator, sfc32. XF Strata's named, seeded random streams use sfc32, which makes every simulation repeatable from its seed.
+
 ### Pillow
 
 By the Pillow contributors. [GitHub](https://github.com/python-pillow/Pillow). Used in research tooling to encode and measure generated test images; its BCn decoder reads the game's compressed textures so their levels, mips and normal-map conventions can be measured offline.
@@ -195,6 +207,10 @@ By the SQLite project. [sqlite.org](https://sqlite.org/). SQLite stores XF Studi
 ### Three.js
 
 By mrdoob and the three.js authors. [GitHub](https://github.com/mrdoob/three.js). Three.js renders the studio's entire browser preview: skinned head, materials, camera controls, ray casting and the glitter studies. One isolated glitter study adapts its physical-lighting shader structure, so that code carries the Three.js MIT notice, which must also accompany any distributed build. Its multiple-views examples (one renderer drawing several cameras into scissored regions of one canvas) framed how the planned view graph shares one GPU context across views.
+
+### WHATWG DOM Standard
+
+The [DOM Standard](https://dom.spec.whatwg.org/#aborting-ongoing-activities) (WHATWG). Its AbortController and AbortSignal define the cancellation XF Strata uses everywhere: its tokens follow their semantics (abort once with a reason, listeners called once, signals that follow a parent), stated in XF Strata's specification for other languages.
 
 ### WebKit
 
@@ -438,6 +454,10 @@ World Objects Removed, Crunch Plaza Expanded, Japantown North Verticality Expand
 ## Research papers
 
 These papers informed our research. Unless an entry says otherwise, no algorithm from them was implemented.
+
+### Zeller and Hildebrandt (2002)
+
+Andreas Zeller and Ralf Hildebrandt, "Simplifying and Isolating Failure-Inducing Input" (IEEE Transactions on Software Engineering, 2002). Its delta debugging is the idea behind XF Strata's shrinker, which removes ever smaller chunks of a failing simulation's steps while the failure persists.
 
 ### Ottosson (2020)
 

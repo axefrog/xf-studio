@@ -1,0 +1,52 @@
+# XF Strata, the graph engine (projects/strata): its own suite (conformance vectors, entity and stream tests, property
+# tests, deterministic simulation, budgets, boundary and API surface), its two typechecks and the minimal example, on
+# every push to main and every pull request that touches it. The Studio's workflow also runs when it changes.
+name: Strata
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "projects/strata/**"
+      - ".github/workflows/strata.yml"
+  pull_request:
+    paths:
+      - "projects/strata/**"
+      - ".github/workflows/strata.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: strata-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        working-directory: projects/strata
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Test
+        run: bun test
+
+      - name: Typecheck
+        run: bun run check
+
+      - name: Example
+        run: bun examples/minimal

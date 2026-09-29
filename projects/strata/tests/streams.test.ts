@@ -68,7 +68,7 @@ test("compaction keeps the latest and every referenced entry, rolls up the rest,
   const before = [...h.memory!.readStreamNow(a)];
   const foldAt = (entries: readonly Entry[], seq: number) => fold(null, entries.filter(entry => entry.seq <= seq), itemType);
   // This session's undo stack would keep its commits; compaction here is about references only.
-  (h.graph as unknown as { undoStacks: Map<string, string[]> }).undoStacks.clear();
+  h.graph.forgetHistory();
   const result = await drive(h.scheduler, h.graph.compact(a));
   expect(result).toMatchObject({ ok: true, before: 42 });
   const after = h.memory!.readStreamNow(a);

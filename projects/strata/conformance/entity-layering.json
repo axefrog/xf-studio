@@ -1,0 +1,158 @@
+{
+  "suite": "entity-layering",
+  "vectors": [
+    {
+      "name": "a-fork-follows-its-base-until-it-overrides",
+      "kind": "entity",
+      "rules": ["12.2", "12.8", "13.2"],
+      "description": "The fork inherits the base's title and colours (the base's effective values, its type defaults included); the base's next title reaches it; once the fork sets its own title, later base titles don't. Each step reports exactly the changed paths.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1",
+        "fields": { "title": { "kind": "value" }, "colours": { "kind": "map", "of": { "kind": "value" } } },
+        "defaults": { "title": "untitled", "colours": { "ink": "#000" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "title": "b", "colours": { "x": "1" } } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "f", "from": { "fork": { "$label": "a" } } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "b2" } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "f" }, "path": ["title"], "value": "mine" } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "b3" } ] }
+      ],
+      "expect": {
+        "effective": { "f": { "title": "mine", "colours": { "ink": "#000", "x": "1" } } },
+        "origins": { "f": { "[\"title\"]": "own", "[\"colours\",\"x\"]": "base a a", "[\"colours\",\"ink\"]": "base a default" } },
+        "changes": [
+          ["a [\"colours\",\"ink\"]", "a [\"colours\",\"x\"]", "a [\"title\"]"],
+          ["f [\"colours\",\"ink\"]", "f [\"colours\",\"x\"]", "f [\"title\"]"],
+          ["a [\"title\"]", "f [\"title\"]"],
+          ["f [\"title\"]"],
+          ["a [\"title\"]"]
+        ]
+      }
+    },
+    {
+      "name": "a-feed-takes-only-its-paths-and-a-tombstone-removes-a-key",
+      "kind": "entity",
+      "rules": ["12.2", "12.3", "13.3"],
+      "description": "n forks a and feeds colour y from b (ahead of its base). Map keys union across layers; a tombstone removes an inherited key and a reset brings it back.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1",
+        "fields": { "title": { "kind": "value" }, "colours": { "kind": "map", "of": { "kind": "value" } } },
+        "defaults": { "title": "untitled", "colours": { "ink": "#000" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "colours": { "x": 1, "y": 2 } } },
+                      { "op": "create", "type": "swatch", "as": "b", "fields": { "colours": { "y": 20, "z": 30 } } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "n", "from": { "fork": { "$label": "a" } } } ] },
+        { "commit": [ { "op": "feed", "node": { "$label": "n" }, "from": { "$label": "b" }, "paths": [["colours", "y"]] } ] },
+        { "commit": [ { "op": "tombstone", "node": { "$label": "n" }, "path": ["colours", "x"] } ] },
+        { "commit": [ { "op": "reset", "node": { "$label": "n" }, "path": ["colours", "x"] } ] }
+      ],
+      "expect": {
+        "effective": { "n": { "title": "untitled", "colours": { "ink": "#000", "x": 1, "y": 20 } } },
+        "origins": { "n": { "[\"colours\",\"y\"]": "feed b b", "[\"colours\",\"x\"]": "base a a" } },
+        "changes": [
+          ["a [\"colours\",\"ink\"]", "a [\"colours\",\"x\"]", "a [\"colours\",\"y\"]", "a [\"title\"]",
+           "b [\"colours\",\"ink\"]", "b [\"colours\",\"y\"]", "b [\"colours\",\"z\"]", "b [\"title\"]"],
+          ["n [\"colours\",\"ink\"]", "n [\"colours\",\"x\"]", "n [\"colours\",\"y\"]", "n [\"title\"]"],
+          ["n [\"colours\",\"y\"]"],
+          ["n [\"colours\",\"x\"]"],
+          ["n [\"colours\",\"x\"]"]
+        ]
+      }
+    },
+    {
+      "name": "a-three-level-fork-of-a-constant-and-constants-refuse-edits",
+      "kind": "entity",
+      "rules": ["11.8", "11.9", "12.2"],
+      "description": "Forks three deep from a constant; the middle one's override reaches the last; the constant refuses an edit.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1",
+        "fields": { "title": { "kind": "value" }, "colours": { "kind": "map", "of": { "kind": "value" } } },
+        "defaults": { "title": "untitled", "colours": { "ink": "#000" } },
+        "constants": [ { "name": "starter", "label": "Starter", "fields": { "title": "starter", "colours": { "red": "#f00", "blue": "#00f" } } } ] } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "one", "from": { "fork": { "type": "swatch", "id": "builtin:swatch/starter" } } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "two", "from": { "fork": { "$label": "one" } } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "three", "from": { "fork": { "$label": "two" } } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "two" }, "path": ["colours", "blue"], "value": "#00a" } ] },
+        { "commit": [ { "op": "set", "node": { "type": "swatch", "id": "builtin:swatch/starter" }, "path": ["title"], "value": "x" } ] }
+      ],
+      "expect": {
+        "effective": { "three": { "title": "starter", "colours": { "blue": "#00a", "ink": "#000", "red": "#f00" } } },
+        "origins": { "three": { "[\"colours\",\"red\"]": "base two builtin:swatch/starter", "[\"colours\",\"blue\"]": "base two two" } },
+        "refusals": [null, null, null, null, "constant"]
+      }
+    },
+    {
+      "name": "a-layer-cycle-is-refused",
+      "kind": "entity",
+      "rules": ["12.5", "13.6"],
+      "description": "Rebasing a onto its own fork would close a layer cycle: refused, nothing changes.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1", "fields": { "title": { "kind": "value" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "title": "a" } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "b", "from": { "fork": { "$label": "a" } } } ] },
+        { "commit": [ { "op": "rebase", "node": { "$label": "a" }, "base": { "$label": "b" } } ] }
+      ],
+      "expect": { "refusals": [null, null, "cycle"], "streams": { "a": [[1, "create"]] } }
+    },
+    {
+      "name": "detach-keeps-the-values-and-stops-following",
+      "kind": "entity",
+      "rules": ["13.5"],
+      "description": "Detaching copies every value the fork inherits from its base (the base's own values and what the base takes from the type's defaults) into own values and drops the layers; the base's later change no longer reaches it.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1",
+        "fields": { "title": { "kind": "value" }, "colours": { "kind": "map", "of": { "kind": "value" } } },
+        "defaults": { "title": "untitled", "colours": { "ink": "#000" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "colours": { "k": 1 } } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "f", "from": { "fork": { "$label": "a" } } } ] },
+        { "commit": [ { "op": "detach", "node": { "$label": "f" } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["colours", "k"], "value": 2 } ] }
+      ],
+      "expect": {
+        "effective": { "f": { "title": "untitled", "colours": { "ink": "#000", "k": 1 } } },
+        "streams": { "f": [[1, "create"], [2, "set"], [3, "set"], [4, "set"], [5, "layers"]] },
+        "changes": [
+          ["a [\"colours\",\"ink\"]", "a [\"colours\",\"k\"]", "a [\"title\"]"],
+          ["f [\"colours\",\"ink\"]", "f [\"colours\",\"k\"]", "f [\"title\"]"],
+          [],
+          ["a [\"colours\",\"k\"]"]
+        ]
+      }
+    },
+    {
+      "name": "apply-to-source-promotes-a-value",
+      "kind": "entity",
+      "rules": ["13.8"],
+      "description": "The fork's own value moves into its base, and the fork inherits it from there.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1",
+        "fields": { "title": { "kind": "value" }, "colours": { "kind": "map", "of": { "kind": "value" } } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "s", "fields": { "title": "s" } } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "f", "from": { "fork": { "$label": "s" } } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "f" }, "path": ["colours", "k"], "value": 5 } ] },
+        { "commit": [ { "op": "applyToSource", "node": { "$label": "f" }, "path": ["colours", "k"] } ] }
+      ],
+      "expect": {
+        "effective": { "s": { "title": "s", "colours": { "k": 5 } }, "f": { "title": "s", "colours": { "k": 5 } } },
+        "origins": { "f": { "[\"colours\",\"k\"]": "base s s" } },
+        "streams": { "s": [[1, "create"], [2, "set"]], "f": [[1, "create"], [2, "set"], [3, "reset"]] }
+      }
+    },
+    {
+      "name": "a-fork-pinned-to-an-entry-ignores-later-entries",
+      "kind": "entity",
+      "rules": ["12.1", "12.6", "13.2"],
+      "description": "p forks a as it was at its entry 1; a's later titles don't reach it until it is rebased onto a live.",
+      "types": [ { "type": "swatch", "owner": "vectors", "schema": "1", "fields": { "title": { "kind": "value" } } } ],
+      "script": [
+        { "commit": [ { "op": "create", "type": "swatch", "as": "a", "fields": { "title": "v1" } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "v2" } ] },
+        { "commit": [ { "op": "create", "type": "swatch", "as": "p", "from": { "fork": { "$label": "a" }, "at": 1 } } ] },
+        { "commit": [ { "op": "set", "node": { "$label": "a" }, "path": ["title"], "value": "v3" } ] },
+        { "commit": [ { "op": "rebase", "node": { "$label": "p" }, "base": { "$label": "a" } } ] }
+      ],
+      "expect": {
+        "effective": { "p": { "title": "v3" } },
+        "changes": [ ["a [\"title\"]"], ["a [\"title\"]"], ["p [\"title\"]"], ["a [\"title\"]"], ["p [\"title\"]"] ]
+      }
+    }
+  ]
+}

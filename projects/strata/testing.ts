@@ -19,3 +19,5 @@ export { graphScenario } from "./src/testing/graph-scenario";
 export type { GraphWorld } from "./src/testing/graph-scenario";
 export { kernelScenario, randomModel } from "./src/testing/kernel-scenario";
 export type { KernelWorld } from "./src/testing/kernel-scenario";
+export { runEntityVector, typeFromData } from "./src/testing/entity-conformance";
+export type { EntityVector, EntityStep } from "./src/testing/entity-conformance";

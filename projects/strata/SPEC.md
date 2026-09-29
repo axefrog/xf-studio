@@ -1,8 +1,10 @@
 # XF Strata engine specification
 
-**Version 0.1 (draft), 29 September 2026.** This document is the normative, language-neutral statement of the XF Strata engine (Strata for short): its execution model (streams, demand, node kinds, cycles, drivers and processes, cancellation, errors), its entity layer (event-sourced nodes, layering, undo, snapshots, compaction, actors and conflicts) and its data formats. Two implementations are planned: the TypeScript engine in this package, and a native engine for the game side (a C++ kernel in the runtime bridge's RED4ext plugin, with redscript and CET as thin adapters). Both MUST pass the conformance vectors in [`conformance/`](conformance/).
+**Version 0.1 (draft), 29 September 2026.** This document is the normative, language-neutral statement of the XF Strata engine (Strata for short): its execution model (streams, demand, node kinds, cycles, drivers and processes, cancellation, errors), its entity layer (event-sourced nodes, layering, undo, snapshots, compaction, actors and conflicts) and its data formats. Two implementations are planned: the TypeScript engine in this package, and a native engine for the game side (a C++ kernel in the runtime bridge's RED4ext plugin, with redscript and CET as thin adapters that treat game objects as data carried by streams). Both MUST pass the conformance vectors in [`conformance/`](conformance/).
 
 The design rationale lives in the Studio's [profiles and graph design](../../research/authoring/profiles-and-graph-design.md) (§1.4 is the execution model); where the two differ on the execution model or the formats, this specification wins.
+
+> **Note (non-normative).** Strata is a graph of nodes in which every node is a stream of entries, nothing computes unless something downstream asks for it, and every change moves through the graph in a *cycle* that never lets a node see a half-updated world. On that kernel sits an entity layer: authored things (a makeup preset, a character, a profile) are nodes whose history is kept forever as entries, which can inherit values from each other in layers, and which can be undone, viewed as they were at any point, and checked by rules. This document is written so that a second implementation, in another language, can be built from it alone and checked against the same test vectors.
 
 ## Contents
 
@@ -14,7 +16,7 @@ The design rationale lives in the Studio's [profiles and graph design](../../res
 6. [Cycles: the START/END protocol](#6-cycles-the-startend-protocol)
 7. [Errors are values](#7-errors-are-values)
 8. [Cancellation tokens](#8-cancellation-tokens)
-9. [Drivers and processes](#9-drivers-and-processes)
+9. [Drivers, processes and actors](#9-drivers-processes-and-actors)
 10. [Models, the erector and operators](#10-models-the-erector-and-operators)
 11. [Entity streams](#11-entity-streams)
 12. [Layering resolution](#12-layering-resolution)
@@ -22,7 +24,7 @@ The design rationale lives in the Studio's [profiles and graph design](../../res
 14. [Undo, redo and revert](#14-undo-redo-and-revert)
 15. [Snapshots and upcasting](#15-snapshots-and-upcasting)
 16. [Compaction and purge](#16-compaction-and-purge)
-17. [Actors, provenance, trust and disagreement](#17-actors-provenance-trust-and-disagreement)
+17. [Actors, frames, provenance, trust and disagreement](#17-actors-frames-provenance-trust-and-disagreement)
 18. [Conflicts](#18-conflicts)
 19. [Stores](#19-stores)
 20. [Sources and determinism](#20-sources-and-determinism)
@@ -41,7 +43,9 @@ The design rationale lives in the Studio's [profiles and graph design](../../res
 
 1.4. Numbers in entries MUST be finite. Integers used as sequence numbers, positions and counters MUST be exact up to 2^53 − 1.
 
-1.5. Non-normative text is marked *Note*, or sits in an appendix.
+1.5. **Normative and explanatory text.** Numbered paragraphs are normative. Every block quote that begins with **Note (non-normative).** is explanation only: intent, reasons, examples and pitfalls. It never adds, removes or weakens a requirement, and a renderer MAY style it apart or filter it out. Appendices are non-normative.
+
+> **Note (non-normative).** The explainers exist because this specification will be read by people implementing Strata in other languages and by people who only want to understand it. If an explainer and a numbered rule ever seem to disagree, the rule is right and the explainer is a bug to report.
 
 ## 2. Data model
 
@@ -49,13 +53,15 @@ The design rationale lives in the Studio's [profiles and graph design](../../res
 
 2.2. **Canonical form.** The canonical serialisation of a value is JSON with object members sorted by the code points of their names, no insignificant whitespace, and numbers in the shortest form that round-trips. Two values are **equal** exactly when their canonical forms are identical. Members whose value is absent are not members; implementations MUST NOT distinguish an absent member from one that was never set.
 
-2.3. **Node IDs.** An entity node's ID is an RFC 4122 UUID in lower case, except a constant's (§11.9), which is `builtin:<type>/<name>`. Kernel node IDs (§5) are strings unique within their environment.
+2.3. **Node IDs.** An entity node's ID is an RFC 4122 UUID in lower case, except a constant's (§11.9), which is `builtin:<type>/<name>`. Kernel node IDs (§5) and actor IDs (§17.1) are strings unique within their environment.
 
 2.4. **Paths.** A path is a non-empty array of strings: a field name, then map keys (§11.2). A path's **key** is its canonical serialisation.
 
 2.5. **Entry references.** An entry of an entity stream is itself addressable: the record `{ "node": { "type": <type>, "id": <id> }, "seq": <integer ≥ 1> }`.
 
 2.6. **Hashes.** Where this specification derives an identity from data (a conflict ID, §18.3), it uses the canonical form of that data. The hash function is implementation-defined but MUST be deterministic and stable across runs and versions of the implementation.
+
+> **Note (non-normative).** Keeping everything plain data is what makes the rest possible: entries can be stored, sent to another process, compared, replayed and checked by a second implementation. Equality is defined on the canonical form so that `{"a":1,"b":2}` and `{"b":2,"a":1}` are the same value in every language. A common pitfall is letting a host object (a texture, a callback) slip into an entry because it is convenient; keep the object in a runtime owned by an adapter and put only its identity or description in the graph.
 
 ## 3. Streams and entries
 
@@ -77,6 +83,8 @@ The design rationale lives in the Studio's [profiles and graph design](../../res
 
 3.5. **Entity streams** (§11) are streams whose entries carry more members (commit, actor, position). They are seeds' streams in kernel terms (§11.1) and follow this section except where §11 is more specific.
 
+> **Note (non-normative).** "Value stream" and "delta stream" are ways of *reading* a stream, not kinds of stream. A camera pose is usually read by taking the latest entry; a preset's edits are read by folding them into a state. Both are entries on a timeline, which is why history, replay and time travel work the same way for both. Pitfall: don't design a node whose meaning depends on how many times something *computed*; its meaning is its entries.
+
 ## 4. Demand
 
 4.1. **Nothing happens without demand.** A node computes, activates or retains only because something demands it. Demand is expressed by a **consumer** on a **producer** with a **demand spec**. Consumers are other nodes (a combinator or effect on each of its inputs) or the host (a one-shot read, §4.8).
@@ -94,7 +102,7 @@ The design rationale lives in the Studio's [profiles and graph design](../../res
 
 4.3. **Demand as a source.** In place of a spec, a consumer MAY give a node whose latest entry is a spec. The implementation MUST then demand `latest` on that spec node, and whenever it appends an entry, MUST treat the consumer's demand as changed to the new spec, as a demand change (§6.8): the demand edge is not released and re-established, the producer never passes through dormancy on its account, and its retention follows the new spec from the end of that cycle. A spec node whose latest entry is not a valid spec, or is an error, MUST be treated as `latest`.
 
-4.4. **Activity.** A node is **active** while it has at least one demand edge from an active consumer or from the host. An effect is active while it is connected by a running driver (§9.3). A node that is not active is **dormant**. A dormant node MUST NOT compute, MUST NOT hold demand on its inputs, and a dormant seed MUST NOT be activated (§5.2). When a combinator or effect becomes active it MUST demand each input (with `latest` unless its operator declares another spec); when it becomes dormant it MUST release those demands. Activation and dormancy therefore cascade upstream.
+4.4. **Activity.** A node is **active** while it has at least one demand edge from an active consumer or from the host. An effect is active while it is connected by a running driver (§9.3). A node that is not active is **dormant**. A dormant node MUST NOT compute, MUST NOT hold demand on its inputs, and a dormant seed MUST NOT be activated (§5.2). When a combinator or effect becomes active it MUST demand each input (with `latest` unless its model or operator declares another spec); when it becomes dormant it MUST release those demands. Activation and dormancy therefore cascade upstream.
 
 4.5. **Retention.** An active node MUST retain every entry required by the union of its consumers' specs: the latest entry; each demanded entry; each entry of a demanded range; for a rolling spec, the entries the spec covers. It MAY retain more. A dormant node MAY discard all its entries except the facts §3.2 requires to continue its sequence numbering. An entity stream's retained entries MAY be loaded from its store on demand (§11.12) rather than held in memory.
 
@@ -104,11 +112,13 @@ The design rationale lives in the Studio's [profiles and graph design](../../res
 
 4.8. **One-shot demand.** The host MAY read a node outside any cycle. If the node is active, the read returns its retained entries. If it is dormant, the implementation MUST either activate it, apply the activation (§6.9) and release it again, or compute the same answer by other means; either way the answer MUST equal what an active node would hold after that activation.
 
+> **Note (non-normative).** Demand is what keeps a large graph cheap: a panel that isn't showing, a V nobody is looking at, a derived value nobody asked for costs nothing. A window over time is itself demand (show me the last 30 seconds), and because a spec can be a node, a slider that resizes that window changes one entry instead of tearing a subscription down and building it again. Example: a history strip demands `{ "rolling": { "entries": 50 } }` of a preset's stream; scrolling back changes its spec node to `{ "range": { "from": 1, "to": 50 } }`. Pitfalls: forgetting that demand is transitive (demanding a combinator demands its inputs), and holding host demand without a token to end it (§8.4), which leaks activity.
+
 ## 5. Node kinds
 
 There are exactly five node kinds. Every node has an ID, a kind, and a stream.
 
-5.1. **Common contract.** A node's inputs are an ordered list of nodes. A node MUST NOT be its own input, and the input graph of active nodes MUST be acyclic: an implementation MUST refuse (and leave unwired) an input edge that would close a cycle among nodes, reporting the refusal as an error entry on the node whose inputs changed.
+5.1. **Common contract.** A node's inputs are an ordered list of nodes. A node MUST NOT be its own input, and the input graph of active nodes MUST be acyclic: an implementation MUST refuse (and leave unwired) an input change that would close a cycle, reporting the refusal on the environment's error seed (§7.4) with the code `cycle`.
 
 5.2. **Seed.** A seed has no inputs. Its entries come from outside through **observations**: each observation appends one entry whose value is the observed data. Constants, baked-in defaults, sources (the clock, input), entity nodes' entry streams and process results are seeds. A seed MAY have an **activation**: host behaviour run when the seed becomes active, given a cancellation token (§8) that is cancelled when the seed becomes dormant (a clock seed starts ticking; a listener attaches). A seed MAY be observed while dormant; the observation appends an entry but starts no work downstream (nothing is active downstream). A seed MAY declare that an observation equal to its latest entry is ignored; otherwise every observation appends.
 
@@ -116,9 +126,11 @@ There are exactly five node kinds. Every node has an ID, a kind, and a stream.
 
 5.4. **Effect.** An effect has one or more inputs and no stream consumers: its work is synchronous host behaviour, run in the cycle whenever at least one input changed (§6.4). There is no long-running effect: an effect that needs long-running work MUST ask a driver for a process (§9). An effect's stream records its runs (the entries MAY be empty records); implementations MAY omit retaining them.
 
-5.5. **Driver.** A driver coordinates demand. It is a shell around an internal graph environment: **starting** it runs its definition, which creates nodes in the run's scope and connects sources to effects (which is what expresses demand, §4.4), and returns the run's **process node** (§9.1). A driver's stream is the list of its runs' process node references.
+5.5. **Driver.** A driver coordinates demand. It is a shell around an internal graph environment: **starting** it runs its definition, which creates nodes in the run's scope and connects sources to effects (which is what expresses demand, §4.4), and returns the run's **process node** (§9.1). A driver is an actor (§9.7). A driver's stream is the list of its runs' process node references.
 
 5.6. **Process.** A process is long-running work: a node whose stream is the work's state (§9.2). It is started by a driver (a driver's run is itself a process), is observable like any node, and is the parent of any child processes started in its context.
+
+> **Note (non-normative).** Think of seeds as where the world comes in, combinators as pure thinking, effects as the only place anything is done, drivers as the things that decide what is being watched, and processes as work in progress that everyone can watch. Example: a clock seed feeds a "minutes since saved" combinator, which feeds an effect that updates a label; the panel's driver connects that effect while the panel is open. Pitfalls: doing slow work in an effect (ask for a process instead), and computing something in an effect that should have been a combinator (then nothing else can reuse it).
 
 ## 6. Cycles: the START/END protocol
 
@@ -137,8 +149,6 @@ There are exactly five node kinds. Every node has an ID, a kind, and a stream.
 5. On the counter's **1→0** transition, and only then, the node **finishes**: if at least one input changed, a combinator computes and an effect runs; otherwise it does no work. It then sends END to each consumer it sent START to: *changed* if it appended an entry in this cycle, *unchanged* otherwise.
 6. A node that computes and finds its output equal to its latest entry MUST NOT append, and MUST send END(unchanged) (**END on unchanged**). Its consumers then do no work on its account.
 
-*Note.* In a reconvergent diamond (A feeds B and C, which both feed D), D receives two STARTs and two ENDs and finishes once, after both B and C, so it computes once and never sees B's new value with C's old one.
-
 6.5. **Cycle invariants.** For every cycle, an implementation MUST guarantee:
 
 - **K1 (once).** Every node finishes at most once.
@@ -149,6 +159,8 @@ There are exactly five node kinds. Every node has an ID, a kind, and a stream.
 - **K6 (scope).** Only nodes downstream of an origin through active edges take part.
 - **K7 (containment).** No failure of a computation or an effect escapes the cycle (§7).
 
+> **Note (non-normative).** The counter makes a node wait for everything upstream of it that is moving in this cycle. In a diamond (A feeds B and C, which both feed D) D receives two STARTs, so it waits for two ENDs and computes once, after both B and C. Without counting, D would compute when B finished (seeing new B and old C: a *glitch*) and again when C finished. END on unchanged is the other half: if B works out that its answer didn't change, it says so, and D doesn't compute on B's account. Pitfall: propagating START on every increment instead of only 0→1 multiplies messages exponentially in deep diamonds; the counts stay correct, but the cost doesn't.
+
 6.6. **Order.** The order in which a node's consumers receive their messages, and in which independent nodes finish, is implementation-defined, subject to 6.4 and 6.5. Hosts and conformance vectors MUST NOT depend on the relative order of independent nodes (nodes neither of which is upstream of the other).
 
 6.7. **Completion.** A cycle **completes** when every origin and every node that received START has finished. Then, in order:
@@ -157,13 +169,15 @@ There are exactly five node kinds. Every node has an ID, a kind, and a stream.
 2. if any node was activated or rewired by them, an activation cycle runs (§6.9);
 3. queued observations (§6.8) start the next cycle, in the order they were made, each queued transaction a cycle of its own.
 
-6.8. **Queued changes (mid-cycle).** During a cycle, an implementation MUST NOT change the set of active nodes, any node's inputs or any demand edge, and MUST NOT start or stop a driver. Such changes requested during a cycle (by an effect, by a combinator's flatMap, by the host) MUST be queued and applied at completion (6.7). Observations made during a cycle MUST NOT join it; they MUST be queued and start a later cycle.
+6.8. **Queued changes (mid-cycle).** During a cycle, an implementation MUST NOT change the set of active nodes, any node's inputs or any demand edge, and MUST NOT start or stop a driver or begin a process. Such changes requested during a cycle (by an effect, by a combinator's flatMap, by the host) MUST be queued and applied at completion (6.7). Observations made during a cycle MUST NOT join it; they MUST be queued and start a later cycle.
 
 6.9. **Activation cycles.** When applied changes activate nodes or change nodes' inputs, the environment's wiring seed observes the batch, and the cycle it starts reaches exactly the nodes activated or rewired (each counts the wiring seed as a changed input for this cycle) and, through them, their active consumers. A newly activated combinator therefore computes from its inputs' latest entries (it is **primed**) and appends if its value differs from its latest entry (or it has none); a newly connected effect runs once with its inputs' latest entries. Priming a node with an input that has no entry yet: the combinator's computation receives that input as having none, and MAY return unchanged.
 
-6.10. **Re-entrancy.** An effect or a host callback MAY request changes and observations during a cycle; they are queued (6.8). A request to run a cycle from within a cycle MUST NOT run it immediately.
+6.10. **Re-entrancy.** An effect or a host callback MAY request changes and observations during a cycle; they are queued (6.8). A request to run a cycle from within a cycle MUST NOT run it immediately. An entity commit (§11.8) requested during a cycle MUST be refused (`busy`) or queued; it MUST NOT mutate entity streams mid-cycle.
 
-6.11. **Liveness.** Every cycle MUST complete in a finite number of steps. Implementations MUST bound activation cycles caused by activation cycles (a wiring change that causes another in its own activation cycle); a bound of at least 64 consecutive activation cycles MUST be supported, after which further queued wiring changes are reported as error entries on the environment's error seed (§7.4) and dropped.
+6.11. **Liveness.** Every cycle MUST complete in a finite number of steps. Implementations MUST bound activation cycles caused by activation cycles (a wiring change that causes another in its own activation cycle); a bound of at least 64 consecutive activation cycles MUST be supported, after which further queued wiring changes are reported on the environment's error seed (code `activation-bound`) and dropped.
+
+> **Note (non-normative).** Queuing is what keeps a cycle's picture of the world consistent: if an effect could rewire the graph while the cycle was still running, nodes later in the same cycle would see a graph that was never whole. So an effect that wants something new (start a driver, rewire a node, observe a seed) *asks*, and the ask is honoured when the cycle is done. Example (A.3): switching which input a node reads is visible from the next cycle; the node is primed from its new input straight away in an activation cycle. Pitfall: expecting an observation made by an effect to be seen by nodes in the same cycle; it starts the next one.
 
 ## 7. Errors are values
 
@@ -171,9 +185,11 @@ There are exactly five node kinds. Every node has an ID, a kind, and a stream.
 
 7.2. An error entry is a changed output: consumers compute, receiving the error as that input's latest entry. A standard operator given an error input MUST output an error entry carrying the same error, unless the operator is defined to handle errors. Two error entries are equal when their error records are equal (so a repeated identical failure is END on unchanged).
 
-7.3. An effect whose run fails MUST NOT affect the cycle; the failure MUST be observed, as an error record naming the effect, on the environment's **error seed** in a later cycle (§6.8).
+7.3. An effect whose run fails MUST NOT affect the cycle; the failure MUST be observed on the environment's **error seed** in a later cycle (§6.8), as an error record with the code `effect`.
 
-7.4. Failures in the environment itself (a refused edge, an activation bound exceeded, a driver definition failing) are observed on the error seed likewise. No failure escapes a cycle to the host as an exception; a host API that cannot complete (a refused commit, §11.8) returns a refusal value.
+7.4. Failures in the environment itself are observed on the error seed likewise, with a code: `cycle` (a refused input change, §5.1), `activation-bound` (§6.11), `operator` (a model names an operator the catalogue lacks, §10.3), `schema` (a model in a format the implementation doesn't read, §10.2). No failure escapes a cycle to the host as an exception; a host API that cannot complete (a refused commit, §11.8) returns a refusal value.
+
+> **Note (non-normative).** A failure is information, not an interruption: it flows downstream like any value, so a panel can show "couldn't work this out: …" instead of the whole graph stopping. Messages are for people and MAY vary between implementations; codes are for programs and are what vectors check. Pitfall: catching an error inside a combinator and returning a stale value, which hides the failure from everything downstream.
 
 ## 8. Cancellation tokens
 
@@ -189,9 +205,11 @@ There are exactly five node kinds. Every node has an ID, a kind, and a stream.
 
 8.6. **Mapping.** An implementation in a language with a native equivalent (a JavaScript host's AbortSignal, a stop token) SHOULD accept native tokens as parents. An engine forbidden from reading host globals MAY implement its own token satisfying the native interface.
 
-## 9. Drivers and processes
+> **Note (non-normative).** One mechanism ends everything: closing a panel aborts its driver's token, which aborts every process the panel started and every effect it connected, all the way down, because each child's token hangs off its parent's. There is nothing to remember to unsubscribe. The TypeScript engine carries its own AbortSignal-compatible token because it may not read host globals; a C++ engine would use its own stop tokens. Pitfall: creating a child token that isn't chained to its parent, which leaves work running after the thing that asked for it is gone.
 
-9.1. **Starting a driver** takes a token and returns a **process node** for the run, in state `running`. Starting is a wiring change (§6.8): requested during a cycle, the run begins at completion, and the returned process node exists at once but appends its `running` entry in the activation cycle. The run's definition then creates nodes in the run's **scope**, connects sources to effects (activating them), and may start child processes and child drivers. The run ends (§9.4) when its token is aborted, or when its definition completes or fails, if it is one that completes.
+## 9. Drivers, processes and actors
+
+9.1. **Starting a driver** takes a token and returns a **process node** for the run. Starting is a wiring change (§6.8): requested during a cycle, the run begins at completion. The returned process node exists at once; its `running` entry is observed when the run begins. The run's definition then creates nodes in the run's **scope**, connects sources to effects (activating them), and may start child processes and child drivers. The run ends (§9.4) when its token is aborted, or when its definition completes or fails, if it is one that completes.
 
 9.2. **Process state.** A process's stream is its state, one entry per change:
 
@@ -209,51 +227,64 @@ A process MUST append exactly one terminal entry and nothing after it. Every sta
 
 9.4. **Ending.** A run or process ends: *aborted* when its token is aborted (with the token's reason); *done* or *failed* when its work completes. After a process is aborted, a later completion of its work MUST be discarded: no `done` or `failed` entry follows `aborted`, and the work's results MUST NOT be observed anywhere.
 
-9.5. **Children.** Work started in the context of a process is a **child process**: its token is chained to the parent's (§8.3). Aborting a parent aborts every descendant. When a process reaches a terminal state, its running children MUST be aborted (with the reason `{ "parent": <status> }`), before its terminal entry is observed or in the same cycle.
+9.5. **Children.** Work started in the context of a process is a **child process**: its token is chained to the parent's (§8.3), so aborting a parent aborts every descendant with the parent's reason. When a process reaches `done` or `failed` while children still run, its running children MUST be aborted with the reason `{ "parent": <status> }`, before its terminal entry is observed or in the same cycle.
 
 9.6. **Drivers start and stop through effects.** A child driver is started and stopped by effects (typically one that starts it while a condition node is true and aborts its token when it becomes false), and coordinated through state data in nodes; its start and stop are queued wiring changes.
 
-9.7. **Long-running work from a node.** A node needing new long-running work MUST obtain it as a child process from the driver responsible for the process the node feeds; it MUST NOT run long-running work itself.
+9.7. **A driver is an actor.** Drivers and actors share one ID space: a driver's ID is the ID of the actor it is, its run's internal graph environment is that actor's private world model, and its run's process node is the actor's observable activity. Entries an actor writes carry its driver's ID (§11.3, §17.1). A driver MAY declare **members** (other actors' IDs): a collective or a union is a driver whose internals are its members, and a leaf actor is a collective of one.
+
+9.8. **Inspection.** An implementation MUST be able to present the process tree: for each run, its driver (actor), the role it fills if it was started into one, the driver's members, its status and its children.
+
+9.9. **Long-running work from a node.** A node needing new long-running work MUST obtain it as a child process from the driver responsible for the process the node feeds; it MUST NOT run long-running work itself.
+
+> **Note (non-normative).** The same shape repeats at every scale. A person, the Studio, the game plugin, a panel, the database connection: each is an actor, which is a driver with a private graph (what it knows and thinks) and an observable activity (its process). A company works the same way: three founders can be one "founder" actor (a *union*) to everyone outside, while anyone can look inside and see the three; the company is a collective whose members fill *roles* (the database role, the reviewer role), and a role is itself something actors can be assigned to. This version specifies only the parts implementations need now (actor IDs, members, roles on runs, the inspectable tree); assigning actors to roles is future work. Pitfall: treating a collective's ID as anything other than an actor ID; to the rest of the graph it is one actor.
 
 ## 10. Models, the erector and operators
 
 10.1. **Data first.** A subsystem SHOULD first be modelled as data in a node: its shape, its state machine and its effects. The live machinery is erected from that model.
 
-10.2. **Graph models.** A graph model is the record `{ "nodes": [ <node model>, … ] }`, where each node model is:
+10.2. **Graph models.** A graph model is the record `{ "schema"?: "xf-strata/graph-model/1", "nodes": [ <node model>, … ] }`. `schema` names the format version; an absent `schema` means format 1, and an implementation MUST refuse a model naming a format it doesn't read (code `schema`, §7.4), leaving what it erected unchanged. The format is published as JSON Schema at [`schema/graph-model-1.schema.json`](schema/graph-model-1.schema.json). Each node model is:
 
 | Member | Meaning |
 |---|---|
 | `id` | Unique within the model. |
 | `kind` | `"seed"`, `"combinator"`, `"effect"` or `"driver"`. |
-| `op` | For a combinator, effect or driver: the operator's name in the registry (§10.4). |
+| `op` | The operator's name in the catalogue (§10.4). A seed without one uses the catalogue's `seed` operator. |
 | `inputs` | For a combinator or effect: the IDs of its inputs, in order (model IDs, or `{ "$node": … }` for live nodes outside the model). |
 | `params` | Data given to the operator. |
-| `initial` | For a seed: an optional first entry, observed when the seed is erected. |
+| `initial` | For a seed: an optional first entry, appended when the seed is created, before any consumer is primed. |
 | `demand` | Optional: the spec the node demands of its inputs, instead of `latest` (a spec, or a model ID of a node whose latest entry is the spec, §4.3). |
 
-10.3. **The erector** is a driver. Started with a model node, its run demands the model node's latest entry and keeps a set of live nodes matching it. At start and whenever the model node appends, it MUST (as queued wiring changes, §6.8): create nodes for new model IDs; release nodes whose IDs disappeared; rewire nodes whose `inputs` or `demand` changed; and replace nodes whose `kind`, `op` or `params` changed (release and create). A node whose model is unchanged MUST keep its identity and retained entries. The erector **delivers a node**: a combinator whose latest entry maps each model ID to its live node reference (`{ "$node": … }`).
+10.3. **The erector** is a driver. Started with a model node, its run demands the model node's latest entry and keeps a set of live nodes matching it. At start and whenever the model node appends, it MUST (as queued wiring changes, §6.8): create nodes for new model IDs; release nodes whose IDs disappeared; rewire nodes whose `inputs` or `demand` changed; and replace nodes whose `kind`, `op`, `params` (or a seed's `initial`) changed (release and create). A node whose model is unchanged MUST keep its identity and retained entries. A model node naming an operator the catalogue lacks, or one of another kind, is not erected (code `operator`). The erector **delivers a node**: a seed whose latest entry maps each model ID to its live node reference (`{ "$node": … }`). Effects in a model are connected for the length of the erector's run.
 
-10.4. **Operators.** An operator registry maps names to computations: for a combinator, a function of its inputs' entries and previous output to a value or *unchanged*; for an effect, synchronous work; for a driver, a definition. Registries are host code; models name operators so that they stay data. An implementer contributes a feature by delivering a node: a model node, and a node carrying the contributed nodes (which MAY be the same node).
+10.4. **The catalogue.** An operator catalogue maps names to operators: for a seed, an optional activation; for a combinator, a computation of its inputs' entries and previous output to a value or *unchanged*; for an effect, synchronous work; for a driver, a definition. Built-in operators, the `seed` operator included, MUST be registered through the same catalogue a script uses, with no other way for a model to create a node. Models name operators so that they stay data. An implementer contributes a feature by delivering a node: a model node, and a node carrying the contributed nodes (which MAY be the same node).
 
 10.5. **Conformance operators.** Every implementation's conformance runner MUST provide these operators (they need not exist in production):
 
 | Name | Kind | Behaviour |
 |---|---|---|
+| `seed` | seed | A plain seed. |
 | `identity` | combinator | The latest value of its one input. |
 | `sum` | combinator | The sum of its inputs' latest values (numbers; absent counts 0) plus `params.add` (default 0). |
 | `product` | combinator | The product of its inputs' latest values. |
-| `pick` | combinator | `params.path` (an array of member names) read from its one input's latest value; absent if missing. |
+| `pick` | combinator | `params.path` (an array of member names) read from its one input's latest value; unchanged if missing. |
 | `scan-sum` | combinator | Its previous output (0 at first) plus each of its one input's entries appended in this cycle. |
 | `collect` | combinator | The array of its one input's retained entries' values covered by its demand (with `demand` a range or rolling spec). |
 | `combine` | combinator | The array of its inputs' latest values (null for an input with none). |
 | `threshold` | combinator | `true` when its one input's latest value ≥ `params.at`, else `false`. |
+| `state-machine` | combinator | §10.6. |
 | `fail-when` | combinator | Its one input's latest value, except that it fails (§7.1, message `params.message`) when that value equals `params.equals`. |
-| `record` | effect | Appends its inputs' latest values (one array per run) to the vector's log for this effect. |
+| `record` | effect | Appends its inputs' latest values (one array per run; an error input as `{ "error": <message> }`) to the vector's log for this effect. |
 | `observe` | effect | Observes seed `params.seed` with its one input's latest value (a queued observation, §6.8). |
 | `while` | effect | Starts driver `params.driver` (with a token of its own) while its one input's latest value is `true`; aborts that token when it becomes `false`. |
-| `rewire` | effect | Changes the inputs of node `params.node` to `params.inputs[<its input's latest value>]` (a queued rewiring). |
+| `rewire` | effect | Changes the inputs of node `params.node` to `params.inputs[<its input's latest value>]` (a queued rewiring), unless they are those already. |
+| `explode` | effect | Fails (throws) with `params.message` when its one input's latest value equals `params.equals`. |
 | `work` | driver | Starts the processes in `params.processes` as children of its run (§22.4), then keeps running until aborted. |
-| `connect` | driver | Connects each `[source, effect]` pair in `params.pairs` (model IDs of existing nodes) for the length of its run. |
+| `connect` | driver | For each `[source, log]` pair in `params.pairs`, connects an effect recording `source`'s latest value to that log, for the length of its run. |
+
+10.6. **State machines as data.** The `state-machine` operator's `params` are `{ "initial": <state>, "inputs": [<name> …], "states": { <state>: { "on": { <event>: { "target": <state>, "guard"?: <name>, "effects"?: [<model id> …] } } } } }`. `inputs` names the node's inputs in order. On priming the output is `{ "state": <initial> }`. In a cycle, for each input in order that appended an entry, if the current state has a transition on that input's name and its guard (another input's name) is absent or has the latest value `true`, the machine moves to `target`; the output is `{ "state", "from", "event", "effects"? }` for the last transition taken, or unchanged if none was. The params schema is part of [`schema/graph-model-1.schema.json`](schema/graph-model-1.schema.json).
+
+> **Note (non-normative).** Anything that can be declared as data can be written by a script, generated by a tool or an AI model, diffed, stored and tested, and a second implementation can erect it identically. That is why the erector exists and why built-in operators get no back door: a script's subsystem and a built-in one are the same kind of thing. Example: a panel's open/closed/busy behaviour is a `state-machine` node whose events are button seeds and whose guard is a "ready" combinator; the effects it names are ordinary effect nodes that read its output. Pitfall: putting logic in an operator that should have been a node; the test is "how much of this is technically data that should be in a node?".
 
 ## 11. Entity streams
 
@@ -261,7 +292,7 @@ The entity layer is event sourcing on the kernel: every authored node is a seed 
 
 11.1. **Entity nodes.** An entity node has a type (§11.2), an ID (§2.3) and a stream of **entity entries**. Its **state** is the fold of its entries (§11.6); its **effective value** is its state resolved through its layers (§12). In kernel terms the node's entry stream is a seed, the fold is a scan combinator over it, and resolution is a combinator over the state and its layer sources' effective values.
 
-11.2. **Types.** A node type is data: `{ "type": <name>, "owner": <name>, "schema": <string>, "stream": "delta" | "value", "persistence": "persistent" | "session", "fields": { <name>: <field spec> }, "defaults": <object>, "constants": [ … ], "compatible": [ <type> … ] }`. A field spec is one of: `{ "kind": "value" }` (atomic data); `{ "kind": "ref", "to": <type or types>, "clone": "follow" | "share", "follows": true? }` (one node reference or null); `{ "kind": "refs", … }` (an ordered, atomic list of references); `{ "kind": "entry" }` (an entry reference, §2.5, or null); `{ "kind": "map", "of": <field kind> }` (keyed values). A field spec MAY add `"inherit": false` (identity: never layered, never cloned) and `"unique": true` (no two live nodes of the type share its own value). A **leaf path** is a field name followed by one key per map level. `stream` names the default consumer (the latest entry, or a scan) and the compaction rule (§16); it does not change the stream.
+11.2. **Types.** A node type is data: `{ "type": <name>, "owner": <name>, "schema": <string>, "stream": "delta" | "value", "persistence": "persistent" | "session", "fields": { <name>: <field spec> }, "defaults": <object>, "constants": [ … ], "compatible": [ <type> … ] }`. A field spec is one of: `{ "kind": "value" }` (atomic data); `{ "kind": "ref", "to": <type, types or "*">, "clone": "follow" | "share", "follows": true? }` (one node reference or null; `"*"` accepts any type); `{ "kind": "refs", … }` (an ordered, atomic list of references); `{ "kind": "entry" }` (an entry reference, §2.5, or null); `{ "kind": "map", "of": <field kind> }` (keyed values). A field spec MAY add `"inherit": false` (identity: never layered, never cloned) and `"unique": true` (no two live nodes of the type share its own value). A **leaf path** is a field name followed by one key per map level. `stream` names the default consumer (the latest entry, or a scan) and the compaction rule (§16); it does not change the stream.
 
 11.3. **Entity entries.** An entity entry is the record:
 
@@ -271,7 +302,7 @@ The entity layer is event sourcing on the kernel: every authored node is a seed 
 | `seq` | 1, 2, 3 … within the node's stream; no gaps unless compacted (§16). |
 | `pos` | The **position**: the local commit order across all streams (a point in time, §11.10). Assigned by the store (§19.3). |
 | `commit` | The ID of the commit that appended it (a UUID); every entry of one commit has the same. |
-| `actor` | The actor that made it (§17). |
+| `actor` | The actor that made it (a driver ID, §9.7). |
 | `actorSeq` | The actor's own counter at the entry. |
 | `at` | The clock source's wall time when committed (for a belief, the other actor's time). |
 | `schema` | The type's schema when written (§15.3). |
@@ -307,7 +338,7 @@ A *primitive op* is set, reset, tombstone, layers, rename, trash, restore, retra
 
 11.7. **Existence.** A node **exists** at a point when its fold there is not *none* and not retracted. A trashed node exists (it resolves, and is listed as trashed).
 
-11.8. **Commits.** A commit is a batch of edits applied atomically as one kernel transaction: each node it touches gets one or more consecutive entries, all with the commit's ID, and the first entry of the commit carries `meta` (§11.3). A commit either applies entirely or is **refused** with a reason code and nothing changes. Implementations MUST refuse, at least: an edit of a constant (`constant`); a path the type doesn't have (`path`); a value its field doesn't accept (`value`; a reference must name an accepted type); a layer list that would close a layer cycle (`cycle`, §12.5); a layer source of another, incompatible type (`type`); a unique value already held (`unique`); a commit whose stated basis differs from the nodes' head seqs (`stale`); an edit of a node that doesn't exist (`missing`); an action a blocking conflict refuses (`conflict`, §18.4).
+11.8. **Commits.** A commit is a batch of edits applied atomically as one kernel transaction: each node it touches gets one or more consecutive entries, all with the commit's ID, and the first entry of the commit carries `meta` (§11.3). An edit that leaves a node's state unchanged appends no entry, and a commit that changes nothing is refused (`empty`). A commit either applies entirely or is **refused** with a reason code and nothing changes. Implementations MUST refuse, at least: an edit of a constant (`constant`); a path the type doesn't have (`path`); a value its field doesn't accept (`value`; a reference must name an accepted type); a layer list that would close a layer cycle (`cycle`, §12.5); a layer source of another, incompatible type (`type`); a unique value already held (`unique`); a commit whose stated basis differs from the nodes' head seqs (`stale`); an edit of a node that doesn't exist (`missing`); an action a blocking conflict refuses (`conflict`, §18.4); and a commit requested during a cycle, unless it is queued (`busy`, §6.10).
 
 11.9. **Constants.** A type MAY declare constants: `{ "name", "label", "fields" }`. A constant is a node with ID `builtin:<type>/<name>`, name `label`, own values from `fields`, no layers and no stream. Constants are layer sources and reference targets, never edit targets.
 
@@ -316,6 +347,10 @@ A *primitive op* is set, reset, tombstone, layers, rename, trash, restore, retra
 11.11. **Actors and commit identity.** Every entry names its actor and the actor's counter; a commit names the positions it was made against (its basis). §17 defines beliefs.
 
 11.12. **Loading.** An implementation MAY hold only part of a stream in memory: a snapshot (§15) and the entries after it. A demand for an earlier point or range (§4.2 `query`) MUST cause the needed entries to be loaded (through a process of the store driver, §19.5) before it is answered.
+
+11.13. **Change reports.** Bookkeeping that keeps caches true (folding new entries, reverse indexes, invalidating resolution memos along layer edges) happens with a commit's observation for every affected node; change reports (§12.8) are computed for the nodes that are demanded.
+
+> **Note (non-normative).** Nothing authored is ever overwritten: an edit is a new entry, and "the preset" is the fold of its entries. That is what makes undo exact, history free, and forking from last week's version possible. Example: a preset's entries might be create, set colour, set opacity, rename; its state is the result, and its value at any earlier point is the fold up to that point. Pitfalls: writing a large whole-state entry for every small edit (use `set` on the path), and treating `pos` as stable before the store has acknowledged the entry (it is assigned by the store).
 
 ## 12. Layering resolution
 
@@ -342,6 +377,8 @@ Otherwise the value is absent.
 
 12.8. **Change reports.** When a cycle changes a demanded node's effective value, the change report MUST list exactly the leaf paths whose effective value (or presence) differs from before the cycle, plus bookkeeping changes (`created`, `name`, `layers`, `trashed`, `retracted`, `purged`).
 
+> **Note (non-normative).** Layering is how "like that one, but…" works without copying. A fork has the source as its base and follows it until it sets something itself; a feed takes only some paths from another node, ahead of the base. Maps are resolved key by key, so a fork can change one makeup layer and keep following the others, and a tombstone removes an inherited key. Example: V2 is a fork of V1 with its own hair; V1's eye colour changes and V2 shows it at once; V2's hair stays hers. Pitfalls: expecting a tombstone in a *source* to stop the search in a node that layers from it (it doesn't: the source yields nothing and the search continues to the next layer), and editing an inherited value on the source by accident (edit the node, or use apply to source deliberately).
+
 ## 13. Layering operations
 
 Each operation is an edit in a commit; its result is normative, its encoding as ops is not (except where stated).
@@ -364,6 +401,10 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 
 13.9. **Identity is never shared.** A created, forked or cloned node gets a fresh ID and fresh values for its `inherit: false` fields (generated from the random source, §20).
 
+13.10. **Creation labels.** Within one commit, an edit MAY name a node created earlier in the same commit by the label it was created under (`{ "created": <label> }`), wherever a node reference is expected, including inside field values.
+
+> **Note (non-normative).** These are the verbs a person uses: fork ("like this, but…"), feed ("take just the eyes from that one"), clone ("an independent copy"), detach ("stop following, keep what I see"), rebase ("follow this other one instead"), reset ("go back to inherited"), apply to source ("make this the default for everyone sharing it"). Pitfall: cloning when forking was meant, which silently stops later improvements to the source from arriving.
+
 ## 14. Undo, redo and revert
 
 14.1. **Append only.** Undo, redo and revert append entries; they never remove or rewrite entries.
@@ -374,7 +415,9 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 
 14.4. **Revert** to entry E of node N appends one `revert` entry whose ops turn N's current state into its state at E (not retracted).
 
-14.5. **Scopes.** Undo stacks are per scope (a node's content history, or the graph's wiring); undoing acts on the scope's latest commit not yet undone; a new commit in a scope clears its redo stack. Undo stacks are session state, not stored.
+14.5. **Scopes.** Undo stacks are per scope (a node's content history, or the graph's wiring); undoing acts on the scope's latest commit not yet undone; a new commit in a scope clears its redo stack. Undo stacks are session state, not stored, and ending a session (or forgetting a scope's history) empties them.
+
+> **Note (non-normative).** Because undo is itself an entry, history and blame keep every step: you can see that something was changed and then undone. Compensation is path by path so that undoing your edit doesn't clobber a later edit someone else made to a different part of the same node. Pitfall: implementing undo by deleting entries, which breaks every reference to them (tags, manifests, pins) and every other window that has already read them.
 
 ## 15. Snapshots and upcasting
 
@@ -383,6 +426,8 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 15.2. **When.** An implementation SHOULD write a snapshot when a node's entries since its last snapshot exceed a bound (200 is RECOMMENDED) or took long to fold, and for every changed node when the host closes.
 
 15.3. **Upcasting.** A type MAY register **upcasters**, pure transformations from entries of schema *a* to entries of schema *b*, applied on read, never written back. Folding applies the chain from each entry's `schema` to the type's current schema. The declarative form used in vectors is `{ "from": a, "to": b, "rename": [[P, P′] …] }`: every path beginning with P is rewritten to begin with P′, in set, reset and tombstone ops and in states' own values.
+
+> **Note (non-normative).** Snapshots make loading fast (a node opens from its latest snapshot and a short tail) without ever becoming the truth: delete them all and the engine rebuilds them from the entries. Upcasting lets a type evolve without rewriting history: last year's entries are read through a translation. Pitfall: using a snapshot folded under an older schema; the rule above forbids it because the old fold may contain paths the new type no longer has.
 
 ## 16. Compaction and purge
 
@@ -400,19 +445,25 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 
 16.7. **Purge** removes a node's stream, snapshots and index rows from the store, and from existing backups (removal, not hiding). References to it by ID remain and read as missing. While other nodes layer from it, purge MUST be refused (`dependents`), naming them, unless forced.
 
-16.8. **Recording compaction.** A store MUST record where each stream was compacted (node, seq, time). Gaps in `seq` are permitted only in compacted streams.
+16.8. **Recording compaction.** A store MUST record where each stream was compacted (node, seq, time). Gaps in `seq` are permitted only in compacted streams, and a store MUST NOT let a compaction remove an entry appended after the entries it was given.
 
-## 17. Actors, provenance, trust and disagreement
+> **Note (non-normative).** Streams would grow forever; compaction is the pressure valve, and reachability is what makes it safe: a Build's manifest that points at "preset P, entry 42" keeps entry 42 however much else is rolled up. Seventy-eight tiny drag edits in three seconds become three state entries, and the fold at each surviving point is identical. Purge is different: it is the one deliberate forgetting, and it reaches backups too. Pitfall: compacting from a copy of a stream while new entries arrive; the store rule in 16.8 exists because the engine's first cut did exactly that and lost a late entry in simulation.
 
-17.1. **Actors.** Every process that writes entries (the Studio, the game plugin, the desktop host, an agent) is an actor with a stable ID and its own entry counter (`actorSeq`), which MUST increase by one per entry it writes.
+## 17. Actors, frames, provenance, trust and disagreement
+
+17.1. **Actors.** Every process that writes entries (the Studio, the game plugin, the desktop host, an agent) is an actor with a stable ID and its own entry counter (`actorSeq`), which MUST increase by one per entry it writes. An actor ID is a driver ID (§9.7) and MAY denote a collective or union (a composite actor).
 
 17.2. **Beliefs.** An entry recording another actor's opinion is a **belief**: it carries `provenance` naming that actor, its counter and its time. Beliefs are appended like any entry; nothing is overwritten.
 
 17.3. **Re-engaging.** A stream MUST be readable "after entry N" (by `seq`) so an observer can resume with a cursor.
 
-17.4. **Trust.** Resolving a fact from several actors' claims asks a **trust policy**, `rank(fact kind, actor) → number` (higher wins; 0 is not trusted), never which claim came last. A claim is `{ "actor", "value", "asOf" }`, true as of `asOf`. The resolved value is the latest claim of the highest-ranked actor with rank > 0. Until trust tables exist, an actor trusts only itself.
+17.4. **Frames of reference.** There is no global truth. A graph's current values are its local actor's perceived world: its **frame of reference**. Implementations MUST NOT present them as anything else, and MUST name the frame a trust or agreement decision is made in.
 
-17.5. **Disagreement** is a state a value can be in: `{ "kind": "disagreement", "factKind", "claims": [ … ], "trusted"?: <claim> }`, present when the actors' latest claims differ. Implementations MUST list disagreements with conflicts (§18) when a rule reports them.
+17.5. **Trust.** Resolving a fact from several actors' claims asks a **trust policy for a frame**, `rank(fact kind, actor, frame) → number` (higher wins; 0 is not trusted), never which claim came last. A claim is `{ "actor", "value", "asOf" }`, true as of `asOf`. The resolved value is the latest claim of the highest-ranked actor with rank > 0. Policies are per frame; until trust tables exist, an actor trusts only itself in its own frame.
+
+17.6. **Disagreement** is a state a value can be in: `{ "kind": "disagreement", "factKind", "claims": [ … ], "trusted"?: <claim> }`, present when the actors' latest claims differ. Implementations MUST list disagreements with conflicts (§18) when a rule reports them.
+
+> **Note (non-normative).** The Studio and the running game each see the world their own way. "The game says V's hair is ash brown" is the game's claim, recorded in the Studio with who said it and when; it is true *as of that observation*, not stale. What counts as canonical is only ever agreement among a group of actors, and the domain of that agreement is a frame of reference; a group that agrees is itself an actor (a collective), and collectives nest. This version carries only the hooks: actor IDs that can name a collective, per-frame trust, and disagreement as a visible state. Example: the Studio says the lights are warm, the game says cool; the disagreement shows with "Push to the game" and "Adopt the game's" as its fixes. Pitfall: letting the last write win across actors, which silently throws away whichever side spoke first.
 
 ## 18. Conflicts
 
@@ -426,6 +477,8 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 
 18.5. **Fixes** apply a route's patch (a list of edits) as one commit, refused if the conflict no longer exists or the patch would add a blocking conflict. No fix removes anything.
 
+> **Note (non-normative).** A conflict is a wiring whose result would be wrong or surprising: a reference to something in the trash, two presets with one export ID, a circle of references. Conflicts never stop anyone looking; blocking ones stop only the actions they name, and each comes with fix routes that are ordinary, undoable graph edits. Pitfall: evaluating rules only for the node that changed; a rule about references must be re-evaluated for whatever refers to the changed node, which is why implementations keep reverse indexes.
+
 ## 19. Stores
 
 19.1. **Contract.** A store holds entity streams, snapshots, the compaction record and an index. It MUST offer: list the index; load every node's latest snapshot and the entries after it; read a stream after entry N; append a commit; read every entry after position N; a change counter; write and discard snapshots; compact a stream; purge a node.
@@ -436,7 +489,9 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 
 19.4. **Compaction** replaces a stream's entries up to the last given entry's `seq` with the given entries (kept and rollup entries, same seqs and positions), keeps any later entry, records the compaction and discards the stream's snapshots.
 
-19.5. **In the kernel,** the store is behind a **store driver**: appends, loads, reads and compactions are processes; an append's acknowledgement (or refusal) is observed as a new cycle. Commits appear in memory at once and are **pending** until acknowledged; a host keeps the pending commits as its recovery copy, and after a restart re-applies those whose basis still matches (skipping any the store already has). A refused (stale) commit, and every pending commit after it, is removed from memory and kept as **rejected**, never silently dropped.
+19.5. **In the kernel,** the store is behind a **store driver** (a child driver of the local actor's driver, in the role `store`): appends, loads, reads, snapshots, compactions and purges are its child processes, retries wait on timer processes, and an append's acknowledgement (or refusal) is observed as a new cycle. Commits appear in memory at once and are **pending** until acknowledged; a host keeps the pending commits as its recovery copy, and after a restart re-applies those whose basis still matches (skipping any the store already has). A refused (stale) commit, and every pending commit after it, is removed from memory and kept as **rejected**, never silently dropped.
+
+> **Note (non-normative).** The person's edit shows at once; the database catches up in order behind it, and until it has, the edit lives in a recovery copy so nothing is lost if the window closes. If another window changed the same node first, the append is refused as stale and the edit is kept, visibly, rather than merged by guesswork. Pitfall: acknowledging an append before it is durable, or assigning positions in the engine rather than the store (two windows would collide).
 
 ## 20. Sources and determinism
 
@@ -445,6 +500,8 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 20.2. **Randomness** is named streams: each purpose (node IDs, commit IDs, identity values) draws from its own stream, so a simulation with a seed is exactly repeatable and adding a use of one stream doesn't shift another.
 
 20.3. **Simulation.** An implementation SHOULD offer simulated sources driven by a seeded scheduler that holds every pending source event and chooses which runs next, so failures reproduce from a seed and a step list.
+
+> **Note (non-normative).** If the engine never reads the clock or the dice itself, the same code runs in the app and in a simulation where time, storage replies, crashes and other windows are all scripted from a seed. A failing run then reproduces exactly, and a shrinker can cut it down to the handful of steps that matter. Pitfall: a "harmless" timestamp read deep inside the engine; one is enough to make runs unrepeatable.
 
 ## 21. What implementations may choose
 
@@ -455,14 +512,17 @@ Implementations MAY choose freely, provided the observable behaviour above holds
 - whether one-shot reads of dormant nodes activate them or compute otherwise (§4.8);
 - threading, provided cycles don't overlap and effects run within their cycle;
 - how host APIs look (names, error types), except that they MUST NOT expose disposal functions where tokens are specified (§8.4) and MUST return refusals as values;
+- error messages (codes are normative, messages are not);
 - store technology, and the physical format of stored entries, provided the records above round-trip exactly;
 - retaining more than demand requires (§4.5).
+
+> **Note (non-normative).** The freedom is deliberate: a C++ kernel in a game plugin and a TypeScript engine in a desktop app have different constraints. What they share is behaviour, checked by the vectors.
 
 ## 22. Conformance vectors
 
 22.1. **Location and format.** Vectors are the JSON files in `conformance/`. Each file is `{ "suite": <name>, "vectors": [ <vector> … ] }`. A vector is `{ "name", "rules": [<section> …], "description", "kind": "kernel" | "entity", … }`. An implementation conforms when every vector passes.
 
-22.2. **Kernel vectors** hold `graph` (a graph model, §10.2, erected at the start in the environment's root run; drivers are listed but not started), `seed` (a string for the random source), and `script`, a list of steps:
+22.2. **Kernel vectors** hold `graph` (a graph model, §10.2, erected at the start by an erector started with a fresh token; drivers are listed but not started), `seed` (optional, a string for the random source), and `script`, a list of steps:
 
 | Step | Does |
 |---|---|
@@ -471,24 +531,28 @@ Implementations MAY choose freely, provided the observable behaviour above holds
 | `{ "abort": <name>, "reason"?: <data> }` | Aborts that token. |
 | `{ "advance": <ms> }` | Advances virtual time, completing process work that falls due (§22.4), each completion a cycle. |
 | `{ "model": <graph model> }` | Observes a new model on the model seed (the erector rewires). |
-| `{ "demand": <node id>, "spec": <spec or node id> }` | The host demands the node (for demand vectors). |
+| `{ "demand": <node id>, "spec": <spec or node id>, "as"?: <name> }` | The host demands the node (for demand vectors). |
 
-and `expect`: `streams` (per node ID, the exact list of entry values or error records, in order), `computes` (per node ID, how many times it computed or ran), `logs` (per `record` effect, its list of runs), `processes` (per process ID, its list of states), and `errors` (the error seed's entries, as `message` strings). Only the members given are checked.
+and `expect`: `streams` (per node ID, the exact list of entry values, an error entry as `{ "error": <message> }`), `computes` (per node ID, how many times it computed or ran), `logs` (per `record` effect or `connect` log, its list of runs), `processes` (per process ID, its list of states), `active` (per node ID, whether it is active at the end) and `errorCodes` (the error seed's entries, as codes). Only the members given are checked.
 
-22.3. **Entity vectors** hold `types` (§11.2, with declarative upcasters, §15.3), `script` (steps: `{ "commit": [edits], "options"? }`, `{ "undo": <scope> }`, `{ "redo": <scope> }`, `{ "compact": <node>, "bucket"?: <ms>, "roots"?: [E] }`, `{ "collapse": <node> }`, `{ "purge": <node>, "force"? }`, `{ "advance": <ms> }`, `{ "entries": [ <stored entry> … ] }` to load a stream as stored, e.g. of an older schema) and `expect` (`effective` per node, `refusals` in order as reason codes, `streams` per node as the list of op kinds and seqs, `origins`, `changes` per step as reported paths). Nodes are named in vectors by labels given at creation (`"as"`), which the runner maps to generated IDs.
+22.3. **Entity vectors** hold `types` (§11.2, with declarative upcasters, §15.3), `script` (steps: `{ "commit": [edits], "options"? }`, `{ "undo": <scope> }`, `{ "redo": <scope> }`, `{ "compact": <node>, "bucket"?: <ms>, "roots"?: [E] }`, `{ "collapse": <node> }`, `{ "purge": <node>, "force"? }`, `{ "advance": <ms> }`, `{ "forget": <scope or "*"> }` to end undo history as a session end does, and `{ "entries": [ <stored entry> … ] }`, before any other step, to load streams as stored, e.g. of an older schema, each entry optionally labelled with `"label"`) and `expect` (`effective` per node, `refusals` in order as reason codes, `streams` per node as `[seq, op kind]` pairs, `origins` per node and path key as `own`, `default`, `absent`, or `<base|feed> <layer label> <owner label>`, `changes` per step as the reported `<label> <path key>` pairs). Nodes are named in vectors by labels: the `as` of a create edit names the new node, and `{ "$label": <name> }` anywhere in a script stands for that node's reference; a node without a label (a constant) is named by its ID.
 
 22.4. **Process work in vectors** is data: `{ "id", "ms": <duration>, "result"?: <data>, "fail"?: <message>, "progress"?: [<data> …], "children"?: [ <work> … ] }`: the process reports each progress item at even intervals, then completes after `ms` with its result (or failure), its children started with it as their parent.
 
+> **Note (non-normative).** A vector is a small story told as data: here is a graph, here is what happens to it, here is what must come out. Because the graph is a model (§10) and the script is data, the same file drives the TypeScript engine's test suite today and a native engine's later. This version ships kernel vectors (cycles, diamonds, END on unchanged, rewiring, demand, drivers, processes, aborts, errors, state machines) and entity vectors (layering, pins, detach, apply to source, undo, revert, compaction, upcasting, purge). When adding a rule, add the vector that would have caught its violation.
+
 ## Appendix A. Examples (non-normative)
 
-**A.1 A diamond.** Seeds `a` (initial 1); combinators `b = sum(a, add 1)`, `c = sum(a, add 2)`, `d = sum(b, c)`; effect `log = record(d)` connected by a running driver. Observing `a = 2`: START reaches b, c (counters 1), d (0→1 from b; 1→2 from c, no further START), log. END: b computes 3, END(changed) to d (2→1); c computes 4, END(changed) to d (1→0): d computes 7 once; log runs once with `[7]`.
+**A.1 A diamond.** Seeds `a` (initial 1); combinators `b = sum(a, add 1)`, `c = sum(a, add 2)`, `d = sum(b, c)`; effect `log = record(d)`. Priming computes b 2, c 3, d 5, and log records 5. Observing `a = 2`: START reaches b, c (counters 1), d (0→1 from b; 1→2 from c, no further START), log. END: b computes 3, END(changed) to d (2→1); c computes 4, END(changed) to d (1→0): d computes 7 once; log runs once with `[7]`. (Vector `diamond-join-computes-once`.)
 
-**A.2 END on unchanged.** As A.1 but `b = threshold(a, at 10)`, `d = identity(b)`. Observing `a = 3` then `a = 4`: b computes `false` both times; the second time b's value equals its latest, so b sends END(unchanged) and d does not compute.
+**A.2 END on unchanged.** As A.1 but `b = threshold(a, at 10)`, `d = identity(b)`. Observing `a = 3` then `a = 4`: b computes `false` both times; the second time b's value equals its latest, so b sends END(unchanged) and d does not compute. (Vector `end-on-unchanged-skips-downstream`.)
 
-**A.3 Mid-cycle rewiring.** An effect `rw = rewire(sel)` switches `out`'s inputs between `x` and `y` when `sel` changes. Observing `sel = 1` and `x = 5` in one transaction: `out` computes in that cycle from its old input; the rewiring applies at completion, and the activation cycle primes `out` from `y`.
+**A.3 Mid-cycle rewiring.** An effect `rw = rewire(sel)` switches `out`'s inputs between `x` and `y` when `sel` changes. Observing `sel = 1` and `x = 5` in one transaction: `out` computes in that cycle from its old input; the rewiring applies at completion, and the activation cycle primes `out` from `y`. (Vector `mid-cycle-rewiring-waits-for-the-cycle-end`.)
 
-**A.4 Nested processes.** A `work` driver started as `run` starts process `p` (ms 100) with child `q` (ms 300). At 100, `p` is done; `q` is aborted with reason `{ "parent": "done" }`. Aborting `run` at 50 instead aborts `p` and `q`; their later completions are discarded.
+**A.4 Nested processes.** A `work` driver started as `run` starts process `p` (ms 100) with child `q` (ms 300). At 100, `p` is done; `q` is aborted with reason `{ "parent": "done" }`. Aborting `run` at 50 instead aborts `p` and `q` with the run's reason; their later completions are discarded. (Vectors in `kernel-processes.json`.)
+
+**A.5 A fork over time.** Preset P has entries 1 (create, colour red) and 2 (set colour blue). A fork F pinned to P entry 1 shows red whatever P does later; rebasing F onto P without a pin shows blue.
 
 ## Appendix B. The TypeScript mapping (non-normative)
 
-In this package: a kernel environment is `createEnvironment({ clock, random })`, with `env.seed`, `env.combinator`, `env.effect`, `env.driver`, `env.transaction`; `driver.start(signal)` returns a process node; cancellation tokens are `Aborter` controllers whose `signal` implements the AbortSignal interface and chains from host `AbortSignal`s; the erector is `erect(env, modelNode, operators)`. The entity layer is `createGraph({ types, rules, sources, store })`. See [README.md](README.md).
+In this package: a kernel environment is `createEnvironment({ clock })`, with `env.seed`, `env.combinator`, `env.effect`, `env.driver`, `env.transaction`; `driver.start(signal)` returns a `Process`; tokens are `Aborter` controllers whose `signal` implements the AbortSignal interface and chains from host `AbortSignal`s; the erector is `erector(env, modelNode, catalogue(...))`. The entity layer is `createGraph({ types, rules, sources, store })`; the graph runs as its actor's driver, and its store driver's processes appear under it in `env.processTree()`. See [README.md](README.md).

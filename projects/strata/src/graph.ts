@@ -1615,6 +1615,15 @@ export class StrataGraph implements GraphView {
   // Undo and redo: compensating entries
   // -------------------------------------------------------------------------------------------------------------
 
+  /**
+   * Ends a scope's Undo and Redo history (all scopes when none is named), as a session end does: the entries stay,
+   * and compaction no longer keeps them for undo's sake.
+   */
+  forgetHistory(scope?: string): void {
+    for (const stacks of [this.undoStacks, this.redoStacks]) {
+      if (scope === undefined) stacks.clear(); else stacks.delete(scope);
+    }
+  }
   /** The commit IDs on a scope's Undo stack, newest last. */
   undoStack(scope = "default"): readonly string[] { return [...this.undoStacks.get(scope) ?? []]; }
   canUndo(scope = "default"): boolean { return !!this.undoStacks.get(scope)?.length; }

@@ -19,6 +19,7 @@ on:
     branches: [main]
     paths:
       - "projects/xf-studio/authoring/**"
+      - "projects/strata/**"
       - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
       - "experiments/*/*.ts"
@@ -26,6 +27,7 @@ on:
   pull_request:
     paths:
       - "projects/xf-studio/authoring/**"
+      - "projects/strata/**"
       - "tools/private-data.json"
       - "experiments/005-preset-collection/**"
       - "experiments/*/*.ts"
