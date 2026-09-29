@@ -10,8 +10,8 @@ import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
 import { decodeGeometryFromPool } from "./mesh-decode";
 import { decodeFromPool, type NativeDecodeOptions, type WorkerAnimMessage, type WorkerCloseMessage, type WorkerDecodeMessage, type WorkerGeometryMessage, type WorkerInit,
-  type WorkerReply, type WorkerTextureMessage, type WorkerTrimMessage } from "./native-decode";
-import { decodeTextureFromPool } from "./texture-decode";
+  type WorkerMaskMessage, type WorkerReply, type WorkerTextureMessage, type WorkerTrimMessage } from "./native-decode";
+import { decodeMaskFromPool, decodeTextureFromPool } from "./texture-decode";
 import { decodeAnimFromPool } from "./anim-decode";
 
 export interface WorkerScope {
@@ -35,7 +35,7 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
   };
   const reply = (message: WorkerReply, transfer?: Transferable[]) => transfer ? scope.postMessage(message, transfer) : scope.postMessage(message);
   scope.addEventListener("message", event => {
-    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerGeometryMessage | WorkerAnimMessage | WorkerCloseMessage
+    const message = event.data as WorkerInit | WorkerDecodeMessage | WorkerTextureMessage | WorkerMaskMessage | WorkerGeometryMessage | WorkerAnimMessage | WorkerCloseMessage
       | WorkerTrimMessage;
     if (message.type === "trim") {
       // The queue has drained: let go of the archive indexes read (re-read in milliseconds when next needed) and collect what the last
@@ -75,6 +75,17 @@ export function serveDecodes(scope: WorkerScope, openDecompress: (init: WorkerIn
         reply({ type: "outcome", id: message.id, outcome }, png && png.byteOffset === 0 && png.byteLength === png.buffer.byteLength ? [png.buffer as ArrayBuffer] : undefined);
         // A texture leaves tens of MB of garbage (the resource and its texture data): ask for a collection before the next one.
         (globalThis as { Bun?: { gc?: (force: boolean) => void } }).Bun?.gc?.(false);
+      });
+    }
+    if (message.type === "mask") {
+      const current = state;
+      const decoding = current ? decodeMaskFromPool(current.pool, current.decompress, message.request)
+        : Promise.resolve({ ok: false as const, kind: "internal" as const, message: "The native decoder worker was not initialised." });
+      void decoding.then(outcome => {
+        // The layers' PNGs move to the host instead of being copied.
+        const transfer = outcome.ok ? outcome.mask.layers.map(layer => layer.png).filter(png => png.byteOffset === 0 && png.byteLength === png.buffer.byteLength)
+          .map(png => png.buffer as ArrayBuffer) : [];
+        reply({ type: "outcome", id: message.id, outcome }, transfer.length ? [...new Set(transfer)] : undefined);
       });
     }
     if (message.type === "geometry") {

@@ -1,9 +1,11 @@
 /**
- * Host adapter: textures exported by XF Studio's own reader first (src/native/texture-decode.ts), and by WolvenKit per resource when the
- * reader can't answer one. It wraps any `GameAssetExporter` (the WolvenKit one in production): geometry and layer masks pass through
- * untouched, and each texture of a single-archive source is decoded natively, in the texture decode worker, to the PNG the preview is
- * served. Only the mip the preview takes is decoded (the largest at or under `maxSide`), so an 8192² body map costs neither WolvenKit's
- * full-size conversion nor the host's halving (PIPE-104).
+ * Host adapter: textures and layer masks exported by XF Studio's own reader first (src/native/texture-decode.ts, mlmask.ts), and by
+ * WolvenKit per resource when the reader can't answer one. It wraps any `GameAssetExporter` (the WolvenKit one in production): geometry
+ * passes through untouched, and each texture and `.mlmask` of a single-archive source is decoded natively, in the texture decode workers,
+ * to the PNGs the preview is served. Only the mip the preview takes is decoded (the largest at or under `maxSide`), so an 8192² body map
+ * costs neither WolvenKit's full-size conversion nor the host's halving (PIPE-104). A mask's layers are texel for texel WolvenKit 9.0.1's
+ * (PREV-190: masks were the one thing a cold hairstyle still launched WolvenKit for, 3.3–3.8 s).
+ * - **Lanes.** A batch's textures and masks are decoded by up to `lanes()` workers side by side (each its own decoder), largest first.
  *
  * - **Cache.** Native PNGs live in the exporter's own cache folder (so the prepared-files budget and Clear cover them), keyed by the depot
  *   hash, the archive's fingerprint and the texture reader's identity (`NATIVE_TEXTURE_IDENTITY`: its output version and the served
@@ -21,12 +23,12 @@ import { join } from "node:path";
 import { fileSha256 } from "./derived-cache";
 import { depotHash } from "./depot-path";
 import { hostFailure } from "./diagnostics/host-log";
-import { type ExportAnswer, type ExportBase, type ExportedTexture, GameAssetExportCache, GameAssetExportError, type ExportKind, type ExportOptions, type ExportRequest,
+import { type ExportAnswer, type ExportBase, type ExportedMask, type ExportedTexture, GameAssetExportCache, GameAssetExportError, type ExportKind, type ExportOptions, type ExportRequest,
   type ExportSource, type GameAssetExporter, type GameAssetExportSession } from "./game-asset-export";
 import type { NativeDecoder } from "./native/native-decode";
 import type { NativeFailureKind } from "./native/native-errors";
 import { NATIVE_READER_DATA, openNativeDecoderAsync, type OpenedDecoder } from "./native/native-fetch-port";
-import { NATIVE_TEXTURE_VERSION, type NativeTextureOutcome, type NativeTextureRequest } from "./native/texture-decode";
+import { NATIVE_MASK_VERSION, NATIVE_TEXTURE_VERSION, type NativeMaskOutcome, type NativeTextureOutcome, type NativeTextureRequest } from "./native/texture-decode";
 import { nativeRouteStamp } from "./resolver-host";
 
 /**
@@ -34,15 +36,18 @@ import { nativeRouteStamp } from "./resolver-host";
  * version and data hash, which decide how the texture resource reads (NATIVE-61).
  */
 export const NATIVE_TEXTURE_IDENTITY = `xfs-native-texture:${NATIVE_TEXTURE_VERSION}:${NATIVE_READER_DATA}`;
+/** The mask reader's identity in cache keys: its output rules (`NATIVE_MASK_VERSION`) and the resource reader's. */
+export const NATIVE_MASK_IDENTITY = `xfs-native-mask:${NATIVE_MASK_VERSION}:${NATIVE_READER_DATA}`;
 /** Time budget per texture in the worker: a 4096² BC7 mip decodes and compresses in about a second; far above that on a loaded machine. */
 export const NATIVE_TEXTURE_TIMEOUT_MS = 60_000;
 
-/** What decodes textures: a native decoder's texture method (a worker in production). */
-export type TextureDecoder = Pick<NativeDecoder, "decodeTexture">;
+/** What decodes textures and layer masks: a native decoder's methods (a worker in production). */
+export type TextureDecoder = Pick<NativeDecoder, "decodeTexture" | "decodeMask">;
 /** Textures this exporter answered: decoded now, from its cache, or handed to the wrapped exporter (by the native refusal's kind). */
 export type NativeTextureStats = { decoded: number; cached: number; fellBack: number; readonly byKind: Partial<Record<NativeFailureKind, number>>;
   /** Wall time of the native decodes, in ms. */ decodeMs: number;
-  /** Wall time of the wrapped exporter's runs (WolvenKit), in ms, beside the decodes. */ innerMs: number };
+  /** Wall time of the wrapped exporter's runs (WolvenKit), in ms, beside the decodes. */ innerMs: number;
+  /** Layer masks: decoded now, from the cache, handed to the wrapped exporter. */ masks: { decoded: number; cached: number; fellBack: number } };
 export type NativeFirstExporter = GameAssetExporter & { readonly nativeTextures: NativeTextureStats };
 
 export type NativeFirstExporterOptions = {
@@ -50,8 +55,13 @@ export type NativeFirstExporterOptions = {
   cacheRoot: string;
   /** The largest texture side served (character-detail-service.ts `SERVED_TEXTURE_MAX`). */
   maxSide: number;
-  /** The game folder's texture decoder, or null when there is none (then every texture goes to the wrapped exporter). */
-  decoder: (gameRoot: string) => Promise<TextureDecoder | null>;
+  /**
+   * The game folder's texture decoder for a lane (0 first), or null when there is none (then every texture and mask goes to the wrapped
+   * exporter; a lane without one is simply not used).
+   */
+  decoder: (gameRoot: string, lane: number) => Promise<TextureDecoder | null>;
+  /** How many lanes decode side by side now (default 1): the host asks for more only while memory allows. */
+  lanes?: () => number;
   timeoutMs?: number;
   /** Told each refusal; by default unexpected kinds go to the diagnostics log. */
   onFallback?: (kind: NativeFailureKind, resource: string, message: string, stack?: string) => void;
@@ -77,7 +87,8 @@ function singleArchive(source: ExportSource): boolean {
 
 export function createNativeFirstExporter(inner: GameAssetExporter, options: NativeFirstExporterOptions): NativeFirstExporter {
   const cache = new GameAssetExportCache(options.cacheRoot, { key: `${NATIVE_TEXTURE_IDENTITY}|max${options.maxSide}`, label: "XF Studio's texture reader" });
-  const stats: NativeTextureStats = { decoded: 0, cached: 0, fellBack: 0, byKind: {}, decodeMs: 0, innerMs: 0 };
+  const maskCache = new GameAssetExportCache(options.cacheRoot, { key: NATIVE_MASK_IDENTITY, label: "XF Studio's mask reader" });
+  const stats: NativeTextureStats = { decoded: 0, cached: 0, fellBack: 0, byKind: {}, decodeMs: 0, innerMs: 0, masks: { decoded: 0, cached: 0, fellBack: 0 } };
   const onFallback = options.onFallback ?? defaultFallback;
   const answerOf = (depotPath: string, files: Record<string, string>, cached: boolean): ExportedTexture => {
     let gameSize: ExportedTexture["gameSize"];
@@ -91,45 +102,89 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
     const files = cache.read(depotPath, source);
     return files?.["texture.png"] && files["texture.json"] ? answerOf(depotPath, files, true) : null;
   };
+  const layersOf = (files: Record<string, string> | null) => {
+    if (!files?.["mask.json"]) return null;
+    const layers: string[] = [];
+    for (let index = 0; files[`layer-${index}.png`]; index++) layers.push(files[`layer-${index}.png`]!);
+    return layers.length ? layers : null;
+  };
+  const cachedMask = (depotPath: string, source: ExportSource): ExportedMask | null => {
+    const layers = layersOf(maskCache.read(depotPath, source));
+    return layers ? { depotPath, hash: depotHash(depotPath), layers, cached: true } : null;
+  };
 
+  type Job = { kind: "textures" | "masks"; source: ExportSource; depotPath: string; index: number };
+  type Decoded = { textures: Map<string, ExportedTexture>[]; masks: Map<string, ExportedMask>[]; refused: Job[] };
   /**
-   * Decode `paths` of one source natively, one at a time (the worker is serial), into `into`; returns the paths to hand to the wrapped
-   * exporter. Stops with `cancelled` between textures once `signal` aborts.
+   * Decode `jobs` natively into per-request maps, on up to `lanes()` decoders side by side (each lane one worker, serial within it); the
+   * jobs a reader refused are returned for the wrapped exporter. Stops with `cancelled` between resources once `signal` aborts.
    */
-  const decodeAll = async (source: ExportSource, paths: readonly string[], into: Map<string, ExportedTexture>, signal?: AbortSignal): Promise<string[]> => {
-    const rest: string[] = [];
-    if (!paths.length) return rest;
-    const decoder = await options.decoder(source.gameRoot).catch(() => null);
-    if (!decoder?.decodeTexture) { stats.fellBack += paths.length; stats.byKind.unavailable = (stats.byKind.unavailable ?? 0) + paths.length; return [...paths]; }
-    let work: string | null = null;
-    try {
-      for (const depotPath of paths) {
+  const decodeJobs = async (jobs: readonly Job[], requests: number, signal?: AbortSignal): Promise<Decoded> => {
+    const out: Decoded = { textures: Array.from({ length: requests }, () => new Map()), masks: Array.from({ length: requests }, () => new Map()), refused: [] };
+    if (!jobs.length) return out;
+    const gameRoot = jobs[0]!.source.gameRoot;
+    const wanted = Math.max(1, Math.min(options.lanes?.() ?? 1, jobs.length));
+    const decoders = (await Promise.all(Array.from({ length: wanted }, (_, lane) => options.decoder(gameRoot, lane).catch(() => null))))
+      .filter((decoder): decoder is TextureDecoder => !!decoder);
+    const refuse = (job: Job, kind: NativeFailureKind) => {
+      if (job.kind === "masks") stats.masks.fellBack++; else stats.fellBack++;
+      stats.byKind[kind] = (stats.byKind[kind] ?? 0) + 1;
+      out.refused.push(job);
+    };
+    if (!decoders.length) { for (const job of jobs) refuse(job, "unavailable"); return out; }
+    const queue = [...jobs];
+    const works: string[] = [];
+    const lane = async (decoder: TextureDecoder) => {
+      for (let job = queue.shift(); job; job = queue.shift()) {
         if (signal?.aborted) throw new GameAssetExportError("cancelled", "The export was cancelled.");
-        const request: NativeTextureRequest = { archivePath: source.archivePath, hash: depotHash(depotPath), maxSide: options.maxSide,
-          timeoutMs: options.timeoutMs ?? NATIVE_TEXTURE_TIMEOUT_MS };
         const began = performance.now();
-        let outcome: NativeTextureOutcome;
-        try { outcome = await decoder.decodeTexture(request); }
-        catch (error) { outcome = { ok: false, kind: "internal", message: String((error as Error)?.message ?? error), stack: (error as Error)?.stack }; }
-        stats.decodeMs += performance.now() - began;
-        if (!outcome.ok) {
-          stats.fellBack++; stats.byKind[outcome.kind] = (stats.byKind[outcome.kind] ?? 0) + 1;
-          onFallback(outcome.kind, `${source.archivePath.split(/[\\/]/).pop()}: ${depotPath}`, outcome.message, outcome.stack);
-          rest.push(depotPath);
+        const label = `${job.source.archivePath.split(/[\\/]/).pop()}: ${job.depotPath}`;
+        if (job.kind === "masks") {
+          let outcome: NativeMaskOutcome;
+          if (!decoder.decodeMask) outcome = { ok: false, kind: "unavailable", message: "This decoder doesn't read layer masks." };
+          else {
+            try { outcome = await decoder.decodeMask({ archivePath: job.source.archivePath, hash: depotHash(job.depotPath), timeoutMs: options.timeoutMs ?? NATIVE_TEXTURE_TIMEOUT_MS }); }
+            catch (error) { outcome = { ok: false, kind: "internal", message: String((error as Error)?.message ?? error), stack: (error as Error)?.stack }; }
+          }
+          stats.decodeMs += performance.now() - began;
+          if (!outcome.ok) { onFallback(outcome.kind, label, outcome.message, outcome.stack); refuse(job, outcome.kind); continue; }
+          const work = maskCache.createWork(), name = depotHash(job.depotPath), files: Record<string, string> = {};
+          works.push(work);
+          mkdirSync(work, { recursive: true });
+          outcome.mask.layers.forEach((layer, index) => { const file = join(work, `${name}-${index}.png`); writeFileSync(file, layer.png); files[`layer-${index}.png`] = file; });
+          const meta = join(work, `${name}.json`);
+          writeFileSync(meta, JSON.stringify({ reader: NATIVE_MASK_IDENTITY, depotPath: job.depotPath, layers: outcome.mask.layers.map(layer => [layer.width, layer.height]),
+            extractedSha256: outcome.mask.extractedSha256 }));
+          files["mask.json"] = meta;
+          const written = maskCache.write(job.depotPath, job.source, files);
+          out.masks[job.index]!.set(job.depotPath, { depotPath: job.depotPath, hash: depotHash(job.depotPath), layers: layersOf(written) ?? [], cached: false });
+          stats.masks.decoded++;
           continue;
         }
+        const request: NativeTextureRequest = { archivePath: job.source.archivePath, hash: depotHash(job.depotPath), maxSide: options.maxSide,
+          timeoutMs: options.timeoutMs ?? NATIVE_TEXTURE_TIMEOUT_MS };
+        let outcome: NativeTextureOutcome;
+        if (!decoder.decodeTexture) outcome = { ok: false, kind: "unavailable", message: "This decoder doesn't read textures." };
+        else {
+          try { outcome = await decoder.decodeTexture(request); }
+          catch (error) { outcome = { ok: false, kind: "internal", message: String((error as Error)?.message ?? error), stack: (error as Error)?.stack }; }
+        }
+        stats.decodeMs += performance.now() - began;
+        if (!outcome.ok) { onFallback(outcome.kind, label, outcome.message, outcome.stack); refuse(job, outcome.kind); continue; }
         const { texture } = outcome;
-        work ??= cache.createWork();
-        const name = depotHash(depotPath), png = join(work, `${name}.png`), meta = join(work, `${name}.json`);
+        const work = cache.createWork(), name = depotHash(job.depotPath), png = join(work, `${name}.png`), meta = join(work, `${name}.json`);
+        works.push(work);
         mkdirSync(work, { recursive: true });
         writeFileSync(png, texture.png);
-        writeFileSync(meta, JSON.stringify({ reader: NATIVE_TEXTURE_IDENTITY, depotPath, width: texture.width, height: texture.height, gameWidth: texture.gameWidth,
+        writeFileSync(meta, JSON.stringify({ reader: NATIVE_TEXTURE_IDENTITY, depotPath: job.depotPath, width: texture.width, height: texture.height, gameWidth: texture.gameWidth,
           gameHeight: texture.gameHeight, mip: texture.mip, format: texture.format, isGamma: texture.isGamma, extractedSha256: texture.extractedSha256 }));
-        into.set(depotPath, answerOf(depotPath, cache.write(depotPath, source, { "texture.png": png, "texture.json": meta }), false));
+        out.textures[job.index]!.set(job.depotPath, answerOf(job.depotPath, cache.write(job.depotPath, job.source, { "texture.png": png, "texture.json": meta }), false));
         stats.decoded++;
       }
-    } finally { if (work) { try { cache.remove(work); } catch { /* Best effort. */ } } }
-    return rest;
+    };
+    try { await Promise.all(decoders.map(lane)); }
+    finally { for (const work of works) { try { cache.remove(work); } catch { /* Best effort. */ } } }
+    return out;
   };
 
   /** The wrapped exporter over `requests`: its `exportAll`, or a session per source and kind. */
@@ -160,47 +215,54 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
     nativeTextures: stats,
     has(kind: ExportKind, depotPath: string, source: ExportSource, base?: ExportBase) {
       if (kind === "textures" && singleArchive(source) && cache.present(depotPath, source, ["texture.png", "texture.json"])) return true;
+      if (kind === "masks" && singleArchive(source) && maskCache.present(depotPath, source, ["mask.json", "layer-0.png"])) return true;
       return inner.has?.(kind, depotPath, source, base) ?? false;
     },
     async exportAll(requests, signal, exportOptions) {
       // Cached native answers first; what is left of each single-archive source is decoded natively beside the wrapped exporter's run
-      // for geometry, masks and other sources' textures, and what the reader refuses goes to the wrapped exporter afterwards.
-      const native = requests.map(() => new Map<string, ExportedTexture>());
-      const jobs: { index: number; paths: string[] }[] = [];
+      // for geometry and other sources' textures and masks, and what the reader refuses goes to the wrapped exporter afterwards.
+      const nativeTextures = requests.map(() => new Map<string, ExportedTexture>()), nativeMasks = requests.map(() => new Map<string, ExportedMask>());
+      const jobs: Job[] = [];
       const passed = requests.map((request, index): ExportRequest => {
-        if (!request.textures.length || !singleArchive(request.source)) return request;
-        const paths: string[] = [];
+        if ((!request.textures.length && !request.masks.length) || !singleArchive(request.source)) return request;
         for (const depotPath of new Set(request.textures)) {
           const hit = cached(depotPath, request.source);
-          if (hit) { native[index]!.set(depotPath, hit); stats.cached++; } else paths.push(depotPath);
+          if (hit) { nativeTextures[index]!.set(depotPath, hit); stats.cached++; } else jobs.push({ kind: "textures", source: request.source, depotPath, index });
         }
-        if (paths.length) jobs.push({ index, paths });
-        return { ...request, textures: [] };
+        for (const depotPath of new Set(request.masks)) {
+          const hit = cachedMask(depotPath, request.source);
+          if (hit) { nativeMasks[index]!.set(depotPath, hit); stats.masks.cached++; } else jobs.push({ kind: "masks", source: request.source, depotPath, index });
+        }
+        return { ...request, textures: [], masks: [] };
       });
-      const decoding = (async () => {
-        const refused: { index: number; paths: string[] }[] = [];
-        for (const job of jobs) {
-          const rest = await decodeAll(requests[job.index]!.source, job.paths, native[job.index]!, signal);
-          if (rest.length) refused.push({ index: job.index, paths: rest });
-        }
-        return refused;
-      })();
       const settle = <T>(work: Promise<T>) => work.then(value => ({ value }), (error: unknown) => ({ error }));
-      const [first, refusedOutcome] = await Promise.all([settle(innerAll(passed, signal, exportOptions)), settle(decoding)]);
+      const [first, decodedOutcome] = await Promise.all([settle(innerAll(passed, signal, exportOptions)), settle(decodeJobs(jobs, requests.length, signal))]);
       if ("error" in first) throw first.error;
-      if ("error" in refusedOutcome) throw refusedOutcome.error;
-      const answers = first.value;
-      const refused = refusedOutcome.value;
-      if (refused.length) {
-        const again = refused.map(({ index, paths }): ExportRequest => ({ source: requests[index]!.source, geometry: [], textures: paths, masks: [] }));
+      if ("error" in decodedOutcome) throw decodedOutcome.error;
+      const answers = first.value, decoded = decodedOutcome.value;
+      if (decoded.refused.length) {
+        const byIndex = new Map<number, { textures: string[]; masks: string[] }>();
+        for (const job of decoded.refused) {
+          const entry = byIndex.get(job.index) ?? { textures: [], masks: [] };
+          entry[job.kind].push(job.depotPath);
+          byIndex.set(job.index, entry);
+        }
+        const order = [...byIndex.keys()];
+        const again = order.map((index): ExportRequest => ({ source: requests[index]!.source, geometry: [], textures: byIndex.get(index)!.textures, masks: byIndex.get(index)!.masks }));
         const fallback = await innerAll(again, signal, exportOptions);
-        refused.forEach(({ index }, at) => {
+        order.forEach((index, at) => {
           const answer = fallback[at]!;
           for (const [path, texture] of answer.textures) answers[index]!.textures.set(path, texture);
+          for (const [path, mask] of answer.masks) answers[index]!.masks.set(path, mask);
           if (answer.failed && !answers[index]!.failed) answers[index]!.failed = answer.failed;
         });
       }
-      native.forEach((textures, index) => { for (const [path, texture] of textures) answers[index]!.textures.set(path, texture); });
+      requests.forEach((_, index) => {
+        for (const [path, texture] of nativeTextures[index]!) answers[index]!.textures.set(path, texture);
+        for (const [path, texture] of decoded.textures[index]!) answers[index]!.textures.set(path, texture);
+        for (const [path, mask] of nativeMasks[index]!) answers[index]!.masks.set(path, mask);
+        for (const [path, mask] of decoded.masks[index]!) answers[index]!.masks.set(path, mask);
+      });
       return answers;
     },
     open(source, signal): GameAssetExportSession {
@@ -209,16 +271,28 @@ export function createNativeFirstExporter(inner: GameAssetExporter, options: Nat
         tool: session.tool,
         present: depotPaths => session.present(depotPaths),
         geometry: depotPaths => session.geometry(depotPaths),
-        masks: depotPaths => session.masks(depotPaths),
+        async masks(depotPaths) {
+          if (!singleArchive(source)) return session.masks(depotPaths);
+          const out = new Map<string, ExportedMask>(), jobs: Job[] = [];
+          for (const depotPath of new Set(depotPaths)) {
+            const hit = cachedMask(depotPath, source);
+            if (hit) { out.set(depotPath, hit); stats.masks.cached++; } else jobs.push({ kind: "masks", source, depotPath, index: 0 });
+          }
+          const decoded = await decodeJobs(jobs, 1, signal);
+          for (const [path, mask] of decoded.masks[0]!) out.set(path, mask);
+          if (decoded.refused.length) for (const [path, mask] of await session.masks(decoded.refused.map(job => job.depotPath))) out.set(path, mask);
+          return out;
+        },
         async textures(depotPaths) {
           if (!singleArchive(source)) return session.textures(depotPaths);
-          const out = new Map<string, ExportedTexture>(), paths: string[] = [];
+          const out = new Map<string, ExportedTexture>(), jobs: Job[] = [];
           for (const depotPath of new Set(depotPaths)) {
             const hit = cached(depotPath, source);
-            if (hit) { out.set(depotPath, hit); stats.cached++; } else paths.push(depotPath);
+            if (hit) { out.set(depotPath, hit); stats.cached++; } else jobs.push({ kind: "textures", source, depotPath, index: 0 });
           }
-          const rest = await decodeAll(source, paths, out, signal);
-          if (rest.length) for (const [path, texture] of await session.textures(rest)) out.set(path, texture);
+          const decoded = await decodeJobs(jobs, 1, signal);
+          for (const [path, texture] of decoded.textures[0]!) out.set(path, texture);
+          if (decoded.refused.length) for (const [path, texture] of await session.textures(decoded.refused.map(job => job.depotPath))) out.set(path, texture);
           return out;
         },
         close: () => session.close(),

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { freemem } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson } from "./eye-plate-recipe";
@@ -191,6 +192,14 @@ export function characterRoute(settings: CharacterDetailSettings): CharacterRout
     manualModRoot: settings.manualModRoot, wolvenKitCli: settings.wolvenKitCli && existsSync(settings.wolvenKitCli) ? settings.wolvenKitCli : null };
 }
 
+/**
+ * How many texture decode workers a batch uses (native-texture-export.ts lanes): two while the computer has room for a second one's
+ * peak (about 300 MB decoding an 8192² map) with plenty to spare, else one (PREV-190: a cold hairstyle's maps decoded one at a time).
+ */
+export const textureLanes = (): number => freemem() > TWO_LANES_FREE_BYTES ? 2 : 1;
+/** Free memory above which a second texture decode worker is used. */
+export const TWO_LANES_FREE_BYTES = 4 * 1024 ** 3;
+
 /** How long the page must have been quiet (no change asked for, no file of its V read) before work prepared ahead goes on. */
 export const QUIET_MS = 400;
 /**
@@ -287,9 +296,11 @@ export class CharacterDetailHost {
     const exports = join(this.options.cacheRoot, "exports");
     const inner = this.options.exporter?.(cli) ?? createWolvenKitGameAssetExporter(exports, cli);
     const decoder = this.options.textureDecoder === false ? null
-      : this.options.textureDecoder ?? (this.options.exporter ? null : (gameRoot: string) => this.textureDecoders.get(gameRoot));
-    // Textures natively first, served from their largest mip within the preview's size, WolvenKit per texture it refuses (PIPE-104).
-    const textured = decoder ? createNativeFirstExporter(inner, { cacheRoot: exports, maxSide: SERVED_TEXTURE_MAX, decoder }) : inner;
+      : this.options.textureDecoder ? ((gameRoot: string, lane: number) => lane ? Promise.resolve(null) : (this.options.textureDecoder as (root: string) => Promise<TextureDecoder | null>)(gameRoot))
+      : this.options.exporter ? null : (gameRoot: string, lane: number) => (lane ? this.textureDecodersExtra : this.textureDecoders).get(gameRoot);
+    // Textures and layer masks natively first, textures served from their largest mip within the preview's size, WolvenKit per resource
+    // the reader refuses (PIPE-104, PREV-190); two workers side by side while memory allows (`textureLanes`).
+    const textured = decoder ? createNativeFirstExporter(inner, { cacheRoot: exports, maxSide: SERVED_TEXTURE_MAX, decoder, lanes: textureLanes }) : inner;
     const geometryDecoder = this.options.geometryDecoder === false ? null
       : this.options.geometryDecoder ?? (this.options.exporter ? null : (gameRoot: string) => this.geometryDecoders.get(gameRoot));
     // Meshes and morph targets natively first, WolvenKit per resource the reader refuses (native reader phase 4).
@@ -299,6 +310,11 @@ export class CharacterDetailHost {
   private decoders: NativeDecoders | null = null;
   private get textureDecoders(): NativeDecoders {
     return this.decoders ??= new NativeDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log });
+  }
+  /** A second texture decode worker per game folder, for a batch's second lane (`textureLanes`). */
+  private decodersExtra: NativeDecoders | null = null;
+  private get textureDecodersExtra(): NativeDecoders {
+    return this.decodersExtra ??= new NativeDecoders({ script: this.options.nativeDecodeWorker, log: this.options.log });
   }
   /** One mesh decode worker per game folder, beside the texture one, so meshes and textures decode side by side. */
   private meshDecoders: NativeDecoders | null = null;
