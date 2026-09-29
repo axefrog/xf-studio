@@ -55,7 +55,7 @@ The coordinator's model review accepted the catalogue with these decisions. Each
 | 7 | Narrow the direct-read ratchet's network pattern to the global `fetch` (a small fix of its own). |
 | 8 | Agreed. The render-fidelity study moves out of `src/` when it is next touched. |
 | 9–13 | Accepted as recommended. Order lists stay until the engine has ordered maps. Settings stay a host file until the host runs a graph. |
-| 14 | Eye shape, material studies and uncensored mode go into View and lighting. **Motion settings (idle, blink, physics, pause) join View and lighting too**, because they change what a view shows. Transitions, view tools, poses and the texture tier stay without Undo. |
+| 14 | Eye shape, material studies and uncensored mode go into View and lighting. **Motion settings (idle, blink, physics, pause) stay without Undo**, like transitions, view tools, poses and the texture tier: they adjust how a view is watched rather than being work the user has done, and Undo is for the user's work. |
 | 15 | No Undo for library edits in 1.0; a `library` scope comes with presets in the database. |
 | 16–20 | Accepted as recommended. The recovery queue stays until pending changes are durable. |
 | 21 | Sanctioned: runtimes offer a synchronous query port returning plain data only, with a per-query time budget. It is part of the engine library's runtime families. |
