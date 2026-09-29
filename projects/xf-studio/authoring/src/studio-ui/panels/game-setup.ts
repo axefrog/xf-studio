@@ -113,10 +113,19 @@ export function gameSetupForm(rt: StudioRuntime) {
   profileText.addEventListener("change", () => void save({ mo2ProfileId: profileText.value.trim() || null }));
   let profileKey = "";
 
-  const wolvenKit = h("input", { class: "field", type: "text", spellcheck: "false", "aria-label": "Your own WolvenKit (optional)" });
-  wolvenKit.addEventListener("change", () => void save({ wolvenKitCli: wolvenKit.value.trim() || null }));
-  const wolvenKitField = h("div", { class: "control" }, h("div", { class: "control-line" }, h("span", { class: "control-label", text: "Your own WolvenKit (optional)" }),
-    helpTip("Your own WolvenKit", "Leave this empty and XF Studio sets WolvenKit up for you (it asks before downloading).")), wolvenKit);
+  // Your own WolvenKit is one file, chosen like every other location (the library's FolderSetting for a file, C-28): what is in use,
+  // then Choose a file… (a text box: no host has a file picker for it), and Don't use a file to go back to XF Studio's own.
+  const wolvenKit = new FolderSetting({ label: "Your own WolvenKit (optional)", kind: "file", unset: "Not chosen: XF Studio sets up its own",
+    help: "Leave this empty and XF Studio sets WolvenKit up for you (it asks before downloading).",
+    placeholder: "e.g. C:\\Tools\\WolvenKit\\WolvenKit.CLI.exe", guidance: "The WolvenKit.CLI.exe file of a WolvenKit you installed yourself.",
+    onChoose: path => saveFile({ wolvenKitCli: path }), onClear: () => saveFile({ wolvenKitCli: null }) });
+  async function saveFile(fields: Partial<LocalSetupFields>): Promise<FolderOutcome> {
+    const outcome = await port.localSetup.dispatch({ kind: "setup.update", fields });
+    if (outcome.ok) rt.feedback.announce(fields.wolvenKitCli ? "Your own WolvenKit saved" : "XF Studio's own WolvenKit is used");
+    rt.changed();
+    return outcome.ok ? { ok: true } : { ok: false, message: outcome.message };
+  }
+  const wolvenKitField = wolvenKit.element;
   // Two long choices, both shown (ChoiceList `rows`); the label and choices come from the settings view (one wording everywhere).
   const plateHead = new ChoiceList<LocalSetupFields["eyePlateHead"]>({ label: "Head used for the eye plate", layout: "rows",
     help: "Build cuts the eye plate from this head. Choose the unmodified head only if a head mod stops Build.",
@@ -156,7 +165,7 @@ export function gameSetupForm(rt: StudioRuntime) {
     focus(section: "game" | "saves" | "tools") {
       void detect();
       if (section === "saves") { saves.focus(); return; }
-      if (section === "tools") { requestAnimationFrame(() => wolvenKit.focus()); return; }
+      if (section === "tools") { requestAnimationFrame(() => wolvenKitField.querySelector<HTMLElement>("button:not([hidden])")?.focus()); return; }
       const view = port.localSetup.snapshot().view;
       const first = !view?.fields.gameRoot ? game.element : view.fields.launchRoute === "mo2" && !view.fields.mo2Root ? mo2.element : game.element;
       requestAnimationFrame(() => first.querySelector<HTMLElement>("button:not([hidden]), input:not([hidden])")?.focus());
@@ -191,13 +200,13 @@ export function gameSetupForm(rt: StudioRuntime) {
       profile.closest<HTMLElement>(".select-wrap")!.hidden = !profiles.length;
       profileText.hidden = profiles.length > 0;
       setValue(profileText, current ?? "");
-      setValue(wolvenKit, fields?.wolvenKitCli ?? "");
+      wolvenKit.update({ chosen: fields?.wolvenKitCli ?? null, disabled: locked, reason: !view ? "Loading your settings…" : "Restore your previous settings first." });
       if (view) {
         const choice = view.eyePlateHead;
         plateHead.setOptions(choice.options.map(option => ({ value: option.value, label: option.label })));
         plateHead.update(view.fields.eyePlateHead, undefined, locked ? { disabled: true, reason: "Restore your previous settings first." } : {});
       }
-      for (const control of [profile, profileText, wolvenKit]) control.disabled = locked;
+      for (const control of [profile, profileText]) control.disabled = locked;
       applyCapability(findAgain, frame.installDetection?.busy ? { available: false, reason: "XF Studio is looking now." }
         : port.installDetection.capability({ kind: "detect.gameInstalls" }));
       saves.update(frame, locked);

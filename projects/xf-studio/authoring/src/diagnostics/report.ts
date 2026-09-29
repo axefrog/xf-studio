@@ -19,7 +19,7 @@ export const REPORT_GROUPS: readonly { id: ReportGroup; label: string; detail: s
   { id: "happened", label: "What happened", detail: "The problem and what led up to it." },
   { id: "mods", label: "Your mod setup", detail: "Which mods and frameworks are installed, by name, version and source. No mod files." },
   { id: "resources", label: "Resource details", detail: "How your V's details were worked out, and short extracts of the game resources involved." },
-  { id: "optional", label: "Optional files", detail: "Larger or private material. Nothing here is included unless you tick it." },
+  { id: "optional", label: "Optional files", detail: "Larger or private material. Nothing here is included unless you turn it on." },
 ]);
 
 /** One reviewable part of the report. `bytes` is its size in the report file before compression. */
@@ -155,7 +155,7 @@ export function issueSummary(manifest: ReportManifest, description: string, file
     fileName ? `**Report file:** please attach \`${fileName}\`, which XF Studio saved for you (drag it into this box).` :
       "**Report file:** please save the report in XF Studio (Report a problem → Save report) and attach it here.",
     "",
-    "_Attachments on GitHub are public. The report file only holds what you left ticked when you saved it._",
+    "_Attachments on GitHub are public. The report file only holds the parts you included when you saved it._",
   ].join("\n"));
 }
 

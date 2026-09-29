@@ -1,4 +1,4 @@
-import { clamp, h, setAttr, setDisabled, setValue, uid } from "../dom";
+import { clamp, h, setAttr, setDisabled, setText, setValue, uid } from "../dom";
 import { bindRangeTransaction, fillRange, NoteLine, type Transaction } from "../controls";
 import { helpTip, type HelpText } from "../help-tip";
 import { iconButton } from "./icon-button";
@@ -20,6 +20,9 @@ import { ReadoutField } from "./readout-field";
  *   on the note line when `reserveNote`, else in the tooltip and description: a list of them says it once).
  * - **Access:** the range is labelled by the visible label, or by `accessibleLabel` when the visible one is short ("L" is "Brow height,
  *   left"); its value text is the formatted value; the typed field is named "<label>, exact value"; the reset is "Reset <label>".
+ * - **Relabel** (`relabel(label, accessibleLabel?)`): one control whose meaning depends on a mode (Shimmer's "Sparkle density" and
+ *   Glitter's "Flake density" on the same value) takes the new name everywhere at once: the visible label, the range's name, the typed
+ *   field, the reset and the help tip (UI-157). Owners never rewrite a label through the DOM.
  */
 export type SliderWithValueOptions = {
   label: string; min: number; max: number; step: number;
@@ -59,7 +62,10 @@ export class SliderWithValue {
   private max: number;
   private disabled = false;
   private text: string | undefined;
+  private readonly labelText = h("span", {});
+  private tip: HTMLButtonElement | null = null;
   constructor(private readonly options: SliderWithValueOptions) {
+    setText(this.labelText, options.label);
     const id = options.id ?? uid("slider");
     this.min = options.min; this.max = options.max;
     const name = options.accessibleLabel ?? options.label;
@@ -70,8 +76,9 @@ export class SliderWithValue {
     this.resetButton = options.reset && options.defaultValue !== undefined
       ? iconButton({ label: `Reset ${name}`, icon: "reset", small: true, className: "slider-reset", onClick: () => { this.commitValue(options.defaultValue!); this.input.focus(); } })
       : undefined;
-    const label = h("label", { class: "control-label-text", for: id }, h("span", { text: options.label }));
+    const label = h("label", { class: "control-label-text", for: id }, this.labelText);
     const tip = options.help !== undefined ? helpTip(name, options.help) : null;
+    this.tip = tip;
     this.element = options.inline
       ? h("div", { class: "control slider-with-value inline" }, h("div", { class: "slider-inline-row" }, label, this.input, this.readout.element, this.resetButton), this.note.element)
       : h("div", { class: "control slider-with-value" },
@@ -108,6 +115,15 @@ export class SliderWithValue {
     if (this.disabled || (value === this.value && !this.text)) return;
     const t = this.options.transaction;
     t.begin?.(); t.edit(value); t.commit?.();
+  }
+  /** A new name for the same value, everywhere it is said (see Relabel above); unchanged names change nothing. */
+  relabel(label: string, accessibleLabel?: string) {
+    const name = accessibleLabel ?? label;
+    setText(this.labelText, label);
+    setAttr(this.input, "aria-label", accessibleLabel);
+    this.readout.relabel(name);
+    if (this.resetButton) for (const attribute of ["aria-label", "title", "data-title"]) setAttr(this.resetButton, attribute, `Reset ${name}`);
+    if (this.tip) setAttr(this.tip, "aria-label", `About ${name}`);
   }
   update(value: number | undefined, state: { disabled?: boolean; reason?: string; note?: string; min?: number; max?: number;
     /** The readout's words when the owner says it better (a pair's "14 / 10 %"); cleared by the next edit. */

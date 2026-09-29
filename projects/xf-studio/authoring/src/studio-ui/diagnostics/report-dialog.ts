@@ -6,6 +6,8 @@ import { icon } from "../icons";
 import type { StudioRuntime } from "../runtime";
 
 let current: { close(): void } | null = null;
+/** A group's disclosure mark: the expander's chevron, turned while the group is open (`details[open]`). */
+const chevron = () => h("span", { class: "report-chevron", "aria-hidden": "true" }, icon("chevronRight"));
 
 const SHARING_WARNING = "Reports you attach on GitHub are public, and most mods' permissions don't allow re-uploading their files. " +
   "Only include files of mods you made yourself, or whose permissions allow sharing them.";
@@ -13,7 +15,7 @@ const MODE_HELP = "Keeps three hours of more detailed activity instead of the la
   "It turns itself off after a day. Nothing is sent anywhere.";
 
 /**
- * "Report a problem": prepares a report, shows exactly what it holds for review (grouped, with sizes and a preview of each part,
+ * "Report a problem": prepares a report, shows exactly what it holds for review (grouped, with a preview of each part and one total size,
  * the whole of any part on request, and the summary and index files as they will be saved), and offers Save report, Copy summary
  * and Open a GitHub issue. Nothing leaves the computer unless the person sends it. Acts only through `port.diagnostics`
  * (docs/diagnostics.md).
@@ -32,22 +34,26 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     placeholder: "What were you doing when it happened, and what did you expect?" });
   description.addEventListener("input", () => void dispatch({ kind: "diagnostics.setDescription", text: description.value }));
   const status = h("p", { class: "report-status", role: "status", "aria-live": "polite" });
+  // One line: a longer message ends with an ellipsis and says the whole of itself as the tooltip (I3).
+  const say = (text: string) => { setText(status, text); status.title = text; };
   const groups = h("div", { class: "report-groups" });
   const total = h("p", { class: "report-total" });
   const retry = button({ label: "Try again", icon: "refresh", small: true, onClick: prepare });
   retry.hidden = true;
   const again = button({ label: "Prepare again", icon: "refresh", small: true, onClick: prepare });
   again.hidden = true;
-  // The report file's own summary and index, always in it, built from the ticked parts only.
+  // The report file's own summary and index, always in it, built from the parts you include only.
   const readme = h("pre", {}), index = h("pre", {});
+  // Every group is a disclosure with the expander's chevron, so a folded one never reads as an empty band (C-31); this one, made from
+  // the parts above it, comes after them.
   const summaryFiles = h("details", { class: "report-group report-files" },
-    h("summary", {}, h("span", { class: "report-group-title", text: "Always in the report" })),
-    h("p", { class: "muted small", text: "A short summary and a list of what the file holds, made from the parts you leave ticked. Your folders are replaced when it's saved." }),
-    h("details", { class: "report-preview" }, h("summary", { text: "Show the summary (README.md)" }), readme),
-    h("details", { class: "report-preview" }, h("summary", { text: "Show the list (report.json)" }), index));
+    h("summary", {}, chevron(), h("span", { class: "report-group-title", text: "Always in the report" })),
+    h("p", { class: "muted small", text: "A short summary and a list of what the file holds, made from the parts you include. Your folders are replaced when it's saved." }),
+    h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the summary (README.md)"), readme),
+    h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the list (report.json)"), index));
   summaryFiles.hidden = true;
   const mode = new Toggle({ label: "Diagnostic mode", help: MODE_HELP,
-    onChange: checked => void dispatch({ kind: "diagnostics.setMode", mode: checked ? "deep" : "normal" }).then(result => setText(status, result.message)) });
+    onChange: checked => void dispatch({ kind: "diagnostics.setMode", mode: checked ? "deep" : "normal" }).then(result => say(result.message)) });
   const save = button({ label: "Save report…", icon: "save", variant: "primary", onClick: () => void run({ kind: "diagnostics.saveReport" }) });
   const copy = button({ label: "Copy summary", icon: "duplicate", onClick: () => void run({ kind: "diagnostics.copySummary" }) });
   const issue = button({ label: "Open a GitHub issue", icon: "export", onClick: () => void run({ kind: "diagnostics.openIssue" }) });
@@ -60,44 +66,48 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
         "Personal folder names and e-mail addresses are already replaced with placeholders." }),
       ref ? h("p", { class: "report-ref" }, "Reference ", h("strong", { text: ref })) : null,
       h("label", { class: "report-label", for: descriptionId, text: "What were you doing?" }), description,
-      h("div", { class: "report-state" }, status, retry, again),
-      summaryFiles, groups, total, mode.element),
+      groups, summaryFiles, total, mode.element),
+    // What the last step did (or that the report is being prepared), with Try again or Prepare again beside it: one fixed line right
+    // above the actions it answers, outside the scrolling parts, so a message appearing moves nothing (C-31, UI gate fix 2).
+    h("div", { class: "report-state" }, status, retry, again),
     h("div", { class: "report-foot" }, save, copy, issue, h("span", { class: "grow" }), closeButton));
 
   async function run(action: DiagnosticsAction) {
     const result = await dispatch(action);
-    setText(status, result.message);
+    say(result.message);
   }
 
   let shape = "", lastSaid = "";
   // No byte size on each part or group (release-readiness-audit.md C-13): what a part holds is its preview; the report's total, against
   // its limit, is said once under the list.
-  const rows = new Map<string, { box: HTMLInputElement; reason: HTMLElement }>();
-  let confirm: HTMLInputElement | null = null;
+  const rows = new Map<string, { box: Toggle; reason: HTMLElement }>();
+  let confirm: Toggle | null = null;
   function build(report: ReportState) {
     rows.clear(); confirm = null;
-    groups.replaceChildren(...report.groups.map((group, index) => {
+    // A group with nothing in it (no mod setup read yet: no parts, or only empty ones) isn't listed: it would be a heading over nothing
+    // (C-31).
+    groups.replaceChildren(...report.groups.filter(group => group.items.some(item => item.bytes > 0)).map((group, index) => {
       const optional = group.id === "optional";
       const hasModFiles = group.items.some(item => item.modFiles);
       if (hasModFiles) {
-        confirm = h("input", { type: "checkbox" });
-        confirm.addEventListener("change", () => void dispatch({ kind: "diagnostics.confirmSharing", confirmed: confirm!.checked }));
+        const sharing: Toggle = new Toggle({ label: "I made these mods, or their permissions allow sharing their files.",
+          onChange: confirmed => void dispatch({ kind: "diagnostics.confirmSharing", confirmed }) });
+        confirm = sharing;
       }
       return h("details", { class: "report-group", open: index < 2 || optional ? true : undefined },
-        h("summary", {}, h("span", { class: "report-group-title", text: group.label })),
+        h("summary", {}, chevron(), h("span", { class: "report-group-title", text: group.label })),
         h("p", { class: "muted small", text: group.detail }),
         hasModFiles ? h("div", { class: "report-warning", role: "note" }, icon("warning"), h("div", {},
-          h("p", { text: SHARING_WARNING }),
-          h("label", { class: "report-confirm" }, confirm!, h("span", { text: "I made these mods, or their permissions allow sharing their files." })))) : null,
+          h("p", { text: SHARING_WARNING }), confirm!.element)) : null,
         h("ul", { class: "report-items" }, group.items.map(item => row(item))));
     }));
   }
   function row(item: ReportItemState) {
-    const box = h("input", { type: "checkbox", id: uid("report-item") });
-    box.addEventListener("change", async () => {
-      const result = await dispatch({ kind: "diagnostics.setIncluded", item: item.id, included: box.checked });
-      if (!result.ok) { box.checked = !box.checked; setText(status, result.message); }
-    });
+    // Each part is a switch, as every include-or-not choice in the Studio is (the library's Switch; C-31), its reason on its note line.
+    const box: Toggle = new Toggle({ label: item.label, onChange: async included => {
+      const result = await dispatch({ kind: "diagnostics.setIncluded", item: item.id, included });
+      if (!result.ok) { box.update(!included); say(result.message); }
+    } });
     const reason = h("small", { class: "report-reason" });
     rows.set(item.id, { box, reason });
     const text = h("pre", { text: item.preview });
@@ -105,13 +115,13 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     const all = item.partial ? button({ label: "Show all of it", small: true, variant: "quiet", onClick: async () => {
       setDisabled(all!, true);
       const full = await port.diagnostics.fullText(item.id);
-      if (full === null) { setDisabled(all!, false); setText(status, "XF Studio couldn't show all of it. Try again in a moment."); return; }
+      if (full === null) { setDisabled(all!, false); say("XF Studio couldn't show all of it. Try again in a moment."); return; }
       setText(text, full); all!.remove();
     } }) : null;
     return h("li", { class: "report-item" },
-      h("label", { class: "report-item-head", for: box.id }, box, h("span", { class: "report-item-label", text: item.label })),
-      h("small", { class: "muted", text: item.detail }), reason,
-      item.preview ? h("details", { class: "report-preview" }, h("summary", { text: "Show what's in it" }), text, all) : null);
+      h("div", { class: "report-item-head" }, box.element),
+      h("small", { class: "muted report-item-detail", text: item.detail }), reason,
+      item.preview ? h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show what's in it"), text, all) : null);
   }
   function render() {
     if (!dialog.isConnected) return;
@@ -128,18 +138,18 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     // The status follows the report's own steps; a message from the mode switch stays until the report says something new.
     const said = report.phase === "preparing" ? report.message ?? "Preparing the report…" : report.busy === "saving" ? "Making the report file…"
       : report.busy === "copying" ? "Copying…" : report.busy === "opening" ? "Opening the issue page…" : report.message ?? "";
-    if (said !== lastSaid) { lastSaid = said; setText(status, said); }
+    if (said !== lastSaid) { lastSaid = said; say(said); }
     for (const group of report.groups) {
       for (const item of group.items) {
         const found = rows.get(item.id);
         if (!found) continue;
-        found.box.checked = item.included;
         const wanted = port.diagnostics.capability({ kind: "diagnostics.setIncluded", item: item.id, included: !item.included });
-        setDisabled(found.box, !item.included && !wanted.available, wanted.reason);
+        // The reason is said once, on the part's own reason line (below), not again on the switch's note line.
+        found.box.update(item.included, { disabled: !item.included && !wanted.available, reason: wanted.reason, reasonOnLine: false });
         setText(found.reason, !item.included && !wanted.available ? wanted.reason ?? "" : "");
       }
     }
-    if (confirm) confirm.checked = report.sharingConfirmed;
+    confirm?.update(report.sharingConfirmed);
     setText(total, report.phase === "ready" ? `Report size: ${report.totalSize}${report.window ? ` · recent activity covers the last ${report.window.minutes} minutes` : ""}` : "");
     for (const [control, kind] of [[save, "diagnostics.saveReport"], [copy, "diagnostics.copySummary"], [issue, "diagnostics.openIssue"]] as const) {
       const capability = port.diagnostics.capability({ kind });

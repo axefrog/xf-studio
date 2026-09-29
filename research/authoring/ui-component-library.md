@@ -34,9 +34,9 @@ All of XF Studio's UI is composed from one component library, documented in the 
 
 | Category | Components |
 |---|---|
-| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover` / `openConfirmPopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `FolderSetting`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
+| General | `button` / `applyCapability`, `iconButton`, `Toggle`, `Slider`, `SliderWithValue`, `PairControl`, `BipolarSlider`, `Segmented`, `ChoiceList` / `choiceItem`, `ColorField`, `SelectField`, `Combobox`, `SearchField`, `expander` / `ExpandAll`, `GroupSection`, `helpTip`, reason tip, `openMenu` / `openValuePopover` / `openConfirmPopover`, `ItemList`, `TabStrip`, `PanelHeader`, `TreeView` / `favouriteToggle`, `SizeBar`, `FolderSetting`, `RecordList`, `menuCapability`, `badge` / `note` / `emptyState` / `EmptyState` / `progressBar` / `section` |
 | Layout | `stack`, `blockSection`, `PageHeader`, `propertyList`, `codeBlock`, `SplitView`, `Splitter` |
-| Feature-specific | `LightList`, `DirectionDial` (lighting setups) |
+| Feature-specific | `LightList`, `DirectionDial` (lighting setups), `modLine` (mod packaging) |
 
 Components added on request:
 - For the expressions panel (`claude/expressions-p1`): SliderWithValue, PairControl, GroupSection (the expander with a count and reset), SearchField and Combobox.
@@ -46,6 +46,7 @@ Components added on request:
 - For the expression drawer's rebuild (`claude/expressions-drawer`, UI-108): `openConfirmPopover` (ask before an action that can't be undone, in place of the browser's `confirm`) and TreeView's `onMenu` (an item's context menu by right-click, Shift+F10 or the Menu key).
 - For the Save Explorer: the layout primitives. It is now their reference composition.
 - For the direction dial's follow-up (`claude/dial-polish`): its height scale, the drag's radius line and dimmed dots, Shift and Alt, and the resize bar, with the `controlSize.set` UI preference for kept control sizes.
+- For the 1.0 consistency track's layout pass (`claude/track-d-layout`, release-readiness audit item 19): `RecordList` (the Library's saved collections and recent drafts, UI-162), `modLine` (the mod a panel builds, UI-140), `menuCapability` (a "…" whose menu would be empty is unavailable with its reason, UI-139), a menu entry's `tip` (what it is as a tooltip, no visible line), FolderSetting's `kind: "file"` and `unset` line (your own WolvenKit, C-28) and its "Choose a folder…" until there is one to choose instead of (C-29), `relabel` on Slider and Slider with value (UI-157), and the Direction dial's resize bar rebuilt on SizeBar (`scale`, `setChosen`; UI-154).
 - For the lighting setups (`claude/lighting-setups`): Light list (the Ordered list with a light's colour chip and kind glyph) and Direction dial (a top view of V: one handle for a light's angle and height, readouts typed in place).
 - For the dock (UI-121): Splitter, the focusable bar between two resizable sides, which the dock's splitters and the Split view's gutter compose.
 - For saved layouts (`claude/saved-layouts`): option switches in the value popover (`ValueOption`: Save layout's name with Remember shown modules and automatic switching, each with a default).

@@ -16,7 +16,7 @@
  *   Show in folder; nothing is added to the game or a mod manager until the person accepts the reviewed plan.
  */
 import { applyCapability, badge, button, emptyState, GroupSection, hasCommands, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
-  section, Segmented, type MenuItem } from "../../../studio-ui/components";
+  section, Segmented, modLine as modLineItem, type MenuItem } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
 import { MOD_NAME_HINT } from "../../../mod-branding";
@@ -386,10 +386,10 @@ export function expressionSets(ctx: Ctx): PanelController {
       const name = setModName(set);
       if (modLine.dataset.name !== `${name}|${!!set.modName}`) {
         modLine.dataset.name = `${name}|${!!set.modName}`;
-        modLine.replaceChildren(h("li", {}, icon("package"), h("span", {}, h("strong", { text: name }), h("span", { class: "muted", text: " · Expressions" })),
-          // While the name is the default, the menu would hold only Rename…: the button renames directly (UI-143).
-          set.modName ? button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true, onClick: event => modMenu(event.currentTarget as Element) })
-            : button({ label: `Rename ${name}…`, icon: "rename", iconOnly: true, variant: "ghost", small: true, onClick: event => renameModPopover(event.currentTarget as Element) })));
+        // While the name is the default the menu would hold only Rename…, so the line's action renames directly (UI-143).
+        modLine.replaceChildren(modLineItem({ name, kind: "Expressions",
+          action: set.modName ? button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true, onClick: event => modMenu(event.currentTarget as Element) })
+            : button({ label: `Rename ${name}…`, icon: "rename", iconOnly: true, variant: "ghost", small: true, onClick: event => renameModPopover(event.currentTarget as Element) }) }));
       }
       const running = exports.busy?.id === set.id ? exports.busy.action : undefined;
       table.update(set.table ?? "installed", () => ctx.presets.capability({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision }), {

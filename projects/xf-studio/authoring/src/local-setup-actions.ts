@@ -13,6 +13,13 @@ export type FolderField = "gameRoot" | "mo2Root" | "manualModRoot" | "savesDirec
 export const FOLDER_FIELDS: readonly FolderField[] = ["gameRoot", "mo2Root", "manualModRoot", "savesDirectory"];
 /** The host's native folder picker: the folder chosen, or null when the person cancelled. */
 export type FolderPicker = (field: FolderField) => Promise<string | null>;
+/** A Build readiness issue that clears by itself once the host's background tool check answers (`HostFeatures.packageBuildPending`). */
+export const BUILD_TOOLS_CHECKING = "build_tools_checking";
+/** How soon the page asks again while the host is still checking its build tools. */
+export const BUILD_TOOLS_RECHECK_MS = 750;
+/** Whether a view's Build readiness is only waiting for the host's tool check. */
+export const buildToolsChecking = (view: LocalSetupView | undefined) =>
+  !!view?.readiness?.build?.issues?.some(issue => issue.code === BUILD_TOOLS_CHECKING);
 export type LocalSetupState = { view?: LocalSetupView; busy: boolean; error?: string;
   /** Whether this host has a native folder picker (`setup.pickFolder`); a view offers Browse… only then. */
   canPickFolder: boolean };
@@ -26,11 +33,15 @@ export class LocalSetupActions {
   private state: LocalSetupState;
   private listeners = new Set<() => void>();
   private refreshQueued = false;
+  private recheck = false;
   /**
    * @param pickFolder the host's native folder picker (the desktop app's); without one, `setup.pickFolder` says to choose a
    *   folder XF Studio found or type it.
+   * @param after the clock source's timer (`Clock.after`), used to ask again while the host is still checking its build tools;
+   *   without one, the page waits for the next refresh instead. Timers come from the clock source, never read here.
    */
-  constructor(private transport: LocalSetupTransport, private readonly pickFolder: FolderPicker | null = null) {
+  constructor(private transport: LocalSetupTransport, private readonly pickFolder: FolderPicker | null = null,
+    private readonly after: ((ms: number, run: () => void) => void) | null = null) {
     this.state = { busy: false, canPickFolder: !!pickFolder };
   }
   snapshot(): Readonly<LocalSetupState> { return structuredClone(this.state); }
@@ -60,6 +71,12 @@ export class LocalSetupActions {
     this.state = state;
     for (const listener of this.listeners) listener();
     if (this.refreshQueued && !this.state.busy) this.requestRefresh();
+    // The host answered before its first tool check finished: ask again shortly, so Build turns available by itself instead of
+    // saying "still checking" until something else refreshes the settings (performance.md, Build after a warm restart).
+    if (this.after && !this.state.busy && buildToolsChecking(this.state.view) && !this.recheck) {
+      this.recheck = true;
+      this.after(BUILD_TOOLS_RECHECK_MS, () => { this.recheck = false; this.requestRefresh(); });
+    }
   }
   capability(action: LocalSetupAction): { available: boolean; reason?: string } {
     if (action.kind === "setup.pickFolder") {

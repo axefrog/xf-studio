@@ -515,14 +515,49 @@ export function vortexOwner(gameRoot: string, file: string): string | null {
 const result = (plan: ModInstallPlan, message: string): ModInstallResult =>
   ({ schema: MOD_INSTALL_RESULT, candidateId: plan.candidateId, modName: plan.modName, route: plan.route, message });
 
+/** PROCESSENTRY32W on 64-bit Windows: its size, and where the image name (260 UTF-16 units) starts. */
+const PROCESS_ENTRY_BYTES = 568, PROCESS_ENTRY_EXE = 44;
+
 /**
- * Whether Mod Organizer 2 and Cyberpunk 2077 are running, from one `tasklist` run off the server thread (bounded by a
- * timeout). Where it can't be read (tasklist failed, timed out or printed nothing), both are unknown: the install then waits
- * rather than guessing (INSTALL-10). Off Windows neither runs.
+ * The lower-cased image names of every running process, from one kernel32 Toolhelp snapshot (a few milliseconds; `tasklist`
+ * took 0.8–1 s, most of Add to my mod manager's review and of its Add; performance.md). Null where it can't be read.
  */
-export async function windowsRunningApps(timeoutMs = 10_000): Promise<RunningApps> {
+export function windowsProcessImages(): Set<string> | null {
+  if (process.platform !== "win32") return null;
+  try {
+    const { dlopen, FFIType, ptr } = import.meta.require("bun:ffi") as typeof import("bun:ffi");
+    const kernel = dlopen("kernel32.dll", {
+      CreateToolhelp32Snapshot: { args: [FFIType.u32, FFIType.u32], returns: FFIType.i64 },
+      Process32FirstW: { args: [FFIType.i64, FFIType.ptr], returns: FFIType.i32 },
+      Process32NextW: { args: [FFIType.i64, FFIType.ptr], returns: FFIType.i32 },
+      CloseHandle: { args: [FFIType.i64], returns: FFIType.i32 },
+    });
+    try {
+      const snapshot = kernel.symbols.CreateToolhelp32Snapshot(0x2 /* TH32CS_SNAPPROCESS */, 0);
+      if (BigInt(snapshot) === -1n || BigInt(snapshot) === 0n) return null;
+      try {
+        const entry = Buffer.alloc(PROCESS_ENTRY_BYTES), images = new Set<string>();
+        entry.writeUInt32LE(PROCESS_ENTRY_BYTES, 0);
+        for (let more = kernel.symbols.Process32FirstW(snapshot, ptr(entry)); more; more = kernel.symbols.Process32NextW(snapshot, ptr(entry))) {
+          const name = entry.toString("utf16le", PROCESS_ENTRY_EXE, PROCESS_ENTRY_BYTES), end = name.indexOf("\0");
+          images.add((end < 0 ? name : name.slice(0, end)).toLowerCase());
+        }
+        return images.size ? images : null;
+      } finally { kernel.symbols.CloseHandle(snapshot); }
+    } finally { kernel.close(); }
+  } catch { return null; }
+}
+
+/**
+ * Whether Mod Organizer 2 and Cyberpunk 2077 are running: from a Toolhelp snapshot, or else one `tasklist` run off the server
+ * thread (bounded by a timeout). Where neither can be read (tasklist failed, timed out or printed nothing), both are unknown:
+ * the install then waits rather than guessing (INSTALL-10). Off Windows neither runs.
+ */
+export async function windowsRunningApps(timeoutMs = 10_000, snapshot: () => Set<string> | null = windowsProcessImages): Promise<RunningApps> {
   if (process.platform !== "win32") return { mo2: false, game: false };
   const unknown: RunningApps = { mo2: null, game: null };
+  const known = snapshot();
+  if (known) return { mo2: known.has("modorganizer.exe"), game: known.has("cyberpunk2077.exe") };
   try {
     const run = Bun.spawn(["tasklist", "/NH", "/FO", "CSV"], { stdout: "pipe", stderr: "ignore", stdin: "ignore", timeout: timeoutMs });
     const [out, code] = await Promise.all([new Response(run.stdout).text(), run.exited]);

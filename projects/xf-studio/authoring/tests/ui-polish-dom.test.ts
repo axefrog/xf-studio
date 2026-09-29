@@ -365,10 +365,11 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     h.panel.spec.element.remove();
   });
 
-  test("with the desktop's folder picker, Choose another folder… picks and saves a folder", async () => {
+  test("with the desktop's folder picker, Choose a folder… picks and saves a folder", async () => {
     const h = await settingsHarness({ picker: true });
     const game = h.root.querySelector("[data-settings-section=game]")!;
-    const choose = buttonNamed(game.querySelector(".folder-setting")!, "Choose another folder…")!;
+    // Nothing chosen or found yet, so it is "a" folder, not "another" (C-29).
+    const choose = buttonNamed(game.querySelector(".folder-setting")!, "Choose a folder…")!;
     expect(choose).toBeTruthy();
     choose.click();
     await settle();

@@ -222,6 +222,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       if (!classicSection.hidden) {
         const flakesTitle = glitter ? "Classic dots" : "Shimmer sparkles";
         setText(classicSection.querySelector(".section-title")!, flakesTitle);
+        // Under "Shimmer sparkles" the density is of sparkles, under Glitter's dots of flakes (UI-157).
+        classic.density.relabel(glitter ? "Flake density" : "Sparkle density");
         setAttr(classicSection.querySelector(".help-tip")!, "aria-label", `About ${flakesTitle}`);
         // Shimmer is an experimental export; classic Glitter is preview only, so its tip doesn't call it experimental.
         setHelp(classicSection.querySelector<HTMLElement>(".help-tip")!, glitter ? "Turn the head to see the flakes catch the light."
@@ -251,7 +253,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       }
       if (!directSection.hidden && flakes && "model" in flakes && flakes.model !== "irregular-planar-1") {
         const f = flakes as ReadonlyDeep<DirectGlintFlakes>;
-        setText(direct.density.element.querySelector(".control-label-text > span")!, f.model === "uv-cell-direct-1" ? "Flake density" : "Maximum flake density");
+        direct.density.relabel(f.model === "uv-cell-direct-1" ? "Flake density" : "Maximum flake density");
         direct.density.update(f.density); direct.fineShare.update(f.fineShare); direct.strength.update(f.strength); direct.color.update(f.color);
       }
     },
@@ -366,7 +368,7 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
         { disabled: !smoothMode, reason: "Turn on Smooth point gradients to blend points." });
       const perPoint = layer.softness.mode === "boundary";
       variable.update(perPoint);
-      setText(width.element.querySelector(".control-label-text > span")!, perPoint ? "Selected point softness" : "Edge softness");
+      width.relabel(perPoint ? "Selected point softness" : "Edge softness");
       width.update(perPoint ? point?.feather ?? layer.feather : layer.feather);
       mottle.update(layer);
     },

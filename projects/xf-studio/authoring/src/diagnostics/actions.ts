@@ -228,7 +228,7 @@ export class DiagnosticsActions {
         if (!action.included) return { available: true };
         if (item.unavailable) return refusal("unavailable", item.unavailable);
         if (item.modFiles && !report!.sharingConfirmed) return refusal("needs_input", "First confirm below that you may share these mods' files.");
-        if (this.totalWith(item.id, true) > report!.limit) return refusal("limit", `That would make the report larger than ${formatBytes(report!.limit)}. Untick something large first.`);
+        if (this.totalWith(item.id, true) > report!.limit) return refusal("limit", `That would make the report larger than ${formatBytes(report!.limit)}. Turn something large off first.`);
         return { available: true };
       }
       case "diagnostics.confirmSharing":
@@ -239,7 +239,7 @@ export class DiagnosticsActions {
       case "diagnostics.copySummary": case "diagnostics.saveReport": case "diagnostics.openIssue":
         if (!ready) return refusal(report?.phase === "preparing" ? "busy" : "not_ready", report?.phase === "preparing" ? "The report is being prepared." : "Prepare the report first.");
         if (report!.busy) return refusal("busy", "Wait for the current step to finish.");
-        if (action.kind === "diagnostics.saveReport" && this.totalWith("", false) > report!.limit) return refusal("limit", `The ticked items add up to more than ${formatBytes(report!.limit)}. Untick something large first.`);
+        if (action.kind === "diagnostics.saveReport" && this.totalWith("", false) > report!.limit) return refusal("limit", `The parts you included add up to more than ${formatBytes(report!.limit)}. Turn something large off first.`);
         return { available: true };
       case "diagnostics.setMode":
         return action.mode === "normal" || action.mode === "deep" ? { available: true } : refusal("invalid_value", "Choose normal or diagnostic mode.");
@@ -262,7 +262,7 @@ export class DiagnosticsActions {
         if (!action.confirmed) for (const item of this.state.report!.groups.flatMap(group => group.items)) if (item.modFiles) this.included.delete(item.id);
         this.publishReport({ sharingConfirmed: action.confirmed });
         this.regroup();
-        return { ok: true, message: action.confirmed ? "You can now tick mod files." : "Mod files left out." };
+        return { ok: true, message: action.confirmed ? "You can now include mod files." : "Mod files left out." };
       }
       case "diagnostics.setDescription": this.publishReport({ description: action.text }); this.refreshFiles(); return { ok: true, message: "" };
       case "diagnostics.copySummary": return this.step("copying", async () => {

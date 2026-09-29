@@ -2,7 +2,7 @@ import { h, setAttr, uid } from "../dom";
 import { NoteLine, type Transaction } from "../controls";
 import { helpTip, type HelpText } from "../help-tip";
 import { ReadoutField } from "./readout-field";
-import { SIZE_BAR_TITLE } from "./size-bar";
+import { SizeBar } from "./size-bar";
 
 /**
  * Direction dial (style guide "Direction dial", feature-specific: lighting setups): where a light sits around V, seen from above, as one
@@ -23,9 +23,11 @@ import { SIZE_BAR_TITLE } from "./size-bar";
  *   leaves; a typed value is one begin-edit-commit step.
  * - **Keyboard** (one tab stop, the dial): Left and Right turn the light by 5° (Page Up and Page Down by 15°), Up and Down raise and
  *   lower it by 5°; Alt with Left or Right turns it to the next 15° step; Home brings it to the front at its height. Enter types the angle exactly.
- * - **Resize.** The bar under the dial resizes it (drag down to enlarge, up to shrink; Up and Down arrows on the focused bar, Home and
- *   End for the smallest and largest; a double-click goes back to the default size). The size is clamped between `DIAL_MIN_SIZE` and what the control's width can hold, and drawn
- *   smaller when the panel narrows (`fitDialSize`); the owner keeps the chosen size (`onResize`).
+ * - **Resize.** The bar under the dial is the library's Size bar (UI-154), so it behaves as every other: drag down to enlarge, up to
+ *   shrink, Escape during a drag goes back; Up and Down arrows on the focused bar, Home and End for the smallest and largest; a
+ *   double-click, Delete or Backspace goes back to the default size. The drawing's height is what the bar sets, its width follows
+ *   (the drawing's aspect). The size is clamped between `DIAL_MIN_SIZE` and what the control's width can hold, and drawn smaller when
+ *   the panel narrows (`fitDialSize`); the owner keeps the chosen size (`onResize`, the drawing's width).
  * - **Readouts:** the label line carries the angle and the height, each the one readout of its value and typed into in place (checklist
  *   C1). The dial's value text says both in words ("330°, from the front, V's left, 20° up").
  * - **Unavailable:** the dial and readouts stop taking input and the reserved note line says why.
@@ -56,6 +58,8 @@ const VIEW = Object.freeze({ x: -8, y: -12, width: 150, height: 124 });
 export const DIAL_MIN_SIZE = 180;
 export const DIAL_DEFAULT_SIZE = 280;
 const RESIZE_STEP = 16;
+/** The drawing's width per unit of its height: the Size bar sets the height, the width follows. */
+const ASPECT = VIEW.width / VIEW.height;
 /** Angle steps around V that Alt snaps to. */
 export const ANGLE_SNAP = 15;
 
@@ -122,8 +126,9 @@ const svg = <K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
 export class DirectionDial {
   readonly element: HTMLElement;
   readonly dial: HTMLElement;
-  /** The resize bar under the dial. */
+  /** The resize bar under the dial (the Size bar's element). */
   readonly grip: HTMLElement;
+  private readonly bar: SizeBar;
   private readonly art: SVGSVGElement;
   private readonly handle: SVGCircleElement;
   private readonly radius: SVGLineElement;
@@ -139,7 +144,6 @@ export class DirectionDial {
   private start: Direction | null = null;
   private disabled = false;
   private burst: ReturnType<typeof setTimeout> | null = null;
-  private chosen = DIAL_DEFAULT_SIZE;
   private available = Number.POSITIVE_INFINITY;
   private tickKey = "";
   constructor(private readonly options: DirectionDialOptions) {
@@ -172,8 +176,13 @@ export class DirectionDial {
     this.dial = h("div", { class: "direction-dial-face", role: "slider", tabindex: "0", "aria-labelledby": labelId, "aria-valuemin": "0",
       "aria-valuemax": "359", "aria-orientation": "horizontal" });
     this.dial.append(this.art);
-    this.grip = h("div", { class: "dial-grip", role: "separator", tabindex: "0", "aria-orientation": "horizontal", "aria-label": `Resize ${options.label}`,
-      title: SIZE_BAR_TITLE, "aria-valuemin": String(DIAL_MIN_SIZE) });
+    // The Size bar sets the drawing's height (its width follows at the drawing's aspect); the owner keeps the width it reports.
+    this.bar = new SizeBar({ label: options.label, target: this.dial, minHeight: DIAL_MIN_SIZE / ASPECT, defaultHeight: DIAL_DEFAULT_SIZE / ASPECT,
+      maxHeight: () => this.fitted(Number.POSITIVE_INFINITY) / ASPECT, step: RESIZE_STEP / ASPECT, scale: ASPECT,
+      valueText: (height, isDefault) => `${this.fitted(height * ASPECT)} pixels wide${isDefault ? ", default" : ""}`,
+      apply: () => this.applySize(), onResize: (_height, final) => this.options.onResize?.(this.shownSize, final) });
+    this.grip = this.bar.element;
+    this.grip.classList.add("dial-grip");
     const readout = (label: string, set: (value: number) => Direction) => new ReadoutField({ label, returnFocus: () => this.dial,
       parse: text => { const n = Number(text.replace(/[°\s+]/g, "").replace("−", "-")); return Number.isFinite(n) ? n : undefined; },
       onCommit: value => this.step(set(value)) });
@@ -184,79 +193,43 @@ export class DirectionDial {
       h("div", { class: "control-line" }, h("span", { class: "control-label-text", id: labelId }, h("span", { text: options.label })),
         options.help !== undefined ? helpTip(options.label, options.help) : null,
         h("span", { class: "dial-readouts" }, this.angle.element, this.height.element)),
-      this.dial, this.grip, this.note.element);
+      this.bar.region, this.note.element);
     this.dial.addEventListener("pointerdown", event => this.drag(event));
     this.dial.addEventListener("keydown", event => this.key(event));
     this.dial.addEventListener("blur", () => this.endBurst());
-    this.grip.addEventListener("pointerdown", event => this.resizeDrag(event));
-    this.grip.addEventListener("keydown", event => this.resizeKey(event));
-    this.grip.addEventListener("dblclick", event => { event.preventDefault(); this.resizeTo(DIAL_DEFAULT_SIZE, true); });
     // The control's width is what the drawing may take: narrowing the panel draws it smaller, widening brings the chosen size back.
     if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => this.layout(this.element.clientWidth)).observe(this.element);
     this.applySize();
   }
+  /** A width as the control's room lets it be drawn. */
+  private fitted(size: number) { return fitDialSize(size, this.available); }
+  /** The width chosen with the bar (or kept by the owner), or the default. */
+  private get chosen() { return this.bar ? (this.bar.chosen ?? DIAL_DEFAULT_SIZE / ASPECT) * ASPECT : DIAL_DEFAULT_SIZE; }
   /** The width the drawing is shown at now. */
-  get shownSize() { return fitDialSize(this.chosen, this.available); }
+  get shownSize() { return this.fitted(this.chosen); }
   /** The control's content width changed (the panel resized): refit the drawing. */
   layout(available: number) {
     if (!(available > 0) || available === this.available) return;
     this.available = available;
+    this.bar.refresh();
     this.applySize();
   }
   /** Set the chosen size (the owner's kept preference, or a resize), clamped to what fits. */
   setSize(size: number) {
     if (!Number.isFinite(size)) return;
-    this.chosen = Math.max(DIAL_MIN_SIZE, Math.round(size));
-    this.applySize();
+    this.bar.setChosen(Math.max(DIAL_MIN_SIZE, Math.round(size)) / ASPECT);
   }
   private applySize() {
+    // Called by the Size bar while it is being built, before the drawing's own parts are all there.
+    if (!this.bar || !this.element) return;
     const shown = this.shownSize;
     this.element.style.setProperty("--dial-size", `${shown}px`);
     // Drawing units per CSS pixel: the words and numbers are sized in px times this, so they stay one type size as the drawing scales.
     this.element.style.setProperty("--dial-unit", (VIEW.width / shown).toFixed(4));
-    setAttr(this.grip, "aria-valuenow", String(shown));
-    setAttr(this.grip, "aria-valuemax", String(fitDialSize(Number.POSITIVE_INFINITY, this.available === Number.POSITIVE_INFINITY ? 1e5 : this.available)));
-    setAttr(this.grip, "aria-valuetext", `${shown} pixels wide`);
   }
   /** Resize to a width, clamped; `final` tells the owner to keep it. */
   resizeTo(size: number, final: boolean) {
-    const fitted = fitDialSize(size, this.available);
-    this.chosen = fitted;
-    this.applySize();
-    this.options.onResize?.(fitted, final);
-  }
-  private resizing: (() => void) | null = null;
-  private resizeDrag(event: PointerEvent) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    this.resizing?.();
-    const pointer = event.pointerId;
-    try { this.grip.setPointerCapture(pointer); } catch { /* Ends on release or a new press. */ }
-    const from = event.clientY, width = this.shownSize, aspect = VIEW.width / VIEW.height;
-    this.grip.classList.add("dragging");
-    // Drag down to enlarge: the drawing's height follows the pointer, its width with it.
-    const move = (e: PointerEvent) => { if (e.pointerId === pointer) this.resizeTo(width + (e.clientY - from) * aspect, false); };
-    const end = () => {
-      if (this.resizing !== end) return;
-      this.resizing = null;
-      this.grip.removeEventListener("pointermove", move); this.grip.removeEventListener("pointerup", up); this.grip.removeEventListener("pointercancel", up);
-      this.grip.removeEventListener("lostpointercapture", up);
-      this.grip.classList.remove("dragging");
-      this.resizeTo(this.shownSize, true);
-    };
-    const up = (e: PointerEvent) => { if (e.pointerId === pointer) end(); };
-    this.resizing = end;
-    this.grip.addEventListener("pointermove", move);
-    this.grip.addEventListener("pointerup", up);
-    this.grip.addEventListener("pointercancel", up);
-    this.grip.addEventListener("lostpointercapture", up);
-  }
-  private resizeKey(event: KeyboardEvent) {
-    const next = event.key === "ArrowDown" ? this.shownSize + RESIZE_STEP : event.key === "ArrowUp" ? this.shownSize - RESIZE_STEP
-      : event.key === "Home" ? DIAL_MIN_SIZE : event.key === "End" ? Number.POSITIVE_INFINITY : undefined;
-    if (next === undefined) return;
-    event.preventDefault();
-    this.resizeTo(next, true);
+    this.bar.resizeTo(Math.max(DIAL_MIN_SIZE, size) / ASPECT, final);
   }
   /** Close a keyboard burst's transaction. */
   private endBurst() {

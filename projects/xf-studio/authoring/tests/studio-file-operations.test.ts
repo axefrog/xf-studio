@@ -7,7 +7,7 @@ import type { EditorSnapshot } from "../src/collection-session";
 import type { PresetCollection } from "../src/preset-collection";
 import { looks } from "./fixtures/looks";
 import { StudioFileOperations, type StudioPickedFile } from "../src/studio-file-operations";
-import { BUILD_NEEDS_SETUP } from "../src/alpha-availability";
+import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON } from "../src/alpha-availability";
 import { recipeFile } from "../src/recipe-schema";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe } from "./fixtures/eye-region";
@@ -15,7 +15,7 @@ import { initialRecipe } from "./fixtures/eye-region";
 const picked = (name: string, text: string, size = text.length): StudioPickedFile => ({
   name, size, text: async () => text, bytes: async () => new TextEncoder().encode(text),
 });
-function fixture(buildReadiness?: () => "ready" | "needs-setup" | "loading" | "damaged" | undefined) {
+function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checking" | "loading" | "damaged" | undefined) {
   const recipe = initialRecipe(), collection: PresetCollection = { schema: "xfas/collection-1",
     id: crypto.randomUUID(), name: "Library", presets: [{ id: crypto.randomUUID(), name: "Eye", revision: 1, recipe: recipeFile(recipe)! }] };
   let editor: EditorSnapshot = { recipe: structuredClone(recipe), ...emptyMemory() };
@@ -229,7 +229,7 @@ test("collection import reads through file port and delegates strict parsing and
 });
 
 test("Build explains the missing developer setup everywhere Build is offered, while Check stays available", async () => {
-  let readiness: "ready" | "needs-setup" | "loading" | "damaged" = "needs-setup";
+  let readiness: "ready" | "needs-setup" | "checking" | "loading" | "damaged" = "needs-setup";
   const f = fixture(() => readiness);
   expect(f.files.capability({ kind: "package.check" })).toEqual({ available: true });
   expect(f.files.capability({ kind: "package.build" })).toEqual({ available: false, reason: BUILD_NEEDS_SETUP });
@@ -237,6 +237,9 @@ test("Build explains the missing developer setup everywhere Build is offered, wh
   expect(f.packageInput()).toBeUndefined();
   readiness = "loading";
   expect(f.files.capability({ kind: "package.build" }).reason).toBe("Your settings are still loading.");
+  // The host's first tool check still running is not a missing setup.
+  readiness = "checking";
+  expect(f.files.capability({ kind: "package.build" })).toEqual({ available: false, reason: BUILD_TOOLS_CHECKING_REASON });
   readiness = "damaged";
   expect(f.files.capability({ kind: "package.build" }).reason).toContain("Restore the previous copy");
   readiness = "ready";

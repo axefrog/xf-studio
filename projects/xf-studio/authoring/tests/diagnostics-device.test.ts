@@ -155,8 +155,9 @@ describe("the report review (DIAG-01, DIAG-09, DIAG-13, DIAG-14)", () => {
     await settle();
     const dialog = lightDocument.body.querySelector("dialog")!;
     const find = (text: string) => dialog.descendants().find(element => element.tagName === "button" && element.textContent.includes(text))!;
+    // Each part is the library's switch (C-31): its input sits inside the part's head.
     const box = (label: string) => dialog.descendants().find(element => element.classList.contains("report-item-head") && element.textContent.includes(label))!
-      .children.find(child => child.tagName === "input")!;
+      .descendants().find(child => child.tagName === "input")!;
     return { actions, handle, dialog, find, box };
   }
   const change = (element: Element, checked: boolean) => { element.checked = checked; element.dispatchEvent(lightEvent("change")); };
@@ -173,7 +174,8 @@ describe("the report review (DIAG-01, DIAG-09, DIAG-13, DIAG-14)", () => {
     // Mod files can't be ticked until the confirmation is.
     const files = box("Files of");
     expect(files.disabled).toBe(true);
-    const confirm = dialog.descendants().find(element => element.classList.contains("report-confirm"))!.children.find(child => child.tagName === "input")!;
+    const confirm = dialog.descendants().find(element => element.classList.contains("report-warning"))!.descendants().find(child => child.tagName === "input")!;
+    expect(confirm.getAttribute("role")).toBe("switch");
     change(confirm, true);
     await settle();
     change(files, true);

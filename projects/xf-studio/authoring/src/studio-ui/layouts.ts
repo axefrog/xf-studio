@@ -178,7 +178,7 @@ export function layoutController(host: LayoutHost) {
           run: () => { if (layout.id !== current.active) switchTo(layout.id); } };
       };
       // Unavailable because nothing changed is information, not a problem: the reason is muted.
-      const whenChanged = changed ? {} : { capability: unchanged, quietReason: true };
+      const whenChanged = changed ? {} : { capability: unchanged };
       return [
         { kind: "heading", label: "Layouts" },
         ...current.layouts.map(row),
@@ -189,7 +189,7 @@ export function layoutController(host: LayoutHost) {
         { kind: "action", label: "Save as new layout…", icon: "plus", run: () => saveAs(anchor) },
         { kind: "action", label: "Rename…", icon: "rename", run: () => rename(anchor) },
         { kind: "action", label: "Delete", icon: "trash", danger: true,
-          ...(only ? { capability: { available: false, reason: "This is your only layout. Save another before deleting it." }, quietReason: true } : {}), run: remove },
+          ...(only ? { capability: { available: false, reason: "This is your only layout. Save another before deleting it." } } : {}), run: remove },
         { kind: "separator" },
         { kind: "action", label: "Remember shown modules", icon: "category", checked: !!active.modules, run: () => setRemember(!active.modules) },
         { kind: "submenu", label: "Switch to it automatically", icon: "monitor", ...(active.autoSize ? { hint: `In ${active.autoSize} windows` } : {}), items: () => [
@@ -205,7 +205,13 @@ export function layoutController(host: LayoutHost) {
     },
     /** The palette's Layout commands. */
     commands(): Command[] {
-      const current = library(), active = activeLayout(current), changed = modified(), centre = () => ({ x: Math.round(window.innerWidth / 2 - 140), y: 120 });
+      const current = library(), active = activeLayout(current), changed = modified();
+      // Run from the palette, the name popover opens under the header's Layouts button, where the layouts live (C-33); only while that
+      // button isn't shown does it open near the top of the window.
+      const centre = (): MenuAnchor => {
+        const header = document.querySelector<HTMLElement>(".shell-header .layouts-btn");
+        return header?.getClientRects().length ? header : { x: Math.round(window.innerWidth / 2 - 140), y: 120 };
+      };
       const always = { capability: () => ({ available: true }) };
       const keywords = "layout workspace arrangement panels";
       return [

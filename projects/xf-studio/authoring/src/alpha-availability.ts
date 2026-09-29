@@ -18,6 +18,9 @@ export const LOCALHOST_SETUP_PLACE = "Settings";
 export const BUILD_NEEDS_SETUP =
   "Building mod files needs your Cyberpunk 2077 game folder and WolvenKit, which XF Studio sets up with the 3D view. Check works without them.";
 
+/** Shown for Build for the few seconds after start-up while XF Studio checks WolvenKit and its build runtime. */
+export const BUILD_TOOLS_CHECKING_REASON = "XF Studio is checking its build tools. Build is available in a few seconds.";
+
 /**
  * Developer and evidence vocabulary that must not appear in a reason or label a community user sees,
  * including settings revisions, server overrides, the Bun runtime and "checked separately" caveats.

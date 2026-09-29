@@ -16,8 +16,11 @@ export type MenuItem =
       tag?: string;
       /** The release stage of what the entry shows or turns on: an Early access stage tag after the label (components/stage-tag.ts). */
       stage?: Stage;
-      /** The unavailable reason is information, not a problem (a planned feature's "Coming soon: …"): shown in the muted colour. */
-      quietReason?: boolean }
+      /**
+       * What the entry is (a panel's description): its tooltip and accessible description, never a visible line, so a long menu of
+       * like entries stays one row each (G2: what a thing is goes in a tip; C-32). A visible `hint` or reason still shows as usual.
+       */
+      tip?: string }
   | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[] }
   | { kind: "separator" }
   | { kind: "heading"; label: string; detail?: string };
@@ -82,6 +85,12 @@ export function menuOpen() { return !!root; }
 /** Whether a menu of these items offers anything to act on (an action or a submenu, available or with its reason). */
 export const hasCommands = (items: readonly MenuItem[]) => items.some(item => item.kind === "action" || item.kind === "submenu");
 /**
+ * A menu button's availability from the menu it opens (UI-139): available while the menu holds something to act on, otherwise
+ * unavailable with `reason`, so a "…" never opens nothing. Apply it with `applyCapability` whenever what the menu would hold changes.
+ */
+export const menuCapability = (items: readonly MenuItem[], reason: string): Capability =>
+  hasCommands(items) ? { available: true } : { available: false, reason };
+/**
  * Open a menu. A menu with nothing to act on (only headings, separators, or nothing) never opens, and nothing is closed: menus are
  * actionable, never informational, so the owner disables its trigger with the reason instead (`hasCommands` asks first). Returns the
  * open menu, or undefined when it didn't open.
@@ -124,17 +133,18 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     const available = item.capability?.available ?? true;
     const reason = !available ? item.capability?.reason ?? "Unavailable." : undefined;
     const descId = uid("menu-desc");
+    const tip = item.kind === "action" ? item.tip : undefined;
     const entry = h("div", { class: `menu-item${item.kind === "action" && item.danger ? " danger" : ""}`,
       role: item.kind === "action" && item.checked !== undefined ? "menuitemcheckbox" : "menuitem",
       tabindex: "-1", "aria-disabled": available ? undefined : "true",
       "aria-checked": item.kind === "action" && item.checked !== undefined ? String(item.checked) : undefined,
       "aria-haspopup": item.kind === "submenu" ? "menu" : undefined,
-      "aria-describedby": reason || item.hint ? descId : undefined },
+      "aria-describedby": reason || item.hint || tip ? descId : undefined, title: tip },
       h("span", { class: "menu-icon" }, item.kind === "action" && item.checked ? icon("check") : item.icon ? icon(item.icon) : null),
       h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, item.label, item.kind === "action" && item.tag ? h("span", { class: "menu-tag", text: item.tag }) : null,
         item.kind === "action" ? stageTag(item.stage, "menu-tag") : null),
-        reason || item.hint ? h("small", { id: descId, class: reason && !(item.kind === "action" && item.quietReason) ? "menu-reason" : "menu-hint", text: reason ?? item.hint })
-          : null),
+        reason || item.hint ? h("small", { id: descId, class: reason ? "menu-reason" : "menu-hint", text: reason ?? item.hint })
+          : tip ? h("small", { id: descId, class: "sr-only", text: tip }) : null),
       item.kind === "action" && item.shortcut ? h("kbd", { text: item.shortcut }) : null,
       item.kind === "submenu" ? h("span", { class: "menu-sub" }, icon("chevronRight")) : null);
     const activate = () => {
