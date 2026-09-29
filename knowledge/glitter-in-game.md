@@ -1,6 +1,12 @@
 # Glitter in game: what can sparkle on a face decal (game 2.31)
 
-**Maturity: Draft.** Every engine step between a flake texture and a screen pixel is traced from compiled programs, installed templates and one installed community glitter mod, and a proposed route is measured offline ([experiment 018](../experiments/018-glitter-route/README.md)) and built as a verified diagnostic board ([experiment 021](../experiments/021-glitter-board/README.md)). Runtime evidence is limited to Shimmer: in the first photo-mode session (25 September) the default faceted Shimmer read as a diffused gloss, not sparkle. No glitter route has been seen in game.
+**Maturity: Draft.** Every engine step between a flake texture and a screen pixel is traced from compiled programs, installed templates and one installed community glitter mod. The route is measured offline ([experiment 018](../experiments/018-glitter-route/README.md)), built as a verified diagnostic board ([experiment 021](../experiments/021-glitter-board/README.md)) and reworked after its first in-game verdict ([experiment 032](../experiments/032-finishes-rework/README.md)). Runtime evidence so far [runtime]:
+- **Session 1 (25 September):** the default faceted Shimmer read as a diffused gloss.
+- **Sessions 3 and 4:** the facet bake was a static grid of large dots.
+- **Session 6 (29 September), by hand under movable lights:**
+  - Shimmer's sparse grain read as glossy vinyl.
+  - Board 1's Glitter A "doesn't seem much like glitter": the flecks looked printed on the base, with little light response.
+  - In showroom close-ups under the creator rig, Glitter A showed a fine sparkle grain and the Shimmer grain a pearly sheen with a pink-white glint.
 
 This page answers three questions for XF Eye Artistry:
 
@@ -19,6 +25,7 @@ Engine basics (G-buffer, decal blending, skin lighting) are in [materials and sh
 - **Temporal antialiasing removes one-pixel glints.** The decoded temporal program clamps history to the 5-tap mean ± 1σ in PQ space. That dims an isolated one-pixel glint by roughly an order of magnitude but keeps glints of 2×2 pixels or more [source]. So every flake has to be at least 2 texels wide at every mip level. DLSS, FSR3 and XeSS are closed binaries whose behaviour is [hypothesis].
 - **Recommended primary route: resolved glint flakes in `mesh_decal`.** The window texture carries strongly tilted, low-roughness, high-metalness flakes, with a separate flake mask and dilated normals. A *nested* mip chain re-draws flakes at at least 2 texels on every level instead of averaging them. Offline, this keeps 3 times more sparkling pixels after the temporal clamp at the face-framing mip, and 30 times more one level further, than a plain BOX chain [offline]. Build now has it as a **diagnostic** route that only a prepared collection's `glitter` knob reaches; the Glitter finish itself is still omitted from ordinary exports. On the built board, block compression keeps the flakes (BC5 normals within 1° at the 95th percentile, BC4 flake edges within 0.055) and WolvenKit keeps the supplied nested chains [offline] ([experiment 021](../experiments/021-glitter-board/README.md#offline-checks-before-a-session)). The look is still [hypothesis].
 - **Fallback: the same maps plus an emissive sparkle accent** on a second plate chunk (`mesh_decal_emissive_subsurface`). It stays visible at any distance, but it is light-independent, so it must be labelled as stylised [source].
+- **Every flake must tilt above mode 1's fade.** `NormalsBlendingMode` 1 writes a flake's normal at weight saturate(50 − 50z), full only from about 11.5° of tilt [source]. A flatter flake keeps the skin's normal, so it brightens with the lid's own highlight, like paint on it. Board 1's |N(0, 25°)| tilts put 37 % of its flake texels under the fade, and a third of its flakes were brightest exactly where the skin's highlight is [offline]: the "printed" verdict. Glitter flakes 2 gives every flake at least 14° ([experiment 032](../experiments/032-finishes-rework/README.md#2-glitter-flakes-2-the-studio-models-in-the-export)).
 - **Community precedent.** The installed glitter eyeshadow mod (Limerence × AllieKat *Winterkissed*, Nexus file "Limerence AXL Glitter Eyeshadows") uses plain `mesh_decal`. It has 4096² maps on the vanilla eye-makeup UVs, embossed shape outlines as normals, metalness near 1 and roughness 0–0.25 [resource].
 
 ## 1. From flake texture to screen pixel
@@ -59,6 +66,7 @@ Each row is one stage a sparkle has to survive, in draw order.
 | **Multilayered / clear coat** | Opaque and depth-writing; replaces the surface and skin's lighting class. The runtime surface cache resolves one surface. | — | Rejected ([assessment](../research/materials/multilayered-makeup-assessment.md)) |
 | **`metal_base_glitter.mt`** | Noise- and time-driven emission in an opaque, depth-writing pass | No | Rejected ([investigation](../research/materials/glitter-shader-investigation.md)) |
 | **Vanilla search** | None of the 373 templates has a glint, sparkle, flake or sequin parameter. The "glitter" resources are an FX flipbook texture, a quest inhaler's multilayer flake microblend and car-paint setups. | — | No vanilla glint material exists [resource] |
+| **The car-paint metallic flake layer** | Vehicle bodies use `vehicle_destr_blendshape.mt`: an opaque, depth-writing multilayered surface (Standard class), plus a forward coat pass that blends over its own base pass (`CoatTintFwd/Side`, `CoatSpecularColor`, `CoatLayerMin/Max`) [resource]. The flakes are the layer template `car_paint_metallic_01.mltemplate`, whose only flake data is a 512² BC5 normal `car_paint_01_n.xbm`, tiled (×15 × 4 on the Chevalier Thrax) at normal strength 0.66. That map is one-texel white noise (neighbour correlation 0.1) tilted 6.4° median, 8.9° at the 90th percentile, none above 11.5°, and its BOX mips halve the tilt per level [offline] ([experiment 032 §5](../experiments/032-finishes-rework/README.md#5-an-isolated-alternative-the-car-paint-metallic-flake-layer)) | Only as micro-sparkle, and only because the opaque surface writes its normal without a fade | Rejected for the plate: it replaces the skin (no soft coverage, SSS or skin lobes), and inside `mesh_decal` its tilts would all fade out. Its pattern, dense small-tilt noise, is Shimmer's, not Glitter's |
 | **Community: *Winterkissed* (Limerence × AllieKat)** | Six looks, all `mesh_decal` in mode 0. They use 4096² diffuse/normal/roughness/metalness maps on the vanilla eye-makeup UVs (≈ 0.016 mm per texel) and a full 13-level chain (how it was made is not recorded). In the three looks measured, normals are **embossed outlines** of stars, circles and hexagons: tilted rims around flat interiors. Metalness is ≈ 1 and roughness 0–0.25 over the covered area. `NormalAlpha` 10, `RoughnessMetalnessAlpha` 10 and `UseNormalAlphaTex` 10 over-drive the alphas so they saturate. The normal mask points at a separate noise-band texture that overlaps only part of the coverage (full normal weight on about 1–3 % of covered texels). | Yes, as a metallic foil with glinting outlines | Evidence that the community ships glitter through the same template. Its outline normals give rings, not flat flakes, the pattern our reference review rejected. A useful in-game reference |
 
 The *Winterkissed* figures come from its installed 1.1.0 archive ([experiment 018](../experiments/018-glitter-route/README.md#community-glitter-winterkissed)); what it looks like in game is not recorded here.
@@ -104,6 +112,21 @@ The 1024 head-UV atlas that the flat and faceted routes used before the window h
 
 The framings are estimates. A negative upscaler mip bias would move every row one level finer and shrink the representatives toward 1 pixel.
 
+### Glitter flakes 2 (board 2)
+
+After session 6 the route's flake statistics gained optional fields that reproduce the Studio's glint models ([`glitter-studio-flakes.ts`](../projects/xf-studio/authoring/src/glitter-studio-flakes.ts)); regions without them draw exactly the recipe above:
+
+| Field | Board 2 (reference: the Studio's Dense fine speckles at full strength) | Why |
+|---|---|---|
+| Tilt | 14° + \|N(0, 16°)\|, up to 65° | Every flake above the fade (with room for BC5), and a tail of steep flakes like the Studio's facets |
+| Surface | Roughness uniform 0.20–0.34, metalness 0.85–1, per flake | Varied sharpness and reflectance, as the Studio's varied facets give |
+| Populations | Small flakes at two texels (0.13 mm); a large share (4 % at 0.29 mm) | The Studio's occasional big flashes. Its finest facets would be one pixel, which the temporal filter dims |
+| Density | The model's own count (grid × density × envelope): 27 % cover, about 16 flakes per mm² | "As authored" |
+| Clustering | A value-noise envelope on the Studio's 18-cell lattice (3.8 mm), floor 0.48 | Dense and sparse areas |
+| Base | Roughness 0.55, metalness 0 (the Studio's glint base; its clear coat has no G-buffer lobe) | Layering over the pigment |
+
+Offline, with the base recipe's sizes kept, the floor takes the share of flakes that peak with the skin's own highlight from 32 % to 1 %, and caps the flakes lit by any one light at 21 % (board 1: 43 %). Twinkle rises by half [offline] ([experiment 032](../experiments/032-finishes-rework/README.md#offline-evidence)). The reference model's two-texel flakes resolve at a macro framing (about one texel per pixel) but give way to sheen by 0.1 mm per pixel, the two-pixel rule at work.
+
 ## 4. Fallback: the primary maps plus an emissive sparkle accent
 
 This covers the case where glints of analytic lights prove too rare, or are suppressed by DLSS at face framing. A second plate render chunk carries the accent, using the multi-chunk mechanism already built for [experiment 017](../experiments/017-plate-depth/README.md#pipeline-changes-for-review). Its material is `base\materials\mesh_decal_emissive_subsurface.mt`:
@@ -130,8 +153,9 @@ The recipe fields should be physical, and each maps one-to-one onto the catalogu
 
 ## 6. What the next sessions should show
 
-- ***Shimmer · strong*, sessions 3 and 4 (28 September).** The facet bake showed a static, regular grid of oversized dots and no flash [runtime], as predicted from its 2.5–3.5 mm discs; [experiment 030](../experiments/030-shimmer-grain/README.md) traced the static part to per-facet metalness and the grid to the UV-cell lattice. The same preset rebuilt with Shimmer's one-texel grain is the next check ([sessions plan](../research/runtime/next-sessions-plan.md#shimmer-grain-check)). Prediction: no dots at face framing, a sheen brighter and broader than Satin's; pinpoint glints that move with the light at an eye close-up, possibly softened by DLSS.
-- **The glitter board** (designed in [experiment 018](../experiments/018-glitter-route/README.md#diagnostic-board), built and verified offline in [experiment 021](../experiments/021-glitter-board/README.md), not yet staged): six presets that separate the base recipe, nested against BOX mips, flake width, flake surface, tilt spread and the emissive accent, with a DLSS-against-DLAA check.
+- ***Shimmer · strong*, sessions 3 and 4 (28 September).** The facet bake showed a static, regular grid of oversized dots and no flash [runtime], as predicted from its 2.5–3.5 mm discs; [experiment 030](../experiments/030-shimmer-grain/README.md) traced the static part to per-facet metalness and the grid to the UV-cell lattice.
+- **Session 6 (29 September).** Shimmer's sparse grain over one glossy surface read as glossy vinyl [runtime]. The forecast's explanation [offline]: a lone one-texel grain in a smooth neighbourhood is what the temporal clamp removes, which leaves the uniform gloss. *shimmer-grain-2* puts glossy pearl specks on 86 % of texels over a satin base. After the clamp its speckle is more than twice grain-1's, and at face framing it is a soft sheen no brighter than Satin's ([Shimmer design](../research/materials/finish-designs/shimmer.md)).
+- **Glitter board 1 (session 6)** looked printed [runtime] (above). **Board 2** ([experiment 021](../experiments/021-glitter-board/README.md)) holds the reference model, board 1 against flakes-2 normals at the same sizes, the Studio's direct and clustered models, nested against BOX mips, and the accent. It is the finishes row of the [session-7 checks](../research/runtime/runtime-bridge-test-card.md#session-7-checks-bridge-053): showroom close-ups under the creator rig, then judging by hand with movable lights.
 
 ## Open questions
 

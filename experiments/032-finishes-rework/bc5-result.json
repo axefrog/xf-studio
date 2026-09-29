@@ -1,0 +1,48 @@
+{
+  "build": "the board 2 eye build (WolvenKit CLI 9.0.1)",
+  "floorDeg": 14,
+  "presets": [
+    {
+      "name": "Glitter A · reference",
+      "floorTexels": 54144,
+      "keepFullWeight": 0.9998,
+      "belowHalfWeight": 0,
+      "meanTiltLossDeg": 0.017
+    },
+    {
+      "name": "Glitter B · 1 vs 2",
+      "floorTexels": 33815,
+      "keepFullWeight": 1,
+      "belowHalfWeight": 0,
+      "meanTiltLossDeg": 0.006
+    },
+    {
+      "name": "Glitter C · direct",
+      "floorTexels": 46485,
+      "keepFullWeight": 1,
+      "belowHalfWeight": 0,
+      "meanTiltLossDeg": 0.007
+    },
+    {
+      "name": "Glitter D · clustered",
+      "floorTexels": 13170,
+      "keepFullWeight": 1,
+      "belowHalfWeight": 0,
+      "meanTiltLossDeg": 0.015
+    },
+    {
+      "name": "Glitter E · mips",
+      "floorTexels": 54144,
+      "keepFullWeight": 0.9998,
+      "belowHalfWeight": 0,
+      "meanTiltLossDeg": 0.017
+    },
+    {
+      "name": "Glitter F · accent",
+      "floorTexels": 54144,
+      "keepFullWeight": 0.9998,
+      "belowHalfWeight": 0,
+      "meanTiltLossDeg": 0.017
+    }
+  ]
+}
