@@ -62,6 +62,10 @@ std::string_view AccessName(Access aAccess)
         return "write-save";
     case Access::WriteShowroom:
         return "write-showroom";
+    case Access::WritePlayer:
+        return "write-player";
+    case Access::ActPlayer:
+        return "act-player";
     case Access::Notify:
         return "notify";
     case Access::Control:
@@ -91,8 +95,37 @@ uint32_t WriteClassBit(Access aAccess)
         return kWriteSave;
     case Access::WriteShowroom:
         return kWriteShowroom;
+    case Access::WritePlayer:
+        return kWritePlayer;
+    case Access::ActPlayer:
+        return kActPlayer;
     default:
         return 0;
+    }
+}
+
+std::string_view ConfigClassName(Access aAccess)
+{
+    switch (aAccess)
+    {
+    case Access::WritePhoto:
+        return "photo";
+    case Access::WriteWorld:
+        return "world";
+    case Access::WriteCharacter:
+        return "character";
+    case Access::WriteInventory:
+        return "inventory";
+    case Access::WriteSave:
+        return "save";
+    case Access::WriteShowroom:
+        return "showroom";
+    case Access::WritePlayer:
+        return "player";
+    case Access::ActPlayer:
+        return "act";
+    default:
+        return {};
     }
 }
 
@@ -278,6 +311,16 @@ void Dispatcher::Kill(const std::string& aReason)
     }
     m_killed.store(true);
     log::Warn("bridge.killed", "reason=" + aReason);
+    if (m_eventSink)
+    {
+        try
+        {
+            m_eventSink("kill", "warn", "the kill switch stopped the bridge: " + aReason, json{{"reason", aReason}});
+        }
+        catch (...)
+        {
+        }
+    }
 }
 
 bool Dispatcher::IsKilled() const
@@ -318,6 +361,58 @@ void Dispatcher::RequireWritesOpen() const
     {
         throw MethodError("writes_paused", "changes were paused in the game's XF bridge panel part-way; the next step wasn't taken");
     }
+    if (m_handover.load())
+    {
+        throw MethodError("handed_over", "the session was handed over to the player part-way; the next step wasn't taken");
+    }
+}
+
+void Dispatcher::RequireWriteClass(Access aAccess) const
+{
+    if (!IsWrite(aAccess))
+    {
+        return;
+    }
+    if (!m_config.allowWrites)
+    {
+        throw MethodError("writes_disabled", "write methods are off; set [bridge] allow_writes = true in config.ini");
+    }
+    if (const auto bit = WriteClassBit(aAccess); bit != 0 && (m_config.writeClasses & bit) == 0)
+    {
+        throw MethodError("write_class_disabled", std::string(AccessName(aAccess)) + " changes are off; add " + std::string(ConfigClassName(aAccess)) +
+                                                      " to [bridge] allow_write_classes in config.ini");
+    }
+}
+
+void Dispatcher::SetHandover(bool aOn, const std::string& aNote)
+{
+    if (m_handover.exchange(aOn) != aOn)
+    {
+        log::Warn("bridge.handover", std::string("on=") + (aOn ? "true" : "false") + (aNote.empty() ? "" : " note=" + aNote));
+        if (m_eventSink)
+        {
+            try
+            {
+                m_eventSink(aOn ? "handover" : "resume", aOn ? "ask" : "info",
+                            aOn ? "the session is handed over to the player" + (aNote.empty() ? std::string() : ": " + aNote)
+                                : "the session is resumed" + (aNote.empty() ? std::string() : ": " + aNote),
+                            json{{"note", aNote}});
+            }
+            catch (...)
+            {
+            }
+        }
+    }
+}
+
+bool Dispatcher::HandedOver() const
+{
+    return m_handover.load();
+}
+
+void Dispatcher::SetEventSink(EventSink aSink)
+{
+    m_eventSink = std::move(aSink);
 }
 
 std::string Dispatcher::KillReason() const
@@ -496,22 +591,45 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
 
     log::Info("bridge.request", "method=" + methodName + " access=" + accessName + pidText, cid);
 
+    // The session event stream hears every refused write too (0.6).
+    const auto refusedEvent = [&](const std::string& aCode) {
+        if (m_eventSink)
+        {
+            try
+            {
+                m_eventSink("refused", "warn", methodName + " refused: " + aCode, json{{"method", methodName}, {"code", aCode}, {"cid", cid}});
+            }
+            catch (...)
+            {
+            }
+        }
+    };
     if (IsWrite(spec.access) && !m_config.allowWrites)
     {
+        refusedEvent("writes_disabled");
         return refuse("bridge.write_refused", id, cid, "writes_disabled",
                       "write methods are off; set [bridge] allow_writes = true in config.ini", false,
                       "method=" + methodName + " reason=allow_writes_false");
     }
     if (IsWrite(spec.access) && m_writesPaused.load())
     {
+        refusedEvent("writes_paused");
         return refuse("bridge.write_refused", id, cid, "writes_paused",
                       "writes are paused in the game's XF bridge panel (Cyber Engine Tweaks overlay); resume them there",
                       false, "method=" + methodName + " reason=writes_paused");
     }
+    if (IsWrite(spec.access) && m_handover.load())
+    {
+        refusedEvent("handed_over");
+        return refuse("bridge.write_refused", id, cid, "handed_over",
+                      "the session is handed over to the player (session.handover); nothing changes until session.resume", false,
+                      "method=" + methodName + " reason=handed_over");
+    }
     if (const auto bit = WriteClassBit(spec.access); bit != 0 && (m_config.writeClasses & bit) == 0)
     {
+        refusedEvent("write_class_disabled");
         return refuse("bridge.write_refused", id, cid, "write_class_disabled",
-                      accessName + " methods are off; add " + accessName.substr(6) +
+                      accessName + " methods are off; add " + std::string(ConfigClassName(spec.access)) +
                           " to [bridge] allow_write_classes in config.ini",
                       false, "method=" + methodName + " reason=class_not_allowed");
     }
@@ -612,6 +730,23 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     const auto level = code == "ok" ? Level::Info : Level::Warn;
     log::Write(level, "native", cid, "bridge.response",
                "method=" + methodName + " code=" + code + " ms=" + std::to_string(elapsedMs));
+    // The session event stream (0.6): every write the bridge answered, with its outcome and, when it gave one, its undo.
+    if (IsWrite(spec.access) && m_eventSink)
+    {
+        json data{{"method", methodName}, {"code", code}, {"cid", cid}, {"ms", elapsedMs}};
+        if (code == "ok" && response.contains("result") && response["result"].is_object() && response["result"].contains("undo"))
+        {
+            data["undo"] = response["result"]["undo"];
+        }
+        try
+        {
+            m_eventSink(code == "ok" ? "write" : "refused", code == "ok" ? "info" : "warn",
+                        methodName + (code == "ok" ? " done" : " refused: " + code), data);
+        }
+        catch (...)
+        {
+        }
+    }
     if (code == "ok" && log::MinLevel() == Level::Debug)
     {
         log::Debug("bridge.result", "method=" + methodName + " result=" + SerializeJson(response["result"]), cid);

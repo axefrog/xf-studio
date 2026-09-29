@@ -212,6 +212,55 @@ std::string ItemName(const json& aParams)
 }
 } // namespace
 
+// Public forms of the checks above (0.6), for the parameter parsers in other core files (Scene, Behaviours, Player).
+[[noreturn]] void CheckFail(const std::string& aMessage)
+{
+    Bad(aMessage);
+}
+std::optional<double> CheckNumber(const json& aParams, const char* aKey, double aMin, double aMax)
+{
+    return Number(aParams, aKey, aMin, aMax);
+}
+std::optional<int64_t> CheckInteger(const json& aParams, const char* aKey, int64_t aMin, int64_t aMax)
+{
+    return Integer(aParams, aKey, aMin, aMax);
+}
+std::optional<bool> CheckBoolean(const json& aParams, const char* aKey)
+{
+    return Boolean(aParams, aKey);
+}
+std::optional<std::string> CheckText(const json& aParams, const char* aKey, size_t aMaxLength)
+{
+    return Text(aParams, aKey, aMaxLength);
+}
+bool CheckRecordName(const std::string& aName)
+{
+    return RecordNameOk(aName);
+}
+std::optional<std::array<double, 3>> CheckPoint(const json& aParams, const char* aKey, double aLimit)
+{
+    const auto it = aParams.find(aKey);
+    if (it == aParams.end() || it->is_null())
+    {
+        return std::nullopt;
+    }
+    if (!it->is_array() || it->size() != 3)
+    {
+        Bad(std::string("'") + aKey + "' must be [x, y, z]");
+    }
+    std::array<double, 3> out{};
+    for (size_t i = 0; i < 3; ++i)
+    {
+        const auto& v = (*it)[i];
+        if (!v.is_number() || !std::isfinite(v.get<double>()) || std::abs(v.get<double>()) > aLimit)
+        {
+            Bad(std::string("'") + aKey + "' must be three finite numbers (within " + Format(aLimit) + ")");
+        }
+        out[i] = v.get<double>();
+    }
+    return out;
+}
+
 MessageRequest ParseMessage(const json& aParams)
 {
     RequireOnly(aParams, {"text", "seconds", "level", "clear"});
@@ -345,9 +394,22 @@ std::string WardrobeArea(const json& aParams, const char* aKey)
 
 WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
 {
-    RequireOnly(aParams, {"set", "clear", "item", "area", "show", "restore"});
+    RequireOnly(aParams, {"set", "clear", "item", "area", "show", "restore", "suspend", "resume"});
     WardrobeEquipRequest request;
     int given = 0;
+    // 0.6: the story's own pair of requests, honoured by the vanilla wardrobe and by script outfit systems alike.
+    for (const char* flag : {"suspend", "resume"})
+    {
+        if (const auto value = Boolean(aParams, flag))
+        {
+            if (!*value)
+            {
+                Bad(std::string("'") + flag + "' takes true");
+            }
+            request.mode = flag;
+            ++given;
+        }
+    }
     if (const auto set = Integer(aParams, "set", 1, 7))
     {
         request.mode = "set";
@@ -386,7 +448,7 @@ WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
         {
             Bad("'restore' must be {set, slots} (a wardrobe.equip answer's undo)");
         }
-        RequireOnly(*it, {"set", "slots"});
+        RequireOnly(*it, {"set", "slots", "script_outfit"});
         const auto set = Integer(*it, "set", 0, 7);
         if (!set)
         {
@@ -428,13 +490,56 @@ WardrobeEquipRequest ParseWardrobeEquip(const json& aParams)
                 request.slots.push_back(slot);
             }
         }
+        if (const auto outfit = it->find("script_outfit"); outfit != it->end() && !outfit->is_null())
+        {
+            if (!outfit->is_object())
+            {
+                Bad("'restore.script_outfit' must be {active, parts} (a wardrobe.equip answer's undo)");
+            }
+            RequireOnly(*outfit, {"active", "parts"});
+            request.scriptKnown = true;
+            request.scriptActive = Boolean(*outfit, "active").value_or(false);
+            if (const auto parts = outfit->find("parts"); parts != outfit->end() && !parts->is_null())
+            {
+                if (!parts->is_array() || parts->size() > 64)
+                {
+                    Bad("'restore.script_outfit.parts' must be a list of at most 64 {slot, item}");
+                }
+                for (const auto& entry : *parts)
+                {
+                    if (!entry.is_object())
+                    {
+                        Bad("each of 'restore.script_outfit.parts' must be {slot, item}");
+                    }
+                    RequireOnly(entry, {"slot", "item"});
+                    const auto slot = Text(entry, "slot", 128);
+                    if (!slot || !RecordNameOk(*slot))
+                    {
+                        Bad("each outfit part needs its slot record, such as OutfitSlots.Head");
+                    }
+                    const auto item = ItemName(entry);
+                    if (item.empty())
+                    {
+                        Bad("each outfit part needs its item record");
+                    }
+                    for (const auto& earlier : request.parts)
+                    {
+                        if (earlier.slot == *slot)
+                        {
+                            Bad("'restore.script_outfit.parts' names " + *slot + " twice");
+                        }
+                    }
+                    request.parts.push_back({*slot, item});
+                }
+            }
+        }
         request.mode = "restore";
         ++given;
     }
     if (given != 1)
     {
-        Bad(given ? "give one wardrobe change: set, clear, item, area with show, or restore"
-                  : "give set (an outfit 1-7), clear: true, item (a clothing record), area with show, or restore");
+        Bad(given ? "give one wardrobe change: set, clear, item, area with show, suspend, resume or restore"
+                  : "give set (an outfit 1-7), clear: true, item (a clothing record), area with show, suspend: true, resume: true or restore");
     }
     return request;
 }

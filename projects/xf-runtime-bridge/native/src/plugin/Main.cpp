@@ -187,10 +187,23 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         // Every call this tick makes into the game's scripts waits for a live scripted session (RB-76: session 5
         // crashed on a script call made just after the script layer detached for a load).
         const bool scriptsReady = state.scriptLayer.Ready();
-        if (state.scriptLayer.TakeDetaches() > 0 && state.relockOwed.exchange(false))
+        if (state.scriptLayer.TakeDetaches() > 0)
         {
-            // The session game.save released the lock in is gone, and with it every change the lock protected.
-            log::Info("game.save_relock_dropped", "reason=session_detached (a load discards the bridge's changes)", "save-relock");
+            // Behaviours held things in the session that is going: dropped without a script call, never resumed (0.6).
+            state.behaviours.DropAll("session_detached");
+            if (state.relockOwed.exchange(false))
+            {
+                // The session game.save released the lock in is gone, and with it every change the lock protected.
+                log::Info("game.save_relock_dropped", "reason=session_detached (a load discards the bridge's changes)", "save-relock");
+            }
+        }
+        // Behaviours (0.6) at tick rate, before the kill switch's restore so their stop steps come first.
+        {
+            static auto last = std::chrono::steady_clock::now();
+            const auto now = std::chrono::steady_clock::now();
+            const double dt = std::chrono::duration<double>(now - last).count();
+            last = now;
+            TickBehaviours(dt, scriptsReady);
         }
         // Kill switch: Bridge::Kill closes the queue before RestoreReady() is true, so no queued
         // write can run after this undo; RestoreOnce runs it here directly, once, after a write,

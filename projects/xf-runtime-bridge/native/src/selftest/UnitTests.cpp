@@ -6,6 +6,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -18,7 +19,11 @@
 #include <vector>
 #include <thread>
 
+#include "core/Behaviours.hpp"
 #include "core/Bridge.hpp"
+#include "core/Events.hpp"
+#include "core/Player.hpp"
+#include "core/Scene.hpp"
 #include "core/Config.hpp"
 #include "core/Dispatcher.hpp"
 #include "core/GameThreadQueue.hpp"
@@ -2672,6 +2677,250 @@ void InkUiTests()
               ParamsCode([&] { k::ParsePinClear(json{{"id", 0}}); }) == "bad_params");
 }
 
+// Bridge 0.6: the wardrobe's managers, the session event stream, scene.read's parameters, behaviours' pure pieces and runner,
+// player control's parameters and steps, the new write classes and the handover.
+void Bridge060Tests()
+{
+    namespace p = xfb::params;
+    namespace w = xfb::writes;
+    namespace b = xfb::behave;
+    namespace pl = xfb::player;
+    const auto parse = [](const char* aText) { return p::ParseWardrobeEquip(json::parse(aText)); };
+
+    // The wardrobe: suspend and resume, a restore with no outfit, a script outfit's parts.
+    Check("0.6 wardrobe.equip: suspend and resume are changes of their own, true only",
+          parse(R"({"suspend":true})").mode == "suspend" && parse(R"({"resume":true})").mode == "resume" &&
+              ParamsCode([&] { parse(R"({"suspend":false})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"suspend":true,"resume":true})"); }) == "bad_params");
+    Check("0.6 wardrobe: suspend has shown once no outfit decides; resume once one does again",
+          w::WardrobeShows(parse(R"({"suspend":true})"), json{{"set", 0}, {"manager", "none"}}) &&
+              !w::WardrobeShows(parse(R"({"suspend":true})"), json{{"set", 0}, {"manager", "script"}}) &&
+              w::WardrobeShows(parse(R"({"resume":true})"), json{{"set", 0}, {"manager", "script"}}));
+    const json noOutfit{{"set", 0}, {"manager", "none"}, {"areas", {{{"area", "Head"}, {"shows", "equipped"}, {"outfit_item", ""}, {"hidden", false}}}}};
+    Check("0.6 wardrobe: a restore with no outfit (set 0) compares each area's hidden flag (session 6's T9)",
+          !w::WardrobeShows(parse(R"({"restore":{"set":0,"slots":[{"area":"Head","item":"","hidden":true}]}})"), noOutfit) &&
+              w::WardrobeShows(parse(R"({"restore":{"set":0,"slots":[{"area":"Head","item":"","hidden":false}]}})"), noOutfit));
+    const auto scripted = parse(R"({"restore":{"set":0,"slots":[],"script_outfit":{"active":true,"parts":[{"slot":"OutfitSlots.Head","item":"Items.Cap_01_basic_01"}]}}})");
+    Check("0.6 wardrobe.equip: a restore carries a script outfit's parts", scripted.scriptKnown && scripted.scriptActive && scripted.parts.size() == 1 &&
+                                                                             scripted.parts[0].slot == "OutfitSlots.Head");
+    const json eex{{"set", 0}, {"manager", "script"}, {"script_outfit", {{"active", true}, {"parts", {{{"slot", "OutfitSlots.Head"}, {"item", "Items.Cap_01_basic_01"}}}}}}};
+    Check("0.6 wardrobe: a script outfit's restore has shown with exactly its parts; an item shows among them",
+          w::WardrobeShows(scripted, eex) &&
+              !w::WardrobeShows(parse(R"({"restore":{"set":0,"script_outfit":{"active":true,"parts":[]}}})"), eex) &&
+              w::WardrobeShows(parse(R"({"item":"Items.Cap_01_basic_01"})"), eex));
+    Check("0.6 wardrobe.equip: script outfit parts are record names, each slot once",
+          ParamsCode([&] { parse(R"({"restore":{"set":0,"script_outfit":{"active":true,"parts":[{"slot":"x","item":"Items.A"}]}}})"); }) == "bad_params" &&
+              ParamsCode([&] { parse(R"({"restore":{"set":0,"script_outfit":{"active":true,"parts":[{"slot":"S.A","item":"Items.A"},{"slot":"S.A","item":"Items.B"}]}}})"); }) == "bad_params");
+    w::WardrobeOps ops;
+    ops.change = [] { return json{{"changed", true}, {"manager_before", "script"}, {"before", {{"set", 0}}}}; };
+    ops.state = [] { return json{{"set", 0}, {"manager", "none"}}; };
+    ops.settle = [] {};
+    const auto suspended = w::WardrobeEquip(parse(R"({"suspend":true})"), ops);
+    Check("0.6 wardrobe.equip {suspend}: shown, and the undo is resume", suspended.value("shown", false) &&
+                                                                        suspended["undo"]["params"].value("resume", false) &&
+                                                                        suspended.value("manager_before", std::string()) == "script");
+
+    // The session event stream.
+    {
+        xfb::EventLog log;
+        for (int i = 0; i < static_cast<int>(xfb::EventLog::kMaxEvents) + 5; ++i)
+        {
+            log.Push(i % 2 ? "write" : "note", "info", "test", "event " + std::to_string(i));
+        }
+        const auto read = log.Read(0, 10);
+        Check("0.6 events: a ring of kMaxEvents; a reader from 0 is told how many it missed",
+              read["dropped"].get<uint64_t>() == 5 && read["events"].size() == 10 && read["events"][0]["seq"].get<uint64_t>() == 6);
+        const auto notes = log.Read(0, 500, {"note"});
+        Check("0.6 events: kinds filter, and next moves past what was skipped",
+              std::all_of(notes["events"].begin(), notes["events"].end(), [](const json& e) { return e["kind"] == "note"; }) &&
+                  notes["next"].get<uint64_t>() >= notes["events"].back()["seq"].get<uint64_t>());
+        const auto seq = log.Push("note", "warn", "game", std::string("line\none\xFF"), json{{"big", std::string(5000, 'x')}});
+        const auto last = log.Read(seq - 1, 1)["events"][0];
+        Check("0.6 events: text cleaned to one valid line, oversized data cut", last["text"] == "line one\xEF\xBF\xBD" && last["data"].value("cut", false));
+        Check("0.6 session.events / session.note parameters",
+              ParamsCode([] { xfb::ParseEventsRequest(json{{"limit", 0}}); }) == "bad_params" &&
+                  ParamsCode([] { xfb::ParseNoteRequest(json::object()); }) == "bad_params" &&
+                  ParamsCode([] { xfb::ParseNoteRequest(json{{"text", "x"}, {"level", "shout"}}); }) == "bad_params" &&
+                  xfb::ParseEventsRequest(json{{"kinds", {"note"}}}).kinds.size() == 1);
+    }
+
+    // scene.read's parameters.
+    {
+        namespace s = xfb::scene;
+        const auto read = s::ParseRead(json{{"parts", {"camera", "npcs", "camera"}}, {"points", {{1, 2, 3}}}});
+        Check("0.6 scene.read: parts once each, points, defaults", read.parts.size() == 2 && read.points.size() == 1 && read.radius == 20.0f &&
+                                                                 read.maxNpcs == 8 && read.occlusion && s::PartsText(read) == "camera,npcs");
+        Check("0.6 scene.read: refusals (unknown part, too many points, bad point, radius)",
+              ParamsCode([] { s::ParseRead(json{{"parts", {"sky"}}}); }) == "bad_params" &&
+                  ParamsCode([] { s::ParseRead(json{{"points", json::array({json::array({1, 2})})}}); }) == "bad_params" &&
+                  ParamsCode([] { s::ParseRead(json{{"radius", 61}}); }) == "bad_params" &&
+                  ParamsCode([] {
+                      json many = json::array();
+                      for (int i = 0; i < 33; ++i)
+                      {
+                          many.push_back({0, 0, 0});
+                      }
+                      s::ParseRead(json{{"points", many}});
+                  }) == "bad_params");
+    }
+
+    // Behaviours: the pure pieces.
+    {
+        double length = 0.0;
+        const auto [at, heading] = b::AlongPath({{0, 0, 0}, {0, 2, 0}, {2, 2, 0}}, 3.0, length);
+        Check("0.6 behave: a point along a path and its heading", length == 4.0 && std::abs(at[0] - 1.0) < 1e-9 && std::abs(at[1] - 2.0) < 1e-9 &&
+                                                                  std::abs(heading - (-90.0)) < 1e-9);
+        Check("0.6 behave: yaw 0 faces +Y, 90 faces -X", std::abs(b::YawFacing(0, 1)) < 1e-9 && std::abs(b::YawFacing(-1, 0) - 90.0) < 1e-9);
+        const auto eyes = b::ToWorld({10, 20, 0}, 90.0, {0, 1, 1.5});
+        Check("0.6 behave: an entity-frame point in the world (turned 90 degrees)", std::abs(eyes[0] - 9.0) < 1e-9 && std::abs(eyes[1] - 20.0) < 1e-9);
+        const json camera{{"position", {0, 0, 1}}, {"forward", {0, 1, 0}}, {"right", {1, 0, 0}}, {"up", {0, 0, 1}}, {"fov", 60.0}};
+        const auto centre = b::OnCameraRay(camera, 2.0, 0.0, 0.0);
+        const auto above = b::OnCameraRay(camera, 2.0, 0.0, -0.5);
+        Check("0.6 behave: a point on the camera ray (centre exact; the frame's top edge at half the vertical field of view)",
+              std::abs(centre[1] - 2.0) < 1e-9 && std::abs(centre[2] - 1.0) < 1e-9 &&
+                  std::abs(std::atan2(above[2] - 1.0, above[1]) * 180.0 / 3.14159265358979 - 30.0) < 1e-6);
+        const auto start = b::StartParams("turntable", json{{"deg_per_s", 45}, {"max_s", 5}});
+        Check("0.6 behave: a command's input becomes {kind, params, max_s}", start["kind"] == "turntable" && start["params"]["deg_per_s"] == 45 &&
+                                                                          start["max_s"] == 5 && !start["params"].contains("max_s"));
+    }
+
+    // Behaviours: the runner against fake game steps.
+    {
+        b::Runner runner;
+        xfb::EventLog events;
+        runner.SetEvents(&events);
+        std::vector<std::pair<int, double>> turns;
+        b::Ops fake;
+        fake.showroom = [] {
+            json piece = json::object();
+            piece["index"] = 0;
+            piece["position"] = json::array({0, 0, 0});
+            piece["yaw"] = 10.0;
+            json out = json::object();
+            out["pieces"] = json::array({piece});
+            return out;
+        };
+        fake.place = [&](const std::string&, int32_t aIndex, const b::Vec3&, double aYaw) { turns.push_back({aIndex, aYaw}); };
+        std::vector<xfb::Access> asked;
+        const auto allow = [&](xfb::Access aAccess) { asked.push_back(aAccess); };
+        const auto started = runner.Start(b::StartParams("turntable", json{{"deg_per_s", 90}, {"revolutions", 0.25}, {"every_ticks", 1}}), allow);
+        Check("0.6 behave.turntable: starts under the showroom class", started["write_class"] == "write-showroom" && asked.size() == 1 &&
+                                                                     asked[0] == xfb::Access::WriteShowroom);
+        for (int i = 0; i < 20 && runner.Active(); ++i)
+        {
+            runner.Tick(0.1, fake, true);
+        }
+        Check("0.6 behave.turntable: turns at its rate, stops after a quarter turn, then turns the head back",
+              !runner.Active() && turns.size() >= 3 && std::abs(turns.back().second - 10.0) < 1e-9 && std::abs(turns[1].second - 28.0) < 1e-6);
+        const auto stopEvent = events.Read(0, 100, {"behaviour"})["events"].back();
+        Check("0.6 behave: the stop is an event with its reason", stopEvent["data"].value("reason", std::string()) == "done");
+
+        turns.clear();
+        runner.Start(b::StartParams("turntable", json{{"deg_per_s", 30}}), allow);
+        runner.Tick(0.1, fake, true);
+        runner.Tick(0.1, fake, false); // the script gate closed: nothing happens
+        const auto during = turns.size();
+        runner.StopAll("kill_switch");
+        runner.Tick(0.1, fake, true);
+        Check("0.6 behave: a closed gate pauses; the kill switch stops it through its stop step (turned back)",
+              !runner.Active() && turns.size() == during + 1 && std::abs(turns.back().second - 10.0) < 1e-9);
+
+        runner.Start(b::StartParams("turntable", json{{"deg_per_s", 30}}), allow);
+        runner.Tick(0.1, fake, true);
+        const auto beforeDrop = turns.size();
+        runner.DropAll("session_detached");
+        Check("0.6 behave: a detach drops behaviours without a game call", !runner.Active() && turns.size() == beforeDrop);
+
+        Check("0.6 behave: refusals (unknown kind, zero rate, look without a target, keep_framed piece without its index)",
+              ParamsCode([&] { runner.Start(json{{"kind", "dance"}}, allow); }) == "bad_params" &&
+                  ParamsCode([&] { runner.Start(b::StartParams("turntable", json{{"deg_per_s", 0}}), allow); }) == "bad_params" &&
+                  ParamsCode([&] { runner.Start(b::StartParams("look", json::object()), allow); }) == "bad_params" &&
+                  ParamsCode([&] { runner.Start(b::StartParams("keep_framed", json{{"subject", "piece"}}), allow); }) == "bad_params");
+        asked.clear();
+        runner.Start(b::StartParams("keep_framed", json{{"piece", 0}}), allow);
+        Check("0.6 behave.keep_framed on a head needs the photo and showroom classes", asked.size() == 2 && asked[0] == xfb::Access::WritePhoto &&
+                                                                                      asked[1] == xfb::Access::WriteShowroom);
+        runner.StopAll("test");
+        runner.Tick(0.1, fake, true);
+        const auto refuseClass = [](xfb::Access) { throw xfb::MethodError("write_class_disabled", "off"); };
+        Check("0.6 behave: a write class that is off refuses the start", ParamsCode([&] { runner.Start(b::StartParams("look", json{{"yaw", 10}}), refuseClass); }) ==
+                                                                          "write_class_disabled");
+        for (int i = 0; i < 4; ++i)
+        {
+            runner.Start(b::StartParams("keep_framed", json{{"piece", i}}), allow);
+        }
+        Check("0.6 behave: at most four at once; the same target replaces", ParamsCode([&] { runner.Start(b::StartParams("keep_framed", json{{"piece", 5}}), allow); }) ==
+                                                                              "behaviour_limit" &&
+                                                                          ParamsCode([&] { runner.Start(b::StartParams("keep_framed", json{{"piece", 1}}), allow); }) == "ok");
+        runner.DropAll("test");
+    }
+
+    // Player control's parameters and steps.
+    {
+        const auto offset = pl::ParseTeleport(json{{"offset", {{"forward", 2.0}}}, {"turn", 90.0}});
+        const auto [to, yaw] = pl::Destination(offset, {100, 200, 10}, 0.0);
+        Check("0.6 player.teleport: an offset along V's facing and a relative turn", std::abs(to[1] - 202.0) < 1e-9 && std::abs(to[0] - 100.0) < 1e-9 && yaw && std::abs(*yaw - 90.0) < 1e-9);
+        const auto [to2, yaw2] = pl::Destination(pl::ParseTeleport(json{{"offset", {{"forward", 1.0}}}}), {0, 0, 0}, 90.0);
+        Check("0.6 player.teleport: facing 90 means forward is -X", std::abs(to2[0] + 1.0) < 1e-9 && !yaw2);
+        Check("0.6 player.teleport: refusals (nothing given, position and offset, yaw and turn, a bad ground)",
+              ParamsCode([] { pl::ParseTeleport(json::object()); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseTeleport(json{{"position", {1, 2, 3}}, {"offset", {{"forward", 1}}}}); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseTeleport(json{{"yaw", 1}, {"turn", 2}}); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseTeleport(json{{"yaw", 1}, {"ground", "air"}}); }) == "bad_params" &&
+                  pl::ParseTeleport(json{{"yaw", 1}, {"ground", "exact"}, {"far", true}}).exact);
+        const auto look = pl::LookTargetFor(pl::ParseLook(json{{"yaw", 30}, {"pitch", -10}, {"relative", true}}), {0, 0, 0}, 10.0, 5.0);
+        Check("0.6 player.look: relative angles add to the view, the point 10 m along it", std::abs(look.yaw - 40.0) < 1e-9 && std::abs(look.pitch + 5.0) < 1e-9 &&
+                                                                                        std::abs(std::hypot(look.point[0], look.point[1], look.point[2]) - 10.0) < 1e-9);
+        Check("0.6 player.look: refusals (nothing, at with angles, a steep absolute pitch, a bad mode)",
+              ParamsCode([] { pl::ParseLook(json::object()); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseLook(json{{"at", {1, 2, 3}}, {"yaw", 1}}); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseLook(json{{"pitch", 89}}); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseLook(json{{"yaw", 1}, {"mode", "fast"}}); }) == "bad_params");
+        const auto crouch = pl::ParseAction(json{{"name", "crouch"}});
+        const auto menu = pl::ParseAction(json{{"name", "menu.open"}, {"menu", "map"}});
+        Check("0.6 player.action: crouch undoes with stand, a menu with menu.close; weapon.slot and menu.open need their argument",
+              crouch.undo["params"]["name"] == "stand" && menu.name == "menu.map" && menu.undo["params"]["name"] == "menu.close" &&
+                  ParamsCode([] { pl::ParseAction(json{{"name", "weapon.slot"}}); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseAction(json{{"name", "menu.open"}, {"menu", "pause"}}); }) == "bad_params" &&
+                  ParamsCode([] { pl::ParseAction(json{{"name", "jump"}}); }) == "bad_params");
+        pl::TeleportPacer pacer;
+        pacer.Take();
+        pacer.Take();
+        Check("0.6 player.teleport: at most two a second", ParamsCode([&] { pacer.Take(); }) == "rate_limited");
+    }
+
+    // The new write classes and the handover.
+    {
+        const auto config = xfb::ParseConfig("[bridge]\nallow_write_classes = photo, player, act\n");
+        Check("0.6 allow_write_classes knows player and act", (config.writeClasses & xfb::kWritePlayer) && (config.writeClasses & xfb::kActPlayer) &&
+                                                             xfb::WriteClassList(config).size() == 3);
+        Check("0.6 access names for the player classes", xfb::AccessName(xfb::Access::WritePlayer) == "write-player" &&
+                                                         xfb::ConfigClassName(xfb::Access::ActPlayer) == "act");
+        xfb::Config open;
+        open.allowWrites = true;
+        open.writeClasses = xfb::kWritePhoto;
+        xfb::Session session;
+        session.token = "t";
+        xfb::GameThreadQueue queue;
+        xfb::Dispatcher dispatcher(open, session, queue);
+        std::vector<std::string> kinds;
+        dispatcher.SetEventSink([&](const std::string& aKind, const std::string&, const std::string&, const json&) { kinds.push_back(aKind); });
+        dispatcher.Register({"t.write", xfb::Access::WritePhoto, xfb::RunOn::BridgeThread, "", [](const xfb::MethodContext&) { return json{{"undo", nullptr}}; }});
+        const auto request = R"({"v":1,"id":1,"token":"t","method":"t.write"})";
+        const auto ok = json::parse(dispatcher.Handle(request, 1).line);
+        dispatcher.SetHandover(true, "test");
+        const auto refused = json::parse(dispatcher.Handle(request, 1).line);
+        dispatcher.SetHandover(false);
+        const auto again = json::parse(dispatcher.Handle(request, 1).line);
+        Check("0.6 handover: writes refused handed_over until resumed; every write, refusal and handover is an event",
+              ok.value("ok", false) && refused["error"]["code"] == "handed_over" && again.value("ok", false) &&
+                  std::find(kinds.begin(), kinds.end(), "handover") != kinds.end() && std::find(kinds.begin(), kinds.end(), "resume") != kinds.end() &&
+                  std::count(kinds.begin(), kinds.end(), "write") == 2 && std::count(kinds.begin(), kinds.end(), "refused") == 1);
+        Check("0.6 RequireWriteClass: a class that is off is refused", ParamsCode([&] { dispatcher.RequireWriteClass(xfb::Access::WritePlayer); }) ==
+                                                                      "write_class_disabled");
+    }
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -2698,6 +2947,7 @@ int RunUnitTests()
     ScriptLayerTests();
     WardrobeTests();
     InkUiTests();
+    Bridge060Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

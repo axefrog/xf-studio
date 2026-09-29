@@ -401,19 +401,31 @@ CameraPlaceRequest ParseCameraPlace(const json& aParams);
 //   {area: Head|Face|OuterChest|InnerChest|Legs|Feet, show: "equipped"|"hidden"}
 //                                                an area shows what is equipped there, or nothing
 //   {restore: {set: 0-7, slots: [{area, item, hidden}]}}   the undo: exactly the wardrobe a snapshot recorded
+//   {suspend: true} / {resume: true}             0.6: the story's own requests take the outfit off (whoever manages it:
+//                                                the wardrobe or a script outfit system) and put it back
 struct WardrobeSlot
 {
     std::string area;
     std::string item; // empty: the area shows no outfit item
     bool hidden = false;
 };
+// 0.6: one part of a script outfit system's outfit (Equipment-EX): its outfit slot record and the item there.
+struct ScriptOutfitPart
+{
+    std::string slot;
+    std::string item;
+};
 struct WardrobeEquipRequest
 {
-    std::string mode; // set, clear, item, equipped, hidden, restore
+    std::string mode; // set, clear, item, equipped, hidden, restore, suspend, resume
     int32_t set = 0;
     std::string item;
     std::string area;
     std::vector<WardrobeSlot> slots;
+    // restore.script_outfit (0.6): the script outfit's state when the snapshot was taken (known only with one installed).
+    bool scriptKnown = false;
+    bool scriptActive = false;
+    std::vector<ScriptOutfitPart> parts;
 };
 WardrobeEquipRequest ParseWardrobeEquip(const json& aParams);
 // The areas an outfit covers (Outfit itself isn't one).
@@ -442,6 +454,17 @@ GameLoadRequest ParseGameLoad(const json& aParams);
 // Refuses parameters a method doesn't know (typos must not be silently ignored). Also used for
 // methods without parameters.
 void RequireOnly(const json& aParams, std::initializer_list<const char*> aKnown);
+
+// The checks every parser uses (0.6: public for the parsers in other core files). Each throws MethodError bad_params with a
+// plain message; an absent or null key is std::nullopt.
+[[noreturn]] void CheckFail(const std::string& aMessage);
+std::optional<double> CheckNumber(const json& aParams, const char* aKey, double aMin, double aMax);
+std::optional<int64_t> CheckInteger(const json& aParams, const char* aKey, int64_t aMin, int64_t aMax);
+std::optional<bool> CheckBoolean(const json& aParams, const char* aKey);
+std::optional<std::string> CheckText(const json& aParams, const char* aKey, size_t aMaxLength);
+bool CheckRecordName(const std::string& aName);
+// [x, y, z], each finite and within +/- aLimit.
+std::optional<std::array<double, 3>> CheckPoint(const json& aParams, const char* aKey, double aLimit = 1e6);
 
 json AttributesJson(const std::vector<Attribute>& aAttributes);
 } // namespace xfb::params

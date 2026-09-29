@@ -11,7 +11,10 @@
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/Api/v1/Sdk.hpp>
 
+#include "core/Behaviours.hpp"
 #include "core/Bridge.hpp"
+#include "core/Events.hpp"
+#include "core/Player.hpp"
 #include "core/Config.hpp"
 #include "core/GameThreadQueue.hpp"
 #include "core/InkUi.hpp"
@@ -79,6 +82,12 @@ struct State
     // ui.message: the coordinator's short messages under the in-game label, read by the CET layer
     // (XFBridge_Messages). Cleared by the kill switch; a killed bridge shows none.
     MessageBoard messages;
+
+    // Bridge 0.6: the session event stream (session.events; XFBridge_Note adds notes from the game), the behaviour runner
+    // (behave.*, ticked on the game thread from the Running update) and player.teleport's pacer (2 a second).
+    EventLog events;
+    behave::Runner behaviours;
+    player::TeleportPacer teleports;
 
     // Bridge 0.5.3, temporary test feature: the ink HUD panel's settings (ui.hud), read with the bridge's state and the
     // message lines by the redscript layer through XFBridge_Hud (core/InkUi.hpp). Defaults from [ui] in config.ini.

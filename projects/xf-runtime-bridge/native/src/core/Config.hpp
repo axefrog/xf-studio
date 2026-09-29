@@ -20,6 +20,8 @@ inline constexpr uint32_t kWriteCharacter = 4;
 inline constexpr uint32_t kWriteInventory = 8; // V's clothing and inventory; only with the maintainer's approval
 inline constexpr uint32_t kWriteSave = 16;     // manual saves and loading
 inline constexpr uint32_t kWriteShowroom = 32; // XF Finish Showroom props and light rigs (showroom.*); the test profile only
+inline constexpr uint32_t kWritePlayer = 64;   // 0.6: reversible player changes (player.*, behaviours that move V); "player"
+inline constexpr uint32_t kActPlayer = 128;    // 0.6: irreversible actions in the world (devices, dialogue, consuming); "act"
 
 struct Config
 {

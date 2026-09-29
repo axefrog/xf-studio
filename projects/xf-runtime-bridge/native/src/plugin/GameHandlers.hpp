@@ -2,8 +2,26 @@
 
 #include "core/Dispatcher.hpp"
 
+#include <chrono>
+#include <functional>
+#include <initializer_list>
+#include <string>
+
 namespace xfb::plugin
 {
+// Bridge 0.6 (Handlers060.cpp): scene.read, the session event stream's handover, behaviours, player control phase 1 and
+// input.probe. Called by RegisterMethods.
+void RegisterMethods060(Dispatcher& aDispatcher);
+// Game thread, every Running tick: runs the behaviours (core/Behaviours.hpp) through the redscript layer.
+void TickBehaviours(double aDt, bool aScriptsReady);
+
+// Shared with Handlers060.cpp: a redscript layer call (XFRuntimeBridge.<class>.<function>(cid, ...) -> JSON), the game-thread
+// step timeout, and a write method marked for the kill switch's restore.
+nlohmann::json ScriptCall(const std::string& aClass, const char* aFunction, std::initializer_list<const char*> aTypes,
+                          std::initializer_list<void*> aValues, const std::string& aCid);
+std::chrono::milliseconds GameTimeout();
+MethodSpec MarkedWrite(std::string aName, Access aAccess, RunOn aRunOn, std::string aSummary, std::function<nlohmann::json(const MethodContext&)> aFn);
+
 // Registers the plugin's bridge methods (bridge.info, game.*, player.position, photomode.state,
 // script.describe, layers.status, diag.write_probe) on the dispatcher.
 void RegisterMethods(Dispatcher& aDispatcher);

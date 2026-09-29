@@ -234,3 +234,35 @@ export function spacingFor(lights: readonly RigLight[], headJoint: Vec3, count: 
   }
   return 10;
 }
+
+/**
+ * Layout on the camera's view ray (0.6, session 6: the eyes put at the camera's height sat about 0.18 m high in a close-up,
+ * because the photo-mode camera looks down at V; nothing was counted twice, the camera's pitch was ignored). The middle
+ * head's eyes go exactly on the ray through the window's centre, `distance` metres from the camera; the others keep that
+ * distance and the same elevation angle, spread along an arc about the camera's vertical axis (arc) or across the view
+ * (row), `spacing` apart; `lateral` shifts the lineup right (negative: left). Each head faces the camera horizontally, and
+ * its entity origin sits where its eyes (`eyes`, in the entity frame) come out at the planned point.
+ */
+export function planOnRay(camera: { position: Vec3; forward: Vec3 }, count: number, layout: "row" | "arc", spacing: number, distance: number, lateral: number, eyes: Vec3): Placement[] {
+  const f = camera.forward, fl = Math.hypot(...f) || 1;
+  const fn: Vec3 = [f[0] / fl, f[1] / fl, f[2] / fl];
+  const h = horizontal(fn), pitch = Math.asin(Math.max(-1, Math.min(1, fn[2])));
+  const r: Vec3 = [h[1], -h[0], 0];
+  const radius = distance * Math.cos(pitch);
+  const out: Placement[] = [];
+  for (let i = 0; i < count; i++) {
+    const offset = i - (count - 1) / 2 + lateral / spacing;
+    let at: Vec3;
+    if (layout === "row") {
+      at = [camera.position[0] + fn[0] * distance + r[0] * offset * spacing, camera.position[1] + fn[1] * distance + r[1] * offset * spacing, camera.position[2] + fn[2] * distance];
+    } else {
+      const a = radius > 1e-3 ? (-offset * spacing) / radius : 0;
+      const u: Vec3 = [h[0] * Math.cos(a) - h[1] * Math.sin(a), h[0] * Math.sin(a) + h[1] * Math.cos(a), 0];
+      at = [camera.position[0] + u[0] * radius, camera.position[1] + u[1] * radius, camera.position[2] + distance * Math.sin(pitch)];
+    }
+    const yaw = round(yawFacing([camera.position[0] - at[0], camera.position[1] - at[1], 0]));
+    const offsetWorld = toWorld([0, 0, 0], yaw, eyes);
+    out.push({ index: i, position: [round(at[0] - offsetWorld[0]), round(at[1] - offsetWorld[1]), round(at[2] - offsetWorld[2])], yaw, eyes: at.map(round) as Vec3 });
+  }
+  return out;
+}

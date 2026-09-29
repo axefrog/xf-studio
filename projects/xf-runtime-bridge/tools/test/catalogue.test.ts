@@ -23,16 +23,18 @@ import { validate, type JsonSchema } from "../api/schema.ts";
 import { toolsFor } from "../mcp/server.ts";
 import { projectDir, tempDir } from "./helpers.ts";
 
-const pluginSource = ["native/src/plugin/GameHandlers.cpp", "native/src/core/Dispatcher.cpp", "native/src/core/Bridge.cpp"]
+const pluginSource = ["native/src/plugin/GameHandlers.cpp", "native/src/plugin/Handlers060.cpp", "native/src/core/Dispatcher.cpp", "native/src/core/Bridge.cpp", "native/src/core/Events.cpp"]
   .map((file) => readFileSync(join(projectDir, file), "utf8"))
   .join("\n");
-const selftestSource = readFileSync(join(projectDir, "native/src/selftest/Main.cpp"), "utf8");
+const selftestSource = ["native/src/selftest/Main.cpp", "native/src/selftest/Sim060.cpp", "native/src/core/Events.cpp"]
+  .map((file) => readFileSync(join(projectDir, file), "utf8"))
+  .join("\n");
 
 /** The access class a method is registered with in C++ source, as the tools name it ("write-photo"). */
 function nativeAccess(source: string, method: string): string | null {
   const name = method.replaceAll(".", "\\.");
   const match =
-    new RegExp(`WriteMethod\\("${name}",\\s*Access::(\\w+)`).exec(source) ??
+    new RegExp(`(?:WriteMethod|MarkedWrite|marked)\\("${name}",\\s*Access::(\\w+)`).exec(source) ??
     new RegExp(`simWrite\\("${name}",\\s*xfb::Access::(\\w+)`).exec(source) ??
     new RegExp(`\\{"${name}",\\s*(?:xfb::)?Access::(\\w+)`).exec(source);
   return match ? match[1].replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase() : null;

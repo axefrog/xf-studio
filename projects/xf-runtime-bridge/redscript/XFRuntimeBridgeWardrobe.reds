@@ -13,6 +13,21 @@
 // A snapshot (the active outfit and, per area, the item it shows or whether it hides it) is taken before every change
 // and returned as the undo; the first one of a session is kept for the kill switch's restore. Called by the plugin
 // behind the inventory write class, like XFInventory.
+//
+// Who decides what V's clothing shows (0.6, session 6's contradiction: set 0 with active true) [source] 2.31
+// equipmentSystem.script:1537 and wardrobeSystem.script:36: the wardrobe's active outfit index is Slot1-Slot7 or
+// INVALID, and number 0 here is INVALID, the vanilla "no outfit". EquipmentSystemPlayerData.IsVisualSetActive() is that
+// index being valid, but a script mod can wrap it: EquipmentEx ORs in its own outfit system and replaces
+// EquipWardrobeSet, UnequipWardrobeSet, QuestHideSlot and QuestRestoreSlot with no-ops, and blocks the appearance resets
+// UnequipVisuals relies on [source] EquipmentEx 3208ff4 scripts/Overrides/EquipmentSystem.reds. So:
+//   manager "wardrobe": the vanilla wardrobe's outfit (set 1-7) decides;
+//   manager "script":   IsVisualSetActive() is true with no wardrobe outfit: a script outfit system decides, and the
+//                       vanilla requests don't reach it (session 6: EquipmentEx on the test profile);
+//   manager "none":     what is equipped shows.
+// The one route every manager honours is the story's own: QuestDisableWardrobeSetRequest (the game's "disable visual
+// override" and undress scenes; player.script:6312, invisibleSceneStash.script:17) takes the outfit off and remembers it,
+// and QuestRestoreWardrobeSetRequest puts it back; EquipmentEx answers them with its own Deactivate and Reactivate, which
+// keep the outfit's parts. wardrobe.equip {suspend} and {resume} use that pair, so equipped gear draws under any manager.
 
 module XFRuntimeBridge
 
@@ -21,6 +36,11 @@ public class XFWardrobeSnapshot {
   public let areas: array<gamedataEquipmentArea>;
   public let items: array<ItemID>;
   public let hidden: array<Bool>;
+  // 0.6: a script outfit system's outfit (Equipment-EX: XFRuntimeBridgeEquipmentEx.reds), when one is installed.
+  public let scriptKnown: Bool;
+  public let scriptActive: Bool;
+  public let scriptSlots: array<TweakDBID>;
+  public let scriptItems: array<ItemID>;
 }
 
 public abstract class XFWardrobe {
@@ -37,6 +57,36 @@ public abstract class XFWardrobe {
 
   public static func Data(player: ref<PlayerPuppet>) -> ref<EquipmentSystemPlayerData> {
     return EquipmentSystem.GetData(player);
+  }
+
+  // Who decides what V's clothing shows: "wardrobe", "script" or "none" (see the header).
+  public static func Manager(data: ref<EquipmentSystemPlayerData>) -> String {
+    let system = GameInstance.GetWardrobeSystem(GetGameInstance());
+    if IsDefined(system) && NotEquals(system.GetActiveClothingSetIndex(), gameWardrobeClothingSetIndex.INVALID) {
+      return "wardrobe";
+    }
+    if IsDefined(data) && data.IsVisualSetActive() {
+      return "script";
+    }
+    return "none";
+  }
+
+  public static func ManagerJson(data: ref<EquipmentSystemPlayerData>) -> String {
+    let manager = XFWardrobe.Manager(data);
+    let out = "\"manager\":" + XFJson.Str(manager);
+    if Equals(manager, "script") {
+      out += ",\"managed_by\":" + XFJson.Str(XFScriptOutfit.Name());
+    }
+    let registry = XFBridgeRegistry.Get();
+    out += ",\"suspended_by_bridge\":" + XFJson.Flag(IsDefined(registry) && registry.IsWardrobeSuspended());
+    return out;
+  }
+
+  public static func ManagedElsewhere(data: ref<EquipmentSystemPlayerData>) -> String {
+    let name = XFScriptOutfit.Name();
+    let who = StrLen(name) > 0 ? name : "a script mod's outfit system";
+    let also = XFScriptOutfit.Present() ? "; wardrobe_equip with item puts an item into that outfit" : "";
+    return XFJson.Fail("outfit_managed_elsewhere", "V's outfit is managed by " + who + ", which replaces the wardrobe's own requests, so this change would do nothing; wardrobe_equip with suspend: true takes that outfit off for now (the story's own request), so equipped clothing shows, and resume: true puts it back" + also);
   }
 
   // The active outfit, 1-7, or 0 when none is.
@@ -60,6 +110,9 @@ public abstract class XFWardrobe {
       ArrayPush(snapshot.hidden, data.IsSlotHidden(areas[i]));
       i += 1;
     }
+    if XFScriptOutfit.Present() {
+      XFScriptOutfit.Snapshot(player, snapshot);
+    }
     return snapshot;
   }
 
@@ -73,7 +126,20 @@ public abstract class XFWardrobe {
       out += "{\"area\":" + XFJson.Str(XFInventory.AreaName(snapshot.areas[i])) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(snapshot.items[i])) + ",\"hidden\":" + XFJson.Flag(snapshot.hidden[i]) + "}";
       i += 1;
     }
-    return out + "]}";
+    out += "]";
+    if snapshot.scriptKnown {
+      out += ",\"script_outfit\":{\"active\":" + XFJson.Flag(snapshot.scriptActive) + ",\"parts\":[";
+      i = 0;
+      while i < ArraySize(snapshot.scriptSlots) {
+        if i > 0 {
+          out += ",";
+        }
+        out += "{\"slot\":" + XFJson.Str(TDBID.ToStringDEBUG(snapshot.scriptSlots[i])) + ",\"item\":" + XFJson.Str(XFInventory.ItemName(snapshot.scriptItems[i])) + "}";
+        i += 1;
+      }
+      out += "]}";
+    }
+    return out + "}";
   }
 
   // What an area shows now: "outfit" (the active outfit's item), "hidden", "equipped" or "empty".
@@ -97,7 +163,7 @@ public abstract class XFWardrobe {
     if Equals(shows, "equipped") || Equals(shows, "empty") {
       return "";
     }
-    return ",\"outfit\":{\"set\":" + IntToString(XFWardrobe.ActiveSet()) + ",\"area\":" + XFJson.Str(XFInventory.AreaName(area)) + ",\"shows\":" + XFJson.Str(shows) + ",\"outfit_item\":" + XFJson.Str(XFInventory.ItemName(data.GetSlotOverridenVisualItem(area))) + "}";
+    return ",\"outfit\":{" + XFWardrobe.ManagerJson(data) + ",\"set\":" + IntToString(XFWardrobe.ActiveSet()) + ",\"area\":" + XFJson.Str(XFInventory.AreaName(area)) + ",\"shows\":" + XFJson.Str(shows) + ",\"outfit_item\":" + XFJson.Str(XFInventory.ItemName(data.GetSlotOverridenVisualItem(area))) + "}";
   }
 
   // wardrobe.state (read).
@@ -110,7 +176,7 @@ public abstract class XFWardrobe {
     if !IsDefined(data) {
       return XFJson.Fail("unavailable", "V's equipment data isn't available");
     }
-    let out = "{\"ok\":true,\"set\":" + IntToString(XFWardrobe.ActiveSet()) + ",\"active\":" + XFJson.Flag(data.IsVisualSetActive()) + ",\"enabled\":" + XFJson.Flag(data.IsWardrobeEnabled()) + ",\"areas\":[";
+    let out = "{\"ok\":true,\"set\":" + IntToString(XFWardrobe.ActiveSet()) + ",\"active\":" + XFJson.Flag(data.IsVisualSetActive()) + "," + XFWardrobe.ManagerJson(data) + ",\"enabled\":" + XFJson.Flag(data.IsWardrobeEnabled()) + ",\"areas\":[";
     let areas = XFWardrobe.Areas();
     let i = 0;
     while i < ArraySize(areas) {
@@ -147,7 +213,7 @@ public abstract class XFWardrobe {
       }
       i += 1;
     }
-    return out + "]}";
+    return out + "],\"script_outfit\":" + XFScriptOutfit.StateJson(player) + "}";
   }
 
   // The ItemID to show for a record: the wardrobe's stored copy (as the wardrobe screen uses), else V's own.
@@ -166,7 +232,8 @@ public abstract class XFWardrobe {
 
   // wardrobe.equip, step 1: checks, the snapshot (the undo; the session's first also kept for the kill switch), then
   // one request. mode: "set" (outfit 1-7), "clear", "item" (a record shown in its area of the active outfit),
-  // "equipped" or "hidden" (an area shows what is equipped there, or nothing).
+  // "equipped" or "hidden" (an area shows what is equipped there, or nothing), "suspend" or "resume" (0.6: the story's
+  // own request takes the outfit off, whoever manages it, and puts it back).
   public static func Change(cid: String, mode: String, set: Int32, item: String, area: String) -> String {
     let refusal = XFInventory.Refusal();
     if StrLen(refusal) > 0 {
@@ -177,11 +244,59 @@ public abstract class XFWardrobe {
     if !IsDefined(data) {
       return XFJson.Fail("unavailable", "V's equipment data isn't available");
     }
+    let registry = XFBridgeRegistry.Get();
+    let manager = XFWardrobe.Manager(data);
+    let before = XFWardrobe.Snapshot(player);
+    if Equals(mode, "resume") {
+      // Only the bridge's own suspend is resumed: a story scene's is the story's to end.
+      if !registry.IsWardrobeSuspended() {
+        return "{\"ok\":true,\"changed\":false,\"note\":\"the bridge hasn't taken an outfit off, so there is nothing to put back\"," + XFWardrobe.ManagerJson(data) + ",\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
+      }
+      XFBridgeActions.EnsureSaveLock(cid);
+      XFWardrobe.Queue(player, new QuestRestoreWardrobeSetRequest());
+      registry.SetWardrobeSuspended(false);
+      XFBridgeLog.Info(cid, "wardrobe.equip resume: the outfit the bridge took off is put back (QuestRestoreWardrobeSetRequest)");
+      return "{\"ok\":true,\"changed\":true,\"manager_before\":" + XFJson.Str(manager) + ",\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
+    }
     if !data.IsWardrobeEnabled() {
       return XFJson.Fail("not_safe_now", "the story has the wardrobe switched off right now");
     }
-    let registry = XFBridgeRegistry.Get();
-    let before = XFWardrobe.Snapshot(player);
+    if Equals(mode, "suspend") {
+      if Equals(manager, "none") {
+        return "{\"ok\":true,\"changed\":false,\"note\":\"no outfit decides what V shows, so what is equipped already draws\"," + XFWardrobe.ManagerJson(data) + ",\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
+      }
+      XFBridgeActions.EnsureSaveLock(cid);
+      registry.NoteWardrobeSnapshot(before);
+      let off = new QuestDisableWardrobeSetRequest();
+      off.blockReequipping = false;
+      XFWardrobe.Queue(player, off);
+      registry.SetWardrobeSuspended(true);
+      XFBridgeLog.Info(cid, "wardrobe.equip suspend: the " + manager + " outfit taken off with the story's request (QuestDisableWardrobeSetRequest); undo: resume");
+      return "{\"ok\":true,\"changed\":true,\"manager_before\":" + XFJson.Str(manager) + ",\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
+    }
+    // Every other change goes through the vanilla wardrobe's requests, which a script outfit system replaces with
+    // no-ops (session 6: EquipmentEx), so it is refused there with the route that works.
+    if Equals(manager, "script") {
+      // A script outfit system the bridge can drive (Equipment-EX): an item goes into its outfit, as its own screen
+      // puts it (the snapshot, with the outfit's parts, is the undo); nothing else maps onto it.
+      if Equals(mode, "item") && XFScriptOutfit.Present() {
+        let wanted = TDBID.Create(item);
+        let own = XFInventory.FindItem(player, wanted);
+        let id = ItemID.IsValid(own) ? own : XFWardrobe.VisualItem(player, wanted);
+        if !ItemID.IsValid(id) {
+          return XFJson.Fail("not_in_inventory", "neither the wardrobe nor V's inventory has '" + item + "'; add it first (inventory_equip with add_if_missing)");
+        }
+        XFBridgeActions.EnsureSaveLock(cid);
+        let refused = XFScriptOutfit.Equip(player, id);
+        if StrLen(refused) > 0 {
+          return refused;
+        }
+        registry.NoteWardrobeSnapshot(before);
+        XFBridgeLog.Info(cid, "wardrobe.equip item " + item + " into " + XFScriptOutfit.Name() + "'s outfit; undo: restore the snapshot (its parts)");
+        return "{\"ok\":true,\"changed\":true,\"route\":" + XFJson.Str(XFScriptOutfit.Name()) + ",\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
+      }
+      return XFWardrobe.ManagedElsewhere(data);
+    }
     if Equals(mode, "set") {
       let index = WardrobeSystem.NumberToWardrobeClothingSetIndex(set - 1);
       let found = data.FindWardrobeClothingSetByID(index);
@@ -246,41 +361,62 @@ public abstract class XFWardrobe {
     return "{\"ok\":true,\"changed\":true,\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
   }
 
-  // The undo, and the kill switch's restore: the outfit, then each area exactly as the snapshot had it.
-  public static func Apply(player: ref<PlayerPuppet>, snapshot: ref<XFWardrobeSnapshot>) -> Void {
+  // The undo, and the kill switch's restore: the outfit, then each area exactly as the snapshot had it. With no outfit
+  // (set 0) the areas are put back too (0.6, session 6's T9: a hidden Head came back shown because set 0 skipped them):
+  // hidden again where it was hidden, shown where it wasn't; an area already as recorded gets no request. Under a script
+  // outfit system nothing is queued (its no-ops would only pretend); the answer says so.
+  public static func Apply(player: ref<PlayerPuppet>, snapshot: ref<XFWardrobeSnapshot>) -> String {
+    let data = XFWardrobe.Data(player);
+    // A script outfit system the bridge can drive goes back first (synchronously, through its own functions); under an
+    // outfit it had on, the vanilla areas are its business.
+    let script = "";
+    if snapshot.scriptKnown && XFScriptOutfit.Present() {
+      script = XFScriptOutfit.Apply(player, snapshot);
+      if snapshot.scriptActive {
+        return "script:" + script;
+      }
+    }
+    if Equals(XFWardrobe.Manager(data), "script") {
+      return "script";
+    }
     if snapshot.set == 0 {
       if XFWardrobe.ActiveSet() != 0 {
         XFWardrobe.Queue(player, new UnequipWardrobeSetRequest());
       }
-      return;
+    } else {
+      let request = new EquipWardrobeSetRequest();
+      request.setID = WardrobeSystem.NumberToWardrobeClothingSetIndex(snapshot.set - 1);
+      XFWardrobe.Queue(player, request);
     }
-    let request = new EquipWardrobeSetRequest();
-    request.setID = WardrobeSystem.NumberToWardrobeClothingSetIndex(snapshot.set - 1);
-    XFWardrobe.Queue(player, request);
     let i = 0;
     while i < ArraySize(snapshot.areas) {
-      if ItemID.IsValid(snapshot.items[i]) {
+      if ItemID.IsValid(snapshot.items[i]) && snapshot.set != 0 {
         let show = new EquipVisualsRequest();
         show.itemID = snapshot.items[i];
         XFWardrobe.Queue(player, show);
       } else {
         if snapshot.hidden[i] {
-          let hide = new QuestHideSlotRequest();
-          hide.slot = snapshot.areas[i];
-          XFWardrobe.Queue(player, hide);
+          if snapshot.set != 0 || !data.IsSlotHidden(snapshot.areas[i]) {
+            let hide = new QuestHideSlotRequest();
+            hide.slot = snapshot.areas[i];
+            XFWardrobe.Queue(player, hide);
+          }
         } else {
-          let equipped = new UnequipVisualsRequest();
-          equipped.area = snapshot.areas[i];
-          XFWardrobe.Queue(player, equipped);
+          if snapshot.set != 0 || data.IsSlotHidden(snapshot.areas[i]) {
+            let equipped = new UnequipVisualsRequest();
+            equipped.area = snapshot.areas[i];
+            XFWardrobe.Queue(player, equipped);
+          }
         }
       }
       i += 1;
     }
+    return StrLen(script) > 0 ? "script:" + script + ",applied" : "applied";
   }
 
   // wardrobe.equip {restore}: the plugin passes the snapshot area by area (Begin, one Slot each, then Finish), all in
   // one game-thread step.
-  public static func RestoreBegin(cid: String, set: Int32) -> String {
+  public static func RestoreBegin(cid: String, set: Int32, scriptKnown: Bool, scriptActive: Bool) -> String {
     let refusal = XFInventory.Refusal();
     if StrLen(refusal) > 0 {
       return refusal;
@@ -290,7 +426,27 @@ public abstract class XFWardrobe {
     }
     let snapshot = new XFWardrobeSnapshot();
     snapshot.set = set;
+    snapshot.scriptKnown = scriptKnown;
+    snapshot.scriptActive = scriptActive;
     XFBridgeRegistry.Get().SetWardrobeRestore(snapshot);
+    return "{\"ok\":true}";
+  }
+
+  // One part of a script outfit (its outfit slot and item) in a restore being assembled.
+  public static func RestorePart(cid: String, slot: String, item: String) -> String {
+    let snapshot = XFBridgeRegistry.Get().WardrobeRestore();
+    if !IsDefined(snapshot) {
+      return XFJson.Fail("bad_params", "no wardrobe restore was begun");
+    }
+    let player = XFInventory.Player();
+    let wanted = TDBID.Create(item);
+    let own = XFInventory.FindItem(player, wanted);
+    let id = ItemID.IsValid(own) ? own : XFWardrobe.VisualItem(player, wanted);
+    if !ItemID.IsValid(id) {
+      return XFJson.Fail("not_in_inventory", "neither the wardrobe nor V's inventory has '" + item + "' any more");
+    }
+    ArrayPush(snapshot.scriptSlots, TDBID.Create(slot));
+    ArrayPush(snapshot.scriptItems, id);
     return "{\"ok\":true}";
   }
 
@@ -321,27 +477,39 @@ public abstract class XFWardrobe {
     if !IsDefined(snapshot) || !IsDefined(player) {
       return XFJson.Fail("bad_params", "no wardrobe restore was begun");
     }
+    let data = XFWardrobe.Data(player);
+    if Equals(XFWardrobe.Manager(data), "script") && !XFScriptOutfit.Present() {
+      registry.SetWardrobeRestore(null);
+      return XFWardrobe.ManagedElsewhere(data);
+    }
     let before = XFWardrobe.Snapshot(player);
     XFBridgeActions.EnsureSaveLock(cid);
     registry.NoteWardrobeSnapshot(before);
-    XFWardrobe.Apply(player, snapshot);
+    let applied = XFWardrobe.Apply(player, snapshot);
     registry.SetWardrobeRestore(null);
-    XFBridgeLog.Info(cid, "wardrobe.equip restore: outfit " + IntToString(snapshot.set));
-    return "{\"ok\":true,\"changed\":true,\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
+    XFBridgeLog.Info(cid, "wardrobe.equip restore: outfit " + IntToString(snapshot.set) + ", " + IntToString(ArraySize(snapshot.areas)) + " areas, " + IntToString(ArraySize(snapshot.scriptSlots)) + " script outfit parts (" + applied + ")");
+    return "{\"ok\":true,\"changed\":true,\"applied\":" + XFJson.Str(applied) + ",\"before\":" + XFWardrobe.SnapshotJson(before) + "}";
   }
 
-  // The kill switch: the wardrobe as it was before the bridge's first change this session ("" when it changed nothing).
+  // The kill switch: an outfit the bridge took off goes back on first (the story's restore request), then the wardrobe as
+  // it was before the bridge's first change this session ("" when it changed nothing).
   public static func RestoreAfterKill(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
     let player = XFInventory.Player();
     if !IsDefined(registry) || !IsDefined(player) {
       return "";
     }
+    let out = "";
+    if registry.IsWardrobeSuspended() {
+      XFWardrobe.Queue(player, new QuestRestoreWardrobeSetRequest());
+      registry.SetWardrobeSuspended(false);
+      out += ",\"wardrobe_resumed\":true";
+    }
     let snapshot = registry.TakeWardrobeSnapshot();
     if !IsDefined(snapshot) {
-      return "";
+      return out;
     }
-    XFWardrobe.Apply(player, snapshot);
-    return ",\"wardrobe_restored\":" + XFWardrobe.SnapshotJson(snapshot);
+    let applied = XFWardrobe.Apply(player, snapshot);
+    return out + ",\"wardrobe_restored\":" + XFWardrobe.SnapshotJson(snapshot) + ",\"wardrobe_restore\":" + XFJson.Str(applied);
   }
 }

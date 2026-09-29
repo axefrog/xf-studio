@@ -17,7 +17,7 @@ const BRIDGE_MESSAGES: Record<string, string> = {
     "The game is loading (or still starting), so the bridge doesn't call into it until the loaded session's player is in; nothing was called or changed. Wait with game_wait for phase gameplay, then try again.",
   unknown_method: "The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build.",
   write_class_disabled:
-    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom; inventory stays off until the maintainer allows it, and showroom is listed only by the XF test profile's build). Nothing was changed.",
+    "This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act; inventory stays off until the maintainer allows it, and showroom, player and act are listed only by the XF test profile's build). Nothing was changed.",
   write_mismatch:
     "The game took a different value than the one asked for (its menu may have changed since photo_state was read), so the bridge put the earlier value back where it knew it. Read photo_state and try again.",
   writes_paused:
@@ -99,6 +99,20 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   not_ready: "The game can't spawn entities yet. Wait until V can move, then try again.",
   no_active_outfit:
     "V isn't wearing a wardrobe outfit, so what is equipped already shows. Nothing was changed. Use inventory_equip, or wardrobe_equip with set to put an outfit on first.",
+  outfit_managed_elsewhere:
+    "V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back.",
+  handed_over:
+    "The session is handed over to the player (session_handover), so the bridge changes nothing until session_resume. Nothing was changed.",
+  in_combat: "V is in combat, so the bridge won't move or act for her now. Nothing was changed. Try again once the fight is over.",
+  in_vehicle: "V is in a vehicle, so the bridge won't move her or act for her now. Nothing was changed. Get out first.",
+  in_scene: "A scene is playing (or V is in a dialogue), where the bridge doesn't move or act for V. Nothing was changed. Wait for the scene to end.",
+  player_busy: "V is busy (jumping, sliding, swimming, in a workspot or a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play.",
+  no_ground: "There is no walkable ground near that point, so V wasn't moved there. Pick a point on the floor (or pass ground: exact at your own risk).",
+  not_streamed: "The world around that point isn't loaded yet, so V wasn't moved there. Move closer first, or pass far: true to wait for it.",
+  no_path: "The game found no walkable path to that point, so V didn't move. Pick a point on the same floor and within reach.",
+  behaviour_limit: "Too many behaviours are running already (at most 4), so this one didn't start. Stop one with behave_stop first.",
+  no_such_behaviour: "No behaviour with that id is running. behave_list shows the ones that are.",
+  expectation_failed: "The pre-capture check failed, so no screenshot was taken. The answer lists which check failed and why; fix the framing or light and try again, or pass on_fail: warn to capture anyway.",
   unsupported: "This game doesn't offer a safe way to do that yet.",
   unavailable: "That part of the game isn't available right now.",
   failed: "Something went wrong inside the game bridge. The plugin log has the details.",
