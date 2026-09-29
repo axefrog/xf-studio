@@ -5,7 +5,7 @@ import { gitHubReleases, RELEASES_API, releasesFromGitHub, simulatedReleases } f
 import { createUpdateCheckHandler, UpdateCheckJsonStore } from "../src/update-check-host";
 import { UpdateCheckActions } from "../src/update-check-actions";
 import { UPDATE_CHECK_DESCRIPTORS } from "../src/studio-action-descriptors";
-import { updateCheckLine } from "../src/studio-ui/update-check";
+import { checkForUpdatesNow, checkingForUpdates, updateCheckLine } from "../src/studio-ui/update-check";
 
 const v = (text: string) => parseVersion(text)!;
 const release = (tag: string, prerelease = true) => ({ version: tag.replace(/^v/, ""), tag, prerelease });
@@ -170,12 +170,17 @@ test("the page's actions are catalogued, pre-empt the check at start, and say pl
   expect(updateCheckLine(actions.snapshot())).toBeNull();
   const manual = actions.dispatch({ kind: "updates.check" });
   expect(startupSignal!.aborted).toBe(true);
-  expect(updateCheckLine(actions.snapshot())).toEqual({ text: "Checking for updates…", releases: false });
+  // A check still running has no line of its own: views keep the last result and show the check on their button.
+  expect(checkingForUpdates(actions.snapshot())).toBe(true);
+  expect(updateCheckLine(actions.snapshot())).toBeNull();
   expect(await manual).toMatchObject({ ok: true, answer: { result: "newer" } });
   holdStartup!();
   await startup;
   expect(actions.snapshot().busy).toBeNull();
+  expect(checkingForUpdates(actions.snapshot())).toBe(false);
   expect(updateCheckLine(actions.snapshot())).toEqual({ text: "XF Studio 0.2.0-beta.1 is available. You have 0.1.0-alpha.2.", releases: true });
+  expect(updateCheckLine(actions.snapshot(), { releasesBelow: true }))
+    .toEqual({ text: "XF Studio 0.2.0-beta.1 is available. Download it from XF Studio releases below.", releases: true });
 
   const current = { busy: null, checkedByPerson: true, unreachable: false,
     answer: { schema: "xfs/update-check-1", installed: "0.1.0-alpha.2", result: "current", latest: null, reason: null, announce: false, automatic: true, checkedAt: 1 } } as const;
@@ -220,4 +225,29 @@ test("the check at start waits for a quiet moment, announces a newer version onc
   expect(await start()).toEqual([]);
   memory = emptyUpdateCheckMemory(); on = false;
   expect(await start()).toEqual([]);
+});
+
+test("the palette's check says it's checking at once, closes that notice before the answer, and couldn't-check is info", async () => {
+  const run = async (kind: "newer" | "current" | "offline") => {
+    const host = new UpdateCheckService({ installed: "0.1.0-alpha.2", now: () => 1, automatic: () => true,
+      store: { load: emptyUpdateCheckMemory, save: () => {} }, releases: simulatedReleases(kind, "0.1.0-alpha.2") });
+    let release: (() => void) | null = null;
+    const actions = new UpdateCheckActions(async (_body, sent) => {
+      await new Promise<void>(resolve => { release = resolve; });
+      return { ok: true, status: 200, data: await host.check(sent) };
+    });
+    const events: string[] = [];
+    const rt = { port: { updates: actions, links: { open: async () => ({ ok: true as const }) } }, changed: () => {},
+      feedback: { toast: (tone: string, _source: string, message: string) => { events.push(`${tone}: ${message}`); return () => { events.push(`closed: ${message}`); }; },
+        record: () => {} } };
+    const done = checkForUpdatesNow(rt as never, true);
+    expect(events).toEqual(["info: Checking for updates…"]);
+    release!();
+    await done;
+    return events;
+  };
+  expect(await run("current")).toEqual(["info: Checking for updates…", "closed: Checking for updates…", "success: You have the newest version, 0.1.0-alpha.2."]);
+  expect((await run("offline")).slice(1))
+    .toEqual(["closed: Checking for updates…", "info: XF Studio couldn't check for updates just now. New versions are always on the releases page."]);
+  expect((await run("newer")).slice(1)).toEqual(["closed: Checking for updates…", "info: XF Studio 0.2.0-beta.1 is available. You have 0.1.0-alpha.2."]);
 });

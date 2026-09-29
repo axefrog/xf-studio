@@ -49,13 +49,22 @@ export function gitHubReleases(get: Get, options: { url?: string; timeoutMs?: nu
   };
 }
 
+export const SIMULATED_RELEASE_KINDS = ["newer", "current", "offline", "slow"] as const;
+export type SimulatedReleaseKind = typeof SIMULATED_RELEASE_KINDS[number];
+/** How long the `slow` fixture takes to answer: long enough to look at a check in progress. */
+export const SLOW_RELEASES_MS = 6000;
+/** Waiting, from the host (this module reads no timers); it ends early when the check is abandoned. */
+export type ReleaseWait = (ms: number, signal: AbortSignal) => Promise<void>;
+
 /**
  * A simulated release source for tests and interface reviews (an isolated localhost server with `XFS_UPDATE_CHECK_FIXTURE`):
- * `newer` publishes a version after `installed`, `current` publishes `installed` itself, `offline` never answers.
+ * `newer` publishes a version after `installed`, `current` publishes `installed` itself, `offline` never answers, and `slow`
+ * answers as `offline` does, but only after `wait` (so a check in progress, and a re-check after it, can be seen).
  */
-export function simulatedReleases(kind: "newer" | "current" | "offline", installed: string): ReleaseSource {
-  return async () => {
-    if (kind === "offline") return failed("offline");
+export function simulatedReleases(kind: SimulatedReleaseKind, installed: string, wait?: ReleaseWait): ReleaseSource {
+  return async signal => {
+    if (kind === "slow") await wait?.(SLOW_RELEASES_MS, signal);
+    if (kind === "offline" || kind === "slow") return failed("offline");
     const tag = kind === "current" ? `v${installed}` : "v0.2.0-beta.1";
     return { ok: true, releases: [{ version: tag.slice(1), tag, prerelease: true }] };
   };

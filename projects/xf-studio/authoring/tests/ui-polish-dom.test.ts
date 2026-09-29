@@ -465,6 +465,80 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     h.panel.spec.element.remove();
   });
 
+  const releasesService = (kind: "newer" | "current" | "offline") => new UpdateCheckService({ installed: "0.1.0-alpha.2", now: () => 1,
+    automatic: () => true, store: { load: emptyUpdateCheckMemory, save: () => {} }, releases: simulatedReleases(kind, "0.1.0-alpha.2") });
+  /** A host whose next answer can be held, so a check in progress can be looked at. */
+  const heldHost = () => {
+    const host = { answer: releasesService("offline"), hold: null as Promise<void> | null, release: () => {},
+      holdNext() { host.hold = new Promise<void>(resolve => { host.release = () => { host.hold = null; resolve(); }; }); },
+      transport: (async body => { if (host.hold) await host.hold;
+        return { ok: true, status: 200, data: body.action === "check" ? await host.answer.check(new AbortController().signal) : null }; }) as UpdateCheckTransport };
+    return host;
+  };
+
+  test("Updates: a re-check shows on Check now (Checking…, unavailable); the line and releases button keep the last result", async () => {
+    const host = heldHost();
+    const h = await settingsHarness({ updates: host.transport });
+    const updates = h.root.querySelector("[data-settings-section=updates]")!;
+    const checkNow = updates.querySelector("button.btn.small")!, releases = buttonNamed(updates, "Open the releases page")!;
+    checkNow.click();
+    await settle(); h.paint();
+    const offline = text(updates);
+    expect(offline).toContain("XF Studio couldn't check for updates just now.");
+    expect(releases.hidden).toBe(false);
+    expect(releases.className).toContain("quiet");
+    host.holdNext(); host.answer = releasesService("newer");
+    checkNow.click();
+    h.paint();
+    expect(text(checkNow)).toBe("Checking…");
+    expect(checkNow.getAttribute("aria-disabled")).toBe("true");
+    expect(text(updates).replace("Checking…", "Check now")).toBe(offline);
+    expect(releases.hidden).toBe(false);
+    host.release();
+    await settle(); h.paint();
+    expect(text(checkNow)).toBe("Check now");
+    expect(checkNow.getAttribute("aria-disabled")).toBeNull();
+    expect(text(updates)).toContain("XF Studio 0.2.0-beta.1 is available. You have 0.1.0-alpha.2.");
+    // A newer version: the releases page becomes the main action and Check now the quiet one.
+    expect(releases.className).toContain("primary");
+    expect(releases.className).not.toContain("quiet");
+    expect(checkNow.className).toContain("quiet");
+    host.answer = releasesService("current");
+    checkNow.click();
+    await settle(); h.paint();
+    expect(releases.hidden).toBe(true);
+    expect(checkNow.className).not.toContain("quiet");
+    h.panel.spec.element.remove();
+  });
+
+  test("Help's Check for updates: while it checks, the button says so and is unavailable, and the last detail stays", async () => {
+    const { helpPanel } = await import("../src/studio-ui/guidance/help-panel");
+    const host = heldHost(), updates = new UpdateCheckActions(host.transport);
+    let panel: ReturnType<typeof helpPanel> | null = null;
+    const rt = { port: { updates, about: { capability: () => ({ available: false }) }, desktopApp: { offered: () => false },
+      links: { open: async () => ({ ok: true }) } }, feedback: { toast: () => () => {}, record: () => {} }, changed: () => panel?.update(null as never),
+    finishes: [], settings: { open: () => {} } };
+    panel = helpPanel(rt as never, { tours: () => [], status: () => undefined, start: () => false });
+    panel.update(null as never);
+    const root = panel.spec.element as unknown as LightElement;
+    const row = root.querySelector(".help-check-updates")!, detail = root.querySelector(".help-updates-detail")!;
+    expect(text(row)).toBe("Check for updates");
+    expect(text(detail)).toBe("Looks for a newer XF Studio on GitHub, where each new version is published.");
+    row.click();
+    await settle();
+    expect(text(detail)).toContain("XF Studio couldn't check for updates just now.");
+    host.holdNext(); host.answer = releasesService("newer");
+    row.click();
+    expect(text(row)).toBe("Checking for updates…");
+    expect(row.getAttribute("aria-disabled")).toBe("true");
+    expect(text(detail)).toContain("XF Studio couldn't check for updates just now.");
+    host.release();
+    await settle();
+    expect(text(row)).toBe("Check for updates");
+    expect(row.getAttribute("aria-disabled")).toBeNull();
+    expect(text(detail)).toBe("XF Studio 0.2.0-beta.1 is available. Download it from XF Studio releases below.");
+  });
+
   test("appearance is set here too, and Mod package points to Settings instead of holding the form", async () => {
     const h = await settingsHarness();
     const appearance = h.root.querySelector("[data-settings-section=appearance]")!;

@@ -10,14 +10,20 @@ import type { StudioRuntime } from "./runtime";
 type Runtime = Pick<StudioRuntime, "port" | "feedback" | "changed">;
 export type UpdateLine = { text: string; releases: boolean };
 
-/** What the last check found, in one plain line; null before anything was checked. */
-export function updateCheckLine(state: Readonly<UpdateCheckState>): UpdateLine | null {
-  if (state.busy === "updates.check") return { text: "Checking for updates…", releases: false };
+/** Whether the person's own check is running. Views that already show a result keep it until the new one arrives. */
+export const checkingForUpdates = (state: Readonly<UpdateCheckState>) => state.busy === "updates.check";
+
+/**
+ * What the last check found, in one plain line; null before anything was checked. It never describes a check still running.
+ * `releasesBelow`: the releases page is the next row (Help), so a newer version points there instead of repeating what's installed.
+ */
+export function updateCheckLine(state: Readonly<UpdateCheckState>, options: { releasesBelow?: boolean } = {}): UpdateLine | null {
   const answer = state.answer;
   if (state.unreachable || (state.checkedByPerson && answer?.result === "failed"))
     return { text: "XF Studio couldn't check for updates just now. New versions are always on the releases page.", releases: true };
   if (answer?.result === "newer" && answer.latest)
-    return { text: `XF Studio ${answer.latest.version} is available. You have ${answer.installed}.`, releases: true };
+    return { text: options.releasesBelow ? `XF Studio ${answer.latest.version} is available. Download it from XF Studio releases below.`
+      : `XF Studio ${answer.latest.version} is available. You have ${answer.installed}.`, releases: true };
   if (state.checkedByPerson && answer?.result === "current") return { text: `You have the newest version, ${answer.installed}.`, releases: false };
   return null;
 }
@@ -27,19 +33,23 @@ export async function openReleasesPage(rt: Runtime) {
   if (!outcome.ok) rt.feedback.toast("warning", "Updates", outcome.message);
 }
 
-/** The person's own check: runs in place and says what it found (a notice too, when asked from the palette). */
+/**
+ * The person's own check: runs in place and says what it found. Asked from the palette, which has no place of its own, a notice says
+ * it's checking at once and gives way to the answer. Not being able to check is `info`: nothing is wrong on the person's side.
+ */
 export async function checkForUpdatesNow(rt: Runtime, notice: boolean) {
   const updates = rt.port.updates;
   const allowed = updates.capability({ kind: "updates.check" });
   if (!allowed.available) { if (notice) rt.feedback.toast("info", "Updates", allowed.reason ?? "Checking for updates isn't available here."); return; }
+  const close = notice ? rt.feedback.toast("info", "Updates", "Checking for updates…") : null;
   const running = updates.dispatch({ kind: "updates.check" });
   rt.changed();
   await running;
   rt.changed();
   const line = updateCheckLine(updates.snapshot());
+  close?.();
   if (!notice || !line) { if (line) rt.feedback.record("info", "Updates", line.text); return; }
-  const found = updates.snapshot().answer;
-  rt.feedback.toast(line.releases && found?.result === "newer" ? "info" : line.releases ? "warning" : "success", "Updates", line.text,
+  rt.feedback.toast(line.releases ? "info" : "success", "Updates", line.text,
     line.releases ? [{ label: "Open the releases page", run: () => void openReleasesPage(rt) }] : []);
 }
 

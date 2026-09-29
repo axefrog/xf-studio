@@ -9,7 +9,7 @@ import type { ViewContext } from "../views/panels";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { PanelController } from "./collection";
 import { gameSetupForm, wantsWolvenKitStep } from "./game-setup";
-import { checkForUpdatesNow, openReleasesPage, updateCheckLine } from "../update-check";
+import { checkForUpdatesNow, checkingForUpdates, openReleasesPage, updateCheckLine } from "../update-check";
 
 /** A size in the person's terms ("1.2 GB", "340 MB"). */
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
@@ -56,6 +56,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     rt.changed();
   }
   const checkNow = button({ label: "Check now", icon: "refresh", small: true, onClick: () => void checkForUpdatesNow(rt, false) });
+  const checkNowLabel = checkNow.querySelector("span")!;
   const updateText = h("span", { class: "muted small", role: "status" });
   const releases = button({ label: "Open the releases page", icon: "link", small: true, variant: "quiet", onClick: () => void openReleasesPage(rt) });
 
@@ -117,10 +118,20 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       const setupView = frame.localSetup.view;
       checkOnStart.update(setupView?.fields.checkForUpdates ?? true, { disabled: !setupView || setupView.source === "backup",
         reason: !setupView ? "Reading your settings…" : setupView.source === "backup" ? "Restore your previous settings first." : undefined });
-      const line = updateCheckLine(port.updates.snapshot());
-      setText(updateText, line?.text ?? "");
-      releases.hidden = !line?.releases;
+      // While checking, the button says so (and waits); the line and the releases button keep the last result, so the row never
+      // reflows. A newer version makes the releases page the main action and Check now the quiet one.
+      const state = port.updates.snapshot(), checking = checkingForUpdates(state);
+      setText(checkNowLabel, checking ? "Checking…" : "Check now");
       applyCapability(checkNow, port.updates.capability({ kind: "updates.check" }));
+      if (!checking) {
+        const line = updateCheckLine(state);
+        setText(updateText, line?.text ?? "");
+        releases.hidden = !line?.releases;
+        const newer = state.answer?.result === "newer" && !!line?.releases && !state.unreachable;
+        checkNow.classList.toggle("quiet", newer);
+        releases.classList.toggle("primary", newer);
+        releases.classList.toggle("quiet", !newer);
+      }
       theme.update(appearance.theme());
       hints.update(appearance.hints());
       research.update(appearance.research());
