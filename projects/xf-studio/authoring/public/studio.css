@@ -1228,7 +1228,8 @@ span.category { border-color: transparent; background: transparent; padding-left
 .report-intro, .report-ref { margin: 0; font-size: var(--fs-sm); }
 .report-label { font: 600 var(--fs-2xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
 .report-description { width: 100%; min-height: 64px; resize: vertical; font: var(--fs-sm)/1.4 var(--font-ui); }
-.report-state { display: flex; align-items: center; gap: var(--sp-3); min-height: 24px; }
+.report-state { display: flex; align-items: center; gap: var(--sp-3); }
+.report-state:not(:has(.report-status:not(:empty), .btn:not([hidden]))) { display: none; }
 .report-status { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
 .report-groups { display: grid; gap: var(--sp-3); }
 .report-group { border: 1px solid var(--line); padding: var(--sp-3) var(--sp-4); }
@@ -1247,10 +1248,14 @@ span.category { border-color: transparent; background: transparent; padding-left
 .report-item { display: grid; gap: 2px; padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
 .report-item-head { display: flex; gap: var(--sp-3); align-items: center; }
 .report-item-head > .toggle-row { flex: 1; min-width: 0; }
-.report-item-detail { padding-left: calc(30px + var(--sp-4)); }
+/* A part's detail, reason and preview line up with its label, after the switch. */
+.report-item-detail, .report-item > .report-reason, .report-item > .report-preview { padding-left: calc(30px + var(--sp-4)); }
 .report-reason { color: var(--warning); }
 .report-reason:empty { display: none; }
-.report-preview > summary { cursor: pointer; font-size: var(--fs-xs); color: var(--text-muted); }
+.report-preview > summary { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; font-size: var(--fs-xs); color: var(--text-muted); list-style: none; }
+.report-preview > summary::-webkit-details-marker { display: none; }
+.report-preview[open] > summary .report-chevron { rotate: 90deg; }
+.report-preview > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .report-preview pre { max-height: 220px; overflow: auto; margin: var(--sp-2) 0 0; padding: var(--sp-3); font: var(--fs-2xs)/1.4 var(--font-mono);
   background: var(--bg-raised); border: 1px solid var(--line-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
 .report-warning { display: flex; gap: var(--sp-3); padding: var(--sp-3); border-left: 3px solid var(--warning); background: var(--bg-raised); }
@@ -1278,7 +1283,7 @@ span.category { border-color: transparent; background: transparent; padding-left
 /* ---------- Menus, popovers, dialogs, toasts ---------- */
 .menu-layer { position: fixed; inset: 0; pointer-events: none; z-index: 1000; }
 .menu-layer > * { pointer-events: auto; }
-.menu { position: fixed; min-width: 220px; max-width: 340px; max-height: calc(100vh - 16px); overflow: auto; padding: var(--sp-2); background: var(--bg-overlay); border: 1px solid var(--line-strong);
+.menu { position: fixed; min-width: 220px; max-width: 340px; max-height: calc(100vh - 12px); overflow: auto; padding: var(--sp-2); background: var(--bg-overlay); border: 1px solid var(--line-strong);
   box-shadow: var(--shadow); border-radius: 0 var(--bevel) 0 0; backdrop-filter: blur(10px); }
 .menu:focus { outline: none; }
 .menu-item { display: flex; align-items: center; gap: var(--sp-4); min-height: 30px; padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-3); cursor: pointer; border-radius: var(--radius); }

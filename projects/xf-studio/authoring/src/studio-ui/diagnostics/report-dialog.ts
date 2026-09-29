@@ -47,8 +47,8 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   const summaryFiles = h("details", { class: "report-group report-files" },
     h("summary", {}, chevron(), h("span", { class: "report-group-title", text: "Always in the report" }), h("span", { class: "report-size", text: "README.md · report.json" })),
     h("p", { class: "muted small", text: "A short summary and a list of what the file holds, made from the parts you leave ticked. Your folders are replaced when it's saved." }),
-    h("details", { class: "report-preview" }, h("summary", { text: "Show the summary (README.md)" }), readme),
-    h("details", { class: "report-preview" }, h("summary", { text: "Show the list (report.json)" }), index));
+    h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the summary (README.md)"), readme),
+    h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the list (report.json)"), index));
   summaryFiles.hidden = true;
   const mode = new Toggle({ label: "Diagnostic mode", help: MODE_HELP,
     onChange: checked => void dispatch({ kind: "diagnostics.setMode", mode: checked ? "deep" : "normal" }).then(result => setText(status, result.message)) });
@@ -64,8 +64,10 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
         "Personal folder names and e-mail addresses are already replaced with placeholders." }),
       ref ? h("p", { class: "report-ref" }, "Reference ", h("strong", { text: ref })) : null,
       h("label", { class: "report-label", for: descriptionId, text: "What were you doing?" }), description,
-      h("div", { class: "report-state" }, status, retry, again),
-      groups, summaryFiles, total, mode.element),
+      groups, summaryFiles,
+      // What the last step did (or that the report is being prepared) says so under everything it is about, beside nothing but the
+      // report's size: no empty band above the parts, and a message appearing moves nothing above it (C-31).
+      h("div", { class: "report-state" }, status, retry, again), total, mode.element),
     h("div", { class: "report-foot" }, save, copy, issue, h("span", { class: "grow" }), closeButton));
 
   async function run(action: DiagnosticsAction) {
@@ -118,7 +120,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     return h("li", { class: "report-item" },
       h("div", { class: "report-item-head" }, box.element, size),
       h("small", { class: "muted report-item-detail", text: item.detail }), reason,
-      item.preview ? h("details", { class: "report-preview" }, h("summary", { text: "Show what's in it" }), text, all) : null);
+      item.preview ? h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show what's in it"), text, all) : null);
   }
   function render() {
     if (!dialog.isConnected) return;

@@ -432,10 +432,10 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels, modules and views", onClick: event => {
     openMenu([...panelMenuItems(rt, view.research()),
       { kind: "separator" },
-      // Which arrangement a reset applies to is said where it matters, on the reset (C-32: the heading carries no line of its own).
-      { kind: "action", label: "Reset this layout", icon: "reset", hint: `${rt.dock.sizeClass === "wide" ? "Wide" : "Compact"} windows · each size keeps its own arrangement`,
-        run: () => rt.dock.reset() },
-      { kind: "action", label: "Keyboard & mouse", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: () => view.openReference() }],
+      // Which arrangement a reset applies to is the entry's tooltip (C-32: the menu fits a 900 px window, one row per entry). Keyboard &
+      // mouse lives in Help, Settings › Appearance and the palette, where people look for it, not among the panels.
+      { kind: "action", label: "Reset this layout", icon: "reset", tip: `Resets the ${rt.dock.sizeClass === "wide" ? "wide" : "compact"} arrangement: each window size keeps its own.`,
+        run: () => rt.dock.reset() }],
     event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
   } });
   // Saved layouts (view-graph-design.md §4.5): the current layout's name, collapsing to its icon in narrow windows.
