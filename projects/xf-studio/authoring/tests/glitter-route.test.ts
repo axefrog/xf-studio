@@ -319,7 +319,7 @@ function run({ build, dds }: Awaited<ReturnType<typeof makeBuild>>, packagedColl
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)]);
   const tools: VerifierTools = {
     unbundle: (_archive, output) => { cpSync(join(build, "archive"), output, { recursive: true }); return ok(); },
-    serialize: (input, output) => { for (const file of files(input)) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8")); return ok(); },
+    serialize: (input, output) => { for (const file of [input].flat().flatMap(files)) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8")); return ok(); },
     exportTextures: (input, output) => {
       for (const file of files(input)) writeFileSync(join(output, basename(file).replace(/\.xbm$/, ".dds")), dds.get(basename(file).replace(/\.xbm$/, ".dds"))!);
       return ok();

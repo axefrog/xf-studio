@@ -25,6 +25,8 @@ export interface ProcessTreeOptions {
    * queued, so a launch that a person's own change now waits on starts at normal priority (PIPE-96).
    */
   readonly lowPriority?: LowPriority;
+  /** Each complete line of stdout as it arrives (without its line ending), e.g. a child's progress lines. */
+  readonly onStdoutLine?: (line: string) => void;
 }
 /** Whether background work runs below normal priority: fixed, or decided when each process starts (PIPE-96). */
 export type LowPriority = boolean | (() => boolean);
@@ -67,7 +69,16 @@ export function runProcessTree(command: string, args: readonly string[], options
       try { setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL); lowPriority.add(child.pid); } catch { /* Advisory. */ }
     }
     let stdout = "", stderr = "", stopped: ProcessStop | null = null, settled = false;
-    child.stdout!.on("data", (chunk: Buffer) => { stdout = (stdout + chunk.toString("utf8")).slice(-keep); });
+    let pending = "";
+    child.stdout!.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      stdout = (stdout + text).slice(-keep);
+      if (!options.onStdoutLine) return;
+      const lines = (pending + text).split("\n").map(line => line.replace(/\r$/, ""));
+      pending = lines.pop() ?? "";
+      if (pending.length > keep) pending = ""; // A line longer than what is kept is never a progress line.
+      for (const line of lines) { try { options.onStdoutLine(line); } catch { /* A listener's failure never stops the process. */ } }
+    });
     child.stderr!.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString("utf8")).slice(-keep); });
     const stop = (reason: ProcessStop) => {
       if (settled || stopped) return;

@@ -19,7 +19,7 @@ import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInsta
 import { verificationInstallReceipts, verificationSettingsDirectory } from "../src/host-state";
 import { LocalSettingsStore } from "../src/local-settings-store";
 import { desktopCapabilities, type DesktopVersion } from "./host";
-import { desktopPackageRequest } from "./package";
+import { desktopPackageProgress, desktopPackageRequest } from "./package";
 import { cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPlateCache, PROBE_PENDING, probeBun, type WolvenKitProbe } from "./build";
 import { eyePlateReadiness } from "../src/eye-plate-cache";
 import { EYE_PLATE_RECIPE } from "../src/eye-plate-recipe";
@@ -407,6 +407,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         report(message);
         return new Response(null, { status: 204 });
       }
+      if (url.pathname === "/api/package/progress") return desktopPackageProgress(routedRequest);
       if (url.pathname === "/api/package") return desktopPackageRequest(routedRequest, checkWorkerPath,
         undefined, { dataRoot, toolsRoot, settings: settingsStore, shutdownSignal: shutdown.signal, wolvenKitProbe, log: logTo("package"),
           managedWolvenKit: () => wolvenKit.managedExecutable() }, activity);

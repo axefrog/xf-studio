@@ -125,7 +125,7 @@ function fixture(tamper?: (json: Record<string, any>) => void) {
   const tools: VerifierTools = {
     unbundle: (_archive, output) => { cpSync(staged, output, { recursive: true }); return { exitCode: 0, stdout: "", stderr: "" }; },
     serialize: (input, output) => {
-      for (const name of readdirSync(input)) cpSync(join(input, name), join(output, `${name}.json`));
+      for (const name of readdirSync(input as string)) cpSync(join(input as string, name), join(output, `${name}.json`));
       return { exitCode: 0, stdout: "", stderr: "" };
     },
     exportTextures: () => { throw Error("not used"); },

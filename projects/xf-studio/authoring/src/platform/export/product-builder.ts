@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import {
-  archiveXlText, ExportRefusal, PACKAGE_BUILD_2, type FeatureBuildContext, type FeatureExporterEntry, type FeatureVerification,
+  archiveXlText, ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, type PackageBuildStage, type FeatureBuildContext, type FeatureExporterEntry, type FeatureVerification,
   type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type VerifierTools,
 } from "../api/export";
 import { checkProducts, type ProductOutcome } from "./product-check";
@@ -23,6 +23,8 @@ import { LOCAL_PACKAGE_2, type LocalPackageManifest2, type ManifestFile } from "
 export const MAX_COLLECTION_BYTES = 16_000_000;
 
 export interface ProductCommandOptions {
+  /** Build: each stage as it starts (compose, convert, pack, verify); the CLI prints them for the host (PIPE-131). */
+  readonly progress?: (stage: PackageBuildStage) => void;
   /** The collection file (either stored schema; its `packagePlan` groups features into mods). */
   readonly collection: string;
   /** Check only: eligibility, plans and preflight, no files. */
@@ -177,6 +179,12 @@ function plannedExtras(outcome: ProductOutcome["features"][number]["outcome"], a
 /** Check (eligibility only) or Build (verified private candidates, one per product) for one exported collection file. */
 export async function runProductCommand(options: ProductCommandOptions): Promise<PackageCheckResult | PackageBuildResult> {
   const log = options.log ?? (() => {});
+  let reached = -1;
+  // Stages only move forward: a feature (or a later product) saying an earlier one changes nothing.
+  const stage = (next: PackageBuildStage) => {
+    const index = PACKAGE_BUILD_STAGES.indexOf(next);
+    if (index > reached) { reached = index; options.progress?.(next); }
+  };
   const cancelled = () => { if (options.signal?.aborted) fail("package_build_cancelled", "Package Build was cancelled."); };
   const app = existing(options.appRoot, "App root");
   if (!isDirectory(app)) fail("package_input_missing", "App root must be a directory.");
@@ -244,7 +252,8 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       const extrasRoot = join(intermediate, "extras");
       mkdirSync(extrasRoot);
       const context = (feature: string): FeatureBuildContext =>
-        ({ staging, work: join(intermediate, "features", feature), extras: extrasRoot, tools, prerequisites, signal: options.signal, log });
+        ({ staging, work: join(intermediate, "features", feature), extras: extrasRoot, tools, prerequisites, signal: options.signal, log, stage });
+      stage("compose");
       for (const { entry, outcome: feature } of outcome.features) {
         cancelled();
         mkdirSync(join(intermediate, "features"), { recursive: true });
@@ -261,6 +270,7 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
       prePackGate(staging, files);
       const packageDir = join(intermediate, "package", "archive", "pc", "mod");
       mkdirSync(packageDir, { recursive: true });
+      stage("pack");
       const packed = await tools.pack(staging, packageDir);
       writeFileSync(join(intermediate, "logs", "pack.log"), packed.log, "utf8");
       log("pack complete");
@@ -300,6 +310,7 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
         installed: false, gameRenderingVerified: false }) + "\n", "utf8");
       cancelled();
       // The product verifier, then each feature's own verifier on its subset (none imports its exporter).
+      stage("verify");
       const verifierTools = options.verifierTools(wolvenkit, gamepath);
       const unpacked = verifyProductArchive({ archive, xl, archiveSha256, files, declaration, features: outcome.features.length,
         tools: verifierTools, work: join(intermediate, "verify") });

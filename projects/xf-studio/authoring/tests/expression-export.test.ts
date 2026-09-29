@@ -160,7 +160,7 @@ function product(value: unknown) {
       xl: archiveXlText(outcome.xl), xlSha256: "x", features: 1 },
     work: join(dir, "work"), staging: join(dir, "staging"), verifyDir: join(dir, `verify-${Math.random().toString(36).slice(2)}`),
     tools: { unbundle: () => ({ exitCode: 0, stdout: "", stderr: "" }), exportTextures: () => ({ exitCode: 0, stdout: "", stderr: "" }),
-      serialize: (source, into) => { mkdirSync(into, { recursive: true }); copyFileSync(source, join(into, `${basename(source)}.json`)); return { exitCode: 0, stdout: "", stderr: "" }; } },
+      serialize: (input, into) => { const source = input as string; mkdirSync(into, { recursive: true }); copyFileSync(source, join(into, `${basename(source)}.json`)); return { exitCode: 0, stdout: "", stderr: "" }; } },
     packaged: JSON.parse(outcome.packaged), prerequisites: { [EXPRESSIONS_GAME_PREREQUISITE]: game() },
     extras: { root: extras, tweaks: [file(extras, tweak)], overlays: { [planned.overlay]: { root: overlay, files: [file(overlay, planned.paths.table)] } } } });
   const edit = (rootDir: string, path: string, change: (text: string) => string) => {

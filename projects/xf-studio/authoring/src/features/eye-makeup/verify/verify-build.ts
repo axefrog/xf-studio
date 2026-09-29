@@ -146,6 +146,8 @@ const readJson = (path: string): Node => JSON.parse(readFileSync(path, "utf8").r
 const bytes = (path: string) => new Uint8Array(readFileSync(path));
 const fileName = (depotPath: string) => depotPath.slice(depotPath.lastIndexOf("/") + 1);
 const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
+/** The verifier's copies of the plate inputs carry this prefix, apart from the packaged plate members of the same stem. */
+const PLATE_INPUT_PREFIX = "plate-input.";
 
 function listFiles(root: string): ResourceFile[] {
   const files: ResourceFile[] = [];
@@ -578,14 +580,16 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   // The standalone entry keeps its archive copy, unbundled tree and log beside the conversions.
   ensure(!existsSync(work) || readdirSync(work).filter(name => !["archive", "unpacked", "logs"].includes(name)).length === 0,
     `Verifier work directory is not empty: ${work}`);
-  const dirs = Object.fromEntries(["json", "plate", "plate-json", "dds", "logs"]
-    .map(name => [name, join(work, name)])) as Record<"json" | "plate" | "plate-json" | "dds" | "logs", string>;
+  const dirs = Object.fromEntries(["json", "plate", "dds", "logs"]
+    .map(name => [name, join(work, name)])) as Record<"json" | "plate" | "dds" | "logs", string>;
   for (const dir of Object.values(dirs)) mkdirSync(dir, { recursive: true });
   const runStep = (label: string, call: () => ToolResult) => runTool(dirs.logs, label, call);
 
   // Plate provenance at the start: the host's plate files, hashed and copied before anything else.
   const plate = plateInputs(build, options);
-  const plateCopy = { mesh: join(dirs.plate, basename(plate.files.mesh)), morph: join(dirs.plate, basename(plate.files.morph)) };
+  // Copies are named apart from the packaged members (the same stems), as all are serialized into one flat folder.
+  const inputName = (path: string) => `${PLATE_INPUT_PREFIX}${basename(path)}`;
+  const plateCopy = { mesh: join(dirs.plate, inputName(plate.files.mesh)), morph: join(dirs.plate, inputName(plate.files.morph)) };
   for (const role of ["mesh", "morph"] as const) {
     copyFileSync(plate.files[role], plateCopy[role]);
     ensure(sha256(readFileSync(plateCopy[role])) === plate.start[role], `Plate ${role} input changed while it was copied`);
@@ -593,12 +597,12 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   // The masculine plate, when the plan includes him: its own inputs, hashed and copied into a folder of their own.
   const bodies = verifierBodies(plan), male = bodies[1];
   ensure(!!male === !!build.masculine, male ? "Build record lacks the masculine plate the plan includes" : "Build record has a masculine plate the plan lacks");
-  const hisDirs = { plate: join(work, "plate-pma"), json: join(work, "plate-pma-json") };
+  const hisDirs = { plate: join(work, "plate-pma") };
   let his: ReturnType<typeof plateInputs> | null = null, hisCopy: { mesh: string; morph: string } | null = null;
   if (male) {
     for (const dir of Object.values(hisDirs)) mkdirSync(dir, { recursive: true });
     his = plateInputs(build.masculine, { plate: options.masculinePlate });
-    hisCopy = { mesh: join(hisDirs.plate, basename(his.files.mesh)), morph: join(hisDirs.plate, basename(his.files.morph)) };
+    hisCopy = { mesh: join(hisDirs.plate, inputName(his.files.mesh)), morph: join(hisDirs.plate, inputName(his.files.morph)) };
     ensure(his.start.mesh !== plate.start.mesh && his.start.morph !== plate.start.morph, "The masculine plate input is the feminine plate");
     for (const role of ["mesh", "morph"] as const) {
       copyFileSync(his.files[role], hisCopy[role]);
@@ -649,8 +653,8 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   ensure(sameJson(files.map(f => f.path).sort(), build.artifacts.map((a: Node) => a.path).sort()), "Unpacked member paths differ from the generated resources");
   const unpackedHashes = new Map(files.map(f => [f.path, f.sha256]));
   for (const artifact of build.artifacts) ensure(unpackedHashes.get(artifact.path) === artifact.sha256, `Unpacked ${artifact.path} differs from its generated payload`);
-  const names = files.map(f => fileName(f.path));
-  ensure(new Set(names).size === names.length, "Unpacked members must have distinct file names for conversion");
+  const names = [...files.map(f => fileName(f.path)), ...[plateCopy, ...hisCopy ? [hisCopy] : []].flatMap(copy => [basename(copy.mesh), basename(copy.morph)])];
+  ensure(new Set(names.map(name => name.toLowerCase())).size === names.length, "Unpacked members and plate inputs must have distinct file names for conversion");
   // Convert only its own members: the unpacked tree itself when it holds nothing else, else a copy of its subset.
   let memberRoot = view.root;
   if (view.files.length !== files.length) {
@@ -663,10 +667,8 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
     }
   }
 
-  // The verifier's own conversions of the hash-checked members and plate inputs.
-  runStep("serialize-members", () => tools.serialize(memberRoot, dirs.json));
-  runStep("serialize-plate", () => tools.serialize(dirs.plate, dirs["plate-json"]));
-  if (male) runStep("serialize-masculine-plate", () => tools.serialize(hisDirs.plate, hisDirs.json));
+  // The verifier's own conversions of the hash-checked members and plate inputs, in one WolvenKit launch.
+  runStep("serialize-members", () => tools.serialize([memberRoot, dirs.plate, ...male ? [hisDirs.plate] : []], dirs.json));
   const converted = (dir: string, name: string) => {
     const path = join(dir, name + ".json");
     ensure(isFile(path), `WolvenKit did not serialize ${name}`);
@@ -694,14 +696,14 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
   const members = new Set(files.map(f => f.path));
   const summary = checkResources(plan, {
     mesh: root(plan.mesh), morph: root(plan.morph), app: root(plan.app), customization: root(plan.customization),
-    sourceMesh: converted(dirs["plate-json"], basename(plateCopy.mesh)).Data.RootChunk,
-    sourceMorph: converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk,
+    sourceMesh: converted(dirs.json, basename(plateCopy.mesh)).Data.RootChunk,
+    sourceMorph: converted(dirs.json, basename(plateCopy.morph)).Data.RootChunk,
     texture: path => root(path),
     archiveHas: path => members.has(path),
   }, build.artifacts.map((a: Node) => a.path), uv, options.morphTargets ?? null);
 
-  const plateGeometry = checkPlateGeometry(converted(dirs["plate-json"], basename(plateCopy.mesh)).Data.RootChunk,
-    converted(dirs["plate-json"], basename(plateCopy.morph)).Data.RootChunk, root(plan.mesh), root(plan.morph), liftsMm);
+  const plateGeometry = checkPlateGeometry(converted(dirs.json, basename(plateCopy.mesh)).Data.RootChunk,
+    converted(dirs.json, basename(plateCopy.morph)).Data.RootChunk, root(plan.mesh), root(plan.morph), liftsMm);
 
   // The masculine selector: his own customization, app and plate, checked like hers against his own plate input. The
   // textures are shared, so his plate's UV window must be hers (and so every window entry's UV transform).
@@ -710,7 +712,7 @@ export function verifyEyeMakeupBuild(options: FeatureVerifyOptions): Verificatio
     const hisSamples = plateUvSamples(root(male.mesh)), hisWindow = expectedWindow(hisSamples.bounds);
     ensure(sameWindow(hisWindow, window, 1e-12), "The masculine plate's UV window differs from the feminine plate's, so the shared textures would not fit him");
     ensure(sameWindow(build.masculine?.plateUv?.window, hisWindow, 1e-12), "Build record's masculine plate UV window differs from the one his plate's UVs give");
-    const sourceMesh = converted(hisDirs.json, basename(hisCopy.mesh)).Data.RootChunk, sourceMorph = converted(hisDirs.json, basename(hisCopy.morph)).Data.RootChunk;
+    const sourceMesh = converted(dirs.json, basename(hisCopy.mesh)).Data.RootChunk, sourceMorph = converted(dirs.json, basename(hisCopy.morph)).Data.RootChunk;
     const hisSummary = checkResources(plan, { mesh: root(male.mesh), morph: root(male.morph), app: root(male.app), customization: root(male.customization),
       sourceMesh, sourceMorph, texture: path => root(path), archiveHas: path => members.has(path) },
       build.artifacts.map((a: Node) => a.path), expectedUvConstants(hisWindow), options.masculineMorphTargets ?? null, male);

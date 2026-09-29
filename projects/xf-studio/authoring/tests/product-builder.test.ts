@@ -74,8 +74,9 @@ test("Build promotes only a verified candidate per product with the full local-p
       "    player_customization.app:", "      - " + prepared.plan.app.replaceAll("/", "\\"), ""].join("\r\n"));
   const intermediate = join(dir, "build", basename(product.package));
   expect(JSON.parse(readFileSync(join(intermediate, "features", "eye-makeup", "build.json"), "utf8")).plateStem).toBe("xfs_eye_plate");
-  // The plate is serialized first (its UVs decide the texture window), and the host packs once.
-  expect(calls).toEqual(["serialize", "import", "import", "deserialize", "deserialize", "deserialize", "pack"]);
+  // The plate is serialized first (its UVs decide the texture window), every resource document converts in one launch
+  // (PIPE-130), and the host packs once.
+  expect(calls).toEqual(["serialize", "import", "import", "deserialize", "pack"]);
   // The feature verifier gets its work folder, the unpacked product, WolvenKit tools, the packaged snapshot and the plate.
   expect(verified).toHaveLength(1);
   expect(typeof verified[0].tools.exportTextures).toBe("function");

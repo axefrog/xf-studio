@@ -239,7 +239,7 @@ export function desktopPackageAdapter(options: { exporters: readonly FeatureExpo
         wolvenkit: settings.wolvenKitCli!, gamepath: settings.gameRoot!, ensurePrivate: path => privatePath(dataRoot, path) };
     },
     runBuilder: (args, run) => runProcessTree(builderBun(), [resolve(toolsRoot, builderEntry), ...args, "--app-root", toolsRoot],
-      { cwd: run.cwd, signal: run.signal, timeoutMs: run.timeoutMs }),
+      { cwd: run.cwd, signal: run.signal, timeoutMs: run.timeoutMs, onStdoutLine: run.onLine }),
     log: (scope, code, message, detail) => {
       const text = detail && typeof detail === "object" && "message" in detail ? `${message} ${String((detail as { message: unknown }).message).slice(-3000)}` : message;
       log(`${scope === "build" ? "Build" : "Check"}: ${text}`);

@@ -258,6 +258,7 @@ const server = Bun.serve({
     // The API accepts only the 127.0.0.1 origin; send `localhost` visitors there so the library and settings work.
     if (url.hostname === "localhost") { url.hostname = "127.0.0.1"; return Response.redirect(url.toString(), 308); }
     if (url.pathname.startsWith(DIAGNOSTICS_PREFIX)) return diagnosticsRequest(request);
+    if (url.pathname === "/api/package/progress") return packageRequest.progress(request);
     if (url.pathname === "/api/package") return packageRequest(request);
     if (url.pathname === "/api/mod-install") return modInstallRequest(request);
     if (url.pathname === "/api/verification/mod-install") return verificationModInstallRequest(request);

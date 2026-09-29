@@ -201,7 +201,7 @@ function fakeTools(fixture: Fixture, hooks: Hooks, calls: string[]): VerifierToo
     }),
     serialize: hooks.serialize ?? ((input, output) => {
       calls.push(`serialize ${input}`);
-      for (const file of files(input)) writeFileSync(join(output, basename(file) + ".json"), "\uFEFF" + readFileSync(file, "utf8"));
+      for (const file of [input].flat().flatMap(files)) writeFileSync(join(output, basename(file) + ".json"), "\uFEFF" + readFileSync(file, "utf8"));
       return ok();
     }),
     exportTextures: hooks.exportTextures ?? ((input, output) => {
@@ -257,8 +257,9 @@ test("a consistent synthetic build passes with the verify.py report shape plus s
     expect(space.mapping.farShare).toBe(0);
     // Every conversion ran on the verifier's own copies inside its work directory.
     const work = join(build, "verify");
-    expect(calls).toEqual([`unbundle ${join(work, "archive", "xfs_cns.archive")}`, `serialize ${join(work, "unpacked")}`,
-      `serialize ${join(work, "plate")}`, `export ${join(work, "unpacked", ...depot.split("/"), "textures")}`]);
+    // The members and the plate inputs convert in one WolvenKit launch (PIPE-130).
+    expect(calls).toEqual([`unbundle ${join(work, "archive", "xfs_cns.archive")}`, `serialize ${[join(work, "unpacked"), join(work, "plate")]}`,
+      `export ${join(work, "unpacked", ...depot.split("/"), "textures")}`]);
     expect(readFileSync(join(work, "logs", "unbundle.log"), "utf8")).toContain("Unbundled");
     expect(() => run(fixture)).toThrow("work directory is not empty");
   } finally { rmSync(build, { recursive: true, force: true }); }
@@ -360,8 +361,8 @@ test("plate provenance: inputs must match the build record and the host, and mus
     let first = true;
     const serialize: VerifierTools["serialize"] = (input, output) => {
       if (first) { first = false; writeFileSync(fixture.plate.morph, "rewritten"); }
-      for (const name of readdirSync(input, { recursive: true }) as string[]) {
-        const file = join(input, name);
+      for (const folder of [input].flat()) for (const name of readdirSync(folder, { recursive: true }) as string[]) {
+        const file = join(folder, name);
         if (statSync(file).isFile()) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8"));
       }
       return ok();
@@ -694,7 +695,7 @@ test("merged product: the real verifier checks only its own members and entries 
     expect(report).toMatchObject({ presetCount: 2, unpackedFilesVerified: 10, archiveXlSha256: sha(mergedDeclaration(plan)) });
     // Its own members are copied out of the product tree and converted there; the other feature's files never are.
     const members = join(fixture.build, "verify-merged", "members");
-    expect(calls[0]).toBe(`serialize ${members}`);
+    expect(calls[0]).toBe(`serialize ${[members, join(fixture.build, "verify-merged", "plate")]}`);
     expect(productFiles(members).map(file => file.path)).not.toContain(LIPS_APP);
     expect(productFiles(members)).toHaveLength(10);
   } finally { rmSync(fixture.build, { recursive: true, force: true }); }

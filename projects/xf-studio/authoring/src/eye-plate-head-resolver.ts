@@ -13,7 +13,7 @@
  * read is unchanged, and opens it again otherwise. Archive index caches are written only below a host-private cache
  * folder: `cacheDir` here, or the preview's resolver cache when the preview opened the route first.
  */
-import { settleDepotAdditions } from "./archivexl-config";
+import { settleDepotAdditions, type DepotAdditions } from "./archivexl-config";
 import { planHeadSource, type HeadSourcePlan } from "./eye-plate-head-source";
 import { EyePlateError, type EyePlateHeadSourcePort } from "./eye-plate-service";
 import type { LaunchRoute } from "./local-settings";
@@ -56,6 +56,14 @@ export function incompleteHeadSource(scan: { scanGaps: readonly string[]; unread
     relevant.map(item => `${item.name}: ${item.error}`).join("\n")) : null;
 }
 
+/**
+ * The route's settled `.xl` additions, once per shared installation (keyed by its depot index): they depend only on its
+ * indexes and `.xl` files, which a changed mod setup replaces with a new installation. Settling them checks every declared
+ * copy, link and patch against every mounted archive, about 90 ms on a large mod list, which each Build otherwise spent on
+ * the host's event loop for each plate (PIPE-133).
+ */
+const settledAdditions = new WeakMap<object, DepotAdditions>();
+
 export function createInstalledHeadSource(route: InstalledHeadRoute, cacheDir: string): EyePlateHeadSourcePort {
   return {
     async resolve({ meshDepotPath, morphDepotPath }) {
@@ -63,7 +71,8 @@ export function createInstalledHeadSource(route: InstalledHeadRoute, cacheDir: s
       const installation = await installations.acquire({ gameRoot: route.gameRoot, launchRoute: route.launchRoute, mo2Root: route.mo2Root ?? null,
         mo2ProfileId: route.mo2ProfileId ?? null, manualModRoot: route.manualModRoot ?? null, wolvenKitCli: route.wolvenKitCli, cacheDir });
       const { depot, xl, summary } = installation;
-      const additions = settleDepotAdditions(xl, hash => depot.lookup(hash).winner !== null);
+      let additions = settledAdditions.get(depot);
+      if (!additions) settledAdditions.set(depot, additions = settleDepotAdditions(xl, hash => depot.has(hash)));
       const plan = planHeadSource({ meshDepotPath, morphDepotPath }, depot, additions, xl.paths);
       const ranks = new Map(installation.plan.archives.map(archive => [archive.id, archive.rank]));
       const incomplete = incompleteHeadSource(summary, plan, file => ranks.get(file));
