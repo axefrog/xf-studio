@@ -16,7 +16,7 @@
  *   Show in folder; nothing is added to the game or a mod manager until the person accepts the reviewed plan.
  */
 import { applyCapability, badge, button, emptyState, GroupSection, hasCommands, ItemList, note, openConfirmPopover, openMenu, openValuePopover, progressBar,
-  section, Segmented, type MenuItem } from "../../../studio-ui/components";
+  section, Segmented, modLine as modLineItem, type MenuItem } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -379,8 +379,8 @@ export function expressionSets(ctx: Ctx): PanelController {
       const name = setModName(set);
       if (modLine.dataset.name !== `${name}|${!!set.modName}`) {
         modLine.dataset.name = `${name}|${!!set.modName}`;
-        modLine.replaceChildren(h("li", {}, icon("package"), h("span", {}, h("strong", { text: name }), h("span", { class: "muted", text: " · Expressions" })),
-          button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true, onClick: event => modMenu(event.currentTarget as Element) })));
+        modLine.replaceChildren(modLineItem({ name, kind: "Expressions",
+          action: button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true, onClick: event => modMenu(event.currentTarget as Element) }) }));
       }
       const running = exports.busy?.id === set.id ? exports.busy.action : undefined;
       table.update(set.table ?? "installed", () => ctx.presets.capability({ kind: "partPresetSet.setExport", id: set.id, revision: set.revision }), {

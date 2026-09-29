@@ -2,9 +2,10 @@
 import { badge, blockSection, button, codeBlock, Combobox, EmptyState, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
-  sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, type LightListItem, type TabItem } from "../components";
+  sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
 import { h } from "../dom";
+import { EYE_MAKEUP_MOD } from "../../mod-branding";
 
 type Mount = () => HTMLElement;
 const tabs: TabItem[] = [["Colour & finish", "finish"], ["Shape", "shape"], ["Pigment & edge", "edge"], ["Warp", "warp"], ["Character", "character"], ["Camera & light", "lighting"]]
@@ -244,6 +245,27 @@ const MOUNTS: Record<string, Mount> = {
       options: [{ value: "installed", label: "The head your game loads (recommended)" }, { value: "base-game", label: "The unmodified game head" }] });
     head.update("installed");
     return h("div", { style: "max-width:420px" }, stack({ gap: "loose" }, body.element, waiting.element, eyes.element, head.element)); },
+  "lib-mod-line": () => {
+    const more = (name: string) => button({ label: `${name} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
+      onClick: event => openMenu([{ kind: "action", label: "Rename…", icon: "rename", run: () => {} }], event.currentTarget as Element, { label: `${name} options` }) });
+    const narrow = h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds (narrow)", style: "width:200px" },
+      modLine({ name: `${EYE_MAKEUP_MOD.modName} Night Market`, kind: "Eye makeup", action: more(`${EYE_MAKEUP_MOD.modName} Night Market`) }));
+    return stack({ gap: "normal" }, h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds" },
+      modLine({ name: EYE_MAKEUP_MOD.modName, kind: "Eye makeup", action: more(EYE_MAKEUP_MOD.modName) })), narrow);
+  },
+  "lib-record-list": () => {
+    const saved = new RecordList({ label: "Saved collections" });
+    const at = new Date(2026, 8, 29, 18, 2, 49);
+    saved.update([
+      { id: "night", name: "Night market set", meta: ["4 presets", "version 5", recordTime(at)], badge: { text: "This draft", tone: "info" }, current: true,
+        action: button({ label: "Reopen", small: true, onClick: () => {} }) },
+      { id: "day", name: "Day looks for the badlands convoy", meta: ["2 presets", "version 1", recordTime(at.getTime() - 86_400_000)],
+        action: button({ label: "Open", small: true, onClick: () => {} }) }]);
+    const drafts = new RecordList({ label: "Recent drafts" });
+    drafts.update([{ id: "d1", name: "Makeup collection", meta: ["Draft", "edited since version 2, not saved", "3 presets"],
+      action: button({ label: "Recover", icon: "undo", small: true, onClick: () => {} }) }]);
+    return stack({ gap: "normal" }, saved.element, drafts.element);
+  },
   "lib-folder-setting": () => {
     let chosen: string | null = null;
     const folder: FolderSetting = new FolderSetting({ label: "Saves folder", help: "Where the game keeps your saves.", placeholder: "e.g. %USERPROFILE%\\Saved Games\\CD Projekt Red\\Cyberpunk 2077",

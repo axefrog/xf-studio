@@ -9,12 +9,14 @@ import type { PanelSpec } from "../dock/dock-view";
 import { icon } from "../icons";
 import { ItemList } from "../item-list";
 import { progressBar } from "../components/progress";
-import { openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "../menu";
+import { RecordList, recordTime } from "../components/record-list";
+import { modLine } from "../components/mod-line";
+import { menuCapability, menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem } from "../menu";
 import type { PackageProductSummary as ProductSummary } from "../../collection-actions";
 type PackageProductSummary = ReadonlyDeep<ProductSummary>;
 import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
-import { collectionMenu, presetMenu } from "../target-menus";
+import { collectionMenu, collectionSections, presetMenu } from "../target-menus";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { setupStatus, wantsWolvenKitStep } from "./game-setup";
 import { wolvenKitStepButton } from "../wolvenkit-step";
@@ -75,6 +77,7 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
   nameInput.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); commitName(); nameInput.blur(); }
     if (event.key === "Escape") { nameInput.value = port.library.summary().draft?.name ?? ""; nameInput.blur(); } });
   const libraryChip = h("span", { class: "chip" });
+  let collectionMenuKey = "";
   const collectionMore = button({ label: "Collection actions", icon: "more", iconOnly: true, variant: "ghost", menu: true,
     onClick: event => collectionMenu(rt, event.currentTarget as Element, event.currentTarget as Element) });
   const addButton = button({ label: "Add preset", icon: "plus", small: true,
@@ -149,6 +152,14 @@ export function presetsPanel(rt: StudioRuntime): PanelController {
       if (removed) setText(restore.querySelector("span")!, `Restore “${removed.name}”`);
       applyCapability(restore, port.library.capability({ kind: "preset.edit", command: { kind: "restore" } }));
       applyCapability(importRecipe, port.files.capability({ kind: "recipe.import" }));
+      // A "…" whose menu would hold nothing to act on is unavailable with its reason, never a button that does nothing (UI-139). Asked
+      // only when the collection's state changes, not on every paint.
+      const menuKey = JSON.stringify([draft?.id, draft?.name, busy]);
+      if (menuKey !== collectionMenuKey) {
+        collectionMenuKey = menuKey;
+        applyCapability(collectionMore, menuCapability(menuFromSections(collectionSections(rt, collectionMore)),
+          busy ? "Wait for the library to finish." : "Your collection is still loading."));
+      }
     },
   };
 }
@@ -208,11 +219,11 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   window.addEventListener("focus", syncList);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); });
   // Earlier drafts, newest first, each brought back with its own Recover (item 13): the draft you had open joins the list.
-  const drafts = h("ul", { class: "saved-list", "aria-label": "Recent drafts" });
+  const drafts = new RecordList({ label: "Recent drafts" });
   const draftsSection = section({ title: "Recent drafts", help: ["Opening a saved collection keeps the draft you had open here, unsaved edits included; Recover brings it back.",
-    "Each line says how the draft stands against its saved version, so a draft is never mistaken for the saved collection of the same name."] }, drafts);
+    "Each line says how the draft stands against its saved version, so a draft is never mistaken for the saved collection of the same name."] }, drafts.element);
   let draftsSignature = "";
-  const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
+  const saved = new RecordList({ label: "Saved collections" });
   const savedEmpty = emptyState("Nothing saved yet", "Save to library keeps the first version of this collection. Drafts still autosave on this computer.");
   const fileButtons = {
     importCollection: button({ label: "Import collection…", icon: "import", small: true, onClick: event => importCollection(rt, event.currentTarget as Element) }),
@@ -233,7 +244,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     section({ title: "Local library", help: ["Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.",
       "Your draft also saves itself on this computer as you work."] },
       stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy)),
-    section({ title: "Saved collections", help: "The versions saved in your library on this computer. Open one to work on it." }, savedEmpty, saved),
+    section({ title: "Saved collections", help: "The versions saved in your library on this computer. Open one to work on it." }, savedEmpty, saved.element),
     draftsSection,
     filesSection);
   return {
@@ -250,29 +261,25 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
       draftsSection.hidden = !queue.length;
       if (draftsKey !== draftsSignature) {
         draftsSignature = draftsKey;
-        drafts.replaceChildren(...queue.map(entry => {
+        drafts.update(queue.map(entry => {
           const recover = button({ label: "Recover", icon: "undo", small: true, title: `Bring back “${entry.name}”; the draft you have open joins this list`,
             onClick: () => void rt.file({ kind: "collection.recover", draft: entry.id }) });
           applyCapability(recover, port.files.capability({ kind: "collection.recover", draft: entry.id }));
-          return h("li", { class: "saved-row" }, h("div", { class: "saved-main" }, h("strong", { text: entry.name }),
-            h("span", { class: "muted small", text: `${DRAFT_STATE[entry.saved](entry.revision)} · ${plural(entry.presets, "preset")}` })),
-            recover);
+          return { id: entry.id, name: entry.name, meta: [...DRAFT_STATE[entry.saved](entry.revision).split(" · "), plural(entry.presets, "preset")], action: recover };
         }));
       }
       const signature = JSON.stringify([library.summaries, draft?.id, library.busy]);
       if (signature !== savedSignature) {
         savedSignature = signature;
-        saved.replaceChildren(...library.summaries.map(item => {
+        saved.update(library.summaries.map(item => {
           const current = item.id === draft?.id;
-          const open = button({ label: current ? "Reopen" : "Open", small: true, variant: current ? "quiet" : undefined,
+          // The row open now says so with its badge and background; its button has the same weight as every other row's Open.
+          const open = button({ label: current ? "Reopen" : "Open", small: true,
             onClick: event => confirmReplace(rt, event.currentTarget as Element, `Open “${item.name}”`,
               () => void rt.request({ kind: "open", id: item.id }, { actions: [undoReplaceAction(rt, "Undo open")] })) });
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));
-          return h("li", { class: `saved-row${current ? " current" : ""}` },
-            h("div", { class: "saved-main" }, h("strong", { text: item.name }),
-              h("span", { class: "muted small", text: `${plural(item.count, "preset")} · version ${item.revision} · ${new Date(item.updatedAt).toLocaleString()}` }),
-              current ? badge("This draft", "info") : null),
-            open);
+          return { id: item.id, name: item.name, current, meta: [plural(item.count, "preset"), `version ${item.revision}`, recordTime(item.updatedAt)],
+            ...(current ? { badge: { text: "This draft", tone: "info" as const } } : {}), action: open };
         }));
       }
       savedEmpty.hidden = library.summaries.length > 0;
@@ -335,10 +342,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     modsSignature = signature;
     // A plan made with a newer version (or damaged) is kept as it came; the service says why in plain words (CORE-91).
     if (planIssue) mods.replaceChildren(h("li", {}, icon("warning"), h("span", { text: planIssue })));
-    else mods.replaceChildren(...products.map(product => h("li", {}, icon("package"),
-      h("span", {}, h("strong", { text: product.modName }), h("span", { class: "muted", text: ` · ${product.features.map(feature => feature.label).join(", ")}` })),
-      button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
-        onClick: event => modMenu(product, products, event.currentTarget as Element) }))));
+    else mods.replaceChildren(...products.map(product => modLine({ name: product.modName, kind: product.features.map(feature => feature.label).join(", "),
+      action: button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
+        onClick: event => modMenu(product, products, event.currentTarget as Element) }) })));
     mods.hidden = !products.length && !planIssue;
   };
   // After Build, each mod offers "Add to my mod manager…" (a reviewed plan, then consent) and "Show in folder" (UI-82). The rows

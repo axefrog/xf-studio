@@ -219,10 +219,13 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   };
   const groupsHost = h("div", { class: "cc-groups" });
   const element = h("div", { class: "panel-content cc-panel" },
-    // Two rows: which V (a save or a default V) with the panel's history, then character presets with Reset all (§4 L2).
-    section("Your V", source, h("div", { class: "row wrap gap-s" }, loadSave, useDefault, useDefaultMale, h("span", { class: "cc-history" }, undo, redo)),
-      h("div", { class: "row wrap gap-s" }, loadPreset, savePreset, h("span", { class: "cc-history" }, resetAll)), status, messages, detailNote, detailsBlock),
-    h("section", { class: "section cc-quick" }, ownMakeup.element),
+    // The V's source with the panel's history beside it, then two rows of buttons: which V (a save or a default V), then character
+    // presets. Reset all sits with the V's own makeup above the rows (the style guide's Creator options), so at 300 px the buttons take
+    // three lines, not four (C-26).
+    section("Your V", h("div", { class: "cc-source-line" }, source, h("span", { class: "cc-history" }, undo, redo)),
+      h("div", { class: "row wrap gap-s" }, loadSave, useDefault, useDefaultMale),
+      h("div", { class: "row wrap gap-s" }, loadPreset, savePreset), status, messages, detailNote, detailsBlock),
+    h("section", { class: "section cc-quick" }, ownMakeup.element, h("div", { class: "row wrap gap-s" }, resetAll)),
     h("div", { class: "cc-find" }, searchField.element, legend, noMatch),
     groupsHost,
     // The appearance record is a research export (release-readiness-audit.md item 6); clearing the prepared game files is kept
@@ -762,6 +765,9 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
             : details?.updateError ?? (detailsNeed || (lines.length ? lines[0]! : ""));
       setText(statusText, line);
       statusText.title = line;
+      // The status line keeps its height while there is a V whose state it can report (UI-68); before any V can load there is nothing
+      // for it to say, so it takes no room (no empty band under the buttons, C-26).
+      status.hidden = !context && !line;
       status.classList.toggle("warning", !!line && (line === details?.updateError || line === detailsNeed || context?.phase === "failed" || lines.includes(line)));
       status.classList.toggle("busy", line === "Updating…" || line === FIRST_TIME || context?.phase === "preparing");
       retry.classList.toggle("cc-unoffered", !context?.retry);

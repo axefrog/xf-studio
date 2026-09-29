@@ -1,6 +1,6 @@
 # Release readiness audit: "ready for Nexus?"
 
-**Status:** first full audit against the [1.0 readiness bar](../../docs/release-readiness.md), run on 29 September 2026 at `main` `95e6d0a`. Read-only: no product code was changed. It measures the gap; it does not close it. The ranked closing list is at the [end](#6-ranked-closing-list). Tracks B, C and E (items 5–14 and 21–23) were closed on `claude/beta-polish-1` (`353d967`, `97e991a` and the follow-up commits named per item); each row below says what was done.
+**Status:** first full audit against the [1.0 readiness bar](../../docs/release-readiness.md), run on 29 September 2026 at `main` `95e6d0a`. Read-only: no product code was changed. It measures the gap; it does not close it. The ranked closing list is at the [end](#6-ranked-closing-list). Tracks B, C and E (items 5–14 and 21–23) were closed on `claude/beta-polish-1` (`353d967`, `97e991a` and the follow-up commits named per item), and Track D's layout item 19 on `claude/track-d-layout`; each row below says what was done.
 
 ## How it was run
 
@@ -171,14 +171,14 @@ These are preview only by nature: they let the user judge a look on a V. They st
 
 | # | Inconsistency | Seen in | Rule | Size |
 |---|---|---|---|---|
-| C-26 | Character at 300 px: the Your V buttons wrap onto four rows, and an empty band sits under Reset all | `nogame-character-dark-300.png` | I4 (no more than two rows of buttons), B4 | M |
-| C-27 | UV map toolbar at 300 px: **Fit shape** drops to a row of its own under Both eyes, Single eye and Other eye, and the disabled Other eye keeps full width beside them | `nogame-uv-dark-300.png` | [lib-segmented] hugging its choices, I4 | S |
-| C-28 | Settings › Tools: "Your own WolvenKit (optional)" is an empty sunken field with no button or placeholder. Every other location uses the Folder setting component with **Choose another folder…** | `nogame-settings-light-480.png` | [lib-folder-setting], H1 | S |
-| C-29 | "Extra mod folder (optional): Not chosen yet · Choose another folder…" says "another" when none is chosen | `nogame-settings-light-480.png` | [f-copy] | S |
-| C-30 | The Library's saved-collection row cuts off its "THIS DRAFT" chip at a normal panel height, and the date wraps to a second line ("9/29/2026, 12:45:10 PM", seconds included) | `21-after-check-save.png` | I3, I4 | S |
-| C-31 | The Report a problem dialog has an empty "Always in the report" header band with nothing under it before its first group, a 0 B "Your mod setup" group, and native checkboxes where the Studio's parts use switches | `nogame-dlg-report-a-problem.png` | B4, component-first | S |
-| C-32 | The Panels menu is taller than a 900 px window (about 25 rows plus hints) | `nogame-menu-panels.png` | [lib-menu] | M |
-| C-33 | The Rename layout popover, opened from the palette, appears under the 3D view's top-right corner, far from any layout control | `nogame-dlg-rename-layout.png` | H2, F5 | S |
+| C-26 | Character at 300 px: the Your V buttons wrap onto four rows, and an empty band sits under Reset all | `nogame-character-dark-300.png` | I4 (no more than two rows of buttons), B4 | M. **Fixed** (`bd83678`): Undo and Redo beside the V's source, Reset all with the V's own makeup (the guide's Creator options); three lines of buttons at 300 px, two at 480 px; no status band before a V can load |
+| C-27 | UV map toolbar at 300 px: **Fit shape** drops to a row of its own under Both eyes, Single eye and Other eye, and the disabled Other eye keeps full width beside them | `nogame-uv-dark-300.png` | [lib-segmented] hugging its choices, I4 | S. **Fixed** (`bd83678`): Fit shape shows its icon only in a narrow panel; one row |
+| C-28 | Settings › Tools: "Your own WolvenKit (optional)" is an empty sunken field with no button or placeholder. Every other location uses the Folder setting component with **Choose another folder…** | `nogame-settings-light-480.png` | [lib-folder-setting], H1 | S. **Fixed** (`bd83678`): Folder setting for a file (Choose a file…, Don't use a file, "Not chosen: XF Studio sets up its own") |
+| C-29 | "Extra mod folder (optional): Not chosen yet · Choose another folder…" says "another" when none is chosen | `nogame-settings-light-480.png` | [f-copy] | S. **Fixed** (`bd83678`): "Choose a folder…" until one is chosen, detected or found |
+| C-30 | The Library's saved-collection row cuts off its "THIS DRAFT" chip at a normal panel height, and the date wraps to a second line ("9/29/2026, 12:45:10 PM", seconds included) | `21-after-check-save.png` | I3, I4 | S. **Fixed** (`bd83678`): the library's Record list: the badge beside the name, the meta line breaking between facts, times to the minute |
+| C-31 | The Report a problem dialog has an empty "Always in the report" header band with nothing under it before its first group, a 0 B "Your mod setup" group, and native checkboxes where the Studio's parts use switches | `nogame-dlg-report-a-problem.png` | B4, component-first | S. **Fixed** (`bd83678`, `5400891`): chevroned groups and previews, empty groups not listed, the summary files after the parts, switches, the status line under the parts |
+| C-32 | The Panels menu is taller than a 900 px window (about 25 rows plus hints) | `nogame-menu-panels.png` | [lib-menu] | M. **Fixed** (`bd83678`, `5400891`): one row per entry (descriptions as tooltips), fits a 900 px window (1655 → 887 px) |
+| C-33 | The Rename layout popover, opened from the palette, appears under the 3D view's top-right corner, far from any layout control | `nogame-dlg-rename-layout.png` | H2, F5 | S. **Fixed** (`bd83678`): opens under the header's Layouts button |
 
 **Open ledger items this sweep confirmed, not repeated above:**
 - UI-139: empty "…" menus;
@@ -365,6 +365,8 @@ The **budgets** are from the [performance backlog](../backlog/performance.md) (s
     - the Report dialog's empty band;
     - the Panels menu height (group or scroll);
     - the popover anchoring. **M–L**
+
+    **Done** on `claude/track-d-layout` (`bd83678`, `5400891`): C-26 to C-33 as each row above says, with UI-139..162 and DESK-06 in the [ledger](code-health.md#fixed-in-claudetrack-d-layout). C-29's "a folder" wording came with the Folder setting change. DESK-05 (the Build line after Add, a state rule) stays with item 17's owner.
 20. **The status line fits one line** (C-14) and the ledger's UI-151 paths go. **S**
 
 ### Track E: beta framing (blocks: "Beta scope" row)

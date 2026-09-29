@@ -8,7 +8,7 @@
  * line), a split view between the tree and the inspector, block sections for a node and an object, property lists and code blocks.
  */
 import { chordsLabel, keyBinding, keyBindingById } from "../../../input-bindings";
-import { applyCapability, badge, blockSection, button, codeBlock, emptyState, helpTip, note, PageHeader, propertyList, rowWords, Segmented, SizeBar, SplitView, stack }
+import { applyCapability, badge, blockSection, button, codeBlock, emptyState, helpTip, note, PageHeader, propertyList, rowWords, Segmented, SizeBar, snapHeight, SplitView, stack }
   from "../../../studio-ui/components";
 import { h, setAttr, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
@@ -64,7 +64,8 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const tree = h("ul", { class: "save-tree", role: "tree", "aria-label": "Nodes of this save" });
   // Its height is the person's, with the bar under it: it fits its rows up to that (60 % of the window by default), kept across reloads.
   const treeBar = new SizeBar({ label: "Nodes of this save", target: tree, key: "save-explorer:tree", fit: true, step: SAVE_ROW, snap: { step: SAVE_ROW, offset: 2 },
-    minHeight: 4 * SAVE_ROW + 2, defaultHeight: () => Math.round((typeof innerHeight === "number" && innerHeight > 0 ? innerHeight : 900) * .6),
+    // The default, 60 % of the window, is snapped to whole rows like every drag, so it never ends partway through a row (UI-155).
+    minHeight: 4 * SAVE_ROW + 2, defaultHeight: () => snapHeight(Math.round((typeof innerHeight === "number" && innerHeight > 0 ? innerHeight : 900) * .6), { step: SAVE_ROW, offset: 2 }),
     valueText: (height, isDefault) => rowWords(height, SAVE_ROW, isDefault) });
   const nodePane = h("div", { class: "save-node", "aria-live": "off" });
   const objectPane = h("div", { class: "save-object" });

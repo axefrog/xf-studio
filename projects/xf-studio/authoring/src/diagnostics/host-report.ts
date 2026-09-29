@@ -323,7 +323,7 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
     { id: "involved-mods", group: "mods", label: "Mods involved", detail: mods.length ? `${mods.length} mods supplied or lost resources your V used: names, versions, download sources and file fingerprints.` : "No mods were involved in the recent window.",
       content: mods.map(({ archives, ...mod }) => ({ ...mod, archives: archives.map(({ path: _path, ...archive }) => archive) })) },
     // The whole mod list is personal and not needed to reproduce a problem (the involved mods are): unticked by default (DIAG-08).
-    { id: "mods", group: "mods", label: "Frameworks and full mod list", detail: "Installed frameworks and every mod you have, enabled or not, by name and version. Only tick this if you're asked for it.",
+    { id: "mods", group: "mods", label: "Frameworks and full mod list", detail: "Installed frameworks and every mod you have, enabled or not, by name and version. Only include this if you're asked for it.",
       content: { frameworks: frameworkRoutes(frameworkCheck, settings?.mo2ProfileId), mods: modList(settings) }, included: false },
     { id: "resolution", group: "resources", label: "Your V's latest preparation", detail: "The creator options, apps, meshes and materials your V used, and which mod supplied each.",
       content: resolved || prepared ? { resolved: resolved?.data ?? null, prepared: prepared?.data ?? null, at: (resolved ?? prepared)!.t } : null },

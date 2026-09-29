@@ -25,6 +25,9 @@ export function installReasonTips(doc: Document = document) {
     // Inside a modal dialog the tip joins it, so it shows above the dialog's backdrop.
     const host = control.closest("dialog") ?? doc.body;
     if (tip.parentElement !== host) host.append(tip);
+    // Measured at the window's left edge, where it has its whole width: measured where it last showed (near the right edge), it would
+    // come out narrower than it is and then run past the window at 300 px (UI-152).
+    tip.style.left = "0px"; tip.style.top = "0px";
     tip.hidden = false;
     const box = control.getBoundingClientRect(), own = tip.getBoundingClientRect(), margin = 6;
     const below = box.bottom + margin + own.height <= innerHeight - margin;

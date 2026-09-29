@@ -5,13 +5,15 @@ import type { Capability } from "../menu";
 
 /**
  * Folder setting (style guide "Folder setting"): one folder the app needs (the game, a Mod Organizer 2 instance, the saves folder),
- * with what it uses now and the one or two ways to change it.
+ * with what it uses now and the one or two ways to change it. `kind: "file"` is the same setting for one file (your own WolvenKit):
+ * every word says "file" instead.
  *
  * - **What it uses:** a line under the label, "Using: <folder>" once one is chosen, else "Detected: <folder>" when the app found one
  *   (and uses it), else "Not chosen yet". The owner passes display paths (placeholder-style, e.g. `%USERPROFILE%\Saved Games\…`); the
  *   component shows what it is given and never logs a path.
  * - **Choose another folder…** opens the host's native folder picker where there is one (`canPick`, behind its capability); otherwise
- *   it opens a text box in place, with inline guidance, committed on Enter or Save and cancelled with Escape.
+ *   it opens a text box in place, with inline guidance, committed on Enter or Save and cancelled with Escape. While there is nothing
+ *   to choose instead of (none chosen, detected or found) it says **Choose a folder…** (C-29).
  * - **Use the detected folder** returns to what the app found, shown only when a detected folder differs from the chosen one.
  * - **Several found folders** (`found`, e.g. the game installed through Steam and GOG): each is shown as a choice, all at once (show the
  *   options, don't hide them), with where it was found in plain words ("Steam, Mod Organizer 2"); the one in use is pressed, and pressing
@@ -27,6 +29,10 @@ export type FolderOutcome = { ok: true } | { ok: false; message: string; cancell
 export type FolderChoice = { path: string; source?: string };
 export type FolderSettingOptions = {
   label: string; help?: HelpText;
+  /** A folder (the default) or one file: the words follow ("Choose a file…", "Type the file first"). */
+  kind?: "folder" | "file";
+  /** The line while nothing is chosen or detected (default "Not chosen yet"): what happens without a choice, where that matters. */
+  unset?: string;
   /** The text box's placeholder: an example in the person's terms. */
   placeholder?: string;
   /** Guidance under the text box while it is open (what folder to give). */
@@ -65,22 +71,24 @@ export class FolderSetting {
   private readonly clear: HTMLButtonElement;
   private readonly save: HTMLButtonElement;
   private readonly choices: HTMLElement;
+  private readonly noun: string;
   private choiceButtons: { path: string; button: HTMLButtonElement }[] = [];
   private choiceKey = "";
   private state: FolderSettingState = { chosen: null };
   private busy = false;
   constructor(private readonly options: FolderSettingOptions) {
     const id = uid("folder");
+    this.noun = options.kind ?? "folder";
     this.input = h("input", { id, class: "field", type: "text", spellcheck: "false", autocomplete: "off", placeholder: options.placeholder,
-      "aria-label": `${options.label}: type the folder`, "aria-describedby": `${id}-note` });
+      "aria-label": `${options.label}: type the ${this.noun}`, "aria-describedby": `${id}-note` });
     this.note.id = `${id}-note`;
     this.save = button({ label: "Save", small: true, onClick: () => void this.commit() });
     const cancel = button({ label: "Cancel", small: true, variant: "quiet", onClick: () => this.closeTyped() });
     this.typed = h("div", { class: "folder-typed", hidden: true },
       h("div", { class: "row gap-s" }, this.input, this.save, cancel), options.guidance ? h("p", { class: "note", text: options.guidance }) : null);
-    this.choose = button({ label: "Choose another folder…", icon: "folder", small: true, onClick: () => void this.chooseAnother() });
-    this.useDetected = button({ label: "Use the detected folder", icon: "reset", small: true, variant: "quiet", onClick: () => void this.run(options.onUseDetected) });
-    this.clear = button({ label: "Don't use a folder", icon: "close", small: true, variant: "quiet", onClick: () => void this.run(options.onClear) });
+    this.choose = button({ label: `Choose a ${this.noun}…`, icon: "folder", small: true, onClick: () => void this.chooseAnother() });
+    this.useDetected = button({ label: `Use the detected ${this.noun}`, icon: "reset", small: true, variant: "quiet", onClick: () => void this.run(options.onUseDetected) });
+    this.clear = button({ label: `Don't use a ${this.noun}`, icon: "close", small: true, variant: "quiet", onClick: () => void this.run(options.onClear) });
     this.choices = h("div", { class: "folder-choices", role: "group", "aria-label": options.label, hidden: true });
     this.element = h("div", { class: "control folder-setting" },
       h("div", { class: "control-line" }, h("span", { class: "control-label", text: options.label }), options.help !== undefined ? helpTip(options.label, options.help) : null),
@@ -102,7 +110,7 @@ export class FolderSetting {
       return outcome.ok;
     } catch {
       // Never an unhandled rejection or a silent failure (UI-124): say so on the note line, and keep the typed folder to try again.
-      this.refuse("Couldn't change the folder. Try again.");
+      this.refuse(`Couldn't change the ${this.noun}. Try again.`);
       return false;
     } finally { this.busy = false; this.paint(); }
   }
@@ -115,7 +123,7 @@ export class FolderSetting {
   }
   private async commit() {
     const path = this.input.value.trim();
-    if (!path) { this.refuse("Type the folder first, or choose Cancel."); return; }
+    if (!path) { this.refuse(`Type the ${this.noun} first, or choose Cancel.`); return; }
     if (await this.run(() => this.options.onChoose(path))) this.closeTyped();
   }
   private closeTyped() { this.typed.hidden = true; this.refuse(""); if (this.element.contains(document.activeElement)) this.choose.focus(); }
@@ -146,7 +154,10 @@ export class FolderSetting {
     this.choices.hidden = !listed.length;
     for (const item of this.choiceButtons) setAttr(item.button, "aria-pressed", String(sameFolder(item.path, chosen)));
     // With the choices shown, the pressed one says what is in use; the line speaks only when nothing is chosen yet.
-    setText(this.using, listed.length ? (chosen ? "" : "Not chosen yet") : chosen ? `Using: ${chosen}` : detected ? `Detected: ${detected}` : "Not chosen yet");
+    const unset = this.options.unset ?? "Not chosen yet";
+    setText(this.using, listed.length ? (chosen ? "" : unset) : chosen ? `Using: ${chosen}` : detected ? `Detected: ${detected}` : unset);
+    // "another" only when there is one to choose instead of (C-29).
+    setText(this.choose.querySelector("span")!, `Choose ${chosen || detected || listed.length ? "another" : "a"} ${this.noun}…`);
     this.using.hidden = !this.using.textContent;
     this.using.classList.toggle("muted", !chosen && !detected);
     const blocked = disabled ? { available: false, reason: reason ?? "Not available right now." } : this.busy ? { available: false, reason: "Saving…" } : undefined;

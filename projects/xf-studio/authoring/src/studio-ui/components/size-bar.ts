@@ -44,6 +44,8 @@ export type SizeBarOptions = {
   snap?: { step: number; offset?: number };
   /** Fit the region to its content up to the height (`max-height`, a list that may hold few rows) instead of a fixed height. */
   fit?: boolean;
+  /** What the bar's value says per px of height (default 1): the Direction dial's bar reports its drawing's width, the height times its aspect. */
+  scale?: number;
   /** The height in words for assistive technology (a list: "6 rows, default"); default "<n> pixels tall". */
   valueText?(height: number, isDefault: boolean): string;
   /** Lay out the region at the bar's new `height` (default: set `target`'s height). */
@@ -140,10 +142,10 @@ export class SizeBar {
   private get panel() { return Math.max(this.minHeight, panelLimit(this.element, (this.element.offsetHeight || 12) + PANEL_RESERVE)); }
   /** Lay the region out at `height` and say it on the bar (the owner calls this after its content changes, when it passes `apply`). */
   refresh() {
-    const shown = this.height, max = Math.min(this.maxHeight, this.panel);
-    setAttr(this.element, "aria-valuemin", String(this.minHeight));
-    setAttr(this.element, "aria-valuemax", String(Number.isFinite(max) ? Math.max(shown, Math.round(max)) : shown));
-    setAttr(this.element, "aria-valuenow", String(shown));
+    const shown = this.height, max = Math.min(this.maxHeight, this.panel), k = this.options.scale ?? 1, say = (n: number) => String(Math.round(n * k));
+    setAttr(this.element, "aria-valuemin", say(this.minHeight));
+    setAttr(this.element, "aria-valuemax", say(Number.isFinite(max) ? Math.max(shown, Math.round(max)) : shown));
+    setAttr(this.element, "aria-valuenow", say(shown));
     const isDefault = this.chosenHeight === undefined;
     setAttr(this.element, "aria-valuetext", this.options.valueText ? this.options.valueText(shown, isDefault) : `${shown} pixels tall${isDefault ? ", default" : ""}`);
   }
@@ -167,6 +169,12 @@ export class SizeBar {
     if (changed) this.apply();
     if (final && this.options.key && chosen !== from.chosen) viewState().setSize(this.options.key, chosen);
     if (changed || final) this.options.onResize?.(chosen, final);
+  }
+  /** Set the chosen height from the owner's own memory (a kept preference; `undefined`: the default), without telling it back. */
+  setChosen(height: number | undefined) {
+    if (height === this.chosenHeight) return;
+    this.chosenHeight = height;
+    this.apply();
   }
   /** Back to the default height, forgetting the chosen one. */
   reset() {
