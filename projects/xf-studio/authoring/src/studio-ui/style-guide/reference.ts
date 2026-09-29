@@ -24,6 +24,8 @@ export function reference(panels: readonly PanelInfo[]) {
   const keys = bindingReference();
   const terms: [string, string][] = [
     ["Preset", "One complete look; one choice in the single in-game eye-makeup selector (plus Off)."],
+    ["3D view", "Where your V is shown in 3D, and what XF Studio prepares from your game files to show it: never “3D preview”, “head view” or “the preview”. Preview quality and Preview only keep the word, which means the 3D view."],
+    ["Settings › Game", "Your game folder, mod manager and WolvenKit: never “Game & tools”, “Local setup” or “Build setup”."],
     ["Layer", "One shape with colour, opacity and finish inside a preset. Top of the list = front."],
     ["Finish", "Matte, Satin, Metallic, Shimmer, Glitter, Glossy, Colour-shifting: one name each, everywhere. Other names (foil, pearl, wet look, duochrome) only in tooltips and search. Satin is shown for the internal “regular”."],
     ["Draft", "The working collection, autosaved on this computer."],

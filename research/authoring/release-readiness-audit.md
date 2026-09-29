@@ -131,41 +131,41 @@ These are preview only by nature: they let the user judge a look on a V. They st
 
 | # | Inconsistency | Seen in | Rule | Size |
 |---|---|---|---|---|
-| C-1 | The Colour-shifting finish has three names: "Colour-shift" (tile), "Colour-shifting" (palette, Mod package list, Help) and "iridescent" (internal). AGENTS.md names it **Colour-shifting** | `nogame-finish-*`, `nogame-package-*`, `10-palette-light.png` | [f-copy], [r-terms] one name per thing | S |
-| C-2 | Finish names differ between places: tiles say "Metallic", "Shimmer" and "Glossy"; the palette and Mod package say "Metallic / foil", "Shimmer / pearl" and "Glossy / wet look". [c-finish] puts synonyms in the tooltip only | palette, `nogame-package-dark-480.png` | [c-finish], G1 | S |
-| C-3 | The export-status group heading is "Can be built" in the picker, "Exports" in the style guide's finish chooser specimen, and a "Can be built" badge in Mod package. The guide or the app is stale | `nogame-finish-light-300.png`, `style-guide/components.ts` `finishGroups` | [c-finish] | S (guide: UI component track) |
-| C-4 | "Experimental" is a badge in Mod package but not in [c-chips]'s fixed vocabulary (Working, Preview only, Can be built, Current, Stale, Blocked). [lib-stage-tag] does call it "a finish's export status". The guide contradicts itself | `nogame-package-dark-480.png` | C3, [c-chips] | S (guide) |
-| C-5 | The library state chip says "Unsaved changes" and "Saved". [c-chips]' specimen vocabulary is "Saved", "Not saved yet" and "Newer version saved" | header, Presets | [c-chips] | S |
-| C-6 | Settings has "Game" in the panel, "Game & tools (Settings › Game)" in the palette, and "GAME & TOOLS" in Mod package | `nogame-settings-*`, `nogame-package-*` | [f-copy] use the exact names on the controls | S |
-| C-7 | The 3D view is called "3D view" (panel), "the 3D head view" (a Help topic), "the head view" (a tour) and "the preview" ("Your V in the preview"). [lib-stage-tag] reserves "preview" for the 3D view, so the Help wording mixes both | `nogame-help-light-480.png` | [f-copy] | S |
-| C-8 | Parallel objects use different verbs:<br>• layers "Bring forward"/"Send backward", presets "Move up"/"Move down";<br>• layers "Undo with Ctrl+Z", presets "Restorable from the Presets panel";<br>• "Recover previous collection draft" (Collection menu, palette) and "Recover previous draft" (Library) | `nogame-menu-layer-actions.png`, `nogame-menu-preset-more.png` | [f-copy], [r-terms] one name per thing | S |
-| C-9 | The palette mixes "Go to X" and "Open X" for panels, and "Help: tours, answers and shortcuts" with "Help" | `10-palette-light.png` | G1 | S |
-| C-10 | Point indices read "Point 1 / 4" in Shape and "Point 1 of 4" in Pigment & edge | `m/inspectors-light-300.png` | [f-copy] | S |
-| C-11 | Help says Settings is "the gear button at the top right" (two topics, and the style guide's Settings entry), but the header icon is `settings`, drawn as sliders | `help-topics.ts`, `icons.ts:79` | I2, [f-copy] naming a control that doesn't exist | S |
+| C-1 | The Colour-shifting finish has three names: "Colour-shift" (tile), "Colour-shifting" (palette, Mod package list, Help) and "iridescent" (internal). AGENTS.md names it **Colour-shifting** | `nogame-finish-*`, `nogame-package-*`, `10-palette-light.png` | [f-copy], [r-terms] one name per thing | S. **Fixed** (`a6cf806`) |
+| C-2 | Finish names differ between places: tiles say "Metallic", "Shimmer" and "Glossy"; the palette and Mod package say "Metallic / foil", "Shimmer / pearl" and "Glossy / wet look". [c-finish] puts synonyms in the tooltip only | palette, `nogame-package-dark-480.png` | [c-finish], G1 | S. **Fixed** (`a6cf806`) |
+| C-3 | The export-status group heading is "Can be built" in the picker, "Exports" in the style guide's finish chooser specimen, and a "Can be built" badge in Mod package. The guide or the app is stale | `nogame-finish-light-300.png`, `style-guide/components.ts` `finishGroups` | [c-finish] | S (guide: UI component track). **Fixed** (`a6cf806`) |
+| C-4 | "Experimental" is a badge in Mod package but not in [c-chips]'s fixed vocabulary (Working, Preview only, Can be built, Current, Stale, Blocked). [lib-stage-tag] does call it "a finish's export status". The guide contradicts itself | `nogame-package-dark-480.png` | C3, [c-chips] | S (guide). **Fixed** (`a6cf806`) |
+| C-5 | The library state chip says "Unsaved changes" and "Saved". [c-chips]' specimen vocabulary is "Saved", "Not saved yet" and "Newer version saved" | header, Presets | [c-chips] | S. **Fixed** (`a6cf806`) |
+| C-6 | Settings has "Game" in the panel, "Game & tools (Settings › Game)" in the palette, and "GAME & TOOLS" in Mod package | `nogame-settings-*`, `nogame-package-*` | [f-copy] use the exact names on the controls | S. **Fixed** (`a6cf806`) |
+| C-7 | The 3D view is called "3D view" (panel), "the 3D head view" (a Help topic), "the head view" (a tour) and "the preview" ("Your V in the preview"). [lib-stage-tag] reserves "preview" for the 3D view, so the Help wording mixes both | `nogame-help-light-480.png` | [f-copy] | S. **Fixed** (`a6cf806`) |
+| C-8 | Parallel objects use different verbs:<br>• layers "Bring forward"/"Send backward", presets "Move up"/"Move down";<br>• layers "Undo with Ctrl+Z", presets "Restorable from the Presets panel";<br>• "Recover previous collection draft" (Collection menu, palette) and "Recover previous draft" (Library) | `nogame-menu-layer-actions.png`, `nogame-menu-preset-more.png` | [f-copy], [r-terms] one name per thing | S. **Fixed** (`a6cf806`) |
+| C-9 | The palette mixes "Go to X" and "Open X" for panels, and "Help: tours, answers and shortcuts" with "Help" | `10-palette-light.png` | G1 | S. **Fixed** (`a6cf806`) |
+| C-10 | Point indices read "Point 1 / 4" in Shape and "Point 1 of 4" in Pigment & edge | `m/inspectors-light-300.png` | [f-copy] | S. **Fixed** (`a6cf806`) |
+| C-11 | Help says Settings is "the gear button at the top right" (two topics, and the style guide's Settings entry), but the header icon is `settings`, drawn as sliders | `help-topics.ts`, `icons.ts:79` | I2, [f-copy] naming a control that doesn't exist | S. **Fixed** (`a6cf806`) |
 
 ### Copy: developer words, raw units, length
 
 | # | Inconsistency | Seen in | Rule | Size |
 |---|---|---|---|---|
-| C-12 | Raw units in the default path: "Point blend 0.05% UV", "Edge softness 0.60% UV" | `nogame-edge-*` | G4 ("no raw units such as '% UV' outside research tools") | M (needs a unit the person can judge: mm on the face, or 0–100) |
-| C-13 | Developer and jargon words shown by default:<br>• "WolvenKit CLI" (Settings, Mod package);<br>• "Rebuild preview";<br>• "MiB";<br>• "Refresh" (library);<br>• "No active exportable layers remain" (Check);<br>• "preset(s)" (status line);<br>• "1 entries" (Report a problem);<br>• byte sizes such as "1006 B" and "357 B" on every report part | `nogame-package-*`, `nogame-quality-*`, `nogame-dlg-report-a-problem.png`, `21-after-check-save.png` | G4, [f-copy] | S each |
-| C-14 | The Check status line runs past one line and ends in an ellipsis ("…whether the mod can also fi…") | `21-after-check-save.png` status bar | G1 (a status line is one line, about 70 characters), I3 | S |
+| C-12 | Raw units in the default path: "Point blend 0.05% UV", "Edge softness 0.60% UV" | `nogame-edge-*` | G4 ("no raw units such as '% UV' outside research tools") | M (needs a unit the person can judge: mm on the face, or 0–100). **Fixed** (`a6cf806`) |
+| C-13 | Developer and jargon words shown by default:<br>• "WolvenKit CLI" (Settings, Mod package);<br>• "Rebuild preview";<br>• "MiB";<br>• "Refresh" (library);<br>• "No active exportable layers remain" (Check);<br>• "preset(s)" (status line);<br>• "1 entries" (Report a problem);<br>• byte sizes such as "1006 B" and "357 B" on every report part | `nogame-package-*`, `nogame-quality-*`, `nogame-dlg-report-a-problem.png`, `21-after-check-save.png` | G4, [f-copy] | S each. **Fixed** (`a6cf806`) |
+| C-14 | The Check status line runs past one line and ends in an ellipsis ("…whether the mod can also fi…") | `21-after-check-save.png` status bar | G1 (a status line is one line, about 70 characters), I3 | S. **Fixed** (`a6cf806`) |
 | C-15 | Stale product text:<br>• the tour "What's new in 0.1.0-alpha.1" (alpha.2 is published; 1.0 needs a current one);<br>• Help › "What's not in this version yet" says the rebuilt Shimmer "hasn't been tried in the game yet", but session 6 tried it and it failed | `nogame-help-light-480.png`, `tours.ts`, `help-topics.ts` | [f-copy] honesty; the beta framing | S. **Fixed** (`97e991a`) |
 | C-16 | The WolvenKit notice says "XF Studio can download it for you from the 3D preview card". It is shown in Settings › Game and Mod package while no such card is visible (the card appears only after the game folder is set) | `nogame-settings-light-480.png` | H4 (the one next step, with its button) | S. **Fixed** (`353d967`) |
-| C-17 | The same sentence, "The 3D preview needs your Cyberpunk 2077 game folder", is repeated as a reason in six or more places at once:<br>• the 3D view;<br>• Character: Your V line and Eyes;<br>• Motion;<br>• the Preview quality line;<br>• about 25 palette reasons | `m/char-light-dark-300.png` | G3 (one place per state), B4 (a shared reason says it once) | M |
+| C-17 | The same sentence, "The 3D preview needs your Cyberpunk 2077 game folder", is repeated as a reason in six or more places at once:<br>• the 3D view;<br>• Character: Your V line and Eyes;<br>• Motion;<br>• the Preview quality line;<br>• about 25 palette reasons | `m/char-light-dark-300.png` | G3 (one place per state), B4 (a shared reason says it once) | M. **Fixed** (`a6cf806`) |
 
 ### States and badges
 
 | # | Inconsistency | Seen in | Rule | Size |
 |---|---|---|---|---|
-| C-18 | One state in several places at once:<br>• "Unsaved changes" in the header and in Presets;<br>• "UV map 1K · ready" in the 3D view and the status bar;<br>• the V-details failure as a viewport note, a toast and the status line together, where the toast also covers the finish panel's note | `01-first-run-dark-1440.png`, `40-load3d-04.png` | G3 | M |
-| C-19 | Help's tours each carry a "NOT STARTED" badge on every row, which isn't a vocabulary word. The Panels menu starts every row with "Open ·" | `nogame-help-light-480.png`, `nogame-menu-panels.png` | C3 (nothing repeats under every row) | S |
+| C-18 | One state in several places at once:<br>• "Unsaved changes" in the header and in Presets;<br>• "UV map 1K · ready" in the 3D view and the status bar;<br>• the V-details failure as a viewport note, a toast and the status line together, where the toast also covers the finish panel's note | `01-first-run-dark-1440.png`, `40-load3d-04.png` | G3 | M. **Fixed** (`a6cf806`) |
+| C-19 | Help's tours each carry a "NOT STARTED" badge on every row, which isn't a vocabulary word. The Panels menu starts every row with "Open ·" | `nogame-help-light-480.png`, `nogame-menu-panels.png` | C3 (nothing repeats under every row) | S. **Fixed** (`a6cf806`) |
 | C-20 | Camera & light › Light has New setup, Rename…, Reset and Delete, but no visible current setup to act on (no game) | `m/char-light-dark-300.png` | H6 (state visible where it applies) | S (re-check with the game) |
-| C-21 | Unavailable menu entries give their reason in the warning colour ("This layer is already at the front." in orange). The Layouts precedent and UI-145 keep a reason that isn't a problem muted | `nogame-menu-layer-actions.png` | [lib-menu], UI-145 | S |
-| C-22 | "Remove layer" is in the danger colour although Undo reverses it. [c-buttons] keeps danger for "destructive where Undo is not enough" | `nogame-menu-layer-actions.png` | [c-buttons], H5 | S |
-| C-23 | Preview quality's Hair look shows "Crisp" as the readout and again as the slider's end label (a value shown twice) | `nogame-quality-dark-300.png` | C1 | S |
-| C-24 | Pigment & edge has a Mottle heading over a switch also labelled "Mottle" | `nogame-edge-light-300.png` | C2 | S |
-| C-25 | A primary Build button that is unavailable still reads as a yellow primary (dimmed yellow) | `nogame-package-dark-480.png` | [c-buttons], F4 | S |
+| C-21 | Unavailable menu entries give their reason in the warning colour ("This layer is already at the front." in orange). The Layouts precedent and UI-145 keep a reason that isn't a problem muted | `nogame-menu-layer-actions.png` | [lib-menu], UI-145 | S. **Fixed** (`a6cf806`) |
+| C-22 | "Remove layer" is in the danger colour although Undo reverses it. [c-buttons] keeps danger for "destructive where Undo is not enough" | `nogame-menu-layer-actions.png` | [c-buttons], H5 | S. **Fixed** (`a6cf806`) |
+| C-23 | Preview quality's Hair look shows "Crisp" as the readout and again as the slider's end label (a value shown twice) | `nogame-quality-dark-300.png` | C1 | S. **Fixed** (`a6cf806`) |
+| C-24 | Pigment & edge has a Mottle heading over a switch also labelled "Mottle" | `nogame-edge-light-300.png` | C2 | S. **Fixed** (`a6cf806`) |
+| C-25 | A primary Build button that is unavailable still reads as a yellow primary (dimmed yellow) | `nogame-package-dark-480.png` | [c-buttons], F4 | S. **Fixed** (`a6cf806`) |
 
 ### Layout and spacing
 
@@ -349,14 +349,14 @@ The **budgets** are from the [performance backlog](../backlog/performance.md) (s
     - "Go to" versus "Open";
     - Help's "gear".
 
-    One PR with the style guide updated by the UI component track (C-3, C-4 and C-5 are guide corrections). **M**
-16. **Units and developer words (C-12, C-13):** replace "% UV" with a person-facing unit, and "MiB", "CLI", "Refresh", "exportable", "preset(s)", "1 entries" and the byte sizes with plain words. **M**
+    One PR with the style guide updated by the UI component track (C-3, C-4 and C-5 are guide corrections). **M**. **Done** (`a6cf806`): one name per finish, synonyms in tooltips and palette search; "3D view" throughout; Game and "Game folder and mod manager (Settings › Game)"; Move up and Move down for layers; Go to for every panel; the guide's Can be built, Experimental and Unsaved changes
+16. **Units and developer words (C-12, C-13):** replace "% UV" with a person-facing unit, and "MiB", "CLI", "Refresh", "exportable", "preset(s)", "1 entries" and the byte sizes with plain words. **M**. **Done** (`a6cf806`): lengths on the face read 0–100 between the control's ends (research-only Glitter flake sizes keep "% UV")
 17. **One place per state (C-17, C-18, C-19):**
     - say "needs your game folder" once per panel;
     - no duplicate chips or badges;
     - failure toasts don't repeat a viewport note;
-    - no per-row "Not started" or "Open ·". **M**
-18. **States and colours (C-21 to C-25):** muted reasons, danger only where Undo can't help, no duplicate readout, no repeated Mottle label, and an unavailable primary that doesn't read as primary. **S–M**
+    - no per-row "Not started" or "Open ·". **M**. **Done** (`a6cf806`): the readiness badge stays in the status bar, and the 3D view shows its own only while updating or failed
+18. **States and colours (C-21 to C-25):** muted reasons, danger only where Undo can't help, no duplicate readout, no repeated Mottle label, and an unavailable primary that doesn't read as primary. **S–M**. **Done** (`a6cf806`)
 19. **Layout (C-26 to C-33),** plus the open ledger items UI-139..158, DESK-05 and DESK-06:
     - Character's button rows at 300 px;
     - the Settings Tools field → Folder setting;
@@ -364,7 +364,7 @@ The **budgets** are from the [performance backlog](../backlog/performance.md) (s
     - the Report dialog's empty band;
     - the Panels menu height (group or scroll);
     - the popover anchoring. **M–L**
-20. **The status line fits one line** (C-14) and the ledger's UI-151 paths go. **S**
+20. **The status line fits one line** (C-14) and the ledger's UI-151 paths go. **S**. **Done** (`a6cf806`): Check and Build say one line of 70 characters or fewer; the result card holds the rest
 
 ### Track E: beta framing (blocks: "Beta scope" row)
 
