@@ -1076,6 +1076,9 @@ test("slider relabel (UI-157): one value renamed by a mode says its new name eve
   const plain = new Slider({ label: "Edge softness", min: 0, max: 1, step: .1, format: String, transaction: t });
   plain.relabel("Selected point softness");
   expect((plain.element as unknown as LightElement).querySelector(".control-label-text")!.textContent).toBe("Selected point softness");
+  // The same signature on both: a short visible label with a fuller accessible name.
+  plain.relabel("Softness", "Selected point softness");
+  expect(plain.input.getAttribute("aria-label")).toBe("Selected point softness");
 });
 
 test("menu capability (UI-139): a menu button whose menu holds nothing to act on is unavailable with its reason", async () => {

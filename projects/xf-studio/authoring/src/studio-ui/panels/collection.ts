@@ -273,7 +273,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
         savedSignature = signature;
         saved.update(library.summaries.map(item => {
           const current = item.id === draft?.id;
-          const open = button({ label: current ? "Reopen" : "Open", small: true, variant: current ? "quiet" : undefined,
+          // The row open now says so with its badge and background; its button has the same weight as every other row's Open.
+          const open = button({ label: current ? "Reopen" : "Open", small: true,
             onClick: event => confirmReplace(rt, event.currentTarget as Element, `Open “${item.name}”`,
               () => void rt.request({ kind: "open", id: item.id }, { actions: [undoReplaceAction(rt, "Undo open")] })) });
           applyCapability(open, port.authoring.requestCapability({ kind: "open", id: item.id }));

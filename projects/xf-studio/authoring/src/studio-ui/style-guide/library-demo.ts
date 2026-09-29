@@ -258,7 +258,7 @@ const MOUNTS: Record<string, Mount> = {
     const at = new Date(2026, 8, 29, 18, 2, 49);
     saved.update([
       { id: "night", name: "Night market set", meta: ["4 presets", "version 5", recordTime(at)], badge: { text: "This draft", tone: "info" }, current: true,
-        action: button({ label: "Reopen", small: true, variant: "quiet", onClick: () => {} }) },
+        action: button({ label: "Reopen", small: true, onClick: () => {} }) },
       { id: "day", name: "Day looks for the badlands convoy", meta: ["2 presets", "version 1", recordTime(at.getTime() - 86_400_000)],
         action: button({ label: "Open", small: true, onClick: () => {} }) }]);
     const drafts = new RecordList({ label: "Recent drafts" });

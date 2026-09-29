@@ -34,6 +34,8 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     placeholder: "What were you doing when it happened, and what did you expect?" });
   description.addEventListener("input", () => void dispatch({ kind: "diagnostics.setDescription", text: description.value }));
   const status = h("p", { class: "report-status", role: "status", "aria-live": "polite" });
+  // One line: a longer message ends with an ellipsis and says the whole of itself as the tooltip (I3).
+  const say = (text: string) => { setText(status, text); status.title = text; };
   const groups = h("div", { class: "report-groups" });
   const total = h("p", { class: "report-total" });
   const retry = button({ label: "Try again", icon: "refresh", small: true, onClick: prepare });
@@ -46,12 +48,12 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   // the parts above it, comes after them.
   const summaryFiles = h("details", { class: "report-group report-files" },
     h("summary", {}, chevron(), h("span", { class: "report-group-title", text: "Always in the report" }), h("span", { class: "report-size", text: "README.md · report.json" })),
-    h("p", { class: "muted small", text: "A short summary and a list of what the file holds, made from the parts you leave ticked. Your folders are replaced when it's saved." }),
+    h("p", { class: "muted small", text: "A short summary and a list of what the file holds, made from the parts you include. Your folders are replaced when it's saved." }),
     h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the summary (README.md)"), readme),
     h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the list (report.json)"), index));
   summaryFiles.hidden = true;
   const mode = new Toggle({ label: "Diagnostic mode", help: MODE_HELP,
-    onChange: checked => void dispatch({ kind: "diagnostics.setMode", mode: checked ? "deep" : "normal" }).then(result => setText(status, result.message)) });
+    onChange: checked => void dispatch({ kind: "diagnostics.setMode", mode: checked ? "deep" : "normal" }).then(result => say(result.message)) });
   const save = button({ label: "Save report…", icon: "save", variant: "primary", onClick: () => void run({ kind: "diagnostics.saveReport" }) });
   const copy = button({ label: "Copy summary", icon: "duplicate", onClick: () => void run({ kind: "diagnostics.copySummary" }) });
   const issue = button({ label: "Open a GitHub issue", icon: "export", onClick: () => void run({ kind: "diagnostics.openIssue" }) });
@@ -64,15 +66,15 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
         "Personal folder names and e-mail addresses are already replaced with placeholders." }),
       ref ? h("p", { class: "report-ref" }, "Reference ", h("strong", { text: ref })) : null,
       h("label", { class: "report-label", for: descriptionId, text: "What were you doing?" }), description,
-      groups, summaryFiles,
-      // What the last step did (or that the report is being prepared) says so under everything it is about, beside nothing but the
-      // report's size: no empty band above the parts, and a message appearing moves nothing above it (C-31).
-      h("div", { class: "report-state" }, status, retry, again), total, mode.element),
+      groups, summaryFiles, total, mode.element),
+    // What the last step did (or that the report is being prepared), with Try again or Prepare again beside it: one fixed line right
+    // above the actions it answers, outside the scrolling parts, so a message appearing moves nothing (C-31, UI gate fix 2).
+    h("div", { class: "report-state" }, status, retry, again),
     h("div", { class: "report-foot" }, save, copy, issue, h("span", { class: "grow" }), closeButton));
 
   async function run(action: DiagnosticsAction) {
     const result = await dispatch(action);
-    setText(status, result.message);
+    say(result.message);
   }
 
   let shape = "", lastSaid = "";
@@ -105,7 +107,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     // Each part is a switch, as every include-or-not choice in the Studio is (the library's Switch; C-31), its reason on its note line.
     const box: Toggle = new Toggle({ label: item.label, onChange: async included => {
       const result = await dispatch({ kind: "diagnostics.setIncluded", item: item.id, included });
-      if (!result.ok) { box.update(!included); setText(status, result.message); }
+      if (!result.ok) { box.update(!included); say(result.message); }
     } });
     const size = h("span", { class: "report-size" }), reason = h("small", { class: "report-reason" });
     rows.set(item.id, { box, size, reason });
@@ -114,7 +116,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     const all = item.partial ? button({ label: "Show all of it", small: true, variant: "quiet", onClick: async () => {
       setDisabled(all!, true);
       const full = await port.diagnostics.fullText(item.id);
-      if (full === null) { setDisabled(all!, false); setText(status, "XF Studio couldn't show all of it. Try again in a moment."); return; }
+      if (full === null) { setDisabled(all!, false); say("XF Studio couldn't show all of it. Try again in a moment."); return; }
       setText(text, full); all!.remove();
     } }) : null;
     return h("li", { class: "report-item" },
@@ -137,7 +139,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
     // The status follows the report's own steps; a message from the mode switch stays until the report says something new.
     const said = report.phase === "preparing" ? report.message ?? "Preparing the report…" : report.busy === "saving" ? "Making the report file…"
       : report.busy === "copying" ? "Copying…" : report.busy === "opening" ? "Opening the issue page…" : report.message ?? "";
-    if (said !== lastSaid) { lastSaid = said; setText(status, said); }
+    if (said !== lastSaid) { lastSaid = said; say(said); }
     for (const group of report.groups) {
       const groupSize = groupSizes.get(group.id);
       if (groupSize) setText(groupSize, group.size);

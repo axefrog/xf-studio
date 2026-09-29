@@ -122,10 +122,10 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
     const hostIncluded = manifest.items.filter(item => include.has(item.id));
     // A mod's own files go in only when the person confirmed they may share them; the page asks, and the host checks (DIAG-09).
     if (hostIncluded.some(item => item.modFiles) && body.sharingConfirmed !== true)
-      return refuse(409, "sharing_not_confirmed", "Confirm that you may share these mods' files before including them, or untick them.");
+      return refuse(409, "sharing_not_confirmed", "Confirm that you may share these mods' files before including them, or turn them off.");
     const included: ReportItemView[] = [...hostIncluded, ...pageItems.filter(item => include.has(item.id)).map(item => item.view)];
     const total = included.reduce((sum, item) => sum + item.bytes, 0);
-    if (total > REPORT_LIMIT) return refuse(413, "report_too_large", `The ticked items add up to more than ${Math.round(REPORT_LIMIT / 1024 / 1024)} MB. Untick something large, then save again.`);
+    if (total > REPORT_LIMIT) return refuse(413, "report_too_large", `The parts you included add up to more than ${Math.round(REPORT_LIMIT / 1024 / 1024)} MB. Turn something large off, then save again.`);
     // The summary and the index come from the ticked items only (DIAG-01), by the same functions the review previews them with.
     const input = { manifest, description, page: pageFacts, included, offered: [...manifest.items, ...pageItems.map(item => item.view)] };
     const entries: ZipEntry[] = [
@@ -138,7 +138,7 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
       for (const file of files.get(item.id) ?? []) {
         let bytes: Uint8Array;
         try { bytes = readFileSync(file.path); }
-        catch { return refuse(409, "file_unreadable", `“${file.name}” couldn't be read any more. Untick it, or prepare the report again.`); }
+        catch { return refuse(409, "file_unreadable", `“${file.name}” couldn't be read any more. Turn it off, or prepare the report again.`); }
         entries.push({ name: modFileEntryName(file.mod, file.name, redact), data: bytes });
       }
     }

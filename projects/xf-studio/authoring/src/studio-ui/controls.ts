@@ -110,9 +110,11 @@ export class Slider {
    * A new name for the same value (UI-157): one slider whose meaning follows a mode ("Sparkle density" for Shimmer, "Flake density" for
    * Glitter; "Edge softness" or "Selected point softness") says it in its label and help tip. Owners never rewrite a label through the DOM.
    */
-  relabel(label: string) {
+  relabel(label: string, accessibleLabel?: string) {
+    const name = accessibleLabel ?? label;
     setText(this.labelText, label);
-    if (this.tip) setAttr(this.tip, "aria-label", `About ${label}`);
+    setAttr(this.input, "aria-label", accessibleLabel);
+    if (this.tip) setAttr(this.tip, "aria-label", `About ${name}`);
   }
   update(value: number | undefined, state: { disabled?: boolean; reason?: string; min?: number; max?: number; note?: string; reasonOnLine?: boolean } = {}) {
     if (state.min !== undefined) setAttr(this.input, "min", String(state.min));
