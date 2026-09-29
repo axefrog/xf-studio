@@ -12,7 +12,7 @@ export { applyCapability, badge, bindRangeTransaction, button, ColorField, Empty
 export { ExpandAll, expander, expanderLabel, isExpanded, setExpanded, type ExpanderLevel } from "../expander";
 export { helpTip, installHelpTips, setHelp, type HelpText } from "../help-tip";
 export { installReasonTips } from "../reason-tip";
-export { closeMenus, hasCommands, menuFromSections, openConfirmPopover, openMenu, openValuePopover, type Capability, type MenuItem, type MenuSection, type ValueField, type ValueOption } from "../menu";
+export { closeMenus, hasCommands, menuCapability, menuFromSections, openConfirmPopover, openMenu, openValuePopover, type Capability, type MenuItem, type MenuSection, type ValueField, type ValueOption } from "../menu";
 export { ItemList, type ItemListOptions, type ListItem, type ListRow } from "../item-list";
 export { iconButton, type IconButtonOptions } from "./icon-button";
 export { planTabs, TabStrip, TAB_STAGES, type TabItem, type TabStripOptions, type TabStripStage } from "./tab-strip";
@@ -35,6 +35,9 @@ export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, treeHeightWords, type TreeB
 export { progressBar, type ProgressBar } from "./progress";
 export { attachSwatchCard, ChoiceList, choiceItem, swatchCard, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
 export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
+export { RecordList, recordTime, type RecordListOptions, type RecordRow } from "./record-list";
+// Feature-specific: mod packaging (the Mod package and Expression sets panels).
+export { modLine, type ModLineOptions } from "./mod-line";
 export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";
 // Feature-specific: lighting setups.
 export { LightList, type LightListItem, type LightListOptions } from "./light-list";

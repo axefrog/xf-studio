@@ -97,11 +97,22 @@ export class Slider {
     this.input = h("input", { id, class: "slider", type: "range", min: String(options.min), max: String(options.max), step: String(options.step) });
     this.output = h("output", { class: "readout", for: id });
     this.note = new NoteLine(options.reserveNote, options.quietReason);
+    this.labelText = h("span", { text: options.label });
+    this.tip = options.help ? helpTip(options.label, options.help) : null;
     this.element = h("div", { class: "control" },
-      h("label", { class: "control-label", for: id }, h("span", { class: "control-label-text" }, h("span", { text: options.label }),
-        options.help ? helpTip(options.label, options.help) : null), this.output),
+      h("label", { class: "control-label", for: id }, h("span", { class: "control-label-text" }, this.labelText, this.tip), this.output),
       this.input, this.note.element);
     this.edit = bindRangeTransaction(this.input, options.transaction, value => { fillRange(this.input); this.output.textContent = options.format(value); });
+  }
+  private readonly labelText: HTMLSpanElement;
+  private readonly tip: HTMLButtonElement | null;
+  /**
+   * A new name for the same value (UI-157): one slider whose meaning follows a mode ("Sparkle density" for Shimmer, "Flake density" for
+   * Glitter; "Edge softness" or "Selected point softness") says it in its label and help tip. Owners never rewrite a label through the DOM.
+   */
+  relabel(label: string) {
+    setText(this.labelText, label);
+    if (this.tip) setAttr(this.tip, "aria-label", `About ${label}`);
   }
   update(value: number | undefined, state: { disabled?: boolean; reason?: string; min?: number; max?: number; note?: string; reasonOnLine?: boolean } = {}) {
     if (state.min !== undefined) setAttr(this.input, "min", String(state.min));

@@ -432,7 +432,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
   const panelsButton = button({ label: "Panels", icon: "layout", iconOnly: true, variant: "ghost", menu: true, title: "Panels, modules and views", onClick: event => {
     openMenu([...panelMenuItems(rt, view.research()),
       { kind: "separator" },
-      { kind: "action", label: "Reset this layout", icon: "reset", run: () => rt.dock.reset() },
+      // Which arrangement a reset applies to is said where it matters, on the reset (C-32: the heading carries no line of its own).
+      { kind: "action", label: "Reset this layout", icon: "reset", hint: `${rt.dock.sizeClass === "wide" ? "Wide" : "Compact"} windows · each size keeps its own arrangement`,
+        run: () => rt.dock.reset() },
       { kind: "action", label: "Keyboard & mouse", icon: "keyboard", shortcut: shortcutLabel("shell.shortcuts"), run: () => view.openReference() }],
     event.currentTarget as Element, { label: "Panels and layout", invoker: event.currentTarget as Element });
   } });
@@ -453,7 +455,9 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     h("div", { class: "brand", "aria-label": "XF Studio beta" }, h("span", { class: "brand-mark", "aria-hidden": "true" }, "XF"), h("span", { class: "brand-name" }, "Studio"),
       Object.assign(badge("Beta", "accent"), { title: "XF Studio is in beta: it may not work on every setup yet. Help › Report a problem… tells us what doesn't." })),
     category,
-    h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset, chip),
+    // The library chip sits after the crumbs, not inside them, so the names give way before it and it never runs over the verification
+    // flag in a crowded header (DESK-06).
+    h("nav", { class: "crumbs", "aria-label": "Current document" }, collection, icon("chevronRight"), preset), chip,
     verify,
     h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, layoutsButton, themeButton));
   return {
@@ -462,6 +466,8 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     update(frame: Frame) {
       const shown = frame.toolFilter.modules, names = rt.modules.list.filter(module => shown.includes(module.id)).map(module => module.label);
       setText(categoryText, names.length ? names.join(" · ") : "Modules");
+      // The list may end with an ellipsis in a crowded header, so its whole text is the tooltip (I3).
+      category.title = names.length ? `${names.join(" · ")}: show or hide parts of the Studio` : "Modules: show or hide parts of the Studio";
       const draft = frame.library.draft;
       setText(collection, draft?.name ?? "Loading…");
       setText(preset, draft?.presets.find(item => item.id === draft.selected)?.name ?? "No preset");
@@ -569,25 +575,35 @@ function moduleAdds(rt: StudioRuntime, module: StudioModule) {
  */
 function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   const dock = rt.dock, shown = rt.shownModules();
-  const STATE = { open: "Open", collapsed: "Collapsed", closed: "Closed", parked: "Parked" } as const;
   const row = (id: string): MenuItem => {
     const meta = rt.views.meta[id], state = dock.panelState(id);
     const module = rt.modules.list.find(item => rt.modules.panels(item).includes(id));
+    // One row per panel (C-32): the tick says it's open, and what the panel is lives in the row's tooltip, so the menu fits the
+    // window. Only a state the tick can't show gets a line: collapsed. A parked panel sits under its hidden module's unticked switch,
+    // and its tooltip says that choosing it shows the module too.
+    const tip = [meta?.description, state === "parked" ? `Choosing it shows ${module?.label ?? "its module"} too.` : ""].filter(Boolean).join(" ");
     return { kind: "action", label: meta?.title ?? id, icon: meta?.icon ?? "dot", checked: state === "open" || state === "collapsed",
-      hint: `${STATE[state]} · ${meta?.description ?? ""}`,
-      // Parked is a state the person chose (the module is hidden), not a problem: its reason is muted (UI-144 makes the row actionable).
-      ...(state === "parked" ? { quietReason: true, capability: { available: false, reason: `Parked · comes back with ${module?.label ?? "its module"}` } } : {}),
-      run: () => state === "collapsed" ? dock.reveal(id) : id === SETTINGS_PANEL && state === "closed" ? rt.settings.open() : dock.toggle(id) };
+      ...(tip ? { tip } : {}), ...(state === "collapsed" ? { hint: "Collapsed" } : {}),
+      // A parked panel is one choice away (UI-144): choosing it shows its module again, which puts its panels back where they were,
+      // then brings this one forward.
+      run: () => {
+        if (state === "parked" && module) { rt.modules.set(module.id, true); dock.reveal(id); }
+        else if (state === "collapsed") dock.reveal(id);
+        else if (id === SETTINGS_PANEL && state === "closed") rt.settings.open();
+        else dock.toggle(id);
+      } };
   };
   const owned = new Set(rt.modules.list.flatMap(module => rt.modules.panels(module)));
-  const items: MenuItem[] = [{ kind: "heading", label: "Panels", detail: `${dock.sizeClass === "wide" ? "Wide" : "Compact"} layout · each size keeps its own arrangement` },
+  const items: MenuItem[] = [{ kind: "heading", label: "Panels" },
     ...rt.views.panels.filter(panel => !owned.has(panel.id)).map(panel => row(panel.id))];
   for (const module of rt.modules.list) {
     const on = shown.includes(module.id);
     // The module's group: its heading, its visibility toggle, then its panels.
-    items.push({ kind: "separator" }, { kind: "heading", label: module.label, detail: on ? "Module · shown" : "Module · hidden" },
+    // Its switch heads the group: the switch's name says the module, its tick whether it is shown, and what showing it does is its
+    // tooltip, so a module adds no heading or lines of its own (C-32).
+    items.push({ kind: "separator" },
       { kind: "action", label: `Show ${module.label}`, icon: isIconName(module.icon) ? module.icon : "category", checked: on, stage: module.stage,
-        hint: on ? "Turn off to hide its panels and view tools; your work is kept" : "Its panels are parked where they were and come back there",
+        tip: on ? "Turn off to hide its panels and view tools; your work is kept" : "Its panels are parked where they were and come back there",
         run: () => rt.modules.set(module.id, !on) },
       ...rt.modules.panels(module).map(row));
   }
@@ -597,7 +613,8 @@ function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   const live = liveFeatures(rt.port);
   const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live, research);
     return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, tag: "Soon", quietReason: true, capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
-  if (graph) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
+  // One 3D view and nothing planned: its row would do what the 3D view panel's row above does, so the section isn't listed (C-32).
+  if (graph && (graph.views.length > 1 || upcoming.length)) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;
       return { kind: "action" as const, label: entry.title ?? rt.views.meta[panel]?.title ?? entry.id, icon: "head" as const,
         hint: `${entry.id === graph.focused ? "Focused · " : ""}${entry.sceneKind === "character" ? "Your V" : entry.sceneKind}${entry.shared.length ? ` · shares ${entry.shared.join(", ")}` : ""}`,

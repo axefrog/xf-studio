@@ -13,7 +13,9 @@ export function uvPanel(ctx: EyeMakeupViewContext): PanelController {
   const modes = new Segmented<"both" | "single">({ label: "UV view", showLabel: false, compact: true, options: [
     { value: "both", label: "Both eyes" }, { value: "single", label: "Single eye" }], onSelect: mode => { uv.command(mode); } });
   const other = button({ label: "Other eye", small: true, variant: "ghost", onClick: () => { uv.command("other"); } });
-  const fit = button({ label: "Fit shape", icon: "target", small: true, variant: "ghost", onClick: () => { uv.command("fit"); } });
+  // In a narrow panel (about 300 px) Fit shape shows its icon only, so the toolbar stays one row (C-27); its name and tooltip stay.
+  const fit = button({ label: "Fit shape", icon: "target", small: true, variant: "ghost", className: "uv-fit", title: "Fit shape", onClick: () => { uv.command("fit"); } });
+  fit.setAttribute("aria-label", "Fit shape");
   const warning = h("div", { class: "uv-warning", hidden: true },
     `Selected point is outside this view · ${shortcutLabel("uv.fit")}: fit shape · ${shortcutLabel("uv.other")}: other eye`);
   const element = h("div", { class: "viewport-panel uv", tabindex: "0", "aria-label": `UV map editor. ${keyDescription("uv")}` });

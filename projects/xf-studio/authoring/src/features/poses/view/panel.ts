@@ -42,8 +42,10 @@ export function posesPanel(ctx: Ctx): PanelController {
   let query = "", treeKey = "", stateKey = "", lastTree: PoseTree | null = null;
   const tree = new TreeView({
     label: "Poses by category",
-    // The person sets its height with the bar under it (about today's fixed 62 % of the window by default), kept across reloads.
-    sizeBar: { key: "poses:tree", defaultRows: 20 }, minRows: 4,
+    // The person sets its height with the bar under it (20 rows by default), kept across reloads. The frame fits its rows up to that
+    // height, so a search that leaves a few poses shows a short list, not a tall empty frame (UI-156); the chosen height comes back
+    // with the rows.
+    maxRows: 20, minRows: 4, sizeBar: { key: "poses:tree" },
     emptyText: "No poses match. Try other words, or clear the search.",
     onToggle: (group, open) => { void ctx.dispatch({ kind: "pose.openGroup", group, open }, { quiet: true }); },
     onActivate: key => { void ctx.dispatch({ kind: "pose.select", id: poseOf(key) }); },

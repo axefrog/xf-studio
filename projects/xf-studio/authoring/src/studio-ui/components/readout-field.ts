@@ -40,6 +40,8 @@ export class ReadoutField {
     this.field.addEventListener("blur", () => { if (this.editing) this.close(true); });
   }
   get editing() { return !this.field.hidden; }
+  /** Name the typed field after a new label (its owner was relabelled). */
+  relabel(label: string) { this.field.setAttribute("aria-label", `${label}, exact value`); }
   /** Show `text` as the readout; `raw` is what the field starts with when editing. */
   show(text: string, raw: string, title?: string) {
     setText(this.output, text);

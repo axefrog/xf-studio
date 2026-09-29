@@ -366,7 +366,7 @@ test("size bar: a tree's drags snap to whole rows and its value says rows; choos
   expect([chooseHeight(142, { chosen: 338, shown: 114 }, bounds), chooseHeight(86, { chosen: 338, shown: 114 }, bounds), chooseHeight(900, { chosen: 170, shown: 170 }, { ...bounds, holds: 1000 })])
     .toEqual([338, 86, 800]);
   expect([rowWords(170, 28, true), rowWords(212, 28), rowWords(30, 28), treeHeightWords(16)]).toEqual(["6 rows, default", "7 and a half rows", "1 row", "half a row"]);
-  // The Poses tree: no maxRows, its frame is the chosen height (20 rows by default) whatever it holds.
+  // A tree with a size bar and no maxRows: its frame is the chosen height (20 rows here by default) whatever it holds.
   const tree = new TreeView({ label: "Poses", minRows: 4, remember: false, sizeBar: { key: "test:poses", defaultRows: 20 }, onActivate: () => {}, onToggle: () => {} });
   const el = tree.sizeBar!.element as unknown as LightElement & { setPointerCapture?: (id: number) => void };
   el.setPointerCapture = () => {};
@@ -403,6 +403,10 @@ test("direction dial: its resize bar shares the Size bar's tooltip, and a double
   expect(dial.grip.getAttribute("title")).toBe(SIZE_BAR_TITLE);
   fire(dial.grip, "dblclick");
   expect([dial.shownSize, kept]).toEqual([DIAL_DEFAULT_SIZE, [DIAL_DEFAULT_SIZE]]);
+  // It is the library's Size bar (UI-154): Delete also goes back to the default, and the bar is the Size bar's element.
+  dial.setSize(400);
+  key(dial.grip, "Delete");
+  expect([dial.shownSize, kept, dial.grip.classList.contains("size-bar")]).toEqual([DIAL_DEFAULT_SIZE, [DIAL_DEFAULT_SIZE, DIAL_DEFAULT_SIZE], true]);
 });
 
 test("tree view: a right-click, Shift+F10 or the Menu key on an item asks the owner for its context menu; focus by any route moves the tab stop", async () => {
@@ -548,7 +552,8 @@ test("folder setting: an action that fails outright is a plain refusal on the no
     const folder = new FolderSetting({ label: "Game folder", onChoose: async () => { throw Error("EACCES: internal detail"); } });
     folder.update({ chosen: null });
     const el = folder.element as unknown as LightElement, note = el.querySelector(".folder-note")!;
-    const choose = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Choose another folder…")!;
+    // Nothing chosen, detected or found: nothing to choose "another" of (C-29).
+    const choose = Array.from(el.querySelectorAll("button")).find(b => b.textContent === "Choose a folder…")!;
     choose.click(); await Promise.resolve();
     folder.input.value = "D:\\Games\\Cyberpunk 2077"; key(folder.input, "Enter");
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -620,6 +625,20 @@ test("folder setting: several found folders are all shown as choices with where 
   expect(cleared).toBe(1);
   folder.update({ chosen: null, found: [] });
   expect([clear.hidden, el.querySelector(".folder-using")!.textContent]).toEqual([true, "Not chosen yet"]);
+});
+
+test("folder setting for one file (C-28): every word says file, the unset line says what happens without a choice", async () => {
+  const { FolderSetting } = await lib();
+  const saved: (string | null)[] = [];
+  const file = new FolderSetting({ label: "Your own WolvenKit (optional)", kind: "file", unset: "Not chosen: XF Studio sets up its own",
+    onChoose: async path => { saved.push(path); return { ok: true as const }; }, onClear: async () => { saved.push(null); return { ok: true as const }; } });
+  file.update({ chosen: null });
+  const el = file.element as unknown as LightElement;
+  const names = () => Array.from(el.querySelector(".folder-actions")!.querySelectorAll("button")).filter(b => !b.hidden).map(b => b.textContent);
+  expect([el.querySelector(".folder-using")!.textContent, names()]).toEqual(["Not chosen: XF Studio sets up its own", ["Choose a file…"]]);
+  expect(file.input.getAttribute("aria-label")).toBe("Your own WolvenKit (optional): type the file");
+  file.update({ chosen: "C:\Tools\WolvenKit.CLI.exe" });
+  expect([el.querySelector(".folder-using")!.textContent, names()]).toEqual(["Using: C:\Tools\WolvenKit.CLI.exe", ["Choose another file…", "Don't use a file"]]);
 });
 
 test("choice list: every choice shown in the Character look; arrows move focus without choosing, a click chooses; unavailable choices keep their reason; tiles carry an accessible name", async () => {
@@ -1043,4 +1062,36 @@ test("menus: a menu or submenu with nothing to act on never opens (and never say
   // An unavailable action still opens (it says why, and it is actionable once available).
   expect(hasCommands([{ kind: "action", label: "Add", capability: { available: false, reason: "Nothing left to add." }, run: () => {} }])).toBe(true);
   closeMenus(false);
+});
+
+test("slider relabel (UI-157): one value renamed by a mode says its new name everywhere: label, typed field, reset and help tip", async () => {
+  const { SliderWithValue, Slider } = await lib();
+  const { t } = log();
+  const control = new SliderWithValue({ label: "Flake density", min: 0, max: 1, step: .05, format: String, transaction: t, defaultValue: .5, reset: true, help: "How many." });
+  control.relabel("Sparkle density");
+  const el = control.element as unknown as LightElement;
+  expect([el.querySelector(".control-label-text")!.textContent, el.querySelector(".readout-input")!.getAttribute("aria-label"),
+    control.resetButton!.getAttribute("aria-label"), el.querySelector(".help-tip")!.getAttribute("aria-label")])
+    .toEqual(["Sparkle density", "Sparkle density, exact value", "Reset Sparkle density", "About Sparkle density"]);
+  const plain = new Slider({ label: "Edge softness", min: 0, max: 1, step: .1, format: String, transaction: t });
+  plain.relabel("Selected point softness");
+  expect((plain.element as unknown as LightElement).querySelector(".control-label-text")!.textContent).toBe("Selected point softness");
+});
+
+test("menu capability (UI-139): a menu button whose menu holds nothing to act on is unavailable with its reason", async () => {
+  const { menuCapability } = await lib();
+  expect(menuCapability([{ kind: "heading", label: "Collection" }], "Your collection is still loading.")).toEqual({ available: false, reason: "Your collection is still loading." });
+  expect(menuCapability([{ kind: "action", label: "Rename…", run: () => {} }], "unused")).toEqual({ available: true });
+});
+
+test("record list (C-30, UI-162): the name keeps its line with its badge, the meta line breaks only between facts, one action per row", async () => {
+  const { RecordList, recordTime } = await lib();
+  const list = new RecordList({ label: "Saved collections" });
+  const open = document.createElement("button");
+  list.update([{ id: "a", name: "My collection", meta: ["3 presets", "version 5", recordTime(new Date(2026, 8, 29, 18, 2, 49))], badge: { text: "This draft", tone: "info" }, current: true, action: open }]);
+  const row = (list.element as unknown as LightElement).querySelector(".record-row")!;
+  expect([row.classList.contains("current"), row.querySelector(".record-name-line")!.textContent, row.querySelectorAll(".record-fact").length, row.querySelectorAll("button").length])
+    .toEqual([true, "My collectionThis draft", 3, 1]);
+  // The time is the date and the minute, never the seconds.
+  expect(row.querySelectorAll(".record-fact")[2]!.textContent).not.toContain(":49");
 });
