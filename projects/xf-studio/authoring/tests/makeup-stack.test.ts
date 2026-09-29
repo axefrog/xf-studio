@@ -119,3 +119,49 @@ test("the preview's surfaces follow the export: Matte at roughness 1, game-match
   expect(stack.materials.map(m => [m.roughness, m.metalness])).toEqual([[1, 0], [.32, .08], [.27, .65]]);
   stack.setCanvases([]);
 });
+
+test("choosing or leaving Colour-shifting changes a layer's uniforms, never its program (PREV-188)", () => {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+  const root = new THREE.Group(), anchor = new THREE.SkinnedMesh(geometry);
+  root.add(anchor);
+  const stack = createMakeupStack(anchor, 1), layer = initialRecipe().layers[0];
+  stack.setCanvases([{ width: 8, height: 8 } as HTMLCanvasElement]);
+  const material = stack.materials[0];
+  stack.updateLayer(0, { ...layer, finish: "matte" });
+  const key = material.customProgramCacheKey(), version = material.version;
+  // Every slot carries the tint (installed with it), at zero until the finish is chosen.
+  expect(key).toContain("xfs-fresnel-tint");
+  stack.updateLayer(0, { ...layer, finish: "iridescent", optics: { model: "game-matched-1", shift: { color: "#3fd4c2", strength: .8 } } });
+  stack.updateLayer(0, { ...layer, finish: "matte" });
+  stack.updateLayer(0, { ...layer, finish: "iridescent", optics: { model: "game-matched-1", shift: { color: "#ff0000", strength: .2 } } });
+  expect(material.customProgramCacheKey()).toBe(key);
+  expect(material.version).toBe(version);
+  stack.setCanvases([]);
+});
+
+test("the finish programs are compiled ahead on stand-ins that are never drawn, once, and released with the stack (PREV-188)", async () => {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+  const root = new THREE.Group(), anchor = new THREE.SkinnedMesh(geometry);
+  root.add(anchor);
+  const stack = createMakeupStack(anchor, 1);
+  const compiled: THREE.SkinnedMesh[] = [];
+  await stack.prewarmFinishes(async object => { compiled.push(object as THREE.SkinnedMesh); });
+  expect(compiled).toHaveLength(2);
+  const [glint, flakes] = compiled.map(mesh => mesh.material as THREE.MeshPhysicalMaterial);
+  // As a layer's own plate draws the default Glitter model (its glints and clear coat) and flake maps (classic Glitter, Shimmer).
+  expect(glint!.customProgramCacheKey()).toContain("xfs-fresnel-tint");
+  expect(glint!.clearcoat).toBeGreaterThan(0);
+  expect(glint!.transparent && glint!.side === THREE.DoubleSide && !glint!.depthWrite).toBe(true);
+  expect(!!flakes!.normalMap && !!flakes!.roughnessMap && flakes!.roughnessMap === flakes!.metalnessMap).toBe(true);
+  // Never drawn: not on the head rig.
+  for (const mesh of compiled) expect(mesh.parent).toBeNull();
+  // Again (the lights changed): the same stand-ins, compiled again.
+  await stack.prewarmFinishes(async object => { compiled.push(object as THREE.SkinnedMesh); });
+  expect(compiled.slice(2)).toEqual(compiled.slice(0, 2));
+  let disposed = 0;
+  for (const mesh of compiled.slice(0, 2)) (mesh.material as THREE.Material).addEventListener("dispose", () => disposed++);
+  stack.dispose();
+  expect(disposed).toBe(2);
+});

@@ -25,7 +25,7 @@ The pigment's hue changes with viewing angle: a duochrome shows its base colour 
 
 ## What the preview does
 
-The game-matched model injects the same term before lighting: `diffuseColor += shift × 2 × strength × saturate(|1 − N·V|²)` ([`fresnel-tint.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/render/fresnel-tint.ts)), with roughness 0.32 and metalness 0.08, and no thin-film iridescence. The Colour & finish panel gains a shift colour and strength. Earlier layers keep the thin-film study.
+The game-matched model injects the same term before lighting: `diffuseColor += shift × 2 × strength × saturate(|1 − N·V|²)` ([`fresnel-tint.ts`](../../../projects/xf-studio/authoring/src/engines/layered-makeup/render/fresnel-tint.ts)), with roughness 0.32 and metalness 0.08, and no thin-film iridescence. The Colour & finish panel gains a shift colour and strength. Earlier layers keep the thin-film study. The term is compiled into every layer's program and the merged plate's, and skipped at zero intensity, so choosing or leaving Colour-shifting changes uniforms only: as a define it cost four program links on ANGLE's D3D11 compiler, a 3.3–3.7 s freeze on the first choice (PREV-188).
 
 ## Risks
 

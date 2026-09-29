@@ -150,13 +150,15 @@ describe("the plate material", () => {
       expect(count(f, "xfsSkinIBL( geometryViewDir")).toBe(skinLight ? 2 : 0);
       expect(count(f, "#include <lights_fragment_maps>")).toBe(skinLight ? 0 : 2);
       expect(count(f, "#define RE_Direct RE_Direct_XfsSkin")).toBe(skinLight ? 1 : 0);
-      // The Colour-shifting tint is compiled only for the Fresnel route and is added to the decal colour before the square root.
+      // The Colour-shifting tint is in every plate program (PREV-188: never a recompile), skipped at zero intensity, and is added to the
+      // decal colour before the square root.
       expect(f.indexOf("xfsDecal += xfsShiftColor")).toBeLessThan(f.indexOf("vec3 xfsRoot"));
-      expect(f.slice(0, f.indexOf("xfsDecal += xfsShiftColor"))).toContain("#ifdef XFS_PLATE_FRESNEL");
+      expect(f).not.toContain("XFS_PLATE_FRESNEL");
+      expect(f.slice(0, f.indexOf("xfsDecal += xfsShiftColor"))).toContain("if ( xfsShiftIntensity > 0.0 ) {");
     }
   });
 
-  test("the skin light and the Fresnel route recompile only on a change; the normals toggle is a uniform", () => {
+  test("the skin light recompiles only on a change; the Fresnel route and the normals toggle are uniforms", () => {
     const { material, handle } = createPlateLightMaterial();
     const shader = { ...standard(), uniforms: {} as Record<string, THREE.IUniform> };
     material.onBeforeCompile(shader as unknown as THREE.WebGLProgramParametersWithUniforms, undefined as unknown as THREE.WebGLRenderer);
@@ -167,12 +169,18 @@ describe("the plate material", () => {
     expect(material.version).toBe(version + 1);
     expect(material.customProgramCacheKey()).not.toBe(key);
     expect((shader.uniforms.xfsLobes!.value as THREE.Vector3).toArray()).toEqual([skin.lobes.roughness0, skin.lobes.roughness1, skin.lobes.weight]);
+    const skinKey = material.customProgramCacheKey(), defines = JSON.stringify(material.defines ?? {});
+    // Choosing Colour-shifting (and leaving it) sets uniforms only: no new program (PREV-188).
     handle.setFresnel({ color: "#3fd4c2", strength: 0.5 }); handle.setFresnel({ color: "#3fd4c2", strength: 0.8 });
-    expect(material.defines?.XFS_PLATE_FRESNEL).toBe("");
+    expect(handle.fresnel).toBe(true);
     expect(shader.uniforms.xfsShiftIntensity!.value).toBeCloseTo(1.6, 9);
-    expect(material.version).toBe(version + 2);
+    expect(material.version).toBe(version + 1);
+    expect(material.customProgramCacheKey()).toBe(skinKey);
+    expect(JSON.stringify(material.defines ?? {})).toBe(defines);
     handle.setFresnel(null);
-    expect(material.defines?.XFS_PLATE_FRESNEL).toBeUndefined();
+    expect(handle.fresnel).toBe(false);
+    expect(shader.uniforms.xfsShiftIntensity!.value).toBe(0);
+    expect(material.version).toBe(version + 1);
     handle.setNormals(false);
     expect(shader.uniforms.xfsPlateNormals!.value).toBe(0);
     material.dispose();

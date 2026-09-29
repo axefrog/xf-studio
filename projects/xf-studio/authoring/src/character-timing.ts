@@ -2,10 +2,10 @@
  * Where a change on the V spends its time in the page, as User Timing marks (`xfs:character:<stage>`), so a click → pixels measurement
  * reads them with `performance.getEntriesByType("mark")` (research/backlog/performance.md). The stages, in order: `ask` (a new request
  * leaves for the host), `answer` (the host has the record), `record` (the record is read), `loaded` (its parts are loaded, reused or
- * built), `placed` (the scene shows them) and `frame` (the first frame drawn after placing). Marks are cleared as they are read, and
+ * built), `prepared` (new parts' maps uploaded and programs linked ahead of their first frame, PREV-189), `placed` (the scene shows them) and `frame` (the first frame drawn after placing). Marks are cleared as they are read, and
  * at most `KEEP` stay, so a long session holds only the recent ones. DOM-free; a runtime without User Timing records nothing.
  */
-const STAGES = ["ask", "answer", "record", "loaded", "placed", "frame"] as const;
+const STAGES = ["ask", "answer", "record", "loaded", "prepared", "placed", "frame"] as const;
 export type CharacterStage = typeof STAGES[number];
 const PREFIX = "xfs:character:";
 const KEEP = 240;

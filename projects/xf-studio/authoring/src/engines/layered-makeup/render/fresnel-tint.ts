@@ -15,6 +15,9 @@ export const FRESNEL_TINT_TERM = "xfsShiftColor * xfsShiftIntensity * clamp( pow
  * and V the direction to the camera. Metalness then splits that colour into diffuse and F0 as
  * usual. One additive colour only; it is not thin-film or multichrome. Draws a layer on its own plate (a Colour-shifting layer
  * the export leaves out of a mixed preset, or any layer when the skin under the plate is unknown).
+ *
+ * Installed once per layer material and switched by its intensity (`clear` sets zero, which skips the term): choosing or leaving
+ * Colour-shifting never changes the program (PREV-188: a new program is a synchronous link of seconds on ANGLE's D3D11 compiler).
  */
 export function installFresnelTint(material: THREE.MeshPhysicalMaterial) {
   if (THREE.REVISION !== "186") throw Error("Fresnel tint requires Three r186");
@@ -41,11 +44,11 @@ uniform float xfsShiftExponent;
     // After the shading normal is final and before the lighting.
     shader.fragmentShader = replace(shader.fragmentShader, "#include <emissivemap_fragment>", `
 // Game route: added to the base colour before the G-buffer (and so before metalness splits it).
-diffuseColor.rgb += ${FRESNEL_TINT_TERM};
+if ( xfsShiftIntensity > 0.0 ) diffuseColor.rgb += ${FRESNEL_TINT_TERM};
 #include <emissivemap_fragment>
 `);
   };
-  const cacheKey = function(this: THREE.MeshPhysicalMaterial) { return `${priorKey.call(this)}|xfs-fresnel-tint-r186-2`; };
+  const cacheKey = function(this: THREE.MeshPhysicalMaterial) { return `${priorKey.call(this)}|xfs-fresnel-tint-r186-3`; };
   material.onBeforeCompile = compile;
   material.customProgramCacheKey = cacheKey;
   material.needsUpdate = true;
@@ -57,6 +60,13 @@ diffuseColor.rgb += ${FRESNEL_TINT_TERM};
       uniforms.xfsShiftColor.value.set(color); // Three converts the sRGB hex to linear working colour.
       uniforms.xfsShiftIntensity.value = FRESNEL_MAX_INTENSITY * strength;
     },
+    /** No tint (another finish): a uniform, the program stays. */
+    clear() {
+      if (disposed) throw Error("Fresnel tint disposed");
+      uniforms.xfsShiftIntensity.value = 0;
+    },
+    /** Whether the tint is drawn now. */
+    get active() { return !disposed && uniforms.xfsShiftIntensity.value > 0; },
     dispose() {
       if (disposed) return;
       if (material.onBeforeCompile === compile) material.onBeforeCompile = priorCompile;

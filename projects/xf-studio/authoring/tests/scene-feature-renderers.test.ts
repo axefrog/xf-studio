@@ -209,7 +209,7 @@ test("a second feature adds its own surface through the port beside eye makeup's
   expect(state.superseded).toBe(0);
   expect(features.evidence()).toMatchObject({ "eye-makeup": { plate: {} }, "cheek-makeup": { surface: "cheek_plate" } });
   // A feature's port is the scene port and nothing more: no host internals.
-  expect(Object.keys(cheek.port).sort()).toEqual(["anchors", "attach", "character", "feature", "onContextRestored", "onFrame",
+  expect(Object.keys(cheek.port).sort()).toEqual(["anchors", "attach", "character", "compile", "feature", "onContextRestored", "onFrame",
     "renderBand", "renderer", "requestFrame", "skin", "subscribeCharacter", "supersede"]);
   expect(cheek.port.feature as string).toBe("cheek-makeup");
   // UI-77: a different factory for the same feature is not this renderer.

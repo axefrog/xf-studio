@@ -21,7 +21,7 @@ import type { LightingSource } from "../../lighting-setups";
 import type { FeatureRenderer, FeatureRendererFactory } from "../api/scene";
 import { createFeatureRenderers, type FeatureRenderers } from "./feature-renderers";
 import { createHeadRig, type MotionLoader } from "./head-rig";
-import { createCharacterRenderer } from "./character-renderer";
+import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 
@@ -221,6 +221,11 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     return true;
   };
   const frameListeners = new Set<(dt: number) => void>();
+  /**
+   * Just after the next animation frame, in a task of its own (work prepared ahead takes its turns between frames: run inside the frame's
+   * callback, a 4096² map's 40 ms upload and the scene's own draw made one long task).
+   */
+  const nextFrame = () => new Promise<void>(resolve => { requestAnimationFrame(() => afterTask(resolve)); });
   // Reused every frame: the head centre (and, while the body shows, the body's) the clip planes are measured from.
   const centre = new THREE.Vector3(), bodyCentre = new THREE.Vector3();
   // Render on demand (UI-38): a frame is drawn when something visible changed, or while the idle or
@@ -277,6 +282,11 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   features = createFeatureRenderers({ renderer, head, surfaces, skin: character.skin,
     character: character.view, subscribeCharacter: character.subscribe,
     requestFrame: invalidate, onFrame, rig: { attach: bones => rigMotion.attach(bones), detach: bones => rigMotion.detach(bones) },
+    compile: async object => {
+      const prepared = lighting.prepare(object, camera);
+      await prepared.ready;
+      for (const program of prepared.programs()) { await nextFrame(); program.getUniforms(); program.getAttributes(); }
+    },
     supersededChanged: () => { character.refreshVisibility(); invalidate(); },
     ...(options.onRendererError ? { report: options.onRendererError } : {}) }, options.renderers ?? []);
   releases.push(() => features?.dispose());
@@ -342,6 +352,13 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     /** The host's detail loader (§5): the V's resolved components, each chunk through the adapter for its template. */
     details: character.details,
     setCharacterDetails: character.setCharacterDetails,
+    /**
+     * Before `setCharacterDetails(details)`: make the parts it adds ready for their first frame while the shown V keeps drawing (maps
+     * uploaded a few per frame, layered stacks baked, programs linked off the page's thread; PREV-188/189), so placing them never
+     * freezes the page. Stops early when `signal` aborts (a newer change).
+     */
+    prepareDetails: (details: Parameters<typeof character.prepareDetails>[0], signal?: AbortSignal) => character.prepareDetails(details, { signal,
+      compile: object => lighting.prepare(object, camera), frame: nextFrame }),
     /** Release the parts kept for later (another V is being shown: nothing of the previous one lingers in GPU memory). */
     releaseKeptParts: character.releaseKeptParts,
     /** Listen for the placed V's limits changing after it was placed (PREV-74); returns the unsubscribe. */

@@ -739,7 +739,8 @@ Built on 26 September in `claude/platform-step7`, as reviewable commits: the sce
   - `supersede(parts)`: the resolved parts the feature replaces from now on, whole slots or only named creator options' components;
   - `skin`: the drawn skin's `light()`, `underlay(surface)` read on the drawn head, and a change subscription (once per change);
   - `character()`/`subscribeCharacter` (the V drawn: record identity and drawn slots), `lighting()`/`subscribeLighting`;
-  - `requestFrame`, `onFrame` and `onContextRestored`.
+  - `requestFrame`, `onFrame` and `onContextRestored`;
+  - `compile(object)`: an object's programs (never drawn yet: a stand-in, or a part about to show) compiled for every pass the scene draws, linked off the page's thread (KHR_parallel_shader_compile) and first used between frames, so the frame that draws it waits on nothing (PREV-188: eye makeup compiles its finish programs ahead this way).
 
   `FeatureRenderer` has `beforeDraw`, `setNormals`, `setWireframe`, `evidence` and `dispose`, all optional but `dispose`; one that throws is reported and skipped. `RENDER_ORDER` names the draw-order bands (feature plates from 10 up to the eye shell at 99), and `invalidating` wraps a renderer's mutators so each call requests a frame.
 - **The scene host** (`platform/scene/`, 1,022 lines in four modules; `scene.ts` was 758 lines and is gone).

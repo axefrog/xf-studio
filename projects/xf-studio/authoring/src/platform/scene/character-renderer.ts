@@ -3,7 +3,8 @@ import { extendSkin, fullSkinDepthMaterial } from "../../skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../eye-material";
 import type { ProfileEncoding } from "../../hair-colour-model";
 import type { AdapterContext, ResolvedSkinSurface } from "../../character-material-adapters";
-import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, type CharacterDetailFetch, type LoadedCharacterComponent, type LoadedCharacterDetails } from "../../character-detail-loader";
+import { BODY_SHAPE_KEY, DetailPartPool, loadCharacterDetails, uploadTexture, type CharacterDetailFetch, type LoadedCharacterComponent,
+  type LoadedCharacterDetails } from "../../character-detail-loader";
 import type { CharacterDetail, DetailSlot } from "../../render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../head-skin-placement";
 import { priorityRank } from "../../render-templates";
@@ -49,6 +50,26 @@ export interface DetailLoader {
 }
 
 export type CharacterRenderer = ReturnType<typeof createCharacterRenderer>;
+
+/**
+ * How a part is brought to its first frame ahead (`prepareDetails`): `compile` starts its programs for every pass the next frame draws
+ * it in, without waiting on the driver (the lighting stage's `prepare`), and returns the textures those programs sample; `frame` waits
+ * for the next animation frame.
+ */
+export type DetailPreparation = {
+  compile(object: THREE.Object3D): { ready: Promise<void>; textures: THREE.Texture[]; programs(): readonly { getUniforms(): unknown; getAttributes(): unknown }[] };
+  frame(): Promise<void>;
+  signal?: AbortSignal;
+};
+/** Main-thread time a preparation spends uploading in one frame before it waits for the next (a map already started finishes). */
+export const PREPARE_FRAME_MS = 8;
+/** Run `callback` in a task of its own, soon (a message is not clamped as a timer is). */
+export function afterTask(callback: () => void): void {
+  if (typeof MessageChannel !== "function") { setTimeout(callback, 0); return; }
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => { channel.port1.close(); callback(); };
+  channel.port2.postMessage(null);
+}
 
 export function createCharacterRenderer(input: {
   scene: THREE.Scene;
@@ -113,6 +134,95 @@ export function createCharacterRenderer(input: {
   // The eye's wetness shell multiplies what is behind it: after the opaque eye, skin and the makeup plates, before brows and lashes.
   const EYE_SHELL_RENDER_ORDER = RENDER_ORDER.eyeShell;
   const SHADOW_CASTER_SLOTS = new Set<DetailSlot>(["skin", "body", "clothing"]);
+  /**
+   * What a drawn mesh needs before its programs are built: whether it casts (skin, body and clothing do; hair strands, alpha-to-coverage
+   * cards, cast by their coverage, and stay out of the stand-in maps of contact-only lights), its full-skin shadow depth material, and the
+   * skinning extension (it wraps the material's compile once). Done once per mesh, when it is prepared or placed, whichever comes first.
+   */
+  function prepareMesh(item: LoadedCharacterComponent, mesh: THREE.SkinnedMesh) {
+    if (mesh.userData.xfsPrepared) return;
+    mesh.userData.xfsPrepared = true;
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;
+    mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
+    if (strand) keepOutOfBodyOnlyShadows(mesh);
+    if (mesh.castShadow && mesh.isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh, { strandAlpha: strand });
+    // A component kept from the previous details already carries the skinning extension.
+    if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, material); mesh.userData.xfsSkinExtended = true; }
+  }
+  /** Parts brought to their first frame already (prepared ahead, or placed): their programs and maps are on the GPU. */
+  const prepared = new WeakSet<LoadedCharacterComponent>();
+  /**
+   * Before `setCharacterDetails(next)` (PREV-189): the parts it adds are made ready for their first frame while the shown V keeps drawing,
+   * so that frame never waits. Their maps are uploaded a few per frame (from decoded bitmaps, `uploadTexture`), their layered stacks
+   * baked, and their programs compiled for every pass without the page waiting on the driver (KHR_parallel_shader_compile). A part
+   * shown before (kept, or taken over) is already ready. Stops, leaving the rest to the first frame, when `signal` aborts.
+   */
+  async function prepareDetails(next: LoadedCharacterDetails, preparation: DetailPreparation) {
+    const { signal } = preparation;
+    const fresh = next.components.filter(item => !prepared.has(item));
+    if (!fresh.length) return;
+    let started = performance.now();
+    const pace = async () => {
+      if (performance.now() - started < PREPARE_FRAME_MS) return;
+      await preparation.frame();
+      started = performance.now();
+    };
+    const uploadAll = async (textures: Iterable<THREE.Texture>) => {
+      for (const texture of textures) {
+        if (signal?.aborted) return;
+        if (!needsUpload(texture)) continue;
+        await pace();
+        if (signal?.aborted) return;
+        upload(texture);
+      }
+    };
+    /**
+     * Wait (a frame at a time) until the GPU has done what was sent so far: a synchronous call behind a queue of 4096² uploads waits for
+     * all of them (a bake's first error check took 92 ms), a fence's status never waits.
+     */
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const drained = async () => {
+      if (typeof gl.fenceSync !== "function") return;
+      const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      if (!fence) return;
+      gl.flush();
+      try {
+        for (let frames = 0; frames < 120 && !signal?.aborted && gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED; frames++) await preparation.frame();
+      } finally { gl.deleteSync(fence); }
+      started = performance.now();
+    };
+    for (const item of fresh) for (const mesh of item.meshes) prepareMesh(item, mesh);
+    // A skinned mesh's bounds (the draw order's depth sort reads them): Three skins every vertex on the CPU for them in the first frame
+    // that draws it (85 ms for a hairstyle); the rest pose's bounds from its geometry, a mesh per turn, stand in (only the sort reads them).
+    for (const item of fresh) for (const mesh of item.meshes) {
+      if (signal?.aborted) return;
+      if (!mesh.isSkinnedMesh || mesh.boundingSphere) continue;
+      await pace();
+      if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+      mesh.boundingSphere = mesh.geometry.boundingSphere!.clone();
+    }
+    await uploadAll(fresh.flatMap(item => item.textures ?? []));
+    if (fresh.some(item => item.layered?.some(entry => entry.handle.state === "pending"))) await drained();
+    // Layered stacks bake with their (now uploaded) layer maps, as the placement would, one stack per frame.
+    for (const item of fresh) if (componentShown(item)) for (const { handle } of item.layered ?? []) {
+      if (signal?.aborted || handle.state !== "pending") continue;
+      await pace();
+      if (!signal?.aborted) { handle.bake(renderer); started = 0; }
+    }
+    if (signal?.aborted) return;
+    const compiled = fresh.map(item => preparation.compile(item.root));
+    await uploadAll(compiled.flatMap(entry => entry.textures));
+    await Promise.all(compiled.map(entry => entry.ready));
+    // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle.
+    await drained();
+    for (const program of new Set(compiled.flatMap(entry => entry.programs()))) {
+      if (signal?.aborted) break;
+      await pace();
+      program.getUniforms(); program.getAttributes();
+    }
+    if (!signal?.aborted) for (const item of fresh) prepared.add(item);
+  }
   head.castShadow = true;
   head.customDepthMaterial = fullSkinDepthMaterial(head);
   let characterDetails: LoadedCharacterDetails | null = null;
@@ -146,10 +256,43 @@ export function createCharacterRenderer(input: {
    * that brings them back (character-detail-loader.ts `DetailPartPool`).
    */
   const pool = new DetailPartPool();
+  /**
+   * Maps waiting to be uploaded, a few per frame (`PREPARE_FRAME_MS`), from the moment their part is built (PREV-189): a V's maps stream to
+   * the GPU while the rest of it loads, and each decoded bitmap is released as its map is uploaded.
+   */
+  const uploads: THREE.Texture[] = [];
+  let uploading = false;
+  const released = new WeakSet<THREE.Texture>();
+  const properties = renderer.properties;
+  // Only a sampled image of a part's own (a render target's, a depth or a video texture is the renderer's to make, never uploaded here),
+  // and never one released meanwhile (a superseded part's).
+  const needsUpload = (texture: THREE.Texture) => !(texture.version === 0 || !texture.image || released.has(texture)
+    || (texture as { isRenderTargetTexture?: boolean }).isRenderTargetTexture === true || (texture as THREE.DepthTexture).isDepthTexture
+    || (texture as THREE.VideoTexture).isVideoTexture || (texture as THREE.CubeTexture).isCubeTexture
+    || (properties.get(texture) as { __version?: number }).__version === texture.version);
+  const upload = (texture: THREE.Texture) => { if (needsUpload(texture)) uploadTexture(texture, map => renderer.initTexture(map)); };
+  const watchRelease = (texture: THREE.Texture) => {
+    const forget = () => { released.add(texture); texture.removeEventListener("dispose", forget); };
+    texture.addEventListener("dispose", forget);
+  };
+  function streamUploads() {
+    if (uploading || !uploads.length || typeof requestAnimationFrame !== "function") return;
+    uploading = true;
+    // Each turn just after a frame, in a task of its own (never inside the frame's own draw).
+    const turn = () => {
+      const began = performance.now();
+      while (uploads.length && performance.now() - began < PREPARE_FRAME_MS) upload(uploads.shift()!);
+      if (uploads.length) requestAnimationFrame(() => afterTask(turn)); else uploading = false;
+    };
+    requestAnimationFrame(() => afterTask(turn));
+  }
   /** The host's detail loader: this renderer's anisotropy and skin placement, the record's chunks through their template's adapter. */
   const details: DetailLoader = {
     load: (record, options) => loadCharacterDetails(record, { ...options, anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
-      context: detailContext, pool }),
+      context: detailContext, pool, built: item => {
+        for (const texture of item.textures ?? []) if (needsUpload(texture)) { watchRelease(texture); uploads.push(texture); }
+        streamUploads();
+      } }),
   };
   // The skin drawn under a feature's surfaces (the scene port's `skin`): the shown resolved skin's light, and the skin under a surface
   // read on the drawn head, like the face decals' underlay. Features read both again whenever the drawn skin changes, told once.
@@ -291,15 +434,7 @@ export function createCharacterRenderer(input: {
       for (const mesh of item.meshes) {
         mesh.renderOrder = shells.has(mesh) ? EYE_SHELL_RENDER_ORDER : faceOrder.get(mesh) ?? DETAIL_RENDER_ORDER[item.component.slot];
         // The skin, body, clothing and hair strands cast the lights' shadows (lighting-setup-stage.ts); eyes, decals and lashes don't.
-        const material = mesh.material as THREE.MeshStandardMaterial;
-        // Hair strands (alpha-to-coverage cards) cast by their coverage; the cap decal and the other hair parts don't.
-        const strand = item.component.slot === "hair" && !!material.alphaToCoverage && !!material.alphaMap;
-        mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
-        // Strands stay out of the stand-in maps of contact-only lights (shadow-casters.ts).
-        if (strand) keepOutOfBodyOnlyShadows(mesh);
-        if (mesh.castShadow && (mesh as THREE.SkinnedMesh).isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh as THREE.SkinnedMesh, { strandAlpha: strand });
-        // A component kept from the previous details already carries the skinning extension (it wraps the material's compile once).
-        if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, mesh.material as THREE.MeshStandardMaterial); mesh.userData.xfsSkinExtended = true; }
+        prepareMesh(item, mesh);
         // Facial shapes: the same (target, region) names as the head's. The body's shapes (breast size, nail length) are the ones the
         // resolver applied to that component, each at full weight; a garment carries the body's applied shape (`BODY_SHAPE_KEY`).
         const applied = item.component.slot === "body" || item.component.slot === "clothing" ? new Set(item.component.morphs ?? []) : null;
@@ -308,6 +443,7 @@ export function createCharacterRenderer(input: {
             : head.morphTargetInfluences?.[head.morphTargetDictionary?.[key] ?? -1] ?? 0;
       }
       scene.add(item.root);
+      prepared.add(item);
     }
     applyGarmentLayers(next);
     // Layered chunks (piercings, eye designs): each stack is baked once into surface maps with this renderer, then lit per frame.
@@ -387,6 +523,7 @@ export function createCharacterRenderer(input: {
     hasDetails: () => !!characterDetails,
     bodyShown: () => (characterDetails?.components ?? []).some(item => item.component.slot === "body" && componentShown(item)),
     setCharacterDetails,
+    prepareDetails,
     /** Release the V and every kept part (the scene is going away). */
     dispose() { setCharacterDetails(null); pool.clear(); },
     /** How many parts are kept for later (developer evidence). */

@@ -216,6 +216,11 @@ export function createLinearDisplay(renderer: THREE.WebGLRenderer) {
       if (preset === "creator") renderCreator(scene, camera, linear ? scatter : undefined);
       else renderStudio(scene, camera, scatter);
     },
+    /**
+     * The target the scene itself is drawn into for `preset` (null: the canvas), bound while its programs are compiled ahead, so they are
+     * the ones the frame draws with (Three keys a program's output encoding and tone mapping on the target).
+     */
+    sceneTarget(preset: LightingPreset): THREE.WebGLRenderTarget | null { return preset === "creator" || linear ? ensureTarget() : null; },
     /** Use a decoded game LUT, or the neutral LUT (null). */
     setLut(next: GradingLut | null) {
       const replacement = lutTexture(next ?? neutralGradingLut(32));

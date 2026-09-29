@@ -97,8 +97,11 @@ export type CharacterContextPorts = {
   creator: CreatorPort;
   /** Show a save's V on the head (its facial shape and body), or none for the default V: used when Undo returns to another V. */
   showSave(save: SavedV | null): void;
-  /** The shown V's preparation (character-detail-actions.ts): whether it failed, and Try again (PREV-86). */
-  details?: { failed(): boolean; retry(): void };
+  /**
+   * The shown V's preparation (character-detail-actions.ts): whether it failed, and Try again (PREV-86); `preload` loads a prepared
+   * change's parts ahead without showing it (a choice under the pointer, PREV-189).
+   */
+  details?: { failed(): boolean; retry(): void; preload?(request: CharacterRequest, signal: AbortSignal): Promise<void> };
   /** Choice previews (choice-preview-service.ts): pictures of a shape row's choices, drawn off the main thread. */
   previews?: ChoicePreviewPort;
 };
@@ -179,6 +182,11 @@ const HISTORY_LIMIT = 100;
 type StepKind = "v" | "clothing" | "makeup";
 /** Most positions one question about a row's choices names. */
 const CHOICE_PREFETCH_POSITIONS = 512;
+/**
+ * How long the pointer (or focus) rests on a prepared choice before its parts are loaded ahead (PREV-189): long enough that sweeping
+ * across a row loads nothing, short enough that the load is done before most clicks.
+ */
+export const PRELOAD_DWELL_MS = 150;
 /** Polling the catalogue's build: while the panel is being looked at, and otherwise (PIPE-78). */
 const POLL_MS = 800, POLL_IDLE_MS = 4000, WATCHED_MS = 3000;
 /** How often an open colour row asks again while the host is still working out its swatches. */
@@ -272,6 +280,11 @@ export class CharacterContextActions {
   private fetch: { key: string; option: string; positions: number[]; focus: number | null; sent: string; states: Map<number, ChoiceFetch>;
     stopped: "time" | "disk" | "setup" | null; busy: boolean; asking: AbortController | null; again: boolean; view: CharacterFetchState } | null = null;
   private firstTime = false;
+  /**
+   * The choice under the pointer whose parts are loaded ahead (`details.preload`): waiting out the dwell, waiting until the host has it
+   * prepared (`waiting`), or loading (`controller`).
+   */
+  private ahead: { option: string; position: number; timer: ReturnType<typeof setTimeout> | null; waiting: boolean; controller: AbortController | null } | null = null;
   /** Pictures of shape rows' choices, once a row with them is shown (choice-preview-service.ts). */
   private previewService: ChoicePreviewService | null = null;
   private prepared: { bytes: number | null; clearing: boolean; freed: number | null; asking: boolean } = { bytes: null, clearing: false, freed: null, asking: false };
@@ -492,7 +505,40 @@ export class CharacterContextActions {
     const fetch = this.fetch, wanted = positions.slice(0, CHOICE_PREFETCH_POSITIONS), hint = focus ?? fetch.focus;
     const sent = JSON.stringify([wanted, hint]);
     if (sent !== fetch.sent) { fetch.sent = sent; fetch.positions = wanted; fetch.focus = hint; this.askPrefetch(fetch); }
+    if (focus !== null) this.hintAhead(option, focus);
     return fetch.view;
+  }
+  /** A choice under the pointer (or focused): once it has rested there a moment and the host has it prepared, its parts load ahead. */
+  private hintAhead(option: string, position: number) {
+    if (!this.ports.details?.preload) return;
+    if (this.ahead?.option === option && this.ahead.position === position) return;
+    this.cancelAhead();
+    const entry: NonNullable<CharacterContextActions["ahead"]> = { option, position, timer: null, waiting: false, controller: null };
+    this.ahead = entry;
+    entry.timer = setTimeout(() => { entry.timer = null; this.startAhead(entry); }, PRELOAD_DWELL_MS);
+  }
+  private startAhead(entry: NonNullable<CharacterContextActions["ahead"]>) {
+    if (this.ahead !== entry || this.disposed || entry.controller || entry.timer) return;
+    // Only a choice the host has prepared: a load ahead never starts a preparation of its own.
+    if (this.fetch?.option !== entry.option || this.fetch.states.get(entry.position) !== "r") { entry.waiting = true; return; }
+    entry.waiting = false;
+    const option = this.byId.get(entry.option), choice = this.pages.get(pageKey(entry.option, ""))?.choices.find(item => item.position === entry.position);
+    if (!option || !choice) return;
+    const change: CharacterChoice = { part: option.part, option: option.name, choice: choice.key, ...(choice.activates ? { activates: [...choice.activates] } : {}) };
+    if (!this.choiceCheck(change).available) return;
+    const next = this.withChoices([change]);
+    if (next.choices.length > CREATOR_LIMITS.choices || sameChoices(next.choices, this.state.choices)) return;
+    const request = characterRequestOf({ bodyGender: next.bodyGender, saved: next.save?.saved ?? null }, next.choices, undefined, this.dressing(),
+      this.bodyShown, this.uncensored, this.creatorPuppet);
+    entry.controller = new AbortController();
+    void this.ports.details!.preload!(request, entry.controller.signal);
+  }
+  /** Nothing is loaded ahead any more (another hint, a change, the row closed). */
+  private cancelAhead() {
+    if (!this.ahead) return;
+    if (this.ahead.timer) clearTimeout(this.ahead.timer);
+    this.ahead.controller?.abort();
+    this.ahead = null;
   }
   /**
    * A shape row's choice pictures (choice-previews-design.md): asks for the pictures of `positions` (view order), the V's chosen one and
@@ -512,6 +558,7 @@ export class CharacterContextActions {
   previewStats() { return this.previewService?.stats ?? null; }
   /** The row closed: stop preparing its choices ahead. */
   stopPrefetch(option: string): void {
+    if (this.ahead?.option === option) this.cancelAhead();
     if (this.fetch?.option !== option) return;
     this.fetch.asking?.abort();
     this.fetch = null;
@@ -531,6 +578,8 @@ export class CharacterContextActions {
       });
       const wasBusy = fetch.busy;
       fetch.stopped = reply.stopped; fetch.busy = reply.busy;
+      // The choice under the pointer became prepared: its parts load ahead now.
+      if (this.ahead?.waiting && this.ahead.option === fetch.option && fetch.states.get(this.ahead.position) === "r") this.startAhead(this.ahead);
       if (changed) {
         fetch.view = Object.freeze({ option: fetch.option, states: new Map(fetch.states), stopped: fetch.stopped, busy: fetch.busy });
         this.publish();
@@ -936,6 +985,8 @@ export class CharacterContextActions {
     const allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason);
     if (action.kind !== "character.setOption" && action.kind !== "character.clearPreparedFiles") this.firstTime = false;
+    // A change of the person's own: nothing more is loaded ahead for the V it replaces (a load in progress is stopped by the change's own).
+    if (this.ahead?.timer || this.ahead?.waiting) this.cancelAhead();
     switch (action.kind) {
       case "character.setOption": {
         const { choices } = this.changesCheck([{ part: action.part, option: action.option, choice: action.choice, ...(action.activates ? { activates: action.activates } : {}) }]);
@@ -1108,6 +1159,7 @@ export class CharacterContextActions {
 
   dispose() {
     this.disposed = true;
+    this.cancelAhead();
     this.fetch?.asking?.abort();
     this.previewService?.dispose();
     this.session?.abort();

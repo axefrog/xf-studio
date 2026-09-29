@@ -168,11 +168,9 @@ uniform sampler2D xfsPlateNormal;
 uniform sampler2D xfsPlateRoughness;
 uniform vec4 xfsPlateWindow;
 uniform float xfsPlateNormals;
-#ifdef XFS_PLATE_FRESNEL
 uniform vec3 xfsShiftColor;
 uniform float xfsShiftIntensity;
 uniform float xfsShiftExponent;
-#endif
 varying vec3 vXfsPlateUnder;
 varying vec2 vXfsPlateSurface;
 varying vec2 vXfsPlateUv;`;
@@ -207,10 +205,10 @@ float xfsNormalAlpha = sqrt( xfsCoverage ) * clamp( 50.0 - 50.0 * xfsFacet.z, 0.
 normal = normalize( tbn * normalize( mix( vec3( 0.0, 0.0, 1.0 ), xfsFacet, xfsNormalAlpha ) ) );`;
 /** Before the lighting: the blended colour, the drawn alpha, and the skin under the vertex lit the same way (`MAPS` is filled in). */
 const BLEND = /* glsl */`
-#ifdef XFS_PLATE_FRESNEL
-xfsDecal += ${FRESNEL_TINT_TERM};
-xfsSqrtDecal = sqrt( max( xfsDecal, vec3( 0.0 ) ) );
-#endif
+if ( xfsShiftIntensity > 0.0 ) {
+	xfsDecal += ${FRESNEL_TINT_TERM};
+	xfsSqrtDecal = sqrt( max( xfsDecal, vec3( 0.0 ) ) );
+}
 vec3 xfsRoot = xfsCoverage * xfsSqrtDecal + ( 1.0 - xfsCoverage ) * sqrt( xfsUnder );
 vec3 xfsBlended = xfsRoot * xfsRoot;
 vec3 xfsGap = xfsUnder - xfsDecal;
@@ -296,7 +294,11 @@ export type PlateLightHandle = {
   /** Light with the skin's own light (the drawn skin's profile) or, with null, Three's standard light. Recompiles on a change. */
   setSkinLight(parameters: SkinLight | null): void;
   readonly skinLight: boolean;
-  /** Colour-shifting (the Fresnel route's one pigment): the shift colour (sRGB hex) and strength 0–1, or null. */
+  /**
+   * Colour-shifting (the Fresnel route's one pigment): the shift colour (sRGB hex) and strength 0–1, or null. A uniform, never a
+   * recompile: the tint is in every plate program, skipped at zero intensity (PREV-188: the define it once was cost four program links,
+   * 3–4 s of a frozen page on ANGLE's D3D11 compiler).
+   */
   setFresnel(shift: { color: string; strength: number } | null): void;
   readonly fresnel: boolean;
   /** Show or flatten the facet normals (the viewport's normals toggle). */
@@ -329,11 +331,6 @@ export function createPlateLightMaterial(): { material: THREE.MeshStandardMateri
     patchPlateLightShader(shader, { skinLight });
   };
   material.customProgramCacheKey = () => `xfs-plate-light-3|${skinLight ? "s" : ""}`;
-  const define = (name: string, on: boolean) => {
-    const defines = { ...material.defines };
-    if (on) defines[name] = ""; else delete defines[name];
-    material.defines = defines;
-  };
   return { material, handle: {
     setComposite(textures, window) {
       uniforms.xfsPlateColour.value = textures?.colour ?? NOTHING;
@@ -355,14 +352,9 @@ export function createPlateLightMaterial(): { material: THREE.MeshStandardMateri
     },
     get fresnel() { return fresnel; },
     setFresnel(shift) {
-      if (shift) {
-        uniforms.xfsShiftColor.value.set(shift.color); // Three converts the sRGB hex to linear working colour, as the per-layer tint.
-        uniforms.xfsShiftIntensity.value = FRESNEL_MAX_INTENSITY * shift.strength;
-      }
-      if (!!shift === fresnel) return;
+      if (shift) uniforms.xfsShiftColor.value.set(shift.color); // Three converts the sRGB hex to linear working colour, as the per-layer tint.
+      uniforms.xfsShiftIntensity.value = shift ? FRESNEL_MAX_INTENSITY * shift.strength : 0;
       fresnel = !!shift;
-      define("XFS_PLATE_FRESNEL", fresnel);
-      material.needsUpdate = true;
     },
     setNormals(enabled) { uniforms.xfsPlateNormals.value = enabled ? 1 : 0; },
   } };

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { passParticipation, SCATTER_INPUT_DEFINE, SCATTER_INPUT_OUTPUTS, type PassParticipation } from "../api/scene";
-import { createPassVariants, occluderCutoff, type PassSpec } from "./pass-variants";
+import { createPassVariants, occluderCutoff, variantRole, type PassSpec } from "./pass-variants";
 import { assignScatterSlots, packScatterTable, SCATTER_MAX_ENTRIES, SCATTER_RED_GATE, SCATTER_ROW, SCATTER_SLOTS, scatterSlot, type ScatterProfile,
   type ScatterQuality } from "./skin-scatter-kernel";
 
@@ -311,6 +311,15 @@ export function createSkinScatter(renderer: THREE.WebGLRenderer) {
     evidence: (): SkinScatterEvidence => ({ enabled, active, quality, width: input?.width ?? 0, height: input?.height ?? 0, scissor: lastScissor,
       slots: distinct.map(profile => ({ blurSize: profile.blurSize, diffuse: [...profile.diffuse], falloff: [...profile.falloff] })), overflow,
       variants: variants.counts(), bytes: (input?.width ?? 0) * (input?.height ?? 0) * 36 }),
+    /**
+     * What `material` draws as in the input pass when the scatter runs (its variant), or null when it takes no part or the scatter is off:
+     * a part's programs are compiled for it ahead of its first frame (lighting-setup-stage.ts `prepare`, PREV-189).
+     */
+    variantOf(material: THREE.Material): THREE.Material | null {
+      if (!enabled || bare) return null;
+      const role = variantRole(material);
+      return role ? variants.variantFor(material, role) : null;
+    },
     /** Developer evidence: drop the input variants, so the next frame measures their compile (a V's first scatter frame). */
     resetVariants() { variants.clear(); },
     dispose() { disposeTargets(); variants.dispose(); blur.dispose(); quad.geometry.dispose(); },

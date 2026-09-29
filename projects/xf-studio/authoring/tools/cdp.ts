@@ -120,10 +120,11 @@ async function startChrome(options: { width?: number; height?: number; debugPort
 
 /**
  * `args`: extra Chrome switches (for example a fake camera: `--use-fake-device-for-media-stream`). `scheme` and `motion` pin the page's
- * `prefers-color-scheme` and `prefers-reduced-motion` instead of taking the machine's settings.
+ * `prefers-color-scheme` and `prefers-reduced-motion` instead of taking the machine's settings. `init`: a script run in the page before its
+ * own (instrumentation for a measurement, for example).
  */
 export async function launch(url: string, options: { width?: number; height?: number; debugPort?: number; scheme?: "light" | "dark";
-  motion?: "reduce" | "no-preference"; args?: readonly string[] } = {}) {
+  motion?: "reduce" | "no-preference"; args?: readonly string[]; init?: string } = {}) {
   const { chrome, profile, page } = await startChrome(options);
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((ok, fail) => { socket.onopen = ok; socket.onerror = fail; });
@@ -229,6 +230,7 @@ export async function launch(url: string, options: { width?: number; height?: nu
   if (options.motion) media.set("prefers-reduced-motion", options.motion);
   if (options.scheme) await session.colorScheme(options.scheme);
   else if (media.size) await emulateMedia();
+  if (options.init) await send("Page.addScriptToEvaluateOnNewDocument", { source: options.init });
   await send("Page.navigate", { url });
   return session;
 }

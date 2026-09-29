@@ -44,6 +44,12 @@ export type CharacterDetailPort = {
     garmentTags?: string[] }>;
   /** Remove every resolved detail from the scene. */
   clear(): void;
+  /**
+   * Load the parts of a prepared request ahead, without showing it (a choice under the pointer, PREV-189): the host is asked as another
+   * page, so the person's own V is never superseded, nothing is prepared that the host hadn't prepared already (a request still
+   * preparing after a moment is left), and the parts are uploaded and compiled, then kept for the change that shows them. A show stops it.
+   */
+  preload?(request: CharacterRequest, signal: AbortSignal): Promise<void>;
   /** Shown slots' limit codes when the renderer's change after `show` (a slot shown later, a re-bake after a restore; PREV-74). */
   onLimits?(listener: (update: SlotLimits) => void): () => void;
   wait(ms: number, signal: AbortSignal): Promise<void>;
@@ -123,6 +129,15 @@ export class CharacterDetailActions {
     if (this.asked?.key === key) return Promise.resolve();
     this.asked = { key, request };
     return this.prepare(key, request);
+  }
+  /**
+   * Load `request`'s parts ahead (a prepared choice under the pointer, PREV-189), so choosing it shows it at once. Only a change on the V
+   * shown now, and only while no change of the person's is being prepared.
+   */
+  preload(request: CharacterRequest, signal: AbortSignal): Promise<void> {
+    if (this.disposed || !this.port.preload || this.status.phase !== "ready" || this.status.updating || !this.shown || !sameCharacter(this.shown, request)
+      || JSON.stringify(request) === JSON.stringify(this.shown)) return Promise.resolve();
+    return this.port.preload(request, signal).catch(() => { /* Ahead of time only: the change itself loads what it needs. */ });
   }
   /** The last request failed (the V, or a change on it): `retry` can try it again. */
   failed(): boolean { return !!this.asked && (this.status.phase === "failed" || !!this.status.updateError); }

@@ -15,6 +15,8 @@ import { MAX_LAYERS } from "../../../engines/layered-makeup/recipe";
 import { EYE_MAKEUP_ID } from "..";
 import { EYE_MAKEUP_REGION } from "../region";
 
+/** How long after the view (or the V's skin) changed the finish programs are compiled ahead: after the V's own first frames. */
+export const FINISH_PREWARM_DELAY_MS = 1500;
 /** The core record's surface the eye makeup plate is (render-detail.ts `geometry.nodes.plate`). */
 export const EYE_PLATE_SURFACE = "plate";
 
@@ -52,7 +54,17 @@ function createEyeMakeupRenderer(host: SceneHostPort): EyeMakeupRenderer {
     });
   }
   refreshUnderlay();
-  const releases = [host.skin.subscribe(refreshUnderlay), host.onContextRestored(() => stack.contextRestored())];
+  // The finish programs (Glitter's glints, flake maps), compiled while the view is idle once the V's skin and lights are in place
+  // (PREV-188): a first Glitter choice then links nothing. Again after each skin change (the V, a lighting setup): cached ones cost nothing.
+  let warm: ReturnType<typeof setTimeout> | null = null;
+  const prewarm = () => {
+    if (warm) clearTimeout(warm);
+    warm = setTimeout(() => { warm = null; void stack.prewarmFinishes(object => host.compile(object)).catch(() => { /* The first choice compiles them instead. */ }); },
+      FINISH_PREWARM_DELAY_MS);
+  };
+  prewarm();
+  const releases = [host.skin.subscribe(() => { refreshUnderlay(); prewarm(); }), host.onContextRestored(() => { stack.contextRestored(); prewarm(); }),
+    () => { if (warm) clearTimeout(warm); }];
   // Every layer change draws a frame; the readers (does a layer need maps?) do not.
   const layers: MakeupLayers = { needsOptics: stack.needsOptics, needsAlbedo: stack.needsAlbedo,
     ...invalidating(stack, ["setCanvases", "reconcileLayerCanvases", "setLayerCanvas", "updateLayer"], host.requestFrame) };

@@ -211,3 +211,48 @@ test("hair strands draw nothing into a body-only shadow map and cast as before i
   expect(draw(body, body.customDepthMaterial!, true)).toEqual({ during: [true, true], after: [true, true] });
 });
 
+
+test("new parts are made ready ahead of their first frame: maps a few per frame, programs compiled and first used, once (PREV-189)", async () => {
+  const rig = headRig(), scene = new THREE.Scene();
+  const properties = new WeakMap<object, Record<string, unknown>>();
+  const uploaded: string[] = [];
+  // Each upload takes longer than a frame's budget, so every one after the first waits for the next frame.
+  const entry = (object: object) => { let found = properties.get(object); if (!found) properties.set(object, found = {}); return found; };
+  const renderer = { capabilities: { getMaxAnisotropy: () => 8 }, properties: { get: entry },
+    initTexture(texture: THREE.Texture) {
+      uploaded.push(texture.name);
+      entry(texture).__version = texture.version;
+      const until = performance.now() + 9; while (performance.now() < until) { /* An upload's cost. */ }
+    },
+    getContext: () => ({ fenceSync: () => ({}), flush() {}, getSyncParameter: () => 1, deleteSync() {}, SIGNALED: 1, SYNC_STATUS: 2, SYNC_GPU_COMMANDS_COMPLETE: 3 }),
+  } as unknown as THREE.WebGLRenderer;
+  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => [] });
+  const map = (name: string) => { const texture = new THREE.Texture({ width: 4, height: 4 }); texture.name = name; texture.needsUpdate = true; return texture; };
+  const strands = skinned(quad(), "strands");
+  const hair = component("hair", "hairstyle", [strands], { textures: [map("colour"), map("alpha"), map("profile")] });
+  let frames = 0, compiled = 0, used = 0;
+  const program = { getUniforms: () => { used++; }, getAttributes: () => {} };
+  const preparation = { frame: async () => { frames++; }, compile: (object: THREE.Object3D) => {
+    compiled++;
+    expect(object).toBe(hair.root);
+    return { ready: Promise.resolve(), textures: [map("uniform-only")], programs: () => [program] };
+  } };
+  await character.prepareDetails(v("a", [hair]), preparation);
+  // Every map, the ones only the compiled programs sample included, one frame at a time; the program's first use taken ahead.
+  expect(uploaded).toEqual(["colour", "alpha", "profile", "uniform-only"]);
+  expect(frames).toBeGreaterThanOrEqual(3);
+  expect(compiled).toBe(1);
+  expect(used).toBe(1);
+  // The mesh was set up as the placement does it (the skinning extension, once).
+  expect(strands.userData.xfsSkinExtended).toBe(true);
+  // A part made ready (or placed) is never prepared again.
+  await character.prepareDetails(v("b", [hair]), preparation);
+  expect(compiled).toBe(1);
+  // A newer change stops a preparation: nothing more is uploaded or compiled for it.
+  const other = component("hair", "other", [skinned(quad(), "other strands")], { textures: [map("late")] });
+  const controller = new AbortController();
+  controller.abort();
+  await character.prepareDetails(v("c", [other]), { ...preparation, signal: controller.signal });
+  expect(uploaded).not.toContain("late");
+  expect(compiled).toBe(1);
+});

@@ -130,12 +130,13 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   function clearDirect(material:THREE.MeshPhysicalMaterial){
     direct.get(material)?.dispose();direct.delete(material);
   }
+  /** The layer's Colour-shifting tint off: installed with the slot, so leaving the finish changes a uniform, not the program. */
   function clearTint(material:THREE.MeshPhysicalMaterial){
-    tints.get(material)?.dispose();tints.delete(material);
+    tints.get(material)?.clear();
   }
   function disposeSlot(i: number) {
     const material = materials[i];
-    clearFlakes(material); clearDirect(material); clearTint(material); applied.delete(material);
+    clearFlakes(material); clearDirect(material); tints.get(material)?.dispose(); tints.delete(material); applied.delete(material);
     material.dispose(); textures[i].dispose(); plates[i].removeFromParent(); blendDirty = true;
   }
   function createSlot(canvas: HTMLCanvasElement, i: number) {
@@ -145,6 +146,8 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     mesh.name = `makeup_layer_${i + 1}`; mesh.material = material;
     mesh.renderOrder = renderOrder(i);
     extendSkin(mesh, material, .00008);
+    // Every slot's program carries the Colour-shifting tint at zero (PREV-188): choosing the finish sets uniforms only.
+    tints.set(material, installFresnelTint(material));
     attach(mesh);
     return { mesh, material, texture };
   }
@@ -265,11 +268,8 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     }else clearDirect(material);
     // Game-matched Colour-shifting: the gradient-recolour decal's additive Fresnel colour.
     const shift = canonicalFinish(layer.finish) === "iridescent" ? layer.optics?.shift : undefined;
-    if (shift) {
-      let tint = tints.get(material);
-      if (!tint) { tint = installFresnelTint(material); tints.set(material, tint); }
-      tint.set(shift.color, shift.strength);
-    } else clearTint(material);
+    if (shift) tints.get(material)?.set(shift.color, shift.strength);
+    else clearTint(material);
     const maps = flakes.get(material), changed = Boolean(material.normalMap) !== Boolean(maps);
     if (candidateKey && maps && maps.albedoKey!==candidateKey) {
       if (maps.albedo) maps.albedo.dispose();
@@ -297,6 +297,54 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     plates[i].visible = true; textures[i].needsUpdate = true;
     // What the composite reads for this slot: the layer as now fully applied (an incomplete update above keeps the last one).
     applied.set(material, layer);
+  }
+  /**
+   * Stand-ins for the programs a finish choice switches a layer's own plate to (`prewarmFinishes`): kept, never drawn, since a released
+   * material releases its program.
+   */
+  const standIns: { mesh: THREE.SkinnedMesh; material: THREE.MeshPhysicalMaterial; textures: THREE.Texture[]; release: () => void }[] = [];
+  /**
+   * Compile, in the background, the layer programs a finish choice can switch a layer's own plate to (PREV-188; readiness audit item 1):
+   * the Glitter models' glints (the default Glitter model draws on its own plate) and the flake maps (classic Glitter; Shimmer on its own
+   * plate). Three shares one program between materials of one configuration, so the layer that then takes the finish links nothing;
+   * Colour-shifting needs none (its tint is a uniform in every slot, `installFresnelTint`). `compile` is the scene's (`SceneHostPort.compile`):
+   * off the page's thread. Call it again after the lights change; programs already made are found at once.
+   */
+  function prewarmFinishes(compile: (object: THREE.Object3D) => Promise<void>): Promise<void> {
+    if (!standIns.length) {
+      const pixel = (bytes: number[], srgb = false) => {
+        const texture = new THREE.DataTexture(new Uint8Array(bytes), 1, 1);
+        if (srgb) texture.colorSpace = THREE.SRGBColorSpace;
+        texture.flipY = false; texture.needsUpdate = true;
+        return texture;
+      };
+      const standIn = (configure: (material: THREE.MeshPhysicalMaterial, textures: THREE.Texture[]) => () => void) => {
+        const mesh = copy(), map = pixel([255, 255, 255, 255], true);
+        // As `createSlot` makes a layer's material, then as `updateLayer` sets it up for the finish.
+        const material = new THREE.MeshPhysicalMaterial({ map, transparent: true, depthWrite: false, roughness: .85, side: THREE.DoubleSide, wireframe });
+        mesh.name = "makeup_layer_standin"; mesh.material = material;
+        extendSkin(mesh, material, .00008);
+        const tint = installFresnelTint(material);
+        const textures = [map];
+        const release = configure(material, textures);
+        standIns.push({ mesh, material, textures, release: () => { release(); tint.dispose(); } });
+      };
+      // The Glitter models' glints (direct glint: its shader and the clear coat).
+      standIn(material => {
+        const glint = installProceduralGlintStudy(material);
+        material.roughness = .55; material.metalness = 0; material.clearcoat = .4; material.clearcoatRoughness = .24;
+        return () => glint.dispose();
+      });
+      // Flake maps: normal, and the packed surface as roughness and metalness.
+      standIn((material, textures) => {
+        const normal = pixel([128, 128, 255, 255]), surface = pixel([255, 255, 255, 255]);
+        textures.push(normal, surface);
+        material.normalMap = normal; material.roughnessMap = material.metalnessMap = surface; material.roughness = 1; material.metalness = 1;
+        return () => {};
+      });
+    }
+    for (const entry of standIns) entry.material.wireframe = wireframe;
+    return Promise.all(standIns.map(entry => compile(entry.mesh))).then(() => undefined);
   }
   /** Where the skin under the plate comes from; read lazily (once per head or skin change) the first time a layer needs it. */
   function setUnderlaySource(source: (() => PlateUnderlay | null) | null) {
@@ -395,6 +443,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
    */
   function dispose() {
     setCanvases([]);
+    for (const entry of standIns.splice(0)) { entry.release(); entry.material.dispose(); for (const texture of entry.textures) texture.dispose(); }
     composite.dispose();
     plate.removeFromParent(); plateLight.material.dispose();
     const own = new Set<string>(STACK_ATTRIBUTES);
@@ -404,7 +453,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     geometry.dispose();
   }
   return { plates, materials, textures, plate, geometry, setCanvases, reconcileLayerCanvases, dispose,
-    setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored,
+    setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored, prewarmFinishes,
     setNormals(value: boolean) { plateLight.handle.setNormals(value); },
     setWire(value: boolean) { wireframe = value; plateLight.material.wireframe = value; for (const m of materials) m.wireframe = value; } };
 }

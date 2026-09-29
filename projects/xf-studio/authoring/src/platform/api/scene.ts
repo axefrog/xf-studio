@@ -150,6 +150,12 @@ export interface SceneHostPort {
   onFrame(listener: (dt: number) => void): () => void;
   /** The WebGL context came back after a loss: render targets are empty (returns the unsubscribe). A frame follows. */
   onContextRestored(listener: () => void): () => void;
+  /**
+   * Compile `object`'s programs (never drawn yet: a stand-in or a part about to show) for every pass the scene draws, linked off the
+   * page's thread, and take their first use between frames (PREV-188): resolves when a frame that draws it would wait on nothing. A
+   * later material of the same configuration shares the programs.
+   */
+  compile(object: THREE.Object3D): Promise<void>;
 }
 
 /**
