@@ -55,6 +55,8 @@ export interface GraphOptions {
   readonly snapshotEvery?: number;
   /** Write a snapshot when folding a node's tail at load took longer than this (default 5 ms). */
   readonly snapshotFoldMs?: number;
+  /** Whether the graph writes snapshots to its store (default true); a read-only view, such as an inspector, says false. */
+  readonly writeSnapshots?: boolean;
   /** Retry delay after a failed append (default 250 ms), and how long to wait for a reply (default 10 s). */
   readonly retryMs?: number;
   readonly replyTimeoutMs?: number;
@@ -143,6 +145,7 @@ export class StrataGraph implements GraphView {
   private readonly faults?: Faults;
   private readonly snapshotEvery: number;
   private readonly snapshotFoldMs: number;
+  private readonly writeSnapshots: boolean;
   private readonly retryMs: number;
   private readonly replyTimeoutMs: number;
 
@@ -217,6 +220,7 @@ export class StrataGraph implements GraphView {
     this.sinks = options.sinks ?? [];
     this.snapshotEvery = options.snapshotEvery ?? 200;
     this.snapshotFoldMs = options.snapshotFoldMs ?? 5;
+    this.writeSnapshots = options.writeSnapshots ?? true;
     this.retryMs = options.retryMs ?? 250;
     this.replyTimeoutMs = options.replyTimeoutMs ?? 10_000;
     const sourceType: TypeDef = Object.freeze({ kind: "strata/type" as const, type: SOURCE_TYPE, owner: "strata", schema: "1",
@@ -1591,7 +1595,7 @@ export class StrataGraph implements GraphView {
   // -------------------------------------------------------------------------------------------------------------
 
   private writeSnapshot(rec: Rec): void {
-    if (!this.store || rec.constant || rec.session || rec.ackedSeq <= rec.snapshotSeq) return;
+    if (!this.store || !this.writeSnapshots || rec.constant || rec.session || rec.ackedSeq <= rec.snapshotSeq) return;
     const acked = rec.entries.filter(entry => entry.seq <= rec.ackedSeq);
     const state = fold(rec.base.state, acked, rec.def);
     if (!state) return;

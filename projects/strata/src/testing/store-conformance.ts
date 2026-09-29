@@ -104,6 +104,22 @@ export const STORE_CASES: readonly StoreCase[] = [
     same((await store.changesSince(0)).entries.map(entry => entry.node.id), [B.id], "changes");
     if (!((await store.counter()) > before)) fail("the counter didn't move on purge");
   } },
+  { name: "positions are never reissued: after a purge of the newest entries, appends continue above them and the head never falls", async run(make) {
+    const store = await make();
+    await appendOk(store, "c1", [sampleEntry(B, 1, "c1")], [[B.id, 0]]);
+    const [a1, a2] = await appendOk(store, "c2", [sampleEntry(A, 1, "c2"), sampleEntry(A, 2, "c2")], [[A.id, 0]]);
+    const headBefore = (await store.changesSince(0)).head;
+    same(headBefore, a2, "head before the purge");
+    await store.purge(A);
+    const after = await store.changesSince(0);
+    if (after.head < headBefore) fail(`the head fell from ${headBefore} to ${after.head} after a purge`);
+    if ((await store.load()).head < headBefore) fail("load's head fell after a purge");
+    const [b2] = await appendOk(store, "c3", [sampleEntry(B, 2, "c3")], [[B.id, 1]]);
+    if (!(b2 > a2)) fail(`position ${b2} was reissued (the purged entries had ${a1} and ${a2})`);
+    // A window that had read up to the purged entries still sees the new one.
+    same((await store.changesSince(a2)).entries.map(entry => entry.commit), ["c3"], "changes since the purged head");
+    same((await store.changesSince(a1)).entries.map(entry => entry.commit), ["c3"], "changes since a purged position");
+  } },
   { name: "the index lists each node's head seq, name and trash state", async run(make) {
     const store = await make();
     await appendOk(store, "c1", [sampleEntry(A, 1, "c1")], [[A.id, 0]]);

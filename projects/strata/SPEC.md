@@ -485,7 +485,9 @@ Each operation is an edit in a commit; its result is normative, its encoding as 
 
 19.2. **Append** is atomic and guarded: the request names, for each node, the head seq it expects; if any differs, the whole append MUST be refused as stale, and nothing written. Appends MUST be idempotent by commit ID: appending a commit already stored returns its positions and writes nothing.
 
-19.3. **Positions** are assigned by the store in append order, strictly increasing across the store, and returned in the order of the request's entries.
+19.3. **Positions** are assigned by the store in append order, strictly increasing across the store, and returned in the order of the request's entries. A position, once assigned, MUST NOT be assigned again, even after the entry holding it is purged (§16.7) or compacted away: every later append gets a position greater than every position the store has ever assigned. The head position a store reports (with a load or with the entries after a position) is the greatest position it has ever assigned, and MUST NOT decrease. Every store MUST pass the store conformance suite, which includes a purge of the newest entries followed by an append.
+
+> **Note (non-normative).** Other windows read "every entry after position N" to catch up. If a purge of the newest entries let the store hand their positions out again, a window that had already read up to N would skip the new entries for ever. A SQL store whose row IDs are reused after the highest rows are deleted (SQLite's `INTEGER PRIMARY KEY` without `AUTOINCREMENT`, for example) needs a persisted high-water mark.
 
 19.4. **Compaction** replaces a stream's entries up to the last given entry's `seq` with the given entries (kept and rollup entries, same seqs and positions), keeps any later entry, records the compaction and discards the stream's snapshots.
 

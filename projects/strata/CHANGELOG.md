@@ -4,6 +4,11 @@ XF Strata follows semantic versioning from its first tag. Every change to the pu
 
 ## 0.1.0 (unreleased)
 
+Changes after the first review (deep review 6):
+
+- Stores: a position is never reissued, and the head never falls, even after a purge of the newest entries (SPEC §19.3); the store conformance suite checks a purge followed by an append.
+- `GraphOptions.writeSnapshots` (default true): a read-only graph, such as an inspector, writes nothing to its store.
+
 The first version, built as slice G1 of XF Studio's profiles and graph design.
 
 - The execution kernel: streams, demand specs and demand as a source, the five node kinds, START/END cycles with queued mid-cycle changes, errors as values, drivers whose start returns a process node, child processes, AbortSignal-compatible cancellation tokens with chaining, the erector over a versioned graph-model schema, one operator catalogue for built-ins and scripts, declarable state machines, an inspectable process tree with actors, roles and members.

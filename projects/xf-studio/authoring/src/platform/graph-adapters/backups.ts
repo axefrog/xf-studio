@@ -1,6 +1,6 @@
 /**
  * Automatic database backups (profiles and graph design §7.4): the library is the only home of the work, so it is
- * copied without asking, at the first start of each day and before every migration, keeping seven daily and four
+ * copied without asking, once each day the Studio runs and before every migration, keeping seven daily and four
  * weekly copies in a `backups` folder beside it. A purge reaches the backups too (decision Q7). Restoring swaps a copy
  * in after keeping the current file. SQLite's `VACUUM INTO` makes each copy: consistent, compact, and free of
  * deleted pages.
@@ -96,29 +96,53 @@ export class LibraryBackups {
     }).sort((a, b) => a.day < b.day ? 1 : a.day > b.day ? -1 : a.file < b.file ? 1 : -1);
   }
 
-  /** Removes a purged node's rows from every copy, and their freed pages with them. */
+  /**
+   * Removes a purged node's rows from every copy, and their freed pages with them. Every copy is tried; if any
+   * couldn't be purged (locked, unreadable) it throws afterwards, naming them, so the store keeps the purge pending
+   * and tries again later.
+   */
   purge(node: string): void {
+    const failed: string[] = [];
     for (const item of this.list()) {
-      const db = new Database(item.file);
-      try {
-        db.exec("PRAGMA secure_delete=ON;");
-        const tables = new Set((db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(row => row.name));
-        let removed = 0;
-        for (const table of NODE_ROWS) if (tables.has(table)) removed += db.query(`DELETE FROM ${table} WHERE node = ?`).run(node).changes;
-        if (removed) db.exec("VACUUM;");
-      } finally { db.close(); }
+      try { purgeFile(item.file, [node]); } catch { failed.push(basename(item.file)); }
     }
+    if (failed.length) throw new Error(`Some backups couldn't be purged yet: ${failed.join(", ")}.`);
   }
 
   /**
-   * Restores a copy: the current library is kept as a pre-restore copy first. Every connection to the library must be
-   * closed before this runs (the host restarts its stores afterwards).
+   * Restores a copy: the current library is kept as a pre-restore copy first. Refused while any other connection has
+   * the library open (the host closes its stores first and restarts them afterwards): the last connection to close
+   * removes the write-ahead log, so a log left after this one closes means another is still open. Purges still pending
+   * in the current library are applied to the restored one, so a restore never brings a purged node back.
    */
   restore(file: string): string {
     if (!this.list().some(item => item.file === file)) throw new Error("That isn't one of this library's backups.");
+    let pending: string[] = [];
+    if (existsSync(this.library)) {
+      const db = new Database(this.library);
+      try {
+        const tables = new Set((db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(row => row.name));
+        if (tables.has("purge_pending")) pending = (db.query("SELECT node FROM purge_pending").all() as { node: string }[]).map(row => row.node);
+      } finally { db.close(); }
+      if (existsSync(`${this.library}-wal`)) throw new Error("Close the Studio's other windows before restoring a backup.");
+    }
     const kept = existsSync(this.library) ? this.copy(this.name("pre-restore", isoDay(this.now()), `.${this.now()}`)) : "";
+    // Only this process's read-only copy connection can have left these, and it is closed.
     for (const suffix of ["-wal", "-shm"]) rmSync(`${this.library}${suffix}`, { force: true });
     copyFileSync(file, this.library);
+    if (pending.length) purgeFile(this.library, pending);
     return kept;
   }
+}
+
+/** Removes nodes' rows from one SQLite file (a backup, or a restored library), and their freed pages with them. */
+function purgeFile(file: string, nodes: readonly string[]): void {
+  const db = new Database(file);
+  try {
+    db.exec("PRAGMA busy_timeout=2000; PRAGMA secure_delete=ON;");
+    const tables = new Set((db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(row => row.name));
+    let removed = 0;
+    for (const node of nodes) for (const table of NODE_ROWS) if (tables.has(table)) removed += db.query(`DELETE FROM ${table} WHERE node = ?`).run(node).changes;
+    if (removed) db.exec("VACUUM;");
+  } finally { db.close(); }
 }
