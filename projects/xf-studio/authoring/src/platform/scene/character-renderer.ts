@@ -152,6 +152,15 @@ export function createCharacterRenderer(input: {
     // A component kept from the previous details already carries the skinning extension.
     if (!mesh.userData.xfsSkinExtended) { extendSkin(mesh, material); mesh.userData.xfsSkinExtended = true; }
   }
+  /**
+   * The resolved skin's material as the core head wears it (core-head placement): the skinning extension for the head's own skin sets,
+   * once per material. The skin's own chunk is never drawn in that placement, so it is never extended or compiled (PREV-191).
+   */
+  function wearOnHead(material: THREE.MeshStandardMaterial) {
+    if (material.userData.xfsHeadExtended) return;
+    extendSkin(head, material);
+    material.userData.xfsHeadExtended = true;
+  }
   /** Parts brought to their first frame already (prepared ahead, or placed): their programs and maps are on the GPU. */
   const prepared = new WeakSet<LoadedCharacterComponent>();
   /**
@@ -164,6 +173,11 @@ export function createCharacterRenderer(input: {
     const { signal } = preparation;
     const fresh = next.components.filter(item => !prepared.has(item));
     if (!fresh.length) return;
+    // A skin the core head will wear (core-head placement, remembered per loaded skin) is prepared as the head drawn with its material:
+    // its own chunk is never drawn, and the head's program is the one its first frame needs (PREV-191).
+    const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
+    const onHead = skinItem && fresh.includes(skinItem) && skinPlacement.place(skinItem.meshes).mode === "core-head" ? skinItem : null;
+    const own = (item: LoadedCharacterComponent) => item !== onHead;
     let started = performance.now();
     const pace = async () => {
       if (performance.now() - started < PREPARE_FRAME_MS) return;
@@ -194,10 +208,10 @@ export function createCharacterRenderer(input: {
       } finally { gl.deleteSync(fence); }
       started = performance.now();
     };
-    for (const item of fresh) for (const mesh of item.meshes) prepareMesh(item, mesh);
+    for (const item of fresh.filter(own)) for (const mesh of item.meshes) prepareMesh(item, mesh);
     // A skinned mesh's bounds (the draw order's depth sort reads them): Three skins every vertex on the CPU for them in the first frame
     // that draws it (85 ms for a hairstyle); the rest pose's bounds from its geometry, a mesh per turn, stand in (only the sort reads them).
-    for (const item of fresh) for (const mesh of item.meshes) {
+    for (const item of fresh.filter(own)) for (const mesh of item.meshes) {
       if (signal?.aborted) return;
       if (!mesh.isSkinnedMesh || mesh.boundingSphere) continue;
       await pace();
@@ -213,9 +227,22 @@ export function createCharacterRenderer(input: {
       if (!signal?.aborted) { handle.bake(renderer); started = 0; }
     }
     if (signal?.aborted) return;
-    const compiled = fresh.map(item => preparation.compile(item.root));
+    const compiled = fresh.map(item => {
+      if (item !== onHead) return preparation.compile(item.root);
+      // The head drawn with the skin's material, for the compile only (it is synchronous: no frame draws the swap).
+      const material = item.meshes[0]!.material as THREE.MeshStandardMaterial, shown = head.material;
+      wearOnHead(material);
+      head.material = material;
+      try { return preparation.compile(head); } finally { head.material = shown; }
+    });
     await uploadAll(compiled.flatMap(entry => entry.textures));
-    await Promise.all(compiled.map(entry => entry.ready));
+    // The driver's links, left (not waited for) when the preparation stops: they finish on the driver's threads either way (PREV-192).
+    const linked = Promise.all(compiled.map(entry => entry.ready));
+    linked.catch(() => { /* Reported below unless the preparation stopped. */ });
+    await (signal ? Promise.race([linked, new Promise<void>(resolve => {
+      if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true });
+    })]) : linked);
+    if (signal?.aborted) return;
     // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle.
     await drained();
     for (const program of new Set(compiled.flatMap(entry => entry.programs()))) {
@@ -320,9 +347,8 @@ export function createCharacterRenderer(input: {
     const shown = shownSkin();
     if (shown?.placement.mode === "core-head") {
       head.material = shown.item.meshes[0]!.material;
-      // A skin kept from the previous details already drew on the core head with this material's extension.
-      const material = head.material as THREE.MeshStandardMaterial;
-      if (!material.userData.xfsHeadExtended) { extendSkin(head, material); material.userData.xfsHeadExtended = true; }
+      // A skin prepared ahead, or kept from the previous details, already carries the head's extension.
+      wearOnHead(head.material as THREE.MeshStandardMaterial);
       head.visible = true;
     } else {
       head.material = skin;

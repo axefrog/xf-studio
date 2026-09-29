@@ -161,12 +161,17 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         const record = await readCharacterRecord(state.record, fetcher, signal);
         await loading;
         if (signal.aborted) return;
-        const load = scene.details.load(record, { fetcher, signal, reuse: shown });
-        loading = load.catch(() => {});
-        const loaded = await load;
-        // Its new parts made ready for their first frame, then kept (the part pool) for the change that shows them.
-        try { if (!signal.aborted) await scene.prepareDetails(loaded, signal); }
-        finally { loaded.dispose(); }
+        const prepare = scene.prepareDetails;
+        // Its new parts made ready for their first frame, then kept (the part pool) for the change that shows them. A show waits for all
+        // of it (`loading`), so a click during the preparation finds the parts in the pool instead of building them again (PREV-192); a
+        // stopped preparation returns at once, its programs still linking on the driver's threads for the show's own preparation.
+        const ahead = (async () => {
+          const loaded = await scene.details.load(record, { fetcher, signal, reuse: shown });
+          try { if (!signal.aborted) await prepare(loaded, signal); }
+          finally { loaded.dispose(); }
+        })();
+        loading = ahead.catch(() => {});
+        await ahead;
       } catch (error) {
         if (!signal.aborted) throw error;
       } finally { if (ahead === controller) ahead = null; }

@@ -43,6 +43,18 @@ export type RenderingOptions = { skinScatter: boolean; faceShadows: boolean; hai
 export const DEFAULT_RENDERING: Readonly<RenderingOptions> = Object.freeze({ skinScatter: true, faceShadows: true, hairLook: 0 });
 export const renderingOf = (display: DisplayState): RenderingOptions =>
   ({ skinScatter: display.skinScatter ?? true, faceShadows: display.faceShadows ?? true, hairLook: display.hairLook ?? 0 });
+/**
+ * The Rendering options that are research studies, by the ID the presentation withdraws them with (UI-163): while research tools are
+ * off, a view draws each at its default, and its stored choice is kept, in force again when research tools come back on. Nothing is
+ * then left applied that the person can't see or undo.
+ */
+export const RESEARCH_RENDERING: Readonly<Record<string, keyof RenderingOptions>> = Object.freeze({
+  "rendering.skinScatter": "skinScatter", "rendering.faceShadows": "faceShadows", "rendering.hairLook": "hairLook" });
+/** A display node as devices apply it: each withdrawn Rendering option at its default (UI-163). */
+function activeDisplay(graph: ViewGraph, display: DisplayState): DisplayState {
+  const withdrawn = Object.entries(RESEARCH_RENDERING).filter(([id]) => graph.withdrawn(id));
+  return withdrawn.length ? { ...display, ...Object.fromEntries(withdrawn.map(([, key]) => [key, DEFAULT_RENDERING[key]])) } : display;
+}
 /** Each view tool's on/off state, by tool ID (`eye-makeup.surface`). */
 export type ToolsState = { on: Record<string, boolean> };
 
@@ -242,7 +254,8 @@ export function storedViewGraph(graph: ViewGraph): ViewGraphData | undefined {
  * tools are what the device applies: the stored choices without the tools the presentation withdrew (UI-102).
  */
 export function previewFields(graph: ViewGraph, view = MAIN_VIEW, options: { active?: boolean } = {}) {
-  const scene = graph.state<SceneState>(view, "scene"), display = graph.state<DisplayState>(view, "display");
+  const scene = graph.state<SceneState>(view, "scene"), stored = graph.state<DisplayState>(view, "display");
+  const display = options.active ? activeDisplay(graph, stored) : stored;
   const lights = graph.state<LightsState>(view, "lights");
   const tools = options.active ? graph.activeTools(view) : graph.state<ToolsState>(view, "tools").on;
   return { scene, display, lights, rig: graph.kind(view, "lights") as LightingPreset, camera: graph.state<CameraNodeState>(view, "camera").pose,

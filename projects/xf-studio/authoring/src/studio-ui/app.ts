@@ -138,8 +138,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   });
   rt.dock = dock;
   /**
-   * Withdraw every view tool this presentation doesn't offer (UI-102): a hidden module's, and research tools while they are hidden.
-   * Each keeps its on/off state, and no device acts on it (Surface controls neither draws nor edits) until it is offered again. The
+   * Withdraw every view tool this presentation doesn't offer (UI-102): a hidden module's, and research tools while they are hidden; and
+   * the research-only view settings with them (the Rendering options, UI-163: drawn at their defaults). Each keeps its state, and no
+   * device acts on it (Surface controls neither draws nor edits) until it is offered again. The
    * application gets tool IDs only, never which modules show (design §6.3 rule 6). Recomputed only when the filter changes (the
    * registered tools are fixed for the session), so a paint costs one comparison.
    */
@@ -148,9 +149,10 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     const filter = rt.toolFilter(), key = JSON.stringify(filter);
     if (key === withdrawnKey) return;
     withdrawnKey = key;
-    const all = port.views.tools(undefined, { modules: modules.map(module => module.id), research: true });
-    const offered = new Set(port.views.tools(undefined, filter).map(tool => tool.id));
-    port.views.withdraw(all.map(tool => tool.id).filter(id => !offered.has(id)));
+    const everything = { modules: modules.map(module => module.id), research: true };
+    const all = [...port.views.tools(undefined, everything).map(tool => tool.id), ...port.views.settings(everything)];
+    const offered = new Set([...port.views.tools(undefined, filter).map(tool => tool.id), ...port.views.settings(filter)]);
+    port.views.withdraw(all.filter(id => !offered.has(id)));
   };
   withdrawUnoffered();
   /**

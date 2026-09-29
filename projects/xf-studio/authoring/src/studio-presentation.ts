@@ -170,6 +170,11 @@ export type StudioPresentationPort<Slot> = {
      * and no device acts on them until they are offered again (UI-102). Tool IDs only; the application never learns why.
      */
     withdraw(tools: readonly string[]): void;
+    /**
+     * The view settings offered under `filter` (the Rendering options are research studies, UI-163); the presentation withdraws the
+     * others with `withdraw`, and views then draw them at their defaults, keeping each stored choice for when they are offered again.
+     */
+    settings(filter: Pick<ViewToolFilter, "research">): readonly string[];
   };
   /** The registered feature modules, in catalogue order (feature-module platform §4). */
   features(): readonly FeatureInfo[];
@@ -388,6 +393,7 @@ export function createStudioPresentation<Slot>(sources: {
     titles: () => a.viewTitles(),
     setTool: (view: ViewId | undefined, tool: string, enabled: boolean) => a.dispatch({ kind: "view.setTool", ...(view === undefined ? {} : { view }), tool, enabled }),
     withdraw: (tools: readonly string[]) => a.withdrawViewTools(tools),
+    settings: (filter: Pick<ViewToolFilter, "research">) => a.viewSettings(filter),
   });
   const localSetup: StudioPresentationPort<Slot>["localSetup"] = sources.localSetup ? {
     snapshot: () => sources.localSetup!.snapshot(), capability: action => sources.localSetup!.capability(action),

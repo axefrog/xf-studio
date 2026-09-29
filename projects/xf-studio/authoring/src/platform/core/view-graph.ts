@@ -176,8 +176,8 @@ export class ViewGraph {
   private undoSteps: Step[] = [];
   private redoSteps: Step[] = [];
   private trails = new Map<string, Trail>();
-  /** Tools the presentation no longer offers (UI-102): each view keeps its choice, and no device acts on them. */
-  private withdrawn = new Set<string>();
+  /** Tools and view settings the presentation no longer offers (UI-102, UI-163): each view keeps its choice, and no device acts on them. */
+  private withdrawnIds = new Set<string>();
   private recording = true;
   private counter = 0;
 
@@ -234,22 +234,27 @@ export class ViewGraph {
 
   // ----- Withdrawn tools -----
   /**
-   * Withdraw view tools (UI-102): the presentation no longer offers them (their module is hidden, or research tools are off), so
-   * no device may act on them. Each view's tools node keeps its choice, saved and in force again once the tool is offered again;
-   * `activeTools` is what devices apply. Presentation input for this session: it records nothing and marks no edit. Returns
+   * Withdraw view tools (UI-102) and view settings (UI-163): the presentation no longer offers them (their module is hidden, or
+   * research tools are off), so no device may act on them. Each view's node keeps its choice, saved and in force again once it is
+   * offered again; `activeTools` (and `withdrawn`) is what devices apply. Presentation input for this session: it records nothing and marks no edit. Returns
    * whether the withdrawn set changed.
    */
   withdrawTools(tools: readonly string[]): boolean {
     const next = new Set(tools);
-    if (next.size === this.withdrawn.size && [...next].every(id => this.withdrawn.has(id))) return false;
-    this.withdrawn = next;
+    if (next.size === this.withdrawnIds.size && [...next].every(id => this.withdrawnIds.has(id))) return false;
+    this.withdrawnIds = next;
     this.emit([...new Set(this.views.map(view => view.tools))], false, "seed", false);
     return true;
   }
+  /**
+   * Whether the presentation withdrew a tool or a view setting (a research-only Rendering option, UI-163, which devices then apply at its
+   * default; the graph's rules say which IDs name settings, `previewFields`).
+   */
+  withdrawn(id: string): boolean { return this.withdrawnIds.has(id); }
   /** A view's tools as devices apply them: its tools node's choices, with every withdrawn tool off. */
   activeTools(view: ViewId): Record<string, boolean> {
     const on = this.state<{ on: Record<string, boolean> }>(view, "tools").on;
-    return Object.fromEntries(Object.entries(on).map(([id, value]) => [id, value && !this.withdrawn.has(id)]));
+    return Object.fromEntries(Object.entries(on).map(([id, value]) => [id, value && !this.withdrawnIds.has(id)]));
   }
 
   // ----- Node edits -----

@@ -219,7 +219,7 @@ const decodeElement = (image: HTMLImageElement) => image.decode?.().catch(() => 
  * copy, is decoded now, off the main thread (a 4096² map took a frame of its own).
  */
 export async function decodeDetailTexture(bytes: ArrayBuffer, cpuSize: { width: number; height: number } | null, cpuRead: boolean): Promise<DecodedTexture> {
-  const blob = new Blob([bytes], { type: "image/png" });
+  const blob = new Blob([withoutColourChunks(bytes)], { type: "image/png" });
   const bitmap = typeof createImageBitmap === "function" ? createImageBitmap(blob, UPLOAD_BITMAP_OPTIONS).catch(() => null) : Promise.resolve(null);
   const small = cpuSize && typeof createImageBitmap === "function"
     ? createImageBitmap(blob, { resizeWidth: cpuSize.width, resizeHeight: cpuSize.height, resizeQuality: "medium" }).catch(() => null)
@@ -232,6 +232,35 @@ export async function decodeDetailTexture(bytes: ArrayBuffer, cpuSize: { width: 
     if ((cpuRead && !reduced) || !decoded) await decodeElement(image);
     return { image, bitmap: decoded, reduced };
   } finally { URL.revokeObjectURL(url); }
+}
+/** PNG chunks that ask a browser to convert the decoded colours (gamma, colour profile, primaries, the sRGB intent, coding points). */
+const COLOUR_CHUNKS = new Set(["gAMA", "iCCP", "cHRM", "sRGB", "cICP"]);
+/**
+ * A map's PNG without the chunks that would make a browser convert its colours (PREV-193): the game samples the texels as stored, and
+ * without them every decode path agrees, the upload bitmap (`colorSpaceConversion: "none"`), Three's own upload of the element
+ * (`UNPACK_COLORSPACE_CONVERSION_WEBGL` is the browser default for a colour map) and the CPU reads of the skin. Returns `bytes` itself when
+ * it has none (the usual case) or isn't a PNG it can walk.
+ */
+export function withoutColourChunks(bytes: ArrayBuffer): ArrayBuffer {
+  const view = new DataView(bytes), data = new Uint8Array(bytes);
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (data.length < 8 || signature.some((byte, index) => data[index] !== byte)) return bytes;
+  const kept: [number, number][] = [[0, 8]];
+  let dropped = false;
+  for (let offset = 8; offset < data.length;) {
+    if (offset + 12 > data.length) return bytes;
+    const length = view.getUint32(offset), end = offset + 12 + length;
+    if (end > data.length) return bytes;
+    const type = String.fromCharCode(data[offset + 4]!, data[offset + 5]!, data[offset + 6]!, data[offset + 7]!);
+    if (COLOUR_CHUNKS.has(type)) dropped = true; else kept.push([offset, end]);
+    offset = end;
+    if (type === "IEND") { if (offset < data.length) kept.push([offset, data.length]); break; }
+  }
+  if (!dropped) return bytes;
+  const out = new Uint8Array(kept.reduce((sum, [start, end]) => sum + end - start, 0));
+  let at = 0;
+  for (const [start, end] of kept) { out.set(data.subarray(start, end), at); at += end - start; }
+  return out.buffer;
 }
 /** Parse a geometry file (its own skin weights kept as floats, `restoreFirstWeights`), each stage in a task of its own (PREV-189). */
 export async function parseDetailGeometry(buffer: ArrayBuffer): Promise<ParsedGeometry> {
@@ -320,8 +349,9 @@ export async function readCharacterRecord(file: string, fetcher: CharacterDetail
 
 /**
  * How a map is decoded for its first upload (PREV-189): off the main thread, as the raw texels WebGL is given (unpremultiplied, no
- * colour conversion: exactly what Three's upload of the image element asks for, `UNPACK_COLORSPACE_CONVERSION_WEBGL` none), so the
- * upload is a copy instead of a synchronous re-decode of the PNG (about 115 ms for a 4096² map, measured 29 September 2026).
+ * colour conversion), so the upload is a copy instead of a synchronous re-decode of the PNG (about 115 ms for a 4096² map, measured
+ * 29 September 2026). Three uploads an element with the browser's default conversion for a colour map; the PNG reaches both without
+ * the chunks that would make them differ (`withoutColourChunks`, PREV-193).
  */
 export const UPLOAD_BITMAP_OPTIONS: ImageBitmapOptions = { premultiplyAlpha: "none", colorSpaceConversion: "none", imageOrientation: "from-image" };
 /** A map's decoded bitmap for its first upload, until the scene uploads it (`uploadTexture`); how many textures still wait on each. */
@@ -358,7 +388,14 @@ export function offerUploadSource(texture: THREE.Texture, bitmap: ImageBitmap) {
   uploadWaiting.set(bitmap, (uploadWaiting.get(bitmap) ?? 0) + 1);
   // Released before it was ever uploaded (a part superseded and let go): its bitmap is not kept for it.
   texture.addEventListener("dispose", released);
+  // Uploaded by the renderer itself (drawn before a preparation reached it, PREV-193): the bitmap isn't kept for the part's life either.
+  if (!uploadWatched.has(texture)) {
+    uploadWatched.add(texture);
+    const before = texture.onUpdate;
+    texture.onUpdate = (updated: THREE.Texture) => { withdrawUploadSource(updated); before?.call(updated, updated); };
+  }
 }
+const uploadWatched = new WeakSet<THREE.Texture>();
 /** Whether `texture` has a decoded bitmap waiting for its first upload (tests). */
 export const hasUploadSource = (texture: THREE.Texture) => uploadSources.has(texture);
 

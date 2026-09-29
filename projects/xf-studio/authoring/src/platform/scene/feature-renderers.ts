@@ -216,6 +216,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
     },
     setNormals(enabled: boolean) { for (const entry of entries) guarded(entry, "setNormals", renderer => renderer.setNormals?.(enabled)); },
     setWireframe(enabled: boolean) { for (const entry of entries) guarded(entry, "setWireframe", renderer => renderer.setWireframe?.(enabled)); },
+    setResearchTools(enabled: boolean) { for (const entry of entries) guarded(entry, "setResearchTools", renderer => renderer.setResearchTools?.(enabled)); },
     contextRestored() {
       for (const entry of entries) for (const listener of [...entry.restored]) guarded(entry, "onContextRestored", () => listener());
     },

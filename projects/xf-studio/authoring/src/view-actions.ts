@@ -15,7 +15,7 @@ import { refusal, deriveViewSummaries, deriveViewTools, SET_VIEW_TOOL, type Capa
   type ViewGraphData, type ViewToolFilter } from "./platform/api";
 import type { ViewGraph } from "./platform/core/view-graph";
 import { PLATFORM_VIEW_TOOLS } from "./platform/core/view-tools";
-import { createStudioViewGraph } from "./preview-view-graph";
+import { createStudioViewGraph, RESEARCH_RENDERING } from "./preview-view-graph";
 import type { PreviewState } from "./workspace-state";
 
 export type ViewAction =
@@ -65,7 +65,14 @@ export class ViewActions {
    * Each view keeps its choice and no device acts on them until they are offered again. The presentation passes tool IDs, never its
    * module visibility (design §6.3 rule 6).
    */
-  withdraw(tools: readonly string[]) { this.graph.withdrawTools(tools.filter(id => this.registration.tools.some(tool => tool.id === id))); }
+  withdraw(tools: readonly string[]) {
+    this.graph.withdrawTools(tools.filter(id => this.registration.tools.some(tool => tool.id === id) || Object.hasOwn(RESEARCH_RENDERING, id)));
+  }
+  /**
+   * The view settings a presentation offers under `filter` (UI-163): the Rendering options are research studies, offered only with
+   * research tools. The presentation withdraws the others with its tools (`withdraw`), so a view draws them at their defaults.
+   */
+  settings(filter: Pick<ViewToolFilter, "research">): readonly string[] { return filter.research ? Object.keys(RESEARCH_RENDERING) : []; }
   capability(action: ViewAction): Capability {
     if (action.kind === "view.undo") return this.graph.history().depth ? { available: true } : refusal("invalid_value", "There is no view or lighting change to undo.");
     if (action.kind === "view.redo") return this.graph.history().redoDepth ? { available: true } : refusal("invalid_value", "There is no undone view or lighting change to redo.");

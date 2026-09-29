@@ -1,9 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
 import * as THREE from "three";
 import { createFeatureRenderers, type FeatureRendererContext } from "../src/platform/scene/feature-renderers";
 import { featureId } from "../src/platform/api";
 import { renderBand, type FeatureRenderer, type FeatureRendererFactory, type SceneHostPort, type SurfaceUnderlay } from "../src/platform/api/scene";
-import { EYE_MAKEUP_RENDERER, EYE_PLATE_SURFACE } from "../src/features/eye-makeup/render";
+import { EYE_MAKEUP_RENDERER, EYE_PLATE_SURFACE, FINISH_PREWARM_DELAY_MS } from "../src/features/eye-makeup/render";
 import { initialRecipe } from "./fixtures/eye-region";
 
 // Feature-module platform step 7: the scene host's feature renderers, through their scene ports only. Eye makeup's renderer is
@@ -372,4 +372,31 @@ test("a render band hands out only its own slots", () => {
   expect([band.order(0), band.order(2)]).toEqual([42, 44]);
   for (const index of [-1, 3, 1.5]) expect(() => band.order(index)).toThrow("outside");
   expect(() => renderBand(10, 0).order(0)).toThrow("outside");
+});
+
+test("the research finishes' programs are made ahead only while research tools show, and released when they go off (PREV-194)", async () => {
+  jest.useFakeTimers();
+  try {
+    const { ctx, skinChanged } = context();
+    const compiled: THREE.Object3D[] = [];
+    ctx.compile = async object => { compiled.push(object); };
+    const features = createFeatureRenderers(ctx, [EYE_MAKEUP_RENDERER]);
+    // Research tools off (the host's default): no stand-in is made, after a skin change either.
+    skinChanged();
+    jest.advanceTimersByTime(FINISH_PREWARM_DELAY_MS + 10);
+    expect(compiled).toHaveLength(0);
+    // On: the Glitter and flake programs are compiled once the view is idle.
+    features.setResearchTools(true);
+    jest.advanceTimersByTime(FINISH_PREWARM_DELAY_MS + 10);
+    expect(compiled).toHaveLength(2);
+    let released = 0;
+    for (const object of compiled) ((object as THREE.Mesh).material as THREE.Material).addEventListener("dispose", () => released++);
+    // Off again: the stand-ins and their programs go, and a skin change makes nothing.
+    features.setResearchTools(false);
+    expect(released).toBe(2);
+    skinChanged();
+    jest.advanceTimersByTime(FINISH_PREWARM_DELAY_MS + 10);
+    expect(compiled).toHaveLength(2);
+    features.dispose();
+  } finally { jest.useRealTimers(); }
 });

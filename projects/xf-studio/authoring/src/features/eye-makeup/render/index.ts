@@ -56,13 +56,15 @@ function createEyeMakeupRenderer(host: SceneHostPort): EyeMakeupRenderer {
   refreshUnderlay();
   // The finish programs (Glitter's glints, flake maps), compiled while the view is idle once the V's skin and lights are in place
   // (PREV-188): a first Glitter choice then links nothing. Again after each skin change (the V, a lighting setup): cached ones cost nothing.
-  let warm: ReturnType<typeof setTimeout> | null = null;
+  // Glitter and Shimmer are research finishes: only with research tools on can anyone choose them (a layer already using one compiles its
+  // own program), so only then are their programs made ahead, and they are released when research tools go off (PREV-194).
+  let warm: ReturnType<typeof setTimeout> | null = null, research = false;
   const prewarm = () => {
+    if (!research) return;
     if (warm) clearTimeout(warm);
     warm = setTimeout(() => { warm = null; void stack.prewarmFinishes(object => host.compile(object)).catch(() => { /* The first choice compiles them instead. */ }); },
       FINISH_PREWARM_DELAY_MS);
   };
-  prewarm();
   const releases = [host.skin.subscribe(() => { refreshUnderlay(); prewarm(); }), host.onContextRestored(() => { stack.contextRestored(); prewarm(); }),
     () => { if (warm) clearTimeout(warm); }];
   // Every layer change draws a frame; the readers (does a layer need maps?) do not.
@@ -74,6 +76,13 @@ function createEyeMakeupRenderer(host: SceneHostPort): EyeMakeupRenderer {
     // The composite, only after a layer or the skin changed (plate-blend.ts).
     beforeDraw: () => stack.prepareBlend(host.renderer),
     setNormals: stack.setNormals,
+    setResearchTools(enabled: boolean) {
+      if (enabled === research) return;
+      research = enabled;
+      if (enabled) { prewarm(); return; }
+      if (warm) { clearTimeout(warm); warm = null; }
+      stack.releaseFinishStandIns();
+    },
     setWireframe: stack.setWire,
     evidence: () => ({ ...stack.blendDiagnostics(), source }),
     dispose() {

@@ -256,3 +256,56 @@ test("new parts are made ready ahead of their first frame: maps a few per frame,
   expect(uploaded).not.toContain("late");
   expect(compiled).toBe(1);
 });
+
+test("a skin the core head wears is prepared as the head drawn with its material, and placing it needs no new program (PREV-191)", async () => {
+  const rig = headRig(), scene = new THREE.Scene();
+  const renderer = { capabilities: { getMaxAnisotropy: () => 8 }, properties: { get: () => ({}) }, initTexture() {},
+    getContext: () => ({ fenceSync: () => ({}), flush() {}, getSyncParameter: () => 1, deleteSync() {}, SIGNALED: 1, SYNC_STATUS: 2, SYNC_GPU_COMMANDS_COMPLETE: 3 }),
+  } as unknown as THREE.WebGLRenderer;
+  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => [] });
+  const wearable = skinned(quad(), "skin chunk"), material = wearable.material as THREE.MeshStandardMaterial;
+  const compiled: { object: THREE.Object3D; material: THREE.Material | THREE.Material[] }[] = [];
+  const preparation = { frame: async () => {}, compile: (object: THREE.Object3D) => {
+    compiled.push({ object, material: (object as THREE.Mesh).material });
+    return { ready: Promise.resolve(), textures: [], programs: () => [] };
+  } };
+  const details = v("a", [skinComponent([wearable])]);
+  await character.prepareDetails(details, preparation);
+  // The head, drawn with the skin's material (extended for the head's skin sets), was compiled; the never-drawn chunk was not touched.
+  expect(compiled).toEqual([{ object: rig.head, material }]);
+  expect(rig.head.material).toBe(rig.skin);
+  expect(material.userData.xfsHeadExtended).toBe(true);
+  expect(wearable.userData.xfsSkinExtended).toBeUndefined();
+  // Placing it wears the same material on the head without extending it again (the program compiled ahead stays valid).
+  const version = material.version, compile = material.onBeforeCompile;
+  character.setCharacterDetails(details);
+  expect(rig.head.material).toBe(material);
+  expect(material.version).toBe(version);
+  expect(material.onBeforeCompile).toBe(compile);
+});
+
+test("a stopped preparation doesn't wait for the driver's links, and leaves its parts unprepared (PREV-192)", async () => {
+  const rig = headRig(), scene = new THREE.Scene();
+  const renderer = { capabilities: { getMaxAnisotropy: () => 8 }, properties: { get: () => ({}) }, initTexture() {},
+    getContext: () => ({ fenceSync: () => ({}), flush() {}, getSyncParameter: () => 1, deleteSync() {}, SIGNALED: 1, SYNC_STATUS: 2, SYNC_GPU_COMMANDS_COMPLETE: 3 }),
+  } as unknown as THREE.WebGLRenderer;
+  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => [] });
+  const hair = component("hair", "hairstyle", [skinned(quad(), "strands")]);
+  const controller = new AbortController();
+  let compiled = 0, used = 0;
+  const preparation = { frame: async () => {}, signal: controller.signal, compile: () => {
+    compiled++;
+    // A link that never finishes while the change is waited for.
+    return { ready: new Promise<void>(() => {}), textures: [], programs: () => [{ getUniforms: () => { used++; }, getAttributes() {} }] };
+  } };
+  const preparing = character.prepareDetails(v("a", [hair]), preparation);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  controller.abort();
+  await preparing;
+  expect([compiled, used]).toEqual([1, 0]);
+  // A later change prepares it again (its programs, already linking, are Three's cached ones).
+  await character.prepareDetails(v("b", [hair]), { ...preparation, signal: undefined, compile: () => {
+    compiled++; return { ready: Promise.resolve(), textures: [], programs: () => [] };
+  } });
+  expect(compiled).toBe(2);
+});

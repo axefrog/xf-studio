@@ -460,6 +460,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     animateBlink: (v: boolean) => blink?.setPlaying(v),
     /** Wireframe display of the feature renderers' own surfaces (eye makeup's layers and plate). */
     setWire: (v: boolean) => features?.setWireframe(v),
+    /** Whether research tools show: the feature renderers make ahead only what can be chosen (PREV-194). Draws nothing new. */
+    setResearchTools: (v: boolean) => features?.setResearchTools(v),
     setNormals: (v: boolean) => {
       rig.setNormals(v);
       character.setNormals(v);

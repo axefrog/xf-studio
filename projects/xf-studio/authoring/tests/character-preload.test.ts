@@ -13,7 +13,7 @@ const record = { schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity:
 
 function harness(phase: "ready" | "failed" = "ready") {
   const pages: string[] = [], events: string[] = [], signals: AbortSignal[] = [];
-  let hold = false, release: (() => void) | null = null;
+  let hold = false, release: (() => void) | null = null, holdPrepare = false, releasePrepare: (() => void) | null = null;
   const loaded = { record, components: [], problems: [], limits: [], notes: [], rigs: [], reused: 0, disposed: false, adopt() {},
     dispose() { events.push("dispose"); } };
   const scene = {
@@ -23,7 +23,10 @@ function harness(phase: "ready" | "failed" = "ready") {
       if (hold) await new Promise<void>(resolve => { release = resolve; });
       return loaded;
     } },
-    prepareDetails: async () => { events.push("prepare"); },
+    prepareDetails: async () => {
+      events.push("prepare");
+      if (holdPrepare) { holdPrepare = false; await new Promise<void>(resolve => { releasePrepare = resolve; }); events.push("prepared"); }
+    },
   };
   const fetcher = async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
@@ -33,7 +36,8 @@ function harness(phase: "ready" | "failed" = "ready") {
     return Response.json(record);
   };
   const device = createBrowserCharacterDetailDevice(scene as never, fetcher);
-  return { device, pages, events, signals, holdLoads() { hold = true; }, release() { hold = false; release?.(); } };
+  return { device, pages, events, signals, holdLoads() { hold = true; }, release() { hold = false; release?.(); },
+    holdPrepare() { holdPrepare = true; }, releasePrepare() { releasePrepare?.(); } };
 }
 
 test("a prepared choice's parts load ahead as another page's V: prepared, then let go to the pool, never shown", async () => {
@@ -66,6 +70,22 @@ test("the person's own change stops a load ahead at once: it is neither prepared
   await ahead; await shown;
   // Its parts went to the pool unprepared; the change loaded, prepared and placed its own.
   expect(events).toEqual(["load", "dispose", "load", "prepare", "placed"]);
+});
+
+test("a change made while a load ahead is preparing waits for its parts to reach the pool, then loads from there (PREV-192)", async () => {
+  const { device, events, signals, holdPrepare, releasePrepare } = harness();
+  holdPrepare();
+  const ahead = device.preload!(DEFAULT_CHARACTER, new AbortController().signal);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  expect(events).toEqual(["load", "prepare"]);
+  const shown = device.show(RECORD, new AbortController().signal);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  // The load ahead is stopped, and the change doesn't load until the parts it built are in the pool.
+  expect(signals[0]!.aborted).toBe(true);
+  expect(events).toEqual(["load", "prepare"]);
+  releasePrepare();
+  await ahead; await shown;
+  expect(events).toEqual(["load", "prepare", "prepared", "dispose", "load", "prepare", "placed"]);
 });
 
 test("a map's first upload comes from its decoded bitmap; the texture keeps its image, and the bitmap closes when no texture waits on it", async () => {
@@ -101,4 +121,40 @@ test("a map released before it was ever uploaded lets its bitmap go", async () =
   texture.dispose();
   expect(hasUploadSource(texture)).toBe(false);
   expect(closed).toBe(1);
+});
+
+test("a map uploaded by the renderer itself lets its bitmap go too (PREV-193)", async () => {
+  const THREE = await import("three");
+  const { hasUploadSource, offerUploadSource } = await import("../src/character-detail-loader");
+  let closed = 0, earlier = 0;
+  const bitmap = { width: 4, height: 4, close() { closed++; } } as unknown as ImageBitmap;
+  const texture = new THREE.Texture({ width: 4, height: 4 });
+  texture.onUpdate = () => { earlier++; };
+  offerUploadSource(texture, bitmap);
+  // What Three's own upload calls once the texels are on the GPU.
+  texture.onUpdate!(texture);
+  expect(hasUploadSource(texture)).toBe(false);
+  expect([closed, earlier]).toEqual([1, 1]);
+});
+
+test("a map's PNG reaches every decode without the chunks that would convert its colours (PREV-193)", async () => {
+  const { withoutColourChunks } = await import("../src/character-detail-loader");
+  const chunk = (type: string, body: number[]) => {
+    const out = new Uint8Array(12 + body.length), view = new DataView(out.buffer);
+    view.setUint32(0, body.length);
+    out.set([...type].map(char => char.charCodeAt(0)), 4);
+    out.set(body, 8);
+    view.setUint32(8 + body.length, 0x12345678);
+    return [...out];
+  };
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  const header = chunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]), data = chunk("IDAT", [1, 2, 3]), end = chunk("IEND", []);
+  const tagged = new Uint8Array([...signature, ...header, ...chunk("gAMA", [0, 0, 0xb1, 0x8f]), ...chunk("iCCP", [65, 0, 0, 9]),
+    ...chunk("sRGB", [0]), ...chunk("cHRM", new Array(32).fill(0)), ...data, ...end]).buffer;
+  expect([...new Uint8Array(withoutColourChunks(tagged))]).toEqual([...signature, ...header, ...data, ...end]);
+  // Untagged (the usual case) and anything it can't walk come back as they are.
+  const plain = new Uint8Array([...signature, ...header, ...data, ...end]).buffer;
+  expect(withoutColourChunks(plain)).toBe(plain);
+  const truncated = tagged.slice(0, 40);
+  expect(withoutColourChunks(truncated)).toBe(truncated);
 });

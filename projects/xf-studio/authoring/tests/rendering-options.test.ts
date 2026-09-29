@@ -13,6 +13,7 @@ import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { storedWorkspace } from "./fixtures/looks";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { hairLookText, RENDERING_HELP } from "../src/studio-ui/panels/preview";
+import { ViewActions } from "../src/view-actions";
 
 /** A preview port that records the Rendering calls. */
 function port() {
@@ -151,4 +152,23 @@ test("the Rendering group's words: the scatter's help says what it does, and the
   expect(RENDERING_HELP.scatter).toContain("shadow edges soften and turn warm");
   expect(RENDERING_HELP.scatter).toContain("lit skin stays neutral");
   expect([hairLookText(0), hairLookText(40), hairLookText(100)]).toEqual(["Crisp", "40 % game-like", "Game-like"]);
+});
+
+test("research-only Rendering options: with research tools off each view draws them at their defaults and keeps the stored choice (UI-163)", () => {
+  const workspace = freshWorkspace(), { port: p, calls } = port();
+  const graph = createStudioViewGraph(workspace.preview), actions = new PreviewActions(workspace.preview, p, graph), views = new ViewActions(graph);
+  actions.dispatch({ kind: "preview.setSkinScatter", enabled: false });
+  actions.dispatch({ kind: "preview.setHairLook", value: 1 });
+  calls.length = 0;
+  // Research tools off: the presentation withdraws every setting it no longer offers.
+  const offered = new Set(views.settings({ research: false }));
+  views.withdraw(views.settings({ research: true }).filter(id => !offered.has(id)));
+  expect(calls).toEqual(["scatter:true", "hair:0"]);
+  // The stored choices stay (saved with the workspace), and a change made meanwhile is kept but not drawn.
+  expect(actions.snapshot()).toMatchObject({ skinScatter: false, hairLook: 1 });
+  actions.dispatch({ kind: "preview.setFaceShadows", enabled: false });
+  expect(calls).toEqual(["scatter:true", "hair:0"]);
+  // Research tools on again: the stored choices are in force again.
+  views.withdraw([]);
+  expect(calls).toEqual(["scatter:true", "hair:0", "scatter:false", "shadows:false", "hair:1"]);
 });
