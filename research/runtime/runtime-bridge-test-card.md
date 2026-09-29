@@ -466,6 +466,20 @@ Expected evidence (under MO2, logs sit in `overwrite/`):
 
 Afterwards, record outcomes in the [design page](runtime-bridge-design.md) (unverified rows become [runtime] with the capture id), in [knowledge/runtime-access.md](../../knowledge/runtime-access.md), and the session 2 answers in [experiment 020](../../experiments/020-session-2/README.md).
 
+## Build record (bridge 0.6.0, branch build, not staged)
+
+Built 29 September 2026 on `claude/bridge-060` at `35c4f34d95cc`, clean tree (manifest `"commit": "35c4f34d95cc2c7afdcfa4bd6f757128757f9d1d"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed): version 0.6.0. On that commit: `xfb_selftest --unit` UNIT OK, self-test 455 of 455, `bun test tools` 261 of 262 (the screen-route capture test needs its synthetic window uncovered on the desktop, and test windows stay off-screen), typecheck, the Lua lint, and the redscript lint without Codeware, with Codeware `v1.20.4`'s scripts (`613a1cb8`), and with the Equipment-EX stub and TweakXL `v1.11.4`'s scripts, each against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…`). The plugin registers fourteen natives (`XFBridge_Note` is new) and ships four more script files (`XFRuntimeBridgeScene.reds`, `XFRuntimeBridgePlayer.reds`, `XFRuntimeBridgeEquipmentEx.reds`, `XFRuntimeBridgePresets.reds`); the -writes `config.ini` lists the new `player` class. A rebuild after merging gives new hashes.
+
+| File | SHA-256 |
+|---|---|
+| `xf-runtime-bridge-0.6.0-writes.zip` (with inventory) | `5f701bea65f5f750e06a6c1c8a0208473bb2a033aab3fba9122eb9f626cd276d` |
+| `xf-runtime-bridge-0.6.0-writes-no-inventory.zip` | `a2497fa31881ebf1b64b4253af74511cd2ed6e44ce43d59118af5ce353453bcb` |
+| `xf-runtime-bridge-0.6.0-diagnostic.zip` | `e1638f32c36c4febad6cc9cc0ed33d7874a7964edc5809061057a7f8b9d18a58` |
+| `xf-runtime-bridge-0.6.0.zip` (default) | `d9909f3290af1e06220c0ebba8ecb53d162fdfeddc44ee5a3db63c968dfab342` |
+| (`XFRuntimeBridge.dll` inside each) | `25e5b4bb0d430b1da21e33d2d23fb0b30fbe7cc7b4dc5b90aa0951c36037b084` |
+
+**Watch in the session:** `rtti.register_types … natives=14` at load; `wardrobe.equip` lines naming the manager (group B); `behave.stopped … reason=` for every behaviour (groups C to E); `bridge.handover on=true/false` (C5); and, for the first photo-mode read, `scene read parts=` (C2). The [session-7 checks](#session-7-checks-bridge-06) cover each.
+
 ## Build record (bridge 0.5.3, branch build, not staged)
 
 Built 29 September 2026 on `claude/rnd-ink` at `ed485a06330a`, clean tree (manifest `"commit": "ed485a06330af009cf474189f6289002f6efef2e"`, `"source_tree_clean": true`), by `bun tools/package.ts`, then `bun tools/package.ts --allow-inventory` (the first run's -writes zip renamed): version 0.5.3, the ink demos (temporary test features) on top of 0.5.2. On that commit: `xfb_selftest --unit` UNIT OK, self-test 417 of 417, `bun test tools` 233 of 234 (the screen-route capture test needs its synthetic window uncovered on the desktop, and test windows stay off-screen), typecheck, the Lua lint, and the redscript lint both without Codeware and with Codeware `v1.20.4`'s scripts (`613a1cb8`) against a copy of the installed 2.31 `final.redscripts` (SHA-256 `2119046f…`). The plugin registers thirteen natives (`XFBridge_Hud` is new) and ships two more script files (`XFRuntimeBridgeInk.reds`, `XFRuntimeBridgePins.reds`); `config.ini` has a new `[ui]` section. A rebuild after merging gives new hashes.
