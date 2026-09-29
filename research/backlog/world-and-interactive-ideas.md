@@ -65,6 +65,29 @@ Nothing here is scheduled; it ranks below V's appearance and body work, and each
 | 5 | **Removal authoring with re-matching** | Players' removals break on game updates; storing type, name, resource and transform lets the Studio re-find nodes and rewrite `expectedNodes` | Medium | Matching rules when a sector is re-cooked |
 | 6 | **Bridge-driven location captures** (W5) | Teleport and stream a place, capture reference images for the viewer's fidelity | Low to medium once the bridge has writes | Streaming waits; quest triggers at the destination |
 
+## Banked: procedural content baked at load time (29 September 2026)
+
+Banked, not scheduled: it waits for 1.0 ("finish before widening").
+
+ArchiveXL already changes world data as it loads. It appends mods' blocks to the world resource when that resource loads, and applies node deletions and mutations to sectors as they stream in ([world and streaming §2.1–2.2](../../knowledge/world-and-streaming.md)). Our own RED4ext plugin could use the same kind of hook to **generate** content as it loads, instead of shipping it pre-baked:
+
+- **Deterministic procedural placement:** props, clutter, foliage scatter and instanced-mesh buffers generated from a model and a seed as a sector streams in. The same model and seed always produce the same result, so saves and other mods see stable node IDs.
+- **Content that follows the player's setup or game state:** generated from what is installed or what has happened, rather than frozen at Build time.
+- **Navigation for new geometry:** the game's navigation is already tiled (17,363 `worldNavigationNode`s, each with a `worldNavigationTileResource` and a `.navmesh`, in dedicated navigation sectors at level 3). So only the tiles that new geometry touches would need rebuilding, offline or at load. It still needs the tile format decoded and a generator. Baking at load changes where the generator runs, not whether we need one. [hypothesis: the tiling suggests a tile-rebuildable design; the format is unread]
+- **The game-side Strata kernel as a load-time erector:** world content declared as models, erected by the plugin when its sector streams in. This is the "one engine under all of it" direction applied to the world.
+
+**Constraints:**
+- **Streaming budgets:** sectors load while V drives fast, so generation must fit in milliseconds or come from a cache warmed ahead.
+- **Stable identities:** persistent state keys on node IDs and hashes.
+- **Ordering with ArchiveXL and other mods' patches.**
+- **Crash safety in hooks:** the load and detach lessons of RB-76 apply.
+
+**First feasibility steps:**
+1. Read ArchiveXL's streaming hooks for where a generator could attach.
+2. Measure a sector's load budget with the bridge.
+3. Inject one generated instanced-mesh sector at load, seeded and deterministic.
+4. Decode one navigation tile, and check whether the game rebuilds or swaps tiles at runtime.
+
 ## Sources to study when this research resumes
 
 - **Dark Future - Urban Survival Gameplay** and **Eviction Notice - Story-Driven Rent System** (both installed in the reference MO2 setup) are well-regarded examples of deep gameplay integration: new systems, UI, quests or messages and persistent state layered onto the vanilla game. Study how they hook the game (redscript, CET, TweakXL, quest and journal additions, save state) as models for the quest and living-world directions ([vision](../../docs/vision.md)). Credit them in the community credits once something is learned from them. The [installed mod ecosystem survey](../mod-ecosystem/README.md) ranks them first and schedules them in its deep-dive batch B1, beside the other script-heavy mods it triaged.
