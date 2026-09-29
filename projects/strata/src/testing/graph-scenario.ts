@@ -31,6 +31,8 @@ export type GraphWorld = {
   faults?: Faults;
   /** Nodes a purge was asked for (another window keeps a purged node until it loads again). */
   purged: Set<string>;
+  /** Nodes collapsed into another entry (their own stream left the store, as a purge's does). */
+  collapsed: Set<string>;
   /** After setup: each window's kernel nodes other than entities' own, and its lifetime token's listeners. */
   baseline: { nodes: [number, number]; listeners: [number, number] };
 };
@@ -98,7 +100,8 @@ function checkUndo(world: GraphWorld, scope = "default"): void {
   const exact = touched.every(id => world.lastWriter.get(id) === top);
   const seqs = touched.map(id => graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === id)?.headSeq ?? 0);
   const result = track(world, () => graph.undo(scope));
-  if (!result.ok) { if (result.reason !== "empty" && result.reason !== "unloaded") world.problems.push(`undo: refused ${result.reason}`); return; }
+  // Nothing to undo, history not loaded, a node in it being collapsed right now, or earlier layers that would now close a cycle.
+  if (!result.ok) { if (!["empty", "unloaded", "busy", "cycle"].includes(result.reason)) world.problems.push(`undo: refused ${result.reason}`); return; }
   touched.forEach((id, i) => {
     const seq = graph[STRATA_DEBUG]().records.find(rec => rec.ref.id === id)?.headSeq ?? 0;
     if (seq < seqs[i]) world.problems.push(`undo: the stream of ${id.slice(0, 8)} shrank`);
@@ -192,6 +195,14 @@ const actions: SimAction<GraphWorld>[] = [
     world.purged.add(node.id);
     void world.graph.purge(node, { force: b % 2 === 0 }).catch(stopped);
   } },
+  { name: "collapse", weight: 0.3, run(world, [a]) {
+    // Inline collapse, when exactly one entry references the node: it must still read the same, here and after a reload.
+    const node = pickFrom(world.graph.list(ITEM).filter(ref => !ref.id.startsWith("builtin:")), a);
+    if (!node) return;
+    void world.graph.collapseInline(node).then(result => { if (result.ok) world.collapsed.add(node.id); }, stopped);
+  } },
+  // A session's Undo history ends: compaction then rolls up what it no longer needs.
+  { name: "forget-history", weight: 0.3, run(world) { world.graph.forgetHistory(); } },
   { name: "compact", weight: 0.3, run(world, [a, b]) {
     const node = pickFrom(world.graph.list(ITEM).filter(ref => !ref.id.startsWith("builtin:")), a);
     if (!node) return;
@@ -216,7 +227,7 @@ async function start(seed: string, restarts: number, carry?: GraphWorld, faults?
     seed, scheduler, memory, store, graph, other, life, otherLife, recovery: [], accepted: carry?.accepted ?? new Set(),
     rejected: carry?.rejected ?? new Set(), jobs: carry?.jobs ?? new SimJobs(scheduler, (_kind, input) => input, 1, 15),
     before: new Map(), touched: carry?.touched ?? new Map(), lastWriter: new Map(), problems: [], restarts, faults,
-    baseline: { nodes: [0, 0], listeners: [0, 0] }, purged: carry?.purged ?? new Set(),
+    baseline: { nodes: [0, 0], listeners: [0, 0] }, purged: carry?.purged ?? new Set(), collapsed: carry?.collapsed ?? new Set(),
   };
   watch(world);
   world.baseline = { nodes: [machinery(graph), machinery(other)], listeners: [listenerCount(life.signal), listenerCount(otherLife.signal)] };
@@ -283,7 +294,8 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
         // Sync reads entries, and a purge leaves none: a window holding a node another window purged loads again (as
         // the Studio's host does when the store's index no longer lists a node it holds).
         let graph = peer;
-        if (peer.list().some(ref => !ref.id.startsWith("builtin:") && !listed.has(ref.id) && world.purged.has(ref.id))) {
+        // A collapse is another window's compaction and purge: the same host concern.
+        if (world.collapsed.size || peer.list().some(ref => !ref.id.startsWith("builtin:") && !listed.has(ref.id) && world.purged.has(ref.id))) {
           graph = makeGraph(world, `${world.seed}:reloaded:${index}`, new Aborter());
           await settleAll(graph.load());
         }
@@ -291,6 +303,12 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
           problems.push(`converge: ${name} resolves ${ref.id.slice(0, 8)} as ${canonical(graph.resolve(ref) ?? null)}, the store as ${canonical(fresh.resolve(ref) ?? null)}`);
         for (const ref of graph.list()) if (!ref.id.startsWith("builtin:") && !listed.has(ref.id))
           problems.push(`converge: ${name} lists ${ref.id.slice(0, 8)}, which the store doesn't hold`);
+        // Collapsed nodes aren't listed, but read from their host entry exactly as the store's copy does.
+        for (const id of world.collapsed) {
+          const ref = { type: ITEM, id };
+          if (canonical(graph.resolve(ref) ?? null) !== canonical(fresh.resolve(ref) ?? null))
+            problems.push(`converge: ${name} resolves collapsed ${id.slice(0, 8)} as ${canonical(graph.resolve(ref) ?? null)}, the store as ${canonical(fresh.resolve(ref) ?? null)}`);
+        }
       }
       world.life.abort("teardown"); world.otherLife.abort("teardown");
       for (const graph of [world.graph, world.other]) {

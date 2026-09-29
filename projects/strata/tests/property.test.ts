@@ -34,11 +34,13 @@ for (let seed = 1; seed <= SEEDS; seed++) test(`random operations agree with the
   const life = new Aborter();
   const sets: ChangeSet[] = [];
   graph.subscribeAll(set => sets.push(set), { signal: life.signal });
-  // Pinned layers read their source replayed to the pinned entry's position, from every entry in memory.
+  // Pinned layers read their source replayed to the point the pinned entry names (the greatest position of its
+  // commit), from every entry in memory.
   const snapshot = () => {
     const entries = graph[STRATA_DEBUG]().records.flatMap(rec => rec.entries);
     const model = referenceModel(SYNTHETIC_TYPES, layer => {
-      const pos = layer.at ? graph.posOf(layer.at) : undefined;
+      const pinned = layer.at && entries.find(entry => entry.node.id === layer.at!.node.id && entry.seq === layer.at!.seq);
+      const pos = pinned ? Math.max(...entries.filter(entry => entry.commit === pinned.commit).map(entry => entry.pos)) : undefined;
       if (pos === undefined) return null;
       const replayed = replayTo(SYNTHETIC_TYPES, entries, pos);
       return ref => { const item = replayed.get(ref.id); return item && item.ref.type === ref.type && item.state && !item.state.retracted ? item.state : null; };

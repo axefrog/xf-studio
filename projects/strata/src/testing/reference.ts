@@ -94,7 +94,8 @@ export function referenceModel(types: readonly TypeSpec[], pinned: (layer: Layer
 export function replayTo(types: readonly TypeSpec[], entries: readonly Entry[], pos: number): Map<string, { ref: NodeRef; state: NodeState | null }> {
   const byType = new Map(types.map(def => [def.type, def]));
   const streams = new Map<string, { ref: NodeRef; entries: Entry[] }>();
-  for (const entry of entries) {
+  // Streams collapsed into an entry are replayed from its copy, by their own positions.
+  for (const entry of entries.flatMap(item => [item, ...(item.inlined ?? []).flatMap(inner => inner.entries)])) {
     if (entry.pos > pos) continue;
     let stream = streams.get(entry.node.id);
     if (!stream) streams.set(entry.node.id, stream = { ref: entry.node, entries: [] });
