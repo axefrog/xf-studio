@@ -50,7 +50,7 @@ A `/strata/` subsection of the Pages site with its own design and palette. It po
 
 - **Concepts:** streams, demand, node kinds, START/END cycles, drivers and processes, cancellation, data-first erection, layering, event sourcing, actors.
 - **Tutorial and API reference.**
-- **The normative spec,** rendered from `projects/strata/SPEC.md`.
+- **The spec,** rendered from `projects/strata/SPEC.md`: normative text interleaved with clearly marked non-normative explainers for every section, styled distinctly.
 - **Examples:** a glitch-free diamond, a live demand-window resize, nested processes with abort, undo and fork over history.
 - **Interactive widgets:** a START/END cycle visualiser, a process-tree explorer, a demand-window scrubber, a compaction demo.
 - **A playground** running the real engine in the browser (Strata reads no host globals), with the conformance vectors as loadable examples.
