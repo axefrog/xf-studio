@@ -13,8 +13,12 @@ import { openReportDialog } from "../diagnostics/report-dialog";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./desktop-app-sheet";
 
 export type HelpGuidance = { tours(): readonly Tour[]; status(tourId: string): TourRecord | undefined; start(tourId: string): boolean };
-const STATUS: Record<TourRecord, [string, "success" | "neutral"]> = {
-  completed: ["Done", "success"], skipped: ["Skipped", "neutral"], declined: ["Not started", "neutral"],
+/**
+ * A tour's badge says only what the person did with it (Done, Skipped). A tour not started (or declined when offered) carries none, so
+ * nothing repeats under every row (release-readiness-audit.md C-19); its Start button says the rest.
+ */
+const STATUS: Partial<Record<TourRecord, [string, "success" | "neutral"]>> = {
+  completed: ["Done", "success"], skipped: ["Skipped", "neutral"],
 };
 
 /**
@@ -70,10 +74,10 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     if (key === toursKey) return list.length;
     toursKey = key;
     tours.replaceChildren(...list.map(tour => {
-      const status = guidance.status(tour.id), [label, tone] = status ? STATUS[status] : ["Not started", "neutral" as const];
+      const status = guidance.status(tour.id), shown = status ? STATUS[status] : undefined;
       return h("li", { class: "help-tour" },
         h("div", { class: "help-tour-text" }, h("strong", { text: tour.title }), h("small", { class: "muted", text: `${tour.summary} ${tour.steps.length} steps.` })),
-        badge(label, tone),
+        shown ? badge(shown[0], shown[1]) : null,
         button({ label: status === "completed" ? "Replay" : "Start", icon: "play", small: true, variant: tour.audience === "onboarding" && !status ? "primary" : undefined,
           onClick: () => { guidance.start(tour.id); } }));
     }));

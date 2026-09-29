@@ -33,7 +33,7 @@ export class PreviewQualityActions {
     return true;
   }
   fail(reason?: string) {
-    this.state.error = reason ?? "Texture calculation failed. Rebuild the preview or edit again to retry.";
+    this.state.error = reason ?? "The makeup textures couldn't be made. Use Try again in Preview quality, or edit the layer again.";
     this.state.blocked = true; this.notify();
   }
   recover() {

@@ -151,7 +151,7 @@ test("Face shadows off draws every light of the setup unshadowed, and on again r
 test("the Rendering group's words: the scatter's help says what it does, and the Hair look names its ends", () => {
   expect(RENDERING_HELP.scatter).toContain("shadow edges soften and turn warm");
   expect(RENDERING_HELP.scatter).toContain("lit skin stays neutral");
-  expect([hairLookText(0), hairLookText(40), hairLookText(100)]).toEqual(["Crisp", "40 % game-like", "Game-like"]);
+  expect([hairLookText(0), hairLookText(40), hairLookText(100)]).toEqual(["0%", "40%", "100%"]);
 });
 
 test("research-only Rendering options: with research tools off each view draws them at their defaults and keeps the stored choice (UI-163)", () => {

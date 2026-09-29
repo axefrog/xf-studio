@@ -59,6 +59,17 @@ let idCounter = 0;
 export const uid = (prefix = "xfs") => `${prefix}-${++idCounter}`;
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 export const pct = (value: number) => `${Math.round(value * 100)}%`;
+/** A name with the other names people use for it, for a tooltip or description line: "Metallic (also foil)" (a finish, C-2). */
+export const nameWithAliases = (item: { label: string; aliases: readonly string[] }) =>
+  item.aliases.length ? `${item.label} (also ${item.aliases.join(", ")})` : item.label;
+/**
+ * A length in texture space as a person reads it: where the value sits between the control's ends, 0 to 100, with one decimal below
+ * 10 so small steps still show (release-readiness-audit.md C-12: never a raw "% UV" outside research tools).
+ */
+export const scaleText = (min: number, max: number) => (value: number) => {
+  const n = max > min ? Math.max(0, Math.min(100, (value - min) / (max - min) * 100)) : 0;
+  return n < 9.95 ? n.toFixed(1) : String(Math.round(n));
+};
 export const isTextInput = (target: EventTarget | null) => target instanceof HTMLElement &&
   (target.isContentEditable || target.matches("input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=color]), textarea, select"));
 export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;

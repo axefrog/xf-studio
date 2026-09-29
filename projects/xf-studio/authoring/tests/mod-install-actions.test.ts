@@ -31,7 +31,7 @@ test("review, then consent to exactly that plan", async () => {
   expect(f.actions.snapshot().outcomes.p1).toMatchObject({ ok: true });
   // The same build isn't added twice; its folder can still be shown.
   expect(f.actions.capability({ kind: "modInstall.apply", product: "p1" }).code).toBe("invalid_value");
-  expect(f.actions.capability({ kind: "modInstall.review", product: "p1" }).reason).toBe("XF Eye Artistry is already added from this build. Build again to add a newer copy.");
+  expect(f.actions.capability({ kind: "modInstall.review", product: "p1" }).reason).toBe("“XF Eye Artistry” is already added from this build. Build again to add a newer copy.");
   expect(f.actions.capability({ kind: "modInstall.reveal", product: "p1" })).toEqual({ available: true });
 });
 

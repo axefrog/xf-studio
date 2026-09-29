@@ -148,10 +148,10 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
     }
   } catch { return "The packaged build tools are unavailable."; }
   if (!settings.wolvenKitCli || !file(settings.wolvenKitCli))
-    return "WolvenKit isn't set up yet. XF Studio can download it for you from the 3D preview card.";
-  if (!signature(settings.wolvenKitCli, "MZ")) return "The selected WolvenKit CLI is not a Windows executable.";
+    return "WolvenKit isn't set up yet. Set it up in Settings › Game.";
+  if (!signature(settings.wolvenKitCli, "MZ")) return "The WolvenKit you chose isn't a Windows program. Choose another in Settings › Tools.";
   try { const issue = wolvenKitProbe(settings.wolvenKitCli); if (issue) return issue; }
-  catch { return "WolvenKit CLI could not complete its version and command checks."; }
+  catch { return "XF Studio couldn't check the WolvenKit you chose. Choose another in Settings › Tools."; }
   if (!settings.gameRoot || !file(resolve(settings.gameRoot, "bin/x64/Cyberpunk2077.exe")) ||
       !directory(resolve(settings.gameRoot, "archive/pc"))) return "Select a complete Cyberpunk 2077 game directory.";
   if (!signature(resolve(settings.gameRoot, "bin/x64/Cyberpunk2077.exe"), "MZ"))

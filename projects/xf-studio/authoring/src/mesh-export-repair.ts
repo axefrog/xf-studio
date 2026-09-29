@@ -102,7 +102,7 @@ function emptyShortGarmentFlags(copyRoot: JsonObject): string | null {
   }
   if (!short.length) return null;
   return `its garment support data is shorter than its vertices in chunk${short.length === 1 ? "" : "s"} ${short.join(", ")}, so the exported copy ` +
-    "leaves that data out (the preview doesn't read it)";
+    "leaves that data out (the 3D view doesn't read it)";
 }
 
 /**

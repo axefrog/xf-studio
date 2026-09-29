@@ -49,7 +49,7 @@ export async function runCommand(rt: StudioRuntime, command: TourCommand): Promi
     case "file": return (await rt.file(command.action)).ok;
     case "previewSetup": {
       const outcome = await rt.port.previewSetup.dispatch(command.action);
-      if (!outcome.ok) rt.feedback.toast("warning", "3D preview", outcome.message);
+      if (!outcome.ok) rt.feedback.toast("warning", "3D view", outcome.message);
       rt.changed();
       return outcome.ok;
     }
@@ -150,7 +150,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
   const offer = new Callout({ className: "guidance-offer", closeLabel: "Not now", onClose: () => declineOffer(),
     onKey: event => { if (event.key !== "Escape") return false; declineOffer(); return true; } });
   offer.update({ eyebrow: "Welcome", title: "New to XF Studio?",
-    body: "A short tour shows where everything is: layers, drawing, the head view, colour and finish, your library and making your mod. It takes about two minutes, and you can replay it from Help.\n\nXF Studio is in beta. If something doesn't work, **Report a problem…** in Help prepares a report for you to review; nothing is sent by itself.",
+    body: "A short tour shows where everything is: layers, drawing, the 3D view, colour and finish, your library and making your mod. It takes about two minutes, and you can replay it from Help.\n\nXF Studio is in beta. If something doesn't work, **Report a problem…** in Help prepares a report for you to review; nothing is sent by itself.",
     actions: [{ id: "later", label: "Not now", variant: "quiet", run: () => declineOffer() },
       { id: "start", label: "Show me around", variant: "primary", run: () => { start(ONBOARDING_TOUR_ID); } }] });
   let offerState: "waiting" | "shown" | "done" = "waiting";
@@ -204,8 +204,9 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     },
     commands(): Command[] {
       return [
-        { id: "help.open", title: "Help: tours, answers and shortcuts", group: "Help", icon: "help", shortcut: shortcutLabel("shell.help"),
-          keywords: "help guide tour topics questions support", capability: () => ({ available: true }), run: () => options.openHelp() },
+        // The one palette entry for Help, named as its panel (the Panels group leaves Help out, as it does Settings; C-9).
+        { id: "help.open", title: "Help", group: "Help", icon: "help", shortcut: shortcutLabel("shell.help"),
+          keywords: "help guide tour topics questions support answers shortcuts go to open panel", capability: () => ({ available: true }), run: () => options.openHelp() },
         ...service.tourList().map(tour => ({ id: `tour.${tour.id}`, title: `Start tour: ${tour.title}`, group: "Help", icon: "play" as const,
           keywords: `tour guide walkthrough ${tour.audience === "whats-new" ? "new release changes" : "onboarding introduction"}`,
           capability: () => service.capability({ kind: "guidance.startTour", tourId: tour.id }), run: () => { start(tour.id); } })),

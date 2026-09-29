@@ -30,7 +30,7 @@ export interface InstalledHeadRoute {
 }
 
 export const INCOMPLETE_SCAN_MESSAGE = "Build stopped because XF Studio couldn't read all of your installed mods, so it can't tell " +
-  "which head your game loads. Check the game and mod folders in Local setup, close any tool that is changing mod files, then build again.";
+  "which head your game loads. Check the game and mod folders in Settings › Game, close any tool that is changing mod files, then build again.";
 function unreadMessage(archives: readonly UnreadIndex[]): string {
   const named = archives.slice(0, 3).map(item => `“${item.name}” (${item.providerName})`).join(", ");
   const more = archives.length > 3 ? ` and ${archives.length - 3} more` : "";

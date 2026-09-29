@@ -70,9 +70,9 @@ test("eye makeup's layer menu: the layer's context entries, then its view's comm
   const current = finishes.find(item => item.id === layer.finish || item.stored.includes(layer.finish))?.id ?? layer.finish;
   expect(own.label).toBeUndefined();
   expect(own.items.map(shown)).toEqual([
-    { label: "Bring forward", icon: "arrowUp", shortcut: chordLabel(keyBindingById("rows.reorder").chords[0]), hint: undefined, checked: undefined,
+    { label: "Move up", icon: "arrowUp", shortcut: chordLabel(keyBindingById("rows.reorder").chords[0]), hint: undefined, checked: undefined,
       capability: at({ kind: "layer.edit", command: { kind: "move", id: layer.id, to: index + 1 } }) },
-    { label: "Send backward", icon: "arrowDown", shortcut: chordLabel(keyBindingById("rows.reorder").chords[1]), hint: undefined, checked: undefined,
+    { label: "Move down", icon: "arrowDown", shortcut: chordLabel(keyBindingById("rows.reorder").chords[1]), hint: undefined, checked: undefined,
       capability: at({ kind: "layer.edit", command: { kind: "move", id: layer.id, to: index - 1 } }) },
     { label: "Mirror across the face", icon: "mirror", shortcut: undefined, hint: undefined, checked: layer.symmetry,
       capability: at({ kind: "layer.setSymmetry", layerId: layer.id, symmetry: !layer.symmetry }) },

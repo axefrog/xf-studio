@@ -146,7 +146,7 @@ test("the layered adapter says `layered-mask` only for a mask the host could not
   // A layer whose template could not be read is left out with a note, not drawn as opaque white.
   const skipped = adapt([layer(), layer({ templateUnreadable: true, textures: { mask: texture("m") } })], 2);
   expect(skipped.limits).toEqual([]);
-  expect(skipped.notes.join(" ")).toContain("1 layer(s) whose template could not be read are left out");
+  expect(skipped.notes.join(" ")).toContain("1 layer whose template could not be read is left out");
   expect(skipped.layered!.evidence().layers).toEqual([0]);
   // A 4 mm part is baked at the smallest size, not at 1024 (PREV-63).
   expect(skipped.layered!.evidence().size).toBe(256);

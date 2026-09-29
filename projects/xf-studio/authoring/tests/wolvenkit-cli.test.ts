@@ -68,7 +68,7 @@ test("the blocking runner applies the same policy, so the verifier gets the shar
   expect(failure(() => runWolvenKitSync(bun, ["-e", "setTimeout(() => {}, 60_000)"], { timeoutMs: 300 }))).toMatchObject({ code: "tool_timeout" });
   expect(failure(() => runWolvenKitSync(join(tmpdir(), "no-such-wolvenkit.exe"), ["unbundle"], { timeoutMs: 1000 }))).toMatchObject({ code: "tool_missing" });
   // The verifier's adapter maps them to plain messages and leaves exit-code judgement to the verifier.
-  expect(() => createWolvenKitVerifierTools(join(tmpdir(), "no-such-wolvenkit.exe"), undefined).unbundle("a", "b")).toThrow("WolvenKit CLI isn't available");
+  expect(() => createWolvenKitVerifierTools(join(tmpdir(), "no-such-wolvenkit.exe"), undefined).unbundle("a", "b")).toThrow("WolvenKit isn't available");
   expect(() => createWolvenKitVerifierTools(bun, undefined).exportTextures("a", "b")).toThrow("Cyberpunk 2077 folder");
   expect(WOLVENKIT_RUNTIME_MISSING_MESSAGE).toContain(".NET runtime");
 }, 60_000);

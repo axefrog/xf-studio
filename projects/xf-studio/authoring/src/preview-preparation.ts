@@ -60,7 +60,7 @@ export type PreviewView = {
  * `gameNote` explains a copy detection found but can't use (for example the Xbox app's) when no folder was found.
  */
 export function previewView(state: PreviewState, detectedGame: string | null = null, wolvenKit: WolvenKitSetupState | null = null,
-  setupPlace = "Build setup", gameNote: string | null = null): PreviewView {
+  setupPlace = "Settings", gameNote: string | null = null): PreviewView {
   if (state.phase === "needs-setup" && !state.needs.includes("game") && state.needs.includes("wolvenkit") && wolvenKit && wolvenKit.phase !== "ready") {
     const card = wolvenKitCard(wolvenKit, setupPlace);
     return { title: card.title, body: card.body, progress: card.progress, step: card.step, primary: card.primary, secondary: card.secondary,
@@ -73,13 +73,13 @@ export function previewView(state: PreviewState, detectedGame: string | null = n
 function viewportMessage(state: PreviewState): string {
   switch (state.phase) {
     case "ready": return "";
-    case "preparing": return "Preparing the 3D preview from your Cyberpunk 2077 files…";
-    case "needs-setup": return state.needs.includes("game") ? "The 3D preview needs your Cyberpunk 2077 game folder."
-      : "The 3D preview needs WolvenKit.";
-    case "blocked": return "The 3D preview can't be built for this game version yet.";
-    case "failed": return state.code === "preview_cancelled" ? "The 3D preview wasn't prepared. You can start it again at any time."
-      : "The 3D preview couldn't be prepared. Try again from the card below.";
-    case "idle": return "The 3D preview can be prepared from your Cyberpunk 2077 files.";
+    case "preparing": return "Preparing the 3D view from your Cyberpunk 2077 files…";
+    case "needs-setup": return state.needs.includes("game") ? "The 3D view needs your Cyberpunk 2077 game folder."
+      : "The 3D view needs WolvenKit.";
+    case "blocked": return "The 3D view can't be built for this game version yet.";
+    case "failed": return state.code === "preview_cancelled" ? "The 3D view wasn't prepared. You can start it again at any time."
+      : "The 3D view couldn't be prepared. Try again from the card below.";
+    case "idle": return "The 3D view can be prepared from your Cyberpunk 2077 files.";
   }
 }
 
@@ -90,25 +90,25 @@ function previewCard(state: PreviewState, detectedGame: string | null,
     case "ready": return hidden;
     case "preparing": {
       const progress = state.progress ? Math.min(1, Math.max(0, (state.progress.index + 0.5) / state.progress.total)) : 0;
-      return { title: "Preparing the 3D preview from your Cyberpunk 2077 files…", body: "This usually takes under a minute. You can keep designing on the UV map meanwhile.",
+      return { title: "Preparing the 3D view from your Cyberpunk 2077 files…", body: "This usually takes under a minute. You can keep designing on the UV map meanwhile.",
         progress, step: state.progress ? `Step ${state.progress.index + 1} of ${state.progress.total}: ${state.progress.label}` : null,
         primary: { label: "Cancel", action: "cancel" }, visible: true };
     }
     case "needs-setup":
       if (state.needs.includes("game"))
         return detectedGame
-          ? { title: "Turn on the 3D preview", body: `We found Cyberpunk 2077 at ${detectedGame}. XF Studio builds the 3D head from your own game files and changes nothing in your game.`,
+          ? { title: "Turn on the 3D view", body: `We found Cyberpunk 2077 at ${detectedGame}. XF Studio builds the 3D head from your own game files and changes nothing in your game.`,
             progress: null, step: null, primary: { label: "Use this folder", action: "use-game" }, visible: true }
-          : { title: "Turn on the 3D preview", body: gameNote ?? state.message, progress: null, step: null, primary: { label: "Choose game folder", action: "setup" }, visible: true };
-      return { title: "The 3D preview needs WolvenKit", body: state.message, progress: null, step: null, primary: { label: "Set up WolvenKit…", action: "wolvenkit-consent" }, visible: true };
+          : { title: "Turn on the 3D view", body: gameNote ?? state.message, progress: null, step: null, primary: { label: "Choose game folder", action: "setup" }, visible: true };
+      return { title: "The 3D view needs WolvenKit", body: state.message, progress: null, step: null, primary: { label: "Set up WolvenKit…", action: "wolvenkit-consent" }, visible: true };
     case "blocked":
-      return { title: "The 3D preview can't be built for this game version", body: state.message, progress: null, step: null,
+      return { title: "The 3D view can't be built for this game version", body: state.message, progress: null, step: null,
         primary: { label: "Try again", action: "retry" }, visible: true };
     case "failed":
-      return { title: state.code === "preview_cancelled" ? "3D preview not prepared" : "The 3D preview couldn't be prepared", body: state.message,
+      return { title: state.code === "preview_cancelled" ? "3D view not prepared" : "The 3D view couldn't be prepared", body: state.message,
         progress: null, step: null, primary: { label: "Try again", action: "retry" }, visible: true };
     case "idle":
-      return { title: "Turn on the 3D preview", body: state.message, progress: null, step: null, primary: { label: "Prepare 3D preview", action: "prepare" }, visible: true };
+      return { title: "Turn on the 3D view", body: state.message, progress: null, step: null, primary: { label: "Prepare 3D view", action: "prepare" }, visible: true };
   }
 }
 
@@ -120,8 +120,8 @@ export class PreviewPreparationActions {
   constructor(private readonly transport: PreviewTransport, private readonly pollMs = 700, private readonly timers?: HostTimers) {
     this.host = new PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">({ transport, isState: isPreviewState, working: state => state.phase === "preparing",
       refresh: "refresh", pollMs, timers, messages: {
-        invalid: "The 3D preview state is unavailable. Restart XF Studio and try again.",
-        unreachable: "XF Studio couldn't reach its 3D preview service. Restart XF Studio and try again." } });
+        invalid: "The 3D view state is unavailable. Restart XF Studio and try again.",
+        unreachable: "XF Studio couldn't reach its 3D view service. Restart XF Studio and try again." } });
   }
   snapshot(): PreviewState | null { return this.host.snapshot(); }
   /** Contact with the host's preparation service (failed polls are retried while it works). */
@@ -130,10 +130,10 @@ export class PreviewPreparationActions {
   capability(action: PreviewAction): { available: boolean; reason?: string } {
     if (action.kind === "preview.refresh") return { available: true };
     const state = this.host.snapshot();
-    if (!state) return { available: false, reason: "The 3D preview state is still loading." };
+    if (!state) return { available: false, reason: "The 3D view state is still loading." };
     if (action.kind === "preview.prepare") return state.canPrepare ? { available: true } : { available: false, reason: state.message };
     if (action.kind === "preview.rebuild") return state.phase === "ready" || state.canPrepare ? { available: true }
-      : { available: false, reason: state.phase === "preparing" ? "The 3D preview is being prepared." : state.message };
+      : { available: false, reason: state.phase === "preparing" ? "The 3D view is being prepared." : state.message };
     return state.canCancel ? { available: true } : { available: false, reason: "Nothing is being prepared." };
   }
   async dispatch(action: PreviewAction): Promise<PreviewOutcome> {
@@ -155,8 +155,8 @@ export class PreviewPreparationActions {
     const read = async (action: "refresh" | "prepare") => {
       let reply: { ok: boolean; data: unknown };
       try { reply = await this.transport(action, body); }
-      catch (error) { throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D preview service.", { cause: error }); }
-      if (!isPreviewState(reply.data)) throw new HeadLoadError("body_unavailable", "The 3D preview state is unavailable.");
+      catch (error) { throw new HeadLoadError("body_unavailable", "XF Studio couldn't reach its 3D view service.", { cause: error }); }
+      if (!isPreviewState(reply.data)) throw new HeadLoadError("body_unavailable", "The 3D view state is unavailable.");
       return reply.data;
     };
     let state = await read("refresh"), asked = false;

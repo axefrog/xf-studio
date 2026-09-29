@@ -266,7 +266,15 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     }
     // A failure an app service met in the background (a V that couldn't be prepared): shown once, with its reference.
     const notice = port.diagnostics.snapshot().notice;
-    if (notice && notice.id !== lastNotice) { lastNotice = notice.id; feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref }); }
+    if (notice && notice.id !== lastNotice) {
+      lastNotice = notice.id;
+      // A V that couldn't be prepared is said by the 3D view's own line while the 3D view is open: no toast repeats it over the
+      // panels (G3, release-readiness-audit.md C-18); the Activity log keeps it with its reference for a report.
+      const inView = notice.area === "character" && dock.isOpen("head") && frame.viewport.head.phase === "ready"
+        && frame.status.assets.characterDetails?.phase === "failed";
+      if (inView) feedback.record("error", notice.source, notice.message, notice.ref ?? undefined);
+      else feedback.toast("error", notice.source, notice.message, [], { ref: notice.ref });
+    }
     header.update(frame); status.update(frame); setupCard.update(frame); dockSetupCard(frame.previewSetup.card.open); guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
     for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
@@ -557,7 +565,7 @@ function moduleMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
       run: () => rt.modules.set(module.id, !shown.includes(module.id)) });
     // Planned modules (ui-copy-and-layout-review.md §6), only with research tools on (coming-soon.ts): each says what it will let the person do.
     for (const module of planned) items.push({ kind: "action", label: module.label, icon: isIconName(module.icon) ? module.icon : "category",
-      tag: "Soon", quietReason: true, capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {} });
+      tag: "Soon", capability: { available: false, reason: `Coming soon: ${module.comingSoon}` }, run: () => {} });
   }
   return items;
 }
@@ -612,7 +620,7 @@ function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[] {
   const graph = rt.port.views.snapshot();
   const live = liveFeatures(rt.port);
   const upcoming = (["viewsNew", "viewsDuplicate"] as const).flatMap(id => { const entry = comingSoon(id, live, research);
-    return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, tag: "Soon", quietReason: true, capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
+    return entry ? [{ kind: "action" as const, label: entry.label, icon: "plus" as const, tag: "Soon", capability: { available: false, reason: entry.reason }, run: () => {} }] : []; });
   // One 3D view and nothing planned: its row would do what the 3D view panel's row above does, so the section isn't listed (C-32).
   if (graph && (graph.views.length > 1 || upcoming.length)) items.push({ kind: "separator" }, { kind: "heading", label: "Views", detail: `${graph.views.length} 3D view${graph.views.length === 1 ? "" : "s"}` },
     ...graph.views.map(entry => { const panel = entry.panel;
@@ -643,14 +651,14 @@ export function withPreviewSetup(rt: Pick<StudioRuntime, "port" | "feedback" | "
     const setup = port.previewSetup.snapshot();
     return { open: setup.card.open, next: setup.head.next?.action ?? { kind: "previewSetup.show" as const } };
   };
-  const entry: Command = { id: "preview.setup", title: "Set up the 3D preview…", group: "View", icon: "head",
+  const entry: Command = { id: "preview.setup", title: "Set up the 3D view…", group: "View", icon: "head",
     keywords: `3d preview view head game folder wolvenkit ${[...waiting].map(command => `${command.title} ${command.keywords ?? ""}`).join(" ").toLowerCase()}`,
     // Showing the card while it already shows is refused as "already showing": the card is the answer, so the entry stays available.
     capability: () => { const { open, next } = now(); return open && next.kind === "previewSetup.show" ? { available: true } : port.previewSetup.capability(next); },
     run: () => {
       const { open, next } = now();
       if (open && next.kind === "previewSetup.show") { document.getElementById("preview-card-title")?.focus(); return; }
-      void port.previewSetup.dispatch(next).then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "3D preview", outcome.message); rt.changed(); });
+      void port.previewSetup.dispatch(next).then(outcome => { if (!outcome.ok) rt.feedback.toast("warning", "3D view", outcome.message); rt.changed(); });
     } };
   const first = commands.findIndex(command => waiting.has(command));
   return [...commands.slice(0, first).filter(command => !waiting.has(command)), entry, ...commands.slice(first).filter(command => !waiting.has(command))];
@@ -686,7 +694,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     request("library.save", "Save to library", "Library", { kind: "save" }, { icon: "save", shortcut: shortcutLabel("shell.save") }),
     request("library.copy", "Save as new collection", "Library", { kind: "saveCopy" }, { icon: "duplicate", keywords: "copy" }),
     // The saved list updates itself (release-readiness-audit.md item 13), so there is no Refresh command.
-    file("library.recover", "Recover previous collection draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
+    file("library.recover", "Recover previous draft", "Library", { kind: "collection.recover" }, { icon: "undo" }),
     { id: "collection.import", title: "Import collection…", group: "Files", icon: "import", capability: () => port.files.capability({ kind: "collection.import" }),
       run: () => importCollection(rt, { x: Math.round(window.innerWidth / 2 - 170), y: 120 }) },
     file("collection.export", "Export collection (saves first)", "Files", { kind: "collection.export" }, { icon: "export" }),
@@ -773,21 +781,21 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     ...([[0, "crisp"], [1, "game-like"]] as const).map(([value, label]) => act(`rendering.hairLook.${value ? "game" : "crisp"}`,
       `Rendering: hair look ${label}`, "Research", { kind: "preview.setHairLook", value }, { icon: "quality", keywords: "hair strands soft thick taa dlss coverage" }))]),
     ...([512, 1024, 2048, 4096] as const).map(size => act(`quality.${size}`, `Preview quality: ${size === 512 ? "512" : `${size / 1024}K`}`, "View", { kind: "quality.set", size }, { icon: "quality" })),
-    act("quality.rebuild", "Rebuild preview", "View", { kind: "quality.rebuild" }, { icon: "refresh" }),
+    act("quality.rebuild", "Preview quality: Try again", "View", { kind: "quality.rebuild" }, { icon: "refresh", keywords: "rebuild retry preview textures try again" }),
     act("idle", motion?.idle ? "Stop the game idle" : "Play the game idle", "Motion", { kind: "motion.setIdle", enabled: !motion?.idle }, { icon: "motion" }),
     act("idle.pause", motion?.idlePaused ? "Resume idle" : "Pause idle", "Motion", { kind: "motion.setPaused", paused: !motion?.idlePaused }, { icon: "pause" }),
     act("blink.play", motion?.blinkPlaying ? "Stop blink" : "Play blink", "Motion", { kind: "motion.playBlink", playing: !motion?.blinkPlaying }, { icon: "play", keywords: "blink eyes lids" }),
     // Settings (UI-109): opened by name, and by what people look for in it. Its generic "Open Settings" entry is left out below.
     { id: "settings.open", title: "Settings", group: "Settings", icon: "settings",
       keywords: "preferences options configure setup game folder mod manager wolvenkit saves theme appearance diagnostics privacy", ...always, run: () => rt.settings.open() },
-    { id: "settings.game", title: "Game & tools (Settings › Game)", group: "Settings", icon: "settings",
-      keywords: "game folder cyberpunk install mod organizer mo2 vortex profile mod manager eye plate head setup", ...always, run: () => rt.settings.open("game") },
+    { id: "settings.game", title: "Game folder and mod manager (Settings › Game)", group: "Settings", icon: "settings",
+      keywords: "game folder cyberpunk install mod organizer mo2 vortex profile mod manager eye plate head setup tools", ...always, run: () => rt.settings.open("game") },
     { id: "settings.saves", title: "Where are my saves? (Settings › Saves)", group: "Settings", icon: "folder",
       keywords: "saves folder save files saved games location explorer choose", ...always, run: () => rt.settings.open("saves") },
     // WolvenKit's setup step sits beside the Game line that says it's needed (UI-161); your own copy is named in Tools.
     { id: "settings.tools", title: "WolvenKit (Settings › Game)", group: "Settings", icon: "settings",
       keywords: "wolvenkit cli tools download path set up", ...always, run: () => rt.settings.open("game") },
-    ...[...panels.values()].filter(panel => panel.spec.id !== SETTINGS_PANEL).map(panel => ({ id: `panel.${panel.spec.id}`, title: `${rt.dock.isOpen(panel.spec.id) ? "Go to" : "Open"} ${panel.spec.title}`, group: "Panels",
+    ...[...panels.values()].filter(panel => panel.spec.id !== SETTINGS_PANEL && panel.spec.id !== "help").map(panel => ({ id: `panel.${panel.spec.id}`, title: `Go to ${panel.spec.title}`, group: "Panels",
       icon: panel.spec.icon, keywords: panel.spec.description, ...always, run: () => rt.dock.reveal(panel.spec.id) })),
     ...[...panels.values()].filter(panel => rt.dock.isOpen(panel.spec.id)).map(panel => ({ id: `panel.float.${panel.spec.id}`, title: `Float ${panel.spec.title}`,
       group: "Layout", icon: "float" as const, ...always, run: () => rt.dock.float(panel.spec.id) })),
@@ -801,7 +809,7 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
     { id: "theme.system", title: `Theme: match system (${theme.system})`, group: "Appearance", icon: "monitor", ...always, run: () => theme.set("system") },
     { id: "theme.light", title: "Theme: light", group: "Appearance", icon: "sun", ...always, run: () => theme.set("light") },
     { id: "theme.dark", title: "Theme: dark", group: "Appearance", icon: "moon", ...always, run: () => theme.set("dark") },
-    { id: "view.hints", title: view.hints() ? "Hide viewport input hints" : "Show viewport input hints", group: "View", icon: "keyboard",
+    { id: "view.hints", title: view.hints() ? "Hide input hints" : "Show input hints", group: "View", icon: "keyboard",
       keywords: "shortcut hints tooltips status", ...always, run: () => view.setHints(!view.hints()) },
     { id: "view.research", title: view.research() ? "Hide research tools" : "Show research tools", group: "View", icon: "activity",
       keywords: "research calibration glitter shimmer finish rendering scattering shadows hair look normal map mask appearance data model study compiler plan developer ids advanced",

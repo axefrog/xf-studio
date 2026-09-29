@@ -2,6 +2,7 @@ import type { StudioAction, StudioCapability, StudioTarget } from "../studio-app
 import type { StudioBoundContext } from "../studio-context-targets";
 import { chordLabel, keyBindingById, shortcutLabel, TARGET_LABELS } from "../input-bindings";
 import type { ViewportHostKind } from "../viewport-attachment";
+import { scaleText } from "./dom";
 import { isIconName, type IconName } from "./icons";
 import { menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem, type MenuSection } from "./menu";
 import type { StudioRuntime } from "./runtime";
@@ -9,8 +10,8 @@ import type { StudioRuntime } from "./runtime";
 type Query = ReturnType<StudioRuntime["port"]["authoring"]["contextQuery"]>;
 type Option = Query["options"][number];
 export const CONTEXT_LABELS: Readonly<Record<string, [string, IconName?]>> = {
-  "preset.add": ["Add preset", "plus"], "preset.restore": ["Restore last removed preset", "reset"],
-  "collection.undoOpen": ["Recover previous collection draft", "undo"], "collection.rename": ["Rename collection…", "rename"],
+  "preset.add": ["Add preset", "plus"], "preset.restore": ["Restore removed preset", "reset"],
+  "collection.undoOpen": ["Recover previous draft", "undo"], "collection.rename": ["Rename collection…", "rename"],
   "preset.select": ["Edit this preset", "target"], "preset.copy": ["Duplicate preset", "duplicate"],
   "preset.remove": ["Remove preset", "trash"], "preset.rename": ["Rename…", "rename"], "preset.move": ["Move to position…", "arrowDown"],
   "layer.select": ["Select layer", "target"], "layer.duplicate": ["Duplicate layer", "duplicate"],
@@ -25,9 +26,9 @@ export const CONTEXT_LABELS: Readonly<Record<string, [string, IconName?]>> = {
   "field.remove": ["Remove warp", "trash"], "field.reach": ["Set warp reach…", "warp"],
 };
 const labels = CONTEXT_LABELS;
-/** Recovery wording for destructive menu entries, from the action's Undo policy. */
+/** Recovery wording for destructive menu entries, from the action's Undo policy: verb first either way (C-8). */
 export const undoHint = (undo: string, id: string) => id.endsWith(".remove") || id === "preset.remove"
-  ? undo === "recovery" ? "Restorable from the Presets panel" : `Undo with ${shortcutLabel("shell.undo")}` : undefined;
+  ? undo === "recovery" ? "Restore from the Presets panel" : `Undo with ${shortcutLabel("shell.undo")}` : undefined;
 /** Row reorder chords from the catalogue ("Alt+↑", "Alt+↓"). */
 const reorderKey = (index: 0 | 1) => chordLabel(keyBindingById("rows.reorder").chords[index]);
 
@@ -45,7 +46,8 @@ export function contextItems(rt: StudioRuntime, query: Query, anchor: MenuAnchor
       const checked = option.id.startsWith("point.mode.") && (hit.kind === "point" || hit.kind === "tangent")
         ? recipe.layers.find(layer => layer.id === hit.layerId)?.points[hit.index]?.handles?.mode === option.id.slice(11) : undefined;
       items.push({ kind: "action", label: text, icon: option.id === "layer.toggle" ? (text === "Show layer" ? "eye" : "eyeOff") : iconName,
-        capability: option.capability, checked, danger: option.id.endsWith(".remove"), hint: undoHint(option.undo, option.id),
+        // Danger only where Undo or recovery can't bring it back ([c-buttons], release-readiness-audit.md C-22).
+        capability: option.capability, checked, danger: option.id.endsWith(".remove") && option.undo === "none", hint: undoHint(option.undo, option.id),
         run: () => dispatchBound(rt, query.context, action) });
       continue;
     }
@@ -63,7 +65,7 @@ function openInput(rt: StudioRuntime, context: StudioBoundContext, option: Extra
   const port = rt.port, hit = context.hit, recipe = rt.editor.recipe();
   const bound = (action: StudioAction) => port.authoring.boundActionCapability(context, action);
   const commit = (action: StudioAction) => dispatchBound(rt, context, action);
-  const percent = (value: number) => `${Math.round(value * 100)}%`, uv = (value: number) => `${(value * 100).toFixed(2)}% UV`;
+  const percent = (value: number) => `${Math.round(value * 100)}%`;
   if (option.id === "point.strength" && (hit.kind === "point" || hit.kind === "tangent")) {
     const layer = recipe.layers.find(item => item.id === hit.layerId), range = rt.range("pigment.edit", "value", "point-strength");
     const make = (value: number): StudioAction => ({ kind: "pigment.edit", layerId: hit.layerId, command: { kind: "point-strength", index: hit.index, value } });
@@ -72,13 +74,13 @@ function openInput(rt: StudioRuntime, context: StudioBoundContext, option: Extra
   } else if (option.id === "point.softness" && (hit.kind === "point" || hit.kind === "tangent")) {
     const layer = recipe.layers.find(item => item.id === hit.layerId), range = rt.range("softness.edit", "value", "point-softness");
     const make = (value: number): StudioAction => ({ kind: "softness.edit", layerId: hit.layerId, command: { kind: "point-softness", index: hit.index, value } });
-    openValuePopover({ kind: "range", label: "Edge softness", value: layer?.points[hit.index]?.feather ?? layer?.feather ?? .012, ...range, step: .0005, format: uv },
+    openValuePopover({ kind: "range", label: "Edge softness", value: layer?.points[hit.index]?.feather ?? layer?.feather ?? .012, ...range, step: .0005, format: scaleText(range.min, range.max) },
       anchor, { title: `Point ${hit.index + 1} edge softness`, apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
   } else if (option.id === "field.reach" && hit.kind === "field") {
     const field = recipe.layers.find(item => item.id === hit.layerId)?.fields.find(item => item.id === hit.id);
     const range = rt.range("field.setReach", "radius");
     const make = (radius: number): StudioAction => ({ kind: "field.setReach", layerId: hit.layerId, fieldId: hit.id, radius });
-    openValuePopover({ kind: "range", label: "Reach", value: field?.radius ?? .03, ...range, step: .001, format: uv },
+    openValuePopover({ kind: "range", label: "Reach", value: field?.radius ?? .03, ...range, step: .001, format: scaleText(range.min, range.max) },
       anchor, { title: "Warp reach", apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
   } else if (option.id === "layer.rename" && hit.kind === "layer") {
     const layer = recipe.layers.find(item => item.id === hit.id);

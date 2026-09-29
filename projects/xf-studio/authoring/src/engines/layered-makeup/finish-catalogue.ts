@@ -8,11 +8,14 @@ import type { RegionWording } from "./region";
 export type FinishId = ReturnType<typeof canonicalFinish>;
 export type FinishDescriptor = {
   id: FinishId;
-  /** Full name for menus and search, e.g. "Glossy / wet look". */
+  /**
+   * The finish's one name, the same on the card, in menus, the palette, Help and Mod package (release-readiness-audit.md C-1, C-2),
+   * e.g. "Glossy". Synonyms stay in `aliases`, for tooltips, the description line and search, never beside the name.
+   */
   label: string;
-  /** One-word card name, e.g. "Glossy"; synonyms move to `aliases`. */
+  /** The same name as `label` (kept for existing readers). */
   shortLabel: string;
-  /** Other names people use for this family (foil, pearl, wet look, duochrome). */
+  /** Other names people use for this family (foil, pearl, wet look, duochrome), shown in tooltips and searched, never as the name. */
   aliases: string[];
   /**
    * Stored names that mean this finish (older recipes' `satin` is `regular`): `layer.setFinish` accepts them,
@@ -49,13 +52,10 @@ export type GlitterModelDescriptor = { id: GlitterModel; label: string; summary:
   controlMax?: Readonly<Record<string, number>>;
 };
 
-const labels: Record<FinishId, string> = {
-  matte: "Matte", regular: "Satin", metallic: "Metallic / foil", shimmer: "Shimmer / pearl",
-  glitter: "Glitter", glossy: "Glossy / wet look", iridescent: "Colour-shifting",
-};
-const short: Record<FinishId, [string, string[]]> = {
+/** Each finish's one name and the other names people use for it. */
+const names: Record<FinishId, [string, string[]]> = {
   matte: ["Matte", []], regular: ["Satin", []], metallic: ["Metallic", ["foil"]], shimmer: ["Shimmer", ["pearl"]],
-  glitter: ["Glitter", []], glossy: ["Glossy", ["wet look"]], iridescent: ["Colour-shift", ["duochrome"]],
+  glitter: ["Glitter", []], glossy: ["Glossy", ["wet look"]], iridescent: ["Colour-shifting", ["duochrome"]],
 };
 /** Finish IDs offered for new edits, in menu order. */
 export const FINISH_IDS: readonly FinishId[] = ["matte", "regular", "metallic", "shimmer", "glitter", "glossy", "iridescent"];
@@ -76,7 +76,7 @@ export function finishCatalogue(wording: RegionWording): FinishDescriptor[] {
   return FINISH_IDS.map(id => {
     const summary = finishExportSummary(id as Finish);
     return {
-      id, label: labels[id], shortLabel: short[id][0], aliases: short[id][1],
+      id, label: names[id][0], shortLabel: names[id][0], aliases: names[id][1],
       stored: LEGACY_FINISH_ALIASES.filter(alias => canonicalFinish(alias) === id), description: finishDescription(id as Finish, wording.surface),
       preview: summary.adapter === "none" ? "preview-study" : "working",
       exportAdapter: summary.adapter, exportNote: summary.note,

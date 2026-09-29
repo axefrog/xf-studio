@@ -421,8 +421,8 @@ export function createStudioPresentation<Slot>(sources: {
     snapshot: () => setup.snapshot(), capability: action => setup.capability(action),
     dispatch: action => setup.dispatch(action), descriptors: () => setup.descriptors(),
   } : {
-    snapshot: () => NO_PREVIEW_SETUP, capability: () => ({ available: false, reason: "The 3D preview isn't set up here." }),
-    dispatch: async () => ({ ok: false, message: "The 3D preview isn't set up here." }), descriptors: () => structuredClone(PREVIEW_SETUP_DESCRIPTORS),
+    snapshot: () => NO_PREVIEW_SETUP, capability: () => ({ available: false, reason: "The 3D view isn't set up here." }),
+    dispatch: async () => ({ ok: false, message: "The 3D view isn't set up here." }), descriptors: () => structuredClone(PREVIEW_SETUP_DESCRIPTORS),
   };
   const d = sources.diagnostics;
   const noReports = { available: false as const, code: "unavailable" as const, reason: "Reporting a problem isn't available here." };

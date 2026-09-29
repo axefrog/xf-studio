@@ -59,7 +59,7 @@ export function previewSetupCard(rt: StudioRuntime) {
   async function run(action: PreviewSetupAction) {
     const outcome = await port.previewSetup.dispatch(action);
     // The card shows a failed step itself; a closed card needs a toast.
-    if (!outcome.ok && !port.previewSetup.snapshot().card.open) rt.feedback.toast("warning", "3D preview", outcome.message);
+    if (!outcome.ok && !port.previewSetup.snapshot().card.open) rt.feedback.toast("warning", "3D view", outcome.message);
     rt.changed();
   }
   function focusHeadStep() {

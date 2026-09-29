@@ -150,20 +150,20 @@ document.body.append(feedback.toasts, feedback.live);
 attach("c-context", "Open live menu", button => openMenu([
   { kind: "heading", label: "Layer", detail: "Petal wash · 2 of 3 from front" },
   { kind: "action", label: "Duplicate layer", icon: "duplicate", shortcut: "Ctrl+D", run: () => feedback.toast("success", "Layers", "Duplicated (demo).") },
-  { kind: "action", label: "Remove layer", icon: "trash", danger: true, hint: "Undo with Ctrl+Z", run: () => feedback.toast("info", "Layers", "Removed “Petal wash” (demo).", [{ label: "Undo", run: () => {} }]) },
-  { kind: "action", label: "Bring forward", icon: "arrowUp", capability: { available: false, reason: "This layer is already in front." }, run: () => {} },
+  { kind: "action", label: "Remove layer", icon: "trash", hint: "Undo with Ctrl+Z", run: () => feedback.toast("info", "Layers", "Removed “Petal wash” (demo).", [{ label: "Undo", run: () => {} }]) },
+  { kind: "action", label: "Move up", icon: "arrowUp", capability: { available: false, reason: "This layer is already at the front." }, run: () => {} },
   { kind: "submenu", label: "Finish", icon: "finish", items: () => [
     { kind: "action", label: "Matte", checked: true, run: () => {} }, { kind: "action", label: "Glitter", hint: "Preview only · not built into your mod", run: () => {} }] },
   { kind: "action", label: "Set point pigment…", icon: "edge", run: () => openValuePopover({ kind: "range", label: "Pigment strength", value: .72, min: 0, max: 1, step: .01, format: v => `${Math.round(v * 100)}%` },
     button, { title: "Point 3 pigment", apply: "Apply", validate: v => Number(v) >= .1 ? { available: true } : { available: false, reason: "Demo: values below 10% are refused." }, commit: () => feedback.toast("success", "Shape", "Applied (demo).") }) },
 ], button, { label: "Demo menu", invoker: button }));
 attach("c-toasts", "Show live toasts", () => {
-  feedback.toast("success", "Library", "Saved “Night market set” · revision 4.");
-  feedback.toast("error", "Library", "The library has a newer revision of this collection. Your draft is kept.", [{ label: "Refresh library", run: () => {} }, { label: "Save as copy", run: () => {} }]);
+  feedback.toast("success", "Library", "Saved “Night market set” · version 4.");
+  feedback.toast("error", "Library", "The library has a newer version of this collection. Your draft is kept.", [{ label: "Check the library again", run: () => {} }, { label: "Save as new collection", run: () => {} }]);
 });
 attach("s-palette", "Open live palette", () => openPalette(() => [
   { id: "save", title: "Save to library", group: "Library", icon: "save", shortcut: "Ctrl+S", capability: () => ({ available: true }), run: () => feedback.toast("success", "Library", "Saved (demo).") },
-  { id: "recover", title: "Recover previous collection draft", group: "Library", icon: "undo", capability: () => ({ available: false, reason: "No previous collection draft." }), run: () => {} },
+  { id: "recover", title: "Recover previous draft", group: "Library", icon: "undo", capability: () => ({ available: false, reason: "No previous draft." }), run: () => {} },
   { id: "float", title: "Float Camera & light", group: "Layout", icon: "float", capability: () => ({ available: true }), run: () => {} },
   { id: "theme", title: "Theme: dark", group: "Appearance", icon: "moon", capability: () => ({ available: true }), run: () => setTheme("dark") },
 ]));

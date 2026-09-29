@@ -9,7 +9,7 @@ import type { Mottle, MottlePresetId } from "../../../engines/layered-makeup/mot
 import type { MottleKey, RecipeAction } from "../../../engines/layered-makeup/recipe-actions";
 import type { ReadonlyDeep } from "../../../read-only";
 import { applyCapability, badge, button, ColorField, emptyState, note, section, Segmented, SelectField, Slider, Toggle, type Transaction } from "../../../studio-ui/controls";
-import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
+import { h, nameWithAliases, pct, scaleText, setAttr, setText } from "../../../studio-ui/dom";
 import { ChoiceList, propertyList, setHelp } from "../../../studio-ui/components";
 import { icon } from "../../../studio-ui/icons";
 import type { Frame } from "../../../studio-ui/runtime";
@@ -18,7 +18,6 @@ import { addLayer, addLayerCapability, catalogues, finenessState, finishOffered,
 import { EYE_MAKEUP_PANEL_META } from "./contribution";
 
 type RLayer = ReadonlyDeep<Layer>;
-const uvPct = (value: number) => `${(value * 100).toFixed(2)}% UV`;
 
 /** One Undo step per continuous edit; refused or failed edits are reported, never swallowed. */
 function recipeTransaction<T>(ctx: EyeMakeupViewContext, id: string, make: (layer: RLayer, value: T) => RecipeAction | undefined,
@@ -62,8 +61,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   const opacity = new Slider({ label: "Opacity", ...opacityRange, step: .01, format: pct,
     transaction: recipeTransaction<number>(ctx, "opacity", (layer, value) => ({ kind: "layer.setOpacity", layerId: layer.id, opacity: value })) });
   // Finishes are grouped by export status, so each row's length is intentional and every group
-  // heading is the one status line its cards share. Cards show the short name only; synonyms and
-  // the full name are in the tooltip and the description line.
+  // heading is the one status line its cards share. Cards show the finish's one name; synonyms are
+  // in the tooltip and the description line.
   const statusText = { "flat-provisional": "Can be built", experimental: "Experimental", none: "Preview only" } as const;
   const finishButtons = catalogues(ctx).finishes.map(finish => {
     const element = h("button", { class: "finish-option", type: "button", "aria-pressed": "false", "data-finish": finish.id,
@@ -182,12 +181,12 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
         setAttr(element, "aria-pressed", String(finish.id === current));
         const choice = choices.find(item => item.value === finish.id);
         element.disabled = !!choice && !choice.capability.available && finish.id !== current;
-        element.title = `${finish.label}. ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
+        element.title = `${nameWithAliases(finish)}. ${finish.description}${element.disabled ? `\n${choice?.capability.reason ?? ""}` : ""}`;
       }
       // A status group with nothing offered (Preview only, while Glitter is behind research tools) takes its heading with it.
       for (const group of statusGroups) group.element.hidden = finishButtons.every(item => item.finish.exportAdapter !== group.status || item.element.hidden);
       const descriptor = catalogues(ctx).finishes.find(finish => finish.id === current);
-      setText(description, descriptor ? `${descriptor.aliases.length ? `${descriptor.shortLabel} (also ${descriptor.aliases.join(", ")}). ` : ""}${descriptor.description}` : "");
+      setText(description, descriptor ? `${descriptor.aliases.length ? `${nameWithAliases(descriptor)}. ` : ""}${descriptor.description}` : "");
       // Per-layer status: an experimental finish still in its earlier preview model is left out until switched.
       const status = ctx.facade.layerExport(layer.id), key = `${current}:${status?.exportable ? status.experimental : status?.reason}`;
       if (exportLine.dataset.finish !== key) {
@@ -305,7 +304,7 @@ export function shapePanel(ctx: EyeMakeupViewContext): PanelController {
       const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       const index = frame.selected, point = layer.points[index];
-      setText(pointLabel, `Point ${index + 1} / ${layer.points.length}`);
+      setText(pointLabel, `Point ${index + 1} of ${layer.points.length}`);
       const target = { kind: "point" as const, layerId: layer.id, index };
       applyCapability(remove, ctx.facade.contextCapability(target, { kind: "point.remove", layerId: layer.id, index }));
       const bezier = layer.pathMode === "bezier";
@@ -331,7 +330,8 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
     ctx.facade.controlCommit("smooth-strength");
   } });
   // Its reason line is reserved (UI-90), so the one thing to do shows while it is unavailable.
-  const blend = new Slider({ label: "Point blend", ...ctx.range("pigment.edit", "value", "strength-blend"), step: ctx.range("pigment.edit", "value", "strength-blend").min, format: uvPct,
+  const blendRange = ctx.range("pigment.edit", "value", "strength-blend");
+  const blend = new Slider({ label: "Point blend", ...blendRange, step: blendRange.min, format: scaleText(blendRange.min, blendRange.max),
     reserveNote: true, help: "How far pigment blends between neighbouring points. More blend softens the differences; a point at 0% may keep a little pigment.",
     transaction: recipeTransaction<number>(ctx, "strength-blend", (layer, value) => layer.strength.mode === "smooth-boundary"
       ? { kind: "pigment.edit", layerId: layer.id, command: { kind: "strength-blend", value } } : undefined) });
@@ -342,7 +342,8 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
     if (!outcome.ok) ctx.feedback.toast("warning", "Pigment & edge", outcome.message);
     ctx.facade.controlCommit("variable-softness");
   } });
-  const width = new Slider({ label: "Edge softness", ...ctx.range("softness.edit", "value", "uniform-softness"), step: .0005, format: uvPct,
+  const widthRange = ctx.range("softness.edit", "value", "uniform-softness");
+  const width = new Slider({ label: "Edge softness", ...widthRange, step: .0005, format: scaleText(widthRange.min, widthRange.max),
     help: "How far the edge fades out. Very soft edges can reach nearby sharp edges in narrow shapes.",
     transaction: recipeTransaction<number>(ctx, "feather", (layer, value) => ({ kind: "softness.edit", layerId: layer.id,
       command: layer.softness.mode === "boundary" ? { kind: "point-softness", index: ctx.facade.view().selected(), value } : { kind: "uniform-softness", value } })) });
@@ -386,7 +387,8 @@ function mottleSection(ctx: EyeMakeupViewContext) {
     new Slider({ label, ...ctx.range("effect.mottle.set", "value", key), step, format, help, reserveNote: key === "grain",
       transaction: recipeTransaction<number>(ctx, `mottle-${key}`, (layer, value) => layer.effects?.mottle
         ? { kind: "effect.mottle.set", layerId: layer.id, key, value } : undefined, "Pigment & edge") });
-  const enabled = new Toggle({ label: "Mottle", onChange: checked => {
+  // The switch says what it does, so it never repeats its section's Mottle heading (release-readiness-audit.md C-24).
+  const enabled = new Toggle({ label: "Break up the coverage", onChange: checked => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "effect.mottle.enable", layerId: layer.id, enabled: checked });
   } });
   // The presets come from the facade's catalogue; the pressed one is the preset the layer's settings equal (seed aside).
@@ -415,7 +417,7 @@ function mottleSection(ctx: EyeMakeupViewContext) {
   const details = h("div", { class: "stack" }, presets.element, amount.element, grain.element, clumping.element, where.element,
     streaks.element, angle.element, length.element, h("div", { class: "row" }, shuffle));
   const element = section({ title: "Mottle", help: ["Breaks the layer up the way powder, cream and mascara sit on skin close up: pores and clumps at skin scale.",
-    "It is part of the layer's texture, so your mod shows exactly what the preview shows, at no cost in game. Higher preview quality shows finer grain."] },
+    "It is part of the layer's texture, so your mod shows exactly what the 3D view shows, at no cost in game. A higher Preview quality shows finer grain."] },
   enabled.element, details);
   return { element, update(layer: RLayer) {
     const m = layer.effects?.mottle as ReadonlyDeep<Mottle> | undefined;
@@ -439,7 +441,8 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "field.add", layerId: layer.id });
   } });
   const chips = h("div", { class: "chip-row", role: "group", "aria-label": "Warps" });
-  const reach = new Slider({ label: "Reach", ...ctx.range("field.setReach", "radius"), step: .001, format: uvPct,
+  const reachRange = ctx.range("field.setReach", "radius");
+  const reach = new Slider({ label: "Reach", ...reachRange, step: .001, format: scaleText(reachRange.min, reachRange.max),
     transaction: {
       begin: () => { const layer = ctx.facade.view().layer(); if (layer && ctx.facade.view().selectedField()) ctx.facade.controlBegin("radius", layer.id); },
       edit: value => { const layer = ctx.facade.view().layer(), field = ctx.facade.view().selectedField(); if (!layer || !field) return;

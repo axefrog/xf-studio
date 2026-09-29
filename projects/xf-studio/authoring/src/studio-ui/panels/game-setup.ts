@@ -107,7 +107,7 @@ export function gameSetupForm(rt: StudioRuntime) {
   const profile = h("select", { id: profileId, class: "field" });
   const profileText = h("input", { class: "field", type: "text", spellcheck: "false", "aria-label": "Mod Organizer 2 profile: type its name" });
   const profileField = h("div", { class: "control" }, h("div", { class: "control-line" }, h("label", { class: "control-label", for: profileId, text: "Profile" }),
-    helpTip("Profile", "The profile you play with. Your mods are added to its list, and the 3D preview reads the mods it uses.")),
+    helpTip("Profile", "The profile you play with. Your mods are added to its list, and the 3D view reads the mods it uses.")),
     h("div", { class: "select-wrap" }, profile, icon("chevronDown")), profileText);
   profile.addEventListener("change", () => void save({ mo2ProfileId: profile.value || null }));
   profileText.addEventListener("change", () => void save({ mo2ProfileId: profileText.value.trim() || null }));

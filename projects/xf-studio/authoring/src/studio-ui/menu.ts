@@ -16,8 +16,6 @@ export type MenuItem =
       tag?: string;
       /** The release stage of what the entry shows or turns on: an Early access stage tag after the label (components/stage-tag.ts). */
       stage?: Stage;
-      /** The unavailable reason is information, not a problem (a planned feature's "Coming soon: …"): shown in the muted colour. */
-      quietReason?: boolean;
       /**
        * What the entry is (a panel's description): its tooltip and accessible description, never a visible line, so a long menu of
        * like entries stays one row each (G2: what a thing is goes in a tip; C-32). A visible `hint` or reason still shows as usual.
@@ -145,7 +143,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       h("span", { class: "menu-icon" }, item.kind === "action" && item.checked ? icon("check") : item.icon ? icon(item.icon) : null),
       h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, item.label, item.kind === "action" && item.tag ? h("span", { class: "menu-tag", text: item.tag }) : null,
         item.kind === "action" ? stageTag(item.stage, "menu-tag") : null),
-        reason || item.hint ? h("small", { id: descId, class: reason && !(item.kind === "action" && item.quietReason) ? "menu-reason" : "menu-hint", text: reason ?? item.hint })
+        reason || item.hint ? h("small", { id: descId, class: reason ? "menu-reason" : "menu-hint", text: reason ?? item.hint })
           : tip ? h("small", { id: descId, class: "sr-only", text: tip }) : null),
       item.kind === "action" && item.shortcut ? h("kbd", { text: item.shortcut }) : null,
       item.kind === "submenu" ? h("span", { class: "menu-sub" }, icon("chevronRight")) : null);
@@ -220,6 +218,8 @@ export type ValueOption = { label: string; checked: boolean; help?: string };
 export function openValuePopover(field: ValueField, anchor: MenuAnchor, options: {
   title: string; apply: string; validate?(value: string | number): Capability; commit(value: string | number, options: boolean[]): void;
   options?: readonly ValueOption[];
+  /** What the value is used for, muted on the note line while the value is accepted; a refusal takes its place (UI-143). */
+  hint?: string;
 }) {
   closeMenus(false);
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -243,7 +243,8 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   const check = () => {
     const result = options.validate?.(read()) ?? { available: true };
     applyButton.disabled = !result.available;
-    note.textContent = result.available ? "" : result.reason ?? "This value is not accepted.";
+    note.textContent = result.available ? options.hint ?? "" : result.reason ?? "This value is not accepted.";
+    note.classList.toggle("hint", result.available);
     if (readout && field.kind === "range") readout.textContent = field.format(Number(input.value));
     return result.available;
   };

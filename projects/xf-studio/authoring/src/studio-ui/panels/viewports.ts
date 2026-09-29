@@ -30,14 +30,18 @@ export function contextMenuGate(kind: ViewportScope, target: HTMLElement, open: 
 export const keyDescription = (scope: ViewportScope) => `Keys: ${KEY_BINDINGS.filter(binding => binding.scope === scope)
   .map(binding => `${chordsLabel(binding)} ${binding.label.toLowerCase()}`).join(", ")}. ${shortcutLabel("shell.shortcuts")} lists every mouse and keyboard binding.`;
 
-/** A view's readiness badge: what the shown modules contribute (eye makeup: its layer textures), absent when none does. */
+/**
+ * A view's readiness badge: what the shown modules contribute (eye makeup: its layer textures), absent when none does. The status bar
+ * holds the steady state (G3, one place per state; release-readiness-audit.md C-18): the view shows the badge only while its V is shown
+ * and the textures are updating or couldn't update, where the result is seen.
+ */
 function readinessBadge(view: ViewContext["view"]) {
   // Not a live region: it changes on every raster and would flood assistive technology (audit B-25).
   const element = h("span", { class: "ready-badge" });
-  return { element, update() {
+  return { element, update(shown: boolean) {
     // The same wording as the status bar and Preview quality (UI-92).
-    const readiness = view.badge();
-    element.hidden = !readiness;
+    const readiness = shown ? view.badge() : undefined;
+    element.hidden = !readiness || readiness.phase === "ready";
     if (!readiness) return;
     element.dataset.phase = readiness.phase;
     setText(element, readiness.label);
@@ -87,14 +91,14 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
   // What the head pane shows until the head is interactive: progress, a neutral "still needed" note or a
   // failure, always with the one next step from the preview setup (unless the setup card shows it).
   const stateIcon = h("span", { class: "viewport-state-icon" });
-  const stateText = h("p", { id: uid("viewport-state"), text: "Checking the 3D preview…" });
+  const stateText = h("p", { id: uid("viewport-state"), text: "Checking the 3D view…" });
   const stateProgress = progressBar({ labelledBy: stateText.id }), stateBar = stateProgress.element;
   const stateNote = h("p", { class: "muted small", text: "You can keep working in the UV map.", hidden: true });
   let nextAction: Parameters<typeof port.previewSetup.dispatch>[0] | undefined;
-  const next = button({ label: "Set up 3D preview", variant: "primary", small: true, onClick: () => {
+  const next = button({ label: "Set up 3D view", variant: "primary", small: true, onClick: () => {
     if (!nextAction) return;
     void port.previewSetup.dispatch(nextAction).then(outcome => {
-      if (!outcome.ok) rt.feedback.toast("warning", "3D preview", outcome.message);
+      if (!outcome.ok) rt.feedback.toast("warning", "3D view", outcome.message);
     });
   } });
   next.hidden = true;
@@ -136,7 +140,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
     stateBar.hidden = tone !== "progress";
     const progress = state.phase === "preparing" && typeof state.progress === "number" ? state.progress : null;
     stateProgress.set(progress);
-    const text = state.error ?? state.message ?? (tone === "error" ? "The 3D preview could not load." : "Checking the 3D preview…");
+    const text = state.error ?? state.message ?? (tone === "error" ? "The 3D view could not load." : "Checking the 3D view…");
     setText(stateText, text);
     // Say what still works unless the message already does.
     stateNote.hidden = tone === "progress" || /UV/.test(text);
@@ -156,7 +160,7 @@ export function headPanel(rt: StudioRuntime, view: ViewContext): PanelController
       loading.hidden = state.phase === "ready";
       if (state.phase !== "ready") paintState(state, frame.previewSetup.head.next);
       // Hints hide themselves while the head isn't interactive (their own state), so they never cover this.
-      badge.update(); hints.update(frame); toolbar.update(frame);
+      badge.update(frame.viewport.head.phase === "ready"); hints.update(frame); toolbar.update(frame);
       const details = frame.status.assets.characterDetails;
       const unavailable = details?.slots.find(entry => entry.state === "unavailable" && entry.message);
       const line = state.phase !== "ready" || !details ? ""

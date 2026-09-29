@@ -186,7 +186,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const views = core.views;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit), renderers: STUDIO_RENDERERS,
-    onContext: event => event === "lost" ? diagnostics.contextLost("3D head view") : diagnostics.contextRestored("3D head view") });
+    onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   const session = createBrowserWorkspaceSession({
     workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
     capture: {

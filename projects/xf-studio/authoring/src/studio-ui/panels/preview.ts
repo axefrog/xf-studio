@@ -22,13 +22,13 @@ type DetailStatus = NonNullable<Frame["status"]["assets"]["characterDetails"]>;
 const SLOT_NAMES = { skin: "Skin", face: "Face details", brows: "Eyebrows", lashes: "Eyelashes", hair: "Hair", eyes: "Eyes", teeth: "Teeth", piercings: "Piercings", body: "Body", clothing: "Clothes" } as const;
 /** What each renderer limit code means for the person using the app (detail-limits.ts). */
 export const DETAIL_LIMIT_TEXT: Readonly<Record<DetailLimit, string>> = {
-  "head-shape": "An installed mod changes your V's head shape. The preview shows it, but eye makeup is still placed on the original head shape.",
+  "head-shape": "An installed mod changes your V's head shape. The 3D view shows it, but eye makeup is still placed on the original head shape.",
   "skin-glow": "Glowing skin details from your installed mods aren't shown yet.",
   "eye-design": "Your V's eye design couldn't be drawn, so the default eye is shown in its place.",
   "layered-material": "Some of your V's piercings or other layered parts couldn't be drawn, so they aren't shown.",
   "layered-mask": "Part of the pattern on your V's piercings or eye design couldn't be read, so those parts show their base colour only.",
   "layered-base": "The base finish of some of your V's piercings or layered parts couldn't be read, so a plain grey stands in for it.",
-  "decal-template": "Some of your V's face details use materials the preview can't draw yet, so those parts aren't shown.",
+  "decal-template": "Some of your V's face details use materials the 3D view can't draw yet, so those parts aren't shown.",
   "rigid-part": "A piercing part stays in place while your V's head moves in the idle, because its shape carries no skinning.",
   "rigid-body-part": "Part of your V's body, such as the nails, moves as one piece with the hand in the idle, because its shape carries no skinning.",
   "part-unread": "Some parts of your V's details couldn't be prepared from your game files, so they aren't shown. Report a problem from Help to see which.",
@@ -191,7 +191,8 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       { kind: "action", label: "Duplicate", icon: "duplicate", capability: capability({ kind: "preview.duplicateLight", light: id }),
         run: () => rt.dispatch({ kind: "preview.duplicateLight", light: id }) },
       { kind: "action", label: "Aim at the head", icon: "target", run: () => rt.dispatch({ kind: "preview.aimLightAtHead", light: id }) },
-      { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => rt.dispatch({ kind: "preview.removeLight", light: id }) },
+      // Ctrl+Z in this panel brings a removed light back (the view history), so it isn't a danger entry (C-22).
+      { kind: "action", label: "Remove", icon: "trash", run: () => rt.dispatch({ kind: "preview.removeLight", light: id }) },
     ], anchor, { label: `${light.name} actions`, invoker });
   };
   const lights = new LightList({ label: "Lights", maxLength: 60, onSelect: id => { selectedLight = id; paintLight(); },
@@ -252,10 +253,10 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     noLights.hidden = !!light; lightControls.hidden = !light;
     if (!light) return;
     const gate = (action: Parameters<typeof port.authoring.capability>[0]) => {
-      if (!ready) return { disabled: true, reason: "The preview is still loading." };
+      if (!ready) return { disabled: true, reason: "The 3D view is still loading." };
       const allowed = capability(action); return { disabled: !allowed.available, reason: allowed.reason };
     };
-    kind.update(light.type, type => ready ? capability({ kind: "preview.setLightType", light: light.id, type }) : { available: false, reason: "The preview is still loading." },
+    kind.update(light.type, type => ready ? capability({ kind: "preview.setLightType", light: light.id, type }) : { available: false, reason: "The 3D view is still loading." },
       { note: light.type === "directional" ? "Cone and softness apply to spot lights." : "" });
     direction.update({ azimuth: light.azimuth, elevation: light.elevation }, { colour: light.colour,
       size: port.preferences.snapshot().controlSizes?.[DIAL_SIZE_KEY],
@@ -349,10 +350,10 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
       display.hidden = !research && !tools.length;
       optics.update(preview?.eyeOwnRoughness ?? true, loading);
       const eye = assets.eyeOptics;
-      setText(opticsNote, !eye ? "Uses the shown eye's own roughness from your game files instead of the preview's even gloss." : eye.active
+      setText(opticsNote, !eye ? "Uses the shown eye's own roughness from your game files instead of the 3D view's even gloss." : eye.active
         ? "The eye's own roughness from your game files: a glassy eye with a crisp catch light, lit the way the game lights eyes."
-        : !eye.requested ? "Off: the eyes use the preview's earlier even gloss, for comparison."
-          : "The eye shown has no roughness the preview can read, so it keeps the even gloss.");
+        : !eye.requested ? "Off: the eyes use the 3D view's earlier even gloss, for comparison."
+          : "The eye shown has no roughness the 3D view can read, so it keeps the even gloss.");
     },
   };
 }
@@ -406,7 +407,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
     update(frame) {
       const motion = frame.preview.motion;
       const unavailable = { disabled: !motion?.available, reason: (frame.viewport.head.error ?? frame.viewport.head.message) ??
-        motion?.error ?? "Your V's motion appears once the 3D preview is ready." };
+        motion?.error ?? "Your V's motion appears once the 3D view is ready." };
       const idles = motion?.idles.length ? motion.idles : [{ id: "closeup", label: "Creator close-up" }];
       // The Body buttons' reserved line says the one thing that matters now: loading, or why motion is off.
       source.setOptions([{ value: STILL, label: "Still", title: "V stands in her bind pose." },
@@ -477,7 +478,8 @@ export const RENDERING_HELP = {
     "Preview only: your looks and your mod are unchanged."],
 } as const;
 /** The Hair look's readout: its two ends by name, per cent between them (the value is 0 Crisp … 1 Game-like). */
-export const hairLookText = (percent: number) => percent < .5 ? "Crisp" : percent > 99.5 ? "Game-like" : `${Math.round(percent)} % game-like`;
+/** The Hair look's readout: how far toward game-like, as a number; its ends name the two looks, so the readout never repeats them (C-23). */
+export const hairLookText = (percent: number) => `${Math.round(percent)}%`;
 
 export function qualityPanel(rt: StudioRuntime): PanelController {
   const port = rt.port;
@@ -485,7 +487,8 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
   const tiers = new Segmented<PreviewTextureSize>({ label: "Texture size", options: sizes.map(size => ({ value: size, label: size === 512 ? "512" : `${size / 1024}K` })),
     onSelect: size => rt.dispatch({ kind: "quality.set", size }) });
   const stateLine = h("div", { class: "quality-state" });
-  const rebuild = button({ label: "Rebuild preview", icon: "refresh", small: true, onClick: () => rt.dispatch({ kind: "quality.rebuild" }) });
+  // Beside the line that says the makeup textures couldn't be made: its one next step (C-13: no "Rebuild preview").
+  const rebuild = button({ label: "Try again", icon: "refresh", small: true, onClick: () => rt.dispatch({ kind: "quality.rebuild" }) });
   // Rendering (how the 3D view draws; the view's display node, View and lighting history): library Toggles and a SliderWithValue. The
   // crease occlusion switch joins this group when it lands (claude/fix-plate-seam).
   const endEdit = () => { port.authoring.dispatch({ kind: "view.endEdit" }); };
@@ -521,7 +524,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
         const ready = readiness.phase === "ready" && frame.viewport.head.phase === "ready";
         stateLine.replaceChildren(badge(text.label, readiness.phase === "ready" ? "success" : readiness.phase === "updating" ? "info" : "error"),
           ...(ready ? [] : [h("span", { class: "small", text: text.detail })]),
-          h("span", { class: "muted small", text: `About ${Math.ceil(readiness.estimatedBytes / 1048576)} MiB of memory at this size.` }));
+          h("span", { class: "muted small", text: `About ${Math.ceil(readiness.estimatedBytes / 1_000_000)} MB of memory at this size.` }));
       }
       applyCapability(rebuild, port.authoring.capability({ kind: "quality.rebuild" }));
       rebuildRow.hidden = readiness.phase !== "blocked";

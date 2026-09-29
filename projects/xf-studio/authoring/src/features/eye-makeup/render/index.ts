@@ -30,7 +30,7 @@ export type EyeMakeupRenderer = LayeredSurfaceRenderer & {
 
 function createEyeMakeupRenderer(host: SceneHostPort): EyeMakeupRenderer {
   const found = host.anchors().surface(EYE_PLATE_SURFACE);
-  if (!found) throw Error("The 3D preview has no eye plate.");
+  if (!found) throw Error("The 3D view has no eye plate.");
   const plate: THREE.SkinnedMesh = found;
   const detached: (() => void)[] = [];
   // One draw-order slot per layer, in the band the host gave eye makeup (10 to 41 as its first feature).

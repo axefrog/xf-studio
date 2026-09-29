@@ -45,11 +45,11 @@ export type PreviewCoreHostOptions = {
 };
 
 const MESSAGES = {
-  ready: "The 3D preview is ready.",
-  idle: "XF Studio can build the 3D head preview from your own Cyberpunk 2077 files. It takes about a minute or less and changes nothing in your game.",
-  game: "Choose your Cyberpunk 2077 game folder so XF Studio can build the 3D head preview from your own game files.",
+  ready: "The 3D view is ready.",
+  idle: "XF Studio can build the 3D view from your own Cyberpunk 2077 files. It takes about a minute or less and changes nothing in your game.",
+  game: "Choose your Cyberpunk 2077 game folder so XF Studio can build the 3D view from your own game files.",
   wolvenkit: "XF Studio needs WolvenKit to read your game files, and it isn't ready yet. XF Studio can download it for you. The UV editor, library and Check keep working without it.",
-  cancelled: "Preparing the 3D preview was cancelled. You can start it again at any time.",
+  cancelled: "Preparing the 3D view was cancelled. You can start it again at any time.",
   male: "XF Studio can build the masculine V's head from your own Cyberpunk 2077 files. It takes about a minute or less and changes nothing in your game.",
   preparingMale: "Preparing the masculine V's head from your Cyberpunk 2077 files…",
   busy: "XF Studio is preparing another head from your game files. This one can start when it has finished.",
@@ -82,7 +82,7 @@ export class PreviewCoreHost {
     const settings = this.options.settings();
     const base = { schema: PREVIEW_CORE_STATE_SCHEMA, body, lastDurationSeconds: this.lastDurationSeconds } as const;
     if (this.running?.body === body) return { ...base, phase: "preparing", code: null, needs: [], canPrepare: false, canCancel: true,
-      message: body === "male" ? MESSAGES.preparingMale : "Preparing the 3D preview from your Cyberpunk 2077 files…", progress: this.progress };
+      message: body === "male" ? MESSAGES.preparingMale : "Preparing the 3D view from your Cyberpunk 2077 files…", progress: this.progress };
     const state = this.restingSnapshot(settings, base, body);
     // Another body's preparation is running: this one waits for it.
     return this.running && state.canPrepare ? { ...state, canPrepare: false, message: state.phase === "idle" ? MESSAGES.busy : state.message } : state;

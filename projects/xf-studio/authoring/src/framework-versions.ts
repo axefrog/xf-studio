@@ -190,7 +190,7 @@ function report(port: FrameworkHostPort, route: "direct" | "mo2", label: string,
 }
 /** MO2 providers for the profile, highest priority first: overwrite, enabled mods, then the game folder. */
 function mo2Providers(port: FrameworkHostPort, input: FrameworkCheckInput, game: Provider): Provider[] | string {
-  if (!input.mo2Root || !input.mo2ProfileId) return "Choose your Mod Organizer 2 folder and profile in Local setup.";
+  if (!input.mo2Root || !input.mo2ProfileId) return "Choose your Mod Organizer 2 folder and profile in Settings › Game.";
   const instance = describeMo2Instance(port.readText(join(input.mo2Root, "ModOrganizer.ini"), iniBytes),
     input.mo2Root, "configured", input.mo2Root);
   const text = port.readText(join(instance.paths.profiles, input.mo2ProfileId, "modlist.txt"), modlistBytes);
@@ -206,8 +206,8 @@ function mo2Providers(port: FrameworkHostPort, input: FrameworkCheckInput, game:
 export function checkFrameworkVersions(port: FrameworkHostPort, input: FrameworkCheckInput): FrameworkVersionCheck {
   const gameReady = !!input.gameRoot && port.isFile(join(input.gameRoot, "bin", "x64", "Cyberpunk2077.exe"));
   const game: Provider = { kind: "game", name: "Game folder", folder: input.gameRoot ?? "" };
-  const noGame = input.gameRoot ? "We couldn't find Cyberpunk 2077 in the selected game folder. Check the folder in Local setup."
-    : "Choose your Cyberpunk 2077 game folder in Local setup so we can check your frameworks.";
+  const noGame = input.gameRoot ? "We couldn't find Cyberpunk 2077 in the selected game folder. Check the folder in Settings › Game."
+    : "Choose your Cyberpunk 2077 game folder in Settings › Game so we can check your frameworks.";
   const routes = [report(port, "direct", "Game folder", null, gameReady ? [game] : noGame)];
   if (input.launchRoute === "mo2" || (input.mo2Root && input.mo2ProfileId))
     routes.push(report(port, "mo2", input.mo2ProfileId ? `Mod Organizer 2 profile "${input.mo2ProfileId}"` : "Mod Organizer 2",

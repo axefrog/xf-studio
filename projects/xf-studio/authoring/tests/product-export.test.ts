@@ -192,7 +192,7 @@ test("a whole look is left out only when no feature packages anything of it; a f
   const result = check(mixed());
   const whole = result.omissions.filter(item => item.kind === "preset").map(item => [item.presetId, item.kind === "preset" && item.reason]);
   // The eye-makeup-only look with nothing exportable is left out whole, with eye makeup's reason; the hair-only look too.
-  expect(whole).toEqual([[b.id, "No active exportable layers remain."], [HAIR_ONLY, NOTHING_PACKAGED_REASON]]);
+  expect(whole).toEqual([[b.id, "None of its shown layers can be built into your mod yet."], [HAIR_ONLY, NOTHING_PACKAGED_REASON]]);
   // The lips-only look is packaged by lips, so nobody reports it; before, eye makeup called it a whole look "with no eye makeup".
   const [product] = result.products, [eyes, lips] = product.features;
   expect(lips.presets.map(look => look.id)).toEqual([a.id, c.id, d.id]);
@@ -201,8 +201,8 @@ test("a whole look is left out only when no feature packages anything of it; a f
   expect(eyes.omissions.some(item => item.kind !== "feature" && item.presetId === c.id)).toBe(false);
   // In words: the eye makeup of a look lips packages is left out, not the look; layers name their feature.
   const words = describePackageCheck(result);
-  expect(words).toContain(`left out the eye makeup of preset “${d.name}”: no active exportable layers remain`);
-  expect(words).toContain(`omitted whole preset “${b.name}” because no exportable active layers remain`);
+  expect(words).toContain(`left out the eye makeup of preset “${d.name}”: none of its shown layers can be built into your mod yet`);
+  expect(words).toContain(`omitted whole preset “${b.name}” because none of its shown layers can be built into your mod yet`);
   expect(words).toContain("omitted eye makeup layer");
   expect(words).not.toContain(`“${c.name}” because it has no eye makeup`);
   expect(resultOmissions(result).filter(item => item.label).every(item => item.label === "Eye makeup")).toBe(true);

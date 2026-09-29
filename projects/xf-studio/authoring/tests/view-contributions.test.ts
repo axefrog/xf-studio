@@ -90,8 +90,11 @@ test("every contributed panel has a factory, and every action kind an activity s
   expect(Object.keys(PANEL_FACTORIES).sort()).toEqual([...PANEL_IDS].sort());
   expect(Object.keys(ACTION_DESCRIPTORS).filter(kind => activitySource(kind) === "Studio")).toEqual([]);
   expect([activitySource("history.undo"), activitySource("history.jumpTo"), activitySource("layer.setEnabled"),
-    activitySource("layer.setOpacity"), activitySource("point.move"), activitySource("camera.front")])
-    .toEqual(["Undo", "History", "Layers", "Colour & finish", "Shape", "Camera"]);
+    activitySource("layer.setOpacity"), activitySource("point.move"), activitySource("camera.front"), activitySource("preview.setLight"),
+    activitySource("preview.setEyeShape")])
+    .toEqual(["Undo", "History", "Layers", "Colour & finish", "Shape", "Camera & light", "Camera & light", "3D view"]);
+  // "Preview" is never a source's name: it means the 3D view (release-readiness-audit.md C-7).
+  expect(Object.keys(ACTION_DESCRIPTORS).filter(kind => activitySource(kind) === "Preview")).toEqual([]);
 });
 
 test("new features use <feature>.<panel> IDs; only the shell's and eye makeup's grandfathered IDs are bare", () => {

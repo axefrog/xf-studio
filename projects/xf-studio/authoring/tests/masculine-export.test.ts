@@ -218,7 +218,8 @@ test("Check: his plate ready, not yet known, unavailable, or on other texture co
   // Before a Build prepared his plate for this route, Check plans on including him and says Build checks his head.
   const unknown = plan(undefined);
   expect(unknown.check.notes).toEqual([CHECK_MASCULINE_NOTE]);
-  expect(unknown.check.audience).toBe(AUDIENCE_BOTH);
+  // Until a Build has checked him, the product line doesn't claim him (UI-148).
+  expect(unknown.check.audience).toBeUndefined();
   // Before any plate was prepared: one note says both things Build still decides.
   const blind = EYE_MAKEUP_EXPORTER.plan({ collection: fixture, diagnostics: false, prerequisites: {} });
   expect(blind.check.notes).toEqual([CHECK_BUILD_DECIDES_NOTE]);
@@ -245,8 +246,8 @@ test("Check: his plate ready, not yet known, unavailable, or on other texture co
     expect(message).not.toMatch(/male player head|male head|texture coordinates|plate|This mod is for/);
   }
   expect(masculineUnavailable("plate_source_modded").unavailable).toMatchObject({ next: "settings.game" });
-  expect(masculineUnavailable("plate_source_modded").unavailable.message).toContain(`“${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both V's`);
-  expect(MASCULINE_WINDOW.text).toContain(`“${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both V's`);
+  expect(masculineUnavailable("plate_source_modded").unavailable.message).toContain(`“${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both heads`);
+  expect(MASCULINE_WINDOW.text).toContain(`“${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both heads`);
   // An unreadable mod is named (from the failure's detail, `name: error` per archive), with the step that clears it.
   expect(unreadArchives(new EyePlateError("plate_source_incomplete", "x", "broken_head.archive: bad index: 3\nother.archive: gone"))).toEqual(["broken_head.archive", "other.archive"]);
   expect(unreadArchives(new EyePlateError("plate_source_modded", "x", "a.archive: y"))).toEqual([]);

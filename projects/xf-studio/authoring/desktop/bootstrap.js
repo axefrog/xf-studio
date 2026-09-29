@@ -130,7 +130,7 @@ about.querySelector("#desktop-version").textContent = capabilities.metadataStatu
 about.querySelector("#desktop-build").textContent = capabilities.metadataStatus === "ready" ?
   `Build ${capabilities.buildHash}` : "This installation looks damaged. Reinstall XF Studio to repair it.";
 about.querySelector("#desktop-preview-note").textContent = capabilities.previewAssets === "ready" ? "" :
-  "The 3D head preview is built from your own Cyberpunk 2077 files. The UV editor, library and Check work without it.";
+  "The 3D view is built from your own Cyberpunk 2077 files. The UV editor, library and Check work without it.";
 about.querySelector("#desktop-data-path").textContent = capabilities.userDataPath;
 // WolvenKit is a separate program XF Studio downloads (with consent) and runs; it is not shipped.
 async function openLink(link) {
@@ -145,7 +145,7 @@ async function refreshWolvenKitNote() {
     const state = await fetch("/api/desktop/wolvenkit", { cache: "no-store" }).then(response => response.json());
     if (state.schema === "xfs/wolvenkit-setup-1") status = ` ${state.message}`;
   } catch { /* The note still explains the tool. */ }
-  wolvenKitNote.textContent = "The 3D preview and Build use WolvenKit CLI, a separate free program (GPL-3.0) by the WolvenKit team. " +
+  wolvenKitNote.textContent = "The 3D view and Build use WolvenKit, a separate free program (GPL-3.0) by the WolvenKit team. " +
     "XF Studio downloads it from WolvenKit's official release only when you allow it; it isn't part of XF Studio." + status;
 }
 about.querySelector("#desktop-wolvenkit-licence").addEventListener("click", () => void openLink("wolvenkit-licence").catch(error => {
@@ -235,7 +235,7 @@ function openAbout() {
 window.xfDesktopOpenAbout = openAbout;
 const welcome = document.createElement("dialog");
 welcome.id = "desktop-welcome";
-welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D head preview is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Once the 3D preview is set up, you can also build your ' + EYE_MAKEUP_MOD.modName + ' mod files and add them to your mod manager. XF Studio asks before it downloads or installs anything.</p><p>This is a beta. If something doesn\'t work, <strong>Report a problem…</strong> in Help prepares a report for you to review; nothing is sent by itself.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Settings</button></div></div>';
+welcome.innerHTML = '<div class="desktop-first-run"><span class="brand-mark" aria-hidden="true">XF</span><h1>Welcome to XF Studio</h1><p>XF Studio customises Cyberpunk 2077. Eye makeup is the first supported feature: design looks in layers, keep them in your library, and run Check to see which can become mod files.</p><p>The 3D view is built from your own Cyberpunk 2077 files the first time you open XF Studio. It changes nothing in your game. The UV editor, library and Check work fully without it.</p><p>Once the 3D view is set up, you can also build your ' + EYE_MAKEUP_MOD.modName + ' mod files and add them to your mod manager. XF Studio asks before it downloads or installs anything.</p><p>This is a beta. If something doesn\'t work, <strong>Report a problem…</strong> in Help prepares a report for you to review; nothing is sent by itself.</p><p id="desktop-welcome-status" role="status"></p><div class="desktop-intake-actions"><button type="button" id="desktop-welcome-start">Start designing</button><button type="button" id="desktop-welcome-setup">Settings</button></div></div>';
 document.body.append(welcome);
 const aboutReadiness = about.querySelector("#desktop-setup-readiness");
 // One settings service and one form (the Studio's Settings, UI-03, UI-109), with the desktop's own folder picker (UI-83).
@@ -283,7 +283,7 @@ welcome.querySelector("#desktop-welcome-setup").addEventListener("click", async 
 const initialSetup = setupAction({ kind: "setup.refresh" });
 void initialSetup.then(() => {
   // A fresh install gets the plain-language welcome; damaged settings open Settings, which
-  // offers to restore them. Everyone else reaches Settings from the header's gear button or About.
+  // offers to restore them. Everyone else reaches Settings from the header's Settings button or About.
   if (setupView?.source === "new") welcome.showModal();
   else if (setupView?.source === "backup") openGameSetup();
 }).catch(() => { aboutReadiness.textContent = "Your settings couldn't be loaded. Check still works; restart XF Studio to try again."; });

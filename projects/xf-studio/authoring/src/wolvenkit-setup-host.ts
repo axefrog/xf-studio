@@ -64,7 +64,7 @@ export type WolvenKitSetupOptions = {
 };
 
 const MESSAGES = {
-  available: "XF Studio uses WolvenKit, the community's free modding tool, to read your Cyberpunk 2077 files for the 3D preview and your mod files. XF Studio can download it for you.",
+  available: "XF Studio uses WolvenKit, the community's free modding tool, to read your Cyberpunk 2077 files for the 3D view and your mod files. XF Studio can download it for you.",
   damaged: "XF Studio's copy of WolvenKit is incomplete or damaged. Download it again to repair it.",
   offline: "XF Studio couldn't reach GitHub to download WolvenKit. Check that this computer is online, then try again.",
   network: "The WolvenKit download was interrupted. Check your internet connection, then try again.",

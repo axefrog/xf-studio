@@ -29,7 +29,7 @@ function header(width: number) {
 
 const MOUNTS: Record<string, Mount> = {
   "lib-button": () => { const unavailable = button({ label: "Build mod files", icon: "package", onClick: () => {} });
-    applyCapability(unavailable, { available: false, reason: "Choose your Cyberpunk 2077 folder in Game & tools first." });
+    applyCapability(unavailable, { available: false, reason: "Choose your Cyberpunk 2077 folder in Settings › Game first." });
     return h("div", { class: "row wrap gap-s" }, button({ label: "Save to library", icon: "save", variant: "primary", onClick: () => {} }),
       button({ label: "Check", icon: "check", onClick: () => {} }), button({ label: "Restore removed", icon: "reset", variant: "quiet", onClick: () => {} }),
       button({ label: "More actions", icon: "more", iconOnly: true, variant: "ghost", menu: true, onClick: event => openMenu([{ kind: "action", label: "Duplicate", icon: "duplicate", run: () => {} }], event.currentTarget as Element, { label: "More actions" }) }),
@@ -104,7 +104,7 @@ const MOUNTS: Record<string, Mount> = {
     const curves = [["easeLinear", "Linear", "steady from start to end"], ["easeIn", "Ease in", "starts slowly and speeds up into the end"],
       ["easeOut", "Ease out", "starts quickly and slows into the end"], ["easeOutStrong", "Strong ease out", "most of the change at once, then a long settle"],
       ["easeInOut", "Ease in-out", "gentle at both ends"], ["easeInOutStrong", "Strong ease in-out", "a slow start and finish around a quick middle"]] as const;
-    const strip = () => { const c: Segmented<string> = new Segmented({ label: "Curve", iconOnly: true, reserveNote: true, compact: true,
+    const strip = () => { const c: Segmented<string> = new Segmented({ label: "Curve", iconOnly: true, reserveNote: true, quietReason: true, compact: true,
       readout: v => curves.find(([icon]) => icon === v)![1], readoutGutter: true,
       options: curves.map(([icon, label, hint]) => ({ value: icon, label, icon, title: `${label}: ${hint}.` })), onSelect: v => c.update(v) }); return c; };
     const on = strip(), off = strip();
@@ -152,7 +152,7 @@ const MOUNTS: Record<string, Mount> = {
     { kind: "action", label: "Save as new layout…", icon: "plus", run: () => openValuePopover({ kind: "text", label: "Name", value: "Layout 2", maxLength: 48 },
       { x: 120, y: 120 }, { title: "Save layout", apply: "Save", options: [{ label: "Remember shown modules", checked: true }, { label: "Switch to it in wide windows", checked: false }],
         commit: () => {} }) },
-    { kind: "separator" }, { kind: "action", label: "Remove", icon: "trash", danger: true, run: () => {} }], event.currentTarget as Element, { label: "Layer actions" }) }),
+    { kind: "separator" }, { kind: "action", label: "Remove", icon: "trash", hint: "Undo with Ctrl+Z", run: () => {} }], event.currentTarget as Element, { label: "Layer actions" }) }),
     button({ label: "Delete a saved expression", icon: "trash", onClick: event => openConfirmPopover(event.currentTarget as Element,
       { title: "Delete saved expression", message: "Delete “Smirk” from your library? This can't be undone.", confirm: "Delete", danger: true, onConfirm: () => {} }) })),
   "lib-stage-tag": () => {

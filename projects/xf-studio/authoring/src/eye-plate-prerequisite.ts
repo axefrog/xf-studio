@@ -46,7 +46,7 @@ export function masculineUnavailable(code: string, unread: readonly string[] = [
     plate_source_unsupported: { code, message: "This game version's masculine V head is new to XF Studio; update XF Studio to include him." },
     // The head choice is one setting for both heads, so the step says what it costs the feminine V too.
     plate_source_modded: { code, next: "settings.game",
-      message: `A head mod changes the masculine V's head in a way ${EYE_MAKEUP_MOD.modName} can't follow yet; choose “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both V's to include him.` },
+      message: `A head mod changes the masculine V's head in a way ${EYE_MAKEUP_MOD.modName} can't follow yet; choose “${EYE_PLATE_HEAD_SETTING.options["base-game"]}” for both heads to include him.` },
     plate_source_incomplete: unread.length
       ? { code, message: `XF Studio couldn't read the mod ${named}, which may change the masculine V's head; reinstall or remove it to include him.` }
       : { code, message: "XF Studio couldn't read all your mods; close any tool changing mod files, then build again to include the masculine V." },

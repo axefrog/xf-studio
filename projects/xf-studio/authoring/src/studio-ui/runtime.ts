@@ -201,10 +201,11 @@ function fileSource(kind: StudioFileAction["kind"]) {
     kind === "mask.export" ? "Mask export" : kind.startsWith("recipe") ? "Recipe" : "Library";
 }
 function recoveryFor(code: string, runtime: StudioRuntime): FeedbackAction[] {
+  // The same words as the Library's own buttons, and no "Refresh" (release-readiness-audit.md C-8, C-13).
   if (code === "conflict") return [
-    { label: "Refresh library", run: () => void runtime.request({ kind: "refresh" }) },
-    { label: "Save as copy", run: () => void runtime.request({ kind: "saveCopy" }) },
+    { label: "Check the library again", run: () => void runtime.request({ kind: "refresh" }) },
+    { label: "Save as new collection", run: () => void runtime.request({ kind: "saveCopy" }) },
   ];
-  if (code === "stale_result") return [{ label: "Refresh library", run: () => void runtime.request({ kind: "refresh" }) }];
+  if (code === "stale_result") return [{ label: "Check the library again", run: () => void runtime.request({ kind: "refresh" }) }];
   return [];
 }

@@ -228,7 +228,7 @@ describe("one hierarchy in the Character panel (Next 4)", () => {
     // reserved under the heading), and a click runs nothing.
     expect(piercings.disabled).toBe(false);
     expect(piercings.getAttribute("aria-disabled")).toBe("true");
-    expect(piercings.getAttribute("data-reason")).toContain("3D preview");
+    expect(piercings.getAttribute("data-reason")).toContain("3D view");
     expect(sectionOf(piercings)!.querySelector(".cc-heading-note")).toBeNull();
     const before = h.dispatched.length;
     piercings.click();

@@ -38,10 +38,13 @@ export const SHELL_VIEW = {
   ],
   activity: [
     { pattern: /^history\.(undo|redo)$/, label: "Undo" }, { pattern: /^history\./, label: "History" },
-    { pattern: /^preset\./, label: "Presets" }, { pattern: /^camera\./, label: "Camera" }, { pattern: /^preview\./, label: "Preview" },
+    { pattern: /^preset\./, label: "Presets" }, { pattern: /^camera\./, label: "Camera & light" },
+    // The 3D view's lights, exposure and backdrop live in Camera & light; everything else a preview.* action changes is the 3D view.
+    { pattern: /^preview\.(.*Light|setExposure|setBackdrop|setDisplayTransform|setKeyAngle|setCreatorShadows|resetCreatorLighting|setCreatorLighting|.*LightingSetup|setLightingPreset|setSurfaceControls|setNormals|setWire)/, label: "Camera & light" },
+    { pattern: /^preview\./, label: "3D view" },
     { pattern: /^motion\./, label: "Motion" }, { pattern: /^transition\./, label: "Transitions" }, { pattern: /^quality\./, label: "Preview quality" },
     { pattern: /^collection\./, label: "Library" }, { pattern: /^package\./, label: "Mod package" }, { pattern: /^savedV\./, label: "Saved V" }, { pattern: /^character\./, label: "Character" },
-    { pattern: /^previewSetup\./, label: "3D preview" }, { pattern: /^setup\./, label: "Settings" },
+    { pattern: /^previewSetup\./, label: "3D view" }, { pattern: /^setup\./, label: "Settings" },
     { pattern: /^view\.(undo|redo)$/, label: "View and lighting" }, { pattern: /^view\./, label: "View" },
   ],
 } as const satisfies ViewContribution;

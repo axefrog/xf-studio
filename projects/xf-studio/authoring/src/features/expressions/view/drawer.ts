@@ -238,14 +238,15 @@ export function expressionDrawer(ctx: Ctx): PanelController {
     onChange: on => { setTransition({ enabled: on }); } });
   animate.element.classList.add("expr-animate");
   let durationStart: number | undefined;
-  const duration = new SliderWithValue({ label: "Duration", min: TRANSITION_MIN, max: TRANSITION_MAX, step: 0.05, unit: "s", defaultValue: 1, reset: true,
+  // A dependency on the switch above is information, not a problem: both keep the muted tone for their reason (UI-145).
+  const duration = new SliderWithValue({ label: "Duration", min: TRANSITION_MIN, max: TRANSITION_MAX, step: 0.05, unit: "s", defaultValue: 1, reset: true, quietReason: true,
     format: seconds => `${Number(seconds.toFixed(2))} s`,
     help: "How long a change takes. At 0 s a change shows at once.",
     transaction: { begin: () => { durationStart = preview?.transition?.seconds; }, edit: seconds => { setTransition({ seconds }); },
       commit: () => { durationStart = undefined; }, cancel: () => { if (durationStart !== undefined) setTransition({ seconds: durationStart }); durationStart = undefined; } } });
   // The chosen curve's name is the readout on its label line, like Duration's value; the note line under the strip is kept for the
   // one reason both controls are off, so nothing moves between the states.
-  const curve = new Segmented<EasingId>({ label: "Curve", iconOnly: true, reserveNote: true, compact: true, readout: id => EASING_LABELS[id], readoutGutter: true,
+  const curve = new Segmented<EasingId>({ label: "Curve", iconOnly: true, reserveNote: true, quietReason: true, compact: true, readout: id => EASING_LABELS[id], readoutGutter: true,
     help: "How a change moves over its duration: steady, or easing in, out or both.",
     options: EASING_IDS.map(id => ({ value: id, label: EASING_LABELS[id], icon: EASING_ICONS[id], title: `${EASING_LABELS[id]}: ${lowerFirst(easingPreset(id).hint)}` })),
     onSelect: easing => { setTransition({ easing }); } });

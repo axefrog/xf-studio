@@ -359,11 +359,11 @@ const layered: MaterialAdapter = {
     // uncovered, as in game. Without its mask a stack shows its bottom layer (as the game does with a one-layer default mask).
     const problems = stackProblems(stack);
     if (problems.mask) { limits.push("layered-mask"); notes.push("its layer mask could not be read; the layers it masks are not drawn"); }
-    if (problems.templates) notes.push(`${problems.templates} layer(s) whose template could not be read are left out`);
+    if (problems.templates) notes.push(`${problems.templates === 1 ? "1 layer whose template could not be read is" : `${problems.templates} layers whose template could not be read are`} left out`);
     // A bottom layer whose template could not be read is drawn neutral (PREV-76), with a code the presentation words.
     if (problems.base) { limits.push("layered-base"); notes.push("its base layer's template could not be read; a neutral grey stands in for it"); }
     // A layer without its microblend is drawn over the game's default one (PREV-138): its edges may differ from the game's.
-    if (problems.microblends) notes.push(`${problems.microblends} layer(s) whose microblend could not be read use the game's default microblend`);
+    if (problems.microblends) notes.push(`${problems.microblends === 1 ? "1 layer whose microblend could not be read uses" : `${problems.microblends} layers whose microblend could not be read use`} the game's default microblend`);
     const layers = order.map(parameters => {
       // The neutral stand-in samples no maps.
       const source = parameters.neutral ? {} : stack.layers[parameters.index]!.textures;

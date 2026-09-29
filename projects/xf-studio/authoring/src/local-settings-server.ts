@@ -92,12 +92,12 @@ export function createLocalSettingsHandler(store = new LocalSettingsStore(), env
       return json({ code: "forbidden", error: "Use the local studio to configure this host." }, 403);
     if (request.method === "GET") {
       try { return json(await view()); }
-      catch { return json({ code: "settings_unreadable", error: "Local setup is unreadable. Restore its previous copy or repair it on this computer." }, 500); }
+      catch { return json({ code: "settings_unreadable", error: "Your settings file is unreadable. Open Settings › Game to restore its previous copy." }, 500); }
     }
-    if (Number(request.headers.get("Content-Length")) > 16_384) return json({ code: "too_large", error: "Local setup request is too large." }, 413);
+    if (Number(request.headers.get("Content-Length")) > 16_384) return json({ code: "too_large", error: "The settings request is too large." }, 413);
     try {
       const body = await request.text();
-      if (Buffer.byteLength(body) > 16_384) return json({ code: "too_large", error: "Local setup request is too large." }, 413);
+      if (Buffer.byteLength(body) > 16_384) return json({ code: "too_large", error: "The settings request is too large." }, 413);
       const input = JSON.parse(body);
       if (!input || typeof input !== "object" || Array.isArray(input)) throw Error("Invalid local setup action.");
       if (request.method === "POST") {

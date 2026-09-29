@@ -26,6 +26,6 @@ export function eyeMakeupCommands(ctx: EyeMakeupViewContext): FeatureCommand<Eye
       layer ? "Select a warp first." : "Select a layer first."),
     // Exportable first: a finish that hasn't passed in game is offered only with research tools, or while the layer uses it.
     ...finishes.filter(finish => finishOffered(ctx, finish, layer && catalogues(ctx).finishOf(layer.finish)?.id)).map(finish => act(`finish.${finish.id}`, `Finish: ${finish.label}${finish.exportAdapter === "none" ? " (preview only)" : finish.exportAdapter === "experimental" ? " (experimental export)" : ""}`, "Colour & finish", layer && { kind: "layer.setFinish", layerId: layer.id, finish: finish.id },
-      { icon: "finish", keywords: finish.exportAdapter === "none" ? "preview only study" : "exports" })),
+      { icon: "finish", keywords: `${finish.aliases.join(" ")} ${finish.exportAdapter === "none" ? "preview only study" : "exports"}` })),
   ];
 }

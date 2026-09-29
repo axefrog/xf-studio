@@ -255,7 +255,7 @@ describe("a planned part that can't be served always says so (diagnostics)", () 
     // Every chunk of the hair needs an input that can't be read: no chunk is left to draw.
     const unreadable = (await prepare(exporterFor({ missing: [P.strandA, P.capMask] }))).record;
     expect(unreadable.components.some(c => c.slot === "hair")).toBe(false);
-    expect(unreadable.provenance.notes).toContain("Part hair of your V's hair isn't shown: none of its 2 chunk(s) could be drawn, because an input they need couldn't be read.");
+    expect(unreadable.provenance.notes).toContain("Part hair of your V's hair isn't shown: none of its 2 parts could be drawn, because an input they need couldn't be read.");
     // One installation, so the second preparation reuses the first one's exports.
     const cache = new CharacterPreparationCache(), fixture = detailFixture(), installation = fixture.installation();
     await prepare(exporterFor(), fixture, cache, installation);

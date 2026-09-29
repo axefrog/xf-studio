@@ -48,7 +48,7 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
       host.preview = previewState({ phase: "preparing", canPrepare: false, canCancel: true, progress: { index: 1, total: 5, label: "Checking" } });
       host.preparing++;
     }
-    if (action === "cancel") host.preview = previewState({ phase: "failed", code: "preview_cancelled", message: "Preparing the 3D preview was cancelled." });
+    if (action === "cancel") host.preview = previewState({ phase: "failed", code: "preview_cancelled", message: "Preparing the 3D view was cancelled." });
     return { ok: true, data: host.preview };
   }, 5);
   const wolvenKit = new WolvenKitSetupActions(async request => {
@@ -83,7 +83,7 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
     ...(options.declined ? { declined: { get: () => options.declined!.value, set: (on: boolean) => { options.declined!.value = on; } } } : {}),
     loadHead: () => host.head() });
   return { host, setup, preparation, localSetup, saved, links, get autostart() { return autostart; }, get hostSetupOpened() { return hostSetupOpened; },
-    ready() { host.preview = previewState({ phase: "ready", canPrepare: false, message: "The 3D preview is ready." }); } };
+    ready() { host.preview = previewState({ phase: "ready", canPrepare: false, message: "The 3D view is ready." }); } };
 }
 
 function spoken(snapshot: PreviewSetupSnapshot): string[] {
@@ -113,12 +113,12 @@ test("Not now hides the card and the head pane offers the way back", async () =>
   await h.setup.start();
   expect(h.host.requests).toEqual(["refresh"]);
   let snapshot = h.setup.snapshot();
-  expect(snapshot.card).toMatchObject({ open: true, canDismiss: true, primary: { label: "Prepare 3D preview", action: { kind: "previewSetup.prepare" } } });
+  expect(snapshot.card).toMatchObject({ open: true, canDismiss: true, primary: { label: "Prepare 3D view", action: { kind: "previewSetup.prepare" } } });
   expect(snapshot.head).toMatchObject({ phase: "unavailable", next: null });
   expect(await h.setup.dispatch({ kind: "previewSetup.dismiss" })).toEqual({ ok: true });
   snapshot = h.setup.snapshot();
   expect(snapshot.card.open).toBe(false);
-  expect(snapshot.head.next).toEqual({ label: "Set up 3D preview", action: { kind: "previewSetup.show" } });
+  expect(snapshot.head.next).toEqual({ label: "Set up 3D view", action: { kind: "previewSetup.show" } });
   expect(h.setup.capability({ kind: "previewSetup.dismiss" }).available).toBe(false);
   expect(await h.setup.dispatch(snapshot.head.next!.action)).toEqual({ ok: true });
   expect(h.setup.snapshot().card.open).toBe(true);
@@ -147,7 +147,7 @@ test("a lost poll is retried with backoff, shown on the card, and recovers", asy
   const lost = h.setup.snapshot();
   expect(h.preparation.connection()).toMatchObject({ retrying: true });
   expect(lost.card.open).toBe(true);
-  expect(lost.card.notice).toMatch(/lost contact with its 3D preview service\. Still trying \(attempt \d+\)/);
+  expect(lost.card.notice).toMatch(/lost contact with its 3D view service\. Still trying \(attempt \d+\)/);
   expect(lost.head.phase).toBe("preparing");
   h.host.down = false;
   h.ready();
@@ -202,7 +202,7 @@ test("a damaged preview offers Prepare again, which prepares it afresh and then 
   h.ready();
   await until(() => h.setup.snapshot().head.phase === "ready");
   expect(attempts).toBe(2);
-  expect(h.setup.capability({ kind: "previewSetup.prepareAgain" })).toEqual({ available: false, reason: "The 3D preview is already showing." });
+  expect(h.setup.capability({ kind: "previewSetup.prepareAgain" })).toEqual({ available: false, reason: "The 3D view is already showing." });
   // An untyped failure is retried once, then preparing again is offered.
   expect(headLoadFailureCode(Error("Error creating WebGL context."))).toBe("webgl_unavailable");
   expect(headLoadFailureCode(Error("geometry nodes are missing"))).toBe("head_load_failed");
@@ -307,7 +307,7 @@ test("every setup action is catalogued, and every state speaks plainly", async (
   for (const [kind, descriptor] of Object.entries(PREVIEW_SETUP_DESCRIPTORS)) expect({ kind, scope: descriptor.scope }).toEqual({ kind, scope: ["host"] });
   const states: PreviewState[] = [previewState({}), previewState({ phase: "preparing", canPrepare: false, canCancel: true }),
     previewState({ phase: "blocked", message: "Your Cyberpunk 2077 has a different female player head." }),
-    previewState({ phase: "failed", code: "preview_cancelled", message: "Preparing the 3D preview was cancelled." }),
+    previewState({ phase: "failed", code: "preview_cancelled", message: "Preparing the 3D view was cancelled." }),
     previewState({ phase: "needs-setup", needs: ["game"], canPrepare: false, message: "Choose your Cyberpunk 2077 game folder." })];
   for (const preview of states) {
     const h = harness({ preview, autostart: false });
@@ -571,7 +571,7 @@ test("Not now is kept: a declined card stays closed after a restart until the pe
   const again = harness({ autostart: false, declined });
   await again.setup.start();
   expect(again.setup.snapshot().card.open).toBe(false);
-  expect(again.setup.snapshot().head.next).toEqual({ label: "Set up 3D preview", action: { kind: "previewSetup.show" } });
+  expect(again.setup.snapshot().head.next).toEqual({ label: "Set up 3D view", action: { kind: "previewSetup.show" } });
   await again.setup.dispatch({ kind: "previewSetup.show" });
   expect(again.setup.snapshot().card.open).toBe(true);
   expect(declined.value).toBe(false);

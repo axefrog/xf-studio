@@ -137,7 +137,7 @@ test("an unreadable route explains the next step instead of guessing", () => {
     const noGame = checkFrameworkVersions(port, { gameRoot: null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null });
     expect(noGame.routes).toHaveLength(1);
     expect(noGame.routes[0]).toMatchObject({ available: false, ready: false,
-      problem: "Choose your Cyberpunk 2077 game folder in Local setup so we can check your frameworks." });
+      problem: "Choose your Cyberpunk 2077 game folder in Settings › Game so we can check your frameworks." });
     const noProfile = checkFrameworkVersions(port, { gameRoot: f.game, launchRoute: "mo2", mo2Root: f.mo2, mo2ProfileId: "Missing" });
     expect(noProfile.routes[1]).toMatchObject({ available: false,
       problem: "We couldn't read the Mod Organizer 2 profile \"Missing\". Check it still exists." });

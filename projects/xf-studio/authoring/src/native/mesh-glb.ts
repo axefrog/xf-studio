@@ -437,7 +437,7 @@ export function meshGeometry(document: RedDocument, limits: MeshLimits = DEFAULT
         chunk.garmentCap[i * 4] = bytes[i * 4 + 1]!; chunk.garmentCap[i * 4 + 3] = 1;
       }
     }
-    if (short.length) notes.push(`its garment support data is shorter than its vertices in chunk${short.length === 1 ? "" : "s"} ${short.join(", ")}, so that data is left out (the preview doesn't read it)`);
+    if (short.length) notes.push(`its garment support data is shorter than its vertices in chunk${short.length === 1 ? "" : "s"} ${short.join(", ")}, so that data is left out (the 3D view doesn't read it)`);
   }
   const { rig, note } = meshRig(mesh, blob, jointsNeeded(chunks), limits);
   if (note) notes.push(note);

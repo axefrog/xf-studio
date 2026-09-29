@@ -372,7 +372,7 @@ export class StudioApplication {
         if (candidate.id === "point.softness" &&
           this.services.document.recipe.layers.find(layer => layer.id === hit.layerId)?.softness.mode !== "boundary")
           capability = { available: false, code: "incompatible_mode",
-            reason: "Enable point edge softness before editing an individual edge." };
+            reason: "Turn on Per-point edge softness before editing one point's edge." };
       }
       // The Undo policy of the variant the option edits, as dispatch records it (CORE-32).
       const variant = { kind: candidate.actionKind, command: { kind: candidate.variant } } as { kind: string };
@@ -454,7 +454,7 @@ export class StudioApplication {
   /** Why a character preset can't be loaded (`import`) or saved (`export`) now, or undefined (the files family's check). */
   characterPresetUnavailable(kind: "import" | "export"): string | undefined {
     const context = this.services.characterContext;
-    if (!context) return "Character presets are available once the 3D preview is ready.";
+    if (!context) return "Character presets are available once the 3D view is ready.";
     const snapshot = context.snapshot();
     if (snapshot.phase !== "ready") return snapshot.phase === "failed" ? snapshot.message || "The creator options couldn't be read." : "The creator options are still loading.";
     if (kind === "export" && !snapshot.set) return "Change at least one creator option first; a preset holds the choices you set.";
@@ -463,7 +463,7 @@ export class StudioApplication {
   /** The shown V's choices as a portable preset file (named after the preset it came from, if any). */
   async characterPresetFile() {
     const context = this.services.characterContext;
-    if (!context) throw Error("Character presets are available once the 3D preview is ready.");
+    if (!context) throw Error("Character presets are available once the 3D view is ready.");
     const origin = context.snapshot().origin, name = origin.kind === "preset" ? origin.name : null;
     const saved = await context.exportPreset(name);
     const file = (name ?? "character").replace(/[^A-Za-z0-9 _-]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60) || "character";

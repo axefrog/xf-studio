@@ -53,7 +53,7 @@ test("every context-menu candidate has a label, and destructive entries name the
   expect(ids.has("point.mode.corner")).toBe(true);
   expect([...ids].filter(id => !CONTEXT_LABELS[id])).toEqual([]);
   expect(undoHint("part", "layer.remove")).toBe("Undo with Ctrl+Z");
-  expect(undoHint("recovery", "preset.remove")).toBe("Restorable from the Presets panel");
+  expect(undoHint("recovery", "preset.remove")).toBe("Restore from the Presets panel");
   expect(undoHint("part", "layer.duplicate")).toBeUndefined();
 });
 

@@ -57,3 +57,6 @@ export function isEyeMakeupModFolder(name: string): boolean {
   const key = name.toLowerCase();
   return eyeMakeupModFolders.some(folder => folder.toLowerCase() === key);
 }
+
+/** What a mod's name is used for, said once wherever a mod is renamed (Mod package, Expression sets; UI-143). */
+export const MOD_NAME_HINT = "The name your mod manager shows for this mod.";

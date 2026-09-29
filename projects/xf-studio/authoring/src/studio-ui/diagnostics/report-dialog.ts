@@ -15,7 +15,7 @@ const MODE_HELP = "Keeps three hours of more detailed activity instead of the la
   "It turns itself off after a day. Nothing is sent anywhere.";
 
 /**
- * "Report a problem": prepares a report, shows exactly what it holds for review (grouped, with sizes and a preview of each part,
+ * "Report a problem": prepares a report, shows exactly what it holds for review (grouped, with a preview of each part and one total size,
  * the whole of any part on request, and the summary and index files as they will be saved), and offers Save report, Copy summary
  * and Open a GitHub issue. Nothing leaves the computer unless the person sends it. Acts only through `port.diagnostics`
  * (docs/diagnostics.md).
@@ -42,12 +42,12 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   retry.hidden = true;
   const again = button({ label: "Prepare again", icon: "refresh", small: true, onClick: prepare });
   again.hidden = true;
-  // The report file's own summary and index, always in it, built from the ticked parts only.
+  // The report file's own summary and index, always in it, built from the parts you include only.
   const readme = h("pre", {}), index = h("pre", {});
   // Every group is a disclosure with the expander's chevron, so a folded one never reads as an empty band (C-31); this one, made from
   // the parts above it, comes after them.
   const summaryFiles = h("details", { class: "report-group report-files" },
-    h("summary", {}, chevron(), h("span", { class: "report-group-title", text: "Always in the report" }), h("span", { class: "report-size", text: "README.md · report.json" })),
+    h("summary", {}, chevron(), h("span", { class: "report-group-title", text: "Always in the report" })),
     h("p", { class: "muted small", text: "A short summary and a list of what the file holds, made from the parts you include. Your folders are replaced when it's saved." }),
     h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the summary (README.md)"), readme),
     h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show the list (report.json)"), index));
@@ -78,16 +78,15 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
   }
 
   let shape = "", lastSaid = "";
-  const rows = new Map<string, { box: Toggle; size: HTMLElement; reason: HTMLElement }>();
-  const groupSizes = new Map<string, HTMLElement>();
+  // No byte size on each part or group (release-readiness-audit.md C-13): what a part holds is its preview; the report's total, against
+  // its limit, is said once under the list.
+  const rows = new Map<string, { box: Toggle; reason: HTMLElement }>();
   let confirm: Toggle | null = null;
   function build(report: ReportState) {
-    rows.clear(); groupSizes.clear(); confirm = null;
-    // A group with nothing in it (no mod setup read yet: no parts, or only empty ones) isn't listed: it would be a heading over nothing,
-    // "0 B" (C-31).
+    rows.clear(); confirm = null;
+    // A group with nothing in it (no mod setup read yet: no parts, or only empty ones) isn't listed: it would be a heading over nothing
+    // (C-31).
     groups.replaceChildren(...report.groups.filter(group => group.items.some(item => item.bytes > 0)).map((group, index) => {
-      const size = h("span", { class: "report-size" });
-      groupSizes.set(group.id, size);
       const optional = group.id === "optional";
       const hasModFiles = group.items.some(item => item.modFiles);
       if (hasModFiles) {
@@ -96,7 +95,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
         confirm = sharing;
       }
       return h("details", { class: "report-group", open: index < 2 || optional ? true : undefined },
-        h("summary", {}, chevron(), h("span", { class: "report-group-title", text: group.label }), size),
+        h("summary", {}, chevron(), h("span", { class: "report-group-title", text: group.label })),
         h("p", { class: "muted small", text: group.detail }),
         hasModFiles ? h("div", { class: "report-warning", role: "note" }, icon("warning"), h("div", {},
           h("p", { text: SHARING_WARNING }), confirm!.element)) : null,
@@ -109,8 +108,8 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
       const result = await dispatch({ kind: "diagnostics.setIncluded", item: item.id, included });
       if (!result.ok) { box.update(!included); say(result.message); }
     } });
-    const size = h("span", { class: "report-size" }), reason = h("small", { class: "report-reason" });
-    rows.set(item.id, { box, size, reason });
+    const reason = h("small", { class: "report-reason" });
+    rows.set(item.id, { box, reason });
     const text = h("pre", { text: item.preview });
     // A long part shows its start; the whole of it loads on request (DIAG-13).
     const all = item.partial ? button({ label: "Show all of it", small: true, variant: "quiet", onClick: async () => {
@@ -120,7 +119,7 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
       setText(text, full); all!.remove();
     } }) : null;
     return h("li", { class: "report-item" },
-      h("div", { class: "report-item-head" }, box.element, size),
+      h("div", { class: "report-item-head" }, box.element),
       h("small", { class: "muted report-item-detail", text: item.detail }), reason,
       item.preview ? h("details", { class: "report-preview" }, h("summary", {}, chevron(), "Show what's in it"), text, all) : null);
   }
@@ -141,15 +140,12 @@ export function openReportDialog(rt: StudioRuntime, ref: string | null) {
       : report.busy === "copying" ? "Copying…" : report.busy === "opening" ? "Opening the issue page…" : report.message ?? "";
     if (said !== lastSaid) { lastSaid = said; say(said); }
     for (const group of report.groups) {
-      const groupSize = groupSizes.get(group.id);
-      if (groupSize) setText(groupSize, group.size);
       for (const item of group.items) {
         const found = rows.get(item.id);
         if (!found) continue;
         const wanted = port.diagnostics.capability({ kind: "diagnostics.setIncluded", item: item.id, included: !item.included });
         // The reason is said once, on the part's own reason line (below), not again on the switch's note line.
         found.box.update(item.included, { disabled: !item.included && !wanted.available, reason: wanted.reason, reasonOnLine: false });
-        setText(found.size, item.size);
         setText(found.reason, !item.included && !wanted.available ? wanted.reason ?? "" : "");
       }
     }

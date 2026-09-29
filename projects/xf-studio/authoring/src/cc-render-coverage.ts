@@ -64,9 +64,9 @@ const RANK: Record<RenderStatus, number> = { "not-rendered": 0, uncensored: 1, c
 const WORDS: Record<DetailSlot, string> = { skin: "the skin", face: "a face detail", brows: "the eyebrows", lashes: "the eyelashes",
   hair: "the hair", eyes: "the eyes", teeth: "the teeth", piercings: "the piercings", body: "the body", clothing: "the clothes" };
 
-export const NOT_HEAD = "The preview doesn't draw this part of the body, so changing it shows nothing.";
+export const NOT_HEAD = "The 3D view doesn't draw this part of the body, so changing it shows nothing.";
 export const UNDER_COVER = "The game's underwear covers it in the 3D view unless your V is shown uncensored (under Body).";
-const NOT_CONSUMED = "The head the preview draws doesn't use this option, so changing it shows nothing.";
+const NOT_CONSUMED = "The head the 3D view draws doesn't use this option, so changing it shows nothing.";
 const CONDITIONAL = "Shown when its parts are face decals (makeup, tattoos, scars, face cyberware); other parts aren't drawn yet.";
 
 /** Coverage of every option, keyed by option ID. */
@@ -102,7 +102,7 @@ export function renderCoverage(options: readonly CoverageInput[]): Map<string, R
     if (!option.emitsNothing || option.type !== "appearance" || option.hasResource || option.link?.key || !option.uiSlot) continue;
     const siblings = options.filter(other => other !== option && other.part === option.part && other.uiSlot === option.uiSlot && !other.emitsNothing);
     const shown = best(siblings.map(other => result.get(other.id)!));
-    result.set(option.id, shown.status === "not-rendered" ? shown : { ...shown, note: "Adds nothing, so the preview shows nothing here, as the game does." });
+    result.set(option.id, shown.status === "not-rendered" ? shown : { ...shown, note: "Adds nothing, so the 3D view shows nothing here, as the game does." });
   }
   // Colour-only controllers show through the followers of their link (the skin tone through the skin types).
   for (const option of options) {
@@ -132,7 +132,7 @@ export function refineCoverage(coverage: RenderCoverage, planned: readonly { rea
   if (coverage.status !== "conditional" || !planned.length) return coverage;
   return planned.some(item => item.drawn)
     ? { status: "rendered", detail: coverage.detail, note: "Drawn as a face detail." }
-    : { status: "not-rendered", detail: null, note: "Its parts aren't face decals, so the preview doesn't draw them yet." };
+    : { status: "not-rendered", detail: null, note: "Its parts aren't face decals, so the 3D view doesn't draw them yet." };
 }
 
 /** The preview's coverage of every option of a catalogue (a projection owned by the preview side; CORE-60). */

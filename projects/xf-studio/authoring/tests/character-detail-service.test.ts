@@ -634,7 +634,7 @@ describe("the body in the character record", () => {
     const { record } = await prepare(BODY_REQUEST, fakeExporter({ big: [P.bodyD] }));
     const skin = record.components.find(c => c.slot === "body" && c.option === "body_color")!;
     expect(skin.materials[0]!.textures.Albedo).toMatchObject({ depotPath: P.bodyD, width: 2050, height: 1 });
-    expect(record.provenance.notes.some(note => note.includes("4100×2 in the game files; the preview uses it at 2050×1"))).toBe(true);
+    expect(record.provenance.notes.some(note => note.includes("4100×2 in the game files; the 3D view uses it at 2050×1"))).toBe(true);
   });
 
   test("PREV-108: a body turned off is neither resolved nor served, and its clothes neither", async () => {

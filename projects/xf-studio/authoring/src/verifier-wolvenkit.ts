@@ -21,7 +21,7 @@ export function createWolvenKitVerifierTools(cli: string, gamepath: string | und
     } catch (error) {
       if (!(error instanceof WolvenKitRunError)) throw error;
       throw Error(error.code === "runtime_missing" ? WOLVENKIT_RUNTIME_MISSING_MESSAGE
-        : error.code === "tool_missing" ? "WolvenKit CLI isn't available, so the build could not be checked."
+        : error.code === "tool_missing" ? "WolvenKit isn't available, so the build could not be checked."
         : `${error.message}${error.output ? ` ${error.output.slice(-2000)}` : ""}`);
     }
   };

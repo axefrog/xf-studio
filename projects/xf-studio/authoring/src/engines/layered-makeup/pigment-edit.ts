@@ -22,7 +22,7 @@ export function editPigment(layer: Layer, command: PigmentCommand): Layer {
       : { mode: "legacy-nearest" } };
   }
   if (layer.strength.mode !== "smooth-boundary")
-    throw Error("Enable smooth point gradients before adjusting their blend.");
+    throw Error("Turn on Smooth point gradients before adjusting their blend.");
   if (!Number.isFinite(command.value) || command.value < MIN_STRENGTH_BLEND || command.value > MAX_STRENGTH_BLEND)
     throw Error("Point blend is outside the supported range.");
   return { ...layer, strength: { mode: "smooth-boundary", blend: command.value } };

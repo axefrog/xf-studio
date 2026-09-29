@@ -66,7 +66,10 @@ These rules are also the style guide's "Copy and wording" entry (section 01, `f-
 
 | Say | Not |
 |---|---|
-| 3D view | viewport, pane, preview head |
+| 3D view | viewport, pane, preview head, 3D preview, head view, "the preview" |
+| Colour-shifting (one name per finish: Matte, Satin, Metallic, Shimmer, Glitter, Glossy) | Colour-shift, iridescent, "Metallic / foil" (synonyms go in tooltips) |
+| Settings › Game | Game & tools, Local setup, Build setup |
+| Move up / Move down (layers and presets) | Bring forward / Send backward |
 | UV map | UV pane, UV editor |
 | game files | game resources, archives |
 | version | revision |

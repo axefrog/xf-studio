@@ -314,13 +314,15 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
   progress("Putting the report together…");
   const full = fullResources(resources, sources.resolverCache);
   type Built = { id: string; group: ReportGroup; label: string; detail: string; content: unknown; included?: boolean };
+  // Counts agree with their nouns ("1 entry", never "1 entries"; release-readiness-audit.md C-13).
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const built: Built[] = [
     { id: "environment", group: "about", label: "Versions", detail: "XF Studio, system, game, WolvenKit and framework versions.", content: facts },
     { id: "settings", group: "about", label: "Setup choices", detail: "Your setup choices. Folders show only whether they're set.", content: settingsSummary(settings) },
     ...(ref ? [{ id: "problem", group: "happened" as const, label: "This problem", detail: `The log entries for ${ref}, with their technical details.`, content: problem }] : []),
-    { id: "log", group: "happened", label: "App log", detail: `XF Studio's recent log: ${entries.length} entries.`, content: entries },
-    { id: "trace", group: "happened", label: "Recent activity detail", detail: `What XF Studio worked out in the last ${state.minutes} minutes (${trace.length} events): which files won, what was prepared. Names and references only.`, content: trace },
-    { id: "involved-mods", group: "mods", label: "Mods involved", detail: mods.length ? `${mods.length} mods supplied or lost resources your V used: names, versions, download sources and file fingerprints.` : "No mods were involved in the recent window.",
+    { id: "log", group: "happened", label: "App log", detail: `XF Studio's recent log: ${count(entries.length, "entry", "entries")}.`, content: entries },
+    { id: "trace", group: "happened", label: "Recent activity detail", detail: `What XF Studio worked out in the last ${state.minutes} minutes (${count(trace.length, "event", "events")}): which files won, what was prepared. Names and references only.`, content: trace },
+    { id: "involved-mods", group: "mods", label: "Mods involved", detail: mods.length ? `${count(mods.length, "mod", "mods")} supplied or lost resources your V used: names, versions, download sources and file fingerprints.` : "No mods were involved in the recent window.",
       content: mods.map(({ archives, ...mod }) => ({ ...mod, archives: archives.map(({ path: _path, ...archive }) => archive) })) },
     // The whole mod list is personal and not needed to reproduce a problem (the involved mods are): unticked by default (DIAG-08).
     { id: "mods", group: "mods", label: "Frameworks and full mod list", detail: "Installed frameworks and every mod you have, enabled or not, by name and version. Only include this if you're asked for it.",
@@ -329,7 +331,7 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
       content: resolved || prepared ? { resolved: resolved?.data ?? null, prepared: prepared?.data ?? null, at: (resolved ?? prepared)!.t } : null },
     { id: "winners", group: "resources", label: "Load-order winners", detail: "For each resource: the archive that won, the ones it beat and the rule that decided.", content: winnerList },
     { id: "excerpts", group: "resources", label: "Resource tables", detail: `Short extracts of those apps, meshes and materials (appearance and material tables). No geometry or textures. ${MOD_CONTENT_NOTE}`, content: excerpts(resources, sources.resolverCache) },
-    ...(full ? [{ id: "resources-full", group: "optional" as const, label: `Every detail of these ${full.length} resources`, detail: `Everything in the resources above, for a closer look. No geometry or textures. ${MOD_CONTENT_NOTE}`, content: full, included: false }] : []),
+    ...(full ? [{ id: "resources-full", group: "optional" as const, label: `Every detail of ${full.length === 1 ? "this resource" : `these ${full.length} resources`}`, detail: `Everything in the resources above, for a closer look. No geometry or textures. ${MOD_CONTENT_NOTE}`, content: full, included: false }] : []),
   ];
   const contents = new Map<string, string>(), files: PreparedHostReport["files"] = new Map();
   const items: ReportItemView[] = [];
