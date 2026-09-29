@@ -175,7 +175,7 @@ export function components() {
       drives: `${code("boundActionCapability(context, action)")} while editing; ${code("dispatchContext")} on Apply.`,
       a11y: "Enter applies, Escape cancels and restores focus." }),
     pattern({ id: "c-confirm", title: "Confirm in place", status: "implemented",
-      specimen: menu(`${menuHeading("Build your mod files?", "Uses the current draft, including unsaved edits. Takes a few minutes and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to.")}${menuItem("Build now", { icon: "package", focus: true })}${menuItem("Check first", { icon: "check" })}`),
+      specimen: menu(`${menuHeading("Build your mod files?", "Uses the current draft, including unsaved edits. Can take a minute or two, and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to.")}${menuItem("Build now", { icon: "package", focus: true })}${menuItem("Check first", { icon: "check" })}`),
       what: "A short anchored choice for a long or irreversible operation, stating its cost and scope. Used instead of a modal so the user can still see the result card and stage.",
       when: "Operations that cannot be cancelled once started (Build). Undoable edits never ask for confirmation; they offer Undo instead." }),
     pattern({ id: "c-toasts", title: "Toasts", status: "implemented", wide: true,

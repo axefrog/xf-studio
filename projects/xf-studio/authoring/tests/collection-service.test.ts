@@ -203,7 +203,7 @@ test("PIPE-131: while a Build runs, its progress line and bar follow the host's 
   expect(f.service.view().progress).toMatchObject({ phase: "working", code: "package", message: "Step 3 of 5: Converting 2 looks…", fraction: .5 });
   current = { stage: "verify", step: 5, steps: 5, looks: 2 };
   await Bun.sleep(BUILD_PROGRESS_INTERVAL_MS + 100);
-  expect(f.service.view().progress).toMatchObject({ message: "Step 5 of 5: Checking the packed mod…", fraction: .9 });
+  expect(f.service.view().progress).toMatchObject({ message: "Step 5 of 5: Checking the mod files…", fraction: .9 });
   finish(new CollectionServiceError("package_build_failed", "Package Build failed. Your draft is unchanged; nothing was installed."));
   await running;
   await Bun.sleep(BUILD_PROGRESS_INTERVAL_MS + 50);

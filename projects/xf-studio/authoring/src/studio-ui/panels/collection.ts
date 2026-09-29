@@ -377,7 +377,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     await rt.request({ kind: "package", action }, { quietSuccess: false });
   }
   function confirmBuild(anchor: Element) {
-    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses the current draft, including unsaved edits. Takes a few minutes and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
+    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses the current draft, including unsaved edits. Can take a minute or two, and can't be cancelled once started. Nothing is added to your game or mod manager until you choose to." },
       { kind: "action", label: "Build now", icon: "package", capability: buildCapability(), run: () => void runPackage("build") },
       { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
     anchor, { label: "Confirm build", invoker: anchor });

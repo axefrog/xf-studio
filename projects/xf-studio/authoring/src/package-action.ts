@@ -40,8 +40,8 @@ export function packageBuildStageLine(progress: PackageBuildProgress): string {
     prepare: "Reading your game files…",
     compose: `Painting ${looks}…`,
     convert: `Converting ${looks}…`,
-    pack: "Packing the mod…",
-    verify: "Checking the packed mod…",
+    pack: "Packing the mod files…",
+    verify: "Checking the mod files…",
   };
   return `Step ${progress.step} of ${progress.steps}: ${doing[progress.stage]}`;
 }
