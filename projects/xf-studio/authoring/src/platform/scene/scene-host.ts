@@ -485,6 +485,6 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // its getters stay live: a spread copy read `idles` once, before the eyes section joined (PREV-187).
   return Object.assign(api, invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
     "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
-    "setBlink", "animateBlink", "setWire", "setNormals", "setStage", "setLighting",
+    "setBlink", "animateBlink", "setWire", "setNormals", "setResearchTools", "setStage", "setLighting",
     "setSkinScatter", "setFaceShadows", "setHairLook"], invalidate));
 }

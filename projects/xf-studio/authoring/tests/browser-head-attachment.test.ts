@@ -106,7 +106,7 @@ test("a head step failing after the scene loaded releases every head connection,
   expect(h.connected).toBe(h.surfaces.get(head.scene));
   expect(h.attached).toEqual({ savedV: head.savedAppearance, preview: head.preview, motion: head.motion, characterDetails: head.characterDetails,
     characterContext: head.characterContext });
-  expect(h.preferenceListeners.size).toBe(1);
+  expect(h.preferenceListeners.size).toBe(2); // The stage theme and the research tools preference (PREV-194).
   expect(h.schemeListeners.size).toBe(1);
   expect(h.scenes[1]!.controls.size).toBe(1);
   const before = h.persisted;
@@ -129,7 +129,7 @@ test("a scene that fails to load attaches nothing, and the next load starts clea
   expect(h.preferenceListeners.size).toBe(0);
   const head = await attachBrowserHead(h.ports);
   expect(h.host.canvases).toBe(1);
-  expect(h.preferenceListeners.size).toBe(1);
+  expect(h.preferenceListeners.size).toBe(2);
   expect(h.viewport.scene()).toBe(head.scene);
   // Loading again over a loaded head releases the old one first.
   await h.viewport.loadHead();
