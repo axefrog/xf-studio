@@ -113,6 +113,8 @@ export function createContactShadows(renderer: THREE.WebGLRenderer, contactShado
       drawn = list.length;
       return true;
     },
+    /** What a casting mesh draws as in the caster depth pass (its compile ahead of its first frame, lighting-setup-stage.ts `prepare`). */
+    casterMaterial: (mesh: THREE.Mesh): THREE.Material => mesh.customDepthMaterial ?? fallbackDepth,
     /** Switch the term off without drawing (a frame without flagged lights, or the shadow switch off). */
     off,
     /** Developer evidence: how many flagged lights the last frame marched toward, and the target's size. */

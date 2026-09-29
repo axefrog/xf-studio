@@ -21,6 +21,8 @@ export type FeatureRendererContext = {
   subscribeCharacter(listener: () => void): () => void;
   requestFrame(): void;
   onFrame(listener: (dt: number) => void): () => void;
+  /** Compile an object's programs ahead (`SceneHostPort.compile`); without it, resolved at once (the first frame compiles them). */
+  compile?(object: THREE.Object3D): Promise<void>;
   /** The rig motion (idle and blink): bones join and leave it by name, as the V's details do. */
   rig: { attach(bones: readonly THREE.Object3D[]): void; detach(bones: readonly THREE.Object3D[]): void };
   /** The resolved parts the renderers supersede changed: show and hide the V's parts again. */
@@ -142,6 +144,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
         entry.restored.add(listener);
         return () => { entry.restored.delete(listener); };
       },
+      compile: (object: THREE.Object3D) => context.compile?.(object) ?? Promise.resolve(),
     });
   }
   function detach(item: Attached) {

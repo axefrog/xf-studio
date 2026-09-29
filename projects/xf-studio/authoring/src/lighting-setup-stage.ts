@@ -269,6 +269,49 @@ export function createLightingSetupStage(options: {
       const scattering = scatter.prepare(scene, display.scatterPossible);
       display.render(scene, camera, game() ? "creator" : "studio", scattering ? () => scatter.render(scene, camera) : undefined);
     },
+    /**
+     * Compile `object`'s programs (a part not in the scene yet) for every pass the next frame draws it in: the forward scene into the
+     * display's target, the skin scatter's input variants and the contact shadows' caster depth. Three's `compileAsync` over
+     * KHR_parallel_shader_compile: the driver links them on its own threads, and `ready` resolves when all are linked, so the first frame
+     * that draws the part finds them done instead of waiting on each link (PREV-188/189: seconds on ANGLE's D3D11 compiler). Returns the
+     * textures the compiled programs sample (their uniforms), so the caller can upload them ahead too, and the programs themselves, whose
+     * first use (`LinkedProgram`) the caller can take ahead as well once they are linked. Lights' shadow maps still compile
+     * their depth variants on first use (Three builds them inside its shadow pass).
+     */
+    prepare(object: THREE.Object3D, camera: THREE.Camera): { ready: Promise<void>; textures: THREE.Texture[]; programs(): LinkedProgram[] } {
+      const pending: Promise<unknown>[] = [], materials = new Set<THREE.Material>();
+      const meshes: THREE.Mesh[] = [];
+      object.traverse(child => { if ((child as THREE.Mesh).isMesh) meshes.push(child as THREE.Mesh); });
+      const previous = renderer.getRenderTarget();
+      /** Compile `mesh` as drawn with `material` (a pass's own material swapped in for the compile only). */
+      const compileAs = (mesh: THREE.Mesh, material: THREE.Material) => {
+        const own = mesh.material;
+        mesh.material = material;
+        try { pending.push(renderer.compileAsync(mesh, camera, scene)); materials.add(material); }
+        finally { mesh.material = own; }
+      };
+      try {
+        renderer.setRenderTarget(display.sceneTarget(game() ? "creator" : "studio"));
+        pending.push(renderer.compileAsync(object, camera, scene));
+        for (const mesh of meshes) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(material);
+        if (display.scatterPossible) for (const mesh of meshes) {
+          if (Array.isArray(mesh.material)) continue;
+          const variant = scatter.variantOf(mesh.material);
+          if (variant) compileAs(mesh, variant);
+        }
+        if (contactOn) for (const mesh of meshes) if (mesh.castShadow) compileAs(mesh, contact.casterMaterial(mesh));
+      } finally { renderer.setRenderTarget(previous); }
+      const textures = new Set<THREE.Texture>();
+      const collect = (value: unknown) => {
+        if ((value as THREE.Texture | null)?.isTexture) textures.add(value as THREE.Texture);
+        else if (Array.isArray(value)) for (const entry of value) collect(entry);
+      };
+      for (const material of materials) {
+        const uniforms = (renderer.properties.get(material) as { uniforms?: Record<string, THREE.IUniform> }).uniforms;
+        for (const uniform of Object.values(uniforms ?? {})) collect(uniform?.value);
+      }
+      return { ready: Promise.all(pending).then(() => undefined), textures: [...textures], programs: () => linkedPrograms(renderer, materials) };
+    },
     status: (): LightingStageStatus => structuredClone({ preset: game() ? "creator" : "studio", sex,
       defaultExposure: DEFAULT_CREATOR_LIGHTING.exposure, lut: lutStatus }),
     subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
@@ -315,6 +358,21 @@ export function createLightingSetupStage(options: {
   };
 }
 export type LightingSetupStage = ReturnType<typeof createLightingSetupStage>;
+
+/**
+ * A program Three linked: its first use reads its uniforms and attributes back from the driver (a synchronous round trip that waits
+ * for whatever the GPU still has queued), which a caller preparing ahead takes between frames instead of inside the first frame.
+ */
+export type LinkedProgram = { getUniforms(): unknown; getAttributes(): unknown };
+/** Every program Three holds for `materials` (a transparent two-sided material has one per side). */
+export function linkedPrograms(renderer: THREE.WebGLRenderer, materials: Iterable<THREE.Material>): LinkedProgram[] {
+  const programs = new Set<LinkedProgram>();
+  for (const material of materials) {
+    const owned = (renderer.properties.get(material) as { programs?: Map<string, LinkedProgram> }).programs;
+    for (const program of owned?.values() ?? []) programs.add(program);
+  }
+  return [...programs];
+}
 
 /**
  * The scatter's sample count for a preview quality (the generated-texture size): the game's High (25 samples) at every size. The

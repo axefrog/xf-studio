@@ -180,7 +180,8 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     const saved = savedAppearance, retired = ports.workspace.preview;
     const characterContext = new CharacterContextActions({ creator: ports.creator ?? createBrowserCreatorDevice(),
       showSave: save => { if (save) saved.dispatch({ kind: "savedV.restore", value: save }); else if (saved.hasSavedV()) saved.dispatch({ kind: "savedV.clear" }); },
-      details: { failed: () => characterDetails.failed(), retry: () => void characterDetails.retry() },
+      details: { failed: () => characterDetails.failed(), retry: () => void characterDetails.retry(),
+        preload: (request, signal) => characterDetails.preload(request, signal) },
       previews: ports.creator ? undefined : createBrowserChoicePreviewDevice() },
     { stored: retired.character, save: savedAppearance.snapshot().savedV,
       legacy: retired.piercingStyle && retired.piercingDefinition ? { style: retired.piercingStyle, definition: retired.piercingDefinition } : undefined,

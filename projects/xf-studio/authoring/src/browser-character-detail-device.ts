@@ -7,7 +7,7 @@ import type { SceneHost } from "./platform/scene/scene-host";
 import { markCharacter } from "./character-timing";
 
 /** The scene host's character side: its detail loader and the swap into the scene (feature-module platform §5). */
-type Scene = Pick<SceneHost, "setCharacterDetails" | "details"> & Partial<Pick<SceneHost, "onBakeLimits" | "releaseKeptParts">>;
+type Scene = Pick<SceneHost, "setCharacterDetails" | "details"> & Partial<Pick<SceneHost, "onBakeLimits" | "releaseKeptParts" | "prepareDetails">>;
 
 /**
  * Browser device for the character-detail service: the host transport (same endpoint on both hosts)
@@ -41,6 +41,10 @@ function hostState(value: unknown): HostCharacterState {
     ...(state.phase === "failed" && state.need === "wolvenkit" ? { need: "wolvenkit" as const } : {}) };
 }
 
+/** How many times a load ahead asks after a request the host is still preparing (about two seconds in all) before leaving it. */
+const PRELOAD_POLLS = 8;
+const answerState = (value: unknown) => hostState(value);
+
 export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init)): CharacterDetailPort {
   /** This page's name, sent with each request. */
   const page = pageName();
@@ -51,6 +55,8 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
    * is finished and kept (the renderer's part pool), so the newer load takes it instead of loading it again.
    */
   let loading: Promise<unknown> = Promise.resolve();
+  /** A load ahead in progress (`preload`): a show stops it first, so the person's change never waits behind it. */
+  let ahead: AbortController | null = null;
   /** The slots the last `show` answered with (their limits follow the scene's, plus the host's own codes, `hostLimits`). */
   let shownSlots: readonly { slot: DetailSlot; state: string; hostLimits: readonly DetailLimit[] }[] = [];
   const limitListeners = new Set<(update: SlotLimits) => void>();
@@ -89,6 +95,7 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         throw error;
       }
       markCharacter("record", { components: record.components.length });
+      ahead?.abort();
       // Through the host's detail loader: each chunk through the adapter for its template, with the host's anisotropy and skin placement.
       await loading;
       if (signal.aborted) throw new DOMException("Superseded.", "AbortError");
@@ -97,6 +104,13 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       const loaded = await load;
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
       markCharacter("loaded", { reused: loaded.reused, components: loaded.components?.length ?? 0 });
+      // New parts are made ready for their first frame while the shown V keeps drawing (PREV-189): nothing waits inside that frame.
+      if (scene.prepareDetails) {
+        try { await scene.prepareDetails(loaded, signal); }
+        catch (error) { loaded.dispose(); throw error; }
+        if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
+        markCharacter("prepared");
+      }
       const placed = scene.setCharacterDetails(loaded);
       markCharacter("placed");
       if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(() => markCharacter("frame")));
@@ -116,6 +130,37 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         const codes = slot.state === "shown" ? [...new Set([...(host ?? []), ...limits.filter(item => item.slot === slot.slot).map(item => item.limit)])] : [];
         return codes.length ? { ...rest, limits: codes } : rest;
       }) };
+    },
+    async preload(request, outer) {
+      if (!scene.prepareDetails || outer.aborted) return;
+      ahead?.abort();
+      const controller = new AbortController(), signal = controller.signal;
+      ahead = controller;
+      outer.addEventListener("abort", () => controller.abort(), { once: true });
+      try {
+        // Asked as another page (PIPE-103): the person's own request is never cancelled by it.
+        const ask = async () => answer(await fetcher(CHARACTER_ENDPOINT, { method: "POST", signal,
+          headers: { "Content-Type": "application/json", "X-XFS-Page": `${page}-ahead` }, body: JSON.stringify(request) }), request);
+        let state = await ask();
+        // A prepared choice answers within a few polls; one the host is still preparing is not waited for.
+        for (let attempt = 0; state.phase === "preparing" && attempt < PRELOAD_POLLS; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 25 * 2 ** Math.min(attempt, 4)));
+          if (signal.aborted) return;
+          state = answerState(await (await fetcher(`${CHARACTER_ENDPOINT}?key=${encodeURIComponent(state.key)}`, { signal })).json());
+        }
+        if (signal.aborted || state.phase !== "ready" || !state.record) return;
+        const record = await readCharacterRecord(state.record, fetcher, signal);
+        await loading;
+        if (signal.aborted) return;
+        const load = scene.details.load(record, { fetcher, signal, reuse: shown });
+        loading = load.catch(() => {});
+        const loaded = await load;
+        // Its new parts made ready for their first frame, then kept (the part pool) for the change that shows them.
+        try { if (!signal.aborted) await scene.prepareDetails(loaded, signal); }
+        finally { loaded.dispose(); }
+      } catch (error) {
+        if (!signal.aborted) throw error;
+      } finally { if (ahead === controller) ahead = null; }
     },
     // Another V: the previous one leaves the scene and GPU memory whole, kept parts included.
     clear() { scene.setCharacterDetails(null); scene.releaseKeptParts?.(); shown = null; shownSlots = []; },

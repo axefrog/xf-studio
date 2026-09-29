@@ -558,3 +558,49 @@ describe("CORE-74: the retired tried style is kept until the context stores choi
     expect(composer.capture().preview).toMatchObject({ piercingStyle: "", piercingDefinition: "", character: stored });
   });
 });
+
+describe("PREV-189: a prepared choice under the pointer loads ahead", () => {
+  test("after a moment on a prepared choice its V loads ahead; a sweep, an unprepared choice or a change loads nothing, and a choice that becomes prepared loads then", async () => {
+    const { PRELOAD_DWELL_MS } = await import("../src/character-context-actions");
+    const source = await fixtureSource(true);
+    const { port: base } = await port(source);
+    const states = new Map<number, string>();
+    // The host is still preparing the row (busy), so the context keeps asking; its states change as choices become prepared.
+    const creatorPort: CreatorPort = { ...base, wait: async () => { await settle(5); },
+      prefetch: async (_request, _option, positions) => ({ states: positions.map(position => states.get(position) ?? "q").join(""), stopped: null, busy: true }) };
+    const preloads: { request: CharacterRequest; signal: AbortSignal }[] = [];
+    const context = new CharacterContextActions({ creator: creatorPort, showSave: () => {},
+      details: { failed: () => false, retry: () => {}, preload: async (request, signal) => { preloads.push({ request, signal }); } } });
+    context.start(); await settle();
+    const option = "head/eyes_color";
+    context.choices(option); await settle();
+    const page = context.choices(option);
+    expect(page.choices.length).toBeGreaterThanOrEqual(2);
+    const positions = page.choices.map(choice => choice.position);
+    states.set(positions[1]!, "r");
+    context.prefetch(option, positions); await settle();
+    // Sweeping across a prepared choice loads nothing; resting on one the host hasn't prepared loads nothing either.
+    context.prefetch(option, positions, positions[1]!); await settle(5);
+    context.prefetch(option, positions, positions[0]!); await settle(PRELOAD_DWELL_MS + 40);
+    expect(preloads).toHaveLength(0);
+    // Resting on the prepared one: its V (the shown V with that choice) loads ahead.
+    context.prefetch(option, positions, positions[1]!); await settle(PRELOAD_DWELL_MS + 40);
+    expect(preloads).toHaveLength(1);
+    expect(preloads[0]!.request.choices).toContainEqual(expect.objectContaining({ part: "head", option: "eyes_color", choice: page.choices[1]!.key }));
+    // Another hint stops it.
+    context.prefetch(option, positions, positions[0]!); await settle(5);
+    expect(preloads[0]!.signal.aborted).toBe(true);
+    // The rested-on choice becomes prepared: it loads then.
+    await settle(PRELOAD_DWELL_MS + 40);
+    expect(preloads).toHaveLength(1);
+    states.set(positions[0]!, "r");
+    await settle(40);
+    expect(preloads).toHaveLength(2);
+    // A change of the person's own before the moment has passed: nothing loads ahead.
+    context.prefetch(option, positions, positions[1]!); await settle(5);
+    context.dispatch({ kind: "character.setOption", part: "head", option: "eyes_color", choice: page.choices[1]!.key });
+    await settle(PRELOAD_DWELL_MS + 40);
+    expect(preloads).toHaveLength(2);
+    context.dispose();
+  });
+});
