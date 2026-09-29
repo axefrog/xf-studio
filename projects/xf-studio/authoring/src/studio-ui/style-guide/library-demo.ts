@@ -4,7 +4,8 @@ import { badge, blockSection, button, setButtonLabel, setButtonVariant, codeBloc
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, type LightListItem, type TabItem } from "../components";
 import { CONTRAST, contrastGain, enhanceSwatchSet, separationWeight } from "../../swatch-contrast";
-import { h, setText } from "../dom";
+import { h } from "../dom";
+import { setUpdateLine } from "../update-check";
 import { EYE_MAKEUP_MOD } from "../../mod-branding";
 
 type Mount = () => HTMLElement;
@@ -42,8 +43,10 @@ const MOUNTS: Record<string, Mount> = {
       const releases = button({ label: "Open the releases page", icon: "link", small: true, variant: "quiet", onClick: () => {} });
       if (state === "checking") { setButtonLabel(check, "Checking…"); applyCapability(check, { available: false, reason: "Already checking for updates." }); }
       if (state === "newer") { setButtonVariant(check, "quiet"); setButtonVariant(releases, "primary"); }
+      // Up to date, the product hides the releases page; a newer version shows it as the main action.
+      releases.hidden = state !== "newer";
       const line = h("span", { class: "muted small", role: "status" });
-      setText(line, state === "newer" ? "XF Studio 0.9.0 is available. You have 0.8.2." : "You have the latest XF Studio.");
+      setUpdateLine(line, state === "newer" ? "XF Studio 0.9.0 is available. You have 0.8.2." : "You have the newest version, 0.9.0.");
       return h("div", { class: "row wrap gap-s align-center" }, check, line, releases);
     };
     return stack({ gap: "normal" }, updates("rest"), updates("checking"), updates("newer")); },

@@ -11,7 +11,7 @@ import type { Tour } from "./types";
 import type { TourRecord } from "../../ui-preferences";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./desktop-app-sheet";
-import { checkForUpdatesNow, checkingForUpdates, updateCheckLine } from "../update-check";
+import { checkForUpdatesNow, checkingForUpdates, setUpdateLine, updateCheckLine } from "../update-check";
 
 export type HelpGuidance = { tours(): readonly Tour[]; status(tourId: string): TourRecord | undefined; start(tourId: string): boolean };
 /**
@@ -63,12 +63,15 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     h("button", { class: item.className ? `link-button ${item.className}` : "link-button", type: "button", text: item.label, onclick: item.run }),
     typeof item.detail === "string" ? h("small", { class: "muted", text: item.detail }) : item.detail)));
   const updateButton = links.querySelector<HTMLButtonElement>(".help-check-updates")!;
+  let updatesShown = false;
   const renderUpdates = () => {
     const state = rt.port.updates.snapshot(), checking = checkingForUpdates(state);
     setText(updateButton, checking ? "Checking for updates…" : "Check for updates");
     applyCapability(updateButton, rt.port.updates.capability({ kind: "updates.check" }));
-    if (!checking) setText(updateDetail, updateCheckLine(state, { releasesBelow: true })?.text
+    // After the first render the detail keeps the last result while a check runs; the first render writes it even mid-check.
+    if (!checking || !updatesShown) setUpdateLine(updateDetail, updateCheckLine(state, { releasesBelow: true })?.text
       ?? "Looks for a newer XF Studio on GitHub, where each new version is published.");
+    updatesShown = true;
   };
   renderUpdates();
   const toursSection = section("Guided tours", tours), topicsSection = section("Questions and answers", topics);
