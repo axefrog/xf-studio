@@ -35,6 +35,7 @@ export function skinSets(g: THREE.BufferGeometry) {
     sets.push({ j: `joints_${n}`, w: `weights_${n}` });
   return sets;
 }
+const extendedFrom = new WeakMap<THREE.Material, { compile: THREE.Material["onBeforeCompile"]; key: () => string }>();
 export function extendSkin(
   mesh: THREE.SkinnedMesh,
   material: THREE.MeshStandardMaterial,
@@ -49,8 +50,15 @@ export function extendSkin(
     .slice(1)
     .map((s) => `attribute vec4 ${s.j}; attribute vec4 ${s.w};`)
     .join("\n");
-  const previousCompile = material.onBeforeCompile.bind(material);
-  const previousKey = material.customProgramCacheKey.bind(material);
+  // Idempotent: a second extendSkin on the same material rebuilds from the hooks it had before the first one, instead of
+  // wrapping its own wrapper (which declared joints_1/weights_1 twice and broke the program).
+  let original = extendedFrom.get(material);
+  if (!original) {
+    original = { compile: material.onBeforeCompile.bind(material), key: material.customProgramCacheKey.bind(material) };
+    extendedFrom.set(material, original);
+  }
+  const previousCompile = original.compile;
+  const previousKey = original.key;
   material.onBeforeCompile = (shader, renderer) => {
     previousCompile(shader, renderer);
     shader.vertexShader = shader.vertexShader

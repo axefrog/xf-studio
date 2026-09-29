@@ -35,6 +35,23 @@ test("CPU surface picking retains contributions beyond the first four", () => {
   expect(q.w).toBeCloseTo(1, 6);
   expect(q.x).toBeCloseTo(p.x, 6);
 });
+test("extendSkin on the same material twice declares the extra skin sets once (a double declaration broke the program)", () => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+  g.setAttribute("skinIndex", new THREE.Uint16BufferAttribute([0, 0, 0, 0], 4));
+  g.setAttribute("skinWeight", new THREE.Float32BufferAttribute([1, 0, 0, 0], 4));
+  g.setAttribute("joints_1", new THREE.Uint16BufferAttribute([0, 0, 0, 0], 4));
+  g.setAttribute("weights_1", new THREE.Float32BufferAttribute([0, 0, 0, 0], 4));
+  const mat = new THREE.MeshStandardMaterial(), m = new THREE.SkinnedMesh(g, mat);
+  m.skeleton = new THREE.Skeleton([new THREE.Bone()], [new THREE.Matrix4()]);
+  extendSkin(m, mat);
+  extendSkin(m, mat);
+  const shader = { vertexShader: "#include <common>\n#include <skinbase_vertex>\n#include <skinnormal_vertex>\n#include <skinning_vertex>", fragmentShader: "", uniforms: {} } as unknown as THREE.WebGLProgramParametersWithUniforms;
+  mat.onBeforeCompile(shader, undefined as unknown as THREE.WebGLRenderer);
+  expect(shader.vertexShader.match(/attribute vec4 joints_1;/g)?.length).toBe(1);
+  expect(shader.vertexShader.match(/mat4 fullSkin = mat4\(0\.0\);/g)?.length).toBe(1);
+  expect(mat.customProgramCacheKey().match(/full-skin-/g)?.length).toBe(1);
+});
 /** Every skinned primitive keeps its full (eight-influence) skin, its facial targets, and normalized totals. */
 function checkSkinnedGlb(buffer: ArrayBuffer, morphCounts: readonly number[] | null, skinCount?: number, eightInfluences = true) {
   const view = new DataView(buffer), n = view.getUint32(12, true);
