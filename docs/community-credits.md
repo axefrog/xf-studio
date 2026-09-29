@@ -248,7 +248,7 @@ By keanuWheeze, per the support link on its [Nexus page](https://www.nexusmods.c
 
 ### CharLi – Character Lighting Suite for Photomode
 
-By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/8176). It showed how to build a light rig from spawned light entities that follows V or the photo-mode puppet, set each light's colour, intensity, range and cone, aim a ring of lights at V and clean it up again. That loop is the basis of the planned scripted light sweep and of the XF Runtime Bridge's lighting mirror, which places a Studio lighting setup about V in photo mode; its teleporting of lights about the puppet is how the bridge now tries placing photo mode's own lights about V. Studied only.
+By FreakaZ (+FlowerD), per its script headers. [Nexus](https://www.nexusmods.com/cyberpunk2077/mods/8176). It showed how to build a light rig from spawned light entities that follows V or the photo-mode puppet, set each light's colour, intensity, range and cone, aim a ring of lights at V and clean it up again. That loop is the basis of the planned scripted light sweep and of the XF Runtime Bridge's lighting mirror, which places a Studio lighting setup about V in photo mode; its teleporting of lights about the puppet is how the bridge now tries placing photo mode's own lights about V. Its turning of a whole rig about the subject as one group is the model for a planned XF light-rig controller. Studied only.
 
 ### CyanideX
 

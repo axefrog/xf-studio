@@ -1,6 +1,6 @@
 # Experiment 030: Shimmer as a fine grain over a pearly sheen
 
-**Status (28 September 2026): offline diagnosis and redesign done; not yet in game.** The exported Shimmer showed as a static, regular grid of oversized dots in sessions 3 and 4. This experiment measures why from the export's own maps, and checks the replacement design, *shimmer-grain-1*, with the same measurements. The design and its rules are on the [Shimmer design page](../../research/materials/finish-designs/shimmer.md). The in-game check is the Shimmer row in the [sessions plan](../../research/runtime/next-sessions-plan.md#shimmer-grain-check).
+**Status (29 September 2026): offline diagnosis and redesign done; seen in game in session 6, and it fails.** The grain removed the dots, but the lid "reads more like a glossy vinyl than a shimmer" ([experiment 032 §4.3](../032-sessions-5-6/README.md#43-finish-verdicts-the-maintainers-words)); Shimmer goes back to the finishes rework. The exported Shimmer showed as a static, regular grid of oversized dots in sessions 3 and 4. This experiment measures why from the export's own maps, and checks the replacement design, *shimmer-grain-1*, with the same measurements. The design and its rules are on the [Shimmer design page](../../research/materials/finish-designs/shimmer.md). The in-game check is the Shimmer row in the [sessions plan](../../research/runtime/next-sessions-plan.md#shimmer-grain-check).
 
 ## What the game showed
 

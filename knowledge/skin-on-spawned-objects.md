@@ -1,6 +1,6 @@
 # Skin and makeup on spawned objects
 
-**Maturity: Draft.** How an object placed or spawned in the world can show a character's skin and makeup: a copy of V that follows the player's own creator choices, a static head built from explicit mesh components, and what XF Finish Showroom builds from the second. Consolidated on 28 September 2026 from the installed 2.31 game (with Phantom Liberty) read with WolvenKit CLI 9.0.1 and XF Studio's TweakDB reader, the installed mod V's Faceplate (H10) 1.1.0 read in place, the Codeware source and the XF Finish Showroom build. **Nothing on this page has been seen in a game session by this project**; the one runtime observation is the mod's own, reported by the maintainer (the face in the tank looks right). Grades follow the [knowledge rules](README.md); [installed] is a mod package in the reference MO2 instance, read only (paths inside `mods/<mod name>/`).
+**Maturity: Draft.** How an object placed or spawned in the world can show a character's skin and makeup: a copy of V that follows the player's own creator choices, a static head built from explicit mesh components, and what XF Finish Showroom builds from the second. Consolidated on 28 September 2026 from the installed 2.31 game (with Phantom Liberty) read with WolvenKit CLI 9.0.1 and XF Studio's TweakDB reader, the installed mod V's Faceplate (H10) 1.1.0 read in place, the Codeware source and the XF Finish Showroom build. The static route (§2, §4) **has been seen in game** through XF Finish Showroom in sessions 5 and 6 (29 September 2026, [experiment 032](../experiments/032-sessions-5-6/README.md#32-xf-finish-showroom-n14)); the replica route (§1) has not, beyond the mod's own result reported by the maintainer (the face in the tank looks right). Grades follow the [knowledge rules](README.md); [installed] is a mod package in the reference MO2 instance, read only (paths inside `mods/<mod name>/`).
 
 This page answers: *can a prop in the world show skin and makeup the way V's own head does, and what exactly does it take?*
 
@@ -10,7 +10,7 @@ This page answers: *can a prop in the world show skin and makeup the way V's own
   - A **replica of V** is an entity with no meshes of its own, only the character creator's controllers. It shows whatever V wears in the creator right now: her head, skin and every face decal, XF Eye Artistry included. The game uses it for V's head in a tank in Phantom Liberty, and V's Faceplate (H10) places that same vanilla entity in V's apartment. [resource] [installed]; that the controllers copy the player's state is [hypothesis, strongly supported].
   - A **static head** is an entity whose appearance lists the head, eyes and decal meshes explicitly, skinned to a head rig. It shows exactly the meshes and mesh appearances it names, whatever V wears. The game's own shop mannequins are built this way. [resource]
 - **Only the static head can show several looks at once.** Every replica follows the one creator state, so a lineup of replicas would all wear V's current preset. A lineup of different presets needs static heads, one mesh appearance each. XF Finish Showroom uses that route (§4).
-- **Nothing special is needed for skin or decals on a static entity.** The head mesh's own appearance picks the skin material (tone and type), and a `mesh_decal` plate drawn after it writes into the same surface buffer as on V. ArchiveXL expands the plate's `{material}` texture paths when the mesh loads, wherever it is used. [resource] [source]; that the result matches V's head in game is what the showroom's fidelity check tests.
+- **Nothing special is needed for skin or decals on a static entity.** The head mesh's own appearance picks the skin material (tone and type), and a `mesh_decal` plate drawn after it writes into the same surface buffer as on V. ArchiveXL expands the plate's `{material}` texture paths when the mesh loads, wherever it is used. [resource] [source]; in game the result matches V's head closely enough to judge finishes (the showroom's fidelity check, §4.3) [runtime].
 
 ## 1. The replica route: V's head in a tank
 
@@ -97,15 +97,20 @@ XF Finish Showroom is XF Studio's in-game test equipment for judging makeup fini
 
 | Component | Resource | Bound to | Grade |
 |---|---|---|---|
-| `face_rig` (`entAnimatedComponent`) | `h0_000_pwa_c__basehead_skeleton.rig`, `woman_average_sermo.animgraph`, `h0_000_pwa_c__basehead_rigsetup.facialsetup` (the player head's own, by path) | the entity | pattern [resource]; with the player's rig [unverified] |
-| `xfs_head` | `h0_000_pwa_c__basehead.mesh`, appearance `01_ca_pale` unless the build chooses another tone | `face_rig` | [unverified] |
-| `xfs_eyes` | `he_000_pwa_c__basehead.mesh` (lashes, eye, wetness), a gradient eye colour | `face_rig` | [unverified] |
-| `xfs_plate` | the build's own copy of the preset's eye plate, mesh appearance `xfs_p<preset>`, lifted 0.4 mm like XF Eye Artistry's | `face_rig` | plate and materials [offline: the eye-makeup verifier]; drawing [unverified] |
-| `xfs_pedestal` | the creator box's own black panel `q110_black_box.mesh` (bounds exactly x −1…0, y −1…0, z 0…1 [resource]), scaled into a 0.24 m column from 1.5 m below the origin to 6 cm above the neck's cut, so the neck sits down into it and a head raised to the camera's eye line still stands on the floor (0.5.2; the base slab is gone) | the entity | column drawn [runtime] session 5; the seated neck [unverified] |
+| `face_rig` (`entAnimatedComponent`) | `h0_000_pwa_c__basehead_skeleton.rig`, `woman_average_sermo.animgraph`, `h0_000_pwa_c__basehead_rigsetup.facialsetup` (the player head's own, by path) | the entity | pattern [resource]; with the player's rig [runtime] sessions 5–6 |
+| `xfs_head` | `h0_000_pwa_c__basehead.mesh`, appearance `01_ca_pale` unless the build chooses another tone | `face_rig` | [runtime] |
+| `xfs_eyes` | `he_000_pwa_c__basehead.mesh` (lashes, eye, wetness), a gradient eye colour | `face_rig` | [runtime] |
+| `xfs_plate` | the build's own copy of the preset's eye plate, mesh appearance `xfs_p<preset>`, lifted 0.4 mm like XF Eye Artistry's | `face_rig` | plate and materials [offline: the eye-makeup verifier]; drawing [runtime] |
+| `xfs_pedestal` | the creator box's own black panel `q110_black_box.mesh` (bounds exactly x −1…0, y −1…0, z 0…1 [resource]), scaled into a 0.24 m column from 1.5 m below the origin to 6 cm above the neck's cut, so the neck sits down into it and a head raised to the camera's eye line still stands on the floor (0.5.2; the base slab is gone) | the entity | column drawn [runtime] session 5; the seated neck, no gap [runtime] session 6 |
 
 The heads are feminine for now: the plate the pipeline prepares first is hers. Vanilla meshes are referenced by path, never copied.
 
-**What session 5 showed** (29 September 2026) [runtime]: the heads spawned, faced the camera or V, and wore their eyes, lashes and makeup; the maintainer judged their materials a match for V's ("you pretty well nailed the mannequin head's materials"). Every head drew a few centimetres above its column, which then topped out 8 mm above the neck's cut, so the head draws higher than the rig's reference pose puts it [runtime]; why (the face rig's pose without animation) is a hypothesis, and the build now seats the neck 6 cm into a taller column. The heads also looked slightly larger than V at the "same" distance: the bridge measured that distance to the entity's origin, about 13 cm behind the face, and horizontally; since 0.5.2 it places each head's eyes at the distance asked, in 3D, as `photo.frame`'s `distance_m` measures to V [offline].
+**What sessions 5 and 6 showed** (29 September 2026, [experiment 032](../experiments/032-sessions-5-6/README.md)) [runtime]:
+- The heads spawned through Codeware in normal play and in photo mode, faced the camera or V, and wore their eyes, lashes and makeup.
+- In session 5 every head drew a few centimetres above its column, which then topped out 8 mm above the neck's cut, so the head draws higher than the rig's reference pose puts it; why (the face rig's pose without animation) is a hypothesis. The 0.5.2 build seats the neck 6 cm into a taller column, and in session 6 **the neck sat in its column with no gap**.
+- The heads looked slightly larger than V at the "same" distance: the bridge measured that distance to the entity's origin, about 13 cm behind the face, and horizontally. Since 0.5.2 it places each head's eyes at the distance asked, in 3D, as `photo.frame`'s `distance_m` measures to V [offline].
+- **Height is not yet right by default.** 0.5.2 raises each head to the camera's eye line (`height_from: "camera"`), which put the eyes about 0.18 m too high (the frame showed the neck); for a head 1.3 m in front of the photo-mode camera, **a height of 1.9 m above the base framed the face**, 1.75 m was too low. The default probably counts the eye offset twice; the bridge track owns the fix.
+- Lit by the creator rig at that framing, the heads separate Gloss A (wet streaks) from Gloss C (flat), show the Shimmer grain as a pearly sheen with no dot grid, and show the Glitter board's flecks: close enough to judge finishes (the verdicts are in the experiment page). A nine-head lineup under the shared key light, 2.8 m away, was too dark to judge, and at the card's 1.6 m it didn't fit the frame.
 
 ### 4.2 Light rigs as templates
 
@@ -117,12 +122,14 @@ Each rig is an entity of `entLightComponent`s with every native field set at bui
 
 A showroom head beside V, both wearing the same preset under the same rig, tests whether the static route shows makeup as V's head does. A replica (§1) would be a third reference that needs no preset of its own, but it needs Phantom Liberty and a quest-free way to spawn it; it is left as an option.
 
+**Result: pass** [runtime] (session 5, F5–F8). A head beside V, both wearing Gloss A · as before, under the same key light and then the creator rig on each in turn, with a five-step sweep of the head. The maintainer's verdict: **"you pretty well nailed the mannequin head's materials."** So a showroom head is a fair stand-in for V when judging a finish, and finish verdicts can come from showroom close-ups instead of per-finish creator visits. Skin scattering, ambient occlusion and the creator's render target still differ from V's in principle; nothing in the comparison showed them.
+
 ## Open questions
 
 1. Do the creator controllers copy the player's state into any entity that carries them, and when (spawn, appearance change, each frame)? A replica spawned by `DynamicEntitySystem` from `Character.q304_v_head_in_jar_wa` would answer it, and would show whether it follows a creator change live.
 2. How is the replica's body hidden in the tank: controller settings, the workspot's animation, or only the tank's framing?
-3. Does an `entAnimatedComponent` with the player head's rig, graph and facial setup, and no animation driving it, hold the reference pose, as the shop mannequin's face appears to?
-4. Does a static head lit by the same rig show a preset's finish as V's head does (the showroom's fidelity check)? Skin scattering, the head's own ambient occlusion and the creator's render target all differ from gameplay.
+3. Does an `entAnimatedComponent` with the player head's rig, graph and facial setup, and no animation driving it, hold the reference pose, as the shop mannequin's face appears to? The face looks right in game, but the head draws a few centimetres higher than the reference pose puts it (§4.1) [runtime]; why is open.
+4. ~~Does a static head lit by the same rig show a preset's finish as V's head does?~~ **Yes, well enough to judge finishes** (§4.3) [runtime].
 5. Does a skinned mesh in a plain `entMeshComponent` (World Builder's mesh spawnable) draw in its bind pose? That would allow heads without a rig component.
 
 ## Sources
