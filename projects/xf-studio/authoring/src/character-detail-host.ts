@@ -457,15 +457,21 @@ export class CharacterDetailHost {
    * answer when nothing it was prepared from changed, else `unknown`. Never starts a preparation.
    */
   async known(request: CharacterRequest, page = ""): Promise<CharacterDetailState> {
-    const key = characterRequestKey(request, installationFingerprint(this.options.settings()));
-    const known = this.states.get(key);
-    if (known?.phase === "ready" && !this.degraded.has(key)) return known;
-    return await this.kept(request, page) ?? this.state(key);
+    const keyNow = () => characterRequestKey(request, installationFingerprint(this.options.settings()));
+    // A V this process answered before (a page reloaded): the installation is checked first, as a person's request is, so a mod changed
+    // since doesn't warm the old record (PREV-199); the check vouches for the page's own request that follows (`KEPT_VOUCH_MS`).
+    if (this.states.get(keyNow())?.phase === "ready") {
+      await this.refresh();
+      const key = keyNow(), known = this.states.get(key);
+      if (known?.phase === "ready" && !this.degraded.has(key)) { this.vouch(key); return known; }
+    }
+    return await this.kept(request, page) ?? this.state(keyNow());
   }
   /** Keys answered from a kept answer whose V hasn't been resolved into the shared cache yet (`warmUp`). */
   private readonly unwarmed = new Set<string>();
-  /** When a kept answer was checked, by key: it vouches for that V's next request within `KEPT_VOUCH_MS` (`answer`). */
+  /** When a kept answer (or a ready V's installation) was checked, by key: it vouches for that V's next request within `KEPT_VOUCH_MS` (`answer`). */
   private readonly keptAt = new Map<string, number>();
+  private vouch(key: string): void { this.keptAt.set(key, Date.now()); }
   /** A kept answer for `request` as this host's ready state, or null (none, not current, or this process already knows the key). */
   private async kept(request: CharacterRequest, page: string): Promise<CharacterDetailState | null> {
     const route = this.route();
@@ -489,7 +495,7 @@ export class CharacterDetailHost {
     this.prefetch.prepared(request, true);
     this.options.log?.(`Your V was shown as prepared before (nothing it was prepared from changed; checked in ${Math.round(performance.now() - started)} ms).`);
     this.unwarmed.add(key);
-    this.keptAt.set(key, Date.now());
+    this.vouch(key);
     return state;
   }
   /**

@@ -11,6 +11,7 @@ import { discoverRoute, DISCOVERY_LIMITS, openInstallation, type InstallationOpt
 import { routeIdentity } from "../src/route-fingerprint";
 import { pathStamp, type WatchedPath } from "../src/source-discovery";
 import { CHARACTER_DETAIL_SCHEMA } from "../src/render-detail";
+import { CharacterWarmStart } from "../src/character-warm-start";
 import { REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 
 /**
@@ -265,3 +266,40 @@ describe("the character-detail host's kept answers", () => {
   });
 });
 
+
+describe("the page's warm start after a reload (PREV-199)", () => {
+  test("a V this process answered is checked against the installation before the warm start is told it is ready", async () => {
+    const g = game();
+    const settings: CharacterDetailSettings = { gameRoot: g.gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: g.cli };
+    const cacheRoot = join(g.root, "details");
+    const answers = new PreparedAnswers(join(cacheRoot, "choices", "answers"), { code: async () => "code", recordSchema: CHARACTER_DETAIL_SCHEMA,
+      recordExists: () => true });
+    // The mod folder's time in whole seconds, so setting it back below restores its stamp exactly.
+    const folderTime = Math.floor(Date.now() / 1000) - 60;
+    utimesSync(g.mod, folderTime, folderTime);
+    const host = new CharacterDetailHost({ cacheRoot, settings: () => settings, keptAnswers: answers,
+      prepare: async options => { await options.open!(g.options); return { record: {} as never, recordFile: "c".repeat(64) + ".json", degraded: false }; } });
+    host.request(REQUEST_A, "page");
+    await host.settled();
+    expect(await host.known(REQUEST_A, "warm-start")).toMatchObject({ phase: "ready" });
+    // A mod is updated in place while the host runs (its folder's time, which the route's own stamps read, stays); the page reloads and its
+    // warm start asks: the old record is not offered.
+    put(join(g.mod, "hair.archive"), rdar(2));
+    utimesSync(g.mod, folderTime, folderTime);
+    expect((await host.known(REQUEST_A, "warm-start")).phase).toBe("unknown");
+  });
+
+  test("files read ahead for one V are let go as soon as the page asks for another", async () => {
+    const stored = new Map<string, string>();
+    const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); } };
+    const first = new CharacterWarmStart({ storage, verification: true, setTimer: () => 0, fetcher: async () => Response.json({ phase: "unknown" }) });
+    first.remember(REQUEST_A);
+    const warm = new CharacterWarmStart({ storage, verification: true, setTimer: () => 0, fetcher: async () => Response.json({ phase: "unknown" }) });
+    await warm.start();
+    const released = () => (warm as unknown as { released: boolean }).released;
+    warm.remember(REQUEST_A);
+    expect(released()).toBe(false);
+    warm.remember(REQUEST_B);
+    expect(released()).toBe(true);
+  });
+});
