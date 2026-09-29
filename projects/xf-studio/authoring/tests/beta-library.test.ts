@@ -117,7 +117,9 @@ test("Recent drafts: any earlier draft is picked by name, and the open one becom
     const current = lib.service.summary().draft!;
     expect(current.id).toBe(b!.id);
     expect(current.recovery.map(entry => entry.id)).toEqual([a!.id, c!.id]);
-    expect(current.recovery[0]).toMatchObject({ name: a!.name, revision: 1, presets: 1 });
+    // Each draft says how it stands against its saved version (readiness gate fix 1): both are as saved.
+    expect(current.recovery[0]).toMatchObject({ name: a!.name, revision: 1, presets: 1, saved: "same" });
+    expect(current.recovery[1]).toMatchObject({ saved: "same" });
     expect(first.recovery).toEqual([]);
     // Pick the older one directly: it comes back, and the draft that was open is first in the list.
     lib.service.dispatch({ kind: "collection.undoOpen", draft: c!.id });
@@ -127,4 +129,40 @@ test("Recent drafts: any earlier draft is picked by name, and the open one becom
     expect(lib.service.actionCapability({ kind: "collection.undoOpen", draft: "no-such-draft" }))
       .toMatchObject({ available: false, reason: "That earlier draft is no longer in the recovery list." });
   } finally { lib.close(); }
+});
+
+
+test("Recent drafts say when a draft was edited since its saved version, or never saved", async () => {
+  const lib = library();
+  try {
+    await lib.service.execute({ kind: "initialize" });
+    await lib.service.execute({ kind: "save" });
+    lib.service.dispatch({ kind: "collection.rename", name: "Edited draft" });
+    const [saved] = lib.db.list();
+    await lib.service.execute({ kind: "saveCopy" });
+    await lib.service.execute({ kind: "open", id: saved!.id });
+    // The copy was saved as it stood: the same. Now edit the reopened one and open the copy: it's edited since its version.
+    lib.service.dispatch({ kind: "preset.edit", command: { kind: "add" } });
+    await lib.service.execute({ kind: "open", id: lib.db.list()[1]!.id });
+    const recovery = lib.service.summary().draft!.recovery;
+    expect(recovery[0]).toMatchObject({ id: saved!.id, saved: "edited" });
+    expect(recovery.map(entry => entry.saved)).toContain("same");
+  } finally { lib.close(); }
+});
+
+test("a fresh workspace beside a non-empty library never names two presets alike (CORE-126)", async () => {
+  const first = library();
+  try {
+    await first.service.execute({ kind: "initialize" });
+    await first.service.execute({ kind: "save" });
+    // A second session with a fresh workspace over the same library (a verification workspace, cleared browser storage).
+    const again = new CollectionService(STUDIO_DOCUMENTS, undefined, coreFixture().workspace.library, () => first.fixture.document.export(),
+      editor => first.fixture.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} }), {
+        list: async () => first.db.list(), get: async id => first.db.get(id),
+        save: async (collection, revision) => first.db.save({ collection, revision }), package: async () => { throw Error("not used"); } });
+    await again.execute({ kind: "initialize" });
+    const names = again.summary().draft!.presets.map(preset => preset.name);
+    expect(names).toHaveLength(2);
+    expect(new Set(names).size).toBe(2);
+  } finally { first.close(); }
 });

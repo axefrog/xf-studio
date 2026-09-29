@@ -235,9 +235,11 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
         focused?.focus({ preventScroll: true });
       }
     }
-    headPane?.classList.toggle("setup-card-docked", open && setupCard.element.parentElement === headPane);
+    // While a tour runs, a floating card would sit over what the tour points at: it waits, and comes back when the tour ends.
+    if (open && setupCard.element.parentElement === root && guidance.service.snapshot().active) setupCard.element.hidden = true;
+    // The card says what the pane needs, so the pane doesn't say it a second time while the card shows (docked or floating).
+    headPane?.classList.toggle("setup-card-open", open);
   };
-  rt.setupCardDocked = () => setupCard.element.parentElement === headPane;
   let queued = false, lastClass = dock.sizeClass, lastMessage = port.status.snapshot().message?.id ?? 0;
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
@@ -754,8 +756,9 @@ function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, panels:
       keywords: "game folder cyberpunk install mod organizer mo2 vortex profile mod manager eye plate head setup", ...always, run: () => rt.settings.open("game") },
     { id: "settings.saves", title: "Where are my saves? (Settings › Saves)", group: "Settings", icon: "folder",
       keywords: "saves folder save files saved games location explorer choose", ...always, run: () => rt.settings.open("saves") },
-    { id: "settings.tools", title: "WolvenKit (Settings › Tools)", group: "Settings", icon: "settings",
-      keywords: "wolvenkit cli tools download path", ...always, run: () => rt.settings.open("tools") },
+    // WolvenKit's setup step sits beside the Game line that says it's needed (UI-161); your own copy is named in Tools.
+    { id: "settings.tools", title: "WolvenKit (Settings › Game)", group: "Settings", icon: "settings",
+      keywords: "wolvenkit cli tools download path set up", ...always, run: () => rt.settings.open("game") },
     ...[...panels.values()].filter(panel => panel.spec.id !== SETTINGS_PANEL).map(panel => ({ id: `panel.${panel.spec.id}`, title: `${rt.dock.isOpen(panel.spec.id) ? "Go to" : "Open"} ${panel.spec.title}`, group: "Panels",
       icon: panel.spec.icon, keywords: panel.spec.description, ...always, run: () => rt.dock.reveal(panel.spec.id) })),
     ...[...panels.values()].filter(panel => rt.dock.isOpen(panel.spec.id)).map(panel => ({ id: `panel.float.${panel.spec.id}`, title: `Float ${panel.spec.title}`,

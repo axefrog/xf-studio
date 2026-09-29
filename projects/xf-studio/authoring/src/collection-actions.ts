@@ -66,7 +66,9 @@ export type CollectionDraftSummary = {
    * The recovery queue, newest first (the previous draft, then older ones), for a list to pick from (release-readiness-audit.md
    * item 13): each draft's collection ID, name, saved revision and preset count; `locked` as for `oldestRecoverable`.
    */
-  recovery: { id: string; name: string; revision?: number; presets: number; locked?: true }[];
+  recovery: { id: string; name: string; revision?: number; presets: number; locked?: true;
+    /** How it stands against the library: never saved, the same as its saved version, edited since it, or unknown (not loaded). */
+    saved: "never" | "same" | "edited" | "unknown" }[];
   recoveryCount: number; recoveryLimit: number;
   /** `locked`: it holds a look made with a newer version, which the library can't take, so this draft may be its only copy. */
   oldestRecoverable?: { id: string; name: string; revision?: number; locked?: true };
@@ -99,7 +101,8 @@ export class CollectionActions {
       previous: s.previous ? { id: s.previous.collection.id, name: s.previous.collection.name,
         revision: s.previous.revision } : undefined,
       recovery: recovery.map(draft => ({ id: draft.collection.id, name: draft.collection.name, revision: draft.revision,
-        presets: draft.collection.presets.length, ...(holdsLocked(draft) ? { locked: true as const } : {}) })),
+        presets: draft.collection.presets.length, ...(holdsLocked(draft) ? { locked: true as const } : {}),
+        saved: draft.revision === undefined ? "never" as const : "unknown" as const })),
       recoveryCount: recovery.length, recoveryLimit: COLLECTION_RECOVERY_LIMIT,
       oldestRecoverable: oldest ? { id: oldest.collection.id, name: oldest.collection.name,
         revision: oldest.revision, ...(holdsLocked(oldest) ? { locked: true as const } : {}) } : undefined };

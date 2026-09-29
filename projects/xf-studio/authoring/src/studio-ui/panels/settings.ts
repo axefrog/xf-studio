@@ -44,8 +44,8 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     rt.changed();
   }
 
-  // WolvenKit's one next step, beside the line that says it's needed (release-readiness-audit.md item 14) and first in Tools.
-  const gameStep = wolvenKitStepButton(rt), toolsStep = wolvenKitStepButton(rt);
+  // WolvenKit's one next step, beside the Game line that says it's needed (release-readiness-audit.md item 14; UI-161: once, there).
+  const gameStep = wolvenKitStepButton(rt);
   // The game files prepared for the 3D view on this computer, and clearing them: cache upkeep, so it lives here and in the palette
   // rather than in the Character panel (release-readiness-audit.md item 6).
   const preparedText = h("span", { class: "muted small" });
@@ -65,7 +65,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     saves: group("saves", "Where the Save Explorer finds your saves. XF Studio uses the game's own saves folder unless you choose another.", form.saves),
     tools: group("tools", ["XF Studio sets WolvenKit up for you (it asks before downloading). Name your own copy only if you'd rather use it.",
       "The 3D view is built from files XF Studio prepares from your game. Clearing them frees the space; they're prepared again when needed."],
-    h("div", { class: "row wrap gap-s" }, toolsStep.element), form.tools, prepared),
+    form.tools, prepared),
     appearance: group("appearance", "Stored with your workspace on this computer.", theme.element, hints.element, research.element, h("div", { class: "row wrap gap-s" }, reference)),
     privacy: group("privacy", "Diagnostics stay on this computer. A problem report is prepared for you to review and save; nothing is sent by itself.",
       deep.element, h("div", { class: "row wrap gap-s" }, report)),
@@ -81,15 +81,16 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
     show(which: SettingsSection = "game") {
       const target = sections[which];
       target.scrollIntoView?.({ block: "start" });
-      if (which === "game" || which === "saves" || which === "tools") form.focus(which);
+      // While WolvenKit is the thing to do, Game lands on its step (the palette's WolvenKit entry comes here).
+      if (which === "game" && !gameStep.element.hidden) requestAnimationFrame(() => gameStep.element.focus());
+      else if (which === "game" || which === "saves" || which === "tools") form.focus(which);
       else requestAnimationFrame(() => target.querySelector<HTMLElement>("button:not([hidden]), input:not([hidden])")?.focus());
     },
     update(frame: Frame) {
       form.update(frame);
       const step = wantsWolvenKitStep(frame);
-      gameStep.update(frame, step); toolsStep.update(frame, step);
+      gameStep.update(frame, step);
       gameStep.element.parentElement!.hidden = gameStep.element.hidden;
-      toolsStep.element.parentElement!.hidden = toolsStep.element.hidden;
       const files = frame.preview.character?.prepared;
       prepared.hidden = !files;
       setText(preparedText, !files ? "" : files.clearing ? "Clearing the prepared game files…"

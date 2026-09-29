@@ -94,6 +94,8 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     const snapshot = service.snapshot(), active = snapshot.active;
     overlay.render(active);
     if (active) {
+      // The shell places the 3D preview card around a running tour (app.ts): tell it when one starts.
+      if (!running) rt.changed();
       running = true;
       // A step is identified by its tour too: starting another tour at the same index still announces it.
       const step = `${active.tour.id}:${active.index}`;
@@ -109,6 +111,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
       }
     } else if (running) {
       running = false; shown = "";
+      rt.changed();
       const last = snapshot.last;
       rt.feedback.announce(last?.outcome === "completed" ? "Tour finished. Replay it any time from Help." : "Tour closed. Replay it any time from Help.");
       // Back to where the person was; if that has gone (the offer card), to Help, where tours live.
@@ -161,16 +164,16 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(): void }) 
     if (hadFocus) document.querySelector<HTMLElement>(".shell-header button")?.focus();
   }
   /**
-   * Offer onboarding once, on the first run (release-readiness-audit.md item 11), after the welcome screen: never while a dialog is
-   * open, while the 3D preview card floats over the window asking for something (docked in the 3D view pane it covers nothing, so the
-   * offer shows beside it), or in a verification workspace unless `force` asks.
+   * Offer onboarding once, on the first run (release-readiness-audit.md item 11), after the welcome screen and one after the other with
+   * the 3D preview card: never while a dialog is open or the card is asking for something (it may show while the card only reports
+   * progress, or once it is set aside), and never in a verification workspace unless `force` asks.
    */
   function maybeOffer(frame: Frame, force = false) {
     if (offerState !== "waiting" || running) return;
     if (!force) {
       if (frame.status.verification || frame.preferences.tours?.[ONBOARDING_TOUR_ID]) { offerState = "done"; return; }
       const card = frame.previewSetup.card;
-      if (performance.now() - mountedAt < 1500 || document.querySelector("dialog[open]") || (card.open && !card.busy && !rt.setupCardDocked())) return;
+      if (performance.now() - mountedAt < 1500 || document.querySelector("dialog[open]") || (card.open && card.canDismiss)) return;
     }
     offerState = "shown";
     offer.show();

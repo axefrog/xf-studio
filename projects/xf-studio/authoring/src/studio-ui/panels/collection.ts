@@ -22,6 +22,14 @@ import { modInstallLabel, openModInstallSheet } from "./mod-install-sheet";
 
 import { PANEL_META } from "../panel-meta";
 
+/** How a recent draft stands against the library, in words (its row's meta line). */
+const DRAFT_STATE: Record<"never" | "same" | "edited" | "unknown", (revision?: number) => string> = {
+  never: () => "Draft · never saved",
+  same: revision => `Draft · same as saved version ${revision}`,
+  edited: revision => `Draft · edited since version ${revision}, not saved`,
+  unknown: revision => `Draft · started from version ${revision}`,
+};
+
 export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
   /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */
   commands?(): Command[];
@@ -201,7 +209,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); });
   // Earlier drafts, newest first, each brought back with its own Recover (item 13): the draft you had open joins the list.
   const drafts = h("ul", { class: "saved-list", "aria-label": "Recent drafts" });
-  const draftsSection = h("div", { class: "stack gap-s" }, h("span", { class: "eyebrow", text: "Recent drafts" }), drafts);
+  const draftsSection = section({ title: "Recent drafts", help: ["Opening a saved collection keeps the draft you had open here, unsaved edits included; Recover brings it back.",
+    "Each line says how the draft stands against its saved version, so a draft is never mistaken for the saved collection of the same name."] }, drafts);
   let draftsSignature = "";
   const saved = h("ul", { class: "saved-list", "aria-label": "Saved collections" });
   const savedEmpty = emptyState("Nothing saved yet", "Save to library keeps the first version of this collection. Drafts still autosave on this computer.");
@@ -224,8 +233,8 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
     section({ title: "Local library", help: ["Saving keeps a version of this collection in your library on this computer. Edits you make while it saves stay in your draft.",
       "Your draft also saves itself on this computer as you work."] },
       stateLine, progress, h("div", { class: "row wrap gap-s" }, save, saveCopy)),
-    section({ title: "Saved collections", help: "Opening one keeps the draft you had open: it goes under Recent drafts, where Recover brings it back." },
-      savedEmpty, saved, draftsSection),
+    section({ title: "Saved collections", help: "The versions saved in your library on this computer. Open one to work on it." }, savedEmpty, saved),
+    draftsSection,
     filesSection);
   return {
     spec: { id: "library", ...PANEL_META["library"], element, visibility: visible => { if (visible) syncList(); } },
@@ -246,7 +255,7 @@ export function libraryPanel(rt: StudioRuntime): PanelController {
             onClick: () => void rt.file({ kind: "collection.recover", draft: entry.id }) });
           applyCapability(recover, port.files.capability({ kind: "collection.recover", draft: entry.id }));
           return h("li", { class: "saved-row" }, h("div", { class: "saved-main" }, h("strong", { text: entry.name }),
-            h("span", { class: "muted small", text: `${plural(entry.presets, "preset")} · ${entry.revision ? `from version ${entry.revision}` : "never saved"}` })),
+            h("span", { class: "muted small", text: `${DRAFT_STATE[entry.saved](entry.revision)} · ${plural(entry.presets, "preset")}` })),
             recover);
         }));
       }

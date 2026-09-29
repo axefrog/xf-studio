@@ -1,6 +1,6 @@
 import { CollectionActions, type CollectionAction, type CollectionDraftSummary, type PackageProductSummary, type ReadonlyDeep } from "./collection-actions";
 import type { EditorSnapshot } from "./collection-session";
-import { collectionDraft, newLook, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
+import { collectionDraft, newLook, newPresetName, NEWER_LOOKS_LIBRARY_MESSAGE, withLiveFeatures, withLiveMemory, withLivePart, type CollectionWorkspace,
   type DocumentModel } from "./collection-workspace";
 import { COLLECTION_MESSAGE } from "./platform/core/document";
 import { eyeMakeupCollection, planCollection } from "./preset-collection";
@@ -165,10 +165,34 @@ export class CollectionService {
       draft: this.actions?.view() });
   }
   summary(): CollectionServiceSummary {
+    const draft = this.actions?.summary();
+    // Each recent draft says how it stands against its saved version (from the baselines this session loaded or saved).
+    if (draft) for (const entry of draft.recovery) if (entry.saved === "unknown") entry.saved = this.draftAgainstSaved(entry.id, entry.revision!);
     return { busy: this.busy, progress: this.progress && { ...this.progress },
-      summaries: this.summaries.map(item => ({ ...item })), draft: this.actions?.summary(),
+      summaries: this.summaries.map(item => ({ ...item })), draft,
       ...(this.actions ? { products: this.actions.productSummary() } : {}),
       ...(this.actions?.packagePlanIssue() ? { packagePlanIssue: this.actions.packagePlanIssue()!.message } : {}) };
+  }
+  private recoveryVerdicts = { content: -1, byId: new Map<string, "same" | "edited" | "unknown">() };
+  /** A queued draft against its saved version: the same, edited since, or unknown when that version isn't loaded. Cached per content. */
+  private draftAgainstSaved(id: string, revision: number): "same" | "edited" | "unknown" {
+    if (this.recoveryVerdicts.content !== this.content) this.recoveryVerdicts = { content: this.content, byId: new Map() };
+    const key = `${id}@${revision}`, known = this.recoveryVerdicts.byId.get(key);
+    if (known) return known;
+    const base = this.baselines.get(key), collection = this.actions?.recoveryCollection(id);
+    let verdict: "same" | "edited" | "unknown" = "unknown";
+    if (base && collection) {
+      const edited = base.name !== collection.name || base.order.join() !== collection.presets.map(look => look.id).join() ||
+        base.plan !== JSON.stringify(collection.packagePlan ?? null) || collection.presets.some(look => {
+          const saved = base.presets.get(look.id);
+          if (!saved || saved.name !== look.name) return true;
+          if (JSON.stringify(look.parts) === saved.raw) return false;
+          try { return this.model.parts.canonicalParts(look.parts) !== saved.canonical; } catch { return true; }
+        });
+      verdict = edited ? "edited" : "same";
+    }
+    this.recoveryVerdicts.byId.set(key, verdict);
+    return verdict;
   }
   snapshot() { return this.actions?.snapshot(); }
   /** The accepted request in flight, if any (requests are serialized). */
@@ -356,7 +380,10 @@ export class CollectionService {
               const existing = draft.collection.presets.find(p => p.id === id);
               if (existing) { existing.parts = withLivePart(existing, current.recipe, model); existing.name = this.legacy.name.trim() || existing.name; }
               else {
-                const look = newLook(id, this.legacy.name.trim() || "Unsaved preset", model);
+                // The live look joins the stored collection under a name none of its looks has (CORE-126): the workspace's own name, or
+                // the next "Preset N".
+                const wanted = this.legacy.name.trim(), names = draft.collection.presets;
+                const look = newLook(id, wanted && !names.some(item => item.name === wanted) ? wanted : newPresetName(names), model);
                 draft.collection.presets.push({ ...look, parts: withLivePart(look, current.recipe, model) });
               }
             }
