@@ -24,13 +24,31 @@ export const SURFACE_OVERRIDE_RANGES = {
 } as const;
 export type SurfaceParameter = keyof typeof SURFACE_OVERRIDE_RANGES;
 export type SurfaceOverride = Partial<Record<SurfaceParameter, number>>;
-/** Flake statistics of one glitter region (experiment 018's recipe fields). */
+/**
+ * Flake statistics of one glitter region: experiment 018's recipe fields, plus the optional *glitter flakes 2* fields
+ * (experiment 032) that reproduce the Studio's glint models in the game's decal. Each optional field is absent or
+ * present on its own; absent, the region draws exactly what the first recipe drew (same random stream, same bytes).
+ */
 export type GlitterFlakes = {
   /** Median flake width (mm) and log-normal spread. */ sizeMm: number; sizeSigma: number;
   /** Authored share of the region the flakes cover. */ cover: number;
-  /** Tilt |N(0, σ)| in degrees, redrawn uniformly below the maximum when it exceeds it. */ tiltSigmaDeg: number; tiltMaxDeg: number;
+  /** Tilt |N(0, σ)| in degrees above `tiltMinDeg`, redrawn uniformly between the two when it exceeds the maximum. */
+  tiltSigmaDeg: number; tiltMaxDeg: number;
+  /** Flake roughness and metalness; with `roughnessMax` / `metalnessMin`, the ends of each flake's own uniform draw. */
   roughness: number; metalness: number; color: string; seed: number;
+  /** Smallest tilt (degrees): above `NormalsBlendingMode` 1's ≈ 11.5° fade, every flake writes its normal at full weight. */
+  tiltMinDeg?: number;
+  /** Each flake's roughness is drawn uniformly in [roughness, roughnessMax]. */
+  roughnessMax?: number;
+  /** Each flake's metalness is drawn uniformly in [metalnessMin, metalness]. */
+  metalnessMin?: number;
+  /** A share of the flakes is a second, larger population whose median width is `largeSizeMm` (the Studio's occasional big flashes). */
+  largeShare?: number; largeSizeMm?: number;
+  /** Clustering: the flake density varies over patches about `clusterMm` wide, down to `clusterFloor` of its peak. */
+  clusterMm?: number; clusterFloor?: number;
 };
+/** The optional fields of `GlitterFlakes`, in canonical order; pairs are set together. */
+export const FLAKE_OPTIONAL_KEYS = ["tiltMinDeg", "roughnessMax", "metalnessMin", "largeShare", "largeSizeMm", "clusterMm", "clusterFloor"] as const;
 /** One glitter region: the flakes of one layer, drawn over its UV bounds and clipped by its coverage. */
 export type GlitterRegion = { layer: string; mips: "nested" | "box"; flakes?: GlitterFlakes; mirrorOf?: string };
 /**
@@ -46,6 +64,7 @@ export type PresetDiagnostics = { plateLiftMm?: number; surface?: SurfaceOverrid
 export const GLITTER_RANGES = {
   sizeMm: [.05, 1.2], sizeSigma: [0, 1], cover: [.01, .6], tiltSigmaDeg: [0, 90], tiltMaxDeg: [1, 89], roughness: [0, 1], metalness: [0, 1],
   seed: [0, 2147483647], share: [.01, 1], ev: [0, 10],
+  tiltMinDeg: [0, 60], roughnessMax: [0, 1], metalnessMin: [0, 1], largeShare: [0, .5], largeSizeMm: [.05, 1.2], clusterMm: [.5, 20], clusterFloor: [0, 1],
 } as const;
 const FLAKE_KEYS = ["sizeMm", "sizeSigma", "cover", "tiltSigmaDeg", "tiltMaxDeg", "roughness", "metalness", "color", "seed"] as const;
 export type ExportDiagnostics = { schema: typeof EXPORT_DIAGNOSTICS_SCHEMA; presets: Record<string, PresetDiagnostics> };
@@ -97,14 +116,23 @@ export function parseExportDiagnostics(value: unknown, presetIds: readonly strin
 
 const inRange = (value: unknown, [lo, hi]: readonly [number, number]) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
 function parseFlakes(value: unknown, where: string): GlitterFlakes {
-  if (!isRecord(value) || Object.keys(value).length !== FLAKE_KEYS.length || !FLAKE_KEYS.every(key => key in value))
-    throw Error(`${where} must set exactly ${FLAKE_KEYS.join(", ")}.`);
+  const optional = (FLAKE_OPTIONAL_KEYS as readonly string[]);
+  if (!isRecord(value) || !FLAKE_KEYS.every(key => key in value) || Object.keys(value).some(key => !(FLAKE_KEYS as readonly string[]).includes(key) && !optional.includes(key)))
+    throw Error(`${where} must set exactly ${FLAKE_KEYS.join(", ")} (and optionally ${optional.join(", ")}).`);
   for (const key of FLAKE_KEYS) if (key !== "color" && !inRange(value[key], GLITTER_RANGES[key])) throw Error(`${where} ${key} is out of range.`);
+  for (const key of FLAKE_OPTIONAL_KEYS) if (key in value && !inRange(value[key], GLITTER_RANGES[key])) throw Error(`${where} ${key} is out of range.`);
   if (typeof value.color !== "string" || !/^#[0-9a-f]{6}$/i.test(value.color)) throw Error(`${where} color must be #rrggbb.`);
   if (!Number.isInteger(value.seed)) throw Error(`${where} seed must be an integer.`);
   if ((value.tiltMaxDeg as number) < (value.tiltSigmaDeg as number) / 4) throw Error(`${where} tiltMaxDeg is too small for its spread.`);
+  if ("tiltMinDeg" in value && !((value.tiltMinDeg as number) < (value.tiltMaxDeg as number))) throw Error(`${where} tiltMinDeg must be below tiltMaxDeg.`);
+  if ("roughnessMax" in value && (value.roughnessMax as number) < (value.roughness as number)) throw Error(`${where} roughnessMax is below roughness.`);
+  if ("metalnessMin" in value && (value.metalnessMin as number) > (value.metalness as number)) throw Error(`${where} metalnessMin is above metalness.`);
+  for (const [a, b] of [["largeShare", "largeSizeMm"], ["clusterMm", "clusterFloor"]] as const)
+    if ((a in value) !== (b in value)) throw Error(`${where} must set ${a} and ${b} together.`);
+  if ("largeSizeMm" in value && (value.largeSizeMm as number) < (value.sizeMm as number)) throw Error(`${where} largeSizeMm is below sizeMm.`);
   // Canonical key order, so the packaged collection's hash does not depend on how the file was written.
-  return Object.fromEntries(FLAKE_KEYS.map(key => [key, key === "color" ? (value.color as string).toLowerCase() : value[key]])) as GlitterFlakes;
+  return Object.fromEntries([...FLAKE_KEYS, ...FLAKE_OPTIONAL_KEYS.filter(key => key in value)]
+    .map(key => [key, key === "color" ? (value.color as string).toLowerCase() : value[key]])) as GlitterFlakes;
 }
 
 /** Validate a glitter knob's shape and numbers (layer references are checked against the recipe when planning). */

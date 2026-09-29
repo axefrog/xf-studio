@@ -63,30 +63,69 @@ export function randomStream(seed: number): () => number {
   };
 }
 
-/** One region's flakes in window millimetres (x from the window's u0, y from its authored v0). */
+/** One region's flakes in window millimetres (x from the window's u0, y from its authored v0), with each flake's surface. */
 export interface Catalogue {
   readonly cx: Float64Array; readonly cy: Float64Array; readonly width: Float64Array; readonly rot: Float64Array;
   readonly aspect: Float64Array; readonly nx: Float64Array; readonly ny: Float64Array; readonly key: Float64Array;
+  readonly rough: Float64Array; readonly metal: Float64Array;
   readonly areaMm2: number;
 }
+
+/** The Studio glint shader's cluster smoothstep edges (render/direct-glint.ts `xfsGlintCluster`), reused for the envelope. */
+export const CLUSTER_EDGES = [.22, .72] as const;
+/** Most position draws one clustered flake takes before it is accepted where it stands. */
+export const CLUSTER_TRIES = 64;
+/** Integer hash of a cluster lattice corner to [0, 1). */
+function latticeHash(i: number, j: number, seed: number) {
+  let h = Math.imul(i | 0, 0x27d4eb2d) ^ Math.imul((j | 0) ^ 0x5bd1e995, 0x165667b1) ^ Math.imul(seed | 0, 0x9e3779b1);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12; h = Math.imul(h, 0x297a2d39);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+const smooth = (t: number) => t * t * (3 - 2 * t);
+/**
+ * Relative flake density at (x, y) window millimetres for a clustered region: value noise on a lattice `clusterMm` wide
+ * (smoothstep-interpolated corners), through the Studio's cluster smoothstep, between `clusterFloor` and 1.
+ */
+export function clusterEnvelope(x: number, y: number, f: Pick<GlitterFlakes, "seed" | "clusterMm" | "clusterFloor">): number {
+  const gx = x / f.clusterMm!, gy = y / f.clusterMm!, i = Math.floor(gx), j = Math.floor(gy), tx = smooth(gx - i), ty = smooth(gy - j);
+  const a = latticeHash(i, j, f.seed) * (1 - tx) + latticeHash(i + 1, j, f.seed) * tx;
+  const b = latticeHash(i, j + 1, f.seed) * (1 - tx) + latticeHash(i + 1, j + 1, f.seed) * tx;
+  const v = a * (1 - ty) + b * ty, [e0, e1] = CLUSTER_EDGES, t = Math.max(0, Math.min(1, (v - e0) / (e1 - e0)));
+  return f.clusterFloor! + (1 - f.clusterFloor!) * smooth(t);
+}
+
 /**
  * Flake catalogue of one region (`rect` already clipped to the window): log-normal widths, hexagon-like facets,
- * |N(0, σ)| tilts truncated at the maximum.
+ * tilts `tiltMinDeg` + |N(0, σ)|, redrawn uniformly between the minimum and the maximum when above it.
+ *
+ * Draw order per flake (the verifier restates it): tilt (Box–Muller of 1 − r, r; one more r when redrawn), azimuth, centre
+ * x and y (a clustered region adds an acceptance draw and repeats all three until accepted, at most `CLUSTER_TRIES` times),
+ * width (Box–Muller), rotation, aspect, key; then, only when set, the large-population draw, the roughness draw and the
+ * metalness draw. A region without the optional fields therefore draws exactly the first recipe's catalogue.
  */
 export function flakeCatalogue(rect: RectUv, window: UvWindow, f: GlitterFlakes): Catalogue {
   const { x0, x1, y0, y1, area } = rectMm(rect, window), n = flakeCount(rect, window, f), random = randomStream(f.seed);
   const gauss = () => { const u = 1 - random(), v = random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-  const arrays = Array.from({ length: 8 }, () => new Float64Array(n));
-  const [cx, cy, width, rot, aspect, nx, ny, key] = arrays;
+  const arrays = Array.from({ length: 10 }, () => new Float64Array(n));
+  const [cx, cy, width, rot, aspect, nx, ny, key, rough, metal] = arrays;
+  const min = f.tiltMinDeg ?? 0, clustered = f.clusterMm !== undefined;
   for (let i = 0; i < n; i++) {
-    let tilt = Math.abs(gauss() * f.tiltSigmaDeg);
-    if (tilt > f.tiltMaxDeg) tilt = random() * f.tiltMaxDeg;
+    let tilt = min + Math.abs(gauss() * f.tiltSigmaDeg);
+    if (tilt > f.tiltMaxDeg) tilt = min + random() * (f.tiltMaxDeg - min);
     const azimuth = random() * 2 * Math.PI, s = Math.sin(tilt * Math.PI / 180);
     cx[i] = x0 + random() * (x1 - x0); cy[i] = y0 + random() * (y1 - y0);
+    if (clustered) for (let tries = 1; random() >= clusterEnvelope(cx[i], cy[i], f) && tries < CLUSTER_TRIES; tries++) {
+      cx[i] = x0 + random() * (x1 - x0); cy[i] = y0 + random() * (y1 - y0);
+    }
     width[i] = f.sizeMm * Math.exp(f.sizeSigma * gauss()); rot[i] = random() * Math.PI; aspect[i] = 1 + random() * .4;
     nx[i] = s * Math.cos(azimuth); ny[i] = s * Math.sin(azimuth); key[i] = random();
+    if (f.largeShare !== undefined && random() < f.largeShare) width[i] *= f.largeSizeMm! / f.sizeMm;
+    rough[i] = f.roughnessMax !== undefined ? f.roughness + random() * (f.roughnessMax - f.roughness) : f.roughness;
+    metal[i] = f.metalnessMin !== undefined ? f.metalnessMin + random() * (f.metalness - f.metalnessMin) : f.metalness;
   }
-  return { cx, cy, width, rot, aspect, nx, ny, key, areaMm2: area };
+  return { cx, cy, width, rot, aspect, nx, ny, key, rough, metal, areaMm2: area };
 }
 
 /**
@@ -102,20 +141,30 @@ export function mirrorCatalogue(c: Catalogue, window: UvWindow, mirror: Mirror):
   return { ...c, cy: c.cy.map(y => span - y), rot: c.rot.map(r => -r), ny: c.ny.map(y => -y) };
 }
 
-/** E[sin²θ] of the tilt distribution (degrees): |N(0, σ)| below the maximum, redrawn uniformly when above it. */
-export function tiltVariance(sigmaDeg: number, maxDeg: number): number {
-  const steps = 4000, h = maxDeg / steps, sin2 = (d: number) => Math.sin(d * Math.PI / 180) ** 2;
-  if (sigmaDeg <= 0) return 0;
+/**
+ * E[sin²θ] of the tilt distribution (degrees): min + |N(0, σ)| up to the maximum, redrawn uniformly between the minimum
+ * and the maximum when above it. With min 0 this is the first recipe's formula, term for term.
+ */
+export function tiltVariance(sigmaDeg: number, maxDeg: number, minDeg = 0): number {
+  const sin2 = (d: number) => Math.sin(d * Math.PI / 180) ** 2;
+  if (sigmaDeg <= 0) return minDeg ? sin2(minDeg) : 0;
+  const span = maxDeg - minDeg, steps = 4000, h = span / steps;
   const g = (d: number) => 2 / (sigmaDeg * Math.sqrt(2 * Math.PI)) * Math.exp(-d * d / (2 * sigmaDeg * sigmaDeg));
   let inside = 0, weighted = 0, uniform = 0;
   for (let i = 0; i <= steps; i++) {
     const d = i * h, w = (i === 0 || i === steps ? 1 : i % 2 ? 4 : 2) * h / 3;
-    inside += w * g(d); weighted += w * g(d) * sin2(d); uniform += w * sin2(d);
+    inside += w * g(d); weighted += w * g(d) * sin2(minDeg + d); uniform += w * sin2(minDeg + d);
   }
-  return weighted + Math.max(0, 1 - inside) * uniform / maxDeg;
+  return weighted + Math.max(0, 1 - inside) * uniform / span;
 }
-/** Roughness a region's unrepresented flakes widen toward: GGX α² + slope variance, back to roughness. */
-export const sheenRoughness = (f: GlitterFlakes) => ((f.roughness ** 2) ** 2 + tiltVariance(f.tiltSigmaDeg, f.tiltMaxDeg)) ** .25;
+/** A region's mean flake roughness and metalness (the middle of each per-flake draw). */
+export const meanFlakeSurface = (f: GlitterFlakes) => ({
+  roughness: f.roughnessMax !== undefined ? (f.roughness + f.roughnessMax) / 2 : f.roughness,
+  metalness: f.metalnessMin !== undefined ? (f.metalnessMin + f.metalness) / 2 : f.metalness,
+});
+/** Roughness a region's unrepresented flakes widen toward: GGX α² of the mean flake + slope variance, back to roughness. */
+export const sheenRoughness = (f: GlitterFlakes) =>
+  ((meanFlakeSurface(f).roughness ** 2) ** 2 + tiltVariance(f.tiltSigmaDeg, f.tiltMaxDeg, f.tiltMinDeg ?? 0)) ** .25;
 
 /** Texel rectangle [x0, x1) × [y0, y1) a region's UV bounds touch at a width × height level over the window. */
 export function regionTexels(rect: RectUv, window: UvWindow, width: number, height: number) {
@@ -315,7 +364,7 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
         for (let k = keep.length - 1; k >= 0; k--) {
           const i = keep[k];
           stamp(canvas, { cx: c.cx[i], cy: c.cy[i], width: widths[i], rot: c.rot[i], aspect: c.aspect[i], nx: c.nx[i], ny: c.ny[i], rank: rank[i],
-            rough: f.roughness, metal: f.metalness, col }, tu, tv, clip, true, total);
+            rough: c.rough[i], metal: c.metal[i], col }, tu, tv, clip, true, total);
         }
       }
       let narrowest = Infinity;
@@ -334,12 +383,12 @@ export function compileGlitterPreset(value: unknown, knob: GlitterDiagnostic, wi
       for (let y = box.y0; y < box.y1; y++) for (let x = box.x0; x < box.x1; x++) { sum += canvas.mask[y * w + x]; count++; }
       const shown = count ? sum / count : 0, share = Math.max(0, f.cover - shown) / Math.max(1e-6, 1 - shown);
       levelStats[r].maskMean = Math.round(shown * 1e4) / 1e4;
-      const sheen = sheenRoughness(f), fc = hexLinear(f.color);
+      const sheen = sheenRoughness(f), sheenMetal = meanFlakeSurface(f).metalness, fc = hexLinear(f.color);
       for (let y = box.y0; y < box.y1; y++) for (let x = box.x0; x < box.x1; x++) {
         const p = y * w + x;
         touched[p] = 1;
         rough[p] = rough[p] * (1 - share) + sheen * share;
-        metal[p] = metal[p] * (1 - share) + f.metalness * share;
+        metal[p] = metal[p] * (1 - share) + sheenMetal * share;
         for (let k = 0; k < 3; k++) col[p * 3 + k] = col[p * 3 + k] * (1 - share) + fc[k] * share;
       }
     });

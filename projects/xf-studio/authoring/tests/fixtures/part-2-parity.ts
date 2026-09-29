@@ -79,8 +79,9 @@ export function glitterFixtures(): { name: string; file: unknown; actions: Recip
       { kind: "glitter.setIrregular", layerId: "g-glit", key: "spread", value: 0.42 },
       select("g-glit", "classic"), { kind: "glitter.setClassic", layerId: "g-glit", key: "density", value: 0.77 },
       select("g-glit", "direct"), { kind: "layer.setOpacity", layerId: "g-gloss", opacity: 0.5 },
+      // Becoming Glitter again starts in the direct-light model (claude/finishes-rework); the classic settings come back when chosen.
       { kind: "layer.setFinish", layerId: "g-glit", finish: "matte" }, { kind: "layer.setFinish", layerId: "g-glit", finish: "glitter" },
-      select("g-glit", "direct")] },
+      select("g-glit", "classic")] },
     { name: "recipe-7 Glitter beside an earlier-study Glossy", file: earlyGlossRecipe(), actions: [
       select("e-glit", "fine"), { kind: "layer.useGameOptics", layerId: "e-gloss" }, select("e-glit", "classic"),
       { kind: "layer.setFinish", layerId: "e-gloss", finish: "matte" }, select("e-glit", "irregular"),

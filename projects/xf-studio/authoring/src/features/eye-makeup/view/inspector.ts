@@ -101,8 +101,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   const shiftSection = section({ title: "Colour shift", help: ["The shift colour shows toward the lid's edges as the view angle grows.",
     "One shift colour per preset is built into your mod."] }, h("div", { class: "row gap-m align-end" }, shift.color.element, shift.strength.element));
 
-  // Glitter preview suite and flake studies.
-  // Five models with long names, all shown (ChoiceList `rows`); a research tool.
+  // Glitter preview models: the three glint models with long names, all shown (ChoiceList `rows`); the classic and irregular
+  // flake studies join them only with research tools on (or on a layer already using one).
   // The chosen model's description is its help tip (UI-131): what it is, not something to do.
   const model = new ChoiceList<GlitterModel>({ label: "Glitter preview model", layout: "rows", help: "", onSelect: value => {
     const layer = ctx.facade.view().layer(); if (layer) ctx.dispatch({ kind: "glitter.selectModel", layerId: layer.id, model: value });
@@ -145,8 +145,8 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       transaction: recipeTransaction<number>(ctx, "direct-strength", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "strength", value })) }),
     color: new ColorField({ label: "Facet colour", transaction: recipeTransaction<string>(ctx, "direct-color", (layer, value) => ({ kind: "glitter.setDirect", layerId: layer.id, key: "color", value })) }),
   };
-  // Choosing among the Glitter model studies is a research tool (UI-85); everyone edits the layer's own model.
-  const modelChoice = h("div", { class: "research-only" }, model.element);
+  // Everyone chooses among the glint models; the classic and irregular studies are research tools (UI-85).
+  const modelChoice = h("div", {}, model.element);
   // That Glitter isn't built into mods is said once, by the finish's export line; the section says only how its colours work.
   const glitterSection = section({ title: "Glitter", help: "Layer colour is the base; the flakes have their own colour." }, modelChoice);
   const classicSection = section({ title: "Flakes", help: ["Turn the head to see the flakes catch the light.", "Experimental: may look different in game."] },
@@ -199,13 +199,14 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
       // The layer's Glitter model, by the catalogue's stored names (UI-10).
       const glitterModel = catalogues(ctx).glitterModelOf(flakes), modelId: GlitterModel = glitterModel.id;
       glitterSection.hidden = !glitter;
-      modelChoice.hidden = !frame.preferences?.researchTools;
+      const research = !!frame.preferences?.researchTools;
       classicSection.hidden = !(shimmer || (glitter && modelId === "classic"));
       irregularSection.hidden = !(glitter && modelId === "irregular");
       directSection.hidden = !(glitter && ["direct", "clustered", "fine"].includes(modelId));
       if (glitter) {
         const modelChoices = ctx.facade.choicesFor(target, "glitter.selectModel", "model");
-        model.setOptions(catalogues(ctx).glitterModels.map(item => ({ value: item.id, label: item.label })));
+        model.setOptions(catalogues(ctx).glitterModels.filter(item => !item.research || research || item.id === modelId)
+          .map(item => ({ value: item.id, label: item.label })));
         model.update(modelId, value => modelChoices.find(choice => choice.value === value)?.capability ?? { available: true });
         model.setHelp(catalogues(ctx).glitterModels.find(item => item.id === modelId)?.summary ?? "");
       }

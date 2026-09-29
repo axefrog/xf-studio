@@ -81,6 +81,10 @@ export const ACCENT_PREFIX = "@accent_";
 const FLAKE_FIELDS: Readonly<Record<string, readonly [number, number]>> = {
   sizeMm: [.05, 1.2], sizeSigma: [0, 1], cover: [.01, .6], tiltSigmaDeg: [0, 90], tiltMaxDeg: [1, 89], roughness: [0, 1], metalness: [0, 1], seed: [0, 2147483647],
 };
+/** Glitter flakes 2's optional fields and their ranges (restated). Pairs are set together. */
+const FLAKE_OPTIONAL_FIELDS: Readonly<Record<string, readonly [number, number]>> = {
+  tiltMinDeg: [0, 60], roughnessMax: [0, 1], metalnessMin: [0, 1], largeShare: [0, .5], largeSizeMm: [.05, 1.2], clusterMm: [.5, 20], clusterFloor: [0, 1],
+};
 /** The most flakes one glitter region's catalogue may hold, and the plate's millimetres per unit UV (restated). */
 export const GLITTER_REGION_RULES = Object.freeze({ maxFlakes: 200_000, mmPerU: 569, mmPerV: 405 });
 export type UvRect = { u0: number; v0: number; u1: number; v1: number };
@@ -116,14 +120,18 @@ export function clipUvRect(rect: UvRect, bounds: UvRect): UvRect | null {
   return out.u1 > out.u0 && out.v1 > out.v0 ? out : null;
 }
 /** A region's catalogue size over `rect` (window millimetres from `window`'s origin), restated. */
-export function restatedFlakeCount(rect: UvRect, window: UvRect, f: { sizeMm: number; sizeSigma: number; cover: number }): number {
+export function restatedFlakeCount(rect: UvRect, window: UvRect,
+  f: { sizeMm: number; sizeSigma: number; cover: number; largeShare?: number; largeSizeMm?: number }): number {
   const x0 = (rect.u0 - window.u0) * GLITTER_REGION_RULES.mmPerU, x1 = (rect.u1 - window.u0) * GLITTER_REGION_RULES.mmPerU;
   const y0 = (rect.v0 - window.v0) * GLITTER_REGION_RULES.mmPerV, y1 = (rect.v1 - window.v0) * GLITTER_REGION_RULES.mmPerV;
-  const meanArea = 3 * Math.sqrt(3) / 8 * f.sizeMm ** 2 * Math.exp(2 * f.sizeSigma ** 2) * 1.2;
+  // A large population scales the mean area by its share of the squared width.
+  const large = f.largeShare ? (1 - f.largeShare) + f.largeShare * (f.largeSizeMm! / f.sizeMm) ** 2 : 1;
+  const meanArea = 3 * Math.sqrt(3) / 8 * f.sizeMm ** 2 * Math.exp(2 * f.sizeSigma ** 2) * 1.2 * large;
   return Math.round(f.cover * ((x1 - x0) * (y1 - y0)) / meanArea);
 }
 const within = (v: unknown, [lo, hi]: readonly [number, number]) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
-export interface VerifierFlakes { sizeMm: number; sizeSigma: number; cover: number; tiltSigmaDeg: number; tiltMaxDeg: number; roughness: number; metalness: number; color: string; seed: number }
+export interface VerifierFlakes { sizeMm: number; sizeSigma: number; cover: number; tiltSigmaDeg: number; tiltMaxDeg: number; roughness: number; metalness: number; color: string; seed: number;
+  tiltMinDeg?: number; roughnessMax?: number; metalnessMin?: number; largeShare?: number; largeSizeMm?: number; clusterMm?: number; clusterFloor?: number }
 export interface VerifierGlitter {
   base: { roughness: number; metalness: number };
   regions: { layer: string; mips: "nested" | "box"; flakes: VerifierFlakes; mirrorOf?: string }[];
@@ -141,7 +149,13 @@ export function glitterOf(preset: VerifierPreset): VerifierGlitter | undefined {
     const f = region.flakes;
     ensure(Object.entries(FLAKE_FIELDS).every(([key, range]) => within(f[key], range)) && Number.isInteger(f.seed) && /^#[0-9a-f]{6}$/.test(f.color),
       `${where} has flakes outside the diagnostic rules`);
+    ensure(Object.keys(f).every(key => key === "color" || key in FLAKE_FIELDS || key in FLAKE_OPTIONAL_FIELDS) &&
+      Object.entries(FLAKE_OPTIONAL_FIELDS).every(([key, range]) => f[key] === undefined || within(f[key], range)),
+      `${where} has flakes outside the diagnostic rules`);
     ensure(f.tiltMaxDeg >= f.tiltSigmaDeg / 4, `${where} region ${region.layer} has a tilt maximum too small for its spread`);
+    ensure((f.tiltMinDeg ?? 0) < f.tiltMaxDeg && (f.roughnessMax ?? f.roughness) >= f.roughness && (f.metalnessMin ?? f.metalness) <= f.metalness &&
+      (f.largeShare === undefined) === (f.largeSizeMm === undefined) && (f.clusterMm === undefined) === (f.clusterFloor === undefined) &&
+      (f.largeSizeMm ?? f.sizeMm) >= f.sizeMm, `${where} region ${region.layer} has inconsistent optional flake fields`);
     own.set(region.layer, f);
   }
   // Glitter is its own texture layout: never with a surface override or head UV.

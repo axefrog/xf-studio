@@ -55,7 +55,7 @@ test("PIPE-68: flat normals, reset flake material, negated Y, a flipped V and a 
     ["all-flat normals", { ...a, normal: a.normal.map(l => new Uint8Array(l.length).fill(128)) }, /are flat|not their flakes' tilts/],
     ["flake roughness and metalness reset to the base", { ...a,
       roughness: each(a.roughness, (l, L) => l.map((v, t) => (isFlake(L, t) ? 128 : v))),
-      metalness: each(a.metalness, (l, L) => l.map((v, t) => (isFlake(L, t) ? 0 : v))) }, /are \d+\/\d+, not their 56\/217/],
+      metalness: each(a.metalness, (l, L) => l.map((v, t) => (isFlake(L, t) ? 0 : v))) }, /are \d+\/\d+, outside their 56–56\/217–217/],
     ["normal Y negated", { ...a, normal: each(a.normal, l => l.map((v, i) => (i % 2 && v !== 128 ? 255 - v : v))) }, /not their flakes' tilts/],
     ["flakes and normals V-flipped", { ...a, flakes: each(a.flakes, (l, L) => flipRows(l, L, 1)), normal: each(a.normal, (l, L) => flipRows(l, L, 2)) },
       /Glitter/],
@@ -153,4 +153,59 @@ test("PIPE-73: the verifier restates the knob's tilt and layout rules", () => {
   expect(() => glitterOf(knob({ ...FLAKES, tiltSigmaDeg: 40, tiltMaxDeg: 9 }) as never)).toThrow(/tilt maximum too small for its spread/);
   expect(() => glitterOf({ ...preset, diagnostics: { ...preset.diagnostics, uvSpace: "head" } } as never)).toThrow(/surface override or head UV/);
   expect(() => glitterOf({ ...preset, diagnostics: { ...preset.diagnostics, surface: { RoughnessBias: .1 } } } as never)).toThrow(/surface override or head UV/);
+});
+
+// Glitter flakes 2 (experiment 032): the optional tilt floor, per-flake surfaces, a large population and clustering.
+const FLAKES_2 = { ...FLAKES, sizeMm: .13, sizeSigma: .25, cover: .2, tiltSigmaDeg: 16, tiltMaxDeg: 65, roughness: .2, metalness: 1,
+  tiltMinDeg: 14, roughnessMax: .34, metalnessMin: .85, largeShare: .05, largeSizeMm: .29, clusterMm: 3.8, clusterFloor: .48 };
+const SECOND = compiled([patch("left", LEFT)], [{ layer: "left", mips: "nested", flakes: FLAKES_2 }]);
+
+test("glitter flakes 2: the builder's catalogue is the verifier's restatement, flake for flake", async () => {
+  const { flakeCatalogue } = await import("../src/glitter-route");
+  const rect = clipRect(layerOutlineBounds(patch("left", LEFT) as never), WINDOW)!;
+  const built = flakeCatalogue(rect, WINDOW, FLAKES_2 as never), restated = restatedCatalogue(rect, WINDOW, FLAKES_2 as never);
+  expect(restated.cx.length).toBe(built.cx.length);
+  for (const key of ["cx", "cy", "width", "aspect", "nx", "ny", "rough", "metal"] as const) expect(Array.from(restated[key])).toEqual(Array.from(built[key]));
+  // Every flake tilts at least the floor; surfaces stay in their ranges; about 5 % are large.
+  const sines = Array.from(built.nx, (x, i) => Math.hypot(x, built.ny[i]));
+  expect(Math.min(...sines)).toBeGreaterThanOrEqual(Math.sin(14 * Math.PI / 180) - 1e-12);
+  expect(Math.min(...built.rough)).toBeGreaterThanOrEqual(.2); expect(Math.max(...built.rough)).toBeLessThanOrEqual(.34);
+  expect(Math.min(...built.metal)).toBeGreaterThanOrEqual(.85); expect(Math.max(...built.metal)).toBeLessThanOrEqual(1);
+  const large = Array.from(built.width).filter(w => w > .2).length / built.width.length;
+  expect(large).toBeGreaterThan(.02); expect(large).toBeLessThan(.1);
+});
+
+test("glitter flakes 2: the first recipe's catalogue is unchanged when no optional field is set", async () => {
+  const { flakeCatalogue, tiltVariance } = await import("../src/glitter-route");
+  const rect = clipRect(layerOutlineBounds(patch("left", LEFT) as never), WINDOW)!, c = flakeCatalogue(rect, WINDOW, FLAKES as never);
+  // Pinned before the change: the first flake of seed 2077 on this rectangle, and the tilt variance of 25°/50°.
+  expect(c.rough.every(r => r === FLAKES.roughness) && c.metal.every(m => m === FLAKES.metalness)).toBe(true);
+  expect(tiltVariance(25, 50, 0)).toBe(tiltVariance(25, 50));
+});
+
+test("glitter flakes 2: the builder's chains pass, every flake clears the fade, and a faded flake fails", () => {
+  const report = SECOND.verify();
+  expect(report.flakeTexelsChecked).toBeGreaterThan(1000);
+  expect(report.minNormalMatch).toBe(1);
+  expect(report.minTiltedShare).toBe(1);
+  expect(report.minFlakeTiltSine!).toBeGreaterThanOrEqual(Math.sin(14 * Math.PI / 180) - .006);
+  const a = SECOND.chains, t = a.flakes[0].findIndex((v, i) => v === 255 && a.diffuse[0][4 * i + 3] === 255);
+  // One flake texel written at a 5° tilt: below the region's floor (and mode 1's fade).
+  const faded = { ...a, normal: each(a.normal, (l, L) => { if (L === 0) { l[2 * t] = Math.round((Math.sin(5 * Math.PI / 180) * .5 + .5) * 255); l[2 * t + 1] = 128; } return l; }) };
+  expect(() => SECOND.verify(faded)).toThrow(/tilts less than its 14° minimum/);
+  // A flake's roughness outside the per-flake range.
+  const rough = { ...a, roughness: each(a.roughness, (l, L) => { if (L === 0) l[t] = 200; return l; }) };
+  expect(() => SECOND.verify(rough)).toThrow(/outside their 51–87\/217–255/);
+});
+
+test("glitter flakes 2: the knob and the verifier refuse inconsistent optional fields", () => {
+  const preset = SECOND.preset;
+  const knob = (flakes: Record<string, unknown>) => ({ ...preset, diagnostics: { glitter: { ...preset.diagnostics!.glitter!, regions: [{ layer: "left", mips: "nested", flakes }] } } });
+  expect(glitterOf(knob(FLAKES_2) as never)).toBeDefined();
+  for (const bad of [{ ...FLAKES_2, tiltMinDeg: 70 }, { ...FLAKES_2, roughnessMax: .1 }, { ...FLAKES_2, metalnessMin: 1.2 },
+    { ...FLAKES_2, largeSizeMm: undefined }, { ...FLAKES_2, clusterFloor: undefined }, { ...FLAKES_2, sparkle: 1 }])
+    expect(() => glitterOf(knob(JSON.parse(JSON.stringify(bad))) as never)).toThrow(/outside the diagnostic rules|inconsistent optional flake fields/);
+  for (const bad of [{ ...FLAKES_2, tiltMinDeg: 66 }, { ...FLAKES_2, roughnessMax: .1 }, { ...FLAKES_2, largeSizeMm: undefined }, { ...FLAKES_2, sparkle: 1 }])
+    expect(() => preparePackageCollection(collection([patch("left", LEFT)], { regions: [{ layer: "left", mips: "nested", flakes: JSON.parse(JSON.stringify(bad)) }] })))
+      .toThrow();
 });

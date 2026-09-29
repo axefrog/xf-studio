@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { FRESNEL_PRESET_RULE, planPresetExport } from "../src/engines/layered-makeup/finish-export";
-import { glitterModel, glitterModels, parseGlitterChoices } from "../src/engines/layered-makeup/glitter-model";
+import { DEFAULT_GLITTER_MODEL, glitterModel, glitterModels, parseGlitterChoices } from "../src/engines/layered-makeup/glitter-model";
+import { defaultFlakes } from "../src/engines/layered-makeup/finish";
+import { defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
 import { historyLabel } from "../src/history-labels";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
@@ -148,9 +150,26 @@ test("leaving Glitter keeps the active model's settings for when that model is c
   f.ok({ kind: "glitter.setDirect", layerId: id, key: "strength", value: 5 });
   f.ok({ kind: "layer.setFinish", layerId: id, finish: "matte" });
   f.ok({ kind: "layer.setFinish", layerId: id, finish: "glitter" });
-  expect(glitterModel(f.layer(0).flakes)).toBe("classic");
-  f.ok({ kind: "glitter.selectModel", layerId: id, model: "direct" });
+  // Becoming Glitter starts in the default model (direct-light glints), with this layer's remembered settings.
+  expect(glitterModel(f.layer(0).flakes)).toBe(DEFAULT_GLITTER_MODEL);
   expect((f.layer(0).flakes as { strength: number }).strength).toBe(5);
+  // The classic flake settings the layer had before it became Glitter are kept for the classic study.
+  f.ok({ kind: "glitter.selectModel", layerId: id, model: "classic" });
+  expect(f.layer(0).flakes).toEqual(defaultFlakes());
+});
+
+test("a layer becoming Glitter starts in the direct-light glint model, not the classic macro dots", () => {
+  const f = fixture(), id = f.layer(0).id;
+  f.ok({ kind: "layer.setFinish", layerId: id, finish: "shimmer" });
+  f.ok({ kind: "glitter.setClassic", layerId: id, key: "density", value: .4 });
+  f.ok({ kind: "layer.setFinish", layerId: id, finish: "glitter" });
+  expect(f.layer(0).flakes).toEqual(defaultDirectGlintFlakes());
+  // Undo returns the Shimmer layer exactly.
+  expect(f.app.dispatch({ kind: "history.undo" })).toMatchObject({ ok: true });
+  expect(f.layer(0).finish).toBe("shimmer"); expect((f.layer(0).flakes as { density: number }).density).toBe(.4);
+  // The catalogue offers the glint models first; the classic and irregular studies are research models.
+  const catalogue = f.app.glitterModelCatalogue();
+  expect(catalogue.map(item => [item.id, !!item.research])).toEqual([["direct", false], ["clustered", false], ["fine", false], ["classic", true], ["irregular", true]]);
 });
 
 test("layer export status follows the preset-level plan Check uses", () => {
@@ -206,6 +225,7 @@ test("game-matched Shimmer takes flake density and spread but refuses fineness; 
   f.ok({ kind: "glitter.setClassic", layerId: f.layer(0).id, key: "density", value: .5 });
   f.ok({ kind: "glitter.setClassic", layerId: f.layer(0).id, key: "tilt", value: .8 });
   f.ok({ kind: "layer.setFinish", layerId: f.layer(1).id, finish: "glitter" });
+  f.ok({ kind: "glitter.selectModel", layerId: f.layer(1).id, model: "classic" });
   f.ok({ kind: "glitter.setClassic", layerId: f.layer(1).id, key: "cells", value: 64 });
   // A Shimmer layer still in the earlier browser study keeps its classic facets.
   const earlier = initialRecipe();

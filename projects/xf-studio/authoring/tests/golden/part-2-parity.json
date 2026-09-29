@@ -1,5 +1,5 @@
 {
- "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); collection plan digests recaptured on claude/export-alpha2 for the hx_ makeup component prefix; package digests recaptured on claude/shimmer-rework for Shimmer's grain (shimmer-grain-1); Shimmer export note reworded after the UI gate (text only, package digests only); FresnelColor written sRGB-encoded (the engine sRGB-decodes Color parameters, materials open question 11) on claude/preview-tint-srgb (Colour-shifting presets' material constants, notes and package digests only)",
+ "capturedFrom": "step-2 code, commit 2dced39 (before part-2); finish defaults (Matte roughness 1.0, Colour-shifting metalness 0.08) recaptured on claude/finish-defaults; experimental finish notes reworded on claude/ui-copy-polish (text only); collection plan digests recaptured on claude/export-alpha2 for the hx_ makeup component prefix; package digests recaptured on claude/shimmer-rework for Shimmer's grain (shimmer-grain-1); Shimmer export note reworded after the UI gate (text only, package digests only); FresnelColor written sRGB-encoded (the engine sRGB-decodes Color parameters, materials open question 11) on claude/preview-tint-srgb (Colour-shifting presets' material constants, notes and package digests only); a layer becoming Glitter starts in the direct-light glint model instead of the classic macro dots, recaptured on claude/finishes-rework (the Glitter fixtures' setFinish steps, and the first fixture's last step now selects the classic model, since re-entry already selects direct)",
  "recipes": {
   "eye-artistry/recipe-1": {
    "recipe": "bec95166e1104aeaccba8465585abc6b204848a14aae7bb2721f47049b573fc1",
@@ -1117,52 +1117,6 @@
    },
    {
     "action": "layer.setFinish {\"finish\":\"glitter\",\"kind\":\"layer.setFinish\",\"layerId\":\"g-glit\"}",
-    "recipe": "9325702c560c1b46d607dc8082be4ea349a145543e39ca7d8232fb93c71ca8e6",
-    "changed": true,
-    "choices": "2348187657dc9e52df9c91215f92d508191205bbb3ca3f2c41640fe8c28ec8ba",
-    "layers": [
-     {
-      "optical": "[\"glossy\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
-      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.311,0.236,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.335,0.215,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.402,0.214,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.434,0.246,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.5]",
-      "masks": [
-       "d2d42094e9626d8be8f34afd400c6cd3be4a711c62f4c4bc6a9e527d242df154"
-      ]
-     },
-     {
-      "optical": "[\"iridescent\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
-      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.312,0.2367,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.337,0.2157,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.405,0.2147,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.438,0.2467,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0.004,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.85]",
-      "masks": [
-       "fd636bdd147fc8fda57efb0185f5c87815499022a3419c0c6810eb7e4c8ae008"
-      ]
-     },
-     {
-      "optical": "[\"glitter\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
-      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.313,0.2374,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.339,0.2164,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.40800000000000003,0.2154,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.442,0.2474,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0.008,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.85]",
-      "masks": [
-       "45d08628c7332e8e83f695a16ed178106c7f1bdc6913383be01497972d9af706"
-      ]
-     },
-     {
-      "optical": "[\"regular\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
-      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.314,0.23809999999999998,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.341,0.2171,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.41100000000000003,0.2161,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.446,0.2481,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.6]",
-      "masks": [
-       "4115636167d216d0f63f1bf636bc5441026d2e136632b8f4359adc0ecdb3bc11"
-      ]
-     }
-    ],
-    "plan": "94e9482d335d7afb053f439cfb8d87fd3dcda404ac2138fafdb723567bb2eb10",
-    "compiled": {
-     "route": "flat",
-     "maps": {
-      "diffuse": "e1d6822ff0ce5fe5d1ddb601591e8f71b1ad9048aa4773bb68b70b4dcdba55c4",
-      "roughness": "d9fc6bbfa1f823c61fdb4d1fc15fa36f99cc3652265503b0190dfdc30c0a056c",
-      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
-     },
-     "metadata": "e24438640b17374df25cbf746fa69a464b71d42689678c246c870e52cb143a7d"
-    }
-   },
-   {
-    "action": "glitter.selectModel {\"kind\":\"glitter.selectModel\",\"layerId\":\"g-glit\",\"model\":\"direct\"}",
     "recipe": "7b87514e97eb659b9fca16d28afbfd2c6e8e3bf2fdb5e5a7da35012581ff2b75",
     "changed": true,
     "choices": "a2ccf16dc64f6e00ed7378a905fb13595af4e9daf3c73f011ec02595875c1bd2",
@@ -1197,6 +1151,52 @@
      }
     ],
     "plan": "680018953cf5ab1273be48db060ae00c0b97e2e7f15bf9bbcd09d79d8f6720de",
+    "compiled": {
+     "route": "flat",
+     "maps": {
+      "diffuse": "e1d6822ff0ce5fe5d1ddb601591e8f71b1ad9048aa4773bb68b70b4dcdba55c4",
+      "roughness": "d9fc6bbfa1f823c61fdb4d1fc15fa36f99cc3652265503b0190dfdc30c0a056c",
+      "metalness": "8a39d2abd3999ab73c34db2476849cddf303ce389b35826850f9a700589b4a90"
+     },
+     "metadata": "e24438640b17374df25cbf746fa69a464b71d42689678c246c870e52cb143a7d"
+    }
+   },
+   {
+    "action": "glitter.selectModel {\"kind\":\"glitter.selectModel\",\"layerId\":\"g-glit\",\"model\":\"classic\"}",
+    "recipe": "9325702c560c1b46d607dc8082be4ea349a145543e39ca7d8232fb93c71ca8e6",
+    "changed": true,
+    "choices": "a2ccf16dc64f6e00ed7378a905fb13595af4e9daf3c73f011ec02595875c1bd2",
+    "layers": [
+     {
+      "optical": "[\"glossy\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
+      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.311,0.236,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.335,0.215,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.402,0.214,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.434,0.246,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.5]",
+      "masks": [
+       "d2d42094e9626d8be8f34afd400c6cd3be4a711c62f4c4bc6a9e527d242df154"
+      ]
+     },
+     {
+      "optical": "[\"iridescent\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
+      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.312,0.2367,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.337,0.2157,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.405,0.2147,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.438,0.2467,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0.004,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.85]",
+      "masks": [
+       "fd636bdd147fc8fda57efb0185f5c87815499022a3419c0c6810eb7e4c8ae008"
+      ]
+     },
+     {
+      "optical": "[\"glitter\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
+      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.313,0.2374,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.339,0.2164,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.40800000000000003,0.2154,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.442,0.2474,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0.008,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.85]",
+      "masks": [
+       "45d08628c7332e8e83f695a16ed178106c7f1bdc6913383be01497972d9af706"
+      ]
+     },
+     {
+      "optical": "[\"regular\",{\"cells\":128,\"density\":0.65,\"tilt\":0.65,\"seed\":2077},1024]",
+      "alpha": "[\"xfs/makeup-dependencies-1\",\"alpha\",\"recipe-6-coverage-1\",\"gltf-uv0-top-left\",1024,true,\"bezier\",[[0.314,0.23809999999999998,1,null,[\"symmetric\",0.016499999999999997,0.005166666666666667,-0.016499999999999997,-0.005166666666666667]],[0.341,0.2171,1,null,[\"symmetric\",-0.01516666666666667,0.0036666666666666653,0.01516666666666667,-0.0036666666666666653]],[0.41100000000000003,0.2161,1,null,[\"symmetric\",-0.016499999999999997,-0.005166666666666667,0.016499999999999997,0.005166666666666667]],[0.446,0.2481,1,null,[\"symmetric\",0.01516666666666667,-0.0036666666666666653,-0.01516666666666667,0.0036666666666666653]]],[\"smooth-boundary\",0.0005],[\"uniform\",null],0.006,[[0.36,0.23,0,-0.002,0.05],[0.4,0.24,0,0.003,0.03]],true,0.6]",
+      "masks": [
+       "4115636167d216d0f63f1bf636bc5441026d2e136632b8f4359adc0ecdb3bc11"
+      ]
+     }
+    ],
+    "plan": "94e9482d335d7afb053f439cfb8d87fd3dcda404ac2138fafdb723567bb2eb10",
     "compiled": {
      "route": "flat",
      "maps": {

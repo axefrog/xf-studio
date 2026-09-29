@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { defaultFlakes, type LegacyFlakes } from "../src/engines/layered-makeup/finish";
 import { createHash } from "node:crypto";
-import { bakeShimmerGrain, createShimmerGrainJob, grainAt, grainCellsPerTexel, grainPitch, grainSettings, grainVariance, previewGrainGrid,
+import { bakeShimmerGrain, createShimmerGrainJob, grainAt, grainCellsPerTexel, grainMeanSurface, grainPitch, grainSettings, grainVariance, previewGrainGrid,
   sinRad, SHIMMER_GRAIN, turn } from "../src/engines/layered-makeup/shimmer-grain";
 import { plateUvWindow } from "../src/engines/layered-makeup/plate-uv-window";
 import { EYE_MAKEUP_REGION } from "./fixtures/eye-region";
@@ -11,7 +11,7 @@ const byte = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255);
 /** NormalsBlendingMode 1's weight for a decoded tangent normal. */
 const gate = (x: number, y: number) => Math.max(0, Math.min(1, 50 - 50 * Math.sqrt(Math.max(0, 1 - x * x - y * y))));
 
-test("grain: deterministic, seeded, the set share tilted, and every tilted grain clears the mode-1 gate", () => {
+test("grain: deterministic, seeded, nearly every texel a speck, every speck glossy and clearing the mode-1 gate, the rest satin", () => {
   const p = defaultFlakes(), size = 256, a = bakeShimmerGrain(p, size, size, { u0: 0, u1: size / 4096, v0: 0, v1: size / 4096 });
   expect(bakeShimmerGrain(p, size, size, { u0: 0, u1: size / 4096, v0: 0, v1: size / 4096 })).toEqual(a);
   const tiny = { u0: 0, u1: 64 / 4096, v0: 0, v1: 64 / 4096 };
@@ -20,15 +20,20 @@ test("grain: deterministic, seeded, the set share tilted, and every tilted grain
   let tilted = 0;
   for (let t = 0; t < size * size; t++) {
     const x = unorm(a.normal[t * 2]), y = unorm(a.normal[t * 2 + 1]);
-    expect(Array.from(a.surface.subarray(t * 2, t * 2 + 2))).toEqual([byte(SHIMMER_GRAIN.roughness), byte(SHIMMER_GRAIN.metalness)]);
-    if (a.normal[t * 2] === 128 && a.normal[t * 2 + 1] === 128) continue;
+    const flat = a.normal[t * 2] === 128 && a.normal[t * 2 + 1] === 128, own = flat ? SHIMMER_GRAIN.base : SHIMMER_GRAIN.speck;
+    expect(Array.from(a.surface.subarray(t * 2, t * 2 + 2))).toEqual([byte(own.roughness), byte(own.metalness)]);
+    if (flat) continue;
     tilted++;
     const sine = Math.hypot(x, y);
     expect(sine).toBeGreaterThan(Math.sin(low) - .006); expect(sine).toBeLessThan(Math.sin(high) + .006);
     expect(gate(x, y)).toBe(1);
   }
   expect(Math.abs(tilted / (size * size) - share)).toBeLessThan(.01);
-  expect(share).toBeCloseTo(.26, 10);
+  expect(share).toBeCloseTo(.8625, 10);
+  // A narrow band just above the fade: 13–18.2° at the default tilt.
+  expect(low * 180 / Math.PI).toBeCloseTo(13, 10); expect(high * 180 / Math.PI).toBeCloseTo(18.2, 10);
+  // Between specks the base keeps the skin's scattering (metalness below 0.1).
+  expect(SHIMMER_GRAIN.base.metalness).toBeLessThan(.1); expect(SHIMMER_GRAIN.base.roughness).toBeGreaterThan(SHIMMER_GRAIN.speck.roughness);
 });
 
 test("grain: no lattice, no discs — tilt is uncorrelated between neighbouring and distant cells", () => {
@@ -48,13 +53,16 @@ test("grain scale: one cell per plate-window texel; head maps hold their cells' 
   expect(grainCellsPerTexel(4096, 4096)).toEqual({ u: 1, v: 1 });
   expect(grainCellsPerTexel(2048, 2048)).toEqual({ u: 2, v: 2 });
   const p = { ...defaultFlakes(), density: 1, tilt: .5 }, fine = bakeShimmerGrain(p, 2048, 2048, { u0: 0, u1: .5, v0: 0, v1: .5 });
-  const coarse = bakeShimmerGrain(p, 1024, 1024, { u0: 0, u1: .5, v0: 0, v1: .5 }), alpha2 = SHIMMER_GRAIN.roughness ** 4;
+  const coarse = bakeShimmerGrain(p, 1024, 1024, { u0: 0, u1: .5, v0: 0, v1: .5 }), { speck, base } = SHIMMER_GRAIN;
   for (let y = 0; y < 1024; y += 37) for (let x = 0; x < 1024; x += 41) {
-    let sx = 0, sy = 0, s2 = 0;
-    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) { const [gx, gy] = grainAt(2 * x + i, 2 * y + j, p); sx += gx; sy += gy; s2 += gx * gx + gy * gy; }
-    const mx = sx / 4, my = sy / 4, t = y * 1024 + x;
+    let sx = 0, sy = 0, s2 = 0, specks = 0;
+    for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
+      const [gx, gy] = grainAt(2 * x + i, 2 * y + j, p); sx += gx; sy += gy; s2 += gx * gx + gy * gy; if (gx || gy) specks++;
+    }
+    const mx = sx / 4, my = sy / 4, t = y * 1024 + x, f = specks / 4, r = f * speck.roughness + (1 - f) * base.roughness;
     expect([coarse.normal[t * 2], coarse.normal[t * 2 + 1]]).toEqual([byte(mx * .5 + .5), byte(my * .5 + .5)]);
-    expect(coarse.surface[t * 2]).toBe(byte((alpha2 + Math.max(0, s2 / 4 - mx * mx - my * my)) ** .25));
+    expect(coarse.surface[t * 2]).toBe(byte((r ** 4 + Math.max(0, s2 / 4 - mx * mx - my * my)) ** .25));
+    expect(coarse.surface[t * 2 + 1]).toBe(byte(f * speck.metalness + (1 - f) * base.metalness));
     // The coarse texel's mean is the mean of the fine map's decoded normals, to byte rounding.
     const fx = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([i, j]) => unorm(fine.normal[((2 * y + j) * 2048 + 2 * x + i) * 2]));
     expect(Math.abs(fx.reduce((a, b) => a + b, 0) / 4 - unorm(coarse.normal[t * 2]))).toBeLessThan(.01);
@@ -64,7 +72,8 @@ test("grain scale: one cell per plate-window texel; head maps hold their cells' 
   expect(grainCellsPerTexel(1024, 1024)).toEqual({ u: 4, v: 4 });
   for (let t = 0; t < 1024 * 1024; t += 4099) {
     expect(Array.from(analytic.normal.subarray(t * 2, t * 2 + 2))).toEqual([128, 128]);
-    expect(analytic.surface[t * 2]).toBe(byte((alpha2 + grainVariance(p)) ** .25));
+    expect(analytic.surface[t * 2]).toBe(byte((grainMeanSurface(p).roughness ** 4 + grainVariance(p)) ** .25));
+    expect(analytic.surface[t * 2 + 1]).toBe(byte(grainMeanSurface(p).metalness));
   }
   // The expected variance matches the drawn grains.
   let s2 = 0;
@@ -92,10 +101,10 @@ test("seeds: neighbouring seeds draw unrelated streams, not one stream shifted b
     return Array.from({ length: n * n }, (_, t) => g[t * 2] !== 128 || g[t * 2 + 1] !== 128);
   };
   const agreement = (a: boolean[], b: boolean[]) => a.filter((v, i) => v === b[i]).length / a.length;
-  // Independent fields at share s agree on s² + (1 − s)² of cells (0.62 at the default 0.26); a shared stream agrees far more.
+  // Independent fields at share s agree on s² + (1 − s)² of cells (0.76 at the default 0.8625); a shared stream agrees far more.
   for (const seed of [0, 1, 2076, 2077, 40000]) {
     const a = tilted(seed), b = tilted(seed + 1);
-    expect(agreement(a, b)).toBeLessThan(.7);
+    expect(agreement(a, b)).toBeLessThan(.82);
   }
   // Under the old key (seed + salt), seed s + 1 drew its tilt from seed s's azimuth draw: the tilt of s + 1 was a function of the
   // azimuth of s wherever both tilted (correlation 1). Now the two are unrelated.
@@ -122,13 +131,14 @@ test("determinism: the byte path uses exact IEEE operations only, and the defaul
     expect(Math.abs(s - Math.sin(2 * Math.PI * t))).toBeLessThan(1e-15);
   }
   expect(() => sinRad(-.1)).toThrow(); expect(() => sinRad(2)).toThrow();
-  // The built-in plate window's default grain, as Build lays it: these digests were taken before the change and must never move.
+  // The built-in plate window's default grain, as Build lays it. Pinned for shimmer-grain-2 (29 September; shimmer-grain-1's were
+  // 5f38f9d6460ae113 / 7c5adbbb5f47446e): they move only with a deliberate new model id, never with a refactor.
   const window = plateUvWindow({ uMin: 0.273193359375, uMax: 0.7265625, vMin: 0.67626953125, vMax: 0.8212890625 });
   const g = bakeShimmerGrain(defaultFlakes(), 2048, 512, window), sha = (a: Uint8Array) => createHash("sha256").update(a).digest("hex").slice(0, 16);
-  expect(sha(g.normal)).toBe("5f38f9d6460ae113");
-  expect(sha(g.surface)).toBe("7c5adbbb5f47446e");
+  expect(sha(g.normal)).toBe("f16e43ff58bfa3ec");
+  expect(sha(g.surface)).toBe("ac8b87496a329fc8");
   const coarse = bakeShimmerGrain({ ...defaultFlakes(), density: 1, tilt: .5 }, 1024);
-  expect([sha(coarse.normal), sha(coarse.surface)]).toEqual(["e303b22f75fb4f8b", "80ad25c9d7d6f585"]);
+  expect([sha(coarse.normal), sha(coarse.surface)]).toEqual(["e303b22f75fb4f8b", "ce59dbf35d4d94df"]);
 });
 
 test("pitch and the preview grid: the real grains per unit of UV, and a grain-aligned power-of-two preview window (PIPE-124, PREV-182)", () => {

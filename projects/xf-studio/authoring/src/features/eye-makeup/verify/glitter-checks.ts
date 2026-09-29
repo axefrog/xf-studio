@@ -10,7 +10,8 @@
 // - Regions: a region's UV rectangle is its layer's outline bounds (restated in resource-checks.ts) clipped to the
 //   window; its texels at a width × height level are [floor(a·n), ceil(b·n)), and flakes or tilted normals appear only
 //   within a margin of them.
-// - Tilt: no normal tilts beyond the largest tilt maximum of the knob.
+// - Tilt: no normal tilts beyond the largest tilt maximum of the knob; where a region sets a tilt minimum (glitter flakes 2),
+//   every fully covered flake texel tilts at least that far (± byte rounding), so no flake falls under mode 1's ≈ 11.5° fade.
 // - Density: a nested region's level-0 mask mean is within half and 1.6 times its authored cover.
 // - Resolved flakes: in a nested region, every connected flake (8-connected, fully covered texels, one region)
 //   holds at least 2.3 texels² of mask, the least a 2-texel hexagon can hold (2.6); a 1-texel flake cannot.
@@ -20,9 +21,11 @@
 // - BOX regions: every lower level inside the region is the plain 2×2 BOX chain of the level-0 bytes (mask,
 //   normal X/Y, roughness, metalness and linear diffuse RGB), byte for byte.
 // - Sheen: at levels that draw no flakes in a nested region, its fully covered texels' roughness and metalness are
-//   the base surface moved toward ((r_f²)² + E[sin²θ])^¼ and the flake metalness by the authored cover (± 1 byte).
+//   the base surface moved toward ((r_f²)² + E[sin²θ])^¼ and the flake metalness by the authored cover (± 1 byte), r_f and the
+//   metalness being the middle of the per-flake ranges where a region draws them.
 // - Flake contents (PIPE-68), on every texel whose mask is 255 inside exactly one region (nested regions on every
-//   level, BOX regions at level 0): roughness and metalness within one byte of the region's flake values, diffuse the
+//   level, BOX regions at level 0): roughness and metalness within one byte of the region's flake values (of their per-flake
+//   ranges, glitter flakes 2), diffuse the
 //   flake colour, most flakes tilted, and the tangent (X, Y) one of the region's catalogue flakes near the texel, ± 1
 //   byte. The catalogue (seeded xoshiro128**, draw order, mirror across u = ½) is restated below; it pins the tangent
 //   frame's signs and the flakes' places, which no statistic can.
@@ -100,16 +103,35 @@ export function components(mask: Uint8Array, dims: Dims): number[][] {
   return out;
 }
 
-/** E[sin²θ] of |N(0, σ)| truncated at the maximum and redrawn uniformly below it (degrees), restated. */
-export function restatedTiltVariance(sigma: number, max: number): number {
-  if (sigma <= 0) return 0;
-  const n = 4000, h = max / n, s2 = (d: number) => Math.sin(d * Math.PI / 180) ** 2;
+/** E[sin²θ] of min + |N(0, σ)| up to the maximum, redrawn uniformly between the minimum and the maximum above it (degrees), restated. */
+export function restatedTiltVariance(sigma: number, max: number, min = 0): number {
+  const s2 = (d: number) => Math.sin(d * Math.PI / 180) ** 2;
+  if (sigma <= 0) return min ? s2(min) : 0;
+  const n = 4000, span = max - min, h = span / n;
   let p = 0, e = 0, u = 0;
   for (let i = 0; i <= n; i++) {
     const d = i * h, w = (i === 0 || i === n ? 1 : i % 2 ? 4 : 2) * h / 3, g = 2 / (sigma * Math.sqrt(2 * Math.PI)) * Math.exp(-d * d / (2 * sigma * sigma));
-    p += w * g; e += w * g * s2(d); u += w * s2(d);
+    p += w * g; e += w * g * s2(min + d); u += w * s2(min + d);
   }
-  return e + Math.max(0, 1 - p) * u / max;
+  return e + Math.max(0, 1 - p) * u / span;
+}
+/** A region's mean flake roughness and metalness: the middle of each per-flake draw (restated). */
+export const restatedMeanSurface = (f: VerifierGlitter["regions"][number]["flakes"]) => ({
+  roughness: f.roughnessMax !== undefined ? (f.roughness + f.roughnessMax) / 2 : f.roughness,
+  metalness: f.metalnessMin !== undefined ? (f.metalnessMin + f.metalness) / 2 : f.metalness,
+});
+
+/** The published cluster envelope, restated: value noise on a `clusterMm` lattice through smoothstep(0.22, 0.72), floor to 1. */
+export function restatedClusterEnvelope(x: number, y: number, f: { seed: number; clusterMm?: number; clusterFloor?: number }): number {
+  const corner = (i: number, j: number) => {
+    let h = Math.imul(i | 0, 0x27d4eb2d) ^ Math.imul((j | 0) ^ 0x5bd1e995, 0x165667b1) ^ Math.imul(f.seed | 0, 0x9e3779b1);
+    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  };
+  const s = (t: number) => t * t * (3 - 2 * t);
+  const gx = x / f.clusterMm!, gy = y / f.clusterMm!, i = Math.floor(gx), j = Math.floor(gy), tx = s(gx - i), ty = s(gy - j);
+  const v = (corner(i, j) * (1 - tx) + corner(i + 1, j) * tx) * (1 - ty) + (corner(i, j + 1) * (1 - tx) + corner(i + 1, j + 1) * tx) * ty;
+  return f.clusterFloor! + (1 - f.clusterFloor!) * s(Math.max(0, Math.min(1, (v - .22) / (.72 - .22))));
 }
 
 /** The published seeded stream, restated: xoshiro128** seeded by four splitmix32 draws, returning r / 2³². */
@@ -123,11 +145,14 @@ export function restatedRandom(seed: number): () => number {
     return out / 4294967296;
   };
 }
-/** A region's catalogue as far as the content checks need it: centres (window mm), widths, aspects and tangents. */
-export interface RestatedCatalogue { cx: Float64Array; cy: Float64Array; width: Float64Array; aspect: Float64Array; nx: Float64Array; ny: Float64Array }
+/** A region's catalogue as far as the content checks need it: centres (window mm), widths, aspects, tangents and surfaces. */
+export interface RestatedCatalogue { cx: Float64Array; cy: Float64Array; width: Float64Array; aspect: Float64Array; nx: Float64Array; ny: Float64Array;
+  rough: Float64Array; metal: Float64Array }
 /**
- * The published draw order per flake: tilt |N(0, σ)| (Box–Muller of 1 − r, r), redrawn uniformly below the maximum
- * when above it; azimuth; centre x, y over the rectangle; width size·e^{σ_w N}; rotation; aspect 1 + 0.4 r; key.
+ * The published draw order per flake: tilt min + |N(0, σ)| (Box–Muller of 1 − r, r), redrawn uniformly between the minimum and
+ * the maximum when above it; azimuth; centre x, y over the rectangle (a clustered region repeats x, y until an acceptance draw
+ * falls below the envelope, at most 64 draws); width size·e^{σ_w N}; rotation; aspect 1 + 0.4 r; key; then, only when set,
+ * the large-population draw (width × large/size below the share), roughness and metalness uniform in their ranges.
  */
 export function restatedCatalogue(rect: Rect, window: VerifierWindow, f: VerifierGlitter["regions"][number]["flakes"]): RestatedCatalogue {
   const x0 = (rect.u0 - window.u0) * GLITTER_REGION_RULES.mmPerU, x1 = (rect.u1 - window.u0) * GLITTER_REGION_RULES.mmPerU;
@@ -136,14 +161,21 @@ export function restatedCatalogue(rect: Rect, window: VerifierWindow, f: Verifie
   ensure(n <= GLITTER_REGION_RULES.maxFlakes, `A glitter region would hold about ${n} flakes, more than ${GLITTER_REGION_RULES.maxFlakes}`);
   const gauss = () => { const u = 1 - random(), v = random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
   const out: RestatedCatalogue = { cx: new Float64Array(n), cy: new Float64Array(n), width: new Float64Array(n), aspect: new Float64Array(n),
-    nx: new Float64Array(n), ny: new Float64Array(n) };
+    nx: new Float64Array(n), ny: new Float64Array(n), rough: new Float64Array(n), metal: new Float64Array(n) };
+  const min = f.tiltMinDeg ?? 0;
   for (let i = 0; i < n; i++) {
-    let tilt = Math.abs(gauss() * f.tiltSigmaDeg);
-    if (tilt > f.tiltMaxDeg) tilt = random() * f.tiltMaxDeg;
+    let tilt = min + Math.abs(gauss() * f.tiltSigmaDeg);
+    if (tilt > f.tiltMaxDeg) tilt = min + random() * (f.tiltMaxDeg - min);
     const azimuth = random() * 2 * Math.PI, s = Math.sin(tilt * Math.PI / 180);
     out.cx[i] = x0 + random() * (x1 - x0); out.cy[i] = y0 + random() * (y1 - y0);
+    if (f.clusterMm !== undefined) for (let tries = 1; random() >= restatedClusterEnvelope(out.cx[i], out.cy[i], f) && tries < 64; tries++) {
+      out.cx[i] = x0 + random() * (x1 - x0); out.cy[i] = y0 + random() * (y1 - y0);
+    }
     out.width[i] = f.sizeMm * Math.exp(f.sizeSigma * gauss()); random(); out.aspect[i] = 1 + random() * .4;
     out.nx[i] = s * Math.cos(azimuth); out.ny[i] = s * Math.sin(azimuth); random();
+    if (f.largeShare !== undefined && random() < f.largeShare) out.width[i] *= f.largeSizeMm! / f.sizeMm;
+    out.rough[i] = f.roughnessMax !== undefined ? f.roughness + random() * (f.roughnessMax - f.roughness) : f.roughness;
+    out.metal[i] = f.metalnessMin !== undefined ? f.metalnessMin + random() * (f.metalness - f.metalnessMin) : f.metalness;
   }
   return out;
 }
@@ -170,6 +202,8 @@ export interface GlitterChainReport {
   levels: { level: number; width: number; height: number; components: number; minComponentMass: number | null; nestedOnFiner: number | null }[];
   regionCover: { layer: string; mips: string; level0MaskMean: number }[];
   boxTexelsChecked: number; sheenTexelsChecked: number; maxTiltSine: number;
+  /** The least tilt sine of a fully covered flake texel in a region with a tilt minimum (glitter flakes 2); null when none sets one. */
+  minFlakeTiltSine: number | null;
   /** Flake contents: fully covered flake texels checked, the least share whose tangent is a nearby catalogue flake's, and the least tilted share. */
   flakeTexelsChecked: number; minNormalMatch: number | null; minTiltedShare: number | null;
   /** Level-0 pigment texels (no flakes, fully covered) checked against the layers' colours and the base surface. */
@@ -300,7 +334,8 @@ export function checkGlitterChains(name: string, recipe: Node, glitter: Verifier
 
   // Sheen at levels without flakes in a nested region.
   let sheenTexels = 0;
-  const sheenOf = (f: VerifierGlitter["regions"][number]["flakes"]) => ((f.roughness ** 2) ** 2 + restatedTiltVariance(f.tiltSigmaDeg, f.tiltMaxDeg)) ** .25;
+  const sheenOf = (f: VerifierGlitter["regions"][number]["flakes"]) =>
+    ((restatedMeanSurface(f).roughness ** 2) ** 2 + restatedTiltVariance(f.tiltSigmaDeg, f.tiltMaxDeg, f.tiltMinDeg ?? 0)) ** .25;
   const baseR = unitByte(glitter.base.roughness) / 255, baseM = unitByte(glitter.base.metalness) / 255;
   dims.forEach((d, L) => {
     const inside = insideOf[L];
@@ -311,7 +346,7 @@ export function checkGlitterChains(name: string, recipe: Node, glitter: Verifier
       for (let y = rect.y0; y < rect.y1 && !any; y++) for (let x = rect.x0; x < rect.x1; x++) if (chains.flakes[L][y * d.width + x]) { any = true; break; }
       if (any) return;
       const f = region.flakes, c = f.cover, sheen = sheenOf(f);
-      const wantR = unitByte(baseR * (1 - c) + sheen * c), wantM = unitByte(baseM * (1 - c) + f.metalness * c);
+      const wantR = unitByte(baseR * (1 - c) + sheen * c), wantM = unitByte(baseM * (1 - c) + restatedMeanSurface(f).metalness * c);
       for (let y = rect.y0; y < rect.y1; y++) for (let x = rect.x0; x < rect.x1; x++) {
         const t = y * d.width + x;
         if (inside.count[t] !== 1 || inside.index[t] !== r || chains.diffuse[L][4 * t + 3] !== 255) continue;
@@ -330,7 +365,7 @@ export function checkGlitterChains(name: string, recipe: Node, glitter: Verifier
   regions.forEach((region, r) => {
     if (region.mirrorOf !== undefined) catalogues[r] = restatedMirror(catalogues[regions.findIndex(other => other.layer === region.mirrorOf)], window);
   });
-  let flakeTexels = 0, minNormalMatch: number | null = null, minTiltedShare: number | null = null;
+  let flakeTexels = 0, minNormalMatch: number | null = null, minTiltedShare: number | null = null, minFlakeTiltSine: number | null = null;
   const layerColours = (recipe?.layers ?? []).filter((l: Node) => l?.enabled && l.opacity > 0).map((l: Node) => hexBytes(String(l.color)));
   dims.forEach((d, L) => {
     const tu = (window.u1 - window.u0) * limits.mmPerU / d.width, tv = (window.v1 - window.v0) * limits.mmPerV / d.height;
@@ -339,7 +374,9 @@ export function checkGlitterChains(name: string, recipe: Node, glitter: Verifier
       metalness: chains.metalness[L], diffuse: chains.diffuse[L] };
     regions.forEach((region, r) => {
       if (region.mips === "box" && L > 0) return;
-      const f = region.flakes, wantR = unitByte(f.roughness), wantM = unitByte(f.metalness), colour = hexBytes(f.color);
+      const f = region.flakes, colour = hexBytes(f.color);
+      const rough = [unitByte(f.roughness) - 1, unitByte(f.roughnessMax ?? f.roughness) + 1], metal = [unitByte(f.metalnessMin ?? f.metalness) - 1, unitByte(f.metalness) + 1];
+      const floorSine = f.tiltMinDeg !== undefined ? Math.sin(f.tiltMinDeg * Math.PI / 180) - .006 : null;
       // Diffuse at a fully covered flake: the flake colour, mixed with at most 0.5/255 of the pigment underneath.
       const e = 1 - 254.5 / 255, fc = colour.map(b => decodeSrgb(b / 255));
       const colourRange = [0, 1, 2].map(k => {
@@ -353,12 +390,19 @@ export function checkGlitterChains(name: string, recipe: Node, glitter: Verifier
         const t = y * d.width + x;
         if (flakes[t] !== 255 || inside.count[t] !== 1 || inside.index[t] !== r || diffuse[4 * t + 3] !== 255) continue;
         checked++;
-        if (Math.abs(roughness[t] - wantR) > 1 || Math.abs(metalness[t] - wantM) > 1)
-          ensure(false, `Glitter flakes of ${region.layer} in ${name} level ${L} are ${roughness[t]}/${metalness[t]}, not their ${wantR}/${wantM}`);
+        if (roughness[t] < rough[0] || roughness[t] > rough[1] || metalness[t] < metal[0] || metalness[t] > metal[1])
+          ensure(false, `Glitter flakes of ${region.layer} in ${name} level ${L} are ${roughness[t]}/${metalness[t]}, outside their ` +
+            `${rough[0] + 1}–${rough[1] - 1}/${metal[0] + 1}–${metal[1] - 1}`);
         for (let k = 0; k < 3; k++) if (diffuse[4 * t + k] < colourRange[k][0] || diffuse[4 * t + k] > colourRange[k][1])
           ensure(false, `Glitter flakes of ${region.layer} in ${name} level ${L} are not their colour ${f.color}`);
         const X = normal[2 * t], Y = normal[2 * t + 1];
         if (X !== 128 || Y !== 128) tilted++;
+        if (floorSine !== null) {
+          const sine = Math.hypot(unorm(X), unorm(Y));
+          ensure(sine >= floorSine, () => `A glitter flake of ${region.layer} in ${name} level ${L} tilts less than its ${f.tiltMinDeg}° minimum ` +
+            `(sine ${sine.toFixed(4)}), so NormalsBlendingMode 1 would fade it`);
+          minFlakeTiltSine = minFlakeTiltSine === null ? sine : Math.min(minFlakeTiltSine, sine);
+        }
         const px = (x + .5) * tu, py = (y + .5) * tv;
         for (const i of near(px, py)) {
           if (Math.hypot(c.cx[i] - px, c.cy[i] - py) > reach) continue;
@@ -393,7 +437,7 @@ export function checkGlitterChains(name: string, recipe: Node, glitter: Verifier
       return [Math.max(0, share - .003), Math.min(1, share + .003)];
     });
     const ranges = [...regions.map((region, r) => ({ f: region.flakes, s: shares[r] })), { f: null, s: [0, 0] }].map(({ f, s }) => {
-      const fc = f ? hexBytes(f.color).map(b => decodeSrgb(b / 255)) : [0, 0, 0], sheen = f ? sheenOf(f) : 0, fm = f ? f.metalness : 0;
+      const fc = f ? hexBytes(f.color).map(b => decodeSrgb(b / 255)) : [0, 0, 0], sheen = f ? sheenOf(f) : 0, fm = f ? restatedMeanSurface(f).metalness : 0;
       const span = (values: number[]) => [Math.min(...values) - 1, Math.max(...values) + 1];
       return {
         colour: [0, 1, 2].map(k => span(s.flatMap(share => [lo[k], hi[k]].map(b => unitByte(encodeSrgb(decodeSrgb(b / 255) * (1 - share) + fc[k] * share)))))),
@@ -413,6 +457,7 @@ export function checkGlitterChains(name: string, recipe: Node, glitter: Verifier
     }
   }
   return { levels, regionCover, boxTexelsChecked: boxTexels, sheenTexelsChecked: sheenTexels, maxTiltSine: Math.round(worstSine * 1e4) / 1e4,
+    minFlakeTiltSine: minFlakeTiltSine === null ? null : Math.round(minFlakeTiltSine * 1e4) / 1e4,
     flakeTexelsChecked: flakeTexels, minNormalMatch: minNormalMatch === null ? null : Math.round(minNormalMatch * 1e4) / 1e4,
     minTiltedShare: minTiltedShare === null ? null : Math.round(minTiltedShare * 1e4) / 1e4, pigmentTexelsChecked: pigmentTexels };
 }

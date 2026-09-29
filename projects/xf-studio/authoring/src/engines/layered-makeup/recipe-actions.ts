@@ -4,7 +4,7 @@ import { transformLayer } from "./shape-transform";
 import { isDirectGlint } from "./direct-glint-settings";
 import type { FieldSelection } from "./field-selection";
 import { canonicalFinish, defaultFlakes, isIrregular, type Flakes } from "./finish";
-import { glitterModel, glitterModels, selectGlitterModel, validGlitterSettings, validShiftSettings,
+import { DEFAULT_GLITTER_MODEL, glitterModel, glitterModelDefaults, glitterModels, selectGlitterModel, validGlitterSettings, validShiftSettings,
   type GlitterChoices, type GlitterModel, type LayerChoices } from "./glitter-model";
 import { editPigment, type PigmentCommand } from "./pigment-edit";
 import { FLAKE_LIMITS, REGION_FLAKE_STUDY_LIMITS, validStudioIrregularSettings, type IrregularFlakes } from "./flake-field";
@@ -257,6 +257,13 @@ export function applyRecipeAction(state: RecipeActionState, action: RecipeAction
       const model = glitterModel(layer.flakes);
       if (validGlitterSettings(model, layer.flakes)) memory[model] = structuredClone(layer.flakes!);
       changed.flakes = defaultFlakes();
+    }
+    if (canonicalFinish(action.finish) === "glitter") {
+      // Becoming Glitter starts in the default model, with its settings from this layer's last visit if any; the classic
+      // flake settings (Shimmer's too) are kept for the classic study.
+      if (layer.flakes && validGlitterSettings("classic", layer.flakes)) memory.classic = structuredClone(layer.flakes);
+      const saved = memory[DEFAULT_GLITTER_MODEL];
+      changed.flakes = saved && validGlitterSettings(DEFAULT_GLITTER_MODEL, saved) ? structuredClone(saved) : glitterModelDefaults(DEFAULT_GLITTER_MODEL);
     }
     if (Object.keys(memory).length) nextChoices[key] = memory;
     changed.finish = action.finish; effect = "immediate";

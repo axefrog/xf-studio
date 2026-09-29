@@ -28,6 +28,8 @@ export type FinishDescriptor = {
   exportNote: string;
 };
 export type GlitterModelDescriptor = { id: GlitterModel; label: string; summary: string;
+  /** A research study: offered only with research tools on (or on a layer already using it). */
+  research?: boolean;
   /**
    * The stored flake-model names that mean this Glitter model (a layer's `flakes.model`; classic flakes have none), so a view
    * finds a layer's model by data, never by its own table (UI-10).
@@ -75,18 +77,22 @@ export function finishCatalogue(wording: RegionWording): FinishDescriptor[] {
 /** The legacy glint-strength control's top (of the parser's 32), kept for usable slider resolution. */
 const GLINT_CONTROL_MAX = Object.freeze({ strength: 16 });
 const classicDefaults = () => { const { cells, density, tilt } = defaultFlakes(); return Object.freeze({ cells, density, tilt }); };
-/** The Glitter models' descriptors; `wording` names the region's area. */
+/**
+ * The Glitter models' descriptors, in menu order; `wording` names the region's area. The glint models come first and are
+ * offered to everyone (direct-light glints are what a layer starts with, glitter-model.ts `DEFAULT_GLITTER_MODEL`); the classic
+ * and irregular flake studies are research models.
+ */
 export function glitterModelCatalogue(wording: RegionWording): GlitterModelDescriptor[] {
   return [
-    { id: "classic", label: "Classic reflective flakes", stored: [], defaults: classicDefaults(),
-      summary: "Original reflective flake map; existing classic recipes retain this look." },
-    { id: "irregular", label: "Irregular raster flakes", stored: ["irregular-planar-1"],
-      summary: `Irregular flakes are baked into a texture. Dense settings cover ${wording.area} and can lose sparkle at face distance.` },
     { id: "direct", label: "Direct-light glints", stored: ["uv-cell-direct-1"], controlMax: GLINT_CONTROL_MAX,
       summary: "Fine facets and occasional larger flashes respond to the preview light." },
     { id: "clustered", label: "Clustered fine glints", stored: ["uv-cell-direct-2"], controlMax: GLINT_CONTROL_MAX,
       summary: "Fine facets gather in soft clusters over a continuous sheen." },
     { id: "fine", label: "Dense fine speckles", stored: ["uv-cell-direct-3"], controlMax: GLINT_CONTROL_MAX,
       summary: "Denser tiny speckles with a sparse population of larger flashes; can look frosty." },
+    { id: "classic", label: "Classic reflective flakes", stored: [], defaults: classicDefaults(), research: true,
+      summary: "Original reflective flake map; existing classic recipes retain this look." },
+    { id: "irregular", label: "Irregular raster flakes", stored: ["irregular-planar-1"], research: true,
+      summary: `Irregular flakes are baked into a texture. Dense settings cover ${wording.area} and can lose sparkle at face distance.` },
   ];
 }
