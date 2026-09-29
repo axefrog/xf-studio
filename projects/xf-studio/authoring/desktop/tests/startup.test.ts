@@ -189,8 +189,8 @@ describe("a damaged or newer workspace never bricks the app", () => {
 });
 
 test("only a disposable UI-trial identity opens off-screen, and only when asked", () => {
-  const trial = String.raw`C:\Users\x\AppData\Local\dev.axefrog.xf-studio-ui-trial-abc12345\canary`;
-  const real = String.raw`C:\Users\x\AppData\Local\dev.axefrog.xf-studio\canary`;
+  const trial = String.raw`D:\Data\dev.axefrog.xf-studio-ui-trial-abc12345\canary`;
+  const real = String.raw`D:\Data\dev.axefrog.xf-studio\canary`;
   expect(trialWindowPosition(trial, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toEqual({ x: -9000, y: 0 });
   expect(trialWindowPosition(trial, {})).toBeNull();
   expect(trialWindowPosition(real, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toBeNull();
