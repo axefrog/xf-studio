@@ -36,7 +36,9 @@ const wolvenKitState = (phase: WolvenKitSetupState["phase"], patch: Partial<Wolv
 function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupState; autostart?: boolean; hostSetup?: boolean;
   games?: string[]; unsupported?: string[]; issues?: { source: string; code: string; detail: string }[]; loadHead?: () => Promise<void>;
   /** Mod Organizer 2 instances detection finds (the route question), and a kept Not now (the workspace's). */
-  mo2?: { root: string; name: string; managesCyberpunk: boolean; selectedProfile: string | null; profiles: string[] }[]; declined?: { value: boolean } } = {}) {
+  mo2?: { root: string; name: string; managesCyberpunk: boolean; selectedProfile: string | null; profiles: string[] }[]; declined?: { value: boolean };
+  /** Settings saved before this start. */
+  fields?: Partial<LocalSetupFields> } = {}) {
   const host = { preview: options.preview ?? previewState({}), wolvenKit: options.wolvenKit ?? wolvenKitState("ready"),
     down: false, requests: [] as string[], preparing: 0, head: options.loadHead ?? (async () => {}) };
   const preparation = new PreviewPreparationActions(async action => {
@@ -55,7 +57,7 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
     return { ok: true, data: host.wolvenKit };
   }, 5);
   let fields: LocalSetupFields = { gameRoot: null, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null,
-    wolvenKitCli: null, eyePlateHead: "installed", savesDirectory: null };
+    wolvenKitCli: null, eyePlateHead: "installed", savesDirectory: null, ...options.fields };
   let revision = 0;
   const saved: Partial<LocalSetupFields>[] = [];
   const view = (): LocalSetupView => ({ revision, source: "primary", fields, overridden: [],
@@ -533,6 +535,30 @@ test("with Mod Organizer 2 found, the first-run card asks how mods are installed
   await until(() => plain.setup.snapshot().card.primary?.action.kind === "previewSetup.useDetectedGame");
   expect(plain.setup.snapshot().card.route).toBeNull();
   expect(plain.setup.capability({ kind: "previewSetup.chooseRoute", route: "mo2" }).available).toBe(false);
+});
+
+test("Use this folder never pairs another MO2 folder in Settings with the found instance's profile (CORE-142)", async () => {
+  const needsGame = () => previewState({ phase: "needs-setup", needs: ["game"], canPrepare: false, code: "preview_game_missing",
+    message: "Choose your Cyberpunk 2077 game folder." });
+  const mo2 = [{ root: "D:\\MO2", name: "Cyberpunk MO2", managesCyberpunk: true, selectedProfile: "Main", profiles: ["Main"] }];
+  // Settings names another MO2 folder without a profile: that folder is saved, with no profile (never the found instance's).
+  const other = harness({ preview: needsGame(), games: ["D:\\Games\\Cyberpunk 2077"], mo2, fields: { mo2Root: "E:\\Modding\\MO2 Cyberpunk" } });
+  other.localSetup.requestRefresh();
+  await until(() => !!other.localSetup.snapshot().view);
+  await other.setup.start();
+  await until(() => !!other.setup.snapshot().card.route);
+  expect(other.setup.snapshot().card.route).toMatchObject({ detail: "MO2 Cyberpunk" });
+  await other.setup.dispatch({ kind: "previewSetup.useDetectedGame" });
+  expect(other.saved.at(-1)).toMatchObject({ launchRoute: "mo2", mo2Root: "E:\\Modding\\MO2 Cyberpunk", mo2ProfileId: null });
+  // The found instance's own folder in Settings (spelt differently): its profile fills in.
+  const same = harness({ preview: needsGame(), games: ["D:\\Games\\Cyberpunk 2077"], mo2, fields: { mo2Root: "d:/mo2/" } });
+  same.localSetup.requestRefresh();
+  await until(() => !!same.localSetup.snapshot().view);
+  await same.setup.start();
+  await until(() => !!same.setup.snapshot().card.route);
+  expect(same.setup.snapshot().card.route).toMatchObject({ detail: "Cyberpunk MO2 · profile Main" });
+  await same.setup.dispatch({ kind: "previewSetup.useDetectedGame" });
+  expect(same.saved.at(-1)).toMatchObject({ mo2Root: "d:/mo2/", mo2ProfileId: "Main" });
 });
 
 test("Not now is kept: a declined card stays closed after a restart until the person asks for it (readiness item 10)", async () => {

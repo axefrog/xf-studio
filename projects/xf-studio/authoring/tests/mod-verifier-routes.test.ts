@@ -209,6 +209,11 @@ test("route-specific tampering fails: widened roughness, normal chain, mask chai
       record.compiled[2].maps[1].sha256 = sha(data); writeFileSync(join(b, "build.json"), JSON.stringify(record)); }],
     [/FresnelColorIntensity/, d => {
       d.mesh.localMaterialBuffer.materials[2].values.find((v: Record<string, unknown>) => "FresnelColorIntensity" in v).FresnelColorIntensity = 8; }, undefined],
+    // Stored bytes that don't decode to the normalised linear shift colour (a channel off by more than one byte, PIPE-126).
+    [/FresnelColor decodes to/, d => {
+      const colour = d.mesh.localMaterialBuffer.materials[2].values.find((v: Record<string, unknown>) => "FresnelColor" in v).FresnelColor;
+      const channel = (["Red", "Green", "Blue"] as const).find(key => colour[key] < 250)!;
+      colour[channel] += 4; }, undefined],
     [/FadeOutOffset/, d => {
       d.mesh.localMaterialBuffer.materials[2].values.find((v: Record<string, unknown>) => "FadeOutOffset" in v).FadeOutOffset = .2; }, undefined],
     [/must name @faceted/, d => { d.mesh.appearances[1].Data.chunkMaterials = []; }, undefined],

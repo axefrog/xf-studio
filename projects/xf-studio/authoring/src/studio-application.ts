@@ -591,6 +591,8 @@ export class StudioApplication {
    * on them until they are offered again. Given tool IDs, never module visibility (design §6.3 rule 6).
    */
   withdrawViewTools(tools: readonly string[]) { this.services.viewActions?.withdraw(tools); }
+  /** The view settings offered under `filter` (research-only Rendering options, UI-163); the presentation withdraws the rest. */
+  viewSettings(filter: Pick<ViewToolFilter, "research">): readonly string[] { return [...this.services.viewActions?.settings(filter) ?? []]; }
   /** A saved-V adapter has already applied the morph; synchronize only the selector. */
   recordAppliedSavedAppearance(result: Readonly<Pick<SavedAppearanceState, "suggestedEyeShape">>) {
     if (result.suggestedEyeShape !== undefined) this.services.preview?.rememberEyeShape(result.suggestedEyeShape);

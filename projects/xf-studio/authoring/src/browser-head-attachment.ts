@@ -60,8 +60,12 @@ export type HeadAttachmentPorts = {
   viewport: Pick<ViewportDevice, "loadHead" | "unloadHead" | "mountSurface">;
   /** Every layered-makeup surface to connect, in composition order; at most one carries the on-head editor. */
   layered: readonly LayeredSurfaceWiring[];
-  /** The UI theme preference and the OS colour scheme the stage backdrop follows. */
-  preferences: Parameters<typeof bindStageTheme>[1];
+  /**
+   * The UI theme preference and the OS colour scheme the stage backdrop follows; the research tools preference the feature renderers
+   * follow (they make ahead only what can be chosen, PREV-194).
+   */
+  preferences: { snapshot(): ReturnType<Parameters<typeof bindStageTheme>[1]["snapshot"]> & { readonly researchTools?: boolean };
+    subscribe(listener: () => void): () => void };
   colourScheme: SystemColourScheme;
   /** The preview quality (generated-texture size) the creator rig's shadow maps follow; 1K when absent. */
   quality?: { snapshot(): { size: number }; subscribe(listener: () => void): () => void };
@@ -128,6 +132,11 @@ export async function attachBrowserHead(ports: HeadAttachmentPorts): Promise<Att
     const scene = await ports.viewport.loadHead(body);
     releases.push(() => ports.viewport.unloadHead(scene));
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
+    {
+      const preferences = ports.preferences, follow = () => scene.setResearchTools?.(preferences.snapshot().researchTools === true);
+      follow();
+      releases.push(preferences.subscribe(follow));
+    }
     if (ports.quality) {
       const quality = ports.quality, follow = () => { scene.lighting.setShadowQuality(quality.snapshot().size); scene.requestRender(); };
       follow();

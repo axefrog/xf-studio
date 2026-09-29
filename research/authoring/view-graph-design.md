@@ -553,7 +553,7 @@ P1 and P2 can run in parallel: P1 is the core and port, P2 the shell and dock. O
 
 **P1–P2 review fixes** (27 September; [code-health ledger](code-health.md), UI-102, UI-106, CORE-94..98).
 
-- Hiding a module withdraws its view tools: the presentation passes `port.views.withdraw(ids)` the tools it doesn't offer (a hidden module's, and research tools while hidden), each view keeps and saves its choice, and the device applies `ViewGraph.activeTools`, so Surface controls stops drawing and editing. The 3D view's hint strip follows the tool marked `editing`: without one it hints camera input only.
+- Hiding a module withdraws its view tools: the presentation passes `port.views.withdraw(ids)` the tools it doesn't offer (a hidden module's, and research tools while hidden), each view keeps and saves its choice, and the device applies `ViewGraph.activeTools`, so Surface controls stops drawing and editing. Research-only view settings go with them (UI-163): while research tools are off the presentation also passes the IDs `port.views.settings(filter)` leaves out (the Rendering options: skin scattering, face shadows, Hair look), and devices apply those at their defaults (`previewFields(…, { active: true })`), each stored choice kept for when research tools come back on. The 3D view's hint strip follows the tool marked `editing`: without one it hints camera input only.
 - `view.setTool` is `not_ready` until the 3D view is ready.
 - History: see §3.6.
 - Persistence: see §3.5. View IDs `uv`, `surface` and `head` are reserved.

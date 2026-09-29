@@ -169,6 +169,11 @@ export interface FeatureRenderer {
   /** The viewer's display toggles, applied to the feature's own materials. */
   setNormals?(enabled: boolean): void;
   setWireframe?(enabled: boolean): void;
+  /**
+   * Whether the person's research tools show (the research-only options, such as the research finishes, can be chosen only then): work
+   * done ahead only for those options runs only while they do (PREV-194). Off until the host says otherwise.
+   */
+  setResearchTools?(enabled: boolean): void;
   /** Read-only developer evidence (verification pages); plain data. */
   evidence?(): unknown;
   /** Release everything the renderer made: meshes it attached, materials, textures and render targets. */

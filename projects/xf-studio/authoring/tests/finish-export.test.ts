@@ -12,7 +12,7 @@ import { plateUvWindow, uvTransformConstants } from "../src/engines/layered-make
 import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/recipe-schema";
 import { facetedReference, maskReference } from "../src/features/eye-makeup/verify/texture-checks";
-import { expectedMaterialValues } from "../src/features/eye-makeup/verify/resource-checks";
+import { expectedMaterialValues, fresnelColourIssue, fresnelColourTarget } from "../src/features/eye-makeup/verify/resource-checks";
 import { compileFacetedPreset, compileFlatPreset, compileFresnelPreset, compilePreset, initialRecipe, raster, rasterWindow } from "./fixtures/eye-region";
 import { readRecipe as parseRecipe, parseRecipeFile } from "../src/recipe-schema";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
@@ -182,6 +182,19 @@ test("the filter lists experimental finishes and names the preset rule; resource
   const expected = expectedMaterialValues("fresnel", plan.presets[2]);
   for (const [key, want] of Object.entries(expected))
     if (typeof want === "number") expect(values[key]).toBeCloseTo(want, 6); else expect(values[key]).toEqual(want);
+  // FresnelColor is checked by decoding the stored bytes, independently of the exporter's encoding (PIPE-126).
+  const target = fresnelColourTarget(plan.presets[2]);
+  expect(fresnelColourIssue(values.FresnelColor, target)).toBeNull();
+  // An encoding in the wrong direction (decoded again instead of encoded), or none (linear bytes stored), fails.
+  const bytes = (f: (v: number) => number) => {
+    const [Red, Green, Blue] = target.map(v => Math.round(Math.max(0, Math.min(1, f(v))) * 255));
+    return { $type: "Color", Red, Green, Blue, Alpha: 255 };
+  };
+  const decode = (v: number) => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+  expect(target.some(v => v > .01 && v < .99)).toBe(true);
+  expect(fresnelColourIssue(bytes(decode), target)).toContain("not the normalised linear shift colour");
+  expect(fresnelColourIssue(bytes(v => v), target)).toContain("not the normalised linear shift colour");
+  expect(fresnelColourIssue({ ...values.FresnelColor, Alpha: 128 }, target)).toBe("is not an opaque Color");
   expect(values.FadeOutOffset).toBe(1000);
   // Colour-shifting's surface is a uniform bias: roughness 0.32 and metalness 0.08, below the 0.1 at which a skin pixel
   // leaves subsurface scattering (research/materials/shader-decal.md §10 item 2).

@@ -149,3 +149,35 @@ derivedCharacterTest("resolved brow, lash, hair and body GLBs retain their shape
   expect(slots.size).toBeGreaterThan(0);
   expect(checks.length).toBeGreaterThan(0);
 }, PRIVATE_GLB_TIMEOUT_MS);
+test("a second extendSkin keeps hooks added over the first and marks the material for a new program when its skin sets differ (PREV-191)", () => {
+  const geometry = (extra: boolean) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+    g.setAttribute("skinIndex", new THREE.Uint16BufferAttribute([0, 0, 0, 0], 4));
+    g.setAttribute("skinWeight", new THREE.Float32BufferAttribute([1, 0, 0, 0], 4));
+    if (extra) {
+      g.setAttribute("joints_1", new THREE.Uint16BufferAttribute([0, 0, 0, 0], 4));
+      g.setAttribute("weights_1", new THREE.Float32BufferAttribute([0, 0, 0, 0], 4));
+    }
+    return g;
+  };
+  const mat = new THREE.MeshStandardMaterial();
+  const one = new THREE.SkinnedMesh(geometry(false), mat), two = new THREE.SkinnedMesh(geometry(true), mat);
+  for (const m of [one, two]) m.skeleton = new THREE.Skeleton([new THREE.Bone()], [new THREE.Matrix4()]);
+  extendSkin(one, mat);
+  // A hook added over the extension (another module's), then the same material extended for a mesh with more skin sets.
+  const extended = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => { extended(shader, renderer); shader.vertexShader += "\n// later hook"; };
+  const version = mat.version;
+  extendSkin(two, mat);
+  expect(mat.version).toBeGreaterThan(version);
+  const shader = { vertexShader: "#include <common>\n#include <skinbase_vertex>\n#include <skinnormal_vertex>\n#include <skinning_vertex>", fragmentShader: "", uniforms: {} } as unknown as THREE.WebGLProgramParametersWithUniforms;
+  mat.onBeforeCompile(shader, undefined as unknown as THREE.WebGLRenderer);
+  expect(shader.vertexShader).toContain("// later hook");
+  expect(shader.vertexShader.match(/attribute vec4 joints_1;/g)?.length).toBe(1);
+  expect(mat.customProgramCacheKey()).toStartWith("full-skin-2-");
+  // The same extension again changes nothing.
+  const same = mat.version;
+  extendSkin(two, mat);
+  expect(mat.version).toBe(same);
+});

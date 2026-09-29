@@ -460,6 +460,8 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     animateBlink: (v: boolean) => blink?.setPlaying(v),
     /** Wireframe display of the feature renderers' own surfaces (eye makeup's layers and plate). */
     setWire: (v: boolean) => features?.setWireframe(v),
+    /** Whether research tools show: the feature renderers make ahead only what can be chosen (PREV-194). Draws nothing new. */
+    setResearchTools: (v: boolean) => features?.setResearchTools(v),
     setNormals: (v: boolean) => {
       rig.setNormals(v);
       character.setNormals(v);
@@ -483,6 +485,6 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   // its getters stay live: a spread copy read `idles` once, before the eyes section joined (PREV-187).
   return Object.assign(api, invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
     "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
-    "setBlink", "animateBlink", "setWire", "setNormals", "setStage", "setLighting",
+    "setBlink", "animateBlink", "setWire", "setNormals", "setResearchTools", "setStage", "setLighting",
     "setSkinScatter", "setFaceShadows", "setHairLook"], invalidate));
 }

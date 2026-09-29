@@ -35,7 +35,26 @@ export function skinSets(g: THREE.BufferGeometry) {
     sets.push({ j: `joints_${n}`, w: `weights_${n}` });
   return sets;
 }
-const extendedFrom = new WeakMap<THREE.Material, { compile: THREE.Material["onBeforeCompile"]; key: () => string }>();
+/** The skinning a material's compile adds (`extendSkin`), read when its program is built. */
+type SkinExtension = { declarations: string; sum: string; offset: number; sets: number };
+const extensions = new WeakMap<THREE.Material, SkinExtension>();
+function extendedVertexShader(source: string, { declarations, sum, offset }: SkinExtension): string {
+  return source
+    .replace("#include <common>", `#include <common>\n${declarations}`)
+    .replace(
+      "#include <skinbase_vertex>",
+      `#ifdef USE_SKINNING\n${sum}\n#endif`,
+    )
+    .replace(
+      "#include <skinnormal_vertex>",
+      // Named `skinMatrix` like Three's own chunk, so code after it (the eye's axis, eye-material.ts) skins directions either way.
+      `#ifdef USE_SKINNING\nmat4 skinMatrix = bindMatrixInverse * fullSkin * bindMatrix;\nobjectNormal = (skinMatrix * vec4(objectNormal,0.0)).xyz;\n#ifdef USE_TANGENT\nobjectTangent = (skinMatrix * vec4(objectTangent,0.0)).xyz;\n#endif\n#endif`,
+    )
+    .replace(
+      "#include <skinning_vertex>",
+      `#ifdef USE_SKINNING\ntransformed = (bindMatrixInverse * fullSkin * bindMatrix * vec4(transformed,1.0)).xyz;\n#endif\ntransformed += normalize(objectNormal) * ${offset.toFixed(7)};`,
+    );
+}
 export function extendSkin(
   mesh: THREE.SkinnedMesh,
   material: THREE.MeshStandardMaterial,
@@ -50,34 +69,28 @@ export function extendSkin(
     .slice(1)
     .map((s) => `attribute vec4 ${s.j}; attribute vec4 ${s.w};`)
     .join("\n");
-  // Idempotent: a second extendSkin on the same material rebuilds from the hooks it had before the first one, instead of
-  // wrapping its own wrapper (which declared joints_1/weights_1 twice and broke the program).
-  let original = extendedFrom.get(material);
-  if (!original) {
-    original = { compile: material.onBeforeCompile.bind(material), key: material.customProgramCacheKey.bind(material) };
-    extendedFrom.set(material, original);
+  // Idempotent (PREV-191): a material's hooks are wrapped once, and the wrapper reads the extension when its program is built. A later
+  // extendSkin on the same material (another mesh) updates the extension in place instead of rebuilding the hooks, so it neither
+  // declares joints_1/weights_1 twice (that broke the program) nor drops a hook added over the wrapper meanwhile, and a changed
+  // extension marks the material for a new program, so Three never reuses the one built for the previous extension.
+  const next: SkinExtension = { declarations, sum, offset, sets: sets.length };
+  const extension = extensions.get(material);
+  if (extension) {
+    if (extension.declarations !== next.declarations || extension.sum !== next.sum || extension.offset !== next.offset) {
+      Object.assign(extension, next);
+      material.needsUpdate = true;
+    }
+  } else {
+    const current = next;
+    extensions.set(material, current);
+    const previousCompile = material.onBeforeCompile.bind(material);
+    const previousKey = material.customProgramCacheKey.bind(material);
+    material.onBeforeCompile = (shader, renderer) => {
+      previousCompile(shader, renderer);
+      shader.vertexShader = extendedVertexShader(shader.vertexShader, current);
+    };
+    material.customProgramCacheKey = () => `full-skin-${current.sets}-${current.offset}|${previousKey()}`;
   }
-  const previousCompile = original.compile;
-  const previousKey = original.key;
-  material.onBeforeCompile = (shader, renderer) => {
-    previousCompile(shader, renderer);
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${declarations}`)
-      .replace(
-        "#include <skinbase_vertex>",
-        `#ifdef USE_SKINNING\n${sum}\n#endif`,
-      )
-      .replace(
-        "#include <skinnormal_vertex>",
-        // Named `skinMatrix` like Three's own chunk, so code after it (the eye's axis, eye-material.ts) skins directions either way.
-        `#ifdef USE_SKINNING\nmat4 skinMatrix = bindMatrixInverse * fullSkin * bindMatrix;\nobjectNormal = (skinMatrix * vec4(objectNormal,0.0)).xyz;\n#ifdef USE_TANGENT\nobjectTangent = (skinMatrix * vec4(objectTangent,0.0)).xyz;\n#endif\n#endif`,
-      )
-      .replace(
-        "#include <skinning_vertex>",
-        `#ifdef USE_SKINNING\ntransformed = (bindMatrixInverse * fullSkin * bindMatrix * vec4(transformed,1.0)).xyz;\n#endif\ntransformed += normalize(objectNormal) * ${offset.toFixed(7)};`,
-      );
-  };
-  material.customProgramCacheKey = () => `full-skin-${sets.length}-${offset}|${previousKey()}`;
   const base = new THREE.Vector4(),
     point = new THREE.Vector4(),
     result = new THREE.Vector4(),

@@ -346,6 +346,10 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
     for (const entry of standIns) entry.material.wireframe = wireframe;
     return Promise.all(standIns.map(entry => compile(entry.mesh))).then(() => undefined);
   }
+  /** Release the stand-ins and their programs (PREV-194: nobody can choose those finishes now); a later prewarm makes them again. */
+  function releaseFinishStandIns() {
+    for (const entry of standIns.splice(0)) { entry.release(); entry.material.dispose(); for (const texture of entry.textures) texture.dispose(); }
+  }
   /** Where the skin under the plate comes from; read lazily (once per head or skin change) the first time a layer needs it. */
   function setUnderlaySource(source: (() => PlateUnderlay | null) | null) {
     underlaySource = source; underlayStale = true; blendDirty = true;
@@ -443,7 +447,7 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
    */
   function dispose() {
     setCanvases([]);
-    for (const entry of standIns.splice(0)) { entry.release(); entry.material.dispose(); for (const texture of entry.textures) texture.dispose(); }
+    releaseFinishStandIns();
     composite.dispose();
     plate.removeFromParent(); plateLight.material.dispose();
     const own = new Set<string>(STACK_ATTRIBUTES);
@@ -454,6 +458,6 @@ export function createMakeupStack(anchor: THREE.SkinnedMesh, anisotropy: number,
   }
   return { plates, materials, textures, plate, geometry, setCanvases, reconcileLayerCanvases, dispose,
     setLayerCanvas, needsOptics, needsAlbedo, updateLayer, diagnostics, setUnderlaySource, setSkinLight, prepareBlend, blendDiagnostics, contextRestored, prewarmFinishes,
-    setNormals(value: boolean) { plateLight.handle.setNormals(value); },
+    releaseFinishStandIns, setNormals(value: boolean) { plateLight.handle.setNormals(value); },
     setWire(value: boolean) { wireframe = value; plateLight.material.wireframe = value; for (const m of materials) m.wireframe = value; } };
 }
