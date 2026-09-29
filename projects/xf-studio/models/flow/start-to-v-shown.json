@@ -1,0 +1,130 @@
+{
+  "kind": "flow",
+  "id": "start-to-v-shown",
+  "owner": "platform",
+  "summary": "From the page loading to the focused V shown complete and interactive, with the V asked for as soon as the store answers.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "source:page-location",
+      "does": "The window learns which library it works in and whether to warm."
+    },
+    {
+      "model": "driver:window",
+      "does": "Starts the window's run and its children; the actor ID comes from the random source."
+    },
+    {
+      "model": "driver:warm-start",
+      "does": "Starts decoding the last V's files at once, before anything else is known."
+    },
+    {
+      "model": "driver:store",
+      "does": "Loads the window's profile, its focused V, look, presets, layout and views from snapshots and short tails."
+    },
+    {
+      "model": "driver:layout",
+      "does": "Makes the panel instances; the main view's panel is visible, which is the demand for its view."
+    },
+    {
+      "model": "driver:paint",
+      "does": "Paints the first frame of the shell."
+    },
+    {
+      "model": "driver:view",
+      "does": "Creates the view's runtime and demands its scene."
+    },
+    {
+      "model": "driver:scene",
+      "does": "Demands the body's core and loads the head; in parallel the V is asked for."
+    },
+    {
+      "model": "driver:core",
+      "does": "Answers from the prepared core, or derives it (cold only) with progress in place."
+    },
+    {
+      "model": "process:head-load",
+      "does": "Builds the head in the scene runtime."
+    },
+    {
+      "model": "operator:character-request",
+      "does": "Derives the V's character request purely from her node and the scene's flags."
+    },
+    {
+      "model": "driver:v-preparation",
+      "does": "Asks the host for the request, superseding only this window's older one."
+    },
+    {
+      "model": "driver:v-host",
+      "does": "Answers from a kept answer after a stamp check, or prepares the record."
+    },
+    {
+      "model": "driver:v-details",
+      "does": "Loads the record's parts, claiming the warm files and reusing the pool, then swaps them in one step."
+    },
+    {
+      "model": "driver:raster",
+      "does": "Rasters every layer of the look's eye makeup preset at the current tier."
+    },
+    {
+      "model": "driver:motion-data",
+      "does": "Loads the idle and blink."
+    },
+    {
+      "model": "driver:frame",
+      "does": "Draws the view once something changed, and stops demanding frames when nothing animates."
+    }
+  ],
+  "demand": "The main view panel's visibility: view → scene → V → preparation and core; the look's rasters from the same view.",
+  "faults": [
+    {
+      "code": "no-game-folder",
+      "when": "No game folder or WolvenKit is known.",
+      "fault": "requester",
+      "goesTo": "driver:preview-setup",
+      "then": "suspend"
+    },
+    {
+      "code": "masculine-core-unavailable",
+      "when": "The masculine core can't be prepared.",
+      "fault": "owner",
+      "goesTo": "driver:scene",
+      "then": "fallback"
+    },
+    {
+      "code": "preparation-failed",
+      "when": "The V's preparation fails.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    },
+    {
+      "code": "host-unreachable",
+      "when": "The host doesn't answer.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "suspend"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Page shown to interactive under 1 s (met today: first paint 0.28–0.30 s).",
+      "Warm restart to the own V complete under 2 s (not met today: 2.8–3.0 s, because the V is asked for only after the head, idle and blink load).",
+      "Cold preparation 20–29 s, with progress shown in place from the first moment."
+    ],
+    "memory": "The default V is about 100 MB over 80 files, held by reference; the warm files are released once claimed or after their keep time."
+  },
+  "invariants": [
+    "Every running process traces its demand to the window's run through a chain of requests.",
+    "The V is asked for in the same cycle the store delivers her node, never after the head loads.",
+    "No main-thread task runs over 50 ms.",
+    "A view never shows a V's parts from two different records at once (the swap is one step).",
+    "Nothing is drawn for a view that isn't visible."
+  ],
+  "x-friction": [
+    {
+      "gap": "V preparation is host work the page follows by polling today.",
+      "capability": "cross-process-work",
+      "closes": "Work in another process observed as a process here."
+    }
+  ]
+}

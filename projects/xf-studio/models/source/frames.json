@@ -55,7 +55,7 @@
     {
       "gap": "Many consumers ask to draw next frame, idle time and dangles integrate over frame time, and non-focused views run at half rate; the clock's single frame callback covers none of this.",
       "capability": "frame-timing",
-      "closes": "A frame driver that coalesces next-frame demands, holds demand while anything animates, budgets work by focus and feeds dt to integrated state."
+      "closes": "Next-frame demands coalesced and held while anything animates, work budgeted by focus, and dt fed to integrated state."
     }
   ]
 }

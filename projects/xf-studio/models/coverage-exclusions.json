@@ -1,1 +1,8 @@
-{"exclusions":[]}
+{
+  "exclusions": [
+    { "module": "brow-study-fixture", "reason": "A research fixture for the render-fidelity study page only; the Studio never reads it, so it moves onto no graph model." },
+    { "module": "render-fidelity-study", "reason": "A standalone research study page outside the Studio; it is retired with its study rather than moved onto the graph." },
+    { "module": "studio-ui/style-guide/demo", "reason": "The style guide's live demo page, a design reference outside the Studio; its demo timers stay as they are." },
+    { "module": "studio-ui/style-guide/library-demo", "reason": "The style guide's component library demo page, a design reference outside the Studio; its demo timers stay as they are." }
+  ]
+}

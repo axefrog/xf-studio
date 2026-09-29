@@ -31,7 +31,7 @@
     {
       "gap": "Coalescing next-frame demands, a 12 ms budget with the focused view first and half rate for others, and nothing drawn for hidden views.",
       "capability": "frame-timing",
-      "closes": "A frame driver with coalesced demand, a focus-ordered budget and frame-integrated state."
+      "closes": "Coalesced next-frame demand, a focus-ordered frame budget and frame-integrated state."
     }
   ]
 }
