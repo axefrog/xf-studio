@@ -1,17 +1,19 @@
 import { LocalSetupActions, type FolderPicker } from "./local-setup-actions";
+import { hostClock } from "./platform/graph-adapters/host-sources";
 
 /**
  * The page's settings service over `/api/local-settings`; `pickFolder` is the host's native folder picker, when it has one. A
  * verification workspace uses its own copy (`/api/verification/local-settings`), so a test never changes the real settings (UI-98).
  */
 export function createBrowserLocalSetup(options: { pickFolder?: FolderPicker; verification?: boolean } = {}) {
+  const clock = hostClock();
   const endpoint = options.verification ? "/api/verification/local-settings" : "/api/local-settings";
   return new LocalSetupActions(async (method, body) => {
     const response = await fetch(endpoint, { method,
       headers: body ? { "Content-Type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined });
     return { ok: response.ok, status: response.status, data: await response.json() };
-  }, options.pickFolder ?? null);
+  }, options.pickFolder ?? null, (ms, run) => clock.after(ms, run));
 }
 
 /** The desktop app's native folder picker (`/api/desktop/pick-folder`): the chosen folder, or null when cancelled. */

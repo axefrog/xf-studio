@@ -1,4 +1,4 @@
-import { BUILD_NEEDS_SETUP } from "./alpha-availability";
+import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON } from "./alpha-availability";
 import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "./collection-service";
 import type { PackageBuildResult, PackageCheckResult } from "./platform/api";
 import type { Layer, Recipe } from "./engines/layered-makeup/recipe";
@@ -66,7 +66,7 @@ type FileSources = {
    * Host build readiness, when the host has a Build setup. Absent means the
    * host decides at request time (tests, hosts without local setup).
    */
-  buildReadiness?(): "ready" | "needs-setup" | "loading" | "damaged" | undefined;
+  buildReadiness?(): "ready" | "needs-setup" | "checking" | "loading" | "damaged" | undefined;
 };
 
 
@@ -141,6 +141,7 @@ export class StudioFileOperations {
         const build = this.sources.buildReadiness?.();
         return build === "needs-setup" ? { available: false, reason: BUILD_NEEDS_SETUP } :
           build === "loading" ? { available: false, reason: "Your settings are still loading." } :
+          build === "checking" ? { available: false, reason: BUILD_TOOLS_CHECKING_REASON } :
           build === "damaged" ? { available: false, reason: "Your settings file is damaged. Restore the previous copy in Settings › Game." } :
           base;
       }

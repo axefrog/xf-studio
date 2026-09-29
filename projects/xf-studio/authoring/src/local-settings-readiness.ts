@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { FrameworkVersionCheck } from "./framework-versions";
 import type { LocalSettings } from "./local-settings";
 import { readConfiguredMo2Instance } from "./install-detection-host";
+import { BUILD_TOOLS_CHECKING } from "./local-setup-actions";
 
 export type LocalCapability = "author" | "check" | "sourceDiscovery" | "sourceCache" | "previewStorage" | "build" |
   "frameworks" | "install" | "updates";
@@ -14,6 +15,11 @@ export type EyePlateHostReadiness = { issue: ReadinessIssue | null; limit: strin
 export type HostFeatures = { updater: boolean; installer: boolean; packageCheck?: boolean; packageBuild?: boolean;
   /** Why the host's own Build gate refuses, in plain words, when `packageBuild` is false. */
   packageBuildIssue?: string | null;
+  /**
+   * The Build gate's answer is provisional: the host's first tool check is still running in the background (readiness requests
+   * never wait for it). The issue then carries `BUILD_TOOLS_CHECKING`, and the page asks again shortly (`LocalSetupActions`).
+   */
+  packageBuildPending?: boolean;
   eyePlate?: EyePlateHostReadiness; frameworks?: FrameworkVersionCheck;
   /**
    * The host's WolvenKit setup outcome, when it manages WolvenKit (see `WolvenKitSetupHost`): null when a
@@ -90,7 +96,8 @@ export function evaluateLocalReadiness(settings: LocalSettings, host: HostFeatur
   if (host.eyePlate?.issue && gameIssues.length === 0) buildIssues.push(host.eyePlate.issue);
   // The host's own Build gate (tool probes, bundled builder, storage) has the last word.
   if (host.packageBuild === false && buildIssues.length === 0)
-    buildIssues.push(issue("package_host_unavailable", host.packageBuildIssue ?? "This version of XF Studio can't build mod files."));
+    buildIssues.push(issue(host.packageBuildPending ? BUILD_TOOLS_CHECKING : "package_host_unavailable",
+      host.packageBuildIssue ?? "This version of XF Studio can't build mod files."));
 
   const cacheIssues: ReadinessIssue[] = [];
   if (settings.sourceCache.directory && !writableDirectory(settings.sourceCache.directory))

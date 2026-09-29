@@ -11,7 +11,7 @@ import type { createTrustedAuthoringCore } from "./trusted-authoring-core";
 import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { WorkspaceState } from "./workspace-state";
-import type { LocalSetupActions } from "./local-setup-actions";
+import { buildToolsChecking, type LocalSetupActions } from "./local-setup-actions";
 import type { InstallDetectionActions } from "./install-detection-actions";
 import type { ModInstallActions } from "./mod-install-actions";
 import type { PreviewSetupActions } from "./preview-setup";
@@ -87,7 +87,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       const setup = options.localSetup!.snapshot();
       if (!setup.view) return setup.error ? "needs-setup" : "loading";
       if (setup.view.source === "backup") return "damaged";
-      return setup.view.readiness.build.ready ? "ready" : "needs-setup";
+      return setup.view.readiness.build.ready ? "ready" : buildToolsChecking(setup.view) ? "checking" : "needs-setup";
     }),
   });
   collection = new CollectionApplication(core.documents, workspace.collections, workspace.library,

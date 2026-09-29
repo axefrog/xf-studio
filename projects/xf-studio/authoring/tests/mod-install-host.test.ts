@@ -6,9 +6,9 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { defaultLocalSettings, type LocalSettings } from "../src/local-settings";
-import { createModInstallHandler, installIssue, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, windowsRunningApps,
+import { createModInstallHandler, installIssue, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, windowsProcessImages, windowsRunningApps,
   type RunningApps } from "../src/mod-install-host";
 import { EYE_MAKEUP_MOD } from "../src/mod-branding";
 
@@ -499,10 +499,20 @@ test("refusals map to plain words and a structured next step (UI-99)", () => {
   expect(installIssue(Error("anything else"), MOD).text).toBe("XF Studio couldn't add this mod safely, so nothing was changed. Try again, or report the problem from Help.");
 });
 
-test("the process check reads MO2 and the game in one bounded tasklist run", async () => {
+test("the process check reads MO2 and the game from one snapshot, or one bounded tasklist run", async () => {
   const apps = await windowsRunningApps();
   if (process.platform === "win32") for (const value of [apps.mo2, apps.game]) expect(typeof value === "boolean" || value === null).toBe(true);
   else expect(apps).toEqual({ mo2: false, game: false });
+  if (process.platform !== "win32") return;
+  // The snapshot sees this test's own process, fast; its names decide the answer.
+  const started = performance.now(), images = windowsProcessImages();
+  expect(performance.now() - started).toBeLessThan(250);
+  expect(images?.has(basename(process.execPath).toLowerCase())).toBe(true);
+  expect(await windowsRunningApps(10_000, () => new Set(["modorganizer.exe"]))).toEqual({ mo2: true, game: false });
+  expect(await windowsRunningApps(10_000, () => new Set(["cyberpunk2077.exe", "bun.exe"]))).toEqual({ mo2: false, game: true });
+  // No snapshot: the tasklist run still answers.
+  const fallback = await windowsRunningApps(10_000, () => null);
+  for (const value of [fallback.mo2, fallback.game]) expect(typeof value === "boolean" || value === null).toBe(true);
 });
 
 test("Show in folder opens the build's archive folder; the endpoint takes only a candidate ID from the page", async () => {
