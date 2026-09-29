@@ -82,8 +82,16 @@ ArchiveXL already changes world data as it loads. It appends mods' blocks to the
 - **Ordering with ArchiveXL and other mods' patches.**
 - **Crash safety in hooks:** the load and detach lessons of RB-76 apply.
 
+**Red Hot Tools is the closest prior art for the runtime side** (psiberx, MIT; studied at `b4d34152` for [world and streaming §2.6 and §3.3](../../knowledge/world-and-streaming.md)):
+- its world inspector tracks streamed sectors and node instances as they load and unload, which is exactly the hook a load-time generator attaches to;
+- its node registry resolves any node to its sector and placement index;
+- its streaming override makes the world stream around any point, for measuring and capturing without moving V;
+- its hot reload of archives and `.xl` files lets a generated block be rebuilt and seen again without restarting the game.
+
+It is MIT-licensed, so its techniques and code can be adapted with credit. Under the self-contained integration rule, our plugin would carry its own versions of what the generator needs, rather than requiring Red Hot Tools at runtime.
+
 **First feasibility steps:**
-1. Read ArchiveXL's streaming hooks for where a generator could attach.
+1. Read Red Hot Tools' sector and node tracking and ArchiveXL's streaming hooks for where a generator could attach.
 2. Measure a sector's load budget with the bridge.
 3. Inject one generated instanced-mesh sector at load, seeded and deterministic.
 4. Decode one navigation tile, and check whether the game rebuilds or swaps tiles at runtime.
