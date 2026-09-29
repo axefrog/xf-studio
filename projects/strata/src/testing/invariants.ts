@@ -7,6 +7,7 @@ import type { TypeSpec } from "../define";
 import { fold } from "../fold";
 import { STRATA_DEBUG } from "../graph";
 import type { Graph } from "../graph";
+import { KNode } from "../kernel/kernel";
 import type { KernelTables } from "../kernel/kernel";
 import type { MemoryStore } from "../store";
 import type { Entry, FieldKind, Layer, NodeRef, NodeState } from "../types";
@@ -198,6 +199,62 @@ export async function checkConsistentCut(graph: Graph, types: readonly TypeSpec[
 /** The caps on the graph's caches: views of the past, and change sets assembled for a commit made during a cycle. */
 const CACHE_CAPS = { timeModels: 16, assembled: 64 } as const;
 
+/** The kernel's table sizes, and how many rows belong to nothing live (`finishedScopes`, `…InScopes`, `staleDemands`). */
+export function kernelTableSizes(t: KernelTables) {
+  let finishedScopes = 0, scopeNodes = 0, forgottenInScopes = 0, scopeEffects = 0, strayEffects = 0, demandEdges = 0, staleDemands = 0;
+  for (const [process, scope] of t.scopes) {
+    if (process.terminal) finishedScopes++;
+    scopeNodes += scope.nodes.length;
+    for (const node of scope.nodes) if (t.nodes.get(node.id) !== node) forgottenInScopes++;
+    scopeEffects += scope.effects.length;
+    for (const effect of scope.effects) if (effect.scope !== scope) strayEffects++;
+  }
+  for (const node of t.nodes.values()) for (const consumer of node.demands.keys()) {
+    demandEdges++;
+    if (consumer instanceof KNode && t.nodes.get(consumer.id) !== consumer) staleDemands++;
+  }
+  return { nodes: t.nodes.size, scopes: t.scopes.size, finishedScopes, scopeNodes, forgottenInScopes, scopeEffects, strayEffects, demandEdges, staleDemands,
+    primed: t.primed.size, pendingChanges: t.pendingChanges, pendingObservations: t.pendingObservations, transactionBuffer: t.transactionBuffer };
+}
+
+/** The graph's table sizes, and how many rows belong to nothing live (the counts `checkTables` wants at 0). */
+export function tableSizes(graph: Graph) {
+  const t = graph[STRATA_DEBUG]().tables;
+  const live = (id: string) => t.records.has(id) || t.inlined.has(id);
+  const onStacks = new Set(t.stacks.flat());
+  const count = <T>(items: Iterable<T>, test: (item: T) => boolean) => { let n = 0; for (const item of items) if (test(item)) n++; return n; };
+  let layerRows = 0, emptyLayerSets = 0, goneDependents = 0, refRows = 0, emptyReferrerSets = 0, strayReferrers = 0;
+  for (const deps of t.layerIndex.values()) { layerRows += deps.size; if (!deps.size) emptyLayerSets++; goneDependents += count(deps.keys(), id => !live(id)); }
+  for (const referrers of t.refIndex.values()) {
+    refRows += referrers.size;
+    if (!referrers.size) emptyReferrerSets++;
+    strayReferrers += count(referrers.keys(), id => !t.refsOut.has(id));
+  }
+  // A gone node's kernel nodes stay only while a node still layers from it, or a kernel node other than its own wires them in.
+  const machineryKept = (id: string) => {
+    if (live(id) || t.layerIndex.has(id)) return true;
+    const own: (KNode | undefined)[] = [t.effectiveNodes.get(id), t.entitySeeds.get(id)];
+    return own.some(node => !!node && [...node.demands.keys()].some(consumer => consumer instanceof KNode && !own.includes(consumer)));
+  };
+  return {
+    kernel: kernelTableSizes(t.kernel),
+    records: t.records.size, inlined: t.inlined.size, defaultsMemo: t.defaultsMemo.size, timeModels: t.timeModels.size, commitEnds: t.commitEnds.size,
+    collapsing: t.collapsing.size, collapsingInto: t.collapsingInto.size, purging: t.purging.size, compacting: t.compacting.size, slowFolds: t.slowFolds.size,
+    sourceRings: t.sourceRings.size, purgedRefs: t.purgedRefs.size,
+    layerIndex: t.layerIndex.size, layerRows, emptyLayerSets, goneDependents, refIndex: t.refIndex.size, refRows, emptyReferrerSets, strayReferrers,
+    refsOut: t.refsOut.size, goneRefsOut: count(t.refsOut.keys(), id => !live(id)),
+    uniqueIndex: t.uniqueIndex.size, goneUnique: count(t.uniqueIndex.values(), id => !live(id)),
+    conflicts: t.conflicts.size, producers: t.producers.size, produced: t.produced.size,
+    orphanProducers: count(t.producers, ([id, set]) => !set.size || !t.conflicts.has(id)) + count(t.conflicts.keys(), id => !t.producers.has(id)),
+    orphanProduced: count(t.produced.values(), ids => !ids.size || [...ids].some(id => !t.conflicts.has(id))),
+    acknowledgements: t.acknowledgements.size, orphanAcknowledgements: count(t.acknowledgements.keys(), id => !t.conflicts.has(id)),
+    commits: t.commits.size, commitsOffStacks: count(t.commits.keys(), id => !onStacks.has(id)), onStacks: onStacks.size,
+    outbox: t.outbox, rejected: t.rejected, ackedCommits: t.ackedCommits.size, entitySeeds: t.entitySeeds.size, effectiveNodes: t.effectiveNodes.size,
+    goneMachinery: count(new Set([...t.entitySeeds.keys(), ...t.effectiveNodes.keys()]), id => !machineryKept(id)),
+    assembled: t.assembled.size, reports: t.reports, flushWaiters: t.flushWaiters,
+  };
+}
+
 /**
  * `tables`: every internal table of the graph and its kernel is bounded by the live set. Rows that belong to nothing
  * live (a finished run's scope, an empty or gone row in an index, a conflict's producer or acknowledgement after the
@@ -206,8 +263,8 @@ const CACHE_CAPS = { timeModels: 16, assembled: 64 } as const;
  * purge or flush waiting).
  */
 export function checkTables(graph: Graph, options: { readonly settled?: boolean } = {}): string[] {
-  const t = graph[STRATA_DEBUG]().tables();
-  const problems = kernelTableProblems(t.kernel, options);
+  const t = tableSizes(graph);
+  const problems = kernelTableProblems(graph[STRATA_DEBUG]().tables.kernel, options);
   const zero: Record<string, number> = {
     "empty layer-dependent sets": t.emptyLayerSets, "gone layer dependents": t.goneDependents, "empty referrer sets": t.emptyReferrerSets,
     "referrers with no references out": t.strayReferrers, "gone nodes' references out": t.goneRefsOut, "gone nodes' unique values": t.goneUnique,
@@ -224,7 +281,8 @@ export function checkTables(graph: Graph, options: { readonly settled?: boolean 
 }
 
 /** `tables` for a kernel: no finished run keeps its scope, no scope keeps a forgotten node or a disconnected effect, no forgotten node keeps demand. */
-export function kernelTableProblems(t: KernelTables, options: { readonly settled?: boolean } = {}): string[] {
+export function kernelTableProblems(tables: KernelTables, options: { readonly settled?: boolean } = {}): string[] {
+  const t = kernelTableSizes(tables);
   const zero: Record<string, number> = {
     "finished runs' scopes": t.finishedScopes, "forgotten nodes in run scopes": t.forgottenInScopes,
     "disconnected effects in run scopes": t.strayEffects, "demand edges from forgotten nodes": t.staleDemands,

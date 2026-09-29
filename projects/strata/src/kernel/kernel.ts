@@ -793,28 +793,6 @@ export class Environment {
   }
 
   /**
-   * The sizes of the kernel's internal tables, and how many of their rows belong to nothing live (test-only, through
-   * `kernelInternals.tables`): every table is bounded by the live nodes, runs and pending work.
-   */
-  private tables(): KernelTables {
-    let finishedScopes = 0, scopeNodes = 0, forgottenInScopes = 0, scopeEffects = 0, strayEffects = 0, demandEdges = 0, staleDemands = 0;
-    for (const [process, scope] of this.scopes) {
-      if (process.terminal) finishedScopes++;
-      scopeNodes += scope.nodes.length;
-      for (const node of scope.nodes) if (this.nodes.get(node.id) !== node) forgottenInScopes++;
-      scopeEffects += scope.effects.length;
-      for (const effect of scope.effects) if (effect.scope !== scope) strayEffects++;
-    }
-    for (const node of this.nodes.values()) for (const consumer of node.demands.keys()) {
-      demandEdges++;
-      if (consumer instanceof KNode && this.nodes.get(consumer.id) !== consumer) staleDemands++;
-    }
-    return { nodes: this.nodes.size, scopes: this.scopes.size, finishedScopes, scopeNodes, forgottenInScopes, scopeEffects, strayEffects,
-      demandEdges, staleDemands, primed: this.primed.size, pendingChanges: this.pendingChanges.length,
-      pendingObservations: this.pendingObservations.length, transactionBuffer: this.transactionBuffer.length };
-  }
-
-  /**
    * The process tree for inspection (SPEC §9.8): each run names its driver (the actor), the role it fills and the
    * driver's members; each process its status and children.
    */
@@ -846,15 +824,16 @@ export const kernelInternals = {
     env["startDriver"](driver, options),
   /** Runs `fn` as a release: a change that only ends things, never dropped at the activation bound. */
   release: (env: Environment, fn: () => void): void => env["release"](fn),
-  /** Test-only: the sizes of the kernel's internal tables (the "bounded by the live set" invariant reads them). */
-
-  tables: (env: Environment): KernelTables => env["tables"](),
+  /** Test-only: the kernel's internal tables, read by the "bounded by the live set" invariant (`strata/testing`). */
+  tables: (env: Environment): KernelTables => ({
+    nodes: env["nodes"], scopes: env["scopes"], primed: env["primed"], pendingChanges: env["pendingChanges"].length,
+    pendingObservations: env["pendingObservations"].length, transactionBuffer: env["transactionBuffer"].length,
+  }),
 };
 
-/** The kernel's internal table sizes (test-only). The `…InScopes`, `finishedScopes` and `staleDemands` counts are rows that belong to nothing live. */
+/** The kernel's internal tables (test-only, read-only). */
 export type KernelTables = {
-  readonly nodes: number; readonly scopes: number; readonly finishedScopes: number; readonly scopeNodes: number; readonly forgottenInScopes: number;
-  readonly scopeEffects: number; readonly strayEffects: number; readonly demandEdges: number; readonly staleDemands: number; readonly primed: number;
+  readonly nodes: ReadonlyMap<string, KNode>; readonly scopes: ReadonlyMap<Process, Scope>; readonly primed: ReadonlySet<KNode>;
   readonly pendingChanges: number; readonly pendingObservations: number; readonly transactionBuffer: number;
 };
 

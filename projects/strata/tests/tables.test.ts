@@ -7,11 +7,11 @@
 import { expect, test } from "bun:test";
 import { Aborter } from "strata";
 import type { Graph, NodeRef } from "strata";
-import { checkTables, STRATA_DEBUG } from "strata/testing";
+import { checkTables, tableSizes } from "strata/testing";
 import { GROUP, ITEM } from "../src/testing/synthetic";
 import { create, drive, harness, ok } from "./helpers";
 
-const tables = (graph: Graph) => graph[STRATA_DEBUG]().tables();
+const tables = (graph: Graph) => tableSizes(graph);
 
 async function churn(graph: Graph, scheduler: Parameters<typeof drive>[0], round: number): Promise<void> {
   // A driver run that finishes, and one that is stopped; the drivers themselves go with the round.

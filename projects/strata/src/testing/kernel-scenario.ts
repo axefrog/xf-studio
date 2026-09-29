@@ -185,7 +185,7 @@ export function kernelScenario(): Scenario<KernelWorld> {
       if (world.env.root.children.length) problems.push(`leak: the root still has ${world.env.root.children.length} children`);
       if (listenerCount(world.env.root.signal)) problems.push(`leak: the root's token still has ${listenerCount(world.env.root.signal)} listeners`);
       problems.push(...kernelTableProblems(kernelInternals.tables(world.env), { settled: true }));
-      if (kernelInternals.tables(world.env).scopes !== 1) problems.push(`leak: ${kernelInternals.tables(world.env).scopes - 1} run scopes outlived the teardown`);
+      if (kernelInternals.tables(world.env).scopes.size !== 1) problems.push(`leak: ${kernelInternals.tables(world.env).scopes.size - 1} run scopes outlived the teardown`);
       return problems;
     },
     check(world) {

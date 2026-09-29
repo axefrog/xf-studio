@@ -2403,55 +2403,19 @@ export class StrataGraph implements GraphView {
       resolver: this.head.resolver,
       layerIndex: this.layerIndex,
       outbox: this.outbox,
-      tables: () => this.tables(),
+      // The internal tables, for the "bounded by the live set" invariant (`checkTables`).
+      tables: {
+        kernel: kernelInternals.tables(this.env), records: this.records, inlined: this.inlined, defaultsMemo: this.defaultsMemo,
+        timeModels: this.timeModels, commitEnds: this.commitEnds, collapsing: this.collapsing, collapsingInto: this.collapsingInto,
+        purging: this.purging, compacting: this.compacting, slowFolds: this.slowFolds, sourceRings: this.sourceRings, purgedRefs: this.purgedRefs,
+        layerIndex: this.layerIndex, refIndex: this.refIndex, refsOut: this.refsOut, uniqueIndex: this.uniqueIndex, conflicts: this.conflictsById,
+        producers: this.producers, produced: this.produced, acknowledgements: this.acknowledgements, commits: this.commits,
+        stacks: [...this.undoStacks.values(), ...this.redoStacks.values()] as readonly (readonly string[])[], outbox: this.outbox.length,
+        rejected: this.rejectedCommits.length, ackedCommits: this.ackedCommits, entitySeeds: this.entitySeeds, effectiveNodes: this.effectiveNodes,
+        assembled: this.assembled, reports: this.reports.length, flushWaiters: this.flushWaiters.length,
+      } as const,
     };
   }
-
-  /**
-   * The sizes of the graph's internal tables and how many of their rows belong to nothing live (test-only): the
-   * "bounded by the live set" invariant (`strata/testing`) checks that the orphan counts are 0 and the caches bounded.
-   */
-  private tables() {
-    const live = (id: string) => this.records.has(id) || this.inlined.has(id);
-    const onStacks = new Set<string>();
-    for (const stacks of [this.undoStacks, this.redoStacks]) for (const stack of stacks.values()) for (const id of stack) onStacks.add(id);
-    let layerRows = 0, emptyLayerSets = 0, goneDependents = 0, refRows = 0, emptyReferrerSets = 0, strayReferrers = 0;
-    for (const deps of this.layerIndex.values()) { layerRows += deps.size; if (!deps.size) emptyLayerSets++; for (const id of deps.keys()) if (!live(id)) goneDependents++; }
-    for (const referrers of this.refIndex.values()) {
-      refRows += referrers.size;
-      if (!referrers.size) emptyReferrerSets++;
-      for (const id of referrers.keys()) if (!this.refsOut.has(id)) strayReferrers++;
-    }
-    const count = <T>(items: Iterable<T>, test: (item: T) => boolean) => { let n = 0; for (const item of items) if (test(item)) n++; return n; };
-    // A gone node's kernel nodes stay only while another kernel node wires them in or a node still layers from it.
-    const machineryKept = (id: string) => {
-      if (live(id) || this.layerIndex.has(id)) return true;
-      const own = [this.effectiveNodes.get(id), this.entitySeeds.get(id)];
-      return own.some(node => !!node && [...node.demands.keys()].some(consumer => consumer instanceof KNode && !own.includes(consumer)));
-    };
-
-    return {
-      kernel: kernelInternals.tables(this.env),
-      records: this.records.size, inlined: this.inlined.size, defaultsMemo: this.defaultsMemo.size, timeModels: this.timeModels.size,
-      commitEnds: this.commitEnds.size, collapsing: this.collapsing.size, collapsingInto: this.collapsingInto.size, purging: this.purging.size,
-      compacting: this.compacting.size, slowFolds: this.slowFolds.size, sourceRings: this.sourceRings.size, purgedRefs: this.purgedRefs.size,
-      layerIndex: this.layerIndex.size, layerRows, emptyLayerSets, goneDependents,
-      refIndex: this.refIndex.size, refRows, emptyReferrerSets, strayReferrers, refsOut: this.refsOut.size,
-      goneRefsOut: count(this.refsOut.keys(), id => !live(id)),
-      uniqueIndex: this.uniqueIndex.size, goneUnique: count(this.uniqueIndex.values(), id => !live(id)),
-
-      conflicts: this.conflictsById.size, producers: this.producers.size, produced: this.produced.size,
-      orphanProducers: count(this.producers, ([id, set]) => !set.size || !this.conflictsById.has(id)) + count(this.conflictsById.keys(), id => !this.producers.has(id)),
-      orphanProduced: count(this.produced.values(), ids => !ids.size || [...ids].some(id => !this.conflictsById.has(id))),
-      acknowledgements: this.acknowledgements.size, orphanAcknowledgements: count(this.acknowledgements.keys(), id => !this.conflictsById.has(id)),
-      commits: this.commits.size, commitsOffStacks: count(this.commits.keys(), id => !onStacks.has(id)), onStacks: onStacks.size,
-      outbox: this.outbox.length, rejected: this.rejectedCommits.length, ackedCommits: this.ackedCommits.size,
-      entitySeeds: this.entitySeeds.size, effectiveNodes: this.effectiveNodes.size,
-      goneMachinery: count(new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()]), id => !machineryKept(id)),
-      assembled: this.assembled.size, reports: this.reports.length, flushWaiters: this.flushWaiters.length,
-    };
-  }
-
 }
 
 /** The leaf paths whose values differ between two effective values of a type (maps walked per key). */

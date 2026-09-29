@@ -14,7 +14,7 @@ export { STRATA_FAULTS, STRATA_DEBUG } from "./src/graph";
 export { STORE_CASES, sampleEntry } from "./src/testing/store-conformance";
 export type { StoreCase } from "./src/testing/store-conformance";
 export { SYNTHETIC_TYPES, SYNTHETIC_RULES, itemType, groupType, ITEM, GROUP } from "./src/testing/synthetic";
-export { checkResolution, checkConflictIndex, checkStructure, checkSnapshots, checkConsistentCut, checkTables, headStates } from "./src/testing/invariants";
+export { checkResolution, checkConflictIndex, checkStructure, checkSnapshots, checkConsistentCut, checkTables, headStates, tableSizes } from "./src/testing/invariants";
 export { graphScenario } from "./src/testing/graph-scenario";
 export type { GraphWorld } from "./src/testing/graph-scenario";
 export { kernelScenario, randomModel } from "./src/testing/kernel-scenario";
