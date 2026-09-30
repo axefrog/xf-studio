@@ -98,19 +98,61 @@ test("the native writer's modules are pure except its texture-compressor adapter
   }
 });
 
-test("only the Build's tools adapter imports the native writer, and no verifier reaches it", () => {
-  const offenders: string[] = [];
-  const walk = (folder: string) => {
-    for (const entry of readdirSync(folder, { withFileTypes: true })) {
-      const full = join(folder, entry.name);
-      if (entry.isDirectory()) { if (full !== NATIVE) walk(full); continue; }
-      if (!/\.tsx?$/.test(entry.name)) continue;
-      const name = relative(SRC, full).split("\\").join("/").replace(/\.tsx?$/, "");
-      for (const dependency of imports(read(full)))
-        if (/(?:^|\/)native\/write\/[\w-]+$/.test(dependency) && name !== "native-resource-tools") offenders.push(`${name} -> ${dependency}`);
-        else if (/(?:^|\/)native-resource-tools$/.test(dependency)) offenders.push(`${name} -> ${dependency}`);
-    }
-  };
-  walk(SRC);
-  expect(offenders).toEqual([]);
+// NATIVE-76: the writer's boundary follows imports transitively, over src/ and tools/ alike, so a path from a verifier to the writer
+// through any number of modules is caught, and so is a tool importing the writer directly.
+const TOOLS = join(import.meta.dir, "..", "tools");
+const APP = join(import.meta.dir, "..");
+/** Every TypeScript module below `folder`: its name (relative to the authoring folder, forward slashes, no extension) and file. */
+function modulesBelow(folder: string): [string, string][] {
+  const out: [string, string][] = [];
+  for (const entry of readdirSync(folder, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || /\.d\.ts$/.test(entry.name)) continue;
+    const file = join(entry.parentPath, entry.name);
+    out.push([relative(APP, file).split("\\").join("/").replace(/\.tsx?$/, ""), file]);
+  }
+  return out;
+}
+const MODULE_FILES = new Map([...modulesBelow(SRC), ...modulesBelow(TOOLS)]);
+const MODULES = new Set(MODULE_FILES.keys());
+/** A module's local imports, resolved to modules (`x`, `x/index`); packages and built-ins are left out. */
+function localImports(module: string): string[] {
+  const text = read(MODULE_FILES.get(module)!);
+  const base = module.split("/").slice(0, -1).join("/");
+  const out: string[] = [];
+  for (const dependency of imports(text)) {
+    if (!dependency.startsWith(".")) continue;
+    const parts: string[] = [];
+    for (const part of `${base}/${dependency}`.split("/")) { if (part === "..") parts.pop(); else if (part !== "." && part) parts.push(part); }
+    const target = parts.join("/").replace(/\.tsx?$/, "");
+    if (MODULES.has(target)) out.push(target); else if (MODULES.has(`${target}/index`)) out.push(`${target}/index`);
+  }
+  return out;
+}
+/** Every module `module` reaches through imports, with one path to each. */
+function reach(module: string): Map<string, string[]> {
+  const paths = new Map<string, string[]>([[module, [module]]]);
+  const queue = [module];
+  while (queue.length) {
+    const next = queue.shift()!;
+    for (const dependency of localImports(next)) if (!paths.has(dependency)) { paths.set(dependency, [...paths.get(next)!, dependency]); queue.push(dependency); }
+  }
+  return paths;
+}
+const isWriter = (module: string) => module.startsWith("src/native/write/") || module === "src/native-resource-tools";
+
+test("only the Build's tools adapter and the writer's own tools import the native writer; no verifier reaches it through any path (NATIVE-76)", () => {
+  expect(MODULES.size).toBeGreaterThan(300);
+  // Direct importers, in src/ and tools/.
+  const DIRECT = ["src/native-resource-tools", "tools/build-native-bcn", "tools/build_collection_package", "tools/native-writer-host", "tools/native-writer-oracle"];
+  const direct = [...MODULES].filter(module => !isWriter(module) || module === "src/native-resource-tools")
+    .filter(module => localImports(module).some(dependency => isWriter(dependency) && dependency !== module)).sort();
+  expect(direct).toEqual(DIRECT);
+  // Every verifier module (the product's, each feature's, the plate's, WolvenKit's adapter for them, the verifier tools), transitively.
+  const verifiers = [...MODULES].filter(module => /^src\/features\/[^/]+\/verify\//.test(module) || /^tools\/verify_/.test(module) ||
+    ["src/platform/export/product-verifier", "src/verifier-wolvenkit", "src/eye-plate-verify"].includes(module));
+  expect(verifiers.length).toBeGreaterThan(10);
+  const leaks = verifiers.flatMap(module => [...reach(module)].filter(([target]) => isWriter(target)).map(([, path]) => path.join(" -> ")));
+  expect(leaks).toEqual([]);
+  // The walk sees a path several modules long: the Build's CLI reaches the writer through the tools adapter.
+  expect(reach("tools/build_collection_package").get("src/native/write/red-encoder")?.length).toBeGreaterThan(2);
 });
