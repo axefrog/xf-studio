@@ -64,6 +64,8 @@
 - **Reactive surroundings:** NPCs noticing V's look, weather-reactive crowds, and time-of-day routines.
 - **Places that remember:** persistent, player-driven changes to locations (decor, props left behind), stored in the save generically, as the [save editor study](../save/save-editor-design.md) shows the save can describe mod data.
 
+- **Sit anywhere, done properly** (banked until after 1.0): V can sit on any bench, ledge or chair through the game's own workspot system, which today works only where the story placed a prompt. The existing community approach offers seats targeted through walls and then clips V through the wall to reach them; the sit itself works. Ours would offer a seat only when a sight-line ray from V reaches it, a navmesh path leads there and the seat's space is free, using the checks the bridge's scene report already runs.
+
 ## Related
 
 [Pose editor](../animation/pose-editor-design.md) · [Pose library](../animation/pose-library-design.md) · [Expressions and idles brief](expressions-and-idles-brief.md) · [Hair physics plan](../animation/hair-physics-plan.md) · [World and interactive ideas](world-and-interactive-ideas.md)
