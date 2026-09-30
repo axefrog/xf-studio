@@ -63,8 +63,8 @@ async function session(scheme: "light" | "dark", width = 960, height = 680, body
   };
   const identity = () => page.evaluate<string | null>(`window.xfStudioSceneEvidence()?.characterDetails?.identity ?? null`);
   /** Wait for a V other than `before` to be placed (with a skin). */
-  const placed = (before: string | null) => page.waitFor(`(() => { const e = window.xfStudioSceneEvidence()?.characterDetails;
-    return !!e && e.identity !== ${JSON.stringify(before)} && !!e.skin; })()`, 900000);
+  const placed = (before: string | null, ms = 900000) => page.waitFor(`(() => { const e = window.xfStudioSceneEvidence()?.characterDetails;
+    return !!e && e.identity !== ${JSON.stringify(before)} && !!e.skin; })()`, ms);
   const canvasRect = () => page.evaluate<{ x: number; y: number; width: number; height: number }>(`(() => {
     const g = document.getElementById("dock-tab-head")?.closest("[data-group]") ?? document;
     const c = [...g.querySelectorAll("canvas")].sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
@@ -171,13 +171,19 @@ try {
     report.beard = { picked, evidence, panels };
   }
   if (scenarios.has("arms") && save) {
-    const s = await session("dark", 960, 680, true);
+    // The head first (body off), then the save, then the body: a body-on first load is the heaviest page state.
+    const s = await session("dark", 800, 560);
+    await s.ready();
+    // Hair and clothes off: the forearms in view, and less for the page to hold.
+    await s.run({ kind: "preview.setHair", enabled: false }).catch(() => undefined);
+    await s.run({ kind: "quality.set", size: 1024 }).catch(() => undefined);
     const before = await s.identity();
     // The save decoded here with XF Studio's own reader and shown through the character context (no file picker in a headless page).
     const decoded = readSavedV(new Uint8Array(readFileSync(resolve(save))));
     report.armsSave = { isMale: decoded.isMale, arms: decoded.loadout?.arms ?? null };
     await s.run({ kind: "character.loadSave", value: decoded });
-    await s.placed(before);
+    await s.placed(before, 240000);
+    await s.run({ kind: "character.setClothing", state: "underwear" }).catch(() => undefined);
     for (const action of [{ kind: "preview.setSurfaceControls", enabled: false }, { kind: "preview.setBody", enabled: true },
       { kind: "motion.setIdle", enabled: false }]) await s.run(action).catch(() => undefined);
     await s.page.waitFor(`(window.xfStudioSceneEvidence()?.characterDetails?.components ?? []).some(c => c.slot === "body")`, 900000);
@@ -187,6 +193,10 @@ try {
     const shots: string[] = [];
     for (const preset of ["studio", "creator"]) {
       await s.run({ kind: "preview.setLightingPreset", preset });
+      await s.run({ kind: "camera.body" }).catch(() => undefined);
+      await s.settle(2000);
+      await s.page.screenshot(resolve(out, `arms-${preset}-body.png`), rect);
+      shots.push(`arms-${preset}-body`);
       for (const [name, camera] of Object.entries({ right: { position: [-0.55, 1.05, -0.75], target: [-0.22, 1.0, 0], fov: 24 },
         left: { position: [0.55, 1.05, -0.75], target: [0.22, 1.0, 0], fov: 24 } })) {
         await s.run({ kind: "camera.restore", camera });
