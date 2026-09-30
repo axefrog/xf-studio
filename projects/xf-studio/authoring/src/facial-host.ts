@@ -652,7 +652,7 @@ export class FacialHost {
     if (entry.rig.phase === "unconfigured") return { reason: IDLE_FACE_NEEDS_SETUP };
     if (!rig?.compiled) return { reason: IDLE_FACE_MISSING };
     return { rig: rig.compiled, identity: `${FACE_BAKE_VERSION}|${rig.identity}`, skeleton: rig.vocabulary.rig, setup: rig.vocabulary.setup,
-      installation: entry.installation ?? null };
+      regions: rig.regions, installation: entry.installation ?? null };
   }
 
   /**
@@ -696,7 +696,7 @@ export class FacialHost {
       clip: { animation: BLINK_CLIP, source: FACIAL_ADDITIVES, duration: blink.clip.duration, sampleRate: BLINK_RATE },
       ...(shapes && Object.keys(shapes).length ? { shapes } : {}),
       rig: { skeleton: rig.vocabulary.rig, setup: rig.vocabulary.setup, bodyGender: "female" } };
-    return { schema: FACE_MOTION_SCHEMA, rest: motionRest(rest), description,
+    return { schema: FACE_MOTION_SCHEMA, rest: motionRest(rest, rig.regions), description,
       clips: [motionClip("eye_blink_closure", closure, rest), motionClip(BLINK_CLIP, clip, rest)] };
   }
 
@@ -961,12 +961,17 @@ const IDLE_FACE_NEEDS_SETUP = "Choose your game folder in Settings to see V's fa
 const ORACLE_BLINK = "The facial solver oracle is in use, so the blink is the developer preparation's (XFS_PREPARED_MOTION=on serves it).";
 /** The closure slider's steps (21 solved instants from open to the clip's closed frame). */
 export const BLINK_STEPS = 20;
-/** Version of what the face bakes hold (the solver's rules and the record's shape); part of the idle face cache's key. */
-export const FACE_BAKE_VERSION = 1;
+/** Version of what the face bakes hold (the solver's rules and the record's shape); part of the idle face cache's key. 2: the rest carries the setup's regions. */
+export const FACE_BAKE_VERSION = 2;
 /** The compiled face the idle host bakes the idle's face with (`FacialHost.faceSource`). */
-export type FaceSource = { rig: CompiledFacialRig; identity: string; skeleton: string; setup: string; installation: Installation | null };
-/** A baked rest as the wire record holds it. */
-export function motionRest(rest: BakedRest): FaceMotionRest { return { names: [...rest.names], parents: [...rest.parents], local: base64Of(rest.local) }; }
+export type FaceSource = { rig: CompiledFacialRig; identity: string; skeleton: string; setup: string;
+  /** The setup's joint regions (`JointRegions`), one per rig joint, where they were read. */
+  regions?: readonly number[]; installation: Installation | null };
+/** A baked rest as the wire record holds it, with the setup's regions when they fit the rest (one per joint). */
+export function motionRest(rest: BakedRest, regions?: readonly number[]): FaceMotionRest {
+  return { names: [...rest.names], parents: [...rest.parents], local: base64Of(rest.local),
+    ...(regions && regions.length === rest.names.length ? { regions: [...regions] } : {}) };
+}
 /** Baked frames as one wire clip (moving joints by name). */
 export function motionClip(name: string, frames: BakedFrames, rest: BakedRest): FaceMotionClip {
   return { name, times: base64Of(frames.times), joints: frames.joints.map(j => rest.names[j]!), local: base64Of(frames.local) };

@@ -13,7 +13,7 @@ import type { DecalSurfaceUnderlay } from "./head-skin-placement";
 import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTexture, IRIS_MASK_ENCODING, shellParameters, type EyeHandle } from "./eye-material";
 import type { DetailLimit } from "./detail-limits";
 import { createMetalBaseMaterial, metalBaseParameters } from "./metal-base-material";
-import { attachInteriorOcclusion } from "./mouth-occlusion";
+import { attachInteriorOcclusion, type MouthInteriorUniforms } from "./mouth-occlusion";
 
 /**
  * Renderer material adapters: one per game material template the preview draws (render-templates.ts).
@@ -55,6 +55,11 @@ export type AdapterContext = {
   profileEncoding: ProfileEncoding;
   /** The view's Hair look (0 Crisp … 1 Game-like), one uniform the scene's strands share (hair-shading.ts); Crisp when absent. */
   hairLook?: HairLookUniform;
+  /**
+   * The lips' aperture the scene measures each frame on the posed face (mouth-aperture.ts), one uniform every mouth-interior part of this
+   * scene reads (mouth-occlusion.ts); absent, the interior assumes the stand-in's fixed parting.
+   */
+  mouthInterior?: MouthInteriorUniforms;
 };
 /**
  * The resolved skin as decals see it: its toned base colour (8-bit sRGB, null outside a browser), its head chunks, and for
@@ -426,8 +431,8 @@ const INTERIOR_SLOTS: ReadonlySet<DetailSlot> = new Set(["teeth"]);
 const interiorAdapters = new Map<MaterialAdapter, MaterialAdapter>();
 /**
  * An adapter whose drawn chunks also take the mouth interior's occlusion (mouth-occlusion.ts): the light that reaches them through the
- * lips, from their depth behind the drawn head. Without the resolved head to measure against, the chunk is drawn fully lit, as before,
- * and says so in its notes.
+ * lips, from their depth behind the drawn head and the lips' parting the scene measures (`mouthInterior`). Without the resolved head to
+ * measure against, the chunk is drawn fully lit, as before, and says so in its notes.
  */
 function withInteriorOcclusion(adapter: MaterialAdapter): MaterialAdapter {
   let wrapped = interiorAdapters.get(adapter);
@@ -437,8 +442,9 @@ function withInteriorOcclusion(adapter: MaterialAdapter): MaterialAdapter {
       if (made.hidden) return made;
       const head = context.skin?.chunks ?? [];
       if (!head.length) return { ...made, notes: [...made.notes, "lit without the mouth's occlusion (no resolved head to measure against)"] };
-      const range = attachInteriorOcclusion(mesh, made.material, head);
-      return { ...made, notes: [...made.notes, `mouth occlusion ${range.min.toFixed(2)}–${range.max.toFixed(2)}`] };
+      const range = attachInteriorOcclusion(mesh, made.material, head, context.mouthInterior);
+      const parting = context.mouthInterior ? "the lips' measured parting" : "a fixed 10 mm parting (no face to measure)";
+      return { ...made, notes: [...made.notes, `mouth occlusion through ${parting}: depth ${(range.depth.min * 1000).toFixed(1)}–${(range.depth.max * 1000).toFixed(1)} mm`] };
     } };
     interiorAdapters.set(adapter, wrapped);
   }

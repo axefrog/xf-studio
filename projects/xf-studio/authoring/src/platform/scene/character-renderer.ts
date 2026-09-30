@@ -10,6 +10,7 @@ import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSur
 import { priorityRank } from "../../render-templates";
 import type { DetailLimit } from "../../detail-limits";
 import { layeredContextRestored } from "../../layered-material";
+import { MOUTH_OCCLUSION, mouthInteriorUniforms } from "../../mouth-occlusion";
 import { characterDetailsEvidence } from "../../scene-evidence";
 import { keepOutOfBodyOnlyShadows } from "./shadow-casters";
 import { RENDER_ORDER, type CharacterSlot, type CharacterView, type SkinUnderlayPort, type SupersededPart } from "../api/scene";
@@ -122,6 +123,10 @@ export function createCharacterRenderer(input: {
   const profileEncoding: ProfileEncoding = "srgb-decoded";
   // The view's Hair look (0 Crisp … 1 Game-like): one uniform every strand material of this scene reads (hair-shading.ts).
   const hairLook: NonNullable<AdapterContext["hairLook"]> = { value: 0 };
+  // The lips' aperture (metres) every mouth-interior part of this scene reads (mouth-occlusion.ts): the scene measures it on the posed face
+  // each frame (`setMouthParting`); until it can, the stand-in's fixed parting.
+  const mouthInterior = mouthInteriorUniforms();
+  let mouthPinned: { parting: number; floor: number } | null = null;
   // Where the resolved skin is drawn, and the skin colour under decals read on that same head (head-skin-placement.ts).
   const skinPlacement = createHeadSkinPlacement(head, { coreAlbedo: coreAlbedoReader(rig.albedo), coreRoughness: coreRoughnessReader(rig.roughness) });
   let browUnderlay: BrowUnderlayEvidence | undefined;
@@ -266,7 +271,7 @@ export function createCharacterRenderer(input: {
   let normalsEnabled = true;
   const skinLimits = (): { slot: DetailSlot; limit: DetailLimit }[] => resolvedSkin?.placement.limit ? [{ slot: "skin", limit: resolvedSkin.placement.limit }] : [];
   function detailContext(slot: DetailSlot): Omit<AdapterContext, "slot"> {
-    return { overMakeup: slot === "lashes", profileEncoding, hairLook,
+    return { overMakeup: slot === "lashes", profileEncoding, hairLook, mouthInterior,
       ...(slot === "face" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null) => skinPlacement.surfaceUnderlay(mesh, skin ?? null) } : {}),
       // The body's decals (tattoos, scars, the underwear cover) blend against the body's own skin, read on its chunks (knowledge/body-rendering.md).
       ...(slot === "body" ? { surface: (mesh: THREE.Mesh, skin?: ResolvedSkinSurface | null, skins?: readonly ResolvedSkinSurface[]) => {
@@ -565,6 +570,24 @@ export function createCharacterRenderer(input: {
     /** The Hair look the strands show (0 Crisp … 1 Game-like; preview only, never exported). */
     setHairLook(value: number) { hairLook.value = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0)); },
     hairLook: () => hairLook.value,
+    /**
+     * The lips' aperture measured on the posed face this frame (metres), or null where it can't be measured: the mouth interior then keeps
+     * the stand-in's fixed parting (mouth-occlusion.ts).
+     */
+    setMouthParting(metres: number | null) {
+      if (mouthPinned) return;
+      mouthInterior.parting.value = metres === null || !Number.isFinite(metres) ? MOUTH_OCCLUSION.unknownParting : Math.max(0, metres);
+    },
+    mouthParting: () => mouthInterior.parting.value,
+    /**
+     * Developer comparisons only (`?verify=1`): hold the interior at a fixed parting and floor (the earlier stand-in's 10 mm and 0.3 for a
+     * before-and-after capture), or null to follow the face again.
+     */
+    pinMouthInterior(pin: { parting: number; floor: number } | null) {
+      mouthPinned = pin;
+      mouthInterior.floor.value = pin ? pin.floor : MOUTH_OCCLUSION.floor;
+      if (pin) mouthInterior.parting.value = pin.parting;
+    },
     eyeAppearance,
     contextRestored,
     /** Listen for the placed V's limits changing after it was placed (PREV-74); returns the unsubscribe. */

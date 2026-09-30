@@ -326,7 +326,7 @@ export class IdleHost {
       frames = times.map(t => clipFrame(rig, loop, t));
     }
     const rest = bakedRest(rig), baked = bakeFrames(rig, frames, times);
-    const record: FaceClipRecord = { schema: FACE_MOTION_SCHEMA, rest: motionRest(rest), clip: motionClip(`${entry.clip}_face`, baked, rest),
+    const record: FaceClipRecord = { schema: FACE_MOTION_SCHEMA, rest: motionRest(rest, source.regions), clip: motionClip(`${entry.clip}_face`, baked, rest),
       rig: { skeleton: source.skeleton, setup: source.setup } };
     this.options.log?.(`The idle's face ${entry.clip} solved in ${Math.round(performance.now() - started)} ms (${frames.length} frames, ${baked.joints.length} joints).`);
     try { mkdirSync(this.cacheDir(key), { recursive: true }); writeFileAtomic(file, JSON.stringify(record)); } catch { /* Advisory. */ }

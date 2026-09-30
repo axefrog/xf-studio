@@ -25,6 +25,11 @@ export type FaceMotionRest = {
   readonly parents: readonly number[];
   /** Per joint: translation (3), rotation x y z w (4), scale (3). */
   readonly local: string;
+  /**
+   * The facial setup's region per joint (`bakedData.Data.JointRegions`: 0 eyes, 1 nose, 2 mouth, 3 jaw, 4 ear, 255 none), where the host
+   * read them: the page finds the lip joints by them (mouth-aperture.ts). Optional: an older record has none.
+   */
+  readonly regions?: readonly number[];
 };
 /** One clip: its times (seconds, or the blink closure 0–1), the moving joints (names) and per frame and joint translation (3) then rotation (4). */
 export type FaceMotionClip = { readonly name: string; readonly times: string; readonly joints: readonly string[]; readonly local: string };

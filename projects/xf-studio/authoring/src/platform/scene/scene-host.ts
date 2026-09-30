@@ -23,6 +23,7 @@ import { createFeatureRenderers, type FeatureRenderers } from "./feature-rendere
 import { createHeadRig, type MotionLoader } from "./head-rig";
 import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
+import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
 import { createOrbitLimits, SceneOrbitControls } from "./orbit-limits";
 
 /**
@@ -173,6 +174,9 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
   const { head, eyes, surfaces, albedo, motion } = rig;
   const { idle, blink, rig: rigMotion } = motion;
   const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? [] });
+  // The lips' aperture on the posed face, measured each drawn frame for the mouth interior's light (PREV-147 step A): the lip joints come
+  // from the face records' rest and regions (the idle's face, else the blink's), the posed bones are the core head's own.
+  const mouth = createMouthApertureSampler(() => headBones(head), () => [idle?.facial?.source, blink?.source]);
   // The orbit's distance limits follow the lens, the pane's aspect, the target and what shows: the farthest fits the head (and the
   // body while it shows) with a margin, the closest stops in front of the head's surface (camera-framing.ts, orbit-limits.ts).
   const shifted = (subject: Subject): Subject => ({ radius: subject.radius,
@@ -236,6 +240,7 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     animating: () => rigMotion.animating() || settle.settling,
     frame(dt) {
       rigMotion.advance(dt);
+      character.setMouthParting(mouth.sample());
       if (controls.enabled) controls.update();
       settle.step();
       // At long orbits, move the near plane in front of a conservative head
@@ -339,6 +344,10 @@ async function assembleHost(host: HTMLElement, options: SceneHostOptions, releas
     featureBands: () => features?.bands() ?? {},
     /** Frames drawn, requests and recent frame timings; `running: false` means the viewport is idle. `display`: how frames reach the canvas. */
     frameTiming: () => ({ ...scheduler.stats(), display: lighting.display.info() }),
+    /** The mouth interior's light (developer evidence): the lip joints measured, the aperture now (metres) and the floor. */
+    mouthEvidence: () => ({ lips: mouth.lips, parting: character.mouthParting() }),
+    /** Developer comparisons: hold the mouth interior at a fixed parting and floor, or null to follow the face (character-renderer.ts). */
+    pinMouthInterior: (pin: { parting: number; floor: number } | null) => { character.pinMouthInterior(pin); invalidate(); },
     maxTextureSize: renderer.capabilities.maxTextureSize,
     eyeShape: rig.eyeShape,
     eyeShapeOptions: rig.eyeShapeOptions,
