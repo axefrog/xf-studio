@@ -4,7 +4,7 @@
  * not created yet that a write could pass through (PIPE-136).
  */
 import { lstatSync, realpathSync } from "node:fs";
-import type { RealPaths } from "./platform/api/path-containment";
+import type { RealPaths } from "../api/path-containment";
 
 export const HOST_REAL_PATHS: RealPaths = {
   exists: path => { try { lstatSync(path); return true; } catch { return false; } },

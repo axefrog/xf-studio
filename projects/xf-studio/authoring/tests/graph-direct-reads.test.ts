@@ -129,6 +129,7 @@ const GRANDFATHERED: Readonly<Record<string, Readonly<Record<string, number>>>> 
   "platform/core/look-history": { clock: 1 },
   "platform/export/check-runner": { timers: 1, processes: 1 }, // previously undetected (review 7): processes
   "platform/export/product-builder": { clock: 2, timers: 1, files: 1 }, // previously undetected: timers
+  "platform/export/host-real-paths": { files: 1 }, // PIPE-136: the containment checks' lstat port, shared by the builder, the host and the desktop
   "platform/export/product-host": { clock: 4, timers: 1, files: 1 },
   "platform/export/product-verifier": { files: 1 },
   "platform/scene/character-renderer": { clock: 6, timers: 3 },

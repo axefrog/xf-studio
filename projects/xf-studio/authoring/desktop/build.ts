@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { canonicalPath, isWithin, isWithinReal, overlaps } from "../src/platform/api/path-containment";
-import { HOST_REAL_PATHS } from "../src/host-real-paths";
+import { HOST_REAL_PATHS } from "../src/platform/export/host-real-paths";
 
 /** The host's file-system reads for the containment checks. */
 const HOST_PATHS = HOST_REAL_PATHS;

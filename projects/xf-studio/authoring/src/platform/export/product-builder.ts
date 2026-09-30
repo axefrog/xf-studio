@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 import { canonicalPath, containmentKey, isWithin as within, overlaps } from "../api/path-containment";
-import { HOST_REAL_PATHS } from "../../host-real-paths";
+import { HOST_REAL_PATHS } from "./host-real-paths";
 import {
   archiveXlText, ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, type PackageBuildStage, type FeatureBuildContext, type FeatureExporterEntry, type FeatureVerification,
   type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type ResourceWriters, type VerifierTools,

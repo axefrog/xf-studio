@@ -5,7 +5,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { HOST_REAL_PATHS } from "../src/host-real-paths";
+import { HOST_REAL_PATHS } from "../src/platform/export/host-real-paths";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalPath as canonicalWith, containmentKey, isBelow, isBelowReal as belowReal, isWithin, isWithinReal as withinReal, overlaps } from "../src/platform/api/path-containment";

@@ -23,7 +23,7 @@ const HOST: PathFlavour = typeof process !== "undefined" && process.platform ===
 
 /**
  * The two file-system reads the real checks need: whether an entry exists at a path, without following it (a link whose target is
- * gone exists: the host passes `lstat`, host-real-paths.ts), and its real path (links followed, 8.3 names expanded).
+ * gone exists: the host passes `lstat`, platform/export/host-real-paths.ts), and its real path (links followed, 8.3 names expanded).
  */
 export type RealPaths = { readonly exists: (path: string) => boolean; readonly realpath: (path: string) => string };
 
