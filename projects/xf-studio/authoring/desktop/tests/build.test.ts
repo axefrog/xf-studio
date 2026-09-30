@@ -1,11 +1,11 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
+import { copyFileSync, existsSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { defaultLocalSettings } from "../../src/local-settings";
 import { LocalSettingsStore } from "../../src/local-settings-store";
-import { BUILD_TOOLS_SCHEMA, builderEntry, cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
+import { BUILD_TOOLS_SCHEMA, BUN_RETRY_MS, builderEntry, cachedBunProbe, cachedWolvenKitProbe, desktopBuildIssue, desktopPackageAdapter, PROBE_PENDING, probeBun, useBuilderBun,
   warmBuildProbes, type WolvenKitProbe } from "../build";
 import { probeWolvenKitCliAsync } from "../../src/wolvenkit-cli";
 import { discardCachedPlate, EyePlateError, packagePlateRecord, type EyePlateManifest } from "../../src/eye-plate-service";
@@ -365,3 +365,30 @@ test("a failed tool check keeps its answer: after the old 10 s expiry, readiness
     await probeWolvenKitCliAsync(wolvenKit);
   } finally { clock.mockRestore(); }
 });
+
+test("a Bun check that couldn't finish is not an answer: its reason shows while it is retried, and a later pass counts (DESK-17)", async () => {
+  // A new path to the real runtime (a hard link, or a copy across volumes), so no earlier answer is cached for it.
+  const bun = resolve(root, "slow-first-start-bun" + (process.platform === "win32" ? ".exe" : ""));
+  try { linkSync(process.execPath, bun); } catch { copyFileSync(process.execPath, bun); }
+  // The first start times out (antivirus scanning the file): not "Reinstall", and not cached as a failure.
+  await warmBuildProbes({ wolvenKitCli: null }, bun, async () => ({ exitCode: null, stdout: "", stderr: "", stopped: "timeout" }));
+  const unanswered = cachedBunProbe(bun);
+  expect(unanswered).toContain("keeps checking");
+  expect(unanswered).not.toContain("Reinstall");
+  // A start that failed is transient too.
+  await warmBuildProbes({ wolvenKitCli: null }, bun, async () => ({ exitCode: null, stdout: "", stderr: "", stopped: null,
+    error: Object.assign(Error("resource busy"), { code: "EBUSY" }) }));
+  expect(cachedBunProbe(bun)).toContain("couldn't be started");
+  // After the retry interval, readiness keeps the last reason while the real check runs; its pass is then the answer.
+  const now = Date.now(), clock = spyOn(Date, "now").mockReturnValue(now + BUN_RETRY_MS + 1);
+  try {
+    expect(cachedBunProbe(bun)).toContain("couldn't be started");
+    await warmBuildProbes({ wolvenKitCli: null }, bun);
+  } finally { clock.mockRestore(); }
+  expect(cachedBunProbe(bun)).toBeNull();
+  // A runtime that ran and answered wrongly is a definite failure, kept until the file changes.
+  const wrong = resolve(root, "wrong-bun" + (process.platform === "win32" ? ".exe" : ""));
+  try { linkSync(process.execPath, wrong); } catch { copyFileSync(process.execPath, wrong); }
+  await warmBuildProbes({ wolvenKitCli: null }, wrong, async () => ({ exitCode: 0, stdout: "something else", stderr: "", stopped: null }));
+  expect(cachedBunProbe(wrong)).toContain("Reinstall");
+}, 30_000);
