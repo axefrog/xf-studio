@@ -16,10 +16,16 @@ import type { FeatureExporterEntry } from "../src/platform/api";
 import type { HostPrerequisite, PackageHostAdapter } from "../src/platform/export/product-host";
 import { cachedWolvenKitProbeResult, probeWolvenKitCli, probeWolvenKitCliAsync } from "../src/wolvenkit-cli";
 
-/** The packaged TypeScript builder: one Bun bundle of tools/build_collection_package.ts. No Python. */
-export const BUILD_TOOLS_SCHEMA = "xfs/desktop-build-tools-2";
-export const builderEntry = "app/tools/build.js";
+/**
+ * The packaged tools (src/packaged-build-tools.ts): the TypeScript builder, one Bun bundle of tools/build_collection_package.ts (no
+ * Python), and XF Studio's texture compressor (native/bcn over DirectXTex, PIPE-130). The compressor is optional: without it (or when it
+ * won't load) the builder imports textures with WolvenKit and says so in the manifest's `resourceWriters`. When the manifest lists it, it
+ * must be the listed bytes (checked here before a Build, and again by the builder before it loads it).
+ */
+export { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/packaged-build-tools";
+import { BUILD_TOOLS_SCHEMA, bcnEntry, builderEntry } from "../src/packaged-build-tools";
 const toolNames = [builderEntry];
+const optionalToolNames = [bcnEntry];
 const file = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
 const directory = (path: string) => { try { return statSync(path).isDirectory(); } catch { return false; } };
 const signature = (path: string, expected: string) => {
@@ -169,11 +175,13 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   wolvenKitProbe: WolvenKitProbe = probeWolvenKit, bunProbe: BunProbe = probeBun): string | null {
   try {
     const manifest = JSON.parse(readFileSync(resolve(toolsRoot, "manifest.json"), "utf8"));
-    if (manifest.schema !== BUILD_TOOLS_SCHEMA || !manifest.files ||
-      JSON.stringify(Object.keys(manifest.files).sort()) !== JSON.stringify([...toolNames].sort()))
+    const listed = manifest.schema === BUILD_TOOLS_SCHEMA && manifest.files && typeof manifest.files === "object" ? Object.keys(manifest.files) : null;
+    if (!listed || toolNames.some(name => !listed.includes(name)) || listed.some(name => !toolNames.includes(name) && !optionalToolNames.includes(name)))
       return "The packaged build tools are incomplete.";
-    for (const name of toolNames) {
+    for (const name of listed) {
       const path = resolve(toolsRoot, name);
+      // A listed optional tool that is gone only costs speed: the builder falls back to WolvenKit for its files.
+      if (optionalToolNames.includes(name) && !existsSync(path)) continue;
       if (!file(path) || !isWithinReal(path, toolsRoot, HOST_PATHS) ||
         toolHash(path) !== manifest.files[name])
         return "The packaged build tools failed integrity checks.";

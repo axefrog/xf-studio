@@ -18,7 +18,7 @@ import type { GeneratedFile, VerifierTools } from "../src/platform/api";
 const near = (a: number, b: number, e = 1e-6) => Math.abs(a - b) <= e;
 
 describe("showroom resources", () => {
-  test("the showroom's collection ID is its own, stable and UUID-shaped; its copy drops the package plan", () => {
+  test("the showroom's collection ID is its own, stable and UUID-shaped; its copy drops the package plan", async () => {
     const id = "0200a5e5-2e55-4c02-9d0b-0000000000d0";
     const derived = showroomCollectionId(id);
     expect(derived).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
@@ -31,7 +31,7 @@ describe("showroom resources", () => {
     expect(copy.sourceId).toBe(id);
   });
 
-  test("paths are the collection depot's showroom folder, and component IDs fit a signed 64-bit number", () => {
+  test("paths are the collection depot's showroom folder, and component IDs fit a signed 64-bit number", async () => {
     const paths = showroomPaths("axefrog/appearance_studio/collections/4426018f6966620881cdcb78569544ab");
     expect(paths.entity).toBe("axefrog/appearance_studio/collections/4426018f6966620881cdcb78569544ab/showroom/xfs_showroom.ent");
     expect(paths.archive).toBe("xfs_showroom_4426018f6966620881cdcb78569544ab");
@@ -39,7 +39,7 @@ describe("showroom resources", () => {
     for (const name of ["face_rig", "xfs_head", "xfs_light_main_face"]) expect(BigInt(showroomComponentId(name)) < 2n ** 63n).toBe(true);
   });
 
-  test("the creator head slot lands on the head joint, and each light aims along its table axis", () => {
+  test("the creator head slot lands on the head joint, and each light aims along its table axis", async () => {
     const slot = studioToEntity(CREATOR_HEAD_SLOT.female);
     expect(slot.every((v, i) => near(v, HEAD_JOINT[i]!))).toBe(true);
     for (const light of rigLights("creator")) {
@@ -50,7 +50,7 @@ describe("showroom resources", () => {
     expect(aimQuaternion([0, -1, 0])).toEqual([0, 0, 1, 0]);
   });
 
-  test("profiles: creator is the whole rig with its shadow flags, creator_face the lights that reach the head unshadowed, key Main_Face", () => {
+  test("profiles: creator is the whole rig with its shadow flags, creator_face the lights that reach the head unshadowed, key Main_Face", async () => {
     expect(rigLights("creator").map(l => l.name)).toEqual(CREATOR_RIG_FEMALE.map(l => l.name));
     expect(rigLights("creator").filter(l => l.localShadows).map(l => l.name)).toEqual(CREATOR_RIG_FEMALE.filter(l => l.shadows).map(l => l.name));
     const face = rigLights("creator_face").map(l => l.name);
@@ -60,7 +60,7 @@ describe("showroom resources", () => {
     expect(rigLights("key").map(l => [l.name, l.contactShadows])).toEqual([["Main_Face", true]]);
   });
 
-  test("each preset's appearance has the face rig, head, eyes, its own plate appearance and the pedestal under the neck", () => {
+  test("each preset's appearance has the face rig, head, eyes, its own plate appearance and the pedestal under the neck", async () => {
     const app = showroomAppearanceResource([{ appearance: "xfs_p1" }, { appearance: "xfs_p2" }], "a/models/xfs_eye_plate.mesh", { skin: "01_ca_pale", eyes: "gradient_brown" });
     const appearances = app.Data.RootChunk.appearances.map((a: any) => a.Data);
     expect(appearances.map((a: any) => a.name.$value)).toEqual(["xfs_p1", "xfs_p2"]);
@@ -123,12 +123,12 @@ function fixture(tamper?: (json: Record<string, any>) => void) {
   const archive = join(root, "packed.archive");
   writeFileSync(archive, "archive-bytes");
   const tools: VerifierTools = {
-    unbundle: (_archive, output) => { cpSync(staged, output, { recursive: true }); return { exitCode: 0, stdout: "", stderr: "" }; },
-    serialize: (input, output) => {
+    unbundle: async (_archive, output) => { cpSync(staged, output, { recursive: true }); return { exitCode: 0, stdout: "", stderr: "" }; },
+    serialize: async (input, output) => {
       for (const name of readdirSync(input as string)) cpSync(join(input as string, name), join(output, `${name}.json`));
       return { exitCode: 0, stdout: "", stderr: "" };
     },
-    exportTextures: () => { throw Error("not used"); },
+    exportTextures: async () => { throw Error("not used"); },
   };
   return { root, depot, pieces, archive, tools, files: listFiles(staged), eye, eyeFiles: listFiles(eye) };
 }
@@ -137,35 +137,35 @@ const verify = (f: ReturnType<typeof fixture>) => verifyShowroomArchive({ archiv
   work: join(f.root, "verify"), expected: { depot: f.depot, pieces: f.pieces, skin: "01_ca_pale", eyes: "gradient_brown", eyeUnbundled: f.eye, eyeFiles: f.eyeFiles } });
 
 describe("showroom verifier", () => {
-  test("accepts a showroom built from its definitions and reports its limits", () => {
-    const report = verify(fixture());
+  test("accepts a showroom built from its definitions and reports its limits", async () => {
+    const report = await verify(fixture());
     expect(report.pieces).toBe(2);
     expect(report.rigLights).toEqual({ xfs_rig_creator: 15, xfs_rig_creator_face: rigLights("creator_face").length, xfs_rig_key: 1 });
     expect(report.gameRenderingVerified).toBe(false);
   });
 
-  test("refuses a light that differs from the creator rig table", () => {
+  test("refuses a light that differs from the creator rig table", async () => {
     const f = fixture(members => {
       const app = members[Object.keys(members).find(k => k.endsWith("xfs_showroom_rig.app"))!];
       app.Data.RootChunk.appearances[0].Data.components[0].intensity = 41;
     });
-    expect(() => verify(f)).toThrow(/Main_Face has other lumens/);
+    await expect(verify(f)).rejects.toThrow(/Main_Face has other lumens/);
   });
 
-  test("refuses a head bound to something else, another skin, or a plate appearance the plate lacks", () => {
-    expect(() => verify(fixture(members => {
+  test("refuses a head bound to something else, another skin, or a plate appearance the plate lacks", async () => {
+    await expect(verify(fixture(members => {
       const app = members[Object.keys(members).find(k => k.endsWith("xfs_showroom.app"))!];
       app.Data.RootChunk.appearances[0].Data.components[1].meshAppearance.$value = "03_ca_senna";
-    }))).toThrow(/xfs_head is not/);
-    expect(() => verify(fixture(members => {
+    }))).rejects.toThrow(/xfs_head is not/);
+    await expect(verify(fixture(members => {
       const plate = members[Object.keys(members).find(k => k.endsWith("xfs_eye_plate.mesh"))!];
       plate.Data.RootChunk.appearances.pop();
-    }))).toThrow(/the plate has no appearance/);
+    }))).rejects.toThrow(/the plate has no appearance/);
   });
 
-  test("refuses a texture that differs from the verified eye-makeup build", () => {
+  test("refuses a texture that differs from the verified eye-makeup build", async () => {
     const f = fixture();
     writeFileSync(join(f.eye, ...`${f.depot}/textures/${f.pieces[0]}_diffuse.xbm`.split("/")), "other");
-    expect(() => verify(f)).toThrow(/differs from the verified eye-makeup build/);
+    await expect(verify(f)).rejects.toThrow(/differs from the verified eye-makeup build/);
   });
 });

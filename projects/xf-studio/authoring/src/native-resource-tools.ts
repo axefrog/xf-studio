@@ -17,6 +17,7 @@ import { basename, join } from "node:path";
 import type { ResourceTools, ResourceWriters, TextureImportSettings, ToolStep } from "./platform/api";
 import type { OodleLibrary } from "./native/oodle";
 import type { BcnLibrary } from "./native/write/bcn";
+import type { BcnCandidate } from "./packaged-build-tools";
 import { writeCr2wDocument } from "./native/write/cr2w-writer";
 import { packArchive, walkOrder } from "./native/write/rdar-writer";
 import { NativeWriteRefusal } from "./native/write/red-encoder";
@@ -142,10 +143,12 @@ export function createNativeResourceTools(wolvenkit: ResourceTools, libraries: N
 
 /**
  * The native writer's libraries for a Build: the game's Oodle (with its compressor) from `gameRoot`, and XF Studio's texture compressor,
- * the first of `bcnCandidates` that exists. What can't be loaded is reported, and its outputs go to WolvenKit.
+ * the first of `bcnCandidates` that exists (packaged-build-tools.ts decides them). A candidate with a `sha256` is loaded only when its
+ * bytes have that hash (`load.sha256`). What can't be loaded is reported, and its outputs go to WolvenKit.
  */
-export function loadNativeWriterLibraries(gameRoot: string, bcnCandidates: readonly string[],
-  load: { oodle: (gameRoot: string) => OodleLibrary; bcn: (path: string) => BcnLibrary; isFile: (path: string) => boolean }): NativeWriterLibraries {
+export function loadNativeWriterLibraries(gameRoot: string, bcnCandidates: readonly (string | BcnCandidate)[],
+  load: { oodle: (gameRoot: string) => OodleLibrary; bcn: (path: string) => BcnLibrary; isFile: (path: string) => boolean;
+    sha256?: (path: string) => string }): NativeWriterLibraries {
   let oodle: NativeWriterLibraries["oodle"];
   try {
     const library = load.oodle(gameRoot);
@@ -153,8 +156,12 @@ export function loadNativeWriterLibraries(gameRoot: string, bcnCandidates: reado
     else { library.close(); oodle = { unavailable: "The game's Oodle library has no compressor export." }; }
   } catch (error) { oodle = { unavailable: (error as Error).message }; }
   let bcn: NativeWriterLibraries["bcn"] = { unavailable: "XF Studio's texture compressor is not installed." };
-  const path = bcnCandidates.find(candidate => load.isFile(candidate));
-  if (path) try { bcn = load.bcn(path); } catch (error) { bcn = { unavailable: (error as Error).message }; }
+  const candidate = bcnCandidates.map(item => typeof item === "string" ? { path: item } as BcnCandidate : item).find(item => load.isFile(item.path));
+  if (candidate) try {
+    if (candidate.sha256 !== undefined && (!load.sha256 || load.sha256(candidate.path) !== candidate.sha256))
+      bcn = { unavailable: "XF Studio's texture compressor differs from the one this app was built with." };
+    else bcn = load.bcn(candidate.path);
+  } catch (error) { bcn = { unavailable: (error as Error).message }; }
   return { oodle, bcn };
 }
 

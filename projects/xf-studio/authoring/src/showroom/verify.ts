@@ -150,7 +150,7 @@ function checkRig(profile: string, app: Json, table: Map<string, Json>): number 
   return expected.length;
 }
 
-export function verifyShowroomArchive(input: ShowroomVerifyInput): ShowroomVerification {
+export async function verifyShowroomArchive(input: ShowroomVerifyInput): Promise<ShowroomVerification> {
   const { work, tools, expected } = input;
   ensure(!existsSync(work) || readdirSync(work).length === 0, "the work folder is not empty");
   const copies = join(work, "archive"), unpacked = join(work, "unpacked"), serialized = join(work, "json"), members = join(work, "members");
@@ -159,7 +159,7 @@ export function verifyShowroomArchive(input: ShowroomVerifyInput): ShowroomVerif
   copyFileSync(input.archive, archive);
   const archiveSha256 = sha256(readFileSync(archive));
   ensure(archiveSha256 === input.archiveSha256, "the archive differs from the build record");
-  const unbundle = tools.unbundle(archive, unpacked);
+  const unbundle = await tools.unbundle(archive, unpacked);
   ensure(unbundle.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(unbundle.stdout + unbundle.stderr), "WolvenKit could not unpack the archive");
   const files = list(unpacked);
   const key = (f: readonly GeneratedFile[]) => JSON.stringify(f.map(x => [x.path, x.bytes, x.sha256]));
@@ -180,7 +180,7 @@ export function verifyShowroomArchive(input: ShowroomVerifyInput): ShowroomVerif
 
   // Own conversion of the five resources it reads.
   for (const member of [plate, ...own]) copyFileSync(join(unpacked, ...member.split("/")), join(members, member.slice(member.lastIndexOf("/") + 1)));
-  const run = tools.serialize(members, serialized);
+  const run = await tools.serialize(members, serialized);
   ensure(run.exitCode === 0 && !/\bError\s*\]|Unhandled exception/.test(run.stdout + run.stderr), "WolvenKit could not read the showroom's resources");
   const read = (leaf: string) => {
     const file = join(serialized, `${leaf}.json`);

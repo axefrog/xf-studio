@@ -36,7 +36,7 @@ function candidate(name: string, options: { members?: Record<string, string>; xl
   return { dir, members };
 }
 /** WolvenKit's stand-in: unbundling a candidate's archive copies the member tree written beside it. */
-const unbundle = (trees: Record<string, string>): VerifierTools["unbundle"] => (archive, output) => {
+const unbundle = (trees: Record<string, string>): VerifierTools["unbundle"] => async (archive, output) => {
   const tree = Object.entries(trees).find(([dir]) => archive.startsWith(dir))?.[1];
   if (!tree) return { exitCode: 1, stdout: "", stderr: "unknown archive" };
   cpSync(tree, output, { recursive: true });
@@ -45,17 +45,17 @@ const unbundle = (trees: Record<string, string>): VerifierTools["unbundle"] => (
 const compare = (a: ReturnType<typeof candidate>, b: ReturnType<typeof candidate>) =>
   compareCandidates(a.dir, b.dir, unbundle({ [a.dir]: a.members, [b.dir]: b.members }), join(root, `work-${crypto.randomUUID()}`));
 
-test("identical members and declaration pass, although the archive containers differ", () => {
-  const report = compare(candidate("main"), candidate("branch"));
+test("identical members and declaration pass, although the archive containers differ", async () => {
+  const report = await compare(candidate("main"), candidate("branch"));
   expect(report).toEqual({ identical: true, differences: [], members: 2 });
 });
 
-test("a changed member, declaration or manifest field fails, and says which", () => {
-  expect(compare(candidate("m1"), candidate("b1", { members: { "a/b.app": "app", "a/b.mesh": "other" } })).differences)
+test("a changed member, declaration or manifest field fails, and says which", async () => {
+  expect((await compare(candidate("m1"), candidate("b1", { members: { "a/b.app": "app", "a/b.mesh": "other" } }))).differences)
     .toEqual(["archive members: differs: a/b.mesh"]);
-  expect(compare(candidate("m2"), candidate("b2", { members: { "a/b.app": "app" } })).differences).toEqual(["archive members: only in A: a/b.mesh"]);
-  expect(compare(candidate("m3"), candidate("b3", { xl: "customizations: {}\r\n" })).differences).toContain("the .archive.xl files differ");
-  const renamed = compare(candidate("m4"), candidate("b4", { modName: "XF Night Looks" }));
+  expect((await compare(candidate("m2"), candidate("b2", { members: { "a/b.app": "app" } }))).differences).toEqual(["archive members: only in A: a/b.mesh"]);
+  expect((await compare(candidate("m3"), candidate("b3", { xl: "customizations: {}\r\n" }))).differences).toContain("the .archive.xl files differ");
+  const renamed = await compare(candidate("m4"), candidate("b4", { modName: "XF Night Looks" }));
   expect(renamed.identical).toBe(false);
   expect(renamed.differences.some(line => line.startsWith("manifest mod name"))).toBe(true);
 });

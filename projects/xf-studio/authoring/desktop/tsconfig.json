@@ -19,5 +19,5 @@
       "strata/testing": ["../../../strata/testing.ts"]
     }
   },
-  "include": ["main.ts", "trial-main.ts", "server.ts", "host.ts", "workspace-store.ts", "workspace-close.ts", "check-worker.ts", "check-runner.ts", "build.ts", "prepare-build-tools.ts", "electrobun.config.ts", "prepare-static.ts", "release.ts", "notices.ts", "host-log.ts", "webview2.ts", "startup-watchdog.ts", "prepare-webview2.ts", "webview2-install.ts", "verify-canary.ts", "build-installer.ts", "package-content-scan.ts", "runtime-capabilities.ts", "tools/sandbox-trial.ts", "tools/measure-installed-start.ts", "tests/*.ts"]
+  "include": ["main.ts", "trial-main.ts", "server.ts", "host.ts", "workspace-store.ts", "workspace-close.ts", "check-worker.ts", "check-runner.ts", "build.ts", "prepare-build-tools.ts", "electrobun.config.ts", "prepare-static.ts", "release.ts", "notices.ts", "host-log.ts", "webview2.ts", "startup-watchdog.ts", "prepare-webview2.ts", "webview2-install.ts", "verify-canary.ts", "build-installer.ts", "package-content-scan.ts", "runtime-capabilities.ts", "devkit-check.ts", "bcn-check.ts", "tools/sandbox-trial.ts", "tools/measure-installed-start.ts", "tests/*.ts"]
 }

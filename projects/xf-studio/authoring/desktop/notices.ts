@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import authoringPackage from "../package.json";
 import hutchConfig from "./hutch.config";
 import { INNO_SETUP } from "./inno-setup";
+import { bcnEntry } from "../src/packaged-build-tools";
+import directxtexPin from "../native/bcn/directxtex.json";
 
 // The notices file and project licence ship inside the installed app (served
 // to About) and beside each release. These checks keep the notices honest
@@ -23,6 +25,8 @@ export type NoticeFacts = Readonly<{
   threeVersion: string;
   /** The Inno Setup release whose setup runtime wraps the downloadable setup program. */
   innoSetupVersion: string;
+  /** The pinned DirectXTex source release the texture compressor is built from (native/bcn/directxtex.json). */
+  directxtexVersion: string;
 }>;
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -36,11 +40,13 @@ export function noticeIssues(text: string, facts: NoticeFacts): string[] {
   if (!row("Electrobun", facts.electrobunVersion)) issues.push(`Electrobun ${facts.electrobunVersion} is not the version listed.`);
   if (!row("three.js", facts.threeVersion)) issues.push(`three.js ${facts.threeVersion} is not the version listed.`);
   if (!row("Inno Setup", facts.innoSetupVersion)) issues.push(`Inno Setup ${facts.innoSetupVersion} is not the version listed.`);
+  if (!row("DirectXTex", facts.directxtexVersion)) issues.push(`DirectXTex ${facts.directxtexVersion} is not the version listed.`);
+  if (!text.includes(`\`Resources/app/build-tools/${bcnEntry}\``)) issues.push(`The packaged texture compressor ${bcnEntry} is not named.`);
   if (!text.includes(`bun-v${facts.bunVersion}`)) issues.push(`Bun's licence link does not point at bun-v${facts.bunVersion}.`);
   for (const name of facts.binaries)
     if (!text.includes(`\`bin/${name}\``)) issues.push(`Shipped program bin/${name} is not named.`);
   if (!text.includes("MicrosoftEdgeWebview2Setup.exe")) issues.push("The packaged WebView2 bootstrapper is not named.");
-  for (const heading of ["### Bun (MIT)", "### Electrobun (MIT)", "### three.js (MIT)", "### Inno Setup License",
+  for (const heading of ["### Bun (MIT)", "### Electrobun (MIT)", "### three.js (MIT)", "### DirectXTex (MIT)", "### Inno Setup License",
     "### GNU Lesser General Public License, version 2.1"])
     if (!text.includes(heading)) issues.push(`Missing licence text: ${heading.slice(4)}.`);
   return issues;
@@ -53,7 +59,7 @@ export function builtVersions(lockPath = resolve(import.meta.dir, ".hutch", "dep
   const bun = objects.find(item => item.type === "toolchain" && item.toolchain === "bun")?.version;
   if (typeof bun !== "string") throw Error("Hutch's dependency lock does not record the Bun toolchain.");
   return { bunVersion: bun, electrobunVersion: hutchConfig.electrobun.version,
-    threeVersion: authoringPackage.dependencies.three, innoSetupVersion: INNO_SETUP.version };
+    threeVersion: authoringPackage.dependencies.three, innoSetupVersion: INNO_SETUP.version, directxtexVersion: directxtexPin.release };
 }
 
 /** The release refuses to go out without a project licence at the repository root. */

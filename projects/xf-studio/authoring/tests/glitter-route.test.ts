@@ -50,7 +50,7 @@ function collection(extra: Record<string, unknown> = {}) {
 
 // ---- Maps, mips and the knob ----
 
-test("the random stream is deterministic and uniform enough", () => {
+test("the random stream is deterministic and uniform enough", async () => {
   const a = randomStream(1), b = randomStream(1), values = Array.from({ length: 20000 }, () => a());
   expect(values.slice(0, 5)).toEqual(Array.from({ length: 5 }, () => b()));
   const mean = values.reduce((s, v) => s + v, 0) / values.length;
@@ -58,7 +58,7 @@ test("the random stream is deterministic and uniform enough", () => {
   expect(values.every(v => v >= 0 && v < 1)).toBe(true);
 });
 
-test("tilt variance matches its restatement and a sampled estimate", () => {
+test("tilt variance matches its restatement and a sampled estimate", async () => {
   for (const [sigma, max] of [[10, 20], [25, 50], [40, 70]]) {
     expect(Math.abs(tiltVariance(sigma, max) - restatedTiltVariance(sigma, max))).toBeLessThan(1e-12);
     const random = randomStream(sigma), n = 200000;
@@ -73,7 +73,7 @@ test("tilt variance matches its restatement and a sampled estimate", () => {
   }
 });
 
-test("catalogues follow the recipe statistics and mirror across u = ½", () => {
+test("catalogues follow the recipe statistics and mirror across u = ½", async () => {
   const rect = { u0: .31, v0: .21, u1: .49, v1: .29 }, c = flakeCatalogue(rect, WINDOW.window, FLAKES);
   const widths = [...c.width].sort((a, b) => a - b), median = widths[widths.length >> 1];
   expect(Math.abs(median - .2)).toBeLessThan(.01);
@@ -88,7 +88,7 @@ test("catalogues follow the recipe statistics and mirror across u = ½", () => {
   expect(m.key).toEqual(c.key);
 });
 
-test("glitter maps: coverage from the pigment, resolved nested flakes, sheen below, deterministic", () => {
+test("glitter maps: coverage from the pigment, resolved nested flakes, sheen below, deterministic", async () => {
   const prepared = preparePackageCollection(collection()), plan = prepared.plan, preset = plan.presets[1];
   const dims = { width: 1024, height: 256 };
   const a = compileGlitterPreset(preset.recipe, preset.diagnostics!.glitter!, WINDOW.window, dims);
@@ -133,7 +133,7 @@ function findIsolated(flakes: Uint8Array, diffuse: Uint8Array, { width, height }
   throw Error("no isolated texel");
 }
 
-test("BOX regions keep points only where nested mips re-draw them", () => {
+test("BOX regions keep points only where nested mips re-draw them", async () => {
   const plan = preparePackageCollection(collection()).plan, preset = plan.presets[0], dims = { width: 1024, height: 256 };
   const c = compileGlitterPreset(preset.recipe, preset.diagnostics!.glitter!, WINDOW.window, dims);
   // Level 1 (0.5 mm texels here): the nested (left) lid still has full-strength flakes; the BOX (right) lid's are averaged away.
@@ -152,7 +152,7 @@ test("BOX regions keep points only where nested mips re-draw them", () => {
   expect(c.accent!.slice(2).every(level => level.every(v => v === 0))).toBe(true);
 }, 60_000);
 
-test("the glitter knob is validated, and only it reaches the route", () => {
+test("the glitter knob is validated, and only it reaches the route", async () => {
   const ids = [ID(1)];
   const knob = collection().diagnostics.presets[ID(1)];
   expect(parseExportDiagnostics({ schema: "xfs/export-diagnostics-1", presets: { [ID(1)]: knob } }, ids)!.presets[ID(1)].glitter!.regions[1])
@@ -188,7 +188,7 @@ test("the glitter knob is validated, and only it reaches the route", () => {
   expect(plain.presets.every(p => !("accentMaterial" in p))).toBe(true);
 });
 
-test("plan and materials: @glitter on the window, the accent on its own chunk, hidden elsewhere", () => {
+test("plan and materials: @glitter on the window, the accent on its own chunk, hidden elsewhere", async () => {
   const plan = preparePackageCollection(collection()).plan;
   expect(plan.plate).toEqual({ liftsMm: [.4, .4], accentChunk: 1 });
   expect(plan.presets.map(p => [p.route, p.material, p.accentMaterial, p.plateChunk, Object.keys(p.textures)])).toEqual([
@@ -318,9 +318,9 @@ const ok = (): ToolResult => ({ exitCode: 0, stdout: "ok", stderr: "" });
 function run({ build, dds }: Awaited<ReturnType<typeof makeBuild>>, packagedCollection: unknown = BAKED.packaged) {
   const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)]);
   const tools: VerifierTools = {
-    unbundle: (_archive, output) => { cpSync(join(build, "archive"), output, { recursive: true }); return ok(); },
-    serialize: (input, output) => { for (const file of [input].flat().flatMap(files)) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8")); return ok(); },
-    exportTextures: (input, output) => {
+    unbundle: async (_archive, output) => { cpSync(join(build, "archive"), output, { recursive: true }); return ok(); },
+    serialize: async (input, output) => { for (const file of [input].flat().flatMap(files)) writeFileSync(join(output, basename(file) + ".json"), readFileSync(file, "utf8")); return ok(); },
+    exportTextures: async (input, output) => {
       for (const file of files(input)) writeFileSync(join(output, basename(file).replace(/\.xbm$/, ".dds")), dds.get(basename(file).replace(/\.xbm$/, ".dds"))!);
       return ok();
     },
@@ -352,7 +352,7 @@ const flipLevelRows = (level: Uint8Array, width: number, height: number) => {
 test("a glitter build with an accent chunk passes the independent verifier", async () => {
   const fixture = await makeBuild();
   try {
-    const report = run(fixture);
+    const report = await run(fixture);
     expect(report.presetRoutes.map(r => r.route)).toEqual(["glitter", "glitter"]);
     expect(report).toMatchObject({ materialTemplates: 3, textureCount: 6 + 5, plateGeometry: { liftsMm: [.4, .4], chunks: 2 } });
     const pixel = report.decodedPixelChecks[0] as any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -408,7 +408,7 @@ test("glitter tampering fails: accent constants and binding, supplied chains, BO
   ];
   for (const [message, mutate, tamper, source] of cases) {
     const fixture = await makeBuild(mutate, tamper);
-    try { expect(() => run(fixture, source === undefined ? BAKED.packaged : source)).toThrow(message); }
+    try { await expect(run(fixture, source === undefined ? BAKED.packaged : source)).rejects.toThrow(message); }
     finally { rmSync(fixture.build, { recursive: true, force: true }); }
   }
 }, 600_000);

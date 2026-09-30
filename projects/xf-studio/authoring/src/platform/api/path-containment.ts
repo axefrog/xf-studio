@@ -12,7 +12,8 @@
  *
  * Real checks (`isWithinReal`, `isBelowReal`) also follow links, through the caller's `RealPaths` (the host passes
  * `existsSync` and `realpathSync.native`): the path must be inside the root as written (or inside the root's
- * canonical form, so a Windows 8.3 short root matches its long form) and its canonical path inside the root's
+ * canonical form, so a Windows 8.3 short root matches its long form, also when only the folders the two share are
+ * written in short form, as under a short-named temporary folder) and its canonical path inside the root's
  * canonical path. So a junction inside the root that leads out is refused, and so is an outside path that reaches in
  * through a junction (PIPE-31).
  */
@@ -110,10 +111,30 @@ export function canonicalPath(path: string, fs: RealPaths): string {
   return real.endsWith(p.separator) ? real + rest.join(p.separator) : real + p.separator + rest.join(p.separator);
 }
 
+/**
+ * `child` with the ancestor it shares, as written, with `root` replaced by that ancestor's canonical form. Following
+ * links in an ancestor both paths are written through can't move one relative to the other, and it expands the 8.3
+ * short names they share (the temporary folder of a long user name, in its 8.3 form); links in the child's own remaining segments
+ * are not followed, so a path that reaches in through a link is still refused.
+ */
+function throughSharedAncestor(child: string, root: string, fs: RealPaths): string {
+  const c = pieces(child, HOST), r = pieces(root, HOST);
+  if (!c || !r) throw Error("That path can't be used.");
+  const same = (a: string, b: string) => HOST === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+  if (!same(c.root, r.root)) return child;
+  let shared = 0;
+  while (shared < c.segments.length && shared < r.segments.length && same(c.segments[shared]!, r.segments[shared]!)) shared++;
+  const ancestor = canonicalPath(joined(c, shared), fs), rest = c.segments.slice(shared);
+  if (!rest.length) return ancestor;
+  return ancestor.endsWith(c.separator) ? ancestor + rest.join(c.separator) : ancestor + c.separator + rest.join(c.separator);
+}
+
 function real(child: string, root: string, fs: RealPaths, strict: boolean): boolean {
-  let canonicalRoot: string, canonicalChild: string;
-  try { canonicalRoot = canonicalPath(root, fs); canonicalChild = canonicalPath(child, fs); } catch { return false; }
-  const lexical = isWithin(child, root) || isWithin(child, canonicalRoot);
+  let canonicalRoot: string, canonicalChild: string, written: string;
+  try {
+    canonicalRoot = canonicalPath(root, fs); canonicalChild = canonicalPath(child, fs); written = throughSharedAncestor(child, root, fs);
+  } catch { return false; }
+  const lexical = isWithin(child, root) || isWithin(child, canonicalRoot) || isWithin(written, canonicalRoot);
   return lexical && (strict ? isBelow(canonicalChild, canonicalRoot) : isWithin(canonicalChild, canonicalRoot));
 }
 

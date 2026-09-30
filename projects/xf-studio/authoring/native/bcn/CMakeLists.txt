@@ -1,6 +1,6 @@
 # XF Studio's block-compression library (xfs_bcn.dll) over DirectXTex's encoders. DirectXTex is not vendored: pass the folder of
-# an official DirectXTex source release as DIRECTXTEX_DIR and its compute shaders compiled with fxc as COMPILED_SHADERS
-# (tools/build-native-bcn.ts does both).
+# the pinned DirectXTex source release (directxtex.json) as DIRECTXTEX_DIR and its compute shaders compiled with fxc as
+# COMPILED_SHADERS (tools/build-native-bcn.ts does both, from the hash-checked release ZIP).
 cmake_minimum_required(VERSION 3.20)
 project(xfs_bcn LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
@@ -8,6 +8,10 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 if(NOT DIRECTXTEX_DIR)
   message(FATAL_ERROR "Set DIRECTXTEX_DIR to a DirectXTex source release folder.")
 endif()
+# Deterministic objects, libraries and DLL (no time stamps): the same inputs and toolset give the same bytes.
+add_compile_options(/Brepro)
+add_link_options(/Brepro)
+set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /Brepro")
 set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(BUILD_SAMPLE OFF CACHE BOOL "" FORCE)
 set(BUILD_DX11 ON CACHE BOOL "" FORCE)

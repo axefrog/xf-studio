@@ -137,12 +137,12 @@ const archiveSha256 = sha256(readFileSync(archive)), xlSha256 = sha256(readFileS
 
 // 5. Verify independently: the product verifier unbundles a copy; every member is serialized again and checked.
 const verifierTools = createWolvenKitVerifierTools(cli, gameRoot);
-const unpacked = verifyProductArchive({ archive, xl, archiveSha256, files, declaration: xlText(), features: 1, tools: verifierTools, work: join(run, "verify") });
+const unpacked = await verifyProductArchive({ archive, xl, archiveSha256, files, declaration: xlText(), features: 1, tools: verifierTools, work: join(run, "verify") });
 const members = new Map<string, Json>();
 for (const file of unpacked.files) {
   const out = join(run, "verify", "json", ...dirname(file.path).split("/"));
   mkdirSync(out, { recursive: true });
-  const result = verifierTools.serialize(depotFile(unpacked.root, file.path), out);
+  const result = await verifierTools.serialize(depotFile(unpacked.root, file.path), out);
   const json = join(out, file.path.slice(file.path.lastIndexOf("/") + 1) + ".json");
   if (result.exitCode !== 0 || !existsSync(json)) throw Error(`WolvenKit could not serialize ${file.path}: ${result.stdout.slice(-800)}`);
   members.set(file.path, readJson(json));
