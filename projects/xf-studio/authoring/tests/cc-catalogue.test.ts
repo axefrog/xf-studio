@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { buildCatalogue, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/cc-catalogue";
 import type { CcoResource } from "../src/cco-model";
-import { catalogueCoverage, PARTLY_SHOWN, refineCoverage, renderCoverage, shownOutcome, type CoverageInput } from "../src/cc-render-coverage";
+import { catalogueCoverage, renderCoverage, shownOutcome, type CoverageInput } from "../src/cc-render-coverage";
+import * as coverageModule from "../src/cc-render-coverage";
 import { CC_PAGE_SIZE, choicePage, panelProjection, readCcPanel, readChoicePage } from "../src/cc-panel";
 import { loadMergedCco } from "../src/character-resolver";
 import { appearance, BASE_CCO, creator, fixtureSource, MOD_CCO, MOD_NAME, PRESENTATION, switcher, TEXTS, vanillaCreator } from "./cc-fixtures";
@@ -116,14 +117,10 @@ describe("creator catalogue from the merged resource", () => {
     // The body draws since the body render: its skin (consumed by the third-person body group) and its shape.
     expect(status("body", "breast")).toEqual(["rendered", "body"]);
     expect(status("body", "body_color")).toEqual(["rendered", "body"]);
-    // A conditional face option settles from the plan; a rendered one (the teeth, which have a slot of their own) is kept.
-    const scars = coverage.get("head/scars")!;
-    expect(refineCoverage(scars, "none").status).toBe("not-rendered");
-    expect(refineCoverage(scars, "whole").status).toBe("rendered");
-    // Drawn only in part (a beard whose cards are left out): never claimed as drawn, and says so.
-    expect(refineCoverage(scars, "part")).toEqual({ status: "conditional", detail: "face", note: PARTLY_SHOWN });
-    expect(refineCoverage(scars, null).status).toBe("conditional");
-    expect(refineCoverage(coverage.get("head/teeth")!, "none")).toEqual(coverage.get("head/teeth")!);
+    // A conditional face option settles in the Character panel from what the shown V draws of it (`shownOutcome`): all of it, only part
+    // of it (a beard whose cards are left out: never claimed as drawn, marked PARTLY_SHOWN), or none of it. There is one way to settle it
+    // (CORE-150): the unused `refineCoverage` is gone.
+    expect("refineCoverage" in coverageModule).toBe(false);
     const shown = { drawn: ["beard_part_01", "scars"], partial: ["beard_part_01"] };
     expect(shownOutcome("scars", shown)).toBe("whole");
     expect(shownOutcome("beard_part_01", shown)).toBe("part");

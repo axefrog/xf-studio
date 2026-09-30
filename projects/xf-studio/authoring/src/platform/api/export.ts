@@ -384,12 +384,21 @@ export type ResourceWriters = {
   readonly native: readonly string[];
   readonly wolvenkit: readonly { readonly file: string; readonly reason: string }[];
 };
+/** How one `deserialize` may be written. */
+export type DeserializeOptions = {
+  /**
+   * The native writer's oracle that proves these documents byte for byte against WolvenKit (NATIVE-72; `NATIVE_WRITER_ORACLES` in
+   * native-resource-tools.ts names each oracle's root classes). Tools that write natively write a document only when it names an oracle
+   * whose classes include its root; without one, WolvenKit converts every document. WolvenKit's own tools ignore it.
+   */
+  readonly oracle?: string;
+};
 /** The conversions a build needs (WolvenKit's, or the native writer's with WolvenKit per file); exporters convert, the host packs. */
 export interface ResourceTools {
   importTextures(input: string, output: string, settings: TextureImportSettings): Promise<ToolStep>;
   serialize(input: string, output: string): Promise<ToolStep>;
   /** Convert every JSON document below `input` (one folder, or several in one launch) into `output`, flat. */
-  deserialize(input: string | readonly string[], output: string): Promise<ToolStep>;
+  deserialize(input: string | readonly string[], output: string, options?: DeserializeOptions): Promise<ToolStep>;
   pack(input: string, output: string): Promise<ToolStep>;
   /**
    * The converter's identity (`wolvenKitIdentityKey`), when known: conversions it made earlier and kept (the eye plate's

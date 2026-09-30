@@ -21,6 +21,7 @@
     "plate-uv-footprint-io",
     "platform/api/export",
     "platform/export/check-runner",
+    "platform/export/host-real-paths",
     "platform/export/manifest",
     "platform/export/product-builder",
     "platform/export/product-check",

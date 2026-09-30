@@ -1,0 +1,54 @@
+{
+  "kind": "process",
+  "id": "library-flush",
+  "owner": "library",
+  "summary": "Making a library file's commits durable a few seconds after they are made, with a checkpoint of its write-ahead log.",
+  "status": "current",
+  "driver": "driver:library",
+  "work": "A passive checkpoint through a short-lived connection of its own: on the checkpoint worker's thread 2 s after the last commit (at most 5 s after the first under steady saving), and at once on the host's thread when the library closes.",
+  "progress": {
+    "type": "null"
+  },
+  "result": {
+    "type": "object",
+    "properties": {
+      "done": {
+        "type": "boolean",
+        "description": "Every committed frame reached the disk; false when a reader or another checkpoint held part of the log."
+      }
+    },
+    "required": [
+      "done"
+    ]
+  },
+  "failure": {
+    "allOf": [
+      {
+        "$ref": "shapes.schema.json#/$defs/fault"
+      },
+      {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "flush-failed"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cancel": "The library's lifetime ends: pending timers stop and the last flush runs at once on the host's thread.",
+  "cleanup": "Nothing: the checkpoint's connection is closed after each run.",
+  "deadline": "Unbounded; an unfinished flush is retried 2 s later, doubling to 30 s.",
+  "lane": "host, checkpoint worker thread, one flush per file at a time",
+  "faults": [
+    {
+      "code": "flush-failed",
+      "when": "The checkpoint failed or couldn't open the file.",
+      "fault": "owner",
+      "goesTo": "diagnostics",
+      "then": "fallback"
+    }
+  ]
+}

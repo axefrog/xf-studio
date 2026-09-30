@@ -19,9 +19,10 @@ import { checkProducts, type ProductsCheck } from "./product-check";
 import { runWorkerCheck, type CheckOutcome, type CheckRequest } from "./check-runner";
 import { LOCAL_PACKAGE_2, readPackageManifest } from "./manifest";
 import { isBelowReal } from "../api/path-containment";
+import { HOST_REAL_PATHS } from "./host-real-paths";
 
 /** The host's file-system reads for the containment checks. */
-const HOST_PATHS = { exists: existsSync, realpath: realpathSync.native };
+const HOST_PATHS = HOST_REAL_PATHS;
 
 /** One Check's deadline (a fresh worker; small compiles only). */
 export const PACKAGE_CHECK_DEADLINE_MS = 15_000;

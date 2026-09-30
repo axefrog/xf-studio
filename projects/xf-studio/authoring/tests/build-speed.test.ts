@@ -71,7 +71,7 @@ test("at most the gate's limit of WolvenKit steps run at once, in the order they
   expect(await task(6)).toBe(6);
 });
 
-test("a finishing task hands its slot to the first waiter: a caller arriving in between waits (deep review 9, PIPE-Low)", async () => {
+test("a finishing task hands its slot to the first waiter: a caller arriving in between waits (PIPE-138)", async () => {
   const gate = concurrencyGate(1);
   let running = 0, most = 0, releaseA!: () => void;
   const order: string[] = [];

@@ -25,6 +25,9 @@ import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden
 import { alphaList } from "./fixtures/alpha-0.1.0/collection-list";
 import { readRecipe } from "../src/recipe-schema";
 
+/** The library's raw store, which only these store tests reach past its privacy (CORE-148). */
+const raw = (library: GraphLibrary) => (library as unknown as { store: SqliteGraphStore }).store;
+
 const folders: string[] = [];
 function folder(): string { const dir = mkdtempSync(join(tmpdir(), "xfs-graph-")); folders.push(dir); return dir; }
 const cleanup = () => { for (const dir of folders.splice(0)) try { rmSync(dir, { recursive: true, force: true }); } catch { /* WAL files may still be closing */ } };
@@ -137,7 +140,7 @@ test("a G1 library migrates to never-reissued positions in place, keeping every 
     legacy.close();
     const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: simClock(new Scheduler()), random: seededRandom("m") });
     try {
-      expect(library.store.migrationError).toBeUndefined();
+      expect(raw(library).migrationError).toBeUndefined();
       expect(library.backups.list().map(item => item.kind)).toEqual(["pre-migration"]);
       expect(library.backups.list()[0].entries).toBe(3);
       const db = new Database(path, { readonly: true });
@@ -147,11 +150,11 @@ test("a G1 library migrates to never-reissued positions in place, keeping every 
         expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(version);
       } finally { db.close(); }
       // The purge-then-append case that reissued a position before.
-      await library.store.purge({ type: POINTER, id: "a" });
-      const result = await library.store.append({ commit: "c3", expect: [["b", 1]], entries: [{ node: { type: POINTER, id: "b" }, seq: 2, pos: 0, commit: "c3",
+      await raw(library).purge({ type: POINTER, id: "a" });
+      const result = await raw(library).append({ commit: "c3", expect: [["b", 1]], entries: [{ node: { type: POINTER, id: "b" }, seq: 2, pos: 0, commit: "c3",
         actor: "local", actorSeq: 4, at: 2, schema: "1", op: { kind: "rename", name: "o" } }] });
       expect(result.ok && result.positions).toEqual([4]);
-      expect((await library.store.changesSince(3)).entries.map(entry => entry.commit)).toEqual(["c3"]);
+      expect((await raw(library).changesSince(3)).entries.map(entry => entry.commit)).toEqual(["c3"]);
     } finally { library.close(); }
     // Opening again doesn't migrate (or back up) twice.
     const again = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: simClock(new Scheduler()), random: seededRandom("m") });
@@ -166,7 +169,7 @@ test("a purge whose backups are locked stays pending and finishes later; the pur
   const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: { ...simClock(new Scheduler()), now: () => now }, random: seededRandom("p") });
   try {
     const node = { type: POINTER, id: "n1" };
-    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
+    await raw(library).append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
       actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } }] });
     library.dailyBackup();
     now += DAY;
@@ -177,12 +180,12 @@ test("a purge whose backups are locked stays pending and finishes later; the pur
     const lock = new Database(copies[0].file);
     lock.exec("BEGIN EXCLUSIVE");
     try {
-      await library.store.purge(node);
-      expect(library.store.pendingPurges()).toEqual(["n1"]);
-      expect((await library.store.readStream(node)).length).toBe(0);
+      await raw(library).purge(node);
+      expect(raw(library).pendingPurges()).toEqual(["n1"]);
+      expect((await raw(library).readStream(node)).length).toBe(0);
       expect(library.backups.list().find(item => item.file === copies[1].file)!.nodes).toBe(0);
     } finally { lock.exec("ROLLBACK"); lock.close(); }
-    expect(library.store.retryPurges()).toEqual([]);
+    expect(raw(library).retryPurges()).toEqual([]);
     expect(library.backups.list().every(item => item.nodes === 0)).toBe(true);
   } finally { library.close(); cleanup(); }
 }, 30_000);   // Several backup and purge rounds on disk: about 5 s on CI's Windows runner, over bun's 5 s default.
@@ -221,12 +224,12 @@ test("the inspector's read graph never writes to the library, catches up without
     const node = { type: POINTER, id: "00000000-0000-4000-8000-000000000001" };
     const entry = (seq: number): Entry => ({ node, seq, pos: 0, commit: `c${seq}`, actor: "local", actorSeq: seq, at: seq, schema: "1",
       op: seq === 1 ? { kind: "create", state: { name: "p", own: {}, layers: [], trashed: false, retracted: false } } : { kind: "rename", name: `p${seq}` } });
-    for (let seq = 1; seq <= 210; seq++) await library.store.append({ commit: `c${seq}`, entries: [entry(seq)], expect: [[node.id, seq - 1]] });
+    for (let seq = 1; seq <= 210; seq++) await raw(library).append({ commit: `c${seq}`, entries: [entry(seq)], expect: [[node.id, seq - 1]] });
     const handler = createGraphHandler(library, "/api/graph");
     const page = await (await handler(new Request("http://localhost:4317/api/graph/inspect?q=", { headers: { Origin: "http://localhost:4317" } }))).json() as { rows: { name: string }[] };
     expect(page.rows.map(row => row.name)).toEqual(["p210"]);
     const first = await library.graph();
-    await library.store.append({ commit: "c211", entries: [entry(211)], expect: [[node.id, 210]] });
+    await raw(library).append({ commit: "c211", entries: [entry(211)], expect: [[node.id, 210]] });
     expect(await library.graph()).toBe(first);
     expect(first.read(node)?.name).toBe("p211");
     const db = new Database(path, { readonly: true });
@@ -267,7 +270,7 @@ test("the inspector feed pages rows through the host endpoint, and refuses other
   const library = new GraphLibrary(join(dir, "library.sqlite"), { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES,
     clock: simClock(new Scheduler()), random: seededRandom("feed") });
   try {
-    const graph = createGraph({ types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, store: library.store, sources: { clock: simClock(new Scheduler()), random: seededRandom("w") } });
+    const graph = createGraph({ types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, store: raw(library), sources: { clock: simClock(new Scheduler()), random: seededRandom("w") } });
     await graph.load();
     const made = graph.commit([{ op: "create", type: POINTER, as: "a", name: "focus.view" }, { op: "create", type: POINTER, as: "b", name: "focus.v", fields: { from: { created: "a" }, path: ["scene"] } }]);
     if (!made.ok) throw new Error(made.message);
@@ -290,8 +293,8 @@ test("the page can't compact or purge (CORE-127): the transport refuses both, th
     const node = { type: POINTER, id: "n1" };
     const entry = (seq: number, commit: string): Entry => ({ node, seq, pos: 0, commit, actor: "local", actorSeq: seq, at: seq, schema: "1",
       op: seq === 1 ? { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } : { kind: "rename", name: `R${seq}` } }) as Entry;
-    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [entry(1, "c1")] });
-    await library.store.append({ commit: "c2", expect: [["n1", 1]], entries: [entry(2, "c2")] });
+    await raw(library).append({ commit: "c1", expect: [["n1", 0]], entries: [entry(1, "c1")] });
+    await raw(library).append({ commit: "c2", expect: [["n1", 1]], entries: [entry(2, "c2")] });
     const handler = createGraphHandler(library, "/api/graph");
     const post = (op: string, args: unknown[]) => handler(new Request("http://127.0.0.1/api/graph/store", { method: "POST",
       headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1" }, body: JSON.stringify({ op, args }) }));
@@ -299,8 +302,8 @@ test("the page can't compact or purge (CORE-127): the transport refuses both, th
     const purged = await post("purge", [node]);
     expect(purged.status).toBe(403);
     expect((await post("compact", [node, [entry(1, "c1")], 5])).status).toBe(403);
-    expect((await library.store.readStream(node)).length).toBe(2);
-    expect((await library.store.list()).map(row => row.ref.id)).toEqual(["n1"]);
+    expect((await raw(library).readStream(node)).length).toBe(2);
+    expect((await raw(library).list()).map(row => row.ref.id)).toEqual(["n1"]);
     // The page's store refuses without sending anything.
     let sent = 0;
     const page = new HostGraphStore("http://127.0.0.1/api/graph/store", async (url, init) => { sent++; return handler(new Request(url, init)); });
@@ -313,15 +316,15 @@ test("the page can't compact or purge (CORE-127): the transport refuses both, th
     await expect(declined.purge(node)).rejects.toThrow(/confirmation/);
     await expect(declined.compact(node, [entry(1, "c1")], 5)).rejects.toThrow(/confirmation/);
     expect(asked).toEqual(["purge:n1", "compact:n1"]);
-    expect((await library.store.readStream(node)).length).toBe(2);
+    expect((await raw(library).readStream(node)).length).toBe(2);
     expect(library.backups.list()).toEqual([]);
     // A yes: today's backup is taken first, then it runs.
     const confirmed = library.confirmedStore(async () => true);
     await confirmed.compact(node, [entry(1, "c1")], 5);
     expect(library.backups.list().map(item => item.kind)).toEqual(["daily"]);
-    expect((await library.store.readStream(node)).length).toBe(2);   // entry 2 was after the compacted range
+    expect((await raw(library).readStream(node)).length).toBe(2);   // entry 2 was after the compacted range
     await confirmed.purge(node);
-    expect(await library.store.list()).toEqual([]);
+    expect(await raw(library).list()).toEqual([]);
   } finally { library.close(); cleanup(); }
 });
 
@@ -388,13 +391,13 @@ test("a backup SQLite can never read is removed by a purge instead of keeping it
   const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: { ...simClock(new Scheduler()), now: () => START }, random: seededRandom("u") });
   try {
     const node = { type: POINTER, id: "n1" };
-    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
+    await raw(library).append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
       actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } }] });
     library.dailyBackup();
     const damaged = join(dir, "backups", "library.daily.2026-08-01.sqlite");
     writeFileSync(damaged, "this is not a database at all, and it never will be ....................................................................");
-    await library.store.purge(node);
-    expect(library.store.pendingPurges()).toEqual([]);
+    await raw(library).purge(node);
+    expect(raw(library).pendingPurges()).toEqual([]);
     expect(existsSync(damaged)).toBe(false);
     expect(library.backups.list().every(item => item.nodes === 0)).toBe(true);
   } finally { library.close(); cleanup(); }
@@ -406,12 +409,12 @@ test("a restore is made beside the library and renamed over it, refused if anoth
     // A purge left pending by a locked copy, so the restore applies it to the copy it restores.
     const library = new GraphLibrary(path, { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: { ...simClock(new Scheduler()), now: () => START }, random: seededRandom("r") });
     const node = { type: POINTER, id: "n1" };
-    await library.store.append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
+    await raw(library).append({ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
       actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } }] });
     const copy = library.backups.daily()!;
     const lock = new Database(copy);
     lock.exec("BEGIN EXCLUSIVE");
-    await library.store.purge(node);
+    await raw(library).purge(node);
     lock.exec("ROLLBACK"); lock.close();
     library.close();
     const backups = new LibraryBackups(path, () => START);
@@ -431,4 +434,24 @@ test("a restore is made beside the library and renamed over it, refused if anoth
     const restored = new Database(path, { readonly: true });
     try { expect((restored.query("SELECT COUNT(*) AS n FROM events").get() as { n: number }).n).toBe(0); } finally { restored.close(); }
   } finally { cleanup(); }
+});
+
+test("the inspector's store and the page's transport never compact or purge; the raw store is private (CORE-148)", async () => {
+  const dir = folder();
+  const library = new GraphLibrary(join(dir, "library.sqlite"), { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES,
+    clock: simClock(new Scheduler()), random: seededRandom("inspector") });
+  try {
+    // @ts-expect-error the raw store isn't reachable from outside the library
+    void library.store;
+    const node = { type: POINTER, id: "n1" };
+    await library.pageStoreOperation("append", [{ commit: "c1", expect: [["n1", 0]], entries: [{ node, seq: 1, pos: 0, commit: "c1", actor: "local",
+      actorSeq: 1, at: 1, schema: "1", op: { kind: "create", state: { name: "Kept", own: {}, layers: [], trashed: false, retracted: false } } }] }]);
+    const inspector = library.inspectorStore();
+    await expect(inspector.purge(node)).rejects.toThrow("never compacts or deletes");
+    await expect(inspector.compact(node, [], 2)).rejects.toThrow("never compacts or deletes");
+    await expect(library.pageStoreOperation("purge", [node])).rejects.toThrow("Unknown store operation");
+    expect((await inspector.readStream(node)).length).toBe(1);
+    // The inspector's graph runs on that store.
+    expect((await library.inspect("")).rows.length).toBeGreaterThan(0);
+  } finally { library.close(); }
 });

@@ -129,6 +129,13 @@ class Cr2wWriter implements EncodeContext {
 
   /** Derived JSON properties turned into the ones the file stores. */
   private prepare(className: string, value: Json): Json {
+    // A material's metadata has no proven encoding (NATIVE-73): only its default, null, is written (by leaving it out).
+    if (className === "CMaterialInstance" && value?.metadata !== undefined && value.metadata !== null)
+      throw new NativeWriteRefusal("CMaterialInstance.metadata is not written.");
+    return this.derive(className, value);
+  }
+
+  private derive(className: string, value: Json): Json {
     if (className === "meshMeshMaterialBuffer" && Array.isArray(value.materials) && value.materials.length) {
       if (value.rawData !== null || (Array.isArray(value.rawDataHeaders) && value.rawDataHeaders.length))
         throw new NativeWriteRefusal("A material buffer gives both materials and raw data.");
@@ -285,8 +292,13 @@ export function writeCr2wObject(data: Json, store: StoreBuffer): Uint8Array {
   return writer.file(version, buildVersion);
 }
 
+/** The WolvenKit JSON format the writer reads: WolvenKit 9.0.1's (`WKitJsonVersion`), which its class table follows (PIPE-135). */
+export const WKIT_JSON_VERSION = "0.0.9";
+
 /** Write a WolvenKit JSON resource document (`{Header, Data}`) as a CR2W file. */
 export function writeCr2wDocument(document: Json, store: StoreBuffer): Uint8Array {
   if (document?.Header?.DataType !== "CR2W") throw new NativeWriteRefusal("Not a CR2W document.");
+  if (document.Header.WKitJsonVersion !== WKIT_JSON_VERSION)
+    throw new NativeWriteRefusal(`WolvenKit JSON version ${JSON.stringify(document.Header.WKitJsonVersion ?? null)} is not written (only ${WKIT_JSON_VERSION}).`);
   return writeCr2wObject(document.Data, store);
 }

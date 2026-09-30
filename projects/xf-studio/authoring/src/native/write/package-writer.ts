@@ -164,12 +164,16 @@ class PackageWriter implements EncodeContext {
     let at = referenceDataAt;
     this.references.forEach(({ sync }, i) => {
       const size = referenceData[i]!.length;
+      if (at > 0x7fffff || size > 0xff) throw new NativeWriteRefusal("A package's references don't fit its descriptors.");
       out.u32(((at & 0x7fffff) | (size << 23) | (sync ? 0x80000000 : 0)) >>> 0);
       at += size;
     });
     for (const data of referenceData) out.bytes(data);
     at = nameData;
-    for (const bytes of nameBytes) { out.u32(((at & 0xffffff) | ((bytes.length + 1) << 24)) >>> 0); at += bytes.length + 1; }
+    for (const bytes of nameBytes) {
+      if (at > 0xffffff) throw new NativeWriteRefusal("A package's names don't fit its descriptors.");
+      out.u32(((at & 0xffffff) | ((bytes.length + 1) << 24)) >>> 0); at += bytes.length + 1;
+    }
     for (const bytes of nameBytes) { out.bytes(bytes); out.u8(0); }
     at = chunkData;
     for (const chunk of this.chunks) { out.u32(chunk.type); out.u32(at); at += chunk.body!.length; }

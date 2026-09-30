@@ -16,7 +16,9 @@
     "source:host-database"
   ],
   "creates": [],
-  "starts": [],
+  "starts": [
+    "process:library-flush"
+  ],
   "runtimes": [
     "runtime:sqlite-connection"
   ],

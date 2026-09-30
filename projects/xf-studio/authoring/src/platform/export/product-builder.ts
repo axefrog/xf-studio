@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 import { canonicalPath, containmentKey, isWithin as within, overlaps } from "../api/path-containment";
+import { HOST_REAL_PATHS } from "./host-real-paths";
 import {
   archiveXlText, ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, type PackageBuildStage, type FeatureBuildContext, type FeatureExporterEntry, type FeatureVerification,
   type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type ResourceWriters, type VerifierTools,
@@ -67,7 +68,7 @@ function fail(code: string, message: string): never { throw new ExportRefusal(co
 /** Canonical absolute path: the nearest existing ancestor's real path plus the not-yet-created remainder. */
 const canonical = (path: string) => canonicalPath(path, HOST_PATHS);
 /** The host's file-system reads for the containment checks. */
-const HOST_PATHS = { exists: existsSync, realpath: realpathSync.native };
+const HOST_PATHS = HOST_REAL_PATHS;
 
 /** Canonical path of an input that must exist. */
 function existing(path: string, label: string): string {
@@ -248,7 +249,7 @@ export async function runProductCommand(options: ProductCommandOptions): Promise
     for (const outcome of planned.products) {
       const token = `${outcome.product.archive}-${timeToken()}`;
       const intermediate = join(roots.build, token);
-      if (existsSync(intermediate) || existsSync(join(roots.output, token))) fail("package_root_unsafe", "Build destination already exists.");
+      if (HOST_PATHS.exists(intermediate) || HOST_PATHS.exists(join(roots.output, token))) fail("package_root_unsafe", "Build destination already exists.");
       mkdirSync(join(intermediate, "logs"), { recursive: true });
       const staging = join(intermediate, "archive");
       mkdirSync(staging);

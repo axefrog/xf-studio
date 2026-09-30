@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import config from "../electrobun.config";
 import { COTTONTAIL_CAPABILITIES, hostCapabilities, hostCapabilityUses } from "../runtime-capabilities";
 import { devkitIssue } from "../devkit-check";
+import desktopPackage from "../package.json";
 
 test("the Cottontail capability declaration is exactly what the host reaches", () => {
   const declared = [...(config.build.cottontail?.capabilities ?? [])].sort();
@@ -43,7 +44,8 @@ test("the known capability names match the Cottontail this checkout's devkit sel
   expect(Object.keys(JSON.parse(readFileSync(manifest, "utf8")).capabilities).sort()).toEqual([...COTTONTAIL_CAPABILITIES].sort());
 });
 
-test("a devkit prepared for another Electrobun release is named as the cause before the typecheck runs", () => {
+test("a devkit prepared for another Electrobun release is named as the cause before the typecheck runs (DESK-16)", () => {
+  expect(desktopPackage.scripts.check).toBe("bun devkit-check.ts && tsc --noEmit");
   const folder = mkdtempSync(join(tmpdir(), "xfs-devkit-"));
   try {
     expect(devkitIssue(folder, "2.0.2")).toContain("missing");
@@ -51,9 +53,11 @@ test("a devkit prepared for another Electrobun release is named as the cause bef
     const lock = (version: string) => writeFileSync(join(folder, ".hutch", "dependencies.lock"),
       JSON.stringify({ objects: [{ type: "electrobun", version }, { type: "toolchain", toolchain: "bun", version: "1.4.0" }] }));
     lock("2.0.1");
-    expect(devkitIssue(folder, "2.0.2")).toContain("Electrobun 2.0.1, but this checkout builds with 2.0.2");
+    expect(devkitIssue(folder, "2.0.2")).toContain("Electrobun 2.0.1, but this checkout builds with 2.0.2: run `bun run prepare:devkit`");
     lock("2.0.2");
     expect(devkitIssue(folder, "2.0.2")).toBeNull();
+    writeFileSync(join(folder, ".hutch", "dependencies.lock"), "{");
+    expect(devkitIssue(folder, "2.0.2")).toContain("can't be read");
   } finally { rmSync(folder, { recursive: true, force: true }); }
   // The config's Cottontail capability list is typed by 2.0.2's devkit (build.cottontail.capabilities), so it stays a checked key.
   const devkitType = resolve(import.meta.dir, "..", ".hutch", "devkit", "api", "config", "ElectrobunConfig.ts");

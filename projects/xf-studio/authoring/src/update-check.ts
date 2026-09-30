@@ -159,9 +159,12 @@ export class UpdateCheckService {
     return this.answer(memory, null, null, false);
   }
 
-  /** The request every check joins: it has its own signal, aborted only once every check waiting on it has been aborted. */
+  /**
+   * The request every check joins: it has its own signal, aborted only once every check waiting on it has been aborted. A run
+   * being aborted is never joined (UPD-05: a check made just after a page reload aborted the last one starts its own request).
+   */
   private shared(): SharedRun {
-    if (this.running) return this.running;
+    if (this.running && !this.running.controller.signal.aborted) return this.running;
     const controller = new AbortController();
     const outcome = (async (): Promise<RunOutcome> => {
       let list: ReleaseList;
@@ -188,7 +191,11 @@ export class UpdateCheckService {
     // This check stops waiting when its own signal aborts; the request stops only when no check is left waiting on it.
     let leave: () => void = () => {};
     const left = new Promise<null>(resolve => {
-      leave = () => { signal.removeEventListener("abort", leave); if (--run.waiting === 0) run.controller.abort(); resolve(null); };
+      leave = () => {
+        signal.removeEventListener("abort", leave);
+        if (--run.waiting === 0) { run.controller.abort(); if (this.running === run) this.running = null; }
+        resolve(null);
+      };
     });
     run.waiting++;
     if (signal.aborted) leave(); else signal.addEventListener("abort", leave, { once: true });

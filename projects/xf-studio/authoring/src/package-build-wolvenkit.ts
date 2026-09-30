@@ -45,8 +45,8 @@ export const DEFAULT_WOLVENKIT_CONCURRENCY = 2;
 
 /**
  * A counting gate: at most `limit` of the tasks run at once, the rest start in the order they were queued. A finishing task hands its
- * slot straight to the first waiter (the count never drops in between), so a caller arriving before that waiter resumes can't take the
- * slot too and run `limit + 1` at once.
+ * slot straight to the first waiter, so the count never drops in between and a caller arriving before that waiter resumes can't take
+ * the slot too (PIPE-138).
  */
 export function concurrencyGate(limit: number): <T>(task: () => Promise<T>) => Promise<T> {
   let running = 0;

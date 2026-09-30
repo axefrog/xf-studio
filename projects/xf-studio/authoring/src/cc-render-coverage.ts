@@ -18,8 +18,8 @@
  * - Any other head appearance consumed by the head's face groups (`FACE_GROUPS`) is drawn **where its parts are templates a face
  *   option draws**: face decals (the `mesh_decal` family: makeup, tattoos, scars, face cyberware, stubble) and hair strands (the beard's
  *   cards); other parts are not. Which case applies is known only after resolving a choice, so the status is `conditional`;
- *   `refineCoverage` settles it from what the shown V draws (`shownOutcome`): whole, only in part (some of its parts left out, so the row
- *   must not read as drawn), or not at all.
+ *   the Character panel settles it from what the shown V draws (`shownOutcome`): whole, only in part (some of its parts left out, so the
+ *   row must not read as drawn, `PARTLY_SHOWN`), or not at all.
  * - A **colour-only** controller (no `.app`, e.g. the skin tone) shows through its link followers.
  * - An option that **adds nothing** (an Off placeholder whose only choice is `None`) is shown correctly by drawing nothing;
  *   it takes its slot's coverage so its row reads like the others.
@@ -137,18 +137,6 @@ export type ShownOutcome = "whole" | "part" | "none";
 export function shownOutcome(option: string, shown: { readonly drawn: readonly string[]; readonly partial?: readonly string[] }): ShownOutcome {
   if (!shown.drawn.includes(option)) return "none";
   return shown.partial?.includes(option) ? "part" : "whole";
-}
-
-/**
- * Settle a `conditional` coverage from what the shown V draws of the option (`shownOutcome`; null while nothing is shown): drawn when all
- * of it is; still `conditional`, with a note that says so, when only part of it is (a beard whose cards were left out never reads as drawn);
- * not drawn when none of it is.
- */
-export function refineCoverage(coverage: RenderCoverage, outcome: ShownOutcome | null): RenderCoverage {
-  if (coverage.status !== "conditional" || !outcome) return coverage;
-  if (outcome === "whole") return { status: "rendered", detail: coverage.detail, note: "Drawn as a face detail." };
-  if (outcome === "part") return { status: "conditional", detail: coverage.detail, note: PARTLY_SHOWN };
-  return { status: "not-rendered", detail: null, note: "The 3D view can't draw its parts yet." };
 }
 
 /** The preview's coverage of every option of a catalogue (a projection owned by the preview side; CORE-60). */

@@ -24,7 +24,11 @@ export type IrreversibleRequest = { readonly op: IrreversibleOperation; readonly
 export type ConfirmIrreversible = (request: IrreversibleRequest) => Promise<boolean>;
 
 export class GraphLibrary {
-  readonly store: SqliteGraphStore;
+  /**
+   * The raw store: private (CORE-148), so compaction and purge are reached only through `confirmedStore`; the inspector reads
+   * through `inspectorStore` and the page's transport through `pageStoreOperation`.
+   */
+  private readonly store: SqliteGraphStore;
   readonly backups: LibraryBackups;
   private view?: { counter: number; graph: Graph; life: Aborter };
   private loading?: Promise<Graph>;
@@ -75,7 +79,7 @@ export class GraphLibrary {
       view.life.abort("reloaded");
     }
     const life = new Aborter(this.life.signal);
-    const graph = createGraph({ types: this.options.types, rules: this.options.rules, store: this.store, actor: "host-inspector",
+    const graph = createGraph({ types: this.options.types, rules: this.options.rules, store: this.inspectorStore(), actor: "host-inspector",
       sources: { clock: this.options.clock, random: this.options.random }, signal: life.signal, writeSnapshots: false });
     await graph.load();
     this.view = { counter, graph, life };
@@ -101,6 +105,28 @@ export class GraphLibrary {
       compact: (node, entries, at) => guarded({ op: "compact", node }, () => store.compact(node, entries, at)),
       purge: node => guarded({ op: "purge", node }, () => store.purge(node)),
     };
+  }
+
+  /**
+   * The store the inspector's graph runs on (CORE-148): it reads and appends as the store does, and refuses compaction and
+   * purge outright, so nothing reached through the inspector can remove history.
+   */
+  inspectorStore(): GraphStore {
+    const store = this.store;
+    const refuse = async (): Promise<never> => { throw new Error("The inspector only reads the library; it never compacts or deletes anything."); };
+    return {
+      list: () => store.list(), load: () => store.load(), readStream: (...args) => store.readStream(...args),
+      append: request => store.append(request), changesSince: pos => store.changesSince(pos), counter: () => store.counter(),
+      putSnapshot: snapshot => store.putSnapshot(snapshot), dropSnapshots: node => store.dropSnapshots(node),
+      compact: refuse, purge: refuse,
+    };
+  }
+
+  /** One of the page transport's reversible operations (`STORE_OPERATIONS`); anything else is refused. */
+  pageStoreOperation(op: string, args: readonly unknown[]): Promise<unknown> {
+    if (!(STORE_OPERATIONS as readonly string[]).includes(op)) return Promise.reject(new Error("Unknown store operation."));
+    const store = this.store as unknown as Record<StoreOperation, (...values: unknown[]) => Promise<unknown>>;
+    return store[op as StoreOperation](...args);
   }
 
   async inspect(query: string, offset = 0): Promise<InspectorPage> { return (await this.graph()).inspect(query, offset); }
@@ -144,8 +170,7 @@ export function createGraphHandler(library: GraphLibrary, prefix: string): (requ
         const { op, args } = JSON.parse(body) as { op: StoreOperation; args: unknown[] };
         if ((IRREVERSIBLE_OPERATIONS as readonly string[]).includes(op)) return json({ error: "Only XF Studio itself can do that, after you confirm it." }, 403);
         if (!STORE_OPERATIONS.includes(op) || !Array.isArray(args)) return json({ error: "Unknown store operation." }, 400);
-        const store = library.store as unknown as Record<StoreOperation, (...values: unknown[]) => Promise<unknown>>;
-        return json({ result: await store[op](...args) });
+        return json({ result: await library.pageStoreOperation(op, args) });
       }
       return json({ error: "Not found." }, 404);
     } catch (error) {
