@@ -106,6 +106,10 @@ A private render of the three pieces on the extracted head (not committed) showe
 
 **Limits.** None of this shows how the game renders or deforms the pieces. In particular, whether rigid anchor-copied pieces stay seated through sliders and facial animation, whether the vanilla `.mi` looks right on these UVs, and how headgear treats the new components are exactly what the session answers.
 
+## Before the session: component names (30 September)
+
+The probe's components are named `<morph>_<finish>` (for example `xfs_probe_hoop_silver`), so ArchiveXL reads their prefix as `xfs_`. Its bundled `hide_Head` tag hides `i1_` components (vanilla piercings are `i1_000_…`) but no `xfs_` ones, so **check 10 cannot show XF pieces hiding under a `hide_Head` item** as built. Vanilla items carry no `hide_Head`, so the vanilla-helmet half of check 10 is unaffected. The [piercings and earrings brief](../../research/backlog/piercings-and-earrings-brief.md#recommended-first-scope-and-phased-plan) recommends rebuilding the probe with `i1_xfs_` component names and `xfs_` mesh appearances before the session (P0) [source: ArchiveXL `Garment/Prefix.cpp`, `bundle/source/resources/VisualTags.xl`; [clothing §4.3](../../knowledge/clothing.md#43-masking-the-body-resource-source-wiki)].
+
 ## Staging notes for the coordinator
 
 - Stage the two files from `generated/20260926T132240/package/archive/pc/mod/` as one MO2 mod named **XF Piercings Probe** in the test profile, next to XF Eye Artistry, without changing anything else. Check the hashes above first.
