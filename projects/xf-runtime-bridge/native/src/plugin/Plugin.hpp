@@ -25,6 +25,7 @@
 #include "core/ScriptLayer.hpp"
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
+#include "core/overlay/Host.hpp"
 
 namespace xfb::plugin
 {
@@ -97,6 +98,9 @@ struct State
     // has reported it at all (older CET layers never do).
     std::atomic<bool> cetOverlayOpen{false};
     std::atomic<bool> cetOverlaySeen{false};
+
+    // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].
+    xfb::overlay::OverlayHost overlayHost;
 
     // Reconnect after the kill switch (the CET panel's button, XFBridge_Rearm): requested from script,
     // carried out by the next Running ticks once the old listener has stopped and the kill switch's

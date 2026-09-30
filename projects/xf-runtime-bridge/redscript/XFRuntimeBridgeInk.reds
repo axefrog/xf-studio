@@ -101,6 +101,10 @@ public class XFHudFrame {
   public let status: String;
   public let levels: array<String>;
   public let texts: array<String>;
+  // 0.7 (session 7, in-game driving): the ask waiting for an answer: its id and each choice's key and label.
+  public let askId: Int32;
+  public let askKeys: array<String>;
+  public let askLabels: array<String>;
 
   public static func Parse(text: String) -> ref<XFHudFrame> {
     let frame = new XFHudFrame();
@@ -155,6 +159,16 @@ public class XFHudFrame {
                           if Equals(key, "msg") && ArraySize(f) >= 3 {
                             ArrayPush(frame.levels, f[1]);
                             ArrayPush(frame.texts, f[2]);
+                          } else {
+                            if Equals(key, "ask") && ArraySize(f) >= 4 {
+                              frame.askId = StringToInt(f[1]);
+                              let i = 2;
+                              while i + 1 < ArraySize(f) {
+                                ArrayPush(frame.askKeys, f[i]);
+                                ArrayPush(frame.askLabels, f[i + 1]);
+                                i += 2;
+                              }
+                            }
                           }
                         }
                       }
@@ -374,6 +388,8 @@ public class XFInkOverlay extends ScriptableSystem {
   private let m_diamond: ref<inkRectangle>;
   private let m_status: ref<inkText>;
   private let m_messages: array<ref<inkText>>;
+  private let m_choices: ref<inkText>;
+  private let m_units: Float;
   private let m_platesRoot: ref<inkCanvas>;
   private let m_plates: array<ref<inkText>>;
   private let m_frame: ref<XFHudFrame>;
@@ -485,19 +501,29 @@ public class XFInkOverlay extends ScriptableSystem {
     return new Vector2(3840.0, 2160.0);
   }
 
+  // 0.7 (session 7: on a 3840x1600 screen the panel sat off-screen at the right edge, and at bottom left it didn't show at
+  // all): the overlay no longer sizes and scales itself from the display setting. It fills the layer's root, in whatever
+  // units that root lays out in, so a panel anchored to a corner is at that corner of what the layer shows (21:9, 32:9 and
+  // 16:9 alike), and its margins are clamped inside it. m_units converts the panel's design (2160 units per screen height)
+  // into the root's units, from the root's own size where it reports one.
+  private func Measure(parent: wref<inkCompoundWidget>) -> Void {
+    let size = parent.GetSize();
+    if size.X > 100.0 && size.Y > 100.0 {
+      this.m_width = size.X;
+      this.m_height = size.Y;
+    } else {
+      let screen = this.ScreenSize();
+      this.m_height = 2160.0;
+      this.m_width = screen.Y > 100.0 ? 2160.0 * screen.X / screen.Y : 3840.0;
+    }
+    this.m_units = this.m_height > 100.0 ? this.m_height / 2160.0 : 1.0;
+  }
+
   private func Build(parent: wref<inkCompoundWidget>) -> Void {
-    // The overlay is 2160 units high whatever the resolution and as wide as the screen's aspect makes it, scaled to the
-    // screen (a uniform scale, so text keeps its shape on ultrawide screens).
-    let screen = this.ScreenSize();
-    let factor = screen.Y > 100.0 ? screen.Y / 2160.0 : 1.0;
-    this.m_height = 2160.0;
-    this.m_width = screen.Y > 100.0 ? 2160.0 * screen.X / screen.Y : 3840.0;
+    this.Measure(parent);
     let root = new inkCanvas();
     root.SetName(n"xfs_overlay");
-    root.SetAnchor(inkEAnchor.TopLeft);
-    root.SetSize(new Vector2(this.m_width, this.m_height));
-    root.SetRenderTransformPivot(new Vector2(0.0, 0.0));
-    root.SetScale(new Vector2(factor, factor));
+    root.SetAnchor(inkEAnchor.Fill);
     root.SetInteractive(false);
     root.Reparent(parent);
     this.m_root = root;
@@ -569,12 +595,19 @@ public class XFInkOverlay extends ScriptableSystem {
     while i < 4 {
       let line = XFInkStyle.Text(StringToName("message" + IntToString(i)), 26, n"Regular", n"MainColors.Blue", false);
       line.SetMargin(new inkMargin(0.0, 4.0, 0.0, 0.0));
-      line.SetWrappingAtPosition(760.0);
+      line.SetWrappingAtPosition(980.0);
       line.SetVisible(false);
       line.Reparent(body);
       ArrayPush(this.m_messages, line);
       i += 1;
     }
+
+    // 0.7: the pending ask's answers and the keys that give them ("[F6] Ready   [F7] Yes   [F8] No").
+    let choices = XFInkStyle.Text(n"choices", 28, n"Semi-Bold", n"MainColors.Yellow", false);
+    choices.SetMargin(new inkMargin(0.0, 8.0, 0.0, 0.0));
+    choices.SetVisible(false);
+    choices.Reparent(body);
+    this.m_choices = choices;
 
     // The tick: a hidden widget's endless transparency animation on the UI's own clock.
     let ticker = new inkRectangle();
@@ -632,8 +665,16 @@ public class XFInkOverlay extends ScriptableSystem {
     this.m_panel.SetAnchor(XFInkStyle.Anchor(frame.anchor));
     this.m_panel.SetAnchorPoint(XFInkStyle.AnchorPoint(frame.anchor));
     this.m_panel.SetRenderTransformPivot(XFInkStyle.AnchorPoint(frame.anchor));
-    this.m_panel.SetMargin(new inkMargin(frame.x, frame.y, frame.x, frame.y));
-    this.m_panel.SetScale(new Vector2(frame.scale, frame.scale));
+    // Margins in the root's units, clamped so the panel's corner stays on screen (at most 40 % of the width or height in).
+    if IsDefined(this.m_parent) {
+      this.Measure(this.m_parent);
+    }
+    let units = this.m_units > 0.0 ? this.m_units : 1.0;
+    let mx = ClampF(frame.x * units, 0.0, this.m_width * 0.4);
+    let my = ClampF(frame.y * units, 0.0, this.m_height * 0.4);
+    this.m_panel.SetMargin(new inkMargin(mx, my, mx, my));
+    let scale = ClampF(frame.scale, 0.5, 3.0) * units;
+    this.m_panel.SetScale(new Vector2(scale, scale));
     XFInkStyle.Bind(this.m_diamond, XFInkStyle.ToneToken(frame.tone));
     XFInkStyle.Bind(this.m_status, XFInkStyle.ToneToken(frame.tone));
     this.m_status.SetText(frame.status);
@@ -648,6 +689,19 @@ public class XFInkOverlay extends ScriptableSystem {
         line.SetVisible(false);
       }
       i += 1;
+    }
+    if ArraySize(frame.askKeys) > 0 {
+      let text = "";
+      let k = 0;
+      while k < ArraySize(frame.askKeys) {
+        let key = StrBeginsWith(frame.askKeys[k], "IK_") ? StrAfterFirst(frame.askKeys[k], "IK_") : frame.askKeys[k];
+        text += (k > 0 ? "     " : "") + "[" + key + "] " + frame.askLabels[k];
+        k += 1;
+      }
+      this.m_choices.SetText(text);
+      this.m_choices.SetVisible(true);
+    } else {
+      this.m_choices.SetVisible(false);
     }
     this.m_platesRoot.SetVisible(frame.nameplates);
   }
@@ -724,5 +778,45 @@ public class XFInkOverlay extends ScriptableSystem {
     plate.SetOpacity(ClampF((15.0 - s.W) / 5.0, 0.0, 1.0));
     plate.SetVisible(true);
     return true;
+  }
+}
+
+// ---- 0.7: answering XF Studio's questions from the game (session 7, in-game driving) ------------------------------------
+
+// The maintainer can't see the chat while the game is in front, so an ask (ui.message level ask) shows its answers in the
+// panel with a key each ([ui] answer_keys, F6 F7 F8 F11 by default: unbound in the 2.31 defaults). Codeware's callback
+// system delivers the raw key (Input/Key, KeyInputEvent; no input binding needed) to this scriptable system; a press of
+// one of the pending ask's keys answers it through XFBridge_Answer, which records the answer in the session's event
+// stream (session.wait returns it). Keys do nothing while no ask is pending, and they still reach the game (which binds
+// none of them by default). Without Codeware there is no ink panel either, and the CET window's buttons answer instead.
+@if(ModuleExists("Codeware"))
+public class XFAnswerKeys extends ScriptableSystem {
+  private func OnAttach() -> Void {
+    GameInstance.GetCallbackSystem().RegisterCallback(n"Input/Key", this, n"OnXFKey");
+  }
+
+  private cb func OnXFKey(event: ref<KeyInputEvent>) {
+    if NotEquals(event.GetAction(), EInputAction.IACT_Press) {
+      return;
+    }
+    // The frame itself (not the overlay's copy), so the keys answer even while no ink panel is mounted.
+    let frame = XFHudFrame.Parse(XFBridge_Hud());
+    if !frame.valid || frame.askId <= 0 {
+      return;
+    }
+    let key = EnumValueToString("EInputKey", Cast<Int64>(EnumInt(event.GetKey())));
+    let choice = -1;
+    let i = 0;
+    while i < ArraySize(frame.askKeys) {
+      if Equals(frame.askKeys[i], key) {
+        choice = i;
+      }
+      i += 1;
+    }
+    if choice < 0 {
+      return;
+    }
+    let answer = XFBridge_Answer(frame.askId, choice, "ink_key");
+    XFBridgeLog.Info("ink", "answer key " + key + " -> choice " + IntToString(choice) + ": " + answer);
   }
 }

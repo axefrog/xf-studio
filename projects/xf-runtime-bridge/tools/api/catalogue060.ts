@@ -45,12 +45,27 @@ export async function withOverlayCleared<T>(context: CommandContext, run: () => 
   if (!context.api.session()) return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };
   const cleared = await attempt(context, "ui.message", { clear: true });
   const hud = await attempt(context, "ui.hud", { show: false, cet_label: false });
+  // 0.7: the XF ImGui overlay too (it lapses by itself after 5 s), and whether Cyber Engine Tweaks' overlay is open (its
+  // windows would be in the picture: session 4's teeth frames were lost to it).
+  const host = await attempt(context, "overlay.hide", { hidden: true, ms: 5000 });
+  const ui = await attempt(context, "ui.state", {});
   const restore = hud.error ? null : ((hud.undo as Json | undefined)?.params as Json | undefined) ?? null;
-  if (!hud.error) await sleep(120); // the panel's next frames (the overlay pulls every sixth tick)
+  if (!hud.error || !host.error) await sleep(120); // the panel's next frames (the overlay pulls every sixth tick)
   try {
-    return { value: await run(), overlay: { cleared: !cleared.error, messages_cleared: cleared.cleared ?? null, panel_hidden: !hud.error } };
+    return {
+      value: await run(),
+      overlay: {
+        cleared: !cleared.error,
+        messages_cleared: cleared.cleared ?? null,
+        panel_hidden: !hud.error,
+        overlay_host_hidden: host.error ? null : host.hidden_for_capture === true,
+        ...(ui.error ? {} : { cet_overlay_open: ui.cet_overlay ?? null }),
+        ...(ui.cet_overlay === true ? { warning: "Cyber Engine Tweaks' overlay was open: its windows may be in the picture. Close it (its key) and capture again." } : {}),
+      },
+    };
   } finally {
     if (restore) await attempt(context, "ui.hud", restore);
+    if (!host.error) await attempt(context, "overlay.hide", { hidden: false });
   }
 }
 
@@ -209,7 +224,7 @@ export function sweepCells(sweep: Json | undefined): { label: string; path?: str
   const frames = (Array.isArray(sweep) ? sweep : (sweep?.frames as Json[] | undefined)) ?? [];
   return frames
     .filter((f) => f && f.capture && (typeof f.capture.full === "string" || typeof f.capture.view === "string"))
-    .map((f) => ({ label: typeof f.angle_deg === "number" ? `${Math.round(f.angle_deg * 10) / 10}°` : `step ${f.step ?? "?"}`, path: (f.capture.full ?? f.capture.view) as string }));
+    .map((f) => ({ label: typeof f.angle_deg === "number" ? `${Math.round(f.angle_deg * 10) / 10} deg` : `step ${f.step ?? "?"}`, path: (f.capture.full ?? f.capture.view) as string }));
 }
 
 async function runCaptureSheet(input: Json, context: CommandContext): Promise<CommandResult> {
@@ -588,11 +603,11 @@ export const PLAYER_COMMANDS: CommandDef[] = [
     name: "player.action",
     title: "Do a system-driven action",
     description:
-      `One of the actions the game's systems can do without input: crouch and stand (the game's own forced crouch, as a sniper nest uses it; only the bridge's own is lifted), weapon.draw, weapon.holster and weapon.slot (1-3) through the equipment system's own requests, menu.open (inventory, map, journal, perks, crafting, or the wardrobe screen) and menu.close. Jumping, sprinting and dodging need an input channel (research). ${playerBusyNote}`,
+      `One of the actions the game's systems can do without input: crouch and stand (the game's own forced crouch, as a sniper nest uses it; only the bridge's own is lifted), weapon.draw, weapon.arms (0.7: the arm cyberware's weapon, such as Mantis Blades, drawn), weapon.holster and weapon.slot (1-3) through the equipment system's own requests, menu.open (inventory, map, journal, perks, crafting, or the wardrobe screen) and menu.close. Jumping, sprinting and dodging need an input channel (research). ${playerBusyNote}`,
     permission: "write-player",
     input: obj(
       {
-        name: oneOf("The action.", ["crouch", "stand", "weapon.draw", "weapon.holster", "weapon.slot", "menu.open", "menu.close"]),
+        name: oneOf("The action.", ["crouch", "stand", "weapon.draw", "weapon.arms", "weapon.holster", "weapon.slot", "menu.open", "menu.close"]),
         slot: int("With weapon.slot: the weapon slot 1-3.", 1, 3),
         menu: oneOf("With menu.open: which menu.", ["inventory", "map", "journal", "perks", "crafting", "wardrobe"]),
       },

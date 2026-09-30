@@ -37,6 +37,7 @@
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
 #include "selftest/Sim060.hpp"
+#include "selftest/Sim070.hpp"
 
 #include <functional>
 #include <limits>
@@ -1473,10 +1474,50 @@ int wmain(int argc, wchar_t** argv)
                              {
                                  lines.push_back({level, text});
                              }
-                             const auto frame = xfb::inkui::Frame(hud.Current(), view, lines);
+                             // 0.7: the pending ask with its answer keys, as the plugin builds it.
+                             xfb::inkui::AskView ask;
+                             xfb::PendingAsk pending;
+                             if (!view.killed && messages.Pending(pending))
+                             {
+                                 ask.id = pending.id;
+                                 for (size_t i = 0; i < pending.choices.size() && i < config.answerKeys.size(); ++i)
+                                 {
+                                     ask.keyed.emplace_back(config.answerKeys[i], pending.choices[i]);
+                                 }
+                             }
+                             const auto frame = xfb::inkui::Frame(hud.Current(), view, lines, &ask);
                              auto out = xfb::inkui::ParseFrame(frame);
                              out["frame"] = frame;
                              return out;
+                         }});
+    // 0.7 (session 7, in-game driving): what XFBridge_Answer and XFBridge_Comment do in the plugin, for the tests: the player
+    // answers the pending ask (or a given one) or sends a comment, and the event goes into the session's stream.
+    dispatcher.Register({"selftest.answer", xfb::Access::Read, xfb::RunOn::BridgeThread, "The player answers an ask or comments (self-test only).",
+                         [&bridge](const xfb::MethodContext& aContext) {
+                             if (!sim060)
+                             {
+                                 throw xfb::MethodError("unavailable", "simulated: no event stream");
+                             }
+                             const auto& p = aContext.params;
+                             if (p.contains("comment"))
+                             {
+                                 const auto text = p.value("comment", std::string());
+                                 const auto seq = sim060->Events().Push("comment", "info", "game", text, json{{"text", text}});
+                                 return json{{"ok", true}, {"seq", seq}};
+                             }
+                             if (bridge.GetDispatcher().IsKilled())
+                             {
+                                 return json{{"ok", false}, {"why", "the bridge is stopped"}};
+                             }
+                             auto answer = messages.Answer(p.value("id", 0ull), p.value("choice", 0));
+                             if (answer.value("ok", false))
+                             {
+                                 const auto label = answer.value("label", std::string());
+                                 answer["seq"] = sim060->Events().Push("answer", "done", "game", "The player answered " + label,
+                                                                       json{{"message_id", answer["message_id"]}, {"choice", answer["choice"]}, {"label", label},
+                                                                            {"question", answer.value("text", std::string())}, {"via", p.value("via", std::string("selftest"))}});
+                             }
+                             return answer;
                          }});
     const auto pinsJson = [] {
         json list = json::array();
@@ -2348,6 +2389,7 @@ int wmain(int argc, wchar_t** argv)
             out["wardrobe_restored"] = snapshot;
             sim.wardrobeSnapshot = nullptr;
         }
+        xfb::selftest::Sim070RestoreAfterKill(out); // 0.7: a weather the bridge held
         sim.creatorOpenTicks = -1;
         sim.frozen = false;
         sim.hudHidden = false;
@@ -2412,6 +2454,25 @@ int wmain(int argc, wchar_t** argv)
         };
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
+    }
+    {
+        // Bridge 0.7's methods against a simulated world (selftest/Sim070.cpp).
+        xfb::selftest::Sim070Hooks hooks070;
+        hooks070.phase = [] {
+            std::scoped_lock _(sim.mutex);
+            return sim.phase;
+        };
+        hooks070.markWrite = [] { restore.MarkWrite(); };
+        hooks070.takeSaveLock = [] {
+            std::scoped_lock _(sim.mutex);
+            sim.gameSaveLock = true;
+        };
+        hooks070.pendingAsk = [] {
+            xfb::PendingAsk ask;
+            return messages.Pending(ask) ? json{{"id", ask.id}, {"text", ask.text}, {"choices", ask.choices}} : json(nullptr);
+        };
+        hooks070.killed = [&bridge] { return bridge.GetDispatcher().IsKilled(); };
+        xfb::selftest::RegisterSim070(dispatcher, queue, config, std::move(hooks070));
     }
 
     if (!bridge.Start(error))

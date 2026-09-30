@@ -148,7 +148,7 @@ ActionRequest ParseAction(const json& aParams)
     const auto name = params::CheckText(aParams, "name", 32);
     if (!name)
     {
-        params::CheckFail("'name' is required: crouch, stand, weapon.draw, weapon.holster, weapon.slot, menu.open or menu.close");
+        params::CheckFail("'name' is required: crouch, stand, weapon.draw, weapon.arms, weapon.holster, weapon.slot, menu.open or menu.close");
     }
     ActionRequest request;
     request.name = *name;
@@ -170,6 +170,13 @@ ActionRequest ParseAction(const json& aParams)
     {
         request.undo = {{"method", "player.action"}, {"params", {{"name", *name == "weapon.draw" ? "weapon.holster" : "weapon.draw"}}}};
         request.undoNote = *name == "weapon.draw" ? "weapon.holster puts it away" : "weapon.draw takes out the last used weapon";
+    }
+    else if (*name == "weapon.arms")
+    {
+        // 0.7 (the render study's capture C6): draws the arm cyberware's weapon (Mantis Blades, Gorilla Arms ...), the
+        // equipment system's RequestActiveMeleeware, so the arms show their drawn state.
+        request.undo = {{"method", "player.action"}, {"params", {{"name", "weapon.holster"}}}};
+        request.undoNote = "weapon.holster puts the arms away again";
     }
     else if (*name == "weapon.slot")
     {
@@ -193,7 +200,7 @@ ActionRequest ParseAction(const json& aParams)
     }
     else
     {
-        params::CheckFail("unknown action '" + *name + "': crouch, stand, weapon.draw, weapon.holster, weapon.slot, menu.open or menu.close "
+        params::CheckFail("unknown action '" + *name + "': crouch, stand, weapon.draw, weapon.arms, weapon.holster, weapon.slot, menu.open or menu.close "
                           "(jump, sprint and dodge need an input channel, research)");
     }
     return request;

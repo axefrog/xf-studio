@@ -18,7 +18,7 @@ local OPTIONS_POLL_SECONDS = 0.25
 local MESSAGES_POLL_SECONDS = 0.25
 -- The message lines wrap at this width (pixels), so they stay in the top-left corner, clear of the
 -- centre of the screen where every framing and capture region sits.
-local MESSAGE_WRAP_PX = 520
+local MESSAGE_WRAP_PX = 640
 local MESSAGE_COLORS = {
   info = { 0.92, 0.92, 0.92, 1.0 },
   ask = { 1.0, 0.82, 0.3, 1.0 },
@@ -36,6 +36,11 @@ local hasPanel, panel = pcall(require, "panel")
 if not hasPanel or type(panel) ~= "table" then
   panel = nil
 end
+-- Bridge 0.7: the XF Studio theme (generated from the Studio's design tokens by tools/overlay/theme.ts).
+local hasTheme, theme = pcall(require, "theme")
+if not hasTheme or type(theme) ~= "table" then
+  theme = nil
+end
 
 local state = {
   initialized = false,
@@ -45,6 +50,8 @@ local state = {
   sinceOptionsPoll = 0,
   sinceMessagesPoll = 0,
   messages = {},   -- ui.message lines: { {text, level}, ... }, oldest first (XFBridge_Messages)
+  pendingAsk = nil, -- 0.7: the ask waiting for the player's answer: { id, text, choices } (XFBridge_Messages' pending_ask)
+  comment = "",     -- 0.7: the commentary box's text
   cetLabel = true, -- bridge 0.5.3: [ui] cet_label / ui.hud's cet_label (read from XFBridge_Hud's frame); the ink panel may replace it
   overlayOpen = false,
   cidCounter = 0,
@@ -202,6 +209,12 @@ local function pollMessages()
     end
   end
   state.messages = lines
+  local ask = answer.pending_ask
+  if type(ask) == "table" and type(ask.id) == "number" and type(ask.choices) == "table" then
+    state.pendingAsk = ask
+  else
+    state.pendingAsk = nil
+  end
 end
 
 -- The panel's actions, run from onUpdate. Each asks the plugin, then shows its answer in plain words.
@@ -243,6 +256,31 @@ local function runAction(action)
     state.message = (ok and noted) and "Marked: the session log has a marker at this moment." or "Couldn't add the marker."
     state.messageOk = ok and noted
     log("info", cid, "panel: marker noted=" .. tostring(ok and noted))
+  elseif action.name == "answer" then
+    -- 0.7: the player's answer to the coordinator's question (the panel's buttons), into the session's event stream.
+    local arg = action.argument or {}
+    local answer = decodeAnswer(callNative("XFBridge_Answer", arg.id or 0, arg.choice or 0, "cet_button"))
+    if answer and answer.ok then
+      state.message = "Sent: " .. tostring(answer.label)
+      state.messageOk = true
+    else
+      state.message = "Couldn't send the answer: " .. tostring(answer and answer.why or "the plugin didn't answer")
+      state.messageOk = false
+    end
+    log("info", cid, "panel: answer id=" .. tostring(arg.id) .. " choice=" .. tostring(arg.choice) .. " ok=" .. tostring(answer and answer.ok))
+    pollMessages()
+  elseif action.name == "comment" then
+    local text = tostring(action.argument or "")
+    local ok, sent = callNative("XFBridge_Comment", text)
+    if ok and sent then
+      state.message = "Comment sent to the session log."
+      state.messageOk = true
+      state.comment = ""
+    else
+      state.message = "Couldn't send the comment."
+      state.messageOk = false
+    end
+    log("info", cid, "panel: comment sent=" .. tostring(ok and sent) .. " chars=" .. tostring(#text))
   elseif action.name == "kill" then
     local ok, killed = callNative("XFBridge_Kill", "cet-panel")
     state.message = (ok and killed) and "The bridge is stopped. Reconnect starts it again." or "The bridge wasn't running."
@@ -293,13 +331,17 @@ registerForEvent("onUpdate", function(deltaTime)
   end
 end)
 
+-- 0.7: the plugin hears about the CET overlay too (ui.state, the capture pre-check that keeps CET's windows out of pictures,
+-- and the XF overlay host's rule of yielding to CET).
 registerForEvent("onOverlayOpen", function()
   state.overlayOpen = true
+  callNative("XFBridge_CetOverlay", true)
   log("debug", "-", "overlay opened")
 end)
 
 registerForEvent("onOverlayClose", function()
   state.overlayOpen = false
+  callNative("XFBridge_CetOverlay", false)
   log("debug", "-", "overlay closed")
 end)
 
@@ -360,6 +402,13 @@ registerForEvent("onDraw", function()
           ImGui.TextWrapped(message.text)
           ImGui.PopStyleColor(1)
         end
+        -- 0.7: how to answer the pending question from here (the XF window's buttons, or the ink panel's keys).
+        if state.pendingAsk then
+          local c = MESSAGE_COLORS.ask
+          ImGui.PushStyleColor(ImGuiCol.Text, c[1], c[2], c[3], c[4])
+          ImGui.TextWrapped("Answer in the XF window (open the CET overlay), or with the keys the XF panel shows.")
+          ImGui.PopStyleColor(1)
+        end
         ImGui.PopTextWrapPos()
       end
     end
@@ -368,7 +417,7 @@ registerForEvent("onDraw", function()
 
   -- The panel (test builds) or the plain details while the CET overlay is open.
   if state.overlayOpen and panel then
-    local drew, err = pcall(panel.draw, state, queueAction)
+    local drew, err = pcall(panel.draw, state, queueAction, theme)
     if not drew then
       state.lastError = tostring(err)
       pcall(ImGui.End)
@@ -392,7 +441,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.6.1",
+  version = "0.7.0",
   -- For other CET mods: GetMod("xf_runtime_bridge").info()
   info = function() return state.info end,
 }

@@ -289,9 +289,9 @@ MessageRequest ParseMessage(const json& aParams)
             Bad("'text' must be text");
         }
         request.text = it->get<std::string>();
-        if (request.text.empty() || request.text.size() > 500)
+        if (request.text.empty() || request.text.size() > 2000)
         {
-            Bad("'text' must be 1 to 500 characters");
+            Bad("'text' must be 1 to 2000 characters (at most 600 are shown)");
         }
     }
     request.seconds = static_cast<int32_t>(Integer(aParams, "seconds", 1, MessageBoard::kMaxSeconds).value_or(8));
@@ -305,13 +305,13 @@ MessageRequest ParseMessage(const json& aParams)
     }
     request.clear = Boolean(aParams, "clear").value_or(false);
     // 0.7: an ask's answer buttons (the in-game panel's keys and the CET window's buttons).
-    if (const auto it = aParams.find("choices"); it != aParams.end() && !it->is_null())
+    if (const auto found = aParams.find("choices"); found != aParams.end() && !found->is_null())
     {
-        if (!it->is_array() || it->empty() || it->size() > MessageBoard::kMaxChoices)
+        if (!found->is_array() || found->empty() || found->size() > MessageBoard::kMaxChoices)
         {
             Bad("'choices' must be a list of 1 to 4 short labels");
         }
-        for (const auto& choice : *it)
+        for (const auto& choice : *found)
         {
             if (!choice.is_string() || CleanMessageText(choice.get<std::string>(), MessageBoard::kMaxChoiceChars).empty() || choice.get<std::string>().size() > 100)
             {

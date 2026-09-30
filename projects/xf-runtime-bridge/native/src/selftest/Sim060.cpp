@@ -650,7 +650,7 @@ void Sim060::Register()
                                    s.crouched = false;
                                    s.effects.erase(std::remove(s.effects.begin(), s.effects.end(), crouch), s.effects.end());
                                }
-                               else if (request.name == "weapon.draw" || request.name == "weapon.slot")
+                               else if (request.name == "weapon.draw" || request.name == "weapon.slot" || request.name == "weapon.arms")
                                {
                                    s.weaponDrawn = true;
                                }

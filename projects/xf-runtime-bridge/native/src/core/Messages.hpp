@@ -50,7 +50,7 @@ class MessageBoard
 {
 public:
     static constexpr size_t kMaxMessages = 4;
-    static constexpr size_t kMaxChars = 200;
+    static constexpr size_t kMaxChars = 600; // 0.7 (session 7): the CET label and the ink panel wrap long lines; 200 cut the coordinator short
     static constexpr int32_t kMaxSeconds = 600;
     static constexpr size_t kMaxChoices = 4;
     static constexpr size_t kMaxChoiceChars = 24;

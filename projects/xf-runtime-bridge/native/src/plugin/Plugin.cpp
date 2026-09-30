@@ -116,6 +116,9 @@ nlohmann::json InfoJson()
         {"restore_pending", state.restore.Pending()},
         {"script_layer", state.scriptLayer.Describe()},
         {"rearm_pending", state.rearmRequested.load()},
+        // 0.7: the overlay host's switches (the CET window takes its theme from here) and the answer keys.
+        {"overlay", {{"enabled", state.config.overlayEnabled}, {"theme", state.config.overlayTheme}, {"phase", xfb::overlay::PhaseName(state.overlayHost.CurrentPhase())}}},
+        {"answer_keys", state.config.answerKeys},
         {"last_rearm", [&state] {
              std::scoped_lock _(state.rearmMutex);
              return state.lastRearm;

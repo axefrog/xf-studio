@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.6.1
+  VERSION 0.7.0
   LANGUAGES CXX RC
 )
 
@@ -55,7 +55,30 @@ FetchContent_Declare(
   DOWNLOAD_EXTRACT_TIMESTAMP ON
 )
 
-FetchContent_MakeAvailable(RED4ext.SDK nlohmann_json)
+# Dear ImGui (MIT) for the overlay host (bridge 0.7), pinned by commit: tag v1.92.9-docking (9b4eb24c), the revision the
+# overlay feasibility study read (research/runtime/imgui-overlay-feasibility.md §1). Docking and viewports stay off; only the
+# core and the DirectX 12 renderer backend are compiled. Set XFB_IMGUI_GIT to a local clone to build offline.
+set(XFB_IMGUI_GIT "https://github.com/ocornut/imgui.git" CACHE STRING "Dear ImGui git repository")
+set(XFB_IMGUI_REF "9b4eb24cee2071e61dc1f9ef3e5228097cdde720" CACHE STRING "Dear ImGui commit (tag v1.92.9-docking)")
+FetchContent_Declare(
+  imgui
+  GIT_REPOSITORY ${XFB_IMGUI_GIT}
+  GIT_TAG        ${XFB_IMGUI_REF}
+  GIT_SHALLOW    OFF
+)
+
+FetchContent_MakeAvailable(RED4ext.SDK nlohmann_json imgui)
+
+add_library(xfb_imgui STATIC
+  ${imgui_SOURCE_DIR}/imgui.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp
+  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_dx12.cpp
+)
+target_include_directories(xfb_imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_compile_definitions(xfb_imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(xfb_imgui PRIVATE /W3 /utf-8)
 
 # -----------------------------------------------------------------------------
 # Common compile settings
@@ -94,6 +117,9 @@ add_library(xfb_core STATIC
   src/core/Dispatcher.cpp
   src/core/Events.cpp
   src/core/GameThreadQueue.cpp
+  src/core/Hooks070.cpp
+  src/core/overlay/Host.cpp
+  src/core/overlay/Theme.cpp
   src/core/InkUi.cpp
   src/core/LivePose.cpp
   src/core/Log.cpp
@@ -124,7 +150,9 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/Natives.cpp
   src/plugin/GameHandlers.cpp
   src/plugin/Handlers060.cpp
+  src/plugin/Handlers070.cpp
   src/plugin/LivePoseMemory.cpp
+  src/plugin/Overlay.cpp
   src/plugin/ScriptCall.cpp
   src/plugin/Plugin.cpp
   src/plugin/Resource.rc
@@ -134,12 +162,12 @@ add_library(XFRuntimeBridge SHARED
 target_compile_definitions(XFRuntimeBridge PRIVATE ${XFB_DEFINITIONS})
 # SDK headers produce warnings we do not own; keep /W4 but do not treat them as errors here.
 target_compile_options(XFRuntimeBridge PRIVATE ${XFB_OPTIONS})
-target_link_libraries(XFRuntimeBridge PRIVATE xfb_core RED4ext::SDK)
+target_link_libraries(XFRuntimeBridge PRIVATE xfb_core RED4ext::SDK xfb_imgui)
 set_target_properties(XFRuntimeBridge PROPERTIES OUTPUT_NAME "XFRuntimeBridge")
 
 # -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
 # -----------------------------------------------------------------------------
-add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/UnitTests.cpp)
+add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/UnitTests.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)

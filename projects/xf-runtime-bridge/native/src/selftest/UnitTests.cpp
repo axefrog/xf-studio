@@ -22,6 +22,8 @@
 #include "core/Behaviours.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
+#include "core/Hooks070.hpp"
+#include "core/overlay/Host.hpp"
 #include "core/Player.hpp"
 #include "core/Scene.hpp"
 #include "core/Config.hpp"
@@ -3059,6 +3061,163 @@ void Bridge061Tests()
     }
 }
 
+// Bridge 0.7: in-game driving (asks with answers, pinning, 600 characters), the answer keys and overlay config, the new hooks'
+// parameters and undos, and the overlay host's game-independent half (refusals, the three-slot hand-off, the descriptor
+// list, the theme table).
+void Bridge070Tests()
+{
+    namespace h = xfb::hooks;
+    namespace o = xfb::overlay;
+    namespace p = xfb::params;
+    namespace k = xfb::inkui;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+    {
+        xfb::MessageBoard board;
+        const auto ask = board.Post({"Is V in the apartment?", 60, "ask", false}, t0);
+        Check("0.7 an ask gets Ready, Yes and No by default", ask["choices"] == json::array({"Ready", "Yes", "No"}), ask.dump());
+        for (int i = 0; i < 5; ++i)
+        {
+            board.Post({"info " + std::to_string(i), 60, "info", false}, t0);
+        }
+        xfb::PendingAsk pending;
+        Check("0.7 the newest unanswered ask stays pinned while newer lines push the others out",
+              board.Pending(pending, t0) && pending.id == ask["id"].get<uint64_t>() && board.Active(t0) == 4);
+        const auto wrong = board.Answer(0, 7, t0);
+        Check("0.7 an answer with no such choice is refused", !wrong.value("ok", true));
+        const auto answered = board.Answer(0, 1, t0);
+        Check("0.7 answering the pending ask names the choice and the question", answered.value("ok", false) && answered["label"] == "Yes" &&
+                                                                                    answered["message_id"] == ask["id"], answered.dump());
+        Check("0.7 an answered ask stops waiting and can't be answered twice", !board.Pending(pending, t0) && !board.Answer(ask["id"].get<uint64_t>(), 0, t0).value("ok", true));
+        xfb::MessageRequest custom{"Which light?", 30, "ask", false, {"Key", "Fill", "Rim"}};
+        const auto posted = board.Post(custom, t0);
+        Check("0.7 an ask takes its own choices", posted["choices"] == json::array({"Key", "Fill", "Rim"}));
+        Check("0.7 the snapshot names the pending ask for the CET window", json::parse(board.Snapshot(t0)).contains("pending_ask"));
+        Check("0.7 an expired ask isn't pending", !board.Pending(pending, t0 + std::chrono::seconds(31)));
+        const auto longPost = board.Post({std::string(900, 'a'), 5, "info", false}, t0);
+        Check("0.7 messages show up to 600 characters", longPost["text"].get<std::string>().size() == 600 && longPost["truncated"] == true);
+        Check("0.7 choices go with asks only", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"choices", {"A"}}}); }) == "bad_params");
+        Check("0.7 at most four choices", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"level", "ask"}, {"choices", {"A", "B", "C", "D", "E"}}}); }) == "bad_params");
+        Check("0.7 a message may be up to 2000 characters long when sent", ParamsCode([] { p::ParseMessage(json{{"text", std::string(1500, 'b')}}); }).empty());
+    }
+    {
+        const auto config = xfb::ParseConfig("[ui]\nanswer_keys = IK_F7, IK_F8\n[overlay]\nenabled = true\ntheme = light\nscale_percent = 150\n");
+        Check("0.7 config: answer keys, overlay switch, theme and scale", config.answerKeys == std::vector<std::string>{"IK_F7", "IK_F8"} && config.overlayEnabled &&
+                                                                               config.overlayTheme == "light" && config.overlayScalePercent == 150 && config.warnings.empty());
+        const auto bad = xfb::ParseConfig("[ui]\nanswer_keys = F7; rm\n[overlay]\ntheme = neon\n");
+        Check("0.7 config: a bad key list or theme keeps the defaults", bad.answerKeys.size() == 4 && bad.answerKeys[0] == "IK_F6" && bad.overlayTheme == "dark" &&
+                                                                               bad.warnings.size() == 2);
+        Check("0.7 config: the overlay is off by default", !xfb::ParseConfig("").overlayEnabled);
+    }
+    {
+        k::HudSettings settings;
+        k::BridgeView view;
+        view.pluginEnabled = true;
+        view.listening = true;
+        k::AskView ask;
+        ask.id = 9;
+        ask.keyed = {{"IK_F6", "Ready"}, {"IK_F7", "Yes"}};
+        const auto frame = k::ParseFrame(k::Frame(settings, view, {{"ask", "Ready?"}}, &ask));
+        Check("0.7 the HUD frame carries the ask's keys", frame["ask"]["id"] == 9 && frame["ask"]["choices"].size() == 2 && frame["ask"]["choices"][1]["key"] == "IK_F7",
+              frame.dump());
+        view.killed = true;
+        Check("0.7 a killed bridge's frame has no ask", !k::ParseFrame(k::Frame(settings, view, {}, &ask)).contains("ask"));
+    }
+    {
+        Check("0.7 cyberware.state refuses an unknown area", ParamsCode([] { h::ParseCyberwareState(json{{"areas", {"Clothing"}}}); }) == "bad_params");
+        Check("0.7 cyberware.equip needs a record", ParamsCode([] { h::ParseCyberwareEquip(json{{"item", "not a record"}}); }) == "bad_params");
+        Check("0.7 cyberware.unequip needs area or item", ParamsCode([] { h::ParseCyberwareUnequip(json::object()); }) == "bad_params");
+        Check("0.7 remove_added needs the item", ParamsCode([] { h::ParseCyberwareUnequip(json{{"area", "ArmsCW"}, {"remove_added", true}}); }) == "bad_params");
+        const auto swap = h::CyberwareEquipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", "Items.StrongArms"}, {"added", false}}, "Items.MantisBlades");
+        Check("0.7 an equip's undo puts the earlier item back", swap["method"] == "cyberware.equip" && swap["params"]["item"] == "Items.StrongArms");
+        const auto empty = h::CyberwareEquipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", ""}, {"added", true}}, "Items.MantisBlades");
+        Check("0.7 an equip into an empty slot undoes by emptying it and removing what the bridge added",
+              empty["method"] == "cyberware.unequip" && empty["params"]["remove_added"] == true && empty["params"]["item"] == "Items.MantisBlades");
+        Check("0.7 an equip of what was there has no undo", h::CyberwareEquipUndo(json{{"already_equipped", true}}, "Items.X").is_null());
+        Check("0.7 an unequip's undo equips the item again, unless it was removed",
+              h::CyberwareUnequipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", "Items.StrongArms"}}, false)["method"] == "cyberware.equip" &&
+                  h::CyberwareUnequipUndo(json{{"previous", "Items.StrongArms"}}, true).is_null());
+        Check("0.7 world.probe needs points or around_v, not both", ParamsCode([] { h::ParseWorldProbe(json::object()); }) == "bad_params" &&
+                                                                        ParamsCode([] { h::ParseWorldProbe(json{{"points", {{1, 2, 3}}}, {"around_v", true}}); }) == "bad_params");
+        const auto ring = h::RingPoints({0, 0, 0}, 0.0, 2.0, 4);
+        Check("0.7 a ring starts at V and its first point is straight ahead (+Y at yaw 0)",
+              ring.size() == 5 && std::abs(ring[1][1] - 2.0) < 1e-9 && std::abs(ring[1][0]) < 1e-9 && std::abs(ring[2][0] + 2.0) < 1e-9);
+        Check("0.7 world.state refuses a fact name with odd characters", ParamsCode([] { h::ParseWorldState(json{{"facts", {"a b"}}}); }) == "bad_params");
+        Check("0.7 the weather needs name or cycle", ParamsCode([] { h::ParseWeather(json::object()); }) == "bad_params");
+        const auto weatherUndo = h::WeatherUndo(json{{"before", "24h_weather_sunny"}});
+        Check("0.7 the weather's undo sets the earlier state with the cycle on", weatherUndo["params"]["name"] == "24h_weather_sunny" && weatherUndo["params"]["cycle"] == true);
+        Check("0.7 photo.scene.set needs a row", ParamsCode([] { h::ParsePhotoScene(json::object()); }) == "bad_params");
+        const auto scene = h::ParsePhotoScene(json{{"npcs", {{"label", "Off"}}}, {"game_speed", 0.5}});
+        Check("0.7 photo.scene.set: a label row and a speed", scene.rows.size() == 2 && scene.rows[0].key == 54 && scene.rows[0].label == "Off" && scene.rows[1].key == 71);
+        const auto saves = h::TrimSaves(json{{"ready", true}, {"names", {"a", "b", "c"}}, {"metadata", {{{"name", "a"}, {"timestamp", 1}}, {{"name", "b"}, {"timestamp", 3}}}}}, 1);
+        Check("0.7 game.saves keeps the newest and says when details are missing", saves["saves"].size() == 1 && saves["saves"][0]["name"] == "b" &&
+                                                                                        !saves["note"].get<std::string>().empty());
+    }
+    {
+        o::DeviceFacts facts;
+        facts.deviceData = facts.swapChain = facts.directQueue = facts.sameDevice = true;
+        facts.format = "R8G8B8A8_UNORM";
+        facts.windowClass = "W2ViewportClass";
+        facts.bufferCount = 3;
+        Check("0.7 overlay: an SDR 8-bit game window may be drawn on", o::RefusalFor(facts).empty());
+        auto hdr = facts;
+        hdr.hdrMode = 1;
+        Check("0.7 overlay: HDR is refused", o::RefusalFor(hdr).find("HDR") != std::string::npos);
+        auto wide = facts;
+        wide.format = "R16G16B16A16_FLOAT";
+        Check("0.7 overlay: a float back buffer is refused", !o::RefusalFor(wide).empty());
+        auto other = facts;
+        other.windowClass = "Chrome_WidgetWin_1";
+        Check("0.7 overlay: another window is refused", !o::RefusalFor(other).empty());
+
+        o::OverlayHost host;
+        Check("0.7 overlay: off by default, nothing drawn", !host.Enabled() && !host.ShouldDraw() && host.Snapshot()["phase"] == "disabled");
+        host.Configure(true, o::ThemeKind::Dark, 100);
+        host.NoteHooks(true, true, true, "");
+        Check("0.7 overlay: hooked, waiting for the first present", host.Snapshot()["phase"] == "waiting" && !host.ShouldDraw());
+        host.NoteInit(facts, "");
+        Check("0.7 overlay: drawing after a clean first present", host.ShouldDraw());
+        const auto now = std::chrono::steady_clock::now();
+        host.HideForCapture(true, 500, now);
+        Check("0.7 overlay: hidden for a capture, and back by itself", !host.ShouldDraw(now + std::chrono::milliseconds(100)) && host.ShouldDraw(now + std::chrono::milliseconds(600)));
+        host.SetCetOpen(true);
+        Check("0.7 overlay: yields while CET's overlay is open", !host.ShouldDraw(now + std::chrono::seconds(1)));
+        host.SetCetOpen(false);
+        host.SetPassThrough(true);
+        Check("0.7 overlay: the pass-through switch stops drawing without unhooking", !host.ShouldDraw(now + std::chrono::seconds(1)) && host.Snapshot()["hooks"]["present"] == true);
+        host.SetPassThrough(false);
+        host.SetKilled(true);
+        Check("0.7 overlay: the kill switch stops drawing", !host.ShouldDraw(now + std::chrono::seconds(1)));
+        o::OverlayHost missing;
+        missing.Configure(true, o::ThemeKind::Light, 100);
+        missing.NoteHooks(false, false, false, "GpuApi::Present");
+        Check("0.7 overlay: a missing address leaves it unhooked, with the reason", missing.Snapshot()["phase"] == "unhooked" && missing.Snapshot()["missing"] == "GpuApi::Present" &&
+                                                                                       missing.Snapshot()["theme"] == "light");
+
+        o::TripleBuffer<int> hand;
+        Check("0.7 hand-off: nothing to take before a publish", !hand.Take());
+        hand.Back() = 1;
+        hand.Publish();
+        hand.Back() = 2;
+        hand.Publish();
+        Check("0.7 hand-off: the reader takes the newest", hand.Take() && hand.Front() == 2 && !hand.Take());
+        hand.Back() = 3;
+        hand.Publish();
+        Check("0.7 hand-off: and the next one after it", hand.Take() && hand.Front() == 3);
+
+        o::DescriptorFreeList list(2);
+        const auto a = list.Alloc(), b = list.Alloc();
+        Check("0.7 descriptors: full after its capacity, a freed slot is reused", a == 0 && b == 1 && list.Alloc() == -1 && list.Free(0) && list.Alloc() == 0 && !list.Free(5));
+
+        float rgba[4] = {};
+        size_t colours = 0;
+        o::ThemeColors(colours);
+        Check("0.7 theme: the table maps ImGui's colours from the Studio's tokens", colours >= 40 && o::ThemeColorOf("WindowBg", o::ThemeKind::Dark, rgba) && rgba[0] < 0.3f &&
+                                                                                        o::ThemeColorOf("WindowBg", o::ThemeKind::Light, rgba) && rgba[0] > 0.8f);
+        Check("0.7 theme: dark is the default and light is chosen by name", o::ThemeFromName("") == o::ThemeKind::Dark && o::ThemeFromName("light") == o::ThemeKind::Light);
+        Check("0.7 theme: the Studio's body text size", o::ThemeMetricOf("FontSize", 0.0f) == 13.0f);
+    }
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -3087,6 +3246,7 @@ int RunUnitTests()
     InkUiTests();
     Bridge060Tests();
     Bridge061Tests();
+    Bridge070Tests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

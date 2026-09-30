@@ -22,7 +22,7 @@
 import { captureBurst, captureWindow, CaptureError, grabForAnalysis, recrop, type CaptureRecord } from "../capture/capture.ts";
 import { NAMED_REGIONS, type RegionSpec } from "../capture/regions.ts";
 import type { CommandApi, ImageRef } from "./command-api.ts";
-import { frame, FramingError, FRAMINGS, LENSES, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
+import { defaultLens, frame, FramingError, FRAMINGS, LENSES, type CameraApplied, type FramingAdapter, type FrameOptions, type SubjectReading } from "./framing.ts";
 import { CAMERA_PRESETS, expandCamera } from "./presets.ts";
 import { KeySendError, readPhotoModeBinding, virtualKey, type FocusPolicy, type KeyRoute } from "../input/photo-key.ts";
 import { plainBridgeError } from "./errors.ts";
@@ -32,11 +32,15 @@ import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, withOverlayCleared } from "./catalogue060.ts";
+import { COMMANDS_070 } from "./catalogue070.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
 import { readFileSync } from "node:fs";
 
 /** game.status refusals game.wait waits through: the engine not ticking for a moment while a save loads (0.5.2). */
+/** How far photo mode's camera may be from V's head before photo.frame brings it back with camera preset 1 (0.7). */
+export const RESEAT_CAMERA_M = 4;
+
 const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_not_running", "game_loading"]);
 
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
@@ -407,7 +411,22 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
   try {
     if (input.xf_preset && input.camera_preset !== undefined) throw planError("bad_input", "Give xf_preset or camera_preset, not both.");
     const target = (input.target as FrameOptions["target"]) ?? "face";
-    const preset = input.xf_preset ? FRAMINGS[target].xf_preset : (input.camera_preset as number | undefined);
+    let preset = input.xf_preset ? FRAMINGS[target].xf_preset : (input.camera_preset as number | undefined);
+    // 0.7 (session 7: framing_bound with V about 8 m from photo mode's drone camera, which needed a 3.55 degree field of
+    // view): a lens with a known starting pose assumes the camera near V, where photo mode puts it. When the drone camera
+    // was flown further off than RESEAT_CAMERA_M, photo mode's own camera preset 1 brings it back near V first (the
+    // undo selects the earlier preset), and the lens is kept.
+    let reseated: { from_m: number } | null = null;
+    const lensName = (input.lens as FrameOptions["lens"] | undefined) ?? defaultLens(target, preset !== undefined);
+    if (preset === undefined && input.reseat_camera !== false && lensName !== "keep") {
+      const first = (await bridgeCall(context, "photo.subject", {})) as unknown as SubjectReading;
+      const from = first?.camera?.position, head = first?.head;
+      const distance = from && head ? Math.hypot(from.x - head.x, from.y - head.y, from.z - head.z) : 0;
+      if (distance > RESEAT_CAMERA_M) {
+        reseated = { from_m: Math.round(distance * 100) / 100 };
+        preset = 1;
+      }
+    }
     if (preset !== undefined) {
       // A camera preset first (attribute 23): it puts the camera at a fixed offset from V, so the
       // framing loop only fine-tunes. XF presets 7-9 come from the test profile's TweakXL file.
@@ -438,7 +457,7 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       ...(input.face_camera !== undefined ? { face_camera: input.face_camera as boolean } : {}),
       ...(input.yaw_offset !== undefined ? { yaw_offset: input.yaw_offset as number } : {}),
       ...(input.lens !== undefined ? { lens: input.lens as FrameOptions["lens"] } : {}),
-      ...(preset !== undefined ? { camera_preset_selected: true } : {}),
+      ...(preset !== undefined && !reseated ? { camera_preset_selected: true } : {}),
       ...(input.method !== undefined ? { method: input.method as FrameOptions["method"] } : {}),
       ...(input.max_steps !== undefined ? { max_steps: input.max_steps as number } : {}),
       ...(input.tolerance !== undefined ? { tolerance: input.tolerance as number } : {}),
@@ -456,7 +475,8 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       };
     }
     if (rollBefore !== undefined && Math.abs(rollBefore) > 0.5) result.notes.unshift(`The camera preset rolled the camera ${Math.round(rollBefore)} degrees; it was levelled (keep_roll keeps it).`);
-    return { value: preset !== undefined ? { ...result, camera_preset: preset } : result };
+    if (reseated) result.notes.unshift(`Photo mode's camera was ${reseated.from_m} m from V, too far for the ${lensName} lens, so camera preset 1 brought it back near V first (reseat_camera: false keeps it where it was).`);
+    return { value: preset !== undefined ? { ...result, camera_preset: preset, ...(reseated ? { reseated_camera: reseated } : {}) } : result };
   } catch (error) {
     // Every failure path puts back what this call changed (RB-68): the framing loop has already put back the
     // field of view and V's placement; the camera preset, roll and look-at set here go back now, in one call
@@ -1159,6 +1179,7 @@ export const CATALOGUE: readonly CommandDef[] = [
       xf_preset: bool("First select the framing's XF camera preset (6 full body, 7 face, 8 eyes, 9 head and shoulders; needs the test profile's preset file), then fine-tune."),
       camera_preset: int("First select this photo-mode camera preset (0-9), then fine-tune.", 0, 9),
       keep_roll: bool("Keep the camera preset's own roll. Default false: the camera is levelled (roll 0) after selecting a preset."),
+      reseat_camera: bool("0.7: when photo mode's camera is more than 4 m from V (a drone camera flown off) and the lens isn't keep, first select camera preset 1 to bring it back near V. Default true."),
       face_camera: bool("Turn V to face the camera first. Default true."),
       yaw_offset: num("Degrees V turns away from facing the camera (counter-clockwise seen from above), for light sweeps and profile checks: 90 shows V's right side, 180 the back of V's head. Photo Mode Ex keeps V's rotation within -180 to 180.", -180, 180),
       lens: oneOf(
@@ -1391,12 +1412,13 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "ui.message",
     title: "Show a message in the game",
     description:
-      "Shows a short message to the player under the bridge's status label in the top-left corner of the game (drawn by the bridge's Cyber Engine Tweaks layer, so the player never has to leave the game): one line of up to 200 characters, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest. level colours it: info, ask (something for the player to do), warn or done. clear: true removes them all. The kill switch clears them too.",
+      "Shows a message to the player under the bridge's status label in the top-left corner of the game and in the XF panel (so the player never has to leave the game): up to 600 characters, wrapped, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. An ask shows answer buttons: choices (1 to 4 labels), or Ready, Yes and No by default; the player answers with the key the XF panel shows next to each (F6, F7, F8, F11 by default) or the button in the XF window of the Cyber Engine Tweaks overlay, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it. clear: true removes them all. The kill switch clears them too.",
     permission: "notify",
     input: obj({
-      text: str("The message: one short line (at most 200 characters are shown).", { minLength: 1, maxLength: 500 }),
-      seconds: int("How long it shows, 1 to 600 seconds. Default 8.", 1, 600),
+      text: str("The message (at most 600 characters are shown).", { minLength: 1, maxLength: 2000 }),
+      seconds: int("How long it shows, 1 to 600 seconds. Default 8; give a question long enough for the player to answer.", 1, 600),
       level: oneOf("info (default), ask, warn or done.", ["info", "ask", "warn", "done"]),
+      choices: { type: "array", description: "With level ask: the answers offered, 1 to 4 short labels (default Ready, Yes, No).", items: str("An answer's label (1 to 24 characters).", { minLength: 1, maxLength: 24 }), minItems: 1, maxItems: 4 },
       clear: bool("Remove every message first (alone: only that)."),
     }),
     undo: "ui.message with clear: true; messages also fade by themselves.",
@@ -1510,13 +1532,12 @@ export const CATALOGUE: readonly CommandDef[] = [
     permission: "write-showroom",
     input: obj(
       {
-        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used).", { maxLength: 1024 }),
+        manifest: str("The showroom build's folder, or its manifest.json (its rig entity is used). Needed for every rig but none (0.7: none takes no manifest).", { maxLength: 1024 }),
         rig: oneOf("creator (default), creator_face, key, or none (remove every rig and keep the heads, as showroom_clear with what: lights).", ["creator", "creator_face", "key", "none"]),
         target: oneOf("each (default): a rig per head; piece: the head given by piece; v: V herself.", ["each", "piece", "v"]),
         piece: int("The head's index in the lineup (0 is the first), with target piece.", 0, 23),
         replace: bool("Remove the rigs placed earlier first (default true)."),
       },
-      ["manifest"],
     ),
     undo: "showroom.clear with what: lights.",
     local: runShowroomLight,
@@ -1569,6 +1590,8 @@ export const CATALOGUE: readonly CommandDef[] = [
   // Behaviours in the plugin at tick rate, and player control phase 1 (0.6)
   ...BEHAVE_COMMANDS,
   ...PLAYER_COMMANDS,
+  // Bridge 0.7 (research/runtime/bridge-hook-inventory.md).
+  ...COMMANDS_070,
 ];
 
 export function findCommand(name: string): CommandDef | undefined {

@@ -380,13 +380,18 @@ public abstract class XFPlayer {
       if Equals(name, "weapon.draw") {
         request.requestType = EquipmentManipulationAction.RequestLastUsedOrFirstAvailableWeapon;
       } else {
-        if Equals(name, "weapon.holster") {
-          request.requestType = EquipmentManipulationAction.UnequipWeapon;
+        if Equals(name, "weapon.arms") {
+          // 0.7: the arm cyberware's weapon (the quick-slot manager's RequestActiveMeleeware, quickSlotsManager.script:471).
+          request.requestType = EquipmentManipulationAction.RequestActiveMeleeware;
         } else {
-          if arg < 1 || arg > 3 {
-            return XFJson.Fail("bad_params", "weapon.slot takes a slot 1-3");
+          if Equals(name, "weapon.holster") {
+            request.requestType = EquipmentManipulationAction.UnequipWeapon;
+          } else {
+            if arg < 1 || arg > 3 {
+              return XFJson.Fail("bad_params", "weapon.slot takes a slot 1-3");
+            }
+            request.requestType = IntEnum<EquipmentManipulationAction>(26 + arg);
           }
-          request.requestType = IntEnum<EquipmentManipulationAction>(26 + arg);
         }
       }
       XFBridgeActions.EnsureSaveLock(cid);

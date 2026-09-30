@@ -32,6 +32,7 @@
 #include "plugin/GameHandlers.hpp"
 #include "plugin/LivePoseMemory.hpp"
 #include "plugin/Natives.hpp"
+#include "plugin/Overlay.hpp"
 #include "plugin/Plugin.hpp"
 #include "plugin/ScriptCall.hpp"
 
@@ -232,6 +233,35 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             }
         }
         HandleRearm(state);
+        // 0.7: the overlay host's panel data (the three-slot hand-off to the render thread) and its switches.
+        if (state.overlayHost.Enabled())
+        {
+            xfb::overlay::PanelData panel;
+            panel.tick = tick;
+            panel.scriptsLive = scriptsReady;
+            bool killed = false;
+            if (state.bridge)
+            {
+                auto& dispatcher = state.bridge->GetDispatcher();
+                killed = dispatcher.IsKilled();
+                panel.requests = dispatcher.RequestCount();
+                panel.tone = killed ? "killed" : dispatcher.WritesPaused() ? "paused" : state.config.allowWrites ? "write" : "ok";
+                panel.bridgeStatus = killed ? "Stopped by the kill switch" : state.bridge->HasClient() ? "Connected to an XF tool" : "Listening";
+            }
+            else
+            {
+                panel.tone = "off";
+                panel.bridgeStatus = "The bridge is off in this build";
+            }
+            PendingAsk ask;
+            if (state.messages.Pending(ask))
+            {
+                panel.pendingAsk = ask.text;
+            }
+            state.overlayHost.SetKilled(killed);
+            state.overlayHost.SetCetOpen(state.cetOverlayOpen.load());
+            xfb::plugin::overlay::Publish(panel);
+        }
         // A client dropped for idleness can't be driving photo mode any more: give the cursor back
         // (RB-34). Only after a write, since only a write hides it. Between sessions there is no cursor flag to
         // release (the registry holding it goes with the session).
@@ -402,6 +432,9 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
     // Every game-thread method and step waits for a live scripted session, checked right before it runs (RB-76).
     SetGameGate([](const std::string& aWhat) { Get().scriptLayer.Require(aWhat); });
     live::ResolveAddresses(); // the live-pose commands' own engine addresses (refused for the session if missing)
+    // 0.7: the XF overlay host (off unless [overlay] enabled; its hooks attach only then, and never detach at run time).
+    state.overlayHost.Configure(state.config.overlayEnabled, xfb::overlay::ThemeFromName(state.config.overlayTheme), state.config.overlayScalePercent);
+    xfb::plugin::overlay::Install(aHandle, aSdk, state.overlayHost);
 
     RegisterStates(aHandle, aSdk);
 

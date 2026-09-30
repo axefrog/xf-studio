@@ -46,6 +46,7 @@ export const STAGING_NOTES: readonly string[] = [
 ];
 export const CET_DIR = "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge";
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
+export const THEME_FILE = `${CET_DIR}/theme.lua`;
 
 export const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
@@ -163,6 +164,8 @@ export function stageVariant(options: StageOptions): Manifest {
   // The in-game panel (reconnect after the kill switch, pause changes): test builds only. Without it the
   // distribution package's CET layer shows its plain status window.
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "panel.lua"), PANEL_FILE);
+  // 0.7: the panel's XF Studio theme (generated from the Studio's tokens, tools/overlay/theme.ts) goes with the panel.
+  if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "theme.lua"), THEME_FILE);
 
   const files = listFiles(stageDir).map((path) => ({
     path: relative(stageDir, path).replaceAll("\\", "/"),
