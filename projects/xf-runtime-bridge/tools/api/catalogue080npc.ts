@@ -11,7 +11,7 @@ import { point3 } from "./catalogue060.ts";
 type Json = Record<string, any>;
 
 /** The XF actors npc.spawn offers (core/Npc.cpp Casts(); tweaks/test-profile/xf_npc_actors.yaml). */
-export const NPC_CASTS = ["woman_corpo", "man_corpo", "woman_nightlife", "man_youngster", "woman_lowlife", "man_lowlife", "research_crowd_record", "research_npc_base"] as const;
+export const NPC_CASTS = ["woman_corpo", "man_corpo", "woman_nightlife", "man_youngster", "woman_lowlife", "man_lowlife", "woman_masked", "man_masked", "research_crowd_record", "research_npc_base"] as const;
 /** Facial reactions (core/Npc.cpp Expressions()). */
 export const NPC_EXPRESSIONS = ["neutral", "joy", "smile", "sad", "surprise", "aggressive", "anger", "interested", "disinterested", "disappointed", "disgust", "nervous", "fear"] as const;
 /** Vanilla voice triggers npc.say may play (core/Npc.cpp VoiceTriggers()). */
@@ -22,8 +22,10 @@ export const NPC_GESTURES = ["talk", "talk_hips", "wave", "shrug", "nod", "arms_
 export const NPC_WAIT_KINDS = [
   "npc.spawned",
   "npc.arrived",
+  "npc.blocked",
   "npc.move_failed",
   "npc.follow_ended",
+  "npc.turned",
   "npc.said",
   "npc.act_done",
   "npc.choice",
@@ -51,6 +53,7 @@ export function npcParams(input: Record<string, unknown>): Record<string, unknow
   join("to", "to_point");
   join("at", "at_point");
   join("face", "face_point");
+  join("away_from", "away_from_point");
   if (out.ahead_m !== undefined || out.side_m !== undefined) {
     out.at = { ahead_m: out.ahead_m ?? 0, ...(out.side_m !== undefined ? { side_m: out.side_m } : {}) };
     delete out.ahead_m;
@@ -93,17 +96,21 @@ export const COMMANDS_080_NPC: CommandDef[] = [
     name: "npc.spawn",
     title: "Bring in an XF actor",
     description:
-      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_view waits until the spot isn't on screen. The actor is friendly to V, can't be killed, and is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Needs Codeware and the -writes package's actor records.",
+      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. The actor is friendly to V, can't be killed, and is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Needs Codeware and the -writes package's actor records.",
     permission: "write-npc",
     input: obj(
       {
-        cast: oneOf("Which actor: woman_corpo, man_corpo, woman_nightlife, man_youngster, woman_lowlife or man_lowlife (research_crowd_record and research_npc_base are for the session-9 comparison only).", [...NPC_CASTS]),
+        cast: oneOf(
+          "Which actor: woman_corpo, man_corpo, woman_nightlife, man_youngster, woman_lowlife or man_lowlife; woman_masked or man_masked wear a mask or respirator over the mouth (for lines without lip movement); research_crowd_record and research_npc_base are for the session-9 comparison only.",
+          [...NPC_CASTS],
+        ),
         ahead_m: num("Metres along V's facing (negative: behind her), -30 to 30.", -30, 30),
         side_m: num("Metres to V's right (negative: left), -30 to 30. Default 0.", -30, 30),
         at_point: point3("A world point instead of ahead_m and side_m."),
         face: target("Face V (\"v\", the default) or another NPC (its handle)."),
         face_point: point3("Face this world point instead."),
-        appearance: str("One of the actor's appearances by name (default random).", { pattern: "^[A-Za-z0-9_]+$", maxLength: 64 }),
+        appearance: str("One of the actor's appearances by name (default: the cast's own look, or random).", { pattern: "^[A-Za-z0-9_]+$", maxLength: 96 }),
+        variant: int("Which of the cast's own looks (npc_status lists them per cast), from 0. Default 0.", 0, 31),
         out_of_view: bool("Appear only when the spot isn't on screen."),
         label: str("The name its lines and dialogue choices show (default Stranger).", { minLength: 1, maxLength: 40 }),
       },
@@ -116,7 +123,7 @@ export const COMMANDS_080_NPC: CommandDef[] = [
     name: "npc.move",
     title: "Walk an actor somewhere",
     description:
-      "Sends one of the bridge's actors walking (or running) to V (\"v\"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6) and turning to face V at the end when going to V (face_v). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there, or npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.",
+      "Sends one of the bridge's actors walking (or running) to V (\"v\"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6) and turning to face V at the end when going to V (face_v). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there; npc.blocked when it makes no headway for 4 seconds (it keeps trying) or can't go on; npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.",
     permission: "write-npc",
     input: obj(
       {
@@ -155,10 +162,22 @@ export const COMMANDS_080_NPC: CommandDef[] = [
   {
     name: "npc.turn",
     title: "Turn an actor",
-    description: "One of the bridge's actors turns on the spot to face V (\"v\"), another NPC (its handle) or a world point (to_point).",
+    description:
+      "One of the bridge's actors turns on the spot to face V (\"v\"), another NPC (its handle) or a world point (to_point), or turns its back on one of them (away_from, away_from_point). hold keeps that facing (turning again whenever V or the other NPC moves round it, and after a walk ends) until npc_turn with off, a new turn or its release. npc.turned follows each turn.",
     permission: "write-npc",
-    input: obj({ who: who("The actor."), to: target("Face V (\"v\") or another NPC (its handle)."), to_point: point3("Face this world point instead.") }, ["who"]),
-    undo: "npc_stop ends the turn where it is.",
+    input: obj(
+      {
+        who: who("The actor."),
+        to: target("Face V (\"v\") or another NPC (its handle)."),
+        to_point: point3("Face this world point instead."),
+        away_from: target("Turn its back on V (\"v\") or another NPC (its handle)."),
+        away_from_point: point3("Turn its back on this world point."),
+        hold: bool("Keep this facing until off, a new turn or the release."),
+        off: bool("Stop holding a facing (it keeps facing where it faces)."),
+      },
+      ["who"],
+    ),
+    undo: "npc_stop ends a turn where it is; a held facing's undo is npc_turn with off.",
     bridge: bridgeNpc("npc.turn"),
   },
   {
@@ -183,19 +202,17 @@ export const COMMANDS_080_NPC: CommandDef[] = [
     name: "npc.say",
     title: "Give an NPC a line",
     description:
-      "An NPC (an actor or a picked one) says something: text (up to 200 characters) shown as a subtitle with its name (style subtitle, the default), in a bubble above its head (overhead) or in the holocall style, for seconds seconds (default from its length); and/or trigger, one of the game's own voice lines for that NPC's voice (greeting, bump, stlh_curious_grunt, coop_irritation, battlecry_curse, fear_foll, fear_beg, fear_run, danger, vehicle_bump: the voice picks the words, not us). The player's subtitle settings still apply. npc.said follows when the line's time ends. hide takes a shown line down by its id.",
+      "An NPC (an actor or a picked one) says something: text (up to 200 characters) shown as a subtitle with its name (style subtitle, the default), in a bubble above its head (overhead) or in the holocall style, for seconds seconds (default from its length); and/or trigger, one of the game's own voice lines for that NPC's voice (greeting, bump, stlh_curious_grunt, coop_irritation, battlecry_curse, fear_foll, fear_beg, fear_run, danger, vehicle_bump: the voice picks the words, not us). speaker changes the name shown for this line. Without who, speaker is a voice with no body speaking to V from elsewhere: its text shows with that name and no NPC (style ownerless, the default, or holocall or subtitle). The player's subtitle settings still apply. npc.said follows when the line's time ends. hide takes a shown line down by its id.",
     permission: "write-npc",
-    input: obj(
-      {
-        who: who(),
-        text: str("The line, up to 200 characters.", { minLength: 1, maxLength: 200 }),
-        trigger: oneOf("A vanilla voice line in the NPC's own voice.", [...NPC_TRIGGERS]),
-        style: oneOf("How the text shows: subtitle (default), overhead or holocall.", ["subtitle", "overhead", "holocall"]),
-        seconds: num("How long the text shows, 1 to 15 seconds.", 1, 15),
-        hide: str("Take down this line (its id from an earlier answer, such as l3) instead.", { pattern: "^l[0-9]{1,9}$" }),
-      },
-      ["who"],
-    ),
+    input: obj({
+      who: who("The NPC speaking (leave out for a voice with no body)."),
+      speaker: str("The name shown with the line (a voice with no body needs one).", { minLength: 1, maxLength: 40 }),
+      text: str("The line, up to 200 characters.", { minLength: 1, maxLength: 200 }),
+      trigger: oneOf("A vanilla voice line in the NPC's own voice.", [...NPC_TRIGGERS]),
+      style: oneOf("How the text shows: subtitle (default for NPCs), overhead, holocall or ownerless (default for a voice with no body).", ["subtitle", "overhead", "holocall", "ownerless"]),
+      seconds: num("How long the text shows, 1 to 15 seconds.", 1, 15),
+      hide: str("Take down this line (its id from an earlier answer, such as l3) instead.", { pattern: "^l[0-9]{1,9}$" }),
+    }),
     undo: "The result's undo hides the line; a voice line can't be taken back once it plays.",
     bridge: { method: "npc.say" },
   },

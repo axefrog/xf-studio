@@ -48,7 +48,7 @@ export type ScenarioReport = {
   seconds: number;
 };
 
-const TARGET_FIELDS = ["to", "target", "at", "face"] as const;
+const TARGET_FIELDS = ["to", "target", "at", "face", "away_from"] as const;
 const TIMEOUT_CASES = ["timeout", "withdrawn", "walked_away"] as const;
 
 class ScenarioError extends Error {
@@ -276,7 +276,7 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
             handles[step.who] = String(out.result.who);
             report.actors[step.who] = handles[step.who];
           }
-          if (step.do === "npc.say" && out.result.line) lastLine[step.who] = String(out.result.line);
+          if (step.do === "npc.say" && out.result.line) lastLine[step.who ?? ""] = String(out.result.line); // "" : a voice with no body
           entry.result = out.result;
           report.steps.push(entry);
           log(`${step.do} ${step.who ?? ""}: ok`);
@@ -304,7 +304,7 @@ export async function runScenario(scenario: Scenario, context: CommandContext, o
               !consumed.has(e.seq) &&
               e.kind === step.wait &&
               (!handle || e.data?.who === handle) &&
-              (step.wait !== "npc.said" || !lastLine[step.who] || step.any === true || e.data?.line === lastLine[step.who]),
+              (step.wait !== "npc.said" || !lastLine[step.who ?? ""] || step.any === true || e.data?.line === lastLine[step.who ?? ""]),
           );
           if (!found) await sleep(pollMs, context.signal);
         }

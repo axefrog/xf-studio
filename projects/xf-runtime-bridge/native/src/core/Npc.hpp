@@ -63,6 +63,11 @@ inline constexpr double kWalkAwayM = 15.0;        // release walk_away: this far
 inline constexpr double kWalkAwayMaxS = 20.0;
 inline constexpr double kArriveSlackM = 0.6;      // arrival by distance: within stop_m plus this (AMM's Director: < 1 m)
 inline constexpr int32_t kHubIdBase = 58460000;    // the dialogue hub ids the bridge uses ("XF" 0x58 0x46)
+inline constexpr double kFacingToleranceDeg = 25.0; // a held facing is turned back when it drifts further than this
+inline constexpr double kTurnedToleranceDeg = 15.0; // a turn has arrived (npc.turned) within this of its goal
+inline constexpr double kFacingReissueS = 1.0;      // a held facing re-turns at most once a second
+inline constexpr double kBlockedAfterS = 4.0;       // a walk that gains less than kProgressM for this long is blocked
+inline constexpr double kProgressM = 0.3;
 
 // --- the tables -------------------------------------------------------------------------------------
 
@@ -75,6 +80,11 @@ struct Cast
     std::string rig;    // woman_average or man_average: which gesture clips play
     std::string label;  // a plain default speaker name for subtitles and the hub title
     bool research = false;
+    // Appearances (the entity template's appearance names) npc.spawn uses by default, in order (variant picks one); empty:
+    // the game picks. masked: every one of them covers the mouth (a respirator or a kerchief), for text lines without
+    // lip sync (the live-DM casting data).
+    std::vector<std::string> appearances;
+    bool masked = false;
 };
 const std::vector<Cast>& Casts();
 const Cast* FindCast(const std::string& aName);
@@ -103,8 +113,12 @@ struct Gesture
 const std::vector<Gesture>& Gestures();
 const Gesture* FindGesture(const std::string& aName);
 
-// npc.say's styles: the scnDialogLineType each draws with (orphans.script:7396-7410 [source]).
+// npc.say's styles: the scnDialogLineType each draws with (orphans.script:7396-7410 [source]). ownerless (OwnerlessRegular)
+// is the one type the subtitle controller shows without a speaker entity (baseSubtitlesControllers.script:523-533), so it
+// carries a voice with no body; holocall and subtitle need a speaker, and a voice line gives them V as the carrier.
 int32_t StyleLineType(const std::string& aStyle); // -1 for an unknown style
+// The difference between two yaws in degrees, in [-180, 180].
+double YawDifference(double aA, double aB);
 
 // --- targets -------------------------------------------------------------------------------------------
 
@@ -155,6 +169,7 @@ struct Command
 struct Line
 {
     int32_t number = 0;   // the line's id (l<number>); the script builds its CRUID from it
+    bool voice = false;   // a voice with no body (no NPC; npc.say without who): no speaker entity of its own
     std::string text;     // "" for a trigger only
     std::string trigger;  // "" for text only
     std::string style = "subtitle";
@@ -188,7 +203,8 @@ struct Ops
     // Sends (or, kind stop, cancels) an AI command on an actor: {sent, before: {position, yaw}} (place and stop report where
     // the actor was). Refuses npc_lost, not_walkable, no_ai.
     std::function<json(const std::string& aWho, const Command& aCommand)> command;
-    // Shows a line (and/or plays a trigger) from aWho: {line_id}. Refuses npc_lost, subtitles_off.
+    // Shows a line (and/or plays a trigger) from aWho, or (aWho empty, aLine.voice) a voice with no body: {line_id}.
+    // Refuses npc_lost.
     std::function<json(const std::string& aWho, const Line& aLine)> say;
     // Hides a line by its number: {hidden}.
     std::function<json(const std::string& aWho, int32_t aLine)> hide;
@@ -269,6 +285,29 @@ private:
         double age = 0.0;
         double maxS = 0.0;
         std::string lastState;
+        // turn: the yaw it turns to (npc.turned when reached); fromHold: a held facing's own re-turn.
+        double yawGoal = 0.0;
+        bool hasYawGoal = false;
+        bool away = false;
+        bool fromHold = false;
+        // move and walk_away: progress, for npc.blocked.
+        double bestDistance = 1e9;
+        double lastAge = 0.0;
+        double sinceProgress = 0.0;
+        bool blockedSent = false;
+    };
+    // A held facing (npc.turn with hold): kept towards (or away from) a target until npc.turn off or the release.
+    struct Facing
+    {
+        Target target;
+        bool away = false;
+        double sinceIssue = kFacingReissueS;
+    };
+    struct VoiceLine
+    {
+        int32_t number = 0;
+        double left = 0.0;
+        std::string speaker;
     };
     struct LineHeld
     {
@@ -290,6 +329,9 @@ private:
         double sinceSpawn = 0.0;
         Vec3 position{};
         bool known = false;
+        double yaw = 0.0;
+        bool yawKnown = false;
+        std::optional<Facing> facing;
         std::optional<Motion> motion;
         std::vector<LineHeld> lines;
         std::optional<Target> look;
@@ -321,6 +363,9 @@ private:
     mutable std::recursive_mutex m_mutex;
     std::map<std::string, Npc> m_npcs;
     std::optional<HubHeld> m_hub;
+    std::vector<VoiceLine> m_voice; // lines from a voice with no body
+    // Hides every voice line now (a handover, a pause, a scene, release all); never throws.
+    void HideVoices(const Ops& aOps);
     EventLog* m_events = nullptr;
     uint32_t m_nextActor = 1;
     uint32_t m_nextPick = 1;

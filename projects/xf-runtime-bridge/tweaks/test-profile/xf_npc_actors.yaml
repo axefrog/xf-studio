@@ -85,6 +85,33 @@ Character.xfs_actor_man_lowlife:
   items: []
   savable: false
 
+# Masked (casting data for text lines without lip sync): the same clones, from templates whose appearances cover the mouth.
+# npc.spawn picks the masked appearance by name (core/Npc.cpp Casts()): the woman's is citizen__creole_wa_caribbean_29
+# (an h1_051 headkerchief mask), the man's are king_of_the_stoop_ma 012 (an h1_031 hazmat respirator), 03 and 014
+# (h1_051 and h1_050 headkerchief masks) [resource: the base game's citizen__creole_wa.ent and citizen__lowlife_ma.ent and
+# their .app garments; how well each hides the mouth in game is session 9's N16].
+Character.xfs_actor_woman_masked:
+  $base: Character.CreoleWoman
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__creole_wa.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
+Character.xfs_actor_man_masked:
+  $base: Character.LowlifeMale
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\citizen\citizen__lowlife_ma.ent'
+  reactionPreset: ReactionPresets.Civilian_NoReaction
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  objectActions: []
+  items: []
+  savable: false
+
 # Session 9's comparison (N4): the plain NPC base (never a crowd record) with the same civilian template, attitude and
 # preset, to tell whether a crowd record's clone behaves differently from a non-crowd one. research_crowd_record spawns the
 # vanilla Character.CorpoWoman itself (no record needed here).

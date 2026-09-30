@@ -355,6 +355,98 @@ void ReleaseTests()
                                                                                                     restored["forgotten"].size() == 1);
     }
 }
+
+// The live DM's additions: a facing held away from V, a voice with no body, npc.turned and npc.blocked, masked casts.
+void DirectorTests()
+{
+    xfb::EventLog log;
+    n::Service service;
+    service.SetEvents(&log);
+    Fake fake;
+    const auto ops = fake.Ops();
+    const auto spawned = service.Spawn(json{{"cast", "man_masked"}, {"at", json{{"ahead_m", 4}}}}, ops);
+    Check("masked cast: its first masked look by default", spawned["appearance"] == "king_of_the_stoop_ma_king_of_the_stoop_ma_012");
+    const auto second = service.Spawn(json{{"cast", "man_masked"}, {"at", json{{"ahead_m", 5}}}, {"variant", 1}}, ops);
+    Check("masked cast: variant picks another", second["appearance"] == "king_of_the_stoop_ma_king_of_the_stoop_ma_03");
+    Check("masked cast: a variant past its looks is refused", CodeOf([&] { service.Spawn(json{{"cast", "woman_masked"}, {"at", json{{"ahead_m", 3}}}, {"variant", 3}}, ops); }) == "bad_params");
+    service.Release(json{{"who", "a2"}}, ops);
+    fake.npcs["a1"]["exists"] = true;
+    fake.npcs["a1"]["spawned"] = true;
+    fake.npcs["a1"]["position"] = {0.0, 4.0, 0.0};
+    fake.npcs["a1"]["yaw"] = 180.0; // facing V (at the origin, 4 m to its -Y)
+    Poll(service, fake, ops);
+    const auto away = service.Turn(json{{"who", "a1"}, {"away_from", "v"}, {"hold", true}}, ops);
+    Check("turn away: the goal faces away from V (yaw 0: +Y) and the undo ends the hold", std::abs(away["yaw_goal"].get<double>()) < 0.01 && away["hold"] == true &&
+                                                                                            away["undo"] == json{{"method", "npc.turn"}, {"params", {{"who", "a1"}, {"off", true}}}});
+    fake.npcs["a1"]["yaw"] = 0.0;
+    fake.npcs["a1"]["command_state"] = "Success";
+    Poll(service, fake, ops);
+    auto turned = Events(log, "npc.turned");
+    Check("npc.turned when it faces away (reached, hold, away)", turned.size() == 1 && turned[0]["data"]["reached"] == true && turned[0]["data"]["away"] == true && turned[0]["data"]["hold"] == true);
+    // V circles round to +Y of the actor: the held facing turns it away again.
+    fake.v["position"] = {0.0, 8.0, 0.0};
+    fake.npcs["a1"]["command_state"] = "NotExecuting";
+    fake.calls.clear();
+    service.Tick(1.1, {}, ops);
+    Check("hold: V moving round it turns it away again", fake.Called("command a1 turn"));
+    fake.npcs["a1"]["yaw"] = 180.0;
+    fake.npcs["a1"]["command_state"] = "Success";
+    Poll(service, fake, ops);
+    turned = Events(log, "npc.turned");
+    Check("hold: the re-turn is reported (again)", turned.size() == 2 && turned[1]["data"]["again"] == true);
+    // A walk suspends the hold; after arrival it turns away again.
+    service.Move(json{{"who", "a1"}, {"to", json::array({0, 10, 0})}, {"stop_m", 1}}, ops);
+    fake.npcs["a1"]["position"] = {0.0, 9.5, 0.0};
+    fake.npcs["a1"]["yaw"] = 0.0; // walked facing +Y: now facing away from V? V at (0, 8): away is +Y, so it already does
+    fake.v["position"] = {0.0, 12.0, 0.0}; // V ahead of it now: away is -Y
+    fake.npcs["a1"]["command_state"] = "Executing";
+    Poll(service, fake, ops);
+    fake.calls.clear();
+    service.Tick(1.1, {}, ops);
+    Check("hold: after the walk ends it turns away again", Events(log, "npc.arrived").size() == 1 && fake.Called("command a1 turn"));
+    const auto off = service.Turn(json{{"who", "a1"}, {"off", true}}, ops);
+    Check("turn off: the hold ends", off["was_holding"] == true && !service.Status(json::object())["npcs"][0].contains("facing"));
+    Check("turn: to and away_from together are refused", CodeOf([&] { service.Turn(json{{"who", "a1"}, {"to", "v"}, {"away_from", "v"}}, ops); }) == "bad_params");
+    // Blocked: no headway for 4 s.
+    fake.npcs["a1"]["command_state"] = "Executing";
+    service.Move(json{{"who", "a1"}, {"to", json::array({0, 20, 0})}}, ops);
+    for (int i = 0; i < 20; ++i)
+    {
+        Poll(service, fake, ops);
+    }
+    const auto blocked = Events(log, "npc.blocked");
+    Check("blocked: no headway for 4 s raises npc.blocked once (stuck), the walk goes on", blocked.size() == 1 && blocked[0]["data"]["reason"] == "stuck" &&
+                                                                                           service.Status(json::object())["npcs"][0].contains("motion"));
+    fake.npcs["a1"]["command_state"] = "Failure";
+    Poll(service, fake, ops);
+    Check("blocked: a failed walk is final (no_path) with npc.move_failed", Events(log, "npc.blocked").size() == 2 && Events(log, "npc.blocked")[1]["data"]["final"] == true &&
+                                                                                Events(log, "npc.move_failed").size() == 1);
+    // A voice with no body.
+    Check("voice: needs a speaker", CodeOf([&] { service.Say(json{{"text", "Hello."}}, ops); }) == "bad_params");
+    Check("voice: no voice triggers", CodeOf([&] { service.Say(json{{"speaker", "A voice"}, {"trigger", "greeting"}}, ops); }) == "bad_params");
+    Check("voice: not overhead", CodeOf([&] { service.Say(json{{"speaker", "A voice"}, {"text", "Hi."}, {"style", "overhead"}}, ops); }) == "bad_params");
+    fake.v["busy"] = "in_combat";
+    fake.calls.clear();
+    const auto voice = service.Say(json{{"speaker", "A voice"}, {"text", "Can you hear me?"}, {"seconds", 1}}, ops);
+    Check("voice: shown even in a fight, ownerless by default, with an undo that hides it", voice["voice"] == true && voice["style"] == "ownerless" && fake.Called("say  ") &&
+                                                                                                voice["undo"] == json{{"method", "npc.say"}, {"params", {{"hide", voice["line"]}}}});
+    fake.v["busy"] = "";
+    fake.calls.clear();
+    service.Tick(1.05, {}, ops);
+    const auto said = Events(log, "npc.said");
+    Check("voice: npc.said with the speaker when its time ends, hidden", !said.empty() && said.back()["data"]["voice"] == true && said.back()["data"]["speaker"] == "A voice" &&
+                                                                          fake.Called("hide  "));
+    const auto kept = service.Say(json{{"speaker", "A voice"}, {"text", "Still there?"}, {"style", "holocall"}, {"seconds", 10}}, ops);
+    fake.v["busy"] = "in_combat";
+    Poll(service, fake, ops);
+    Check("voice: a fight releases the actors but the voice line stays", Events(log, "npc.auto_released").size() == 1 && service.Status(json::object())["voice_lines"].size() == 1);
+    fake.v["busy"] = "";
+    n::TickInput handover;
+    handover.handedOver = true;
+    fake.calls.clear();
+    service.Tick(0.01, handover, ops);
+    Check("voice: a handover takes it down", fake.Called("hide  " + kept["line"].get<std::string>().substr(1)) && !service.Active());
+}
 } // namespace
 
 int RunNpcUnitTests()
@@ -364,5 +456,6 @@ int RunNpcUnitTests()
     RefusalTests();
     TickTests();
     ReleaseTests();
+    DirectorTests();
     return gNpcFailures;
 }

@@ -77,6 +77,7 @@ struct Actor
     std::string clip;
     std::set<int32_t> lines;
     std::string trigger; // the last voice trigger played
+    bool stuck = false;  // selftest.npc {stuck: who}: its walk makes no progress (npc.blocked)
 };
 } // namespace
 
@@ -92,6 +93,7 @@ struct SimNpc::State
         {"EntityID(9004)", "Character.LowlifeMale", "NPCPuppet", {103.0, 196.0, 10.0}, true, {}, "workspot"},
     };
     std::map<std::string, Actor> actors;
+    std::map<int32_t, std::string> voiceLines; // voice lines showing: number -> "speaker|style"
     struct HubState
     {
         bool shown = false;
@@ -277,6 +279,13 @@ npc::Ops MakeOps(SimNpc::State* aState)
     };
     ops.say = [s](const std::string& aWho, const npc::Line& aLine) -> json {
         std::scoped_lock _(s->mutex);
+        if (aWho.empty())
+        {
+            // A voice with no body.
+            s->hooks.takeSaveLock();
+            s->voiceLines[aLine.number] = aLine.speaker + "|" + aLine.style;
+            return json{{"line_id", aLine.number}};
+        }
         const auto it = s->actors.find(aWho);
         if (it == s->actors.end() || it->second.lost)
         {
@@ -295,6 +304,10 @@ npc::Ops MakeOps(SimNpc::State* aState)
     };
     ops.hide = [s](const std::string& aWho, int32_t aLine) {
         std::scoped_lock _(s->mutex);
+        if (aWho.empty())
+        {
+            s->voiceLines.erase(aLine);
+        }
         const auto it = s->actors.find(aWho);
         if (it != s->actors.end())
         {
@@ -383,6 +396,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
         std::scoped_lock _(s->mutex);
         const auto count = s->actors.size();
         s->actors.clear();
+        s->voiceLines.clear();
         s->hub = SimNpc::State::HubState{};
         ++s->releasedAll;
         return json{{"released", count}, {"reason", aReason}, {"simulated", true}};
@@ -485,6 +499,14 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                       it->second.dead = true;
                                   }
                               }
+                              if (p.contains("stuck"))
+                              {
+                                  const auto it = s->actors.find(p["stuck"].get<std::string>());
+                                  if (it != s->actors.end())
+                                  {
+                                      it->second.stuck = true;
+                                  }
+                              }
                               if (p.contains("lose"))
                               {
                                   const auto it = s->actors.find(p["lose"].get<std::string>());
@@ -519,7 +541,13 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                                     {"lines", std::vector<int32_t>(a.lines.begin(), a.lines.end())},
                                                     {"trigger", a.trigger}});
                               }
+                              json voices = json::object();
+                              for (const auto& [number, text] : s->voiceLines)
+                              {
+                                  voices["l" + std::to_string(number)] = text;
+                              }
                               return json{{"actors", actors},
+                                          {"voice_lines", voices},
                                           {"hub", {{"shown", s->hub.shown}, {"id", s->hub.id}, {"title", s->hub.title}, {"choices", s->hub.choices}, {"answer", s->hub.answer}}},
                                           {"released_all", s->releasedAll}};
                           }});
@@ -570,7 +598,7 @@ void SimNpc::Tick(double aDt)
                 a.command.state = "Success";
                 continue;
             }
-            const double speed = (a.command.gait == 2 ? 6.0 : a.command.gait == 1 ? 3.5 : 1.4) * s->speedScale;
+            const double speed = a.stuck ? 0.0 : (a.command.gait == 2 ? 6.0 : a.command.gait == 1 ? 3.5 : 1.4) * s->speedScale;
             if (d <= a.command.distance)
             {
                 if (a.command.kind == "move")
@@ -598,6 +626,7 @@ void SimNpc::OnDetach()
 {
     std::scoped_lock _(m_state->mutex);
     m_state->actors.clear();
+    m_state->voiceLines.clear();
     m_state->hub = State::HubState{};
 }
 

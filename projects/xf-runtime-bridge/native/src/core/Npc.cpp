@@ -132,6 +132,13 @@ const std::vector<Cast>& Casts()
         {"man_youngster", "Character.xfs_actor_man_youngster", "man_average", "Stranger", false},
         {"woman_lowlife", "Character.xfs_actor_woman_lowlife", "woman_average", "Stranger", false},
         {"man_lowlife", "Character.xfs_actor_man_lowlife", "man_average", "Stranger", false},
+        // Masked (the live-DM casting data): every look covers the mouth, which hides the missing lip sync of text lines.
+        // Appearance names from the base game's citizen templates (citizen__creole_wa.ent, citizen__lowlife_ma.ent) and
+        // their .app garments (h1_051 headkerchief masks, h1_031 hazmat respirator) [resource]; how well each hides the
+        // mouth in game is session 9's N16 [hypothesis].
+        {"woman_masked", "Character.xfs_actor_woman_masked", "woman_average", "Stranger", false, {"citizen__creole_wa_caribbean_29"}, true},
+        {"man_masked", "Character.xfs_actor_man_masked", "man_average", "Stranger", false,
+         {"king_of_the_stoop_ma_king_of_the_stoop_ma_012", "king_of_the_stoop_ma_king_of_the_stoop_ma_03", "king_of_the_stoop_ma_king_of_the_stoop_ma_014"}, true},
         // Session 9's N4 comparison only: the vanilla crowd record itself (isCrowd true, unchanged), and our clone of the plain
         // NPC base (never a crowd record) with the same template.
         {"research_crowd_record", "Character.CorpoWoman", "woman_average", "Stranger", true},
@@ -224,7 +231,25 @@ int32_t StyleLineType(const std::string& aStyle)
     {
         return 4; // OverHead: above the speaker (the chatter controller's rules)
     }
+    if (aStyle == "ownerless")
+    {
+        return 9; // OwnerlessRegular: a subtitle with a name and no speaker entity
+    }
     return -1;
+}
+
+double YawDifference(double aA, double aB)
+{
+    double d = std::fmod(aA - aB, 360.0);
+    if (d > 180.0)
+    {
+        d -= 360.0;
+    }
+    if (d < -180.0)
+    {
+        d += 360.0;
+    }
+    return d;
 }
 
 // --- targets -----------------------------------------------------------------------------------------
@@ -345,13 +370,13 @@ void RequireKnown(const std::string& aMethod, const json& aParams)
         {"npc.list", {"radius_m", "max"}},
         {"npc.pick", {"id"}},
         {"npc.status", {}},
-        {"npc.spawn", {"cast", "at", "face", "appearance", "out_of_view", "label"}},
+        {"npc.spawn", {"cast", "at", "face", "appearance", "variant", "out_of_view", "label"}},
         {"npc.move", {"who", "to", "gait", "stop_m", "face_v", "max_s"}},
         {"npc.follow", {"who", "target", "distance_m", "gait", "max_s"}},
-        {"npc.turn", {"who", "to"}},
+        {"npc.turn", {"who", "to", "away_from", "hold", "off"}},
         {"npc.place", {"who", "at", "yaw"}},
         {"npc.stop", {"who"}},
-        {"npc.say", {"who", "text", "trigger", "style", "seconds", "hide"}},
+        {"npc.say", {"who", "speaker", "text", "trigger", "style", "seconds", "hide"}},
         {"npc.look", {"who", "at", "off"}},
         {"npc.face", {"who", "expression", "off"}},
         {"npc.act", {"who", "gesture", "off", "seconds"}},
@@ -575,6 +600,14 @@ json Service::NpcJson(const Npc& aNpc) const
     {
         out["releasing"] = aNpc.releasing;
     }
+    if (aNpc.yawKnown)
+    {
+        out["yaw"] = std::round(aNpc.yaw * 10) / 10;
+    }
+    if (aNpc.facing)
+    {
+        out["facing"] = {{aNpc.facing->away ? "away_from" : "to", TargetJson(aNpc.facing->target)}, {"hold", true}};
+    }
     return out;
 }
 
@@ -593,7 +626,18 @@ json Service::Status(const json& aParams) const
         hub = {{"hub", m_hub->hub.id}, {"who", m_hub->hub.who}, {"title", m_hub->hub.title}, {"choices", m_hub->hub.choices},
                {"age_s", std::round(m_hub->age * 10) / 10}, {"max_s", m_hub->maxS}};
     }
-    return json{{"npcs", npcs}, {"hub", hub}, {"actors", ActorCount()}, {"limits", {{"actors", kMaxActors}, {"picks", kMaxPicks}, {"range_m", kMaxRangeM}}}};
+    json voices = json::array();
+    for (const auto& line : m_voice)
+    {
+        voices.push_back({{"line", "l" + std::to_string(line.number)}, {"speaker", line.speaker}, {"seconds_left", std::round(line.left * 10) / 10}});
+    }
+    json casts = json::array();
+    for (const auto& cast : Casts())
+    {
+        casts.push_back({{"cast", cast.name}, {"rig", cast.rig}, {"masked", cast.masked}, {"research", cast.research}, {"appearances", cast.appearances}});
+    }
+    return json{{"npcs", npcs}, {"hub", hub}, {"voice_lines", voices}, {"actors", ActorCount()}, {"casts", casts},
+                {"limits", {{"actors", kMaxActors}, {"picks", kMaxPicks}, {"range_m", kMaxRangeM}}}};
 }
 
 size_t Service::ActorCount() const
@@ -631,7 +675,23 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     {
         face = ParseTarget(aParams["face"], "face", false);
     }
-    const auto appearance = params::CheckText(aParams, "appearance", 64).value_or("random");
+    std::string appearance = params::CheckText(aParams, "appearance", 96).value_or(std::string());
+    if (appearance.empty())
+    {
+        const auto variant = static_cast<size_t>(params::CheckInteger(aParams, "variant", 0, 31).value_or(0));
+        if (!cast->appearances.empty())
+        {
+            if (variant >= cast->appearances.size())
+            {
+                Bad("'variant' is 0 to " + std::to_string(cast->appearances.size() - 1) + " for " + cast->name);
+            }
+            appearance = cast->appearances[variant];
+        }
+        else
+        {
+            appearance = "random";
+        }
+    }
     const bool outOfView = params::CheckBoolean(aParams, "out_of_view").value_or(false);
     const auto label = params::CheckText(aParams, "label", kMaxTitleChars).value_or(cast->label);
     const auto v = RequireV(aOps);
@@ -666,7 +726,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
         npc.position = ToVec(step["position"]); // where it will appear; known (a target, a distance) once it has
     }
     m_npcs[who] = npc;
-    json out{{"who", who}, {"cast", cast->name}, {"record", cast->record}, {"entity", npc.entity}, {"asked_at", json::array({point[0], point[1], point[2]})},
+    json out{{"who", who}, {"cast", cast->name}, {"record", cast->record}, {"appearance", appearance}, {"entity", npc.entity}, {"asked_at", json::array({point[0], point[1], point[2]})},
              {"yaw", yaw}, {"spawning", true}};
     if (step.contains("position"))
     {
@@ -781,22 +841,42 @@ json Service::Turn(const json& aParams, const Ops& aOps)
 {
     RequireKnown("npc.turn", aParams);
     const auto who = RequireWho(aParams);
-    if (!aParams.contains("to"))
+    const bool off = params::CheckBoolean(aParams, "off").value_or(false);
+    if (off)
     {
-        Bad("'to' is required: \"v\", an NPC's handle or [x, y, z]");
+        // Ends a held facing (the actor keeps its current facing).
+        std::scoped_lock _(m_mutex);
+        auto& npc = Ours(who, true);
+        const bool had = npc.facing.has_value();
+        npc.facing.reset();
+        return json{{"who", who}, {"hold", false}, {"was_holding", had}, {"undo", nullptr}, {"undo_note", "nothing to undo: the actor keeps facing where it faces"}};
     }
-    const auto to = ParseTarget(aParams["to"], "to", false);
+    const bool away = aParams.contains("away_from");
+    if (away == aParams.contains("to"))
+    {
+        Bad("give 'to' (face it) or 'away_from' (turn its back on it): \"v\", an NPC's handle or [x, y, z]; or off: true");
+    }
+    const auto target = ParseTarget(aParams[away ? "away_from" : "to"], away ? "away_from" : "to", false);
+    if (target.kind == Target::Kind::Who && target.who == who)
+    {
+        Bad("an NPC can't turn to itself");
+    }
+    const bool hold = params::CheckBoolean(aParams, "hold").value_or(false);
+    const auto v = RequireV(aOps);
     Command command;
     command.kind = "turn";
-    command.target = to;
-    const auto v = RequireV(aOps);
+    command.target.kind = Target::Kind::Point;
+    double goal = 0.0;
     {
         std::scoped_lock _(m_mutex);
-        Ours(who, true);
-        if (to.kind == Target::Kind::Point || to.kind == Target::Kind::Who)
-        {
-            command.target.point = Resolve(to, v);
-        }
+        auto& npc = Ours(who, true);
+        const auto there = Resolve(target, v);
+        // The point to turn to: the target itself, or (away) the point opposite it, so the rotation doesn't depend on the
+        // command's angleOffset semantics [hypothesis for angleOffset].
+        const Vec3 from = npc.known ? npc.position : ToVec(v.value("position", json::array({0, 0, 0})));
+        const double dx = there[0] - from[0], dy = there[1] - from[1];
+        command.target.point = away ? Vec3{from[0] - dx, from[1] - dy, from[2]} : Vec3{there[0], there[1], from[2]};
+        goal = YawTowards(away ? -dx : dx, away ? -dy : dy);
     }
     aOps.command(who, command);
     std::scoped_lock _(m_mutex);
@@ -805,11 +885,26 @@ json Service::Turn(const json& aParams, const Ops& aOps)
     {
         Motion motion;
         motion.kind = "turn";
-        motion.target = to;
+        motion.target = target;
         motion.maxS = 5.0;
+        motion.yawGoal = goal;
+        motion.hasYawGoal = true;
+        motion.away = away;
         npc.motion = motion;
     }
-    return json{{"who", who}, {"to", TargetJson(to)}, {"undo", Undo("npc.stop", {{"who", who}})}, {"undo_note", "npc.stop ends the turn where it is"}};
+    if (hold)
+    {
+        npc.facing = Facing{target, away, 0.0};
+    }
+    else
+    {
+        npc.facing.reset();
+    }
+    json out{{"who", who}, {away ? "away_from" : "to", TargetJson(target)}, {"yaw_goal", std::round(goal * 10) / 10}, {"hold", hold}};
+    out["undo"] = hold ? Undo("npc.turn", {{"who", who}, {"off", true}}) : Undo("npc.stop", {{"who", who}});
+    out["undo_note"] = hold ? "the undo stops holding the facing (the actor keeps facing where it faces); npc.turned follows each turn"
+                            : "npc.stop ends the turn where it is; npc.turned follows when it faces there";
+    return out;
 }
 
 json Service::Place(const json& aParams, const Ops& aOps)
@@ -894,7 +989,14 @@ json Service::Stop(const json& aParams, const Ops& aOps)
 json Service::Say(const json& aParams, const Ops& aOps)
 {
     RequireKnown("npc.say", aParams);
-    const auto who = RequireWho(aParams);
+    // Without who, a voice with no body: a line with a speaker's name and no NPC (someone speaking to V from elsewhere).
+    const bool voice = !aParams.contains("who");
+    const auto who = voice ? std::string() : RequireWho(aParams);
+    const auto speakerParam = params::CheckText(aParams, "speaker", kMaxTitleChars * 4);
+    if (voice && !aParams.contains("hide") && !speakerParam)
+    {
+        Bad("give who (an NPC's handle) or speaker (the name of a voice with no body)");
+    }
     if (aParams.contains("hide"))
     {
         // The undo of a line: hide it by its id.
@@ -904,17 +1006,26 @@ json Service::Say(const json& aParams, const Ops& aOps)
             Bad("'hide' must be a line's id from npc_say (l1, l2, ...)");
         }
         const auto number = static_cast<int32_t>(std::strtol(hide.c_str() + 1, nullptr, 10));
+        if (!voice)
         {
             std::scoped_lock _(m_mutex);
             Ours(who, false);
         }
         aOps.hide(who, number);
         std::scoped_lock _(m_mutex);
-        auto& npc = Ours(who, false);
-        npc.lines.erase(std::remove_if(npc.lines.begin(), npc.lines.end(), [&](const LineHeld& l) { return l.number == number; }), npc.lines.end());
-        return json{{"who", who}, {"hidden", hide}, {"undo", nullptr}, {"undo_note", "nothing to undo"}};
+        if (voice)
+        {
+            m_voice.erase(std::remove_if(m_voice.begin(), m_voice.end(), [&](const VoiceLine& l) { return l.number == number; }), m_voice.end());
+        }
+        else
+        {
+            auto& npc = Ours(who, false);
+            npc.lines.erase(std::remove_if(npc.lines.begin(), npc.lines.end(), [&](const LineHeld& l) { return l.number == number; }), npc.lines.end());
+        }
+        return json{{"who", voice ? json(nullptr) : json(who)}, {"hidden", hide}, {"undo", nullptr}, {"undo_note", "nothing to undo"}};
     }
     Line line;
+    line.voice = voice;
     const auto text = params::CheckText(aParams, "text", kMaxLineChars * 4);
     if (text)
     {
@@ -926,6 +1037,10 @@ json Service::Say(const json& aParams, const Ops& aOps)
     }
     if (const auto trigger = params::CheckText(aParams, "trigger", 32))
     {
+        if (voice)
+        {
+            Bad("a voice with no body has no voice lines of its own: give text only");
+        }
         const auto& triggers = VoiceTriggers();
         if (std::find(triggers.begin(), triggers.end(), *trigger) == triggers.end())
         {
@@ -940,36 +1055,74 @@ json Service::Say(const json& aParams, const Ops& aOps)
     }
     if (line.text.empty() && line.trigger.empty())
     {
-        Bad("give text (a line of up to 200 characters), trigger (a vanilla voice line), or both");
+        Bad(voice ? "give text: the line the voice says" : "give text (a line of up to 200 characters), trigger (a vanilla voice line), or both");
     }
-    line.style = params::CheckText(aParams, "style", 16).value_or("subtitle");
+    line.style = params::CheckText(aParams, "style", 16).value_or(voice ? "ownerless" : "subtitle");
     if (StyleLineType(line.style) < 0)
     {
-        Bad("'style' must be subtitle, overhead or holocall");
+        Bad("'style' must be subtitle, overhead, holocall or ownerless");
+    }
+    if (voice && line.style == "overhead")
+    {
+        Bad("a voice with no body can't speak overhead: use ownerless (the default), holocall or subtitle");
     }
     const double byLength = line.text.empty() ? 3.0 : std::clamp(1.5 + static_cast<double>(CountChars(line.text)) / 15.0, 2.0, 10.0);
     line.seconds = params::CheckNumber(aParams, "seconds", 1.0, 15.0).value_or(byLength);
-    const auto v = RequireV(aOps);
-    (void)v;
+    if (voice)
+    {
+        // A line on screen only: normal play, whatever V is doing.
+        const auto v = aOps.v();
+        const auto phase = v.value("phase", std::string("gameplay"));
+        if (phase != "gameplay")
+        {
+            throw MethodError("not_in_world", "lines are shown in normal play only; the game is in '" + phase + "'");
+        }
+    }
+    else
+    {
+        RequireV(aOps);
+    }
     {
         std::scoped_lock _(m_mutex);
-        auto& npc = Ours(who, false);
-        line.speaker = npc.label.empty() ? "Stranger" : npc.label;
+        if (voice)
+        {
+            line.speaker = CleanMessageText(*speakerParam, kMaxTitleChars);
+        }
+        else
+        {
+            auto& npc = Ours(who, false);
+            line.speaker = speakerParam ? CleanMessageText(*speakerParam, kMaxTitleChars) : npc.label.empty() ? "Stranger" : npc.label;
+        }
         line.number = m_nextLine;
     }
     aOps.say(who, line);
     std::scoped_lock _(m_mutex);
     ++m_nextLine;
-    auto& npc = Ours(who, false);
-    npc.lines.push_back({line.number, line.seconds, !line.text.empty()});
+    if (voice)
+    {
+        m_voice.push_back({line.number, line.seconds, line.speaker});
+    }
+    else
+    {
+        Ours(who, false).lines.push_back({line.number, line.seconds, !line.text.empty()});
+    }
     const auto id = "l" + std::to_string(line.number);
-    json out{{"who", who}, {"line", id}, {"seconds", line.seconds}, {"style", line.style}};
+    json out{{"who", voice ? json(nullptr) : json(who)}, {"line", id}, {"seconds", line.seconds}, {"style", line.style}, {"speaker", line.speaker}};
+    if (voice)
+    {
+        out["voice"] = true;
+    }
     if (!line.trigger.empty())
     {
         out["trigger"] = line.trigger;
         out["trigger_note"] = "the NPC's own voice picks a line for that trigger; the words are the voice's, not ours";
     }
-    out["undo"] = line.text.empty() ? json(nullptr) : Undo("npc.say", {{"who", who}, {"hide", id}});
+    json undoParams{{"hide", id}};
+    if (!voice)
+    {
+        undoParams["who"] = who;
+    }
+    out["undo"] = line.text.empty() ? json(nullptr) : Undo("npc.say", undoParams);
     out["undo_note"] = line.text.empty() ? "a voice line can't be taken back once it plays" : "the undo hides the line; it hides by itself after seconds (npc.said)";
     return out;
 }
@@ -1324,6 +1477,7 @@ json Service::Release(const json& aParams, const Ops& aOps)
                 m_hub.reset();
             }
         }
+        HideVoices(aOps);
         return json{{"released", whos}, {"undo", nullptr}, {"undo_note", "nothing to undo"}};
     }
     std::string kind;
@@ -1404,8 +1558,33 @@ json Service::Release(const json& aParams, const Ops& aOps)
     return json{{"who", who}, {"how", chosen}, {"undo", nullptr}, {"undo_note", "nothing to undo"}};
 }
 
+void Service::HideVoices(const Ops& aOps)
+{
+    std::vector<VoiceLine> voices;
+    {
+        std::scoped_lock _(m_mutex);
+        voices.swap(m_voice);
+    }
+    for (const auto& line : voices)
+    {
+        try
+        {
+            aOps.hide(std::string(), line.number);
+        }
+        catch (const std::exception&)
+        {
+        }
+    }
+}
+
 void Service::ReleaseEverything(const std::string& aReason, const Ops& aOps)
 {
+    // A voice with no body stays through a fight or a ride (only the actors go); anything that takes the game away from the
+    // bridge (a handover, the pause, a story scene) takes its lines down too.
+    if (aReason == "handover" || aReason == "paused" || aReason == "scene" || aReason == "not_v")
+    {
+        HideVoices(aOps);
+    }
     std::vector<std::string> whos;
     {
         std::scoped_lock _(m_mutex);
@@ -1436,7 +1615,7 @@ void Service::ReleaseEverything(const std::string& aReason, const Ops& aOps)
 bool Service::Active() const
 {
     std::scoped_lock _(m_mutex);
-    return !m_npcs.empty() || m_hub.has_value();
+    return !m_npcs.empty() || m_hub.has_value() || !m_voice.empty();
 }
 
 json Service::Holds() const
@@ -1462,6 +1641,7 @@ void Service::DropAll(const std::string& aReason)
         }
         m_npcs.clear();
         m_hub.reset();
+        m_voice.clear();
         m_sincePoll = 0.0;
     }
     for (const auto& who : whos)
@@ -1486,6 +1666,7 @@ json Service::RestoreAfterKill(const Ops& aOps)
         std::scoped_lock _(m_mutex);
         m_npcs.clear();
         m_hub.reset();
+        m_voice.clear(); // the script hides its voice lines in the same step
     }
     for (const auto& who : whos)
     {
@@ -1532,6 +1713,7 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
     // Timers: lines, gestures, the hub's and each motion's limit.
     std::vector<std::pair<std::string, int32_t>> linesDone;
     std::vector<std::string> gesturesDone;
+    std::vector<VoiceLine> voicesDone;
     bool hubTimedOut = false;
     bool poll = false;
     {
@@ -1558,10 +1740,26 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
             {
                 npc.motion->age += aDt;
             }
+            if (npc.facing)
+            {
+                npc.facing->sinceIssue += aDt;
+            }
             if (!npc.spawned)
             {
                 npc.sinceSpawn += aDt;
             }
+        }
+        for (auto& line : m_voice)
+        {
+            line.left -= aDt;
+            if (line.left <= 0.0)
+            {
+                voicesDone.push_back(line);
+            }
+        }
+        if (!voicesDone.empty())
+        {
+            m_voice.erase(std::remove_if(m_voice.begin(), m_voice.end(), [](const VoiceLine& l) { return l.left <= 0.0; }), m_voice.end());
         }
         if (m_hub)
         {
@@ -1605,6 +1803,17 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
             }
         }
         Emit("npc.said", "info", who + " finished a line", {{"who", who}, {"line", "l" + std::to_string(number)}});
+    }
+    for (const auto& line : voicesDone)
+    {
+        try
+        {
+            aOps.hide(std::string(), line.number);
+        }
+        catch (const std::exception&)
+        {
+        }
+        Emit("npc.said", "info", line.speaker + " finished a line", {{"voice", true}, {"speaker", line.speaker}, {"line", "l" + std::to_string(line.number)}});
     }
     for (const auto& who : gesturesDone)
     {
@@ -1689,6 +1898,8 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
     }
     std::vector<std::string> lost, died, spawnedNow, arrived, walkedAway;
     std::vector<std::pair<std::string, std::string>> failed, followEnded;
+    std::vector<json> blocked, turned;
+    std::vector<std::pair<std::string, Command>> holdTurns;
     {
         std::scoped_lock _(m_mutex);
         for (const auto& entry : aReading.value("npcs", json::array()))
@@ -1705,6 +1916,11 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
             {
                 npc.position = ToVec(entry["position"]);
                 npc.known = true;
+            }
+            if (entry.contains("yaw") && exists && entry["yaw"].is_number())
+            {
+                npc.yaw = entry["yaw"].get<double>();
+                npc.yawKnown = true;
             }
             if (npc.kind == "actor" && !npc.spawned)
             {
@@ -1732,6 +1948,50 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
             }
             if (!npc.motion)
             {
+                // A held facing (npc.turn hold): turned back when it drifts, including after a walk ends.
+                if (npc.facing && npc.known && npc.yawKnown && npc.facing->sinceIssue >= kFacingReissueS)
+                {
+                    Vec3 there = npc.facing->target.point;
+                    bool have = npc.facing->target.kind == Target::Kind::Point;
+                    if (npc.facing->target.kind == Target::Kind::V)
+                    {
+                        there = vPos;
+                        have = true;
+                    }
+                    else if (npc.facing->target.kind == Target::Kind::Who)
+                    {
+                        const auto other = m_npcs.find(npc.facing->target.who);
+                        if (other != m_npcs.end() && other->second.known)
+                        {
+                            there = other->second.position;
+                            have = true;
+                        }
+                    }
+                    const double dx = there[0] - npc.position[0], dy = there[1] - npc.position[1];
+                    if (have && std::abs(dx) + std::abs(dy) > 0.05)
+                    {
+                        const bool away = npc.facing->away;
+                        const double goal = YawTowards(away ? -dx : dx, away ? -dy : dy);
+                        if (std::abs(YawDifference(npc.yaw, goal)) > kFacingToleranceDeg)
+                        {
+                            Command turn;
+                            turn.kind = "turn";
+                            turn.target.kind = Target::Kind::Point;
+                            turn.target.point = away ? Vec3{npc.position[0] - dx, npc.position[1] - dy, npc.position[2]} : Vec3{there[0], there[1], npc.position[2]};
+                            holdTurns.emplace_back(who, turn);
+                            npc.facing->sinceIssue = 0.0;
+                            Motion motion;
+                            motion.kind = "turn";
+                            motion.target = npc.facing->target;
+                            motion.maxS = 5.0;
+                            motion.yawGoal = goal;
+                            motion.hasYawGoal = true;
+                            motion.away = away;
+                            motion.fromHold = true;
+                            npc.motion = motion;
+                        }
+                    }
+                }
                 continue;
             }
             auto& motion = *npc.motion;
@@ -1754,6 +2014,23 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
                 }
                 const double d = HorizontalDistance(npc.position, target);
                 const bool near = d <= motion.stopM + kArriveSlackM;
+                // Progress: a walk that gains less than kProgressM for kBlockedAfterS is blocked (once per stall).
+                if (d < motion.bestDistance - kProgressM)
+                {
+                    motion.bestDistance = d;
+                    motion.sinceProgress = 0.0;
+                    motion.blockedSent = false;
+                }
+                else
+                {
+                    motion.sinceProgress += motion.age - motion.lastAge;
+                }
+                motion.lastAge = motion.age;
+                if (!near && state != "Success" && motion.sinceProgress >= kBlockedAfterS && !motion.blockedSent)
+                {
+                    motion.blockedSent = true;
+                    blocked.push_back({{"who", who}, {"reason", "stuck"}, {"distance_m", std::round(d * 100) / 100}, {"walking", motion.kind}});
+                }
                 if (near || state == "Success")
                 {
                     (motion.kind == "walk_away" ? walkedAway : arrived).push_back(who);
@@ -1767,6 +2044,7 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
                     else
                     {
                         failed.emplace_back(who, state);
+                        blocked.push_back({{"who", who}, {"reason", state == "Failure" ? "no_path" : "interrupted"}, {"state", state}, {"final", true}});
                     }
                 }
                 else if (motion.age >= motion.maxS)
@@ -1794,12 +2072,40 @@ void Service::OnPoll(const json& aReading, const Ops& aOps)
             }
             else if (motion.kind == "turn")
             {
-                if (state == "Success" || state == "Failure" || state == "Cancelled" || state == "Interrupted" || motion.age >= motion.maxS)
+                const bool faced = motion.hasYawGoal && npc.yawKnown && std::abs(YawDifference(npc.yaw, motion.yawGoal)) <= kTurnedToleranceDeg;
+                const bool ended = state == "Success" || state == "Failure" || state == "Cancelled" || state == "Interrupted" || motion.age >= motion.maxS;
+                if (faced || ended)
                 {
+                    turned.push_back({{"who", who}, {"yaw", std::round(npc.yaw * 10) / 10}, {"yaw_goal", std::round(motion.yawGoal * 10) / 10}, {"away", motion.away},
+                                      {"hold", npc.facing.has_value()}, {"reached", faced || state == "Success"}, {"again", motion.fromHold}});
                     npc.motion.reset();
                 }
             }
         }
+    }
+    for (const auto& [who, turn] : holdTurns)
+    {
+        try
+        {
+            aOps.command(who, turn);
+        }
+        catch (const std::exception&)
+        {
+            std::scoped_lock _(m_mutex);
+            const auto it = m_npcs.find(who);
+            if (it != m_npcs.end())
+            {
+                it->second.motion.reset();
+            }
+        }
+    }
+    for (const auto& data : turned)
+    {
+        Emit("npc.turned", "info", data.value("who", std::string()) + (data.value("reached", false) ? " faces its mark" : " stopped turning"), data);
+    }
+    for (const auto& data : blocked)
+    {
+        Emit("npc.blocked", "warn", data.value("who", std::string()) + " is blocked (" + data.value("reason", std::string()) + ")", data);
     }
     for (const auto& who : spawnedNow)
     {

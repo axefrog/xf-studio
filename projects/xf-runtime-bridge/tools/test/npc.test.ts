@@ -418,6 +418,87 @@ describe("0.8 npc against the self-test host's street", () => {
   }, 30_000);
 });
 
+describe("0.8 npc: the live DM's additions (turn away and hold, a voice with no body, npc.blocked, masked casts)", () => {
+  let host: Host;
+  let api: CommandApi;
+  beforeAll(async () => {
+    host = await startSelftestHost(["--allow-writes", "--write-classes", ALL], 180);
+    api = apiFor(host);
+    await bridge(api, "selftest.npc", { speed: 8 });
+  }, HOOK_TIMEOUT_MS);
+  afterAll(async () => {
+    await host?.stop();
+  });
+
+  test("a masked cast spawns in its mask by default; variant picks another; npc.status lists the casts", async () => {
+    const since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "man_masked", ahead_m: 4 });
+    expect(a.appearance).toBe("king_of_the_stoop_ma_king_of_the_stoop_ma_012");
+    await event(api, "npc.spawned", since, a.who);
+    const status = await ok(api, "npc.status");
+    const casts = Object.fromEntries((status.casts as Any[]).map((c) => [c.cast, c]));
+    expect(casts.woman_masked).toMatchObject({ masked: true, appearances: ["citizen__creole_wa_caribbean_29"] });
+    expect(casts.woman_corpo.masked).toBe(false);
+    const b = await ok(api, "npc.spawn", { cast: "man_masked", ahead_m: 5, variant: 2 });
+    expect(b.appearance).toBe("king_of_the_stoop_ma_king_of_the_stoop_ma_014");
+    await ok(api, "npc.release", { who: "all" });
+  }, 30_000);
+
+  test("turn away and hold: it faces away, turns away again when V walks round it, and after a walk; off ends it", async () => {
+    let since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 4 });
+    await event(api, "npc.spawned", since, a.who);
+    const away = await ok(api, "npc.turn", { who: a.who, away_from: "v", hold: true });
+    expect(away.hold).toBe(true);
+    const first = await event(api, "npc.turned", since, a.who);
+    expect(first.data).toMatchObject({ away: true, hold: true, reached: true });
+    // V walks round to the far side of the actor (V at 100,200; the actor at 100,204).
+    since = await latest(api);
+    await bridge(api, "selftest.player", { position: [100, 210, 10] });
+    const again = await event(api, "npc.turned", since, a.who);
+    expect(again.data).toMatchObject({ away: true, again: true });
+    const street = await bridge(api, "selftest.npc", {});
+    const yaw = street.actors.find((x: Any) => x.who === a.who).yaw;
+    expect(Math.abs(Math.abs(yaw) - 180)).toBeLessThan(1); // facing -Y, away from V at +Y
+    expect((await ok(api, "npc.status")).npcs[0].facing).toEqual({ away_from: "v", hold: true });
+    const off = await ok(api, "npc.turn", { who: a.who, off: true });
+    expect(off.was_holding).toBe(true);
+    await bridge(api, "selftest.player", { position: [100, 200, 10] });
+    await ok(api, "npc.release", { who: "all" });
+  }, 30_000);
+
+  test("npc.blocked when a walk makes no headway, then npc.move_failed at max_s", async () => {
+    const since = await latest(api);
+    const a = await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 10 });
+    await event(api, "npc.spawned", since, a.who);
+    await bridge(api, "selftest.npc", { stuck: a.who });
+    await ok(api, "npc.move", { who: a.who, to: "v", max_s: 7 });
+    const blocked = await event(api, "npc.blocked", since, a.who, 9000);
+    expect(blocked.data).toMatchObject({ reason: "stuck", walking: "move" });
+    const failed = await event(api, "npc.move_failed", since, a.who, 9000);
+    expect(failed.data.state).toBe("timeout");
+    await ok(api, "npc.release", { who: "all" });
+  }, 30_000);
+
+  test("a voice with no body: ownerless by default, holocall and subtitle carried by V; npc.said names the speaker; hide", async () => {
+    const since = await latest(api);
+    expect(await refused(api, "npc.say", { text: "No name." })).toBe("bad_params");
+    expect(await refused(api, "npc.say", { speaker: "A voice", text: "Up here.", style: "overhead" })).toBe("bad_params");
+    const ownerless = await ok(api, "npc.say", { speaker: "A voice", text: "Can you hear me?", seconds: 1 });
+    expect(ownerless).toMatchObject({ voice: true, style: "ownerless", speaker: "A voice", who: null });
+    expect(ownerless.undo).toEqual({ method: "npc.say", params: { hide: ownerless.line } });
+    const holocall = await ok(api, "npc.say", { speaker: "A voice", text: "Over the relay.", style: "holocall", seconds: 10 });
+    let street = await bridge(api, "selftest.npc", {});
+    expect(street.voice_lines[holocall.line]).toBe("A voice|holocall");
+    const said = await event(api, "npc.said", since);
+    expect(said.data).toMatchObject({ voice: true, speaker: "A voice", line: ownerless.line });
+    await ok(api, "npc.say", { hide: holocall.line });
+    street = await bridge(api, "selftest.npc", {});
+    expect(street.voice_lines).toEqual({});
+    expect((await ok(api, "npc.status")).voice_lines).toEqual([]);
+  }, 30_000);
+});
+
 describe("0.8 npc: the class gate", () => {
   let host: Host;
   let api: CommandApi;

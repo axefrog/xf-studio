@@ -51,6 +51,7 @@ public class XFNpcRegistry extends ScriptableSystem {
   private let m_hubIndex: Int32;
   private let m_hubAnswer: Int32;
   private let m_lastInputAt: Float;
+  private let m_voiceLines: array<Int32>; // lines from a voice with no body (npc.say without who)
 
   public static func Get() -> ref<XFNpcRegistry> {
     let game = GetGameInstance();
@@ -159,6 +160,20 @@ public class XFNpcRegistry extends ScriptableSystem {
     this.m_hubAnswer = -1;
     let empty: ListChoiceHubData;
     this.m_hub = empty;
+  }
+
+  public func AddVoiceLine(line: Int32) -> Void {
+    ArrayPush(this.m_voiceLines, line);
+  }
+
+  public func RemoveVoiceLine(line: Int32) -> Void {
+    ArrayRemove(this.m_voiceLines, line);
+  }
+
+  public func TakeVoiceLines() -> array<Int32> {
+    let lines = this.m_voiceLines;
+    ArrayClear(this.m_voiceLines);
+    return lines;
   }
 
   public func LastInputAt() -> Float {
@@ -728,15 +743,19 @@ public abstract class XFNpc {
     return CreateCRUID(StringToUint64("5846" + IntToString(line)));
   }
 
+  // who "" is a voice with no body (npc.say without who): OwnerlessRegular (type 9) needs no speaker entity
+  // (baseSubtitlesControllers.script:523-533); holocall and subtitle lines get V as their carrier so the subtitle controller
+  // shows them, with the voice's own name.
   public static func Say(cid: String, who: String, line: Int32, text: String, trigger: String, lineType: Int32, speaker: String, seconds: Float) -> String {
     let registry = XFNpcRegistry.Get();
-    let entry = IsDefined(registry) ? registry.Entry(who) : null;
+    let voice = StrLen(who) == 0;
+    let entry = IsDefined(registry) && !voice ? registry.Entry(who) : null;
     let npc = XFNpc.EntityOf(entry) as GameObject;
-    if !IsDefined(npc) {
+    if !voice && !IsDefined(npc) {
       return XFNpc.Lost(who);
     }
     XFBridgeActions.EnsureSaveLock(cid);
-    if StrLen(trigger) > 0 {
+    if StrLen(trigger) > 0 && !voice {
       GameObject.PlayVoiceOver(npc, StringToName(trigger), n"Scripts:XFRuntimeBridge");
     }
     if StrLen(text) > 0 {
@@ -744,7 +763,13 @@ public abstract class XFNpc {
       data.id = XFNpc.LineId(line);
       data.text = text;
       data.type = IntEnum<scnDialogLineType>(lineType);
-      data.speaker = npc;
+      if voice {
+        if lineType != 9 {
+          data.speaker = GetPlayer(GetGameInstance());
+        }
+      } else {
+        data.speaker = npc;
+      }
       data.speakerName = speaker;
       data.isPersistent = false;
       data.duration = seconds;
@@ -752,7 +777,13 @@ public abstract class XFNpc {
       ArrayPush(lines, data);
       let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(GetAllBlackboardDefs().UIGameData);
       board.SetVariant(GetAllBlackboardDefs().UIGameData.ShowDialogLine, ToVariant(lines), true);
-      ArrayPush(entry.lines, line);
+      if voice {
+        if IsDefined(registry) {
+          registry.AddVoiceLine(line);
+        }
+      } else {
+        ArrayPush(entry.lines, line);
+      }
     }
     return "{\"ok\":true,\"line_id\":" + IntToString(line) + "}";
   }
@@ -766,6 +797,9 @@ public abstract class XFNpc {
     let entry = IsDefined(registry) ? registry.Entry(who) : null;
     if IsDefined(entry) {
       ArrayRemove(entry.lines, line);
+    }
+    if IsDefined(registry) && StrLen(who) == 0 {
+      registry.RemoveVoiceLine(line);
     }
     return "{\"ok\":true,\"hidden\":true}";
   }
@@ -1026,6 +1060,15 @@ public abstract class XFNpc {
         released += 1;
       }
       registry.ForgetAll();
+      let voices = registry.TakeVoiceLines();
+      if ArraySize(voices) > 0 {
+        let ids: array<CRUID>;
+        for voiceLine in voices {
+          ArrayPush(ids, XFNpc.LineId(voiceLine));
+        }
+        let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(GetAllBlackboardDefs().UIGameData);
+        board.SetVariant(GetAllBlackboardDefs().UIGameData.HideDialogLine, ToVariant(ids), true);
+      }
     }
     // Every actor and carrier by the bridge's tag, including any the registry lost track of.
     let system = GameInstance.GetDynamicEntitySystem();
