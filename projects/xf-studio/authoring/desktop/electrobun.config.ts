@@ -24,6 +24,10 @@ export default {
   build: {
     mainProcess: "bun",
     bun: { entrypoint: trialSuffix ? "trial-main.ts" : "main.ts" },
+    // Cottontail's optional standard-library modules this host reaches (runtime-capabilities.ts; a test keeps the list
+    // equal to that walk). Inert while the main process is Bun, which ships its whole runtime; complete so that a move
+    // to a Cottontail main process can't ship without SQLite, FFI, zlib, YAML or hashing.
+    cottontail: { capabilities: ["compression", "ffi", "hashing", "sqlite", "yaml"] },
     copy: { "static": "views/studio", "build-tools": "build-tools", "webview2/MicrosoftEdgeWebview2Setup.exe": "webview2/MicrosoftEdgeWebview2Setup.exe" },
     win: { defaultRenderer: "native", autoGrantPermissions: [], icon: "icon/icon.ico" },
   },
