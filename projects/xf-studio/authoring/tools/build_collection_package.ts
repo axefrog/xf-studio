@@ -18,13 +18,17 @@
 // --diagnostics honours a prepared collection's diagnostic export knobs (plate lifts, surface overrides, head UV, the
 // Glitter route) to build an in-game test candidate; without it such a collection is refused. The hosts never pass it.
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { runProductCommand } from "../src/platform/export/product-builder";
 import { ExportRefusal, PACKAGE_PROGRESS_PREFIX, PrerequisiteStale } from "../src/platform/api";
 import { STUDIO_EXPORTERS } from "../src/compose/exporters";
 import { EYE_PLATE_MASCULINE_PREREQUISITE, EYE_PLATE_PREREQUISITE } from "../src/features/eye-makeup";
 import { createWolvenKitPackageTools } from "../src/package-build-wolvenkit";
 import { createWolvenKitVerifierTools } from "../src/verifier-wolvenkit";
+import { closeNativeWriterLibraries, createNativeResourceTools, loadNativeWriterLibraries, type NativeWriterLibraries } from "../src/native-resource-tools";
+import { loadGameOodle } from "../src/native/oodle";
+import { loadBcnLibrary } from "../src/native/write/bcn";
+import { nodeWriterHost } from "./native-writer-host";
 
 const app = resolve(import.meta.dir, "..");
 const project = resolve(app, "..");
@@ -65,14 +69,24 @@ let machine = process.argv.includes("--machine-result");
 try {
   const { values, flags } = parseArgs(process.argv.slice(2));
   machine = flags.has("--machine-result");
+  // The native writer (PIPE-130): the game's Oodle and XF Studio's texture compressor, when they load; WolvenKit writes what they
+  // can't. `XFS_NATIVE_WRITER=off` (a developer's switch) keeps every conversion on WolvenKit.
+  const appRoot = values["--app-root"] ?? app;
+  let libraries: NativeWriterLibraries | null = null;
+  const nativeLibraries = () => libraries ??= loadNativeWriterLibraries(values["--gamepath"]!, [
+    ...process.env.XFS_BCN_LIBRARY ? [process.env.XFS_BCN_LIBRARY] : [],
+    join(appRoot, "native", "xfs_bcn.dll"), join(app, "data", "tools", "xfs-bcn", "xfs_bcn.dll")],
+  { oodle: loadGameOodle, bcn: loadBcnLibrary, isFile: nodeWriterHost.isFile });
+  const native = !flags.has("--check") && !!values["--gamepath"] && process.env.XFS_NATIVE_WRITER !== "off";
   // In the source tree the code root is the authoring directory; the desktop bundle passes --app-root.
   // Build and dist default to the project's ignored folders.
+  try {
   const result = await runProductCommand({
     exporters: STUDIO_EXPORTERS,
     collection: values["--collection"], check: flags.has("--check"), diagnostics: flags.has("--diagnostics"),
     prerequisites: prerequisites(values),
     wolvenkit: values["--wolvenkit"], gamepath: values["--gamepath"],
-    appRoot: values["--app-root"] ?? app,
+    appRoot,
     buildRoot: values["--build-root"] ?? resolve(project, "build"),
     distRoot: values["--dist-root"] ?? resolve(project, "dist"),
     outputRoot: values["--output-root"],
@@ -80,10 +94,14 @@ try {
     log: line => console.log(line),
     // The host reads these lines as the Build runs to show which stage it has reached (PIPE-131).
     progress: stage => { if (machine) console.log(PACKAGE_PROGRESS_PREFIX + JSON.stringify({ stage })); },
-    tools: (wolvenkit, cwd, signal) => createWolvenKitPackageTools(wolvenkit, { cwd, signal }),
+    tools: (wolvenkit, cwd, signal) => {
+      const base = createWolvenKitPackageTools(wolvenkit, { cwd, signal });
+      return native ? createNativeResourceTools(base, nativeLibraries(), nodeWriterHost, line => console.log(line)) : base;
+    },
     verifierTools: createWolvenKitVerifierTools,
   });
   console.log(machine ? "XFS_PACKAGE_RESULT=" + JSON.stringify(result) : JSON.stringify(result, null, 2));
+  } finally { if (libraries) closeNativeWriterLibraries(libraries); }
 } catch (error) {
   const code = typeof (error as { code?: unknown })?.code === "string" ? (error as { code: string }).code : "package_build_failed";
   const message = error instanceof Error ? error.message : String(error);

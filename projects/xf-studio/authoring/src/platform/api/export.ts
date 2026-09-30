@@ -376,7 +376,15 @@ export interface TextureImportSettings {
   IsGamma: boolean; TextureGroup: string; RawFormat: string; Compression: string;
   GenerateMipMaps: boolean; IsStreamable: boolean; PremultiplyAlpha: boolean;
 }
-/** The WolvenKit operations a build needs; exporters convert, the host packs. */
+/**
+ * Which writer made each output of a Build's conversions and pack (PIPE-130): XF Studio's native writer, or WolvenKit where the native
+ * writer refused an input (with its reason). Files are named as written (a resource's file name; `archive` for the pack).
+ */
+export type ResourceWriters = {
+  readonly native: readonly string[];
+  readonly wolvenkit: readonly { readonly file: string; readonly reason: string }[];
+};
+/** The conversions a build needs (WolvenKit's, or the native writer's with WolvenKit per file); exporters convert, the host packs. */
 export interface ResourceTools {
   importTextures(input: string, output: string, settings: TextureImportSettings): Promise<ToolStep>;
   serialize(input: string, output: string): Promise<ToolStep>;
@@ -388,6 +396,8 @@ export interface ResourceTools {
    * JSON) are read instead of repeated only when they name this identity.
    */
   readonly identity?: string;
+  /** Which writer made what so far, when the tools write natively (absent: WolvenKit made everything). */
+  writers?(): ResourceWriters;
 }
 /** A generated file of the staging tree: slash-separated depot path, length and SHA-256. */
 export type GeneratedFile = { readonly path: string; readonly bytes: number; readonly sha256: string };
