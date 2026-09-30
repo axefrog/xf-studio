@@ -69,9 +69,9 @@ flowchart TB
   resources --> gate["Pre-pack path gate<br/>tree = union of features' files<br/>canonical names, hashes"]
   gate -- Fail --> stop
   gate -- Pass --> pack["One archive packed natively<br/>(WolvenKit if refused)<br/>host writes the .archive.xl<br/>merged from each feature's entries"]
-  pack --> productVerifier["Product verifier<br/>own copy, WolvenKit unbundle<br/>members = features' files<br/>.xl = merged entries"]
+  pack --> productVerifier["Product verifier<br/>own copy, WolvenKit unbundle<br/>(each overlay alongside)<br/>members = features' files<br/>.xl = merged entries"]
   productVerifier -- Fail --> stop
-  productVerifier -- Pass --> verifier["Each feature's own verifier<br/>eye makeup: routes<br/>re-derived, each body's<br/>plate vs its input, lift,<br/>UV window, pixels, mips"]
+  productVerifier -- Pass --> verifier["Each feature's own verifier<br/>(features side by side;<br/>eye makeup's serialize<br/>beside its texture export)<br/>eye makeup: routes<br/>re-derived, each body's<br/>plate vs its input, lift,<br/>UV window, pixels, mips"]
   verifier -- Fail --> stop["No private candidate<br/>diagnostics retained locally"]
   verifier -- Pass --> dist["Private builder output<br/>one folder per mod<br/>xfs/local-package-2 manifest"]
   dist --> resultGate{"Host result gate<br/>answer = host's own plan,<br/>exact files and hashes"}
