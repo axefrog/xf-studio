@@ -152,6 +152,8 @@ Built: Expression › Transitions ([expression editor design §5.5](../animation
 In order:
 
 1. Piercings/earrings design (a [jewellery construction-set proposal](../jewellery/construction-set-design.md) awaits review)
+
+   How vanilla piercings work, the authoring routes (a parametric kit, imported meshes, vanilla pieces restyled), placement, materials and gems, dangles, export, a recommended first scope with a phased plan, and questions for the maintainer: [piercings and earrings brief](piercings-and-earrings-brief.md).
 2. Eyebrows
 3. Cheek makeup
 
