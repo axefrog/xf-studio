@@ -57,7 +57,9 @@ public abstract class XFPlayer {
       return "in_scene";
     }
     let scenes = GameInstance.GetSceneSystem(game).GetScriptInterface();
-    if IsDefined(scenes) && (scenes.IsEntityInScene(player.GetEntityID()) || scenes.IsEntityInDialogue(player.GetEntityID())) {
+    // Session 7 (30 Sep 2026): IsEntityInScene(V) is true in ordinary gameplay (SceneTier1, during The Pickup), so it refused every
+    // player move; locked scenes are caught by the PSM tiers above, and dialogue here.
+    if IsDefined(scenes) && scenes.IsEntityInDialogue(player.GetEntityID()) {
       return "in_scene";
     }
     return StrLen(XFPlayer.BusyState(player)) > 0 ? "player_busy" : "";
