@@ -8,7 +8,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { isWithin as within, overlaps } from "./platform/api/path-containment";
 import { defaultLocalSettings } from "./local-settings";
 import { checkFrameworkVersions, frameworkModNames, type FrameworkRouteReport } from "./framework-versions";
-import { createWindowsDetectionHost } from "./install-detection-host";
+import { createWindowsDetectionHost, readConfiguredMo2Instance } from "./install-detection-host";
 import { applyMo2Placement, disableMo2Mods, mo2ModlistEntry, planMo2Placement, type Mo2Placement } from "./mo2-placement";
 import { isMo2ModFolderName, parseMo2Modlist } from "./mo2-instance";
 import { assertNoLinkedPath, createModInstallTransport, inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
@@ -75,12 +75,12 @@ export function candidateModName(manifest: { modName?: string }): string {
  * The installed places a candidate's duplicate must not already be in (PIPE-90): every mod folder of the MO2 instance,
  * enabled or not (a feature may be present in only one installed XF mod), and the game's own archive/pc/mod folder.
  */
-export function installedPlaces(mo2: string, game: string): { label: string; folder: string }[] {
+export function installedPlaces(modsFolder: string, game: string): { label: string; folder: string }[] {
   let mods: string[] = [];
   // A promotion's own in-flight copy (`.xfs-promotion-<transaction>`) is not an installed mod.
-  try { mods = readdirSync(join(mo2, "mods")).filter(name => !name.startsWith(".xfs-promotion-")); }
+  try { mods = readdirSync(modsFolder).filter(name => !name.startsWith(".xfs-promotion-")); }
   catch { /* No mods folder: nothing installed there. */ }
-  return [...mods.map(name => ({ label: `the Mod Organizer 2 mod “${name}”`, folder: join(mo2, "mods", name, "archive", "pc", "mod") })),
+  return [...mods.map(name => ({ label: `the Mod Organizer 2 mod “${name}”`, folder: join(modsFolder, name, "archive", "pc", "mod") })),
     { label: "the game's archive/pc/mod folder", folder: join(game, "archive", "pc", "mod") }];
 }
 /** An existing MO2 mod folder that holds an earlier install of this mod under a legacy name. */
@@ -108,19 +108,21 @@ function checked(options: RuntimeDiagnosticOptions) {
     requireValue(isAbsolute(value), `${label} must be absolute.`);
   profileName(options.profileId);
   const store = resolve(candidateStore), game = resolve(gameRoot), mo2 = resolve(mo2Root), stage = resolve(stagingRoot);
-  for (const source of [store, game, mo2]) {
+  // The instance's own folders: its ModOrganizer.ini may keep mods, profiles and overwrite elsewhere (PIPE-05).
+  const instance = readConfiguredMo2Instance(mo2).paths;
+  for (const source of [store, game, mo2, instance.mods, instance.profiles, instance.overwrite]) {
     requireValue(!overlaps(stage, source), "Diagnostic staging must be outside every source root.");
     noLinks(source);
   }
   noLinks(stage);
   requireValue(!existsSync(stage), "Diagnostic staging root must not already exist.");
-  const profile = join(mo2, "profiles", options.profileId), modlist = join(profile, "modlist.txt");
+  const profile = join(instance.profiles, options.profileId), modlist = join(profile, "modlist.txt");
   regular(modlist);
   regular(join(game, "bin", "x64", "Cyberpunk2077.exe"));
   requireValue(statSync(join(game, "archive", "pc")).isDirectory(), "Game archive/pc is missing.");
-  requireValue(statSync(join(mo2, "mods")).isDirectory(), "MO2 mods directory is missing.");
+  requireValue(statSync(instance.mods).isDirectory(), "MO2 mods directory is missing.");
   const candidate = inspectLocalPackageCandidate(store, options.candidateId);
-  return { store, game, mo2, stage, profile, modlist, candidate };
+  return { store, game, mo2, mods: instance.mods, profiles: instance.profiles, stage, profile, modlist, candidate };
 }
 
 export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): RuntimeDiagnosticPlan {
@@ -137,22 +139,22 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   // Part of this build already installed elsewhere (another stage's promotion, a split-off mod): refused at staging (PIPE-90).
   const xl = paths.candidate.manifest.files[1];
   const duplicateInstalls = installedDuplicates(readFileSync(join(paths.candidate.root, ...xl.path.split("/")), "utf8"),
-    installedPlaces(paths.mo2, paths.game));
+    installedPlaces(paths.mods, paths.game));
   const exactFilenameConflicts: string[] = [];
   for (const entry of paths.candidate.manifest.files) {
     const file = basename(entry.path);
     if (existsSync(join(paths.game, "archive", "pc", "mod", file)))
       exactFilenameConflicts.push(`Direct game archive already has ${file}`);
     for (const name of names) {
-      const target = join(paths.mo2, "mods", name, "archive", "pc", "mod", file);
+      const target = join(paths.mods, name, "archive", "pc", "mod", file);
       if (existsSync(target)) exactFilenameConflicts.push(`Enabled MO2 mod ${name} has ${file}`);
     }
   }
   // Either manifest version: the looks its verifiers checked (PIPE-09).
   requireValue(paths.candidate.manifest.presetCount > 0, "Diagnostic candidate has no recorded presets.");
   const legacy = EYE_MAKEUP_MOD.predecessorMods.some(name => names.includes(name));
-  const dedicatedModExists = existsSync(join(paths.mo2, "mods", mod));
-  const legacyFolder = legacyModFolder(join(paths.mo2, "mods"));
+  const dedicatedModExists = existsSync(join(paths.mods, mod));
+  const legacyFolder = legacyModFolder(paths.mods);
   const listed = (name: string) => mo2ModlistEntry(text, name) !== null;
   const cautions = [
     "This checks paired payload hashes and the manifest claim; it does not rerun the independent archive verifier.",
