@@ -50,39 +50,92 @@ const recordName = (description: string): JsonSchema => str(description, { patte
 export const WAIT_KINDS = ["answer", "comment", "note", "behaviour", "kill", "handover", "resume", "write", "refused"] as const;
 
 /**
- * session.wait (0.7): blocks until the session's event stream has an event of the given kinds after `after` (default: the
- * newest when the call starts), then answers those events. With message_id, only the answer to that question counts. The
- * tools poll the plugin's stream a few times a second (paced like every call), so the agent makes one call instead of
+ * session.wait (0.7): blocks until the session's event stream has an event of the given kinds, then answers those events.
+ * The tools poll the plugin's stream a few times a second (paced like every call), so the agent makes one call instead of
  * polling session_log; an abort (the MCP client's cancel) ends the wait early.
+ *
+ * - Where it starts: after `after` when given, else at the newest event when the call starts; but with `message_id` and no
+ *   `after`, the question's own answer counts even when the player gave it before the wait began (RB-96: the answer between
+ *   ui_message and session_wait was skipped). The stream is searched from its start for that answer first.
+ * - message_id covers answers only: with it, only the answer to that question counts, and the other kinds asked for
+ *   (comment, note, ...) still end the wait from the call on (RB-115).
+ * - Notes count only from the game (source "game": Mark this moment, the CET window), never a client's own session.note
+ *   (RB-115).
+ * - With message_id the question's state is read too (ui.ask.state): withdrawn, cleared or expired without an answer ends
+ *   the wait with `question_gone` (RB-103); answered while its event is no longer in the stream returns the answer from the
+ *   board.
  */
 export async function runSessionWait(input: Json, context: CommandContext): Promise<CommandResult> {
-  const kinds = ((input.kinds as string[] | undefined) ?? ["answer", "comment"]).slice();
   const messageId = input.message_id as number | undefined;
+  const kinds = ((input.kinds as string[] | undefined) ?? ["answer", "comment"]).slice();
+  if (messageId !== undefined && !kinds.includes("answer")) kinds.push("answer");
   const timeoutMs = Math.round(((input.timeout_s as number | undefined) ?? 120) * 1000);
-  let since = input.after as number | undefined;
-  if (since === undefined) since = Number((await call(context, "session.events", { since: 0, limit: 1 })).latest ?? 0);
-  const deadline = Date.now() + timeoutMs;
+  const started = Date.now();
+  const deadline = started + timeoutMs;
+  const waited = () => Math.round((Date.now() - started) / 100) / 10;
   const interval = (input.poll_ms as number | undefined) ?? 400;
+  const latest = Number((await call(context, "session.events", { since: 0, limit: 1 })).latest ?? 0);
+  let since = (input.after as number | undefined) ?? latest;
+
+  const counts = (e: Json) =>
+    (e.kind !== "answer" || messageId === undefined || e.data?.message_id === messageId) && (e.kind !== "note" || e.source === "game");
+  const answered = (events: Json[], extra: Json = {}): CommandResult => {
+    const answer = events.find((e) => e.kind === "answer");
+    const comments = events.filter((e) => e.kind === "comment");
+    return {
+      value: {
+        waited_s: waited(),
+        events,
+        next: since,
+        ...(answer ? { answer: { label: answer.data?.label, choice: answer.data?.choice, message_id: answer.data?.message_id, via: answer.data?.via } } : {}),
+        ...(comments.length ? { comments: comments.map((e) => e.data?.text ?? e.text) } : {}),
+        ...extra,
+      },
+    };
+  };
+  const askState = async (): Promise<Json | null> => {
+    const response = await context.api.callBridge("ui.ask.state", { id: messageId }, context.cid);
+    return response.ok ? (response.result as Json) : null; // an older plugin without it: poll the stream only
+  };
+
+  // RB-96: the player may have answered already (between ui_message and this call). Look back through the stream.
+  if (messageId !== undefined && input.after === undefined) {
+    let cursor = 0;
+    for (let page = 0; page < 20 && cursor < latest; page++) {
+      const read = await call(context, "session.events", { since: cursor, limit: 100, kinds: ["answer"] });
+      const hit = ((read.events as Json[] | undefined) ?? []).find((e) => e.data?.message_id === messageId);
+      if (hit) return answered([hit], { answered_before_wait: true });
+      const next = Number(read.next ?? cursor);
+      if (next <= cursor) break;
+      cursor = next;
+    }
+  }
+
+  let checkedAnswered = false;
   while (Date.now() < deadline && !context.signal?.aborted) {
     const read = await call(context, "session.events", { since, limit: 100, kinds });
-    const events = ((read.events as Json[] | undefined) ?? []).filter((e) => messageId === undefined || e.kind !== "answer" || e.data?.message_id === messageId);
     since = Number(read.next ?? since);
-    const wanted = messageId === undefined ? events : events.filter((e) => e.kind !== "answer" || e.data?.message_id === messageId);
-    if (wanted.length) {
-      const answer = wanted.find((e) => e.kind === "answer");
-      return {
-        value: {
-          waited_s: Math.round((timeoutMs - (deadline - Date.now())) / 100) / 10,
-          events: wanted,
-          next: since,
-          ...(answer ? { answer: { label: answer.data?.label, choice: answer.data?.choice, message_id: answer.data?.message_id, via: answer.data?.via } } : {}),
-          ...(wanted.some((e) => e.kind === "comment") ? { comments: wanted.filter((e) => e.kind === "comment").map((e) => e.data?.text ?? e.text) } : {}),
-        },
-      };
+    const wanted = ((read.events as Json[] | undefined) ?? []).filter(counts);
+    if (wanted.length) return answered(wanted);
+    if (messageId !== undefined) {
+      const state = await askState();
+      if (state?.state === "gone") {
+        return { value: { question_gone: true, message_id: messageId, why: "the question was withdrawn, cleared or ran out of time without an answer", waited_s: waited(), events: [], next: since } };
+      }
+      if (state?.state === "answered") {
+        // Its event is pushed a moment after the board marks it: read the stream once more before answering from the board.
+        if (checkedAnswered) {
+          return {
+            value: { waited_s: waited(), events: [], next: since, answer: { label: state.answer?.label, choice: state.answer?.choice, message_id: messageId, via: null }, from: "question_state" },
+          };
+        }
+        checkedAnswered = true;
+        continue;
+      }
     }
     await sleep(interval, context.signal);
   }
-  return { value: { timed_out: !context.signal?.aborted, aborted: context.signal?.aborted === true, waited_s: Math.round(timeoutMs / 100) / 10, events: [], next: since } };
+  return { value: { timed_out: !context.signal?.aborted, aborted: context.signal?.aborted === true, waited_s: waited(), events: [], next: since } };
 }
 
 // --- the catalogue's new entries ---------------------------------------------------------------------
@@ -92,11 +145,11 @@ export const COMMANDS_070: CommandDef[] = [
     name: "session.wait",
     title: "Wait for the player's answer",
     description:
-      "Waits until the player answers a question from the game or sends a comment (or another event kind you name), then returns it: kinds (default answer and comment; note catches Mark this moment), message_id (only the answer to that ui_message question counts), after (the event sequence to wait after; default: now) and timeout_s (1 to 600, default 120). Answers come from the XF panel's answer keys or the buttons in the XF window of the Cyber Engine Tweaks overlay; comments from that window's comment box. Use it after ui_message with level ask instead of polling session_log. Changes nothing.",
+      "Waits until the player answers a question from the game or sends a comment (or another event kind you name), then returns it: kinds (default answer and comment; note catches notes from the game, such as Mark this moment, never a client's own), message_id (only the answer to that ui_message question counts, even one given before this call; other kinds still end the wait from now on; a question withdrawn, cleared or run out of time without an answer ends it with question_gone), after (the event sequence to wait after; default: now) and timeout_s (1 to 600, default 120). Answers come from the XF panel's answer keys or the buttons in the XF window of the Cyber Engine Tweaks overlay; comments from that window's comment box. Use it after ui_message with level ask instead of polling session_log. Changes nothing.",
     permission: "read",
     input: obj({
       kinds: { type: "array", description: "Event kinds that end the wait (default answer and comment).", items: oneOf("An event kind.", [...WAIT_KINDS]), minItems: 1, maxItems: WAIT_KINDS.length },
-      message_id: int("Only the answer to this question (ui_message's id) ends the wait.", 1, 1e9),
+      message_id: int("Only the answer to this question (ui_message's id) ends the wait, even one given before the call; other kinds still count.", 1, 1e9),
       after: int("Wait for events after this sequence number (session_events' next); default: the newest when the call starts.", 0, 1e12),
       timeout_s: num("Give up after this many seconds, 1 to 600. Default 120.", 1, 600),
       poll_ms: int("How often the stream is read, 200 to 2000 ms. Default 400.", 200, 2000),
@@ -116,13 +169,15 @@ export const COMMANDS_070: CommandDef[] = [
     name: "cyberware.equip",
     title: "Equip a cyberware item",
     description:
-      "Puts a cyberware item into its area's slot through the game's own equipment request, as a ripperdoc's screen does (the earlier item in that slot comes out first): item is its record (Items.StrongArms, Items.MantisBlades, Items.NanoWires, Items.ProjectileLauncher, ...), slot the slot (default the first empty one), add_if_missing adds it to V's inventory first and remembers it. Only in normal play, outside combat and scenes; the game's own equip requirements apply. The answer reads the slot back and carries the undo (the earlier item back, or the slot emptied and an added item removed). V's look and stats change until the undo or a load; the save lock is held meanwhile. In the inventory class, off unless allowed.",
+      "Puts a cyberware item into its area's slot through the game's own equipment request, as a ripperdoc's screen does (the earlier item in that slot comes out first): item is its record (Items.StrongArms, Items.MantisBlades, Items.NanoWires, Items.ProjectileLauncher, ...), slot the slot (default the first empty one), add_if_missing adds it to V's inventory first and remembers it. Only in normal play, outside combat and scenes, and not while the arm cyberware is drawn (arms_drawn); the game's own equip requirements are checked before anything changes (not_equippable leaves nothing added). The answer reads the slot back and carries the undo (the exact earlier copy back, with a copy the bridge added removed, or the slot emptied and an added item removed); if the slot can't be read back, equipped is "unknown" and the undo is still given. V's look and stats change until the undo, the kill switch or a load; the save lock is held meanwhile and game_save refuses until it is undone. In the inventory class, off unless allowed.",
     permission: "write-inventory",
     input: obj(
       {
         item: recordName("The cyberware item's record, such as Items.MantisBlades."),
         slot: int("The slot, 0 to 9 (default: the first empty one).", 0, 9),
         add_if_missing: bool("Add the item to V's inventory first if V doesn't have it (removed again by the undo)."),
+        id: str("The exact copy to equip, as an undo names it (digits).", { pattern: "^[0-9]{1,24}$" }),
+        remove_added_item: recordName("After the equip, remove the copy of this record the bridge added (a swap's undo gives it)."),
       },
       ["item"],
     ),
@@ -133,7 +188,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "cyberware.unequip",
     title: "Empty a cyberware slot",
     description:
-      "Takes a cyberware item out of its slot through the game's own unequip request: area (ArmsCW, ...) and slot, or item (its record; its own slot is found). remove_added also removes an item the bridge itself added this session. Normal play only. The answer reads the slot back and carries the undo (the item equipped again).",
+      "Takes a cyberware item out of its slot through the game's own unequip request: area (ArmsCW, ...) and slot (one of the area's unlocked slots), or item (its record; its own slot is found). remove_added also removes an item the bridge itself added this session. Normal play only, and not while the arm cyberware is drawn (arms_drawn). The answer reads the slot back and carries the undo (the item equipped again).",
     permission: "write-inventory",
     input: obj({
       area: oneOf("The cyberware area.", [...CYBERWARE_AREAS]),
@@ -175,7 +230,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "world.weather.set",
     title: "Set the weather",
     description:
-      "Holds one of this world's weather states (name, as world_state lists them, blending over blend_s seconds), which stops the game's own weather cycle, or gives the weather back to the cycle (cycle: true, with or without a name). Needs Codeware (detected, never installed). The answer carries the undo (the earlier state and the cycle back on); the kill switch does the same. A save made meanwhile would keep the weather, so the save lock stays on.",
+      "Holds one of this world's weather states (name, as world_state lists them, blending over blend_s seconds), which stops the game's own weather cycle, or gives the weather back to the cycle (cycle: true, with or without a name). Needs Codeware (detected, never installed). Refused in a story scene (quest_scene), where the story may hold the weather; elsewhere a quest's own weather hold can still win, and giving the weather back to the cycle ends such a hold too (the answer's note says so). The answer carries the undo (the earlier state and the cycle back on); the kill switch does the same. A save made meanwhile would keep the weather, so the save lock stays on and game_save refuses until it is undone.",
     permission: "write-world",
     input: obj({
       name: str("The weather state, such as 24h_weather_rain.", { pattern: "^[A-Za-z0-9_.-]+$", maxLength: 96 }),

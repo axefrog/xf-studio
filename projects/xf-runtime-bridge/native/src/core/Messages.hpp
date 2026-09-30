@@ -26,10 +26,21 @@ struct MessageRequest
     std::string text;
     int32_t seconds = 8;
     std::string level = "info"; // info, ask, warn, done
-    bool clear = false;         // remove every message first (with no text: only that)
+    bool clear = false;         // remove the lines first (with no text: only that); a question still waiting stays (RB-103)
     // 0.7 (session 7, in-game driving): an ask's answer buttons, 1 to kMaxChoices labels; an ask without them gets
     // DefaultChoices() (Ready, Yes, No). Only asks carry choices.
     std::vector<std::string> choices;
+    bool clearAsks = false; // with clear: a question still waiting is withdrawn too
+    uint64_t withdraw = 0;  // remove this one message first (an ask's undo)
+};
+
+// What became of an ask (session.wait's question_gone, RB-103): "pending" (showing, unanswered), "answered" (with the
+// answer), "gone" (withdrawn, cleared or expired without an answer) or "unknown" (no such message was posted).
+struct AskState
+{
+    std::string state;
+    int32_t choice = -1;
+    std::string label;
 };
 
 // The ask the player can answer now: the latest unanswered ask still showing (pinned: newer lines never push it out).
@@ -46,6 +57,11 @@ struct PendingAsk
 // aTruncated says whether characters were cut.
 std::string CleanMessageText(const std::string& aText, size_t aMaxChars, bool* aTruncated = nullptr);
 
+// ui.message's undo from its answer: a posted line or question is withdrawn by its id; a clear has none to undo.
+nlohmann::json UiMessageUndo(const nlohmann::json& aPosted);
+// ui.ask.state {id}'s answer (RB-96, RB-103).
+nlohmann::json AskStateJson(uint64_t aId, const AskState& aState);
+
 class MessageBoard
 {
 public:
@@ -60,8 +76,9 @@ public:
 
     using Clock = std::chrono::steady_clock;
 
-    // Shows a message (after clear, if asked). Answers {id, shown, text, level, seconds, truncated,
-    // dropped (ids pushed out), active}; {cleared: n, active: 0} for a clear without text.
+    // Shows a message (after clear or withdraw, if asked). Answers {id, shown, text, level, seconds, truncated,
+    // dropped (ids pushed out), active}; {cleared: n, active} for a clear without text. A clear keeps a question that
+    // is still waiting for its answer unless clearAsks (RB-103: a capture's clear took the maintainer's question away).
     nlohmann::json Post(const MessageRequest& aRequest, Clock::time_point aNow = Clock::now());
     // The messages still showing, oldest first: {"messages":[{id, text, level, remaining_ms}]}, or an
     // empty string when there are none (what XFBridge_Messages answers).
@@ -78,6 +95,9 @@ public:
     // "Answered: <choice>" for kAnsweredSeconds and the answer is {ok: true, message_id, choice, label, text}; otherwise
     // {ok: false, why} (no such ask showing, already answered, choice out of range).
     nlohmann::json Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow = Clock::now());
+    // RB-96/RB-103: what became of ask aId (session.wait reads it through ui.ask.state).
+    AskState StateOf(uint64_t aId, Clock::time_point aNow = Clock::now());
+    static constexpr size_t kAnsweredKept = 64;
 
 private:
     struct Message
@@ -94,5 +114,7 @@ private:
     std::mutex m_mutex;
     std::deque<Message> m_messages;
     uint64_t m_next = 1;
+    // The last kAnsweredKept answers by ask id (the "Answered: ..." line fades after kAnsweredSeconds).
+    std::deque<std::pair<uint64_t, AskState>> m_answered;
 };
 } // namespace xfb

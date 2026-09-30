@@ -242,6 +242,12 @@ public abstract class XFWeather {
     return IsDefined(container) ? container.Get(n"XFRuntimeBridge.XFWeatherMemory") as XFWeatherMemory : null;
   }
 
+  // RB-102: whether the bridge holds the weather now (game.save's holds).
+  public static func HeldByBridge() -> Bool {
+    let memory = XFWeather.Memory();
+    return IsDefined(memory) && memory.changed;
+  }
+
   public static func Name() -> CName {
     let weather = GameInstance.GetWeatherSystem(GetGameInstance());
     if !IsDefined(weather) {
@@ -295,10 +301,19 @@ public abstract class XFWeather {
   }
 
   // world.weather.set: name = "" with cycle true resets (the undo); otherwise holds that state.
+  //
+  // RB-110: the bridge counts the weather as its own only once the game took the change, so a failed call leaves nothing
+  // for the undo or the kill switch to "restore". A story scene (tiers 3 to 5) may hold the weather itself, so the bridge
+  // refuses there; elsewhere a quest can still hold a weather of its own with a higher priority, which the game keeps over
+  // this one, and giving the weather back to the cycle ends such a hold too; the answer says so.
   public static func Set(cid: String, name: String, blend: Float, cycle: Bool) -> String {
     let phase = XFBridgeActions.Phase();
     if NotEquals(phase, "gameplay") && NotEquals(phase, "photo_mode") {
       return XFJson.Fail("not_in_gameplay", "the weather is set in normal play or photo mode; the game is in '" + phase + "'");
+    }
+    let player = XFInventory.Player();
+    if IsDefined(player) && InventoryGPRestrictionHelper.BlockedBySceneTier(player) {
+      return XFJson.Fail("quest_scene", "a story scene is playing (scene tier 3 to 5), where the story may hold the weather itself; the bridge leaves it alone");
     }
     let weather = GameInstance.GetWeatherSystem(GetGameInstance());
     let memory = XFWeather.Memory();
@@ -311,25 +326,29 @@ public abstract class XFWeather {
       return XFJson.Fail("bad_params", "'" + name + "' isn't one of this world's weather states (world_state lists them)");
     }
     XFBridgeActions.EnsureSaveLock(cid);
-    if !memory.changed {
-      memory.changed = true;
-      memory.earlier = before;
-    }
-    let ok = true;
     if StrLen(name) > 0 {
-      ok = weather.SetWeather(target, blend, 100u);
+      let set = weather.SetWeather(target, blend, 100u);
+      if !set {
+        return XFJson.Fail("call_failed", "the game didn't take the weather change; nothing changed");
+      }
+      if !memory.changed {
+        memory.changed = true;
+        memory.earlier = before;
+      }
     }
-    if ok && cycle {
-      ok = weather.ResetWeather(false, blend);
+    if cycle {
+      let reset = weather.ResetWeather(false, blend);
+      if !reset {
+        let held = StrLen(name) > 0 ? "; the weather was set and stays held (the undo gives it back)" : "";
+        return XFJson.Fail("call_failed", "the game didn't give the weather back to its cycle" + held);
+      }
       if StrLen(name) == 0 || Equals(target, memory.earlier) {
         memory.changed = false;
       }
     }
-    if !ok {
-      return XFJson.Fail("call_failed", "the game didn't take the weather change");
-    }
     XFBridgeLog.Info(cid, "weather " + NameToString(before) + " -> " + (StrLen(name) > 0 ? name : "(unchanged)") + ", cycle " + (cycle ? "on" : "held") + "; undo: set " + NameToString(before) + " back with the cycle on");
-    return "{\"ok\":true,\"before\":" + XFJson.Name(before) + ",\"after\":" + XFJson.Str(name) + ",\"cycle\":" + XFJson.Flag(cycle) + ",\"blend_s\":" + XFJson.Num(blend) + "}";
+    let note = "a quest that holds a weather of its own keeps it over this one, and the undo (the cycle back on) ends such a hold too; world_state after blend_s shows which weather shows";
+    return "{\"ok\":true,\"before\":" + XFJson.Name(before) + ",\"after\":" + XFJson.Str(name) + ",\"cycle\":" + XFJson.Flag(cycle) + ",\"blend_s\":" + XFJson.Num(blend) + ",\"held_by_bridge\":" + XFJson.Flag(memory.changed) + ",\"note\":" + XFJson.Str(note) + "}";
   }
 
   public static func RestoreAfterKill(cid: String) -> String {
@@ -356,6 +375,10 @@ public abstract class XFWeather {
 
   public static func Set(cid: String, name: String, blend: Float, cycle: Bool) -> String {
     return XFJson.Fail("codeware_missing", "setting the weather needs Codeware, which isn't loaded; get it from its official releases page");
+  }
+
+  public static func HeldByBridge() -> Bool {
+    return false;
   }
 
   public static func RestoreAfterKill(cid: String) -> String {

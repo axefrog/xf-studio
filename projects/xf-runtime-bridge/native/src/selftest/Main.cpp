@@ -1439,8 +1439,18 @@ int wmain(int argc, wchar_t** argv)
                          [](const xfb::MethodContext& aContext) {
                              auto out = messages.Post(p::ParseMessage(aContext.params));
                              out["simulated"] = true;
-                             out["undo"] = {{"method", "ui.message"}, {"params", {{"clear", true}}}};
+                             out["undo"] = xfb::UiMessageUndo(out);
                              return out;
+                         }});
+    dispatcher.Register({"ui.ask.state", xfb::Access::Read, xfb::RunOn::BridgeThread, "What became of a question (simulated CET layer).",
+                         [](const xfb::MethodContext& aContext) {
+                             p::RequireOnly(aContext.params, {"id"});
+                             const auto id = static_cast<uint64_t>(p::CheckInteger(aContext.params, "id", 1, 1000000000).value_or(0));
+                             if (id == 0)
+                             {
+                                 throw xfb::MethodError("bad_params", "give id");
+                             }
+                             return xfb::AskStateJson(id, messages.StateOf(id));
                          }});
     dispatcher.Register({"selftest.messages", xfb::Access::Read, xfb::RunOn::BridgeThread, "The message lines the CET layer would draw (self-test only).",
                          [](const xfb::MethodContext&) {
@@ -1499,6 +1509,12 @@ int wmain(int argc, wchar_t** argv)
                                  throw xfb::MethodError("unavailable", "simulated: no event stream");
                              }
                              const auto& p = aContext.params;
+                             if (p.contains("note"))
+                             {
+                                 // A note from the game (XFBridge_Note: Mark this moment), source game (RB-115).
+                                 const auto text = p.value("note", std::string());
+                                 return json{{"ok", true}, {"seq", sim060->Events().Push("note", "info", "game", text, json{{"text", text}})}};
+                             }
                              if (p.contains("comment"))
                              {
                                  const auto text = p.value("comment", std::string());
@@ -2016,6 +2032,10 @@ int wmain(int argc, wchar_t** argv)
                                      ops.guard = [&dispatcher] { dispatcher.RequireWritesOpen(); };
                                      ops.holds = [] {
                                          auto held = sim060 ? sim060->Holds() : json::array();
+                                         for (const auto& hold : xfb::selftest::Sim070Holds())
+                                         {
+                                             held.push_back(hold);
+                                         }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
                                          {
@@ -2054,6 +2074,10 @@ int wmain(int argc, wchar_t** argv)
                                          // RB-94 (0.7): the holds again, in the save's own step, as the plugin reads them. The
                                          // name "hold arrives" simulates another client putting something on V after prepare.
                                          auto held = sim060 ? sim060->Holds() : json::array();
+                                         for (const auto& hold : xfb::selftest::Sim070Holds())
+                                         {
+                                             held.push_back(hold);
+                                         }
                                          std::scoped_lock _(sim.mutex);
                                          if (sim.wardrobeSuspended)
                                          {

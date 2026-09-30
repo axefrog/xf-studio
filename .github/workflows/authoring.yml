@@ -3,7 +3,8 @@
 #
 # - authoring (Ubuntu): `bun test` (which also runs the desktop host tests), `bun run check` (which
 #   also typechecks the authoring tools and the experiment scripts) and `bun run build` in
-#   projects/xf-studio/authoring. The suite has no platform-specific tests.
+#   projects/xf-studio/authoring, then the runtime bridge's overlay theme against studio.css's tokens
+#   (`theme.ts --check`). The suite has no platform-specific tests.
 # - desktop (Windows): the desktop typecheck extends the Electrobun SDK type devkit, which Hutch
 #   generates; that step is proven on Windows by desktop-release.yml, so it runs there, followed by
 #   the desktop package's own `bun test tests`.
@@ -18,6 +19,9 @@ on:
   push:
     branches: [main]
     paths:
+      - "projects/xf-runtime-bridge/tools/overlay/**"
+      - "projects/xf-runtime-bridge/native/src/core/overlay/ThemeTable.inc"
+      - "projects/xf-runtime-bridge/cet/xf_runtime_bridge/theme.lua"
       - "projects/xf-studio/authoring/**"
       - "projects/strata/**"
       - "tools/private-data.json"
@@ -26,6 +30,9 @@ on:
       - ".github/workflows/authoring.yml"
   pull_request:
     paths:
+      - "projects/xf-runtime-bridge/tools/overlay/**"
+      - "projects/xf-runtime-bridge/native/src/core/overlay/ThemeTable.inc"
+      - "projects/xf-runtime-bridge/cet/xf_runtime_bridge/theme.lua"
       - "projects/xf-studio/authoring/**"
       - "projects/strata/**"
       - "tools/private-data.json"
@@ -81,6 +88,11 @@ jobs:
 
       - name: Browser build
         run: bun run build
+
+      # The XF Runtime Bridge's overlay theme is generated from studio.css's tokens (native table and CET theme); fail
+      # when a token change leaves them behind. Node built-ins only, so no install is needed (RB-104).
+      - name: Overlay theme drift
+        run: bun ../../xf-runtime-bridge/tools/overlay/theme.ts --check
 
   desktop:
     runs-on: windows-2025

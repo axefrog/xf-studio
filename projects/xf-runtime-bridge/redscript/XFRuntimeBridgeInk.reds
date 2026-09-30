@@ -393,6 +393,8 @@ public class XFInkOverlay extends ScriptableSystem {
   private let m_platesRoot: ref<inkCanvas>;
   private let m_plates: array<ref<inkText>>;
   private let m_frame: ref<XFHudFrame>;
+  // RB-114: the frame whose question and answer keys are on screen now (set when Apply draws them).
+  private let m_drawn: ref<XFHudFrame>;
   private let m_layer: String;
   private let m_tries: Int32;
   private let m_ticks: Int32;
@@ -690,6 +692,11 @@ public class XFInkOverlay extends ScriptableSystem {
       }
       i += 1;
     }
+    if frame.show && frame.askId > 0 && ArraySize(frame.askKeys) > 0 {
+      this.m_drawn = frame;
+    } else {
+      this.m_drawn = null;
+    }
     if ArraySize(frame.askKeys) > 0 {
       let text = "";
       let k = 0;
@@ -704,6 +711,11 @@ public class XFInkOverlay extends ScriptableSystem {
       this.m_choices.SetVisible(false);
     }
     this.m_platesRoot.SetVisible(frame.nameplates);
+  }
+
+  // RB-114: the question the panel shows now with its keys, or null (nothing mounted, hidden, or no question drawn).
+  public func DrawnAsk() -> ref<XFHudFrame> {
+    return this.m_mounted ? this.m_drawn : null;
   }
 
   private func Plate(index: Int32) -> ref<inkText> {
@@ -787,8 +799,10 @@ public class XFInkOverlay extends ScriptableSystem {
 // panel with a key each ([ui] answer_keys, F6 F7 F8 F11 by default: unbound in the 2.31 defaults). Codeware's callback
 // system delivers the raw key (Input/Key, KeyInputEvent; no input binding needed) to this scriptable system; a press of
 // one of the pending ask's keys answers it through XFBridge_Answer, which records the answer in the session's event
-// stream (session.wait returns it). Keys do nothing while no ask is pending, and they still reach the game (which binds
-// none of them by default). Without Codeware there is no ink panel either, and the CET window's buttons answer instead.
+// stream (session.wait returns it). Keys do nothing while no ask is drawn, and they still reach the game (which binds none
+// of them by default). Without Codeware there is no ink panel either, and the CET window's buttons answer instead.
+// RB-114: a key answers the question the panel shows (the drawn frame's askId, as the CET buttons answer the one their
+// window shows), never a newer one that arrived since the panel last drew.
 @if(ModuleExists("Codeware"))
 public class XFAnswerKeys extends ScriptableSystem {
   private func OnAttach() -> Void {
@@ -799,9 +813,12 @@ public class XFAnswerKeys extends ScriptableSystem {
     if NotEquals(event.GetAction(), EInputAction.IACT_Press) {
       return;
     }
-    // The frame itself (not the overlay's copy), so the keys answer even while no ink panel is mounted.
-    let frame = XFHudFrame.Parse(XFBridge_Hud());
-    if !frame.valid || frame.askId <= 0 {
+    let overlay = XFInkOverlay.Get();
+    if !IsDefined(overlay) {
+      return;
+    }
+    let frame = overlay.DrawnAsk();
+    if !IsDefined(frame) || !frame.valid || frame.askId <= 0 {
       return;
     }
     let key = EnumValueToString("EInputKey", Cast<Int64>(EnumInt(event.GetKey())));

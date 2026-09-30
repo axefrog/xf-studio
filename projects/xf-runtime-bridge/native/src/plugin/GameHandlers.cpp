@@ -788,7 +788,7 @@ json UiMessage(const MethodContext& aContext)
 {
     const auto request = params::ParseMessage(aContext.params);
     auto out = Get().messages.Post(request);
-    out["undo"] = {{"method", "ui.message"}, {"params", {{"clear", true}}}};
+    out["undo"] = UiMessageUndo(out);
     out["undo_note"] = "messages also disappear by themselves after their seconds, and the kill switch clears them";
     if (!Get().layers.Has("cet"))
     {

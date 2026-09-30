@@ -16,7 +16,9 @@
 //   overlay.state (read)              the ImGui overlay host (core/overlay/Host.hpp)
 
 #include <array>
+#include <chrono>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -42,8 +44,23 @@ struct CyberwareEquipRequest
     std::string item;     // a record name, "Items.StrongArms"
     int32_t slot = -1;    // -1: the first empty slot (else slot 0)
     bool addIfMissing = false;
+    std::string id;              // RB-109: the exact copy (its combined hash, digits), as an undo names the earlier item
+    std::string removeAddedItem; // RB-109: after the equip, remove the copy of this record the bridge added (a swap's undo)
 };
 CyberwareEquipRequest ParseCyberwareEquip(const json& aParams);
+
+// cyberware.equip's sequence (RB-101), shared by the plugin and the self-test host: the equip step (the script checks,
+// adds only if asked, refuses before changing anything or takes an added copy back out itself), then the slot read back
+// until it shows the item, then (a swap's undo) the added copy removed. Once the equip step has run its undo is always
+// answered: a later failure (the slot never read back, the game gate closing, a timeout) answers `equipped: "unknown"`
+// with the undo and the reason instead of losing it.
+struct CyberwareEquipOps
+{
+    std::function<json()> equip;                              // the script's step: {area, slot, added, previous, id?, ...}
+    std::function<json(const std::string&, int32_t)> settle;  // the slot read back until it shows the item: {item, empty}
+    std::function<json(const std::string&)> removeAdded;      // remove the bridge's added copy of a record: {removed}
+};
+json RunCyberwareEquip(const CyberwareEquipRequest& aRequest, const CyberwareEquipOps& aOps);
 
 struct CyberwareUnequipRequest
 {
@@ -103,6 +120,14 @@ struct PhotoSceneRequest
 {
     std::vector<PhotoSceneRow> rows;
 };
+// photo.scene.set's sequence (RB-111): each row resolved (a label to its option's value) and set in order; when a later row
+// fails, the rows already set are put back (newest first) before the refusal, which names what was put back.
+struct PhotoSceneOps
+{
+    std::function<json(const PhotoSceneRow&)> resolve; // {value, matched_by}
+    std::function<json(int32_t, double)> set;          // {before, before_known, after, ...}
+};
+json RunPhotoScene(const PhotoSceneRequest& aRequest, const PhotoSceneOps& aOps);
 inline constexpr int32_t kPhotoNpcs = 54;
 inline constexpr int32_t kPhotoWeather = 69;
 inline constexpr int32_t kPhotoGameSpeed = 71;
@@ -114,6 +139,16 @@ struct SavesRequest
     int32_t waitMs = 3000;
 };
 SavesRequest ParseSaves(const json& aParams);
+// game.saves' sequence (RB-118): the request, reads until the details stop arriving or the wait ends, and always a final
+// step that stops collecting (even when a read throws), so the load menu's callback never stays registered.
+struct SavesOps
+{
+    std::function<void()> request;
+    std::function<json(bool)> read; // read(done): the names and metadata so far; done stops collecting
+    std::function<void(std::chrono::milliseconds)> sleep;
+    std::function<std::chrono::steady_clock::time_point()> now;
+};
+json RunSaves(const SavesRequest& aRequest, const SavesOps& aOps);
 // Keeps the newest aLimit saves' metadata (by timestamp) and marks names without metadata.
 json TrimSaves(const json& aAnswer, int32_t aLimit);
 } // namespace xfb::hooks

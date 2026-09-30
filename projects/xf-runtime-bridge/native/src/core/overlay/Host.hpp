@@ -41,6 +41,17 @@ struct DeviceFacts
 
 // The reason the host refuses to draw with these facts, or "" when it may.
 std::string RefusalFor(const DeviceFacts& aFacts);
+// RB-97: after a resize the renderer reads the swap chain again. Refuses what RefusalFor refuses (HDR switched on without a
+// restart, a float or 10-bit format) and any change the renderer was built for: the back buffer's format (the pipeline
+// state keeps the first) or its count (the heaps and allocators were sized for the first). "" when drawing may go on.
+std::string RefusalAfterResize(const DeviceFacts& aFirst, const DeviceFacts& aNow);
+
+// RB-99: the glyphs the host bakes into its font atlas once, at the start and after a resize, as inclusive code-point
+// ranges (Latin, Latin-1, Latin Extended-A, general punctuation, the euro and trade marks, arrows, U+FFFD). Nothing outside
+// them is ever drawn, so Dear ImGui never uploads a new glyph from the render thread.
+const std::vector<std::pair<uint32_t, uint32_t>>& GlyphRanges();
+// Panel text limited to GlyphRanges(): other code points and invalid UTF-8 become U+FFFD, control characters spaces.
+std::string LimitToGlyphs(const std::string& aText);
 
 enum class Phase
 {
@@ -73,7 +84,8 @@ public:
     ThemeKind Theme() const { return m_theme; }
     float Scale() const { return static_cast<float>(m_scalePercent) / 100.0f; }
 
-    // Load time: which hooks attached and which addresses were missing.
+    // Load time: which hooks attached and which addresses were missing. Drawing needs all three: present, resize and the
+    // render shutdown (RB-107: without the shutdown hook nothing would release the host before the device goes).
     void NoteHooks(bool aPresent, bool aResize, bool aShutdown, const std::string& aMissing);
     // The first present: the facts and the refusal (empty: drawing starts).
     void NoteInit(const DeviceFacts& aFacts, const std::string& aRefusal);
@@ -82,6 +94,10 @@ public:
     void NoteResize(uint32_t aWidth, uint32_t aHeight);
     // One drawn frame: the host's CPU time on the render thread in microseconds.
     void NoteFrame(double aCpuMicros);
+    // RB-108 (Low 13): what the panel shows each frame, read from atomics (no JSON on the render thread).
+    uint64_t Frames() const { return m_frames.load(); }
+    double CpuMs() const { return m_cpuMicros.load() / 1000.0; }
+    double CpuMsMax() const { return m_cpuMicrosMax.load() / 1000.0; }
     void NoteFrameGeneration(const std::vector<std::string>& aModules);
 
     // Render thread, every present: draw now? (enabled, drawing, not hidden for a capture, not yielding to CET, not killed)
@@ -96,6 +112,7 @@ public:
     void SetKilled(bool aKilled) { m_killed.store(aKilled); }
     // The pass-through switch (never an unhook, feasibility §2.4): false makes the detour call straight through.
     void SetPassThrough(bool aOn) { m_passThrough.store(aOn); }
+    bool PassThrough() const { return m_passThrough.load(); }
 
     // overlay.state's answer.
     json Snapshot(std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now()) const;

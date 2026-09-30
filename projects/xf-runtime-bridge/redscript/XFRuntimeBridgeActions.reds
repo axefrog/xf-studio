@@ -114,6 +114,11 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // JSON text per save; collected only while game.saves asked for it.
   private let m_saveMetadata: array<String>;
   private let m_collectMetadata: Bool;
+  // game.saves (RB-118): its own list, apart from game.load's (a load in between no longer mixes the two).
+  private let m_listedSaves: array<String>;
+  private let m_listedReady: Bool;
+  // cyberware (RB-102): the slots before the bridge's first cyberware change this session.
+  private let m_cyberwareSnapshot: ref<XFCyberwareSnapshot>;
   // wardrobe.equip (0.5.2): the wardrobe before the bridge's first change this session (the kill switch puts it back),
   // and a restore being assembled area by area.
   private let m_wardrobeSnapshot: ref<XFWardrobeSnapshot>;
@@ -473,6 +478,18 @@ public class XFBridgeRegistry extends ScriptableSystem {
     ArrayRemove(this.m_addedItems, id);
   }
 
+  public func AddedItems() -> array<ItemID> {
+    return this.m_addedItems;
+  }
+
+  public func CyberwareSnapshot() -> ref<XFCyberwareSnapshot> {
+    return this.m_cyberwareSnapshot;
+  }
+
+  public func SetCyberwareSnapshot(snapshot: ref<XFCyberwareSnapshot>) -> Void {
+    this.m_cyberwareSnapshot = snapshot;
+  }
+
   // The wardrobe before the bridge's first change this session; later changes keep the first.
   public func NoteWardrobeSnapshot(snapshot: ref<XFWardrobeSnapshot>) -> Void {
     if !IsDefined(this.m_wardrobeSnapshot) {
@@ -622,6 +639,30 @@ public class XFBridgeRegistry extends ScriptableSystem {
   public func ClearSaves() -> Void {
     ArrayClear(this.m_saves);
     this.m_savesReady = false;
+  }
+
+  // game.saves' own answer to RequestSavesForLoad (RB-118).
+  protected cb func OnXFBridgeSavesListed(saves: array<String>) -> Bool {
+    let handler = new inkMenuScenario().GetSystemRequestsHandler();
+    if IsDefined(handler) {
+      handler.UnregisterFromCallback(n"OnSavesForLoadReady", this, n"OnXFBridgeSavesListed");
+    }
+    this.m_listedSaves = saves;
+    this.m_listedReady = true;
+    return true;
+  }
+
+  public func ClearListed() -> Void {
+    ArrayClear(this.m_listedSaves);
+    this.m_listedReady = false;
+  }
+
+  public func ListedSaves() -> array<String> {
+    return this.m_listedSaves;
+  }
+
+  public func ListedReady() -> Bool {
+    return this.m_listedReady;
   }
 
   // game.saves (0.7): the load menu's own metadata callback (loadGameMenu.script:110, 412). Record data only.
@@ -1286,6 +1327,8 @@ public abstract class XFBridgeActions {
     out += XFPlayer.RestoreAfterKill(cid);
     // 0.7: a weather the bridge held goes back to the earlier state, with the game's weather cycle on again.
     out += XFWeather.RestoreAfterKill(cid);
+    // RB-102: V's cyberware as it was before the bridge's first change, and the copies it added removed a moment later.
+    out += XFCyberware.RestoreAfterKill(cid);
     if registry.IsSaveLockHeld() {
       out += ",\"save_lock_kept\":true";
     }

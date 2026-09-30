@@ -470,6 +470,8 @@ bool Load(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk)
 void Unload()
 {
     auto& state = Get();
+    // RB-107: the overlay's detours stay attached until RED4ext detaches them at exit; from here they only pass through.
+    state.overlayHost.SetPassThrough(true);
     log::Info("plugin.unload", "requests_served=" +
                                    std::to_string(state.bridge ? state.bridge->GetDispatcher().RequestCount() : 0));
     state.queue.Close();

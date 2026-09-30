@@ -14,6 +14,23 @@
 // queue of our own); never hook DXGI; never detach at run time (the host's pass-through flag instead; RED4ext detaches at
 // exit); release the back buffers before the engine resizes; stop at the render shutdown; the drawing body runs under a
 // structured-exception guard that switches the host off instead of ending the game.
+//
+// Deep review of 0.7.0 (research/authoring/code-health.md, RB-96..RB-118):
+//   * RB-97: after a resize the swap chain's description and HDR mode are read again and the first-use checks run again
+//     (core RefusalAfterResize); any change of format or buffer count refuses, since the pipeline and heaps were made for
+//     the first.
+//   * RB-98: the backend's device objects are created explicitly at start-up and a failure refuses; IM_ASSERT is ours
+//     (xfb_imconfig.h): a failed assertion is recorded and, inside the guard, raised as a structured exception the guard
+//     catches, so Release builds never draw on with a null pipeline.
+//   * RB-99: the font atlas is baked once (Dear ImGui's legacy, non-dynamic atlas: core GlyphRanges()), panel text is
+//     limited to those glyphs (core LimitToGlyphs), and a texture upload asked for at any other time stops the host instead
+//     of letting the backend wait INFINITE on the engine's queue. Uploads happen only on the first frame and after a resize.
+//   * RB-100: the render shutdown tears everything down under the lock: bounded fence waits, the backend's shutdown, the
+//     context, every COM reference and the fence event.
+//   * RB-105 (Low 10): every present checks the swap chain against the engine's for that device index; a new one stops the
+//     host and lets go of the old one.
+//   * RB-106 (Low 11): the lock is taken outside the structured-exception frame, so an exception can't leave it held; the
+//     resize skips the lock once the host has given up.
 
 #include <RED4ext/RED4ext.hpp>
 #include <RED4ext/GpuApi/DeviceData.hpp>
@@ -23,8 +40,11 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -32,19 +52,24 @@
 
 #include <imgui.h>
 #include <imgui_impl_dx12.h>
+#include <imgui_internal.h>
 
 #include "core/Log.hpp"
 #include "plugin/Overlay.hpp"
 
-// Dear ImGui's DirectX 12 backend (docking branch) asks DXGI for a factory once, to read tearing support for secondary
-// viewports, which the host never opens. Rather than import dxgi.dll (on the reference install ReShade's proxy) and make a
-// factory of our own, the host answers with the factory the game's own swap chain was made from (GetParent): no new DXGI
-// object is created.
+#if !defined(XFB_IMGUI_ASSERT_OVERRIDDEN)
+#error "Dear ImGui must be built with the bridge's IM_ASSERT (IMGUI_USER_CONFIG=xfb_imconfig.h): Release builds would otherwise ignore backend failures (RB-98)"
+#endif
+
 namespace xfb::plugin::overlay
 {
 IDXGISwapChain3* CurrentSwapChain();
 }
 
+// Dear ImGui's DirectX 12 backend (docking branch) asks DXGI for a factory once, to read tearing support for secondary
+// viewports, which the host never opens. Rather than import dxgi.dll (on the reference install ReShade's proxy) and make a
+// factory of our own, the host answers with the factory the game's own swap chain was made from (GetParent): no new DXGI
+// object is created.
 extern "C" HRESULT WINAPI CreateDXGIFactory1(REFIID aRiid, void** aOut)
 {
     if (!aOut)
@@ -54,6 +79,36 @@ extern "C" HRESULT WINAPI CreateDXGIFactory1(REFIID aRiid, void** aOut)
     *aOut = nullptr;
     auto* swapChain = xfb::plugin::overlay::CurrentSwapChain();
     return swapChain ? swapChain->GetParent(aRiid, aOut) : E_FAIL;
+}
+
+namespace
+{
+// RB-98: Dear ImGui's assertions (xfb_imconfig.h). Recorded once; inside the render-thread guard they are raised as a
+// structured exception with this code, which the guard catches and turns into "the overlay stops".
+constexpr DWORD kImGuiAssertCode = 0xE0584641; // 'XFA'
+thread_local int tGuardDepth = 0;
+std::atomic<bool> gAssertFailed{false};
+char gAssertText[256] = {};
+} // namespace
+
+void XfbImGuiAssertFailed(const char* aExpr, const char* aFile, int aLine)
+{
+    if (!gAssertFailed.exchange(true))
+    {
+        const char* name = aFile ? aFile : "";
+        for (const char* c = name; *c; ++c)
+        {
+            if (*c == '/' || *c == '\\')
+            {
+                name = c + 1;
+            }
+        }
+        std::snprintf(gAssertText, sizeof(gAssertText), "%s (%s:%d)", aExpr ? aExpr : "?", name, aLine);
+    }
+    if (tGuardDepth > 0)
+    {
+        RaiseException(kImGuiAssertCode, 0, 0, nullptr);
+    }
 }
 
 namespace xfb::plugin::overlay
@@ -71,6 +126,7 @@ constexpr uint32_t kHashResize = 239671909UL;
 constexpr uint32_t kHashShutdown = 3192982283UL;
 constexpr uint32_t kHashDeviceData = 1239944840UL;
 constexpr uint32_t kSrvSlots = 64;
+constexpr DWORD kTeardownWaitMs = 500;
 
 using Present_t = void* (*)(int32_t*, uint8_t, UINT);
 using Resize_t = void* (*)(uint32_t, uint32_t, uint32_t, uint8_t, int32_t*);
@@ -84,13 +140,18 @@ OverlayHost* gHost = nullptr;
 
 xfb::overlay::TripleBuffer<PanelData> gPanel;
 
-// Render-thread state. Only the present, resize and shutdown detours touch it, and the engine calls them from its render
-// thread; the mutex covers a resize arriving from another thread.
+// Render-thread state. Only the present, resize and shutdown detours touch it, each under the mutex (taken outside the
+// structured-exception frame, RB-106); gaveUp is atomic so a detour can skip the lock once the host has stopped.
 struct Renderer
 {
     std::mutex mutex;
+    std::atomic<bool> gaveUp{false};
     bool initialised = false;
-    bool gaveUp = false;
+    bool backendInit = false;
+    bool shutDown = false;
+    int32_t deviceIndex = 0;
+    IDXGISwapChain4* engineSwapChain = nullptr; // the engine's swap chain the host was made for (identity only, RB-105)
+    DeviceFacts firstFacts;
     ComPtr<ID3D12Device> device;
     ComPtr<ID3D12CommandQueue> queue;
     ComPtr<IDXGISwapChain3> swapChain;
@@ -110,13 +171,32 @@ struct Renderer
     bool needBuffers = true;
     xfb::overlay::DescriptorFreeList slots{kSrvSlots};
     ImGuiContext* context = nullptr;
+    ImFont* body = nullptr;
     ImFont* display = nullptr;
+    UINT fontHeight = 0;         // the back buffer height the fonts were baked for (RB-108: rebuilt after a resize)
+    bool uploadsAllowed = false; // RB-99: a font texture upload is expected (the first frame, the frame after a rebuild)
     std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
     PanelData panel;
     std::vector<std::string> frameGeneration;
 };
 Renderer gR;
+
+// The baked glyph ranges as ImGui wants them (pairs, zero-terminated), from core GlyphRanges().
+const ImWchar* GlyphRangesForImGui()
+{
+    static const std::vector<ImWchar> ranges = [] {
+        std::vector<ImWchar> out;
+        for (const auto& [lo, hi] : xfb::overlay::GlyphRanges())
+        {
+            out.push_back(static_cast<ImWchar>(lo));
+            out.push_back(static_cast<ImWchar>(hi));
+        }
+        out.push_back(0);
+        return out;
+    }();
+    return ranges.data();
+}
 
 std::string FormatName(DXGI_FORMAT aFormat)
 {
@@ -144,6 +224,17 @@ RED4ext::GpuApi::SDeviceData* DeviceData()
         return nullptr;
     }
     return *reinterpret_cast<RED4ext::GpuApi::SDeviceData**>(gDeviceDataSlot);
+}
+
+RED4ext::GpuApi::SSwapChainData* SwapChainData(int32_t aDeviceIndex)
+{
+    auto* dd = DeviceData();
+    const uint32_t id = aDeviceIndex > 0 ? static_cast<uint32_t>(aDeviceIndex) : 0;
+    if (!dd || !dd->swapChains.IsUsedID(id))
+    {
+        return nullptr;
+    }
+    return &dd->swapChains.GetData(id);
 }
 
 bool SameObject(IUnknown* aA, IUnknown* aB)
@@ -176,10 +267,45 @@ std::vector<std::string> FrameGenerationModules()
     return out;
 }
 
-// The XF Studio theme (core/overlay/ThemeTable.inc, generated from the Studio's tokens) as the ImGui style.
+// What the renderer sees now for a device index: the facts the refusal checks read, the swap chain's description, and the
+// engine's swap-chain record (null when there is none). Used at the first present and again after every resize (RB-97).
+RED4ext::GpuApi::SSwapChainData* ReadFacts(int32_t aDeviceIndex, DeviceFacts& aFacts, DXGI_SWAP_CHAIN_DESC1& aDesc)
+{
+    auto* dd = DeviceData();
+    aFacts.deviceData = dd != nullptr;
+    auto* sc = SwapChainData(aDeviceIndex);
+    aFacts.swapChain = sc && sc->swapChain;
+    if (!aFacts.swapChain)
+    {
+        return nullptr;
+    }
+    aFacts.hdrMode = static_cast<int>(sc->startupHdrMode);
+    sc->swapChain->GetDesc1(&aDesc);
+    aFacts.format = FormatName(aDesc.Format);
+    aFacts.bufferCount = aDesc.BufferCount;
+    aFacts.width = aDesc.Width;
+    aFacts.height = aDesc.Height;
+    wchar_t cls[64]{};
+    if (sc->windowHandle && GetClassNameW(sc->windowHandle, cls, 64) > 0)
+    {
+        for (const wchar_t* c = cls; *c; ++c)
+        {
+            aFacts.windowClass.push_back(static_cast<char>(*c < 128 ? *c : '?'));
+        }
+    }
+    ComPtr<ID3D12Device> scDevice;
+    sc->swapChain->GetDevice(IID_PPV_ARGS(&scDevice));
+    aFacts.sameDevice = SameObject(scDevice.Get(), dd->device.Get());
+    aFacts.directQueue = dd->directCommandQueue && dd->directCommandQueue->GetDesc().Type == D3D12_COMMAND_LIST_TYPE_DIRECT;
+    return sc;
+}
+
+// The XF Studio theme (core/overlay/ThemeTable.inc, generated from the Studio's tokens) as the ImGui style, from scratch
+// (ScaleAllSizes is cumulative, so a rebuild after a resize starts from the default style).
 void ApplyTheme(ThemeKind aKind, float aScale)
 {
     auto& style = ImGui::GetStyle();
+    style = ImGuiStyle();
     for (int i = 0; i < ImGuiCol_COUNT; ++i)
     {
         float rgba[4];
@@ -214,7 +340,9 @@ ImFont* LoadFont(const char* aKind, float aSize)
         std::error_code error;
         if (std::filesystem::exists(path, error))
         {
-            if (auto* font = io.Fonts->AddFontFromFileTTF(path.string().c_str(), aSize))
+            ImFontConfig config;
+            config.GlyphRanges = GlyphRangesForImGui();
+            if (auto* font = io.Fonts->AddFontFromFileTTF(path.string().c_str(), aSize, &config))
             {
                 return font;
             }
@@ -222,7 +350,25 @@ ImFont* LoadFont(const char* aKind, float aSize)
     }
     ImFontConfig config;
     config.SizePixels = aSize;
+    config.GlyphRanges = GlyphRangesForImGui();
     return io.Fonts->AddFontDefault(&config);
+}
+
+// RB-99, RB-108: the fonts at the current height's scale, every glyph baked now (the atlas is never grown while drawing),
+// and the theme at the same scale. The next frame uploads the new atlas; that upload is expected.
+void BuildFonts()
+{
+    auto& io = ImGui::GetIO();
+    io.Fonts->Clear();
+    const float scale = (static_cast<float>(gR.height) / 1080.0f) * gHost->Scale();
+    gR.body = LoadFont("ui", xfb::overlay::ThemeMetricOf("FontSize", 13.0f) * scale);
+    gR.display = LoadFont("display", xfb::overlay::ThemeMetricOf("FontSizeLarge", 15.0f) * scale);
+    io.FontDefault = gR.body;
+    ImFontAtlasBuildMain(io.Fonts);
+    ApplyTheme(gHost->Theme(), scale);
+    ImGui::GetStyle().FontSizeBase = gR.body ? gR.body->LegacySize : 13.0f * scale;
+    gR.fontHeight = gR.height;
+    gR.uploadsAllowed = true;
 }
 
 void SrvAlloc(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE* aCpu, D3D12_GPU_DESCRIPTOR_HANDLE* aGpu)
@@ -239,13 +385,15 @@ void SrvFree(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE aCpu, D3D12_G
     gR.slots.Free(static_cast<int32_t>((aCpu.ptr - base) / gR.srvStride));
 }
 
-void WaitBuffer(size_t aIndex, DWORD aMs)
+// Waits (bounded) until the GPU is done with our last use of buffer aIndex; false when it isn't within aMs.
+bool WaitBuffer(size_t aIndex, DWORD aMs)
 {
-    if (aIndex < gR.fenceValues.size() && gR.fence && gR.fence->GetCompletedValue() < gR.fenceValues[aIndex])
+    if (aIndex < gR.fenceValues.size() && gR.fence && gR.fenceEvent && gR.fence->GetCompletedValue() < gR.fenceValues[aIndex])
     {
         gR.fence->SetEventOnCompletion(gR.fenceValues[aIndex], gR.fenceEvent);
-        WaitForSingleObject(gR.fenceEvent, aMs);
+        return WaitForSingleObject(gR.fenceEvent, aMs) == WAIT_OBJECT_0;
     }
+    return true;
 }
 
 void ReleaseBuffers()
@@ -258,8 +406,189 @@ void ReleaseBuffers()
     gR.needBuffers = true;
 }
 
+// RB-100: everything the host made or holds, released. The GPU's use of our objects is waited for first, bounded; if it
+// doesn't finish in time the host's own objects are left alive (a leak until the process ends) rather than freed under
+// the GPU, and only the references to the engine's objects are let go.
+void Teardown()
+{
+    bool idle = true;
+    for (size_t i = 0; i < gR.fenceValues.size(); ++i)
+    {
+        idle = WaitBuffer(i, kTeardownWaitMs) && idle;
+    }
+    gR.buffers.clear();
+    gR.swapChain.Reset();
+    gR.engineSwapChain = nullptr;
+    gR.initialised = false;
+    if (!idle)
+    {
+        log::Warn("overlay.teardown", "the GPU didn't finish the overlay's last frames within " + std::to_string(kTeardownWaitMs) +
+                                          " ms; its own objects are left alive rather than freed under the GPU");
+        return;
+    }
+    if (gR.context)
+    {
+        ImGui::SetCurrentContext(gR.context);
+        if (gR.backendInit)
+        {
+            gR.backendInit = false;
+            ImGui_ImplDX12_Shutdown();
+        }
+        ImGui::DestroyContext(gR.context);
+        gR.context = nullptr;
+        gR.body = gR.display = nullptr;
+    }
+    gR.list.Reset();
+    gR.allocators.clear();
+    gR.fenceValues.clear();
+    gR.fence.Reset();
+    gR.srvHeap.Reset();
+    gR.rtvHeap.Reset();
+    gR.queue.Reset();
+    gR.device.Reset();
+    gR.slots = xfb::overlay::DescriptorFreeList(kSrvSlots);
+    if (gR.fenceEvent)
+    {
+        CloseHandle(gR.fenceEvent);
+        gR.fenceEvent = nullptr;
+    }
+}
+
+// A refusal or failure at start-up: recorded, logged, and whatever was made so far released.
+bool Refuse(const DeviceFacts& aFacts, const std::string& aWhy)
+{
+    gHost->NoteInit(aFacts, aWhy);
+    log::Warn("overlay.refused", "why=" + aWhy);
+    Teardown();
+    return false;
+}
+
+// First present: the checks (Host.hpp RefusalFor), then our heaps, allocators, list, fence and ImGui.
+bool Initialise(int32_t aDeviceIndex)
+{
+    DeviceFacts facts;
+    DXGI_SWAP_CHAIN_DESC1 desc{};
+    auto* sc = ReadFacts(aDeviceIndex, facts, desc);
+    gR.frameGeneration = FrameGenerationModules();
+    gHost->NoteFrameGeneration(gR.frameGeneration);
+    if (const auto refusal = xfb::overlay::RefusalFor(facts); !refusal.empty())
+    {
+        return Refuse(facts, refusal);
+    }
+    auto* dd = DeviceData();
+    gR.deviceIndex = aDeviceIndex;
+    gR.firstFacts = facts;
+    gR.engineSwapChain = sc->swapChain.Get();
+    gR.device = dd->device;
+    gR.queue = dd->directCommandQueue;
+    sc->swapChain.As(&gR.swapChain);
+    gR.format = desc.Format;
+    gR.bufferCount = desc.BufferCount;
+    gR.width = desc.Width;
+    gR.height = desc.Height;
+
+    D3D12_DESCRIPTOR_HEAP_DESC srv{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvSlots, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
+    D3D12_DESCRIPTOR_HEAP_DESC rtv{D3D12_DESCRIPTOR_HEAP_TYPE_RTV, gR.bufferCount, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0};
+    if (FAILED(gR.device->CreateDescriptorHeap(&srv, IID_PPV_ARGS(&gR.srvHeap))) || FAILED(gR.device->CreateDescriptorHeap(&rtv, IID_PPV_ARGS(&gR.rtvHeap))))
+    {
+        return Refuse(facts, "couldn't create the overlay's descriptor heaps");
+    }
+    gR.srvStride = gR.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    gR.rtvStride = gR.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    gR.allocators.resize(gR.bufferCount);
+    gR.fenceValues.assign(gR.bufferCount, 0);
+    for (auto& allocator : gR.allocators)
+    {
+        if (FAILED(gR.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))))
+        {
+            return Refuse(facts, "couldn't create the overlay's command allocators");
+        }
+    }
+    if (FAILED(gR.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, gR.allocators[0].Get(), nullptr, IID_PPV_ARGS(&gR.list))) ||
+        FAILED(gR.list->Close()) || FAILED(gR.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&gR.fence))))
+    {
+        return Refuse(facts, "couldn't create the overlay's command list or fence");
+    }
+    gR.fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!gR.fenceEvent)
+    {
+        return Refuse(facts, "couldn't create the overlay's fence event");
+    }
+
+    IMGUI_CHECKVERSION();
+    gR.context = ImGui::CreateContext();
+    ImGui::SetCurrentContext(gR.context);
+    auto& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.LogFilename = nullptr;
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+
+    ImGui_ImplDX12_InitInfo info;
+    info.Device = gR.device.Get();
+    info.CommandQueue = gR.queue.Get();
+    info.NumFramesInFlight = static_cast<int>(gR.bufferCount);
+    info.RTVFormat = gR.format;
+    info.DSVFormat = DXGI_FORMAT_UNKNOWN;
+    info.SrvDescriptorHeap = gR.srvHeap.Get();
+    info.SrvDescriptorAllocFn = &SrvAlloc;
+    info.SrvDescriptorFreeFn = &SrvFree;
+    if (!ImGui_ImplDX12_Init(&info))
+    {
+        return Refuse(facts, "Dear ImGui's DirectX 12 renderer didn't start");
+    }
+    gR.backendInit = true;
+    // RB-99: no dynamic atlas. With the backend's texture flag cleared Dear ImGui bakes every glyph of the ranges once and
+    // never asks the backend for a new glyph while drawing (whose upload waits INFINITE on the engine's queue).
+    io.BackendFlags &= ~ImGuiBackendFlags_RendererHasTextures;
+    BuildFonts();
+    // RB-98: the pipeline and root signature now, not lazily in the first NewFrame, where a failure was only an IM_ASSERT
+    // (nothing in Release) and drawing went on with nulls.
+    if (!ImGui_ImplDX12_CreateDeviceObjects())
+    {
+        return Refuse(facts, "Dear ImGui's DirectX 12 pipeline couldn't be created");
+    }
+    if (gAssertFailed.load())
+    {
+        return Refuse(facts, std::string("Dear ImGui reported a failed check while starting: ") + gAssertText);
+    }
+    gR.initialised = true;
+    gHost->NoteInit(facts, "");
+    log::Info("overlay.init", "ok=true format=" + facts.format + " buffers=" + std::to_string(facts.bufferCount) + " size=" + std::to_string(facts.width) + "x" +
+                                  std::to_string(facts.height) + " hdr=" + std::to_string(facts.hdrMode) + " theme=" + xfb::overlay::ThemeName(gHost->Theme()));
+    return true;
+}
+
+// Stops the host for the session with a reason: everything released, the reason in overlay.state. aRefusal: a check failed
+// (phase refused, with these facts) rather than an error (phase failed).
+void StopFor(const std::string& aWhy, const DeviceFacts* aRefusal = nullptr)
+{
+    gR.gaveUp = true;
+    if (aRefusal)
+    {
+        gHost->NoteInit(*aRefusal, aWhy);
+        log::Warn("overlay.refused", "why=" + aWhy);
+    }
+    else
+    {
+        gHost->NoteFailure(aWhy);
+        log::Warn("overlay.stopped", "why=" + aWhy);
+    }
+    Teardown();
+}
+
+// RB-97: after a resize the back buffers are fetched again, and the swap chain is checked again first.
 bool MakeBuffers()
 {
+    DeviceFacts now;
+    DXGI_SWAP_CHAIN_DESC1 desc{};
+    ReadFacts(gR.deviceIndex, now, desc);
+    if (const auto refusal = xfb::overlay::RefusalAfterResize(gR.firstFacts, now); !refusal.empty())
+    {
+        StopFor(refusal, &now);
+        return false;
+    }
+    gR.width = desc.Width;
+    gR.height = desc.Height;
     gR.buffers.assign(gR.bufferCount, nullptr);
     auto rtv = gR.rtvHeap->GetCPUDescriptorHandleForHeapStart();
     for (UINT i = 0; i < gR.bufferCount; ++i)
@@ -276,119 +605,6 @@ bool MakeBuffers()
     return true;
 }
 
-// First present: the checks (Host.hpp RefusalFor), then our heaps, allocators, list, fence and ImGui.
-bool Initialise(int32_t aDeviceIndex)
-{
-    DeviceFacts facts;
-    auto* dd = DeviceData();
-    facts.deviceData = dd != nullptr;
-    RED4ext::GpuApi::SSwapChainData* sc = nullptr;
-    const uint32_t id = aDeviceIndex > 0 ? static_cast<uint32_t>(aDeviceIndex) : 0;
-    if (dd && dd->swapChains.IsUsedID(id))
-    {
-        sc = &dd->swapChains.GetData(id);
-    }
-    facts.swapChain = sc && sc->swapChain;
-    DXGI_SWAP_CHAIN_DESC1 desc{};
-    if (facts.swapChain)
-    {
-        facts.hdrMode = static_cast<int>(sc->startupHdrMode);
-        sc->swapChain->GetDesc1(&desc);
-        facts.format = FormatName(desc.Format);
-        facts.bufferCount = desc.BufferCount;
-        facts.width = desc.Width;
-        facts.height = desc.Height;
-        wchar_t cls[64]{};
-        if (sc->windowHandle && GetClassNameW(sc->windowHandle, cls, 64) > 0)
-        {
-            for (const wchar_t* c = cls; *c; ++c)
-            {
-                facts.windowClass.push_back(static_cast<char>(*c < 128 ? *c : '?'));
-            }
-        }
-        ComPtr<ID3D12Device> scDevice;
-        sc->swapChain->GetDevice(IID_PPV_ARGS(&scDevice));
-        facts.sameDevice = SameObject(scDevice.Get(), dd->device.Get());
-        facts.directQueue = dd->directCommandQueue && dd->directCommandQueue->GetDesc().Type == D3D12_COMMAND_LIST_TYPE_DIRECT;
-    }
-    gR.frameGeneration = FrameGenerationModules();
-    gHost->NoteFrameGeneration(gR.frameGeneration);
-    const auto refusal = xfb::overlay::RefusalFor(facts);
-    if (!refusal.empty())
-    {
-        gHost->NoteInit(facts, refusal);
-        log::Warn("overlay.refused", "why=" + refusal);
-        return false;
-    }
-    gR.device = dd->device;
-    gR.queue = dd->directCommandQueue;
-    sc->swapChain.As(&gR.swapChain);
-    gR.format = desc.Format;
-    gR.bufferCount = desc.BufferCount;
-    gR.width = desc.Width;
-    gR.height = desc.Height;
-
-    D3D12_DESCRIPTOR_HEAP_DESC srv{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kSrvSlots, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
-    D3D12_DESCRIPTOR_HEAP_DESC rtv{D3D12_DESCRIPTOR_HEAP_TYPE_RTV, gR.bufferCount, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0};
-    if (FAILED(gR.device->CreateDescriptorHeap(&srv, IID_PPV_ARGS(&gR.srvHeap))) || FAILED(gR.device->CreateDescriptorHeap(&rtv, IID_PPV_ARGS(&gR.rtvHeap))))
-    {
-        gHost->NoteInit(facts, "couldn't create the overlay's descriptor heaps");
-        return false;
-    }
-    gR.srvStride = gR.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-    gR.rtvStride = gR.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-    gR.allocators.resize(gR.bufferCount);
-    gR.fenceValues.assign(gR.bufferCount, 0);
-    for (auto& allocator : gR.allocators)
-    {
-        if (FAILED(gR.device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))))
-        {
-            gHost->NoteInit(facts, "couldn't create the overlay's command allocators");
-            return false;
-        }
-    }
-    if (FAILED(gR.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, gR.allocators[0].Get(), nullptr, IID_PPV_ARGS(&gR.list))) ||
-        FAILED(gR.list->Close()) || FAILED(gR.device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&gR.fence))))
-    {
-        gHost->NoteInit(facts, "couldn't create the overlay's command list or fence");
-        return false;
-    }
-    gR.fenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-
-    IMGUI_CHECKVERSION();
-    gR.context = ImGui::CreateContext();
-    ImGui::SetCurrentContext(gR.context);
-    auto& io = ImGui::GetIO();
-    io.IniFilename = nullptr;
-    io.LogFilename = nullptr;
-    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-    const float scale = (static_cast<float>(gR.height) / 1080.0f) * gHost->Scale();
-    const float body = xfb::overlay::ThemeMetricOf("FontSize", 13.0f) * scale;
-    LoadFont("ui", body);
-    gR.display = LoadFont("display", xfb::overlay::ThemeMetricOf("FontSizeLarge", 15.0f) * scale);
-    ApplyTheme(gHost->Theme(), scale);
-
-    ImGui_ImplDX12_InitInfo info;
-    info.Device = gR.device.Get();
-    info.CommandQueue = gR.queue.Get();
-    info.NumFramesInFlight = static_cast<int>(gR.bufferCount);
-    info.RTVFormat = gR.format;
-    info.DSVFormat = DXGI_FORMAT_UNKNOWN;
-    info.SrvDescriptorHeap = gR.srvHeap.Get();
-    info.SrvDescriptorAllocFn = &SrvAlloc;
-    info.SrvDescriptorFreeFn = &SrvFree;
-    if (!ImGui_ImplDX12_Init(&info))
-    {
-        gHost->NoteInit(facts, "Dear ImGui's DirectX 12 renderer didn't start");
-        return false;
-    }
-    gR.initialised = true;
-    gHost->NoteInit(facts, "");
-    log::Info("overlay.init", "ok=true format=" + facts.format + " buffers=" + std::to_string(facts.bufferCount) + " size=" + std::to_string(facts.width) + "x" +
-                                  std::to_string(facts.height) + " hdr=" + std::to_string(facts.hdrMode) + " theme=" + xfb::overlay::ThemeName(gHost->Theme()));
-    return true;
-}
-
 ImVec4 ThemeColour(const char* aName)
 {
     float rgba[4] = {1, 1, 1, 1};
@@ -397,6 +613,7 @@ ImVec4 ThemeColour(const char* aName)
 }
 
 // The one diagnostic panel (P0): no input, top left under the CET label's place, a moving bar so flicker and ghosting show.
+// Its text is limited to the baked glyphs when the game thread publishes it (Publish); the figures come from atomics.
 void DrawPanel(double aSeconds)
 {
     if (gPanel.Take())
@@ -412,7 +629,7 @@ void DrawPanel(double aSeconds)
     {
         if (gR.display)
         {
-            ImGui::PushFont(gR.display, 0.0f);
+            ImGui::PushFont(gR.display, gR.display->LegacySize);
         }
         ImGui::TextColored(ThemeColour("XfAccentText"), "XF RUNTIME BRIDGE");
         if (gR.display)
@@ -430,9 +647,7 @@ void DrawPanel(double aSeconds)
             ImGui::PopTextWrapPos();
         }
         ImGui::Separator();
-        const auto state = gHost->Snapshot();
-        ImGui::TextDisabled("frames %llu   cpu %.3f ms (max %.3f)", static_cast<unsigned long long>(state.value("frames", 0ull)), state.value("cpu_ms", 0.0),
-                            state.value("cpu_ms_max", 0.0));
+        ImGui::TextDisabled("frames %llu   cpu %.3f ms (max %.3f)", static_cast<unsigned long long>(gHost->Frames()), gHost->CpuMs(), gHost->CpuMsMax());
         ImGui::TextDisabled("%s x%u  %ux%u  sdr  theme %s", FormatName(gR.format).c_str(), gR.bufferCount, gR.width, gR.height, xfb::overlay::ThemeName(gHost->Theme()));
         std::string fg;
         for (const auto& name : gR.frameGeneration)
@@ -448,6 +663,20 @@ void DrawPanel(double aSeconds)
         ImGui::PopStyleColor();
     }
     ImGui::End();
+}
+
+// RB-99: whether Dear ImGui asks the backend to create or update a texture this frame (the backend would wait INFINITE on
+// the engine's queue for it).
+bool WantsUpload()
+{
+    for (ImTextureData* tex : ImGui::GetPlatformIO().Textures)
+    {
+        if (tex && (tex->Status == ImTextureStatus_WantCreate || tex->Status == ImTextureStatus_WantUpdates))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void DrawFrame()
@@ -472,6 +701,10 @@ void DrawFrame()
     }
     const auto started = std::chrono::steady_clock::now();
     ImGui::SetCurrentContext(gR.context);
+    if (gR.height != gR.fontHeight)
+    {
+        BuildFonts(); // RB-108: the new size's fonts, between frames (the atlas is unlocked here)
+    }
     auto& io = ImGui::GetIO();
     io.DisplaySize = ImVec2(static_cast<float>(gR.width), static_cast<float>(gR.height));
     io.DeltaTime = std::max(1e-4f, std::chrono::duration<float>(started - gR.last).count());
@@ -480,6 +713,11 @@ void DrawFrame()
     ImGui::NewFrame();
     DrawPanel(std::chrono::duration<double>(started - gR.started).count());
     ImGui::Render();
+    if (WantsUpload() && !gR.uploadsAllowed)
+    {
+        StopFor("Dear ImGui asked for a font texture upload outside the start and a resize; the overlay stops rather than wait on the render thread");
+        return;
+    }
 
     gR.allocators[index]->Reset();
     gR.list->Reset(gR.allocators[index].Get(), nullptr);
@@ -495,6 +733,7 @@ void DrawFrame()
     ID3D12DescriptorHeap* heaps[] = {gR.srvHeap.Get()};
     gR.list->SetDescriptorHeaps(1, heaps);
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), gR.list.Get());
+    gR.uploadsAllowed = false;
     barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
     gR.list->ResourceBarrier(1, &barrier);
@@ -506,26 +745,32 @@ void DrawFrame()
     gHost->NoteFrame(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - started).count());
 }
 
-// The C++ body of the present detour (objects with destructors live here, not in the SEH frame).
-void PresentBody(int32_t* aDeviceIndex)
+// The C++ body of the present detour (runs inside the guard, with the lock already held by the detour).
+void PresentBody(int32_t aDeviceIndex)
 {
-    std::scoped_lock _(gR.mutex);
-    if (gR.gaveUp)
-    {
-        return;
-    }
     if (!gR.initialised)
     {
-        if (!Initialise(aDeviceIndex ? *aDeviceIndex : 0))
+        if (!Initialise(aDeviceIndex))
         {
             gR.gaveUp = true; // refused or failed for the session: pass-through from now on
             return;
         }
     }
+    // RB-105: the swap chain must still be the one the host was made for. A new one (the engine recreated it) stops the
+    // host, which lets go of its references to the old one.
+    if (aDeviceIndex != gR.deviceIndex)
+    {
+        return; // another device slot's present: not ours to draw on
+    }
+    auto* sc = SwapChainData(aDeviceIndex);
+    if (!sc || sc->swapChain.Get() != gR.engineSwapChain)
+    {
+        StopFor("the game's swap chain changed (it was recreated); the overlay stops for this session");
+        return;
+    }
     if (gR.device && gR.device->GetDeviceRemovedReason() != S_OK)
     {
-        gHost->NoteFailure("the GPU device was removed");
-        gR.gaveUp = true;
+        StopFor("the GPU device was removed");
         return;
     }
     if (!gHost->ShouldDraw())
@@ -535,35 +780,13 @@ void PresentBody(int32_t* aDeviceIndex)
     DrawFrame();
 }
 
-int PresentGuarded(int32_t* aDeviceIndex)
+void PresentThunk(void* aArg)
 {
-    __try
-    {
-        PresentBody(aDeviceIndex);
-        return 0;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return 1;
-    }
-}
-
-void* PresentDetour(int32_t* aDeviceIndex, uint8_t aSomeSync, UINT aSyncInterval)
-{
-    if (gHost && gHost->Enabled() && gHost->Active())
-    {
-        if (PresentGuarded(aDeviceIndex) != 0)
-        {
-            gR.gaveUp = true;
-            gHost->NoteFailure("an exception while drawing; the overlay passes everything through for the rest of the session");
-        }
-    }
-    return gPresent(aDeviceIndex, aSomeSync, aSyncInterval);
+    PresentBody(*static_cast<int32_t*>(aArg));
 }
 
 void ResizeBody(uint32_t aWidth, uint32_t aHeight)
 {
-    std::scoped_lock _(gR.mutex);
     if (gR.initialised)
     {
         ReleaseBuffers();
@@ -574,36 +797,119 @@ void ResizeBody(uint32_t aWidth, uint32_t aHeight)
     }
 }
 
-int ResizeGuarded(uint32_t aWidth, uint32_t aHeight)
+struct ResizeArgs
 {
+    uint32_t width, height;
+};
+
+void ResizeThunk(void* aArg)
+{
+    const auto* args = static_cast<ResizeArgs*>(aArg);
+    ResizeBody(args->width, args->height);
+}
+
+void TeardownThunk(void*)
+{
+    Teardown();
+}
+
+// The structured-exception guard (no C++ objects with destructors in this frame). Counts the guard depth for IM_ASSERT.
+DWORD gLastExceptionCode = 0;
+int RunGuarded(void (*aBody)(void*), void* aArg)
+{
+    int result = 0;
+    ++tGuardDepth;
     __try
     {
-        ResizeBody(aWidth, aHeight);
-        return 0;
+        aBody(aArg);
     }
-    __except (EXCEPTION_EXECUTE_HANDLER)
+    __except (gLastExceptionCode = GetExceptionCode(), EXCEPTION_EXECUTE_HANDLER)
     {
-        return 1;
+        result = 1;
     }
+    --tGuardDepth;
+    return result;
+}
+
+std::string ExceptionWhy(const char* aDoing)
+{
+    if (gLastExceptionCode == kImGuiAssertCode)
+    {
+        return std::string("Dear ImGui reported a failed check ") + aDoing + " (" + gAssertText + "); the overlay passes everything through for the rest of the session";
+    }
+    char code[16];
+    std::snprintf(code, sizeof(code), "0x%08lX", static_cast<unsigned long>(gLastExceptionCode));
+    return std::string("an exception ") + code + " " + aDoing + "; the overlay passes everything through for the rest of the session";
+}
+
+// After an exception the ImGui state may be half-way through a frame: the host stops and lets go of the engine's objects
+// only (its own are left alive, a small leak, rather than torn down from an unknown state).
+void StopAfterException(const char* aDoing)
+{
+    gR.gaveUp = true;
+    const auto why = ExceptionWhy(aDoing);
+    gHost->NoteFailure(why);
+    log::Error("overlay.exception", "why=" + why);
+    gR.buffers.clear();
+    gR.swapChain.Reset();
+    gR.engineSwapChain = nullptr;
+}
+
+void* PresentDetour(int32_t* aDeviceIndex, uint8_t aSomeSync, UINT aSyncInterval)
+{
+    if (gHost && gHost->Enabled() && gHost->Active() && !gHost->PassThrough() && !gR.gaveUp.load())
+    {
+        std::scoped_lock _(gR.mutex); // outside the SEH frame (RB-106)
+        if (!gR.gaveUp.load())
+        {
+            int32_t index = aDeviceIndex ? *aDeviceIndex : 0;
+            if (RunGuarded(&PresentThunk, &index) != 0)
+            {
+                StopAfterException("while drawing");
+            }
+            else if (gAssertFailed.load() && !gR.gaveUp.load())
+            {
+                StopFor(std::string("Dear ImGui reported a failed check (") + gAssertText + ")");
+            }
+        }
+    }
+    return gPresent(aDeviceIndex, aSomeSync, aSyncInterval);
 }
 
 void* ResizeDetour(uint32_t aWidth, uint32_t aHeight, uint32_t a3, uint8_t a4, int32_t* aDeviceIndex)
 {
-    if (gHost && gHost->Enabled() && ResizeGuarded(aWidth, aHeight) != 0)
+    // RB-106: once the host has given up it holds no back buffers, so the resize doesn't take the lock at all.
+    if (gHost && gHost->Enabled() && !gR.gaveUp.load())
     {
-        gR.gaveUp = true;
-        gHost->NoteFailure("an exception while letting go of the back buffers for a resize");
+        std::scoped_lock _(gR.mutex);
+        ResizeArgs args{aWidth, aHeight};
+        if (!gR.gaveUp.load() && RunGuarded(&ResizeThunk, &args) != 0)
+        {
+            StopAfterException("while letting go of the back buffers for a resize");
+        }
     }
     return gResize(aWidth, aHeight, a3, a4, aDeviceIndex);
 }
 
 void* ShutdownDetour(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4)
 {
-    if (gHost && gHost->Enabled() && !gR.gaveUp)
+    if (gHost && gHost->Enabled())
     {
-        gR.gaveUp = true; // no more drawing; RED4ext detaches at exit, nothing is released here
-        gHost->NoteShutdown();
-        log::Info("overlay.shutdown", "render shutdown seen; the overlay stops drawing");
+        std::scoped_lock _(gR.mutex);
+        if (!gR.shutDown)
+        {
+            gR.shutDown = true;
+            const bool wasActive = gHost->Active();
+            gR.gaveUp = true;
+            // RB-100: release everything before the engine's device goes: bounded fence waits, the backend, the context, every
+            // COM reference and the fence event.
+            const bool clean = RunGuarded(&TeardownThunk, nullptr) == 0;
+            if (wasActive)
+            {
+                gHost->NoteShutdown();
+            }
+            log::Info("overlay.shutdown", std::string("render shutdown seen; the overlay stopped and released its objects") + (clean ? "" : " (an exception part-way; the rest is left to the process's exit)"));
+        }
     }
     return gShutdown(a1, a2, a3, a4);
 }
@@ -658,7 +964,11 @@ void Install(RED4ext::v1::PluginHandle aHandle, const RED4ext::v1::Sdk* aSdk, Ov
 
 void Publish(const PanelData& aData)
 {
-    gPanel.Back() = aData;
+    // RB-99: the panel's text limited to the baked glyphs here, on the game thread, not per frame on the render thread.
+    auto& back = gPanel.Back();
+    back = aData;
+    back.bridgeStatus = xfb::overlay::LimitToGlyphs(aData.bridgeStatus);
+    back.pendingAsk = xfb::overlay::LimitToGlyphs(aData.pendingAsk);
     gPanel.Publish();
 }
 } // namespace xfb::plugin::overlay

@@ -79,28 +79,32 @@ json CyberwareEquip(const MethodContext& aContext)
     const auto request = h::ParseCyberwareEquip(aContext.params);
     const auto cid = aContext.cid;
     RequireOpen();
-    const auto step = Game(
-        [cid, request] {
-            RED4ext::CString item(request.item.c_str());
-            int32_t slot = request.slot;
-            bool add = request.addIfMissing;
-            return ScriptCall("XFCyberware", "Equip", {"String", "Int32", "Bool"}, {&item, &slot, &add}, cid);
-        },
-        "cyberware.equip");
-    const auto area = step.value("area", std::string());
-    const auto slot = step.value("slot", 0);
-    const auto now = SettleSlot(cid, area, slot, [&](const json& aNow) { return aNow.value("item", std::string()) == request.item; });
-    auto out = step;
-    out["now"] = now.value("item", std::string());
-    out["equipped"] = now.value("item", std::string()) == request.item;
-    out["undo"] = h::CyberwareEquipUndo(step, request.item);
-    out["undo_note"] = out["undo"].is_null() ? "it was already equipped: nothing changed"
-                                             : "the result's undo puts the earlier item back (or empties the slot and removes an item the bridge added); loading the save undoes it too";
-    if (!out["equipped"].get<bool>())
-    {
-        out["note"] = "the slot doesn't show the item yet: the game may still be applying it, or refused it (cyberware_state shows what V has)";
-    }
-    return out;
+    h::CyberwareEquipOps ops;
+    ops.equip = [cid, request] {
+        return Game(
+            [cid, request] {
+                RED4ext::CString item(request.item.c_str());
+                RED4ext::CString hash(request.id.c_str());
+                int32_t slot = request.slot;
+                bool add = request.addIfMissing;
+                return ScriptCall("XFCyberware", "Equip", {"String", "String", "Int32", "Bool"}, {&item, &hash, &slot, &add}, cid);
+            },
+            "cyberware.equip");
+    };
+    ops.settle = [cid, request](const std::string& aArea, int32_t aSlot) {
+        return SettleSlot(cid, aArea, aSlot, [&](const json& aNow) { return aNow.value("item", std::string()) == request.item; });
+    };
+    ops.removeAdded = [cid](const std::string& aItem) {
+        RequireOpen();
+        return Game(
+            [cid, aItem] {
+                RED4ext::CString item(aItem.c_str());
+                return ScriptCall("XFInventory", "RemoveAdded", {"String"}, {&item}, cid);
+            },
+            "cyberware.remove");
+    };
+    // RB-101: once the equip step has run, its undo is answered whatever happens while the slot is read back.
+    return h::RunCyberwareEquip(request, ops);
 }
 
 json CyberwareUnequip(const MethodContext& aContext)
@@ -217,42 +221,39 @@ json UiState(const MethodContext& aContext)
     return out;
 }
 
+// ui.ask.state {id} (RB-96, RB-103; tools only): what became of a question: pending, answered (with the answer), gone or
+// unknown. Bridge thread: the message board only.
+json UiAskState(const MethodContext& aContext)
+{
+    params::RequireOnly(aContext.params, {"id"});
+    const auto id = static_cast<uint64_t>(params::CheckInteger(aContext.params, "id", 1, 1000000000).value_or(0));
+    if (id == 0)
+    {
+        throw MethodError("bad_params", "give id: the question's message id (ui_message's answer)");
+    }
+    return AskStateJson(id, Get().messages.StateOf(id));
+}
+
 // --- saves ----------------------------------------------------------------------------------------
 
 json GameSaves(const MethodContext& aContext)
 {
     const auto request = h::ParseSaves(aContext.params);
     const auto cid = aContext.cid;
-    Game([cid] { return ScriptCall("XFGame", "SavesRequest", {}, {}, cid); }, "game.saves.request");
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(request.waitMs);
-    json answer;
-    size_t lastCount = 0;
-    int stable = 0;
-    while (std::chrono::steady_clock::now() < deadline)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        answer = Game(
-            [cid] {
-                bool done = false;
+    h::SavesOps ops;
+    ops.request = [cid] { Game([cid] { return ScriptCall("XFGame", "SavesRequest", {}, {}, cid); }, "game.saves.request"); };
+    ops.read = [cid](bool aDone) {
+        return Game(
+            [cid, aDone] {
+                bool done = aDone;
                 return ScriptCall("XFGame", "SavesAnswer", {"Bool"}, {&done}, cid);
             },
-            "game.saves.read");
-        const auto count = answer.value("metadata", json::array()).size();
-        const auto names = answer.value("names", json::array()).size();
-        stable = count == lastCount ? stable + 1 : 0;
-        lastCount = count;
-        if (answer.value("ready", false) && (count >= names || stable >= 3))
-        {
-            break;
-        }
-    }
-    answer = Game(
-        [cid] {
-            bool done = true;
-            return ScriptCall("XFGame", "SavesAnswer", {"Bool"}, {&done}, cid);
-        },
-        "game.saves.done");
-    return h::TrimSaves(answer, request.limit);
+            aDone ? "game.saves.done" : "game.saves.read");
+    };
+    ops.sleep = [](std::chrono::milliseconds aMs) { std::this_thread::sleep_for(aMs); };
+    ops.now = [] { return std::chrono::steady_clock::now(); };
+    // RB-118: the final step that stops collecting runs even when a read throws.
+    return h::RunSaves(request, ops);
 }
 
 // --- photo mode's scene rows ------------------------------------------------------------------------
@@ -261,35 +262,19 @@ json PhotoScene(const MethodContext& aContext)
 {
     const auto request = h::ParsePhotoScene(aContext.params);
     const auto cid = aContext.cid;
-    json applied = json::array();
-    json undo = json::object();
-    for (const auto& row : request.rows)
-    {
-        float value = static_cast<float>(row.value.value_or(0.0));
-        json resolved = nullptr;
-        if (!row.value)
-        {
-            int32_t key = row.key;
-            RED4ext::CString label(row.label.c_str());
-            resolved = ScriptCall("XFPhotoScene", "Resolve", {"Int32", "String"}, {&key, &label}, cid);
-            value = resolved.value("value", 0.0f);
-        }
-        int32_t key = row.key;
-        auto set = ScriptCall("XFPhoto", "SetAttribute", {"Int32", "Float"}, {&key, &value}, cid);
-        if (!resolved.is_null())
-        {
-            set["matched_by"] = resolved.value("matched_by", std::string());
-        }
-        applied.push_back(set);
-        const char* name = row.key == h::kPhotoNpcs ? "npcs" : row.key == h::kPhotoWeather ? "weather" : "game_speed";
-        if (set.value("before_known", true))
-        {
-            undo[name] = name == std::string("game_speed") ? json(set.value("before", 1.0)) : json{{"value", set.value("before", 0.0)}};
-        }
-    }
-    return json{{"applied", applied},
-                {"undo", undo.empty() ? json(nullptr) : json{{"method", "photo.scene.set"}, {"params", undo}}},
-                {"undo_note", "the result's undo sets the rows back; closing photo mode drops them too"}};
+    h::PhotoSceneOps ops;
+    ops.resolve = [cid](const h::PhotoSceneRow& aRow) {
+        int32_t key = aRow.key;
+        RED4ext::CString label(aRow.label.c_str());
+        return ScriptCall("XFPhotoScene", "Resolve", {"Int32", "String"}, {&key, &label}, cid);
+    };
+    ops.set = [cid](int32_t aKey, double aValue) {
+        int32_t key = aKey;
+        float value = static_cast<float>(aValue);
+        return ScriptCall("XFPhoto", "SetAttribute", {"Int32", "Float"}, {&key, &value}, cid);
+    };
+    // RB-111: a row that fails puts the rows already set back before the refusal.
+    return h::RunPhotoScene(request, ops);
 }
 
 // --- the overlay host -----------------------------------------------------------------------------
@@ -321,6 +306,7 @@ void RegisterMethods070(Dispatcher& aDispatcher)
     aDispatcher.Register({"world.probe", Access::Read, RunOn::BridgeThread, "Streaming, walkable ground, ground and ceiling at points (observe only).", &WorldProbe});
     aDispatcher.Register(MarkedWrite("world.weather.set", Access::WriteWorld, RunOn::GameThread, "Holds a weather state or gives the weather back to the game.", &WorldWeather));
     aDispatcher.Register({"ui.state", Access::Read, RunOn::GameThread, "Menus, popups, photo mode's UI, the prompt, the CET overlay and the XF panels.", &UiState});
+    aDispatcher.Register({"ui.ask.state", Access::Read, RunOn::BridgeThread, "What became of a question (pending, answered, gone).", &UiAskState});
     aDispatcher.Register({"game.saves", Access::Read, RunOn::BridgeThread, "The save list with each save's details.", &GameSaves});
     aDispatcher.Register(MarkedWrite("photo.scene.set", Access::WritePhoto, RunOn::GameThread, "Photo mode's surrounding NPCs, weather and game speed rows.", &PhotoScene));
     aDispatcher.Register({"overlay.state", Access::Read, RunOn::BridgeThread, "The XF overlay host's state.", &OverlayState});

@@ -39,7 +39,9 @@ export const point3 = (description: string): JsonSchema => ({ type: "array", des
 /**
  * Runs a capture with the bridge's own overlay out of the picture (0.6, session 6's friction): the coordinator's ui.message
  * lines are cleared and the ink HUD panel and the CET label are switched off for the moment of the capture, then the panel
- * comes back as it was. Without a bridge (or a bridge too old for ui.hud) the capture just runs.
+ * comes back as it was. A question still waiting for the player's answer stays on the board (RB-103: the clear used to take
+ * it away, ending the player's chance to answer); the panel is hidden, so it isn't in the picture either way. Without a
+ * bridge (or a bridge too old for ui.hud) the capture just runs.
  */
 export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>): Promise<{ value: T; overlay: Json }> {
   if (!context.api.session()) return { value: await run(), overlay: { cleared: false, why: "the game bridge isn't running" } };

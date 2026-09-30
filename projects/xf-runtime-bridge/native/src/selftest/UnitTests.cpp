@@ -3222,6 +3222,181 @@ void Bridge070Tests()
     }
 }
 
+// The deep review of bridge 0.7.0 (research/authoring/code-health.md, RB-96..RB-118): the question board's clear, withdraw and
+// state (session.wait's early answer and question_gone), cyberware.equip's sequence keeping its undo, the exact copy and the
+// added copy in a swap's undo, photo.scene.set putting rows back, game.saves' final step, and the overlay host's checks
+// after a resize, its hook rule and its glyph limit.
+void Bridge070ReviewTests()
+{
+    namespace h = xfb::hooks;
+    namespace o = xfb::overlay;
+    namespace p = xfb::params;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+    {
+        xfb::MessageBoard board;
+        const auto ask = board.Post({"Ready for the next frame?", 60, "ask", false}, t0);
+        const auto askId = ask["id"].get<uint64_t>();
+        board.Post({"a line", 60, "info", false}, t0);
+        Check("RB-96 a posted question is pending", board.StateOf(askId, t0).state == "pending");
+        const auto cleared = board.Post({"", 8, "info", true}, t0);
+        xfb::PendingAsk pending;
+        Check("RB-103 a clear takes the lines down but keeps the waiting question", cleared.value("cleared", 0) == 1 && board.Pending(pending, t0) &&
+                                                                                        pending.id == askId && cleared.value("kept_question", 0ull) == askId,
+              cleared.dump());
+        board.Answer(askId, 0, t0);
+        const auto answered = board.StateOf(askId, t0);
+        Check("RB-96 an answered question says so with its answer, even after its line fades",
+              answered.state == "answered" && answered.label == "Ready" && board.StateOf(askId, t0 + std::chrono::seconds(30)).state == "answered");
+        const auto second = board.Post({"And now?", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        const auto withdrawn = board.Post({"", 8, "info", false, {}, false, second}, t0);
+        Check("RB-103 a withdrawn question is gone", withdrawn.value("withdrawn", false) && board.StateOf(second, t0).state == "gone");
+        const auto third = board.Post({"Still there?", 5, "ask", false}, t0)["id"].get<uint64_t>();
+        Check("RB-103 a question that ran out of time is gone", board.StateOf(third, t0 + std::chrono::seconds(6)).state == "gone");
+        const auto fourth = board.Post({"Last one", 60, "ask", false}, t0)["id"].get<uint64_t>();
+        board.Post({"", 8, "info", true, {}, true}, t0);
+        Check("RB-103 clear_asks withdraws a waiting question too", board.StateOf(fourth, t0).state == "gone" && board.Active(t0) == 0);
+        Check("RB-96 an id never posted is unknown", board.StateOf(9999, t0).state == "unknown");
+        const auto undo = xfb::UiMessageUndo(json{{"id", 7}});
+        Check("RB-103 a message's undo withdraws it by id", undo["params"]["withdraw"] == 7 && xfb::UiMessageUndo(json{{"cleared", 1}}).is_null());
+        Check("RB-103 clear_asks goes with clear", ParamsCode([] { p::ParseMessage(json{{"clear_asks", true}}); }) == "bad_params" &&
+                                                       ParamsCode([] { p::ParseMessage(json{{"withdraw", 3}}); }) == "ok");
+    }
+    {
+        // RB-101: cyberware.equip keeps its undo when reading the slot back fails.
+        h::CyberwareEquipRequest request;
+        request.item = "Items.MantisBlades";
+        h::CyberwareEquipOps ops;
+        ops.equip = [] { return json{{"area", "ArmsCW"}, {"slot", 0}, {"added", true}, {"previous", ""}}; };
+        ops.settle = [](const std::string&, int32_t) -> json { throw xfb::MethodError("game_loading", "a save started loading"); };
+        ops.removeAdded = [](const std::string&) { return json{{"removed", true}}; };
+        const auto out = h::RunCyberwareEquip(request, ops);
+        Check("RB-101 a failed read-back answers equipped unknown with the undo", out["equipped"] == "unknown" && out["undo"]["method"] == "cyberware.unequip" &&
+                                                                                     out["undo"]["params"]["remove_added"] == true && out["settle_error"]["code"] == "game_loading",
+              out.dump());
+        ops.equip = []() -> json { throw xfb::MethodError("not_equippable", "the game says V can't equip it"); };
+        Check("RB-101 a refusal in the equip step passes through (nothing changed)", ParamsCode([&] { h::RunCyberwareEquip(request, ops); }) == "not_equippable");
+
+        // RB-109: a swap's undo names the exact earlier copy and removes the copy the bridge added.
+        const auto swap = h::CyberwareEquipUndo(json{{"area", "ArmsCW"}, {"slot", 0}, {"previous", "Items.StrongArms"}, {"id", "123456789"}, {"added", true}},
+                                                "Items.MantisBlades");
+        Check("RB-109 a swap's undo carries the earlier copy's id and removes the added item",
+              swap["params"]["id"] == "123456789" && swap["params"]["remove_added_item"] == "Items.MantisBlades", swap.dump());
+        const auto parsed = h::ParseCyberwareEquip(swap["params"]);
+        Check("RB-109 cyberware.equip takes the undo's id and remove_added_item", parsed.id == "123456789" && parsed.removeAddedItem == "Items.MantisBlades");
+        Check("RB-109 an id is digits only", ParamsCode([] { h::ParseCyberwareEquip(json{{"item", "Items.StrongArms"}, {"id", "12a"}}); }) == "bad_params");
+        int removed = 0;
+        ops.equip = [] { return json{{"area", "ArmsCW"}, {"slot", 0}, {"added", false}, {"previous", "Items.MantisBlades"}}; };
+        ops.settle = [](const std::string&, int32_t) { return json{{"item", "Items.StrongArms"}}; };
+        ops.removeAdded = [&](const std::string& aItem) {
+            removed += aItem == "Items.MantisBlades" ? 1 : 100;
+            return json{{"removed", true}};
+        };
+        h::CyberwareEquipRequest back = parsed;
+        const auto undone = h::RunCyberwareEquip(back, ops);
+        Check("RB-109 running that undo equips the earlier copy, then removes the added one", undone["equipped"] == true && undone["removed"] == true && removed == 1,
+              undone.dump());
+    }
+    {
+        // RB-111: photo.scene.set puts rows already set back when a later row fails.
+        const auto request = h::ParsePhotoScene(json{{"npcs", {{"label", "Off"}}}, {"weather", {{"label", "Blizzard"}}}});
+        std::map<int32_t, double> rows{{54, 1.0}, {69, 0.0}};
+        h::PhotoSceneOps ops;
+        ops.resolve = [](const h::PhotoSceneRow& aRow) -> json {
+            if (aRow.label == "Off")
+            {
+                return json{{"value", 0.0}, {"matched_by", "exact"}};
+            }
+            throw xfb::MethodError("bad_params", "no option labelled " + aRow.label);
+        };
+        ops.set = [&](int32_t aKey, double aValue) {
+            const auto before = rows[aKey];
+            rows[aKey] = aValue;
+            return json{{"before", before}, {"before_known", true}, {"after", aValue}};
+        };
+        std::string message;
+        try
+        {
+            h::RunPhotoScene(request, ops);
+        }
+        catch (const xfb::MethodError& e)
+        {
+            message = std::string(e.code) + ": " + e.what();
+        }
+        Check("RB-111 a failed row puts the rows already set back and says so", rows[54] == 1.0 && message.find("bad_params") == 0 && message.find("put back") != std::string::npos,
+              message);
+    }
+    {
+        // RB-118: game.saves' final step runs even when a read throws.
+        h::SavesOps ops;
+        int reads = 0;
+        bool done = false;
+        auto now = std::chrono::steady_clock::now();
+        ops.request = [] {};
+        ops.read = [&](bool aDone) -> json {
+            if (aDone)
+            {
+                done = true;
+                return json{{"ready", true}};
+            }
+            if (++reads == 2)
+            {
+                throw xfb::MethodError("game_loading", "a save started loading");
+            }
+            return json{{"ready", false}, {"names", json::array()}};
+        };
+        ops.sleep = [&](std::chrono::milliseconds aMs) { now += aMs; };
+        ops.now = [&] { return now; };
+        const auto code = ParamsCode([&] { h::RunSaves(h::SavesRequest{}, ops); });
+        Check("RB-118 game.saves stops collecting in its final step even after a failed read", code == "game_loading" && done && reads == 2);
+    }
+    {
+        o::DeviceFacts first;
+        first.deviceData = first.swapChain = first.directQueue = first.sameDevice = true;
+        first.format = "R8G8B8A8_UNORM";
+        first.windowClass = "W2ViewportClass";
+        first.bufferCount = 3;
+        auto same = first;
+        same.width = 1920;
+        same.height = 1080;
+        Check("RB-97 a resize to a new size alone goes on drawing", o::RefusalAfterResize(first, same).empty());
+        auto hdr = same;
+        hdr.format = "R10G10B10A2_UNORM";
+        Check("RB-97 HDR switched on without a restart refuses after the resize", o::RefusalAfterResize(first, hdr).find("after a resize") == 0);
+        auto hdrMode = same;
+        hdrMode.hdrMode = 2;
+        Check("RB-97 an HDR mode reported after the resize refuses", !o::RefusalAfterResize(first, hdrMode).empty());
+        auto bgra = same;
+        bgra.format = "B8G8R8A8_UNORM";
+        Check("RB-97 a changed 8-bit format refuses too (the pipeline keeps the first)", o::RefusalAfterResize(first, bgra).find("format") != std::string::npos);
+        auto two = same;
+        two.bufferCount = 2;
+        Check("RB-97 a changed buffer count refuses", o::RefusalAfterResize(first, two).find("back buffers") != std::string::npos);
+
+        o::OverlayHost host;
+        host.Configure(true, o::ThemeKind::Dark, 100);
+        host.NoteHooks(true, true, false, "");
+        Check("RB-107 without the render-shutdown hook the host stays unhooked and says why",
+              host.Snapshot()["phase"] == "unhooked" && host.Snapshot()["missing"].get<std::string>().find("render shutdown") != std::string::npos);
+        host.NoteHooks(true, true, true, "");
+        host.NoteInit(first, "");
+        host.NoteInit(hdr, o::RefusalAfterResize(first, hdr));
+        Check("RB-97 a refusal after a resize moves the host to refused", host.Snapshot()["phase"] == "refused" && !host.ShouldDraw());
+        host.NoteFrame(1500.0);
+        Check("RB-108 the panel's figures come from atomics", host.Frames() == 1 && std::abs(host.CpuMs() - 1.5) < 1e-9 && std::abs(host.CpuMsMax() - 1.5) < 1e-9);
+
+        const std::string baked = "Ready? \xE2\x80\x94 caf\xC3\xA9 \xE2\x82\xAC" "5";
+        Check("RB-99 baked text passes unchanged", o::LimitToGlyphs(baked) == baked);
+        Check("RB-99 glyphs outside the baked ranges become U+FFFD", o::LimitToGlyphs("\xE6\x97\xA5\xF0\x9F\x98\x80x") == "\xEF\xBF\xBD\xEF\xBF\xBDx");
+        Check("RB-99 invalid UTF-8 and control characters are replaced", o::LimitToGlyphs("a\xFF\tb") == "a\xEF\xBF\xBD b");
+        bool covered = true;
+        for (const auto& [lo, hi] : o::GlyphRanges())
+        {
+            covered = covered && lo <= hi && hi <= 0xFFFF;
+        }
+        Check("RB-99 the ranges fit Dear ImGui's 16-bit glyph type and include U+FFFD", covered && o::LimitToGlyphs("\xEF\xBF\xBD") == "\xEF\xBF\xBD");
+    }
+}
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -3251,6 +3426,7 @@ int RunUnitTests()
     Bridge060Tests();
     Bridge061Tests();
     Bridge070Tests();
+    Bridge070ReviewTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

@@ -112,6 +112,25 @@ std::string CleanMessageText(const std::string& aText, size_t aMaxChars, bool* a
     return out;
 }
 
+json UiMessageUndo(const json& aPosted)
+{
+    if (aPosted.contains("id"))
+    {
+        return json{{"method", "ui.message"}, {"params", {{"withdraw", aPosted["id"]}}}};
+    }
+    return nullptr;
+}
+
+json AskStateJson(uint64_t aId, const AskState& aState)
+{
+    json out{{"id", aId}, {"state", aState.state}};
+    if (aState.state == "answered")
+    {
+        out["answer"] = {{"choice", aState.choice}, {"label", aState.label}};
+    }
+    return out;
+}
+
 void MessageBoard::DropExpired(Clock::time_point aNow)
 {
     m_messages.erase(std::remove_if(m_messages.begin(), m_messages.end(), [aNow](const Message& aMessage) { return aMessage.expires <= aNow; }),
@@ -123,16 +142,42 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
     std::scoped_lock _(m_mutex);
     DropExpired(aNow);
     size_t cleared = 0;
+    bool withdrawn = false;
+    if (aRequest.withdraw != 0)
+    {
+        const auto before = m_messages.size();
+        m_messages.erase(std::remove_if(m_messages.begin(), m_messages.end(), [&](const Message& aMessage) { return aMessage.id == aRequest.withdraw; }),
+                         m_messages.end());
+        withdrawn = m_messages.size() != before;
+    }
     if (aRequest.clear)
     {
-        cleared = m_messages.size();
-        m_messages.clear();
+        // RB-103: a clear (a capture's, a session step's) takes the lines down but leaves a question that is still waiting
+        // for the player's answer, unless the caller withdraws questions too.
+        const auto before = m_messages.size();
+        m_messages.erase(std::remove_if(m_messages.begin(), m_messages.end(),
+                                        [&](const Message& aMessage) { return aRequest.clearAsks || aMessage.choices.empty(); }),
+                         m_messages.end());
+        cleared = before - m_messages.size();
     }
     bool truncated = false;
     const auto text = CleanMessageText(aRequest.text, kMaxChars, &truncated);
     if (text.empty())
     {
-        return json{{"cleared", cleared}, {"active", m_messages.size()}};
+        json out{{"cleared", cleared}, {"active", m_messages.size()}};
+        if (aRequest.withdraw != 0)
+        {
+            out["withdrawn"] = withdrawn;
+        }
+        if (aRequest.clear && !aRequest.clearAsks)
+        {
+            PendingAsk kept;
+            if (PendingLocked(kept, aNow))
+            {
+                out["kept_question"] = kept.id;
+            }
+        }
+        return out;
     }
     const auto seconds = std::clamp<int32_t>(aRequest.seconds, 1, kMaxSeconds);
     std::vector<std::string> choices;
@@ -267,6 +312,11 @@ json MessageBoard::Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow)
         }
         const auto label = message.choices[static_cast<size_t>(aChoice)];
         json out{{"ok", true}, {"message_id", id}, {"choice", aChoice}, {"label", label}, {"text", message.text}};
+        m_answered.emplace_back(id, AskState{"answered", aChoice, label});
+        while (m_answered.size() > kAnsweredKept)
+        {
+            m_answered.pop_front();
+        }
         message.choices.clear();
         message.level = "done";
         message.text = CleanMessageText("Answered: " + label + " (" + message.text + ")", kMaxChars);
@@ -274,6 +324,27 @@ json MessageBoard::Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow)
         return out;
     }
     return json{{"ok", false}, {"why", id == 0 ? "no question is waiting for an answer" : "that question isn't showing any more"}, {"message_id", id}};
+}
+
+AskState MessageBoard::StateOf(uint64_t aId, Clock::time_point aNow)
+{
+    std::scoped_lock _(m_mutex);
+    DropExpired(aNow);
+    for (const auto& [id, state] : m_answered)
+    {
+        if (id == aId)
+        {
+            return state;
+        }
+    }
+    for (const auto& message : m_messages)
+    {
+        if (message.id == aId && !message.choices.empty())
+        {
+            return {"pending"};
+        }
+    }
+    return {aId == 0 || aId >= m_next ? "unknown" : "gone"};
 }
 
 std::vector<std::pair<std::string, std::string>> MessageBoard::Lines(Clock::time_point aNow)

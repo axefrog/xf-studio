@@ -105,17 +105,19 @@ const STEPS: { back: number; side: number }[] = [
   { back: 0.3, side: 0 }, { back: 0.6, side: 0 }, { back: 0, side: 0.5 }, { back: 0, side: -0.5 }, { back: 0.3, side: 0.5 }, { back: 0.3, side: -0.5 }, { back: 0, side: 1 }, { back: 0, side: -1 },
 ];
 
-type Adjustment = { index: number; from: Vec3; to: Vec3 | null; why: string; note: string };
+type Adjustment = { index: number; from: Vec3; to: Vec3 | null; why: string; note: string; checked?: false };
 
 /**
  * Probes each placement's eyes (world.probe: level rays and a sight line from the anchor) and moves a blocked one to the
- * first clear step, in place (position and eyes together). Without world.probe (an older bridge) nothing is checked.
+ * first clear step, in place (position and eyes together). Without world.probe (an older bridge: `unknown_method`) nothing
+ * is checked. Any other failed probe (RB-117: a timeout, a rate limit, the game gate) is reported for that head as not
+ * checked, and the other heads are still probed.
  */
 export async function findFreeSpace(context: CommandContext, placements: Placement[], anchorEye: Vec3, forward: Vec3): Promise<Adjustment[]> {
   const out: Adjustment[] = [];
   const probe = async (point: Vec3) => {
     const response = await context.api.callBridge("world.probe", { points: [point], clearance_m: CLEARANCE_M, sight_from: anchorEye }, context.cid);
-    if (!response.ok) return null;
+    if (!response.ok) return { failed: response.error.code, message: response.error.message } as const;
     const r = ((response.result as Json).probes as Json[])[0] ?? {};
     const blockedSides = Number(r.clearance?.blocked ?? 0);
     const sight = r.sight?.blocked === true;
@@ -127,7 +129,12 @@ export async function findFreeSpace(context: CommandContext, placements: Placeme
   for (const p of placements) {
     if (!p.eyes) continue;
     const first = await probe(p.eyes);
-    if (!first) return out; // no world.probe: an older bridge
+    if ("failed" in first) {
+      if (first.failed === "unknown_method") return out; // no world.probe: an older bridge
+      out.push({ index: p.index, from: [...p.position] as Vec3, to: null, why: `not checked (${first.failed})`, checked: false,
+        note: `Head ${p.index}'s free space wasn't checked: the probe failed (${first.failed}: ${first.message}); it stands where it was placed.` });
+      continue;
+    }
     if (first.clear) continue;
     const from = [...p.position] as Vec3;
     let moved: Vec3 | null = null;
@@ -135,7 +142,7 @@ export async function findFreeSpace(context: CommandContext, placements: Placeme
       const d: Vec3 = [-f[0] * step.back + right[0] * step.side, -f[1] * step.back + right[1] * step.side, 0];
       const eyes: Vec3 = [p.eyes[0] + d[0], p.eyes[1] + d[1], p.eyes[2]];
       const check = await probe(eyes);
-      if (check?.clear) {
+      if (!("failed" in check) && check.clear) {
         p.position = [p.position[0] + d[0], p.position[1] + d[1], p.position[2]].map((v) => Math.round(v * 1000) / 1000) as Vec3;
         p.eyes = eyes.map((v) => Math.round(v * 1000) / 1000) as Vec3;
         moved = p.position;

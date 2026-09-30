@@ -21,7 +21,9 @@ public abstract class XFUi {
     let boards = GameInstance.GetBlackboardSystem(game);
     let phase = XFBridgeActions.Phase();
     let photo = GameInstance.GetPhotoModeSystem(game).IsPhotoModeActive();
-    let menuOpen = boards.Get(defs.UI_System).GetBool(defs.UI_System.IsInMenu);
+    // RB-113: a blackboard is checked before it is read.
+    let system = boards.Get(defs.UI_System);
+    let menuOpen = IsDefined(system) && system.GetBool(defs.UI_System.IsInMenu);
     let gameData = boards.Get(defs.UIGameData);
     let popupShown = IsDefined(gameData) && gameData.GetBool(defs.UIGameData.Popup_IsShown);
     let popupModal = IsDefined(gameData) && gameData.GetBool(defs.UIGameData.Popup_IsModal);

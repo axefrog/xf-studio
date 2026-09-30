@@ -102,7 +102,7 @@ const BRIDGE_MESSAGES: Record<string, string> = {
   outfit_managed_elsewhere:
     "V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back.",
   bridge_effects_active:
-    "The bridge still holds something on V that a save would keep (a glide's movement hold, a forced crouch, a running behaviour or an outfit it took off), so nothing was saved. player_stop lifts the effects and stops behaviours, and wardrobe_equip with resume: true puts a suspended outfit back; then save again.",
+    "The bridge still holds something that a save would keep (a glide's movement hold, a forced crouch, a running behaviour, an outfit it took off, a weather it holds, or cyberware it changed or added), so nothing was saved. player_stop lifts the effects and stops behaviours, wardrobe_equip with resume: true puts a suspended outfit back, and the undos of world_weather_set and cyberware_equip or cyberware_unequip put those back; then save again.",
   script_outfit_api_changed:
     "The installed Equipment-EX doesn't offer the outfit functions the bridge calls (a different version changed them), so the bridge won't drive its outfit; nothing was changed. wardrobe_equip with suspend: true still takes the outfit off (the story's own request); wardrobe_state names the version and what differs.",
   handed_over:

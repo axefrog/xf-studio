@@ -121,13 +121,16 @@ public abstract class XFScene {
     return new Vector4(head.X + forward.X * 0.08, head.Y + forward.Y * 0.08, head.Z + 0.045, 1.0);
   }
 
+  // RB-113 (the world-object rule): every native answer in a local before any text is built.
   public static func Subject(object: ref<GameObject>, camera: Vector4, occlusion: Bool) -> String {
     let head: Vector4;
     let slot = XFScene.Head(object, head);
     let forward = object.GetWorldForward();
+    let position = object.GetWorldPosition();
+    let yaw = object.GetWorldYaw();
     let face = XFScene.Face(head, forward);
-    let out = "\"position\":" + XFScene.Arr(object.GetWorldPosition()) + ",\"head\":" + XFScene.Arr(head) + ",\"head_slot\":" + XFJson.Flag(slot);
-    out += ",\"forward\":" + XFScene.Arr(forward) + ",\"yaw\":" + XFJson.Num(object.GetWorldYaw()) + ",\"face\":" + XFScene.Arr(face);
+    let out = "\"position\":" + XFScene.Arr(position) + ",\"head\":" + XFScene.Arr(head) + ",\"head_slot\":" + XFJson.Flag(slot);
+    out += ",\"forward\":" + XFScene.Arr(forward) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"face\":" + XFScene.Arr(face);
     if occlusion {
       out += ",\"occlusion\":" + XFScene.Ray(camera, face);
     }
@@ -274,12 +277,15 @@ public abstract class XFScene {
         let light = IsDefined(entity) && entity.IsA(n"gamePhotomodeLightObject") ? entity as GameObject : null;
         out += "{\"light\":" + IntToString(i) + ",\"found\":" + XFJson.Flag(IsDefined(light));
         if IsDefined(light) {
-          out += ",\"position\":" + XFScene.Arr(light.GetWorldPosition()) + ",\"forward\":" + XFScene.Arr(light.GetWorldForward());
+          // RB-113: the light's answers in locals before the text is built (the world-object rule).
+          let lightAt = light.GetWorldPosition();
+          let lightForward = light.GetWorldForward();
+          out += ",\"position\":" + XFScene.Arr(lightAt) + ",\"forward\":" + XFScene.Arr(lightForward);
           if IsDefined(controller) {
             out += ",\"selected\":" + XFJson.Flag(controller.XFBridgeLightIndicatorIndex() == i - 1);
           }
           if hasHead {
-            out += ",\"to_face\":" + XFScene.Ray(light.GetWorldPosition(), face);
+            out += ",\"to_face\":" + XFScene.Ray(lightAt, face);
           }
         } else {
           out += ",\"why\":" + XFJson.Str(IsDefined(entity) ? "the light indicator follows something that isn't a photo-mode light" : "no light entity for it (off, or not placed yet)");

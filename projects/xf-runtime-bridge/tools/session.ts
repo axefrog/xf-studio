@@ -268,7 +268,7 @@ export async function runScript(
       if (options.ask) {
         await untilAborted(options.ask(planned.text!, planned.label), stepSignal);
         if (askShown && !stepSignal?.aborted) {
-          await echo({ clear: true });
+          await echo({ clear: true, clear_asks: true });
           askShown = false;
         }
       } else {
@@ -344,7 +344,7 @@ export async function runScript(
     // An ask still on screen (interrupted while waiting, a crash, or a pause at an ask) is taken down
     // first; a paused run shows its own closing line below instead (RB-64).
     if (askShown) {
-      await echo({ clear: true });
+      await echo({ clear: true, clear_asks: true });
       askShown = false;
     }
     // Restore runs exactly once, after a finished, failed, interrupted or crashed run, and never

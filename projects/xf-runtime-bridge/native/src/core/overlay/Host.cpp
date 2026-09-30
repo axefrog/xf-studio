@@ -43,6 +43,102 @@ std::string RefusalFor(const DeviceFacts& aFacts)
     return {};
 }
 
+std::string RefusalAfterResize(const DeviceFacts& aFirst, const DeviceFacts& aNow)
+{
+    if (auto refusal = RefusalFor(aNow); !refusal.empty())
+    {
+        return "after a resize: " + refusal;
+    }
+    if (aNow.format != aFirst.format)
+    {
+        return "after a resize the back buffer's format is " + aNow.format + ", not " + aFirst.format + " (the overlay's pipeline was built for the first)";
+    }
+    if (aNow.bufferCount != aFirst.bufferCount)
+    {
+        return "after a resize the swap chain has " + std::to_string(aNow.bufferCount) + " back buffers, not " + std::to_string(aFirst.bufferCount) +
+               " (the overlay's heaps and allocators were made for the first)";
+    }
+    return {};
+}
+
+const std::vector<std::pair<uint32_t, uint32_t>>& GlyphRanges()
+{
+    static const std::vector<std::pair<uint32_t, uint32_t>> ranges{
+        {0x0020, 0x007E}, {0x00A0, 0x00FF}, {0x0100, 0x017F}, {0x2010, 0x205E}, {0x20AC, 0x20AC},
+        {0x2122, 0x2122}, {0x2190, 0x2193}, {0xFFFD, 0xFFFD},
+    };
+    return ranges;
+}
+
+std::string LimitToGlyphs(const std::string& aText)
+{
+    const auto baked = [](uint32_t aCp) {
+        for (const auto& [lo, hi] : GlyphRanges())
+        {
+            if (aCp >= lo && aCp <= hi)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto put = [](std::string& aOut, uint32_t aCp) {
+        if (aCp < 0x80)
+        {
+            aOut.push_back(static_cast<char>(aCp));
+        }
+        else if (aCp < 0x800)
+        {
+            aOut.push_back(static_cast<char>(0xC0 | (aCp >> 6)));
+            aOut.push_back(static_cast<char>(0x80 | (aCp & 0x3F)));
+        }
+        else
+        {
+            aOut.push_back(static_cast<char>(0xE0 | (aCp >> 12)));
+            aOut.push_back(static_cast<char>(0x80 | ((aCp >> 6) & 0x3F)));
+            aOut.push_back(static_cast<char>(0x80 | (aCp & 0x3F)));
+        }
+    };
+    std::string out;
+    out.reserve(aText.size());
+    size_t i = 0;
+    while (i < aText.size())
+    {
+        const auto lead = static_cast<unsigned char>(aText[i]);
+        uint32_t cp = 0;
+        size_t length = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : (lead & 0xF8) == 0xF0 ? 4 : 0;
+        bool valid = length != 0 && i + length <= aText.size();
+        if (valid)
+        {
+            cp = length == 1 ? lead : length == 2 ? (lead & 0x1Fu) : length == 3 ? (lead & 0x0Fu) : (lead & 0x07u);
+            for (size_t k = 1; k < length && valid; ++k)
+            {
+                const auto next = static_cast<unsigned char>(aText[i + k]);
+                valid = (next & 0xC0) == 0x80;
+                cp = (cp << 6) | (next & 0x3Fu);
+            }
+            valid = valid && !((length == 2 && cp < 0x80) || (length == 3 && cp < 0x800) || (length == 4 && cp < 0x10000) || cp > 0x10FFFF ||
+                               (cp >= 0xD800 && cp <= 0xDFFF));
+        }
+        if (!valid)
+        {
+            put(out, 0xFFFD);
+            i += 1;
+            continue;
+        }
+        i += length;
+        if (cp < 0x20 || cp == 0x7F || (cp >= 0x80 && cp < 0xA0))
+        {
+            out.push_back(' ');
+        }
+        else
+        {
+            put(out, baked(cp) ? cp : 0xFFFD);
+        }
+    }
+    return out;
+}
+
 const char* PhaseName(Phase aPhase)
 {
     switch (aPhase)
@@ -83,7 +179,11 @@ void OverlayHost::NoteHooks(bool aPresent, bool aResize, bool aShutdown, const s
     m_missing = aMissing;
     if (m_enabled.load())
     {
-        m_phase.store(aPresent && aResize && m_missing.empty() ? Phase::Waiting : Phase::Unhooked);
+        m_phase.store(aPresent && aResize && aShutdown && m_missing.empty() ? Phase::Waiting : Phase::Unhooked);
+        if (!(aPresent && aResize && aShutdown) && m_missing.empty())
+        {
+            m_missing = std::string(!aPresent ? "GpuApi::Present hook" : !aResize ? "GpuApi::ResizeBackbuffer hook" : "render shutdown hook") + " not attached";
+        }
     }
 }
 

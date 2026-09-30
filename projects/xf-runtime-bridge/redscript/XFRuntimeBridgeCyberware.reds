@@ -14,8 +14,37 @@
 // side), so the bridge reports V's capacity before and after and refuses nothing more than the game's IsEquippable does.
 // Every answer names the earlier item for the undo. The save lock is held from the first change; the session ends by
 // loading its save.
+//
+// Deep review of 0.7.0: an item V can't equip is refused before anything changes, and a copy added for it is taken out
+// again (RB-101); an undo names the exact earlier copy (RB-109); the arms aren't swapped or emptied while their weapon is
+// drawn, and a slot outside the area's unlocked slots is refused (RB-112). The slots as they were before the bridge's first
+// change are kept (XFCyberwareSnapshot): game.save refuses while anything differs or an added copy is still in V's
+// inventory, and the kill switch puts them back (RB-102).
 
 module XFRuntimeBridge
+
+// V's cyberware slots before the bridge's first change this session (RB-102).
+public class XFCyberwareSnapshot {
+  public let areas: array<gamedataEquipmentArea>;
+  public let slots: array<Int32>;
+  public let items: array<ItemID>;
+}
+
+// The kill switch's restore removes the copies the bridge added once the queued requests have taken them out of their slots.
+public class XFCyberwareRemoveLater extends DelayCallback {
+  public func Call() -> Void {
+    // Like XFWardrobeRestoreLater (RB-93): the script gate and normal play first; a load discards the change anyway.
+    if !XFBridge_Live() {
+      return;
+    }
+    if NotEquals(XFBridgeActions.Phase(), "gameplay") {
+      XFBridgeLog.Info("kill-restore", "cyberware copies the bridge added left in place: the game isn't in normal play");
+      return;
+    }
+    let removed = XFCyberware.RemoveAddedCopies("kill-restore");
+    XFBridgeLog.Info("kill-restore", "cyberware copies the bridge added removed after the restore: " + IntToString(removed));
+  }
+}
 
 public abstract class XFCyberware {
   public static func Areas() -> array<gamedataEquipmentArea> {
@@ -206,9 +235,169 @@ public abstract class XFCyberware {
     return XFInventory.Refusal();
   }
 
+  // RB-112: whether V has an arm cyberware weapon out (the right weapon slot holds an ArmsCW item).
+  public static func ArmsDrawn(player: ref<PlayerPuppet>) -> Bool {
+    let object = GameInstance.GetTransactionSystem(GetGameInstance()).GetItemInSlot(player, t"AttachmentSlots.WeaponRight");
+    if !IsDefined(object) {
+      return false;
+    }
+    let drawn = object.GetItemID();
+    if !ItemID.IsValid(drawn) {
+      return false;
+    }
+    let area = XFCyberware.ItemArea(ItemID.GetTDBID(drawn));
+    return Equals(area, gamedataEquipmentArea.ArmsCW);
+  }
+
+  // RB-102: the slots as they are now, kept once, before the bridge's first cyberware change this session.
+  public static func NoteSnapshot(player: ref<PlayerPuppet>, data: ref<EquipmentSystemPlayerData>) -> Void {
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) || IsDefined(registry.CyberwareSnapshot()) {
+      return;
+    }
+    let snapshot = new XFCyberwareSnapshot();
+    let areas = XFCyberware.Areas();
+    let i = 0;
+    while i < ArraySize(areas) {
+      let count = data.GetNumberOfSlots(areas[i], false);
+      let s = 0;
+      while s < count {
+        let held = data.GetItemInEquipSlot(areas[i], s);
+        ArrayPush(snapshot.areas, areas[i]);
+        ArrayPush(snapshot.slots, s);
+        ArrayPush(snapshot.items, held);
+        s += 1;
+      }
+      i += 1;
+    }
+    registry.SetCyberwareSnapshot(snapshot);
+  }
+
+  // The copies of cyberware the bridge added this session that V still has.
+  public static func AddedCopies(player: ref<PlayerPuppet>) -> array<ItemID> {
+    let out: array<ItemID>;
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(registry) || !IsDefined(player) {
+      return out;
+    }
+    let system = GameInstance.GetTransactionSystem(GetGameInstance());
+    let added = registry.AddedItems();
+    let i = 0;
+    while i < ArraySize(added) {
+      let area = XFCyberware.ItemArea(ItemID.GetTDBID(added[i]));
+      if NotEquals(area, gamedataEquipmentArea.Invalid) && system.HasItem(player, added[i]) {
+        ArrayPush(out, added[i]);
+      }
+      i += 1;
+    }
+    return out;
+  }
+
+  // RB-102 (game.save's holds): whether the bridge's cyberware changes are still on V: a slot that differs from the
+  // snapshot, or an added copy V still has.
+  public static func Changed() -> Bool {
+    let player = XFInventory.Player();
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(player) || !IsDefined(registry) {
+      return false;
+    }
+    if ArraySize(XFCyberware.AddedCopies(player)) > 0 {
+      return true;
+    }
+    let snapshot = registry.CyberwareSnapshot();
+    if !IsDefined(snapshot) {
+      return false;
+    }
+    let data = EquipmentSystem.GetData(player);
+    if !IsDefined(data) {
+      return false;
+    }
+    let i = 0;
+    while i < ArraySize(snapshot.areas) {
+      let now = data.GetItemInEquipSlot(snapshot.areas[i], snapshot.slots[i]);
+      if now != snapshot.items[i] {
+        return true;
+      }
+      i += 1;
+    }
+    return false;
+  }
+
+  // Removes the added copies that are out of their slots; returns how many.
+  public static func RemoveAddedCopies(cid: String) -> Int32 {
+    let player = XFInventory.Player();
+    let registry = XFBridgeRegistry.Get();
+    if !IsDefined(player) || !IsDefined(registry) {
+      return 0;
+    }
+    let system = GameInstance.GetTransactionSystem(GetGameInstance());
+    let copies = XFCyberware.AddedCopies(player);
+    let removed = 0;
+    let i = 0;
+    while i < ArraySize(copies) {
+      let equipped = EquipmentSystem.GetInstance(player).IsEquipped(player, copies[i]);
+      if !equipped && system.RemoveItem(player, copies[i], 1) {
+        registry.ForgetAddedItem(copies[i]);
+        removed += 1;
+      }
+      i += 1;
+    }
+    return removed;
+  }
+
+  // RB-102, the kill switch: every slot back to what the snapshot holds (the ripperdoc's own requests), then, a moment
+  // later, the copies the bridge added removed. "" when the bridge changed no cyberware.
+  public static func RestoreAfterKill(cid: String) -> String {
+    let registry = XFBridgeRegistry.Get();
+    let player = XFInventory.Player();
+    if !IsDefined(registry) || !IsDefined(player) {
+      return "";
+    }
+    let snapshot = registry.CyberwareSnapshot();
+    let pending = ArraySize(XFCyberware.AddedCopies(player));
+    if !IsDefined(snapshot) && pending == 0 {
+      return "";
+    }
+    let restored = 0;
+    if IsDefined(snapshot) {
+      let data = EquipmentSystem.GetData(player);
+      let equipment = EquipmentSystem.GetInstance(player);
+      let system = GameInstance.GetTransactionSystem(GetGameInstance());
+      let i = 0;
+      while i < ArraySize(snapshot.areas) {
+        let now = data.GetItemInEquipSlot(snapshot.areas[i], snapshot.slots[i]);
+        let before = snapshot.items[i];
+        if now != before {
+          if ItemID.IsValid(now) {
+            let off = new UnequipRequest();
+            off.owner = player;
+            off.areaType = snapshot.areas[i];
+            off.slotIndex = snapshot.slots[i];
+            equipment.QueueRequest(off);
+          }
+          if ItemID.IsValid(before) && system.HasItem(player, before) {
+            let on = new EquipRequest();
+            on.owner = player;
+            on.itemID = before;
+            on.slotIndex = snapshot.slots[i];
+            equipment.QueueRequest(on);
+          }
+          restored += 1;
+        }
+        i += 1;
+      }
+      registry.SetCyberwareSnapshot(null);
+    }
+    if pending > 0 {
+      GameInstance.GetDelaySystem(GetGameInstance()).DelayCallback(new XFCyberwareRemoveLater(), 1.0, false);
+    }
+    return ",\"cyberware_restored\":" + IntToString(restored) + ",\"cyberware_added_to_remove\":" + IntToString(pending);
+  }
+
   // cyberware.equip, step 1: checks, adds the item if asked, queues the equip request into slot (-1: the first empty slot,
-  // else slot 0). Answers the earlier item in that slot for the undo.
-  public static func Equip(cid: String, item: String, slot: Int32, addIfMissing: Bool) -> String {
+  // else slot 0). Answers the earlier item in that slot (and its exact copy, `id`) for the undo. hash: the exact copy to
+  // equip (an undo's), "" for any copy of the record.
+  public static func Equip(cid: String, item: String, hash: String, slot: Int32, addIfMissing: Bool) -> String {
     let refusal = XFCyberware.Refusal();
     if StrLen(refusal) > 0 {
       return refusal;
@@ -239,13 +428,24 @@ public abstract class XFCyberware {
     if index >= slots {
       return XFJson.Fail("bad_params", XFCyberware.AreaName(area) + " has " + IntToString(slots) + " unlocked slot(s); slot " + IntToString(index) + " doesn't exist");
     }
+    let previous = data.GetItemInEquipSlot(area, index);
+    if Equals(area, gamedataEquipmentArea.ArmsCW) && ItemID.IsValid(previous) && XFCyberware.ArmsDrawn(player) {
+      return XFJson.Fail("arms_drawn", "V has her arm cyberware out; holster it first (player_action weapon.holster), then swap it");
+    }
     let system = GameInstance.GetTransactionSystem(GetGameInstance());
-    let id = XFInventory.FindItem(player, tdbid);
+    let id = StrLen(hash) > 0 ? XFInventory.ExactItem(player, tdbid, hash) : XFInventory.FindItem(player, tdbid);
     let added = false;
-    if !ItemID.IsValid(id) {
+    if ItemID.IsValid(id) {
+      // RB-101: the game's own requirement check before anything changes.
+      let owned = system.GetItemData(player, id);
+      if IsDefined(owned) && !data.IsEquippable(owned) {
+        return XFJson.Fail("not_equippable", "the game says V can't equip '" + item + "' now (a requirement such as level or an attribute isn't met); nothing changed");
+      }
+    } else {
       if !addIfMissing {
         return XFJson.Fail("not_in_inventory", "V doesn't have '" + item + "'; pass add_if_missing to add one");
       }
+      XFCyberware.NoteSnapshot(player, data);
       XFBridgeActions.EnsureSaveLock(cid);
       if !system.GiveItemByTDBID(player, tdbid, 1) {
         return XFJson.Fail("call_failed", "the game didn't add '" + item + "' to V's inventory");
@@ -254,16 +454,19 @@ public abstract class XFCyberware {
       if !ItemID.IsValid(id) {
         return XFJson.Fail("call_failed", "'" + item + "' was added but can't be found in V's inventory");
       }
+      // RB-101: the requirement is checked on the added copy (a record has no item data before it exists); a copy V can't
+      // equip is taken out again before the refusal, so the refusal leaves nothing behind.
+      let addedData = system.GetItemData(player, id);
+      if IsDefined(addedData) && !data.IsEquippable(addedData) {
+        let takenOut = system.RemoveItem(player, id, 1);
+        return XFJson.Fail("not_equippable", "the game says V can't equip '" + item + "' now (a requirement such as level or an attribute isn't met); the copy the bridge added was " + (takenOut ? "taken out again" : "left in V's inventory (the game didn't remove it)"));
+      }
       added = true;
       XFBridgeRegistry.Get().NoteAddedItem(id);
     }
-    let itemData = system.GetItemData(player, id);
-    if IsDefined(itemData) && !data.IsEquippable(itemData) {
-      return XFJson.Fail("not_equippable", "the game says V can't equip '" + item + "' now (a requirement such as level or an attribute isn't met)");
-    }
-    let previous = data.GetItemInEquipSlot(area, index);
     let already = ItemID.IsValid(previous) && previous == id;
     if !already {
+      XFCyberware.NoteSnapshot(player, data);
       XFBridgeActions.EnsureSaveLock(cid);
       if ItemID.IsValid(previous) {
         // The ripperdoc takes the earlier item out first (UnequipCyberware, then EquipRequest).
@@ -298,9 +501,16 @@ public abstract class XFCyberware {
       return XFJson.Fail("bad_params", "unknown cyberware area '" + area + "'" + (StrLen(item) > 0 ? " for '" + item + "'" : ""));
     }
     let data = EquipmentSystem.GetData(player);
+    let slots = data.GetNumberOfSlots(type, false);
     let index = slot < 0 ? 0 : slot;
+    // RB-112: only the area's unlocked slots.
+    if index >= slots {
+      return XFJson.Fail("bad_params", XFCyberware.AreaName(type) + " has " + IntToString(slots) + " unlocked slot(s); slot " + IntToString(index) + " doesn't exist");
+    }
+    if Equals(type, gamedataEquipmentArea.ArmsCW) && XFCyberware.ArmsDrawn(player) {
+      return XFJson.Fail("arms_drawn", "V has her arm cyberware out; holster it first (player_action weapon.holster), then take it off");
+    }
     if StrLen(item) > 0 && slot < 0 {
-      let slots = data.GetNumberOfSlots(type, false);
       let s = 0;
       while s < slots {
         let held = data.GetItemInEquipSlot(type, s);
@@ -316,6 +526,7 @@ public abstract class XFCyberware {
       return XFJson.Fail("bad_params", XFCyberware.AreaName(type) + " slot " + IntToString(index) + " holds '" + XFCyberware.Record(before) + "', not '" + item + "'");
     }
     if ItemID.IsValid(before) {
+      XFCyberware.NoteSnapshot(player, data);
       XFBridgeActions.EnsureSaveLock(cid);
       let request = new UnequipRequest();
       request.owner = player;
@@ -337,7 +548,11 @@ public abstract class XFCyberware {
     if Equals(type, gamedataEquipmentArea.Invalid) {
       return XFJson.Fail("bad_params", "unknown cyberware area '" + area + "'");
     }
-    let now = EquipmentSystem.GetData(player).GetItemInEquipSlot(type, slot);
+    let data = EquipmentSystem.GetData(player);
+    if slot < 0 || slot >= data.GetNumberOfSlots(type, false) {
+      return XFJson.Fail("bad_params", XFCyberware.AreaName(type) + " has no slot " + IntToString(slot));
+    }
+    let now = data.GetItemInEquipSlot(type, slot);
     return "{\"ok\":true,\"area\":" + XFJson.Str(area) + ",\"slot\":" + IntToString(slot) + ",\"item\":" + XFJson.Str(XFCyberware.Record(now)) + ",\"empty\":" + XFJson.Flag(!ItemID.IsValid(now)) + "}";
   }
 }

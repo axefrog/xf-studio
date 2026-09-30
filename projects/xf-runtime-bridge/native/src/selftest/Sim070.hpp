@@ -27,6 +27,10 @@ struct Sim070Hooks
 };
 
 void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue& aQueue, const Config& aConfig, Sim070Hooks aHooks);
-// The kill switch's restore of 0.7's state (the weather), as XFWeather.RestoreAfterKill does it; adds to aOut.
+// The kill switch's restore of 0.7's state (the weather; RB-102: V's cyberware as it was before the bridge's first change,
+// and the copies it added removed), as XFWeather.RestoreAfterKill and XFCyberware.RestoreAfterKill do it; adds to aOut.
 void Sim070RestoreAfterKill(nlohmann::json& aOut);
+// What 0.7's writes hold that a save would keep (RB-102, XFGame.BridgeHolds): a weather the bridge holds, cyberware it
+// changed or added.
+nlohmann::json Sim070Holds();
 } // namespace xfb::selftest

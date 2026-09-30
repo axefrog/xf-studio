@@ -75,9 +75,12 @@ add_library(xfb_imgui STATIC
   ${imgui_SOURCE_DIR}/imgui_tables.cpp
   ${imgui_SOURCE_DIR}/imgui_widgets.cpp
   ${imgui_SOURCE_DIR}/backends/imgui_impl_dx12.cpp
+  src/plugin/imgui/ImGuiConfigCheck.cpp
 )
-target_include_directories(xfb_imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
-target_compile_definitions(xfb_imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS IMGUI_DISABLE_WIN32_FUNCTIONS WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(xfb_imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/imgui)
+# RB-98: the bridge's IM_ASSERT (src/plugin/imgui/xfb_imconfig.h) for Dear ImGui and everything that includes it; a build
+# without it fails (ImGuiConfigCheck.cpp, Overlay.cpp). Dear ImGui itself is not patched.
+target_compile_definitions(xfb_imgui PUBLIC "IMGUI_USER_CONFIG=\"xfb_imconfig.h\"" IMGUI_DISABLE_OBSOLETE_FUNCTIONS IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS IMGUI_DISABLE_WIN32_FUNCTIONS WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(xfb_imgui PRIVATE /W3 /utf-8)
 
 # -----------------------------------------------------------------------------

@@ -369,7 +369,8 @@ public abstract class XFGame {
   }
 
   // What the bridge holds on V that a save would keep (RB-83, game.save refuses while anything is listed): the status
-  // effects it applied (a glide's movement hold, a forced crouch) and an outfit it suspended with the story's request.
+  // effects it applied (a glide's movement hold, a forced crouch), an outfit it suspended with the story's request, and
+  // (RB-102) a weather it holds and cyberware it changed or added.
   public static func BridgeHolds(cid: String) -> String {
     let registry = XFBridgeRegistry.Get();
     if !IsDefined(registry) {
@@ -379,6 +380,14 @@ public abstract class XFGame {
     let out = StrMid(effects, 1, StrLen(effects) - 2);
     if registry.IsWardrobeSuspended() {
       out += (StrLen(out) > 0 ? "," : "") + "\"outfit suspended by the bridge\"";
+    }
+    let weather = XFWeather.HeldByBridge();
+    if weather {
+      out += (StrLen(out) > 0 ? "," : "") + "\"weather held by the bridge\"";
+    }
+    let cyberware = XFCyberware.Changed();
+    if cyberware {
+      out += (StrLen(out) > 0 ? "," : "") + "\"cyberware changed by the bridge\"";
     }
     return "{\"ok\":true,\"holds\":[" + out + "]}";
   }
@@ -501,23 +510,25 @@ public abstract class XFGame {
     if !IsDefined(handler) || !IsDefined(registry) {
       return XFJson.Fail("unavailable", "the game's save handler isn't available");
     }
-    registry.ClearSaves();
+    registry.ClearListed();
     registry.StartMetadata();
-    handler.RegisterToCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesReady");
+    handler.RegisterToCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesListed");
     handler.RegisterToCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
     handler.RequestSavesForLoad();
     return "{\"ok\":true,\"requested\":true}";
   }
 
-  // game.saves, step 2: the names and whatever metadata has arrived; `done` stops collecting.
+  // game.saves, step 2: the names and whatever metadata has arrived; `done` stops collecting (the plugin's last step,
+  // taken even when a read failed: RB-118). Its list is its own, never game.load's.
   public static func SavesAnswer(cid: String, done: Bool) -> String {
     let registry = XFBridgeRegistry.Get();
     if !IsDefined(registry) {
       return XFJson.Fail("game_not_ready", "no game session yet");
     }
-    let names = registry.Saves();
+    let names = registry.ListedSaves();
     let metadata = registry.SaveMetadata();
-    let out = "{\"ok\":true,\"ready\":" + XFJson.Flag(registry.SavesReady()) + ",\"names\":[";
+    let ready = registry.ListedReady();
+    let out = "{\"ok\":true,\"ready\":" + XFJson.Flag(ready) + ",\"names\":[";
     let i = 0;
     while i < ArraySize(names) {
       if i > 0 {
@@ -540,6 +551,9 @@ public abstract class XFGame {
       let handler = XFGame.Handler();
       if IsDefined(handler) {
         handler.UnregisterFromCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
+        if !ready {
+          handler.UnregisterFromCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesListed");
+        }
       }
     }
     return out + "]}";

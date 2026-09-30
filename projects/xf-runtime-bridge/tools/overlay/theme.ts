@@ -1,14 +1,19 @@
 // The XF ImGui theme (bridge 0.7): XF Studio's design tokens mapped to a Dear ImGui style, for the bridge's own overlay
 // host (native, core/overlay/ThemeTable.inc) and its Cyber Engine Tweaks window (cet/xf_runtime_bridge/theme.lua).
 //
-// One data-driven table, generated from the Studio's tokens so the two never drift: the :root block of
+// One data-driven table, generated from the Studio's tokens so the two never drift: the :root blocks of
 // projects/xf-studio/authoring/public/studio.css (the style guide's authority) is parsed, every light-dark(light, dark)
 // token is split into its two themes, oklch() is converted to sRGB (Björn Ottosson's OKLab matrices, gamut-clipped per
 // channel), and MAPPING below says which token each ImGui colour and metric takes. Dark is the default theme and light is
 // a manual choice ([overlay] theme in config.ini); nothing switches automatically.
 //
 //   bun tools/overlay/theme.ts            writes both generated files
-//   bun tools/overlay/theme.ts --check    exits 1 when either differs from what the tokens give (tools/test checks it too)
+//   bun tools/overlay/theme.ts --check    exits 1 when either differs from what the tokens give (CI's authoring workflow
+//                                         and tools/test check it too); --css <file> reads another stylesheet (the tests)
+//
+// Only the mapped tokens' resolved values count (RB-104): the generated files carry their hash, not the stylesheet's, so
+// a rule elsewhere in studio.css never fails the check. Every plain :root block is read (RB-116), and a mapped token set
+// in a theme-qualified or @media :root rule is refused (the generator wouldn't see it).
 //
 // The mapping is a design decision for the UI component track's review (AGENTS.md: component-first UI, UI/UX review);
 // this file only carries it out. ImGui has no bevelled corners, so the Studio's bevel becomes its 2 px radius everywhere.
@@ -25,26 +30,71 @@ export const LUA_OUT = join(PROJECT_DIR, "cet", "xf_runtime_bridge", "theme.lua"
 export type Rgba = [number, number, number, number];
 export type Token = { light: string; dark: string };
 
-/** The :root block's custom properties, each split into its light and dark values (a plain value serves both). */
-export function parseRootTokens(css: string): Map<string, Token> {
-  const start = css.indexOf(":root {");
-  if (start < 0) throw new Error("studio.css has no :root block");
-  const end = css.indexOf("\n}", start);
-  const body = css.slice(start + ":root {".length, end).replace(/\/\*[\s\S]*?\*\//g, "");
-  const out = new Map<string, Token>();
+type Rule = { selector: string; body: string; media: boolean };
+
+/** The style rules of a stylesheet, comments removed, with the selectors of rules nested in @media and other at-rules. */
+export function cssRules(css: string): Rule[] {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const out: Rule[] = [];
+  const walk = (from: number, to: number, media: boolean) => {
+    let i = from;
+    while (i < to) {
+      const open = text.indexOf("{", i);
+      if (open < 0 || open >= to) return;
+      const raw = text.slice(i, open);
+      const selector = raw.slice(raw.lastIndexOf(";") + 1).replace(/^[}\s]+/, "").trim(); // after a block-less at-rule (@import)
+      let depth = 1, j = open + 1;
+      while (j < to && depth > 0) {
+        if (text[j] === "{") depth++;
+        else if (text[j] === "}") depth--;
+        j++;
+      }
+      if (selector.startsWith("@")) walk(open + 1, j - 1, true);
+      else out.push({ selector, body: text.slice(open + 1, j - 1), media });
+      i = j;
+    }
+  };
+  walk(0, text.length, false);
+  return out;
+}
+
+function declarations(body: string): [string, string][] {
+  const out: [string, string][] = [];
   for (const declaration of splitTop(body, ";")) {
     const m = /^\s*(--[a-z0-9-]+)\s*:\s*([\s\S]+?)\s*$/.exec(declaration);
-    if (!m) continue;
-    const [, name, value] = m;
-    const ld = /^light-dark\(([\s\S]+)\)$/.exec(value!);
-    if (ld) {
-      const parts = splitTop(ld[1]!, ",");
-      if (parts.length === 2) {
-        out.set(name!, { light: parts[0]!.trim(), dark: parts[1]!.trim() });
-        continue;
-      }
+    if (m) out.push([m[1]!, m[2]!]);
+  }
+  return out;
+}
+
+/**
+ * The custom properties of every plain `:root` block (RB-116: all of them, in order, a later one overriding an earlier;
+ * 0.7.0 read only the first), each split into its light and dark values (a plain value serves both).
+ */
+export function parseRootTokens(css: string): Map<string, Token> {
+  const out = new Map<string, Token>();
+  const roots = cssRules(css).filter((r) => !r.media && r.selector === ":root");
+  if (!roots.length) throw new Error("studio.css has no :root block");
+  for (const rule of roots) {
+    for (const [name, value] of declarations(rule.body)) {
+      const ld = /^light-dark\(([\s\S]+)\)$/.exec(value);
+      const parts = ld ? splitTop(ld[1]!, ",") : [];
+      out.set(name, parts.length === 2 ? { light: parts[0]!.trim(), dark: parts[1]!.trim() } : { light: value, dark: value });
     }
-    out.set(name!, { light: value!, dark: value! });
+  }
+  return out;
+}
+
+/**
+ * Where a token is set in a root-scoped rule other than a plain :root (a theme override such as :root[data-theme="dark"],
+ * or a :root rule inside @media): token -> the selectors. The generator reads plain :root only, so a mapped token set in
+ * one of these would drift from what the Studio shows; buildTheme refuses that (RB-104).
+ */
+export function scopedRootTokens(css: string): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const rule of cssRules(css)) {
+    if (!rule.selector.split(",").some((part) => part.trim().startsWith(":root")) || (!rule.media && rule.selector === ":root")) continue;
+    for (const [name] of declarations(rule.body)) out.set(name, [...(out.get(name) ?? []), (rule.media ? "@media " : "") + rule.selector]);
   }
   return out;
 }
@@ -184,13 +234,20 @@ export const FONTS = {
 } as const;
 
 export type Theme = {
-  source_sha256: string;
+  /** RB-104: the SHA-256 of the mapped tokens' resolved values (colours and metrics), not of the whole stylesheet, so an
+   * unrelated rule in studio.css never makes the tables "drift". */
+  tokens_sha256: string;
   colors: { name: string; token: string; dark: Rgba; light: Rgba }[];
   metrics: { name: string; value: number; from: string }[];
 };
 
 export function buildTheme(css: string): Theme {
   const tokens = parseRootTokens(css);
+  const scoped = scopedRootTokens(css);
+  for (const token of [...MAPPING.map((m) => m.token), ...METRICS.map((m) => m.from)]) {
+    const where = scoped.get(token);
+    if (where) throw new Error(`studio.css sets the mapped token ${token} outside a plain :root block (${where.join("; ")}); the overlay theme reads plain :root only, so it would drift from what the Studio shows. Move the value into :root (with light-dark()) or change the mapping.`);
+  }
   const colour = (token: string, which: "light" | "dark", alpha = 1): Rgba => {
     const t = tokens.get(token);
     if (!t) throw new Error(`studio.css has no token ${token}`);
@@ -203,7 +260,8 @@ export function buildTheme(css: string): Theme {
     if (!t) throw new Error(`studio.css has no token ${m.from}`);
     return { name: m.name, value: px(t.dark), from: m.from };
   });
-  return { source_sha256: createHash("sha256").update(css).digest("hex"), colors, metrics };
+  const tokens_sha256 = createHash("sha256").update(JSON.stringify({ colors, metrics })).digest("hex");
+  return { tokens_sha256, colors, metrics };
 }
 
 const f = (v: number) => (Number.isInteger(v) ? `${v}.0f` : `${v}f`);
@@ -211,7 +269,7 @@ const f = (v: number) => (Number.isInteger(v) ? `${v}.0f` : `${v}f`);
 export function nativeTable(theme: Theme): string {
   const lines = [
     "// GENERATED by tools/overlay/theme.ts from projects/xf-studio/authoring/public/studio.css; do not edit.",
-    `// Source SHA-256 ${theme.source_sha256}. Regenerate with bun tools/overlay/theme.ts (the tests check it).`,
+    `// Mapped tokens' SHA-256 ${theme.tokens_sha256}. Regenerate with bun tools/overlay/theme.ts (CI and the tests check it).`,
     "// Colours are sRGB (gamma-encoded) RGBA, dark then light; metrics are the Studio's pixels at 1x.",
     "// XF_THEME_COLOR(name, token, dark r, g, b, a, light r, g, b, a)",
     ...theme.colors.map((c) => `XF_THEME_COLOR(${c.name}, "${c.token}", ${c.dark.map(f).join(", ")}, ${c.light.map(f).join(", ")})`),
@@ -226,7 +284,7 @@ export function luaTable(theme: Theme): string {
   const rgba = (c: Rgba) => `{ ${c.join(", ")} }`;
   const lines = [
     "-- GENERATED by tools/overlay/theme.ts from projects/xf-studio/authoring/public/studio.css; do not edit.",
-    `-- Source SHA-256 ${theme.source_sha256}. Regenerate with bun tools/overlay/theme.ts (the tests check it).`,
+    `-- Mapped tokens' SHA-256 ${theme.tokens_sha256}. Regenerate with bun tools/overlay/theme.ts (CI and the tests check it).`,
     "-- The XF Studio theme for the bridge's CET window: ImGui colours (sRGB RGBA) per theme and the Studio's metrics in pixels.",
     "return {",
     "  colors = {",
@@ -247,7 +305,8 @@ export function generated(css = readFileSync(STUDIO_CSS, "utf8")) {
 }
 
 if (import.meta.main) {
-  const { native, lua } = generated();
+  const cssAt = process.argv.indexOf("--css");
+  const { native, lua } = generated(readFileSync(cssAt >= 0 ? process.argv[cssAt + 1]! : STUDIO_CSS, "utf8"));
   if (process.argv.includes("--check")) {
     const same = (path: string, text: string) => {
       try {

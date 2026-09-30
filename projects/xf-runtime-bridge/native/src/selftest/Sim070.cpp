@@ -28,6 +28,8 @@ const std::map<std::string, std::string> kHolster{{"Items.StrongArms", "holstere
                                                   {"Items.MantisBlades", "holstered_mantis"},
                                                   {"Items.NanoWires", "holstered_nanowire"},
                                                   {"Items.ProjectileLauncher", "holstered_launcher"}};
+// RB-101: a record V can't equip (a requirement the simulated V doesn't meet).
+const std::string kNotEquippable = "Items.ProjectileLauncher";
 const std::vector<std::string> kWeathers{"24h_weather_sunny", "24h_weather_light_clouds", "24h_weather_rain", "24h_weather_fog"};
 
 struct State
@@ -36,6 +38,11 @@ struct State
     std::map<std::string, std::vector<std::string>> slots; // area -> item per slot ("" empty)
     std::set<std::string> inventory{"Items.MantisBlades", "Items.KiroshiOptics"};
     std::set<std::string> added;
+    // RB-102: the slots before the bridge's first cyberware change (the kill switch puts them back).
+    std::map<std::string, std::vector<std::string>> cyberwareBefore;
+    bool cyberwareSnapshot = false;
+    // RB-101: selftest.cyberware {fail_settle: code} makes the next slot read-back fail with that code.
+    std::string failSettle;
     std::string weather = "24h_weather_sunny";
     bool weatherChanged = false;
     std::string weatherEarlier;
@@ -87,6 +94,38 @@ std::vector<std::string>& SlotsOf(State& aState, const std::string& aArea)
     auto& slots = aState.slots[aArea];
     slots.resize(static_cast<size_t>(SlotCount(aArea)));
     return slots;
+}
+
+void SnapshotCyberware(State& aState)
+{
+    if (!aState.cyberwareSnapshot)
+    {
+        for (const auto& area : h::CyberwareAreas())
+        {
+            aState.cyberwareBefore[area] = SlotsOf(aState, area);
+        }
+        aState.cyberwareSnapshot = true;
+    }
+}
+
+bool CyberwareChanged(State& aState)
+{
+    if (!aState.added.empty())
+    {
+        return true;
+    }
+    if (!aState.cyberwareSnapshot)
+    {
+        return false;
+    }
+    for (const auto& area : h::CyberwareAreas())
+    {
+        if (SlotsOf(aState, area) != aState.cyberwareBefore[area])
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void RequireGameplay(const Sim070Hooks& aHooks, const char* aWhat)
@@ -151,46 +190,85 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
     aDispatcher.Register({"cyberware.equip", Access::WriteInventory, RunOn::BridgeThread, "Equips cyberware (simulated).", [hooks](const MethodContext& aContext) {
                               const auto request = h::ParseCyberwareEquip(aContext.params);
                               hooks->markWrite();
-                              RequireGameplay(*hooks, "cyberware is changed");
-                              std::scoped_lock _(state.mutex);
-                              const auto found = kAreas.find(request.item);
-                              if (found == kAreas.end())
-                              {
-                                  throw MethodError("bad_params", "simulated: '" + request.item + "' isn't a cyberware item record");
-                              }
-                              bool added = false;
-                              if (!state.inventory.count(request.item))
-                              {
-                                  if (!request.addIfMissing)
+                              h::CyberwareEquipOps ops;
+                              // The script's step, as XFCyberware.Equip: checks first; an item V can't equip is refused before
+                              // anything changes, and an added copy is taken out again (RB-101).
+                              ops.equip = [hooks, request] {
+                                  RequireGameplay(*hooks, "cyberware is changed");
+                                  std::scoped_lock _(state.mutex);
+                                  const auto found = kAreas.find(request.item);
+                                  if (found == kAreas.end())
+                                  {
+                                      throw MethodError("bad_params", "simulated: '" + request.item + "' isn't a cyberware item record");
+                                  }
+                                  const bool had = state.inventory.count(request.item) != 0;
+                                  if (!had && !request.addIfMissing)
                                   {
                                       throw MethodError("not_in_inventory", "simulated: V doesn't have '" + request.item + "'; pass add_if_missing to add one");
                                   }
-                                  state.inventory.insert(request.item);
-                                  state.added.insert(request.item);
-                                  added = true;
-                              }
-                              auto& slots = SlotsOf(state, found->second);
-                              int32_t slot = request.slot;
-                              if (slot < 0)
-                              {
-                                  const auto empty = std::find(slots.begin(), slots.end(), std::string());
-                                  slot = empty == slots.end() ? 0 : static_cast<int32_t>(empty - slots.begin());
-                              }
-                              if (slot >= static_cast<int32_t>(slots.size()))
-                              {
-                                  throw MethodError("bad_params", "simulated: " + found->second + " has " + std::to_string(slots.size()) + " slot(s)");
-                              }
-                              hooks->takeSaveLock();
-                              const auto previous = slots[static_cast<size_t>(slot)];
-                              const bool already = previous == request.item;
-                              slots[static_cast<size_t>(slot)] = request.item;
-                              json step{{"item", request.item}, {"area", found->second}, {"slot", slot}, {"added", added}, {"already_equipped", already}, {"previous", previous}};
-                              auto out = step;
-                              out["simulated"] = true;
-                              out["now"] = request.item;
-                              out["equipped"] = true;
-                              out["undo"] = h::CyberwareEquipUndo(step, request.item);
-                              return out;
+                                  if (request.item == kNotEquippable)
+                                  {
+                                      throw MethodError("not_equippable", std::string("simulated: the game says V can't equip '") + request.item + "' now" +
+                                                                             (had ? "" : "; nothing was added"));
+                                  }
+                                  auto& slots = SlotsOf(state, found->second);
+                                  int32_t slot = request.slot;
+                                  if (slot < 0)
+                                  {
+                                      const auto empty = std::find(slots.begin(), slots.end(), std::string());
+                                      slot = empty == slots.end() ? 0 : static_cast<int32_t>(empty - slots.begin());
+                                  }
+                                  if (slot >= static_cast<int32_t>(slots.size()))
+                                  {
+                                      throw MethodError("bad_params", "simulated: " + found->second + " has " + std::to_string(slots.size()) + " slot(s)");
+                                  }
+                                  bool added = false;
+                                  if (!had)
+                                  {
+                                      state.inventory.insert(request.item);
+                                      state.added.insert(request.item);
+                                      added = true;
+                                  }
+                                  hooks->takeSaveLock();
+                                  SnapshotCyberware(state);
+                                  const auto previous = slots[static_cast<size_t>(slot)];
+                                  const bool already = previous == request.item;
+                                  slots[static_cast<size_t>(slot)] = request.item;
+                                  json step{{"simulated", true}, {"item", request.item}, {"area", found->second}, {"slot", slot}, {"added", added},
+                                            {"already_equipped", already}, {"previous", previous}};
+                                  if (!previous.empty())
+                                  {
+                                      step["id"] = std::to_string(std::hash<std::string>{}(previous) % 1000000007ull);
+                                  }
+                                  return step;
+                              };
+                              ops.settle = [](const std::string& aArea, int32_t aSlot) {
+                                  std::scoped_lock _(state.mutex);
+                                  if (!state.failSettle.empty())
+                                  {
+                                      const auto code = state.failSettle;
+                                      state.failSettle.clear();
+                                      throw MethodError(code, "simulated: the game didn't tick while the cyberware request was handled");
+                                  }
+                                  const auto item = SlotsOf(state, aArea).at(static_cast<size_t>(aSlot));
+                                  return json{{"item", item}, {"empty", item.empty()}};
+                              };
+                              ops.removeAdded = [](const std::string& aItem) {
+                                  std::scoped_lock _(state.mutex);
+                                  const bool removed = state.added.erase(aItem) != 0;
+                                  if (removed)
+                                  {
+                                      state.inventory.erase(aItem);
+                                  }
+                                  return json{{"removed", removed}};
+                              };
+                              return h::RunCyberwareEquip(request, ops);
+                          }});
+    aDispatcher.Register({"selftest.cyberware", Access::Read, RunOn::BridgeThread, "Makes the next cyberware slot read-back fail (self-test only).",
+                          [](const MethodContext& aContext) {
+                              std::scoped_lock _(state.mutex);
+                              state.failSettle = aContext.params.value("fail_settle", std::string());
+                              return json{{"fail_settle", state.failSettle}, {"inventory", state.inventory}, {"added", state.added}};
                           }});
     aDispatcher.Register({"cyberware.unequip", Access::WriteInventory, RunOn::BridgeThread, "Empties a cyberware slot (simulated).", [hooks](const MethodContext& aContext) {
                               const auto request = h::ParseCyberwareUnequip(aContext.params);
@@ -220,6 +298,7 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                                   throw MethodError("bad_params", "simulated: " + area + " slot " + std::to_string(slot) + " holds '" + previous + "', not '" + request.item + "'");
                               }
                               hooks->takeSaveLock();
+                              SnapshotCyberware(state);
                               slots[static_cast<size_t>(slot)].clear();
                               bool removed = false;
                               if (request.removeAdded && state.added.count(request.item))
@@ -333,15 +412,16 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                               }
                               hooks->takeSaveLock();
                               const auto before = state.weather;
-                              if (!state.weatherChanged)
-                              {
-                                  state.weatherChanged = true;
-                                  state.weatherEarlier = before;
-                              }
+                              // RB-110: the bridge counts the weather as its own only once the change took.
                               if (!request.name.empty())
                               {
                                   state.weather = request.name;
                                   state.cycle = false;
+                              }
+                              if (!state.weatherChanged)
+                              {
+                                  state.weatherChanged = true;
+                                  state.weatherEarlier = before;
                               }
                               if (request.cycle)
                               {
@@ -379,7 +459,12 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                                                  {{{"index", 0}, {"name", "ManualSave-3"}, {"type", "ManualSave"}, {"location", "Watson"}, {"timestamp", 300}, {"modded", true}},
                                                   {{"index", 1}, {"name", "AutoSave-12"}, {"type", "AutoSave"}, {"location", "Watson"}, {"timestamp", 400}, {"modded", true}},
                                                   {{"index", 2}, {"name", "ManualSave-2"}, {"type", "ManualSave"}, {"location", "Kabuki"}, {"timestamp", 100}, {"modded", true}}}}};
-                              auto out = h::TrimSaves(answer, request.limit);
+                              h::SavesOps ops;
+                              ops.request = [] {};
+                              ops.read = [answer](bool) { return answer; };
+                              ops.sleep = [](std::chrono::milliseconds) {};
+                              ops.now = [] { return std::chrono::steady_clock::now(); };
+                              auto out = h::RunSaves(request, ops);
                               out["simulated"] = true;
                               return out;
                           }});
@@ -390,29 +475,26 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                               {
                                   throw MethodError("not_in_photo_mode", "simulated: photo mode is not open");
                               }
-                              std::scoped_lock _(state.mutex);
-                              const std::map<int32_t, std::vector<std::string>> options{{54, {"Off", "On"}}, {69, {"Default", "Sunny", "Rain"}}};
-                              json applied = json::array(), undo = json::object();
-                              for (const auto& row : request.rows)
-                              {
-                                  double value = row.value.value_or(0.0);
-                                  if (!row.value)
+                              h::PhotoSceneOps ops;
+                              ops.resolve = [](const h::PhotoSceneRow& aRow) {
+                                  static const std::map<int32_t, std::vector<std::string>> options{{54, {"Off", "On"}}, {69, {"Default", "Sunny", "Rain"}}};
+                                  const auto& list = options.at(aRow.key);
+                                  const auto hit = std::find(list.begin(), list.end(), aRow.label);
+                                  if (hit == list.end())
                                   {
-                                      const auto& list = options.at(row.key);
-                                      const auto hit = std::find(list.begin(), list.end(), row.label);
-                                      if (hit == list.end())
-                                      {
-                                          throw MethodError("bad_params", "simulated: no option of photo-mode row " + std::to_string(row.key) + " is labelled '" + row.label + "'");
-                                      }
-                                      value = static_cast<double>(hit - list.begin());
+                                      throw MethodError("bad_params", "simulated: no option of photo-mode row " + std::to_string(aRow.key) + " is labelled '" + aRow.label + "'");
                                   }
-                                  const auto before = state.photoRows[row.key];
-                                  state.photoRows[row.key] = value;
-                                  applied.push_back({{"key", row.key}, {"before", before}, {"after", value}});
-                                  const char* name = row.key == h::kPhotoNpcs ? "npcs" : row.key == h::kPhotoWeather ? "weather" : "game_speed";
-                                  undo[name] = row.key == h::kPhotoGameSpeed ? json(before) : json{{"value", before}};
-                              }
-                              return json{{"simulated", true}, {"applied", applied}, {"undo", {{"method", "photo.scene.set"}, {"params", undo}}}};
+                                  return json{{"value", static_cast<double>(hit - list.begin())}, {"matched_by", "exact"}};
+                              };
+                              ops.set = [](int32_t aKey, double aValue) {
+                                  std::scoped_lock _(state.mutex);
+                                  const auto before = state.photoRows[aKey];
+                                  state.photoRows[aKey] = aValue;
+                                  return json{{"key", aKey}, {"before", before}, {"before_known", true}, {"after", aValue}};
+                              };
+                              auto out = h::RunPhotoScene(request, ops);
+                              out["simulated"] = true;
+                              return out;
                           }});
     aDispatcher.Register({"overlay.state", Access::Read, RunOn::BridgeThread, "The overlay host (simulated renderer).", [hooks](const MethodContext& aContext) {
                               params::RequireOnly(aContext.params, {});
@@ -444,5 +526,45 @@ void Sim070RestoreAfterKill(json& aOut)
         gState->weatherChanged = false;
         aOut["weather_restored"] = gState->weather;
     }
+    // RB-102: the cyberware as it was before the bridge's first change, and the copies it added removed.
+    if (gState->cyberwareSnapshot || !gState->added.empty())
+    {
+        if (gState->cyberwareSnapshot)
+        {
+            for (const auto& [area, slots] : gState->cyberwareBefore)
+            {
+                SlotsOf(*gState, area) = slots;
+            }
+        }
+        json removed = json::array();
+        for (const auto& item : gState->added)
+        {
+            gState->inventory.erase(item);
+            removed.push_back(item);
+        }
+        gState->added.clear();
+        gState->cyberwareSnapshot = false;
+        aOut["cyberware_restored"] = true;
+        aOut["cyberware_removed"] = removed;
+    }
+}
+
+json Sim070Holds()
+{
+    json held = json::array();
+    if (!gState)
+    {
+        return held;
+    }
+    std::scoped_lock _(gState->mutex);
+    if (gState->weatherChanged)
+    {
+        held.push_back("weather held by the bridge (" + gState->weather + ")");
+    }
+    if (CyberwareChanged(*gState))
+    {
+        held.push_back("cyberware changed by the bridge");
+    }
+    return held;
 }
 } // namespace xfb::selftest

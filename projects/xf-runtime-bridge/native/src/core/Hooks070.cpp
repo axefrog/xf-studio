@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "core/Dispatcher.hpp"
 #include "core/Params.hpp"
 
 namespace xfb::hooks
@@ -97,11 +98,20 @@ std::string AreasCsv(const std::vector<std::string>& aAreas)
 
 CyberwareEquipRequest ParseCyberwareEquip(const json& aParams)
 {
-    p::RequireOnly(aParams, {"item", "slot", "add_if_missing"});
+    p::RequireOnly(aParams, {"item", "slot", "add_if_missing", "id", "remove_added_item"});
     CyberwareEquipRequest request;
     request.item = RecordName(aParams, "item", true);
     request.slot = static_cast<int32_t>(p::CheckInteger(aParams, "slot", 0, 9).value_or(-1));
     request.addIfMissing = p::CheckBoolean(aParams, "add_if_missing").value_or(false);
+    if (const auto id = p::CheckText(aParams, "id", 24))
+    {
+        if (id->empty() || id->find_first_not_of("0123456789") != std::string::npos)
+        {
+            p::CheckFail("'id' must be an item copy's identity (digits), as an undo gives it");
+        }
+        request.id = *id;
+    }
+    request.removeAddedItem = RecordName(aParams, "remove_added_item", false);
     return request;
 }
 
@@ -142,7 +152,17 @@ json CyberwareEquipUndo(const json& aStep, const std::string& aItem)
     }
     if (!previous.empty())
     {
-        return json{{"method", "cyberware.equip"}, {"params", {{"item", previous}, {"slot", slot}}}};
+        // RB-109: the exact earlier copy, and the copy the bridge added for this equip removed once it is out of the slot.
+        json params{{"item", previous}, {"slot", slot}};
+        if (const auto id = aStep.value("id", std::string()); !id.empty())
+        {
+            params["id"] = id;
+        }
+        if (aStep.value("added", false))
+        {
+            params["remove_added_item"] = aItem;
+        }
+        return json{{"method", "cyberware.equip"}, {"params", params}};
     }
     json params{{"area", area}, {"slot", slot}};
     if (aStep.value("added", false))
@@ -151,6 +171,58 @@ json CyberwareEquipUndo(const json& aStep, const std::string& aItem)
         params["remove_added"] = true;
     }
     return json{{"method", "cyberware.unequip"}, {"params", params}};
+}
+
+json RunCyberwareEquip(const CyberwareEquipRequest& aRequest, const CyberwareEquipOps& aOps)
+{
+    // A refusal here changed nothing (the script refuses before its first change, or takes an added copy out again).
+    const auto step = aOps.equip();
+    auto out = step;
+    out["undo"] = CyberwareEquipUndo(step, aRequest.item);
+    out["undo_note"] = out["undo"].is_null() ? "it was already equipped: nothing changed"
+                                             : "the result's undo puts the earlier item back (or empties the slot and removes an item the bridge added); loading the save undoes it too";
+    const auto area = step.value("area", std::string());
+    const auto slot = step.value("slot", 0);
+    const auto fail = [&](const std::string& aCode, const std::string& aWhat) {
+        out["equipped"] = "unknown";
+        out["settle_error"] = {{"code", aCode}, {"message", aWhat}};
+        out["note"] = "the equip request was sent, but reading the slot back failed (" + aWhat +
+                      "); the undo above still puts things back, and cyberware_state shows what V has";
+    };
+    try
+    {
+        const auto now = aOps.settle(area, slot);
+        const auto item = now.value("item", std::string());
+        out["now"] = item;
+        const bool equipped = item == aRequest.item;
+        out["equipped"] = equipped;
+        if (!equipped)
+        {
+            out["note"] = "the slot doesn't show the item yet: the game may still be applying it, or refused it (cyberware_state shows what V has)";
+        }
+        if (equipped && !aRequest.removeAddedItem.empty())
+        {
+            // A swap's undo: the copy the bridge added for the swap came out of the slot; remove it now.
+            try
+            {
+                out["removed"] = aOps.removeAdded(aRequest.removeAddedItem).value("removed", false);
+            }
+            catch (const std::exception& e)
+            {
+                out["removed"] = false;
+                out["remove_note"] = std::string("the added copy stays in V's inventory: ") + e.what();
+            }
+        }
+    }
+    catch (const MethodError& e)
+    {
+        fail(e.code, e.what());
+    }
+    catch (const std::exception& e)
+    {
+        fail("internal", e.what());
+    }
+    return out;
 }
 
 json CyberwareUnequipUndo(const json& aStep, bool aRemoved)
@@ -340,6 +412,137 @@ PhotoSceneRequest ParsePhotoScene(const json& aParams)
         p::CheckFail("give npcs, weather or game_speed (photo_state with options lists each row's choices)");
     }
     return request;
+}
+
+json RunPhotoScene(const PhotoSceneRequest& aRequest, const PhotoSceneOps& aOps)
+{
+    struct Applied
+    {
+        int32_t key;
+        double before;
+        bool known;
+    };
+    std::vector<Applied> done;
+    json applied = json::array();
+    json undo = json::object();
+    try
+    {
+        for (const auto& row : aRequest.rows)
+        {
+            double value = row.value.value_or(0.0);
+            json resolved = nullptr;
+            if (!row.value)
+            {
+                resolved = aOps.resolve(row);
+                value = resolved.value("value", 0.0);
+            }
+            auto set = aOps.set(row.key, value);
+            if (!resolved.is_null())
+            {
+                set["matched_by"] = resolved.value("matched_by", std::string());
+            }
+            applied.push_back(set);
+            const bool known = set.value("before_known", true);
+            done.push_back({row.key, set.value("before", row.key == kPhotoGameSpeed ? 1.0 : 0.0), known});
+            const char* name = row.key == kPhotoNpcs ? "npcs" : row.key == kPhotoWeather ? "weather" : "game_speed";
+            if (known)
+            {
+                undo[name] = row.key == kPhotoGameSpeed ? json(set.value("before", 1.0)) : json{{"value", set.value("before", 0.0)}};
+            }
+        }
+    }
+    catch (const std::exception& e)
+    {
+        // RB-111: a later row failed; put the rows already set back, newest first, and say so in the refusal.
+        std::string code = "internal";
+        if (const auto* method = dynamic_cast<const MethodError*>(&e))
+        {
+            code = method->code;
+        }
+        std::string putBack, notBack;
+        for (auto it = done.rbegin(); it != done.rend(); ++it)
+        {
+            const auto name = std::to_string(it->key);
+            if (!it->known)
+            {
+                notBack += (notBack.empty() ? "" : ", ") + name + " (its earlier value wasn't reported)";
+                continue;
+            }
+            try
+            {
+                aOps.set(it->key, it->before);
+                putBack += (putBack.empty() ? "" : ", ") + name;
+            }
+            catch (const std::exception& back)
+            {
+                notBack += (notBack.empty() ? "" : ", ") + name + " (" + back.what() + ")";
+            }
+        }
+        std::string message = e.what();
+        if (!putBack.empty())
+        {
+            message += "; the rows already set were put back (menu keys " + putBack + ")";
+        }
+        if (!notBack.empty())
+        {
+            message += "; not put back: " + notBack;
+        }
+        throw MethodError(code, message);
+    }
+    return json{{"applied", applied},
+                {"undo", undo.empty() ? json(nullptr) : json{{"method", "photo.scene.set"}, {"params", undo}}},
+                {"undo_note", "the result's undo sets the rows back; closing photo mode drops them too"}};
+}
+
+json RunSaves(const SavesRequest& aRequest, const SavesOps& aOps)
+{
+    aOps.request();
+    json answer;
+    std::exception_ptr failure;
+    try
+    {
+        const auto deadline = aOps.now() + std::chrono::milliseconds(aRequest.waitMs);
+        size_t lastCount = 0;
+        int stable = 0;
+        while (aOps.now() < deadline)
+        {
+            aOps.sleep(std::chrono::milliseconds(200));
+            answer = aOps.read(false);
+            const auto count = answer.value("metadata", json::array()).size();
+            const auto names = answer.value("names", json::array()).size();
+            stable = count == lastCount ? stable + 1 : 0;
+            lastCount = count;
+            if (answer.value("ready", false) && (count >= names || stable >= 3))
+            {
+                break;
+            }
+        }
+    }
+    catch (...)
+    {
+        failure = std::current_exception();
+    }
+    // Always the final step: it stops collecting and lets go of the load menu's callbacks, whatever happened above.
+    try
+    {
+        auto last = aOps.read(true);
+        if (!failure)
+        {
+            answer = std::move(last);
+        }
+    }
+    catch (...)
+    {
+        if (!failure)
+        {
+            failure = std::current_exception();
+        }
+    }
+    if (failure)
+    {
+        std::rethrow_exception(failure);
+    }
+    return TrimSaves(answer, aRequest.limit);
 }
 
 SavesRequest ParseSaves(const json& aParams)

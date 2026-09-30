@@ -1191,9 +1191,10 @@ json GameSave(const params::GameSaveRequest& aRequest, const SaveOps& aOps)
             {
                 names += (names.empty() ? "" : ", ") + (item.is_string() ? item.get<std::string>() : item.dump());
             }
-            throw MethodError("bridge_effects_active", "the bridge still holds something on V that a save would keep (" + names +
+            throw MethodError("bridge_effects_active", "the bridge still holds something that a save would keep (" + names +
                                                            "); nothing was saved. player_stop lifts the effects and stops behaviours "
-                                                           "(wardrobe_equip {resume: true} puts a suspended outfit back), then save again");
+                                                           "(wardrobe_equip {resume: true} puts a suspended outfit back; the weather's and "
+                                                           "cyberware's undos put those back), then save again");
         }
     }
     const auto prepared = aOps.prepare();

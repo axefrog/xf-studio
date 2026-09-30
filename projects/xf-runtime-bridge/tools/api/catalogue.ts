@@ -475,8 +475,10 @@ async function runFrame(input: Record<string, unknown>, context: CommandContext)
       };
     }
     if (rollBefore !== undefined && Math.abs(rollBefore) > 0.5) result.notes.unshift(`The camera preset rolled the camera ${Math.round(rollBefore)} degrees; it was levelled (keep_roll keeps it).`);
-    if (reseated) result.notes.unshift(`Photo mode's camera was ${reseated.from_m} m from V, too far for the ${lensName} lens, so camera preset 1 brought it back near V first (reseat_camera: false keeps it where it was).`);
-    return { value: preset !== undefined ? { ...result, camera_preset: preset, ...(reseated ? { reseated_camera: reseated } : {}) } : result };
+    // RB-117: the undo selects the earlier camera preset, but no setting puts a drone camera back where it was flown (photo
+    // mode has no camera position setter), so the note says so.
+    if (reseated) result.notes.unshift(`Photo mode's camera was ${reseated.from_m} m from V, too far for the ${lensName} lens, so camera preset 1 brought it back near V first (reseat_camera: false keeps it where it was). The undo selects the earlier camera preset but can't put the drone camera back where it was flown: photo mode has no setting for the camera's position.`);
+    return { value: preset !== undefined ? { ...result, camera_preset: preset, ...(reseated ? { reseated_camera: { ...reseated, position_restorable: false } } : {}) } : result };
   } catch (error) {
     // Every failure path puts back what this call changed (RB-68): the framing loop has already put back the
     // field of view and V's placement; the camera preset, roll and look-at set here go back now, in one call
@@ -1412,16 +1414,18 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "ui.message",
     title: "Show a message in the game",
     description:
-      "Shows a message to the player under the bridge's status label in the top-left corner of the game and in the XF panel (so the player never has to leave the game): up to 600 characters, wrapped, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. An ask shows answer buttons: choices (1 to 4 labels), or Ready, Yes and No by default; the player answers with the key the XF panel shows next to each (F6, F7, F8, F11 by default) or the button in the XF window of the Cyber Engine Tweaks overlay, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it. clear: true removes them all. The kill switch clears them too.",
+      "Shows a message to the player under the bridge's status label in the top-left corner of the game and in the XF panel (so the player never has to leave the game): up to 600 characters, wrapped, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. An ask shows answer buttons: choices (1 to 4 labels), or Ready, Yes and No by default; the player answers with the key the XF panel shows next to each (F6, F7, F8, F11 by default) or the button in the XF window of the Cyber Engine Tweaks overlay, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it. clear: true takes the lines down but leaves a question still waiting for its answer (clear_asks: true withdraws it too); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
     permission: "notify",
     input: obj({
       text: str("The message (at most 600 characters are shown).", { minLength: 1, maxLength: 2000 }),
       seconds: int("How long it shows, 1 to 600 seconds. Default 8; give a question long enough for the player to answer.", 1, 600),
       level: oneOf("info (default), ask, warn or done.", ["info", "ask", "warn", "done"]),
       choices: { type: "array", description: "With level ask: the answers offered, 1 to 4 short labels (default Ready, Yes, No).", items: str("An answer's label (1 to 24 characters).", { minLength: 1, maxLength: 24 }), minItems: 1, maxItems: 4 },
-      clear: bool("Remove every message first (alone: only that)."),
+      clear: bool("Remove the lines first (alone: only that); a question still waiting for its answer stays."),
+      clear_asks: bool("With clear: withdraw a waiting question too (a session_wait on it ends with question_gone)."),
+      withdraw: int("Take down the message with this id (ui_message's id); a question withdrawn this way ends its session_wait with question_gone.", 1, 1e9),
     }),
-    undo: "ui.message with clear: true; messages also fade by themselves.",
+    undo: "The result's undo withdraws the message by its id; messages also fade by themselves.",
     bridge: { method: "ui.message" },
   },
   {

@@ -48,7 +48,7 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
     expect(posted.ok, JSON.stringify(posted)).toBe(true);
     const after = await frame(api);
     expect(after.messages).toEqual([{ level: "ask", text: "Press the photo-mode key" }]);
-    await api.run("ui.message", { clear: true });
+    await api.run("ui.message", { clear: true, clear_asks: true });
   });
 
   test("ui.hud moves, scales and hides it, and its undo puts every setting back", async () => {

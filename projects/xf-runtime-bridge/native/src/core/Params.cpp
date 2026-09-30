@@ -279,7 +279,7 @@ std::optional<std::array<double, 3>> CheckPoint(const json& aParams, const char*
 
 MessageRequest ParseMessage(const json& aParams)
 {
-    RequireOnly(aParams, {"text", "seconds", "level", "clear", "choices"});
+    RequireOnly(aParams, {"text", "seconds", "level", "clear", "choices", "clear_asks", "withdraw"});
     MessageRequest request;
     const auto it = aParams.find("text");
     if (it != aParams.end() && !it->is_null())
@@ -304,6 +304,12 @@ MessageRequest ParseMessage(const json& aParams)
         request.level = *level;
     }
     request.clear = Boolean(aParams, "clear").value_or(false);
+    request.clearAsks = Boolean(aParams, "clear_asks").value_or(false);
+    if (request.clearAsks && !request.clear)
+    {
+        Bad("clear_asks goes with clear: true");
+    }
+    request.withdraw = static_cast<uint64_t>(Integer(aParams, "withdraw", 1, 1000000000).value_or(0));
     // 0.7: an ask's answer buttons (the in-game panel's keys and the CET window's buttons).
     if (const auto found = aParams.find("choices"); found != aParams.end() && !found->is_null())
     {
@@ -324,9 +330,9 @@ MessageRequest ParseMessage(const json& aParams)
             Bad("'choices' go with level ask (a question the player answers in the game)");
         }
     }
-    if (request.text.empty() && !request.clear)
+    if (request.text.empty() && !request.clear && request.withdraw == 0)
     {
-        Bad("give text (the message) or clear: true");
+        Bad("give text (the message), clear: true or withdraw (a message's id)");
     }
     if (!request.text.empty() && CleanMessageText(request.text, MessageBoard::kMaxChars).empty())
     {
