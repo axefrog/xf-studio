@@ -54,9 +54,11 @@ public abstract class XFPlayer {
     // 0.7 (session 7): the gameplay tiers, as the player state machine's high level reports them (gamePSMHighLevel 0-5,
     // orphans.script:6685; GameplayTier Tier1_FullGameplay .. Tier5_Cinematic, orphans.script:3105; highLevelTransitions.script
     // SceneTierII..V). Tiers 3 to 5 are the scene holding V (limited gameplay on a spline, first-person cinematic, cinematic):
-    // refused. Tier 2 is staged gameplay (V's apartment, clubs: weapons away, walking pace set by the scene), where the scene
-    // system also counts V as in a scene without holding her: session 7 read in_scene true in the apartment. There the
-    // bridge's reversible moves are allowed, like the player's own walking; a dialogue is still refused in every tier.
+    // refused. Tier 2 is staged gameplay (V's apartment, clubs: weapons away, walking pace set by the scene) and tier 1 full
+    // gameplay: the bridge's reversible moves are allowed, like the player's own walking. The scene system's
+    // IsEntityInScene(V) is no guide: session 7 read it true in V's apartment (tier 2) and on a walkway during The Pickup
+    // (tier 1), where every move was refused; it is reported (player.state in_scene, staged_scene) but not used. A dialogue
+    // is refused in every tier.
     let defs = GetAllBlackboardDefs().PlayerStateMachine;
     let high = XFPlayer.Psm(player, defs.HighLevel);
     if high >= 3 && high <= 5 {
