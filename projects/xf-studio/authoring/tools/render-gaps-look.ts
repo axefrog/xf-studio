@@ -19,6 +19,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { decodePng } from "../src/png";
+import { readSavedV } from "../src/save-reader";
 import { launch } from "./cdp";
 
 const argv = process.argv.slice(2);
@@ -48,6 +49,13 @@ async function session(scheme: "light" | "dark", width = 960, height = 680, body
   await page.waitFor("document.querySelector('.dock-group') && window.xfStudioPresentation?.viewport.snapshot().head.phase === 'ready'", 300000);
   // The body off unless the scenario needs it: the host then prepares the head alone, and the page holds far less (a 4 GB guard).
   if (!body) await run({ kind: "preview.setBody", enabled: false });
+  /** The shown V placed and nothing preparing (the viewport's status line gone). */
+  const ready = async (slot?: string) => {
+    await page.wait(1500);
+    await page.waitFor(`(() => { const e = window.xfStudioSceneEvidence?.()?.characterDetails; if (!e || !e.skin) return false;
+      ${slot ? `if (!(e.components ?? []).some(c => c.slot === ${JSON.stringify(slot)})) return false;` : ""}
+      return !/Preparing your V/.test(document.body.innerText); })()`, 900000);
+  };
   const settle = async (ms = 1500) => {
     await page.wait(ms);
     await page.waitFor("(() => { const e = window.xfStudioSceneEvidence?.(); return e && !e.frames.running; })()", 60000).catch(() => undefined);
@@ -68,7 +76,10 @@ async function session(scheme: "light" | "dark", width = 960, height = 680, body
     await page.waitFor(`!!window.xfStudioPresentation.authoring.characterPanel()`, 300000);
     const option = await page.evaluate<{ id: string; part: string; name: string; label: string; count: number } | null>(`(() => {
       const panel = window.xfStudioPresentation.authoring.characterPanel();
-      const o = panel.options.find(o => new RegExp(${JSON.stringify(pattern)}, "i").test(o.name));
+      const view = window.xfStudioPresentation.authoring.characterView();
+      const matching = panel.options.filter(o => new RegExp(${JSON.stringify(pattern)}, "i").test(o.name) && !/cyberware|fpp/i.test(o.name));
+      // The one the shown V uses (an active row with a value), else the first.
+      const o = matching.find(o => view?.values?.[o.id]) ?? matching[0];
       return o ? { id: o.id, part: o.part, name: o.name, label: o.label, count: o.count } : null; })()`);
     if (!option) throw Error(`No creator option matches ${pattern}`);
     await page.waitFor(`window.xfStudioPresentation.authoring.characterChoices(${JSON.stringify(option.id)}, 400).choices.length >= ${Math.min(position + 1, option.count)}`, 120000);
@@ -81,18 +92,20 @@ async function session(scheme: "light" | "dark", width = 960, height = 680, body
     await placed(before);
     return { option, choice };
   };
-  return { page, run, settle, identity, placed, canvasRect, maximize, choose };
+  return { page, run, settle, identity, placed, canvasRect, maximize, choose, ready };
 }
 
 try {
   if (scenarios.has("teeth")) {
     const s = await session("dark");
-    await s.page.waitFor(`!!window.xfStudioSceneEvidence()?.characterDetails?.skin`, 900000);
+    await s.ready("teeth");
     for (const action of [{ kind: "preview.setSurfaceControls", enabled: false }, { kind: "preview.setLightingPreset", preset: "creator" },
       { kind: "preview.setHair", enabled: false }, { kind: "motion.setIdle", enabled: true }, { kind: "motion.setPaused", paused: true }]) await s.run(action).catch(() => undefined);
     await s.maximize(); await s.settle(3000);
     const rect = await s.canvasRect();
     await s.run({ kind: "camera.restore", camera: { position: [0, 1.627, -0.30], target: [0, 1.622, -0.068], fov: 10 } });
+    // Where the parting sits in the frame (the camera restore keeps the idle's displacement, so the mouth is off centre).
+    const teethBox: [number, number, number, number] = [0.1, 0.585, 0.38, 0.625];
     const hasMouth = await s.page.evaluate<boolean>(`!!window.xfStudioSceneEvidence()?.mouth`);
     const frames: Record<string, unknown>[] = [];
     for (const t of [2.4, 14.45, 6.0]) {
@@ -103,7 +116,7 @@ try {
         const file = resolve(out, `${name}.png`);
         await s.page.screenshot(file, rect);
         return { name, mouth: hasMouth ? await s.page.evaluate(`window.xfStudioSceneEvidence().mouth`) : null,
-          luminance: { mouth: boxLuminance(file, [0.4, 0.46, 0.6, 0.54]) } };
+          luminance: { teethBox: boxLuminance(file, teethBox) } };
       };
       frames.push({ t, ...(await shoot(`teeth-t${t}`)) });
       if (hasMouth) {
@@ -121,11 +134,14 @@ try {
     await dark.run({ kind: "character.useDefault", bodyGender: "male" });
     await dark.placed(before);
     const picked = await dark.choose("^beard$", beardAt);
+    await dark.ready("face");
     for (const action of [{ kind: "preview.setSurfaceControls", enabled: false }, { kind: "preview.setLightingPreset", preset: "creator" },
       { kind: "motion.setIdle", enabled: false }]) await dark.run(action).catch(() => undefined);
     const evidence = await dark.page.evaluate(`(() => { const e = window.xfStudioSceneEvidence().characterDetails;
       return { slots: e.slots ?? null, face: (e.components ?? []).filter(c => c.slot === "face").map(c => ({ option: c.option, component: c.component, meshes: c.meshes ?? null })) }; })()`);
     const panelShot = async (s: Awaited<ReturnType<typeof session>>, name: string) => {
+      await s.page.evaluate(`window.xfStudioShell.dock.reveal("character")`);
+      await s.page.wait(1500);
       // The Character panel's beard rows: the panel scrolled to the first row whose label mentions a beard.
       const box = await s.page.evaluate<{ x: number; y: number; width: number; height: number } | null>(`(() => {
         const row = [...document.querySelectorAll(".cc-row")].find(r => /beard/i.test(r.querySelector(".cc-row-label")?.textContent ?? ""));
@@ -157,8 +173,10 @@ try {
   if (scenarios.has("arms") && save) {
     const s = await session("dark", 960, 680, true);
     const before = await s.identity();
-    await s.page.chooseFiles([resolve(save)]);
-    await s.page.send("Runtime.evaluate", { expression: `window.xfStudioShell.runtime.file({ kind: "savedV.import" })`, awaitPromise: true, userGesture: true });
+    // The save decoded here with XF Studio's own reader and shown through the character context (no file picker in a headless page).
+    const decoded = readSavedV(new Uint8Array(readFileSync(resolve(save))));
+    report.armsSave = { isMale: decoded.isMale, arms: decoded.loadout?.arms ?? null };
+    await s.run({ kind: "character.loadSave", value: decoded });
     await s.placed(before);
     for (const action of [{ kind: "preview.setSurfaceControls", enabled: false }, { kind: "preview.setBody", enabled: true },
       { kind: "motion.setIdle", enabled: false }]) await s.run(action).catch(() => undefined);
@@ -182,7 +200,7 @@ try {
   }
   if (scenarios.has("hair")) {
     const s = await session("dark");
-    await s.page.waitFor(`!!window.xfStudioSceneEvidence()?.characterDetails?.skin`, 900000);
+    await s.ready("hair");
     for (const action of [{ kind: "preview.setSurfaceControls", enabled: false }, { kind: "motion.setIdle", enabled: false },
       { kind: "preview.setLightingPreset", preset: "creator" }, { kind: "camera.creatorFraming", page: "hair" }]) await s.run(action).catch(() => undefined);
     await s.maximize(); await s.settle(3000);
@@ -190,6 +208,7 @@ try {
     const picked: unknown[] = [];
     for (const position of colours) {
       picked.push(await s.choose("^hair_color", position));
+      await s.ready("hair");
       await s.run({ kind: "camera.creatorFraming", page: "hair" }).catch(() => undefined);
       await s.settle(2500);
       const file = resolve(out, `hair-colour-${position}.png`);
