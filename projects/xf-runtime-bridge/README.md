@@ -173,7 +173,7 @@ Tools are the catalogue with dots as underscores (`photo_camera_set`), each desc
 
 ## Build and check
 
-Needs Visual Studio 2022 (MSVC 14.43), CMake 4.0.1 and Bun 1.4.2. The native dependencies are fetched and pinned: RED4ext.SDK tag `1.0.0` and nlohmann/json 3.12.0 (release tarball, SHA-256 pinned). The tools' dependencies are pinned in `package.json` / `bun.lock`.
+Needs Visual Studio 2022 (MSVC 14.43), CMake 4.0.1 and Bun 1.4.2. The native dependencies are fetched and pinned: RED4ext.SDK tag `1.0.0`, nlohmann/json 3.12.0 (release tarball, SHA-256 pinned) and, from 0.7, Dear ImGui at commit `9b4eb24c` (tag `v1.92.9-docking`; `-DXFB_IMGUI_GIT=<local clone>` builds offline). The tools' dependencies are pinned in `package.json` / `bun.lock`.
 
 ```powershell
 # from projects/xf-runtime-bridge; add -DXFB_RED4EXT_SDK_GIT=D:/Dev/RED4ext.SDK to clone the SDK from a local checkout
@@ -189,6 +189,7 @@ bun tools/lint-redscript.ts --bundle <COPY> --codeware <Codeware repository>/scr
 bun tools/lint-redscript.ts --bundle <COPY> --codeware <Codeware repository>/scripts --extra tools/lint-stubs/equipment-ex --extra <TweakXL repository>/scripts
                                                        # 0.6: the Equipment-EX and TweakXL branches (0.6.1: the Equipment-EX branch needs Codeware too)
 bun tools/lint-lua.ts
+bun tools/overlay/theme.ts --check                     # 0.7: the overlay's theme tables match XF Studio's tokens (bun tools/overlay/theme.ts regenerates them)
 bun tools/package.ts                                   # three zips in dist/ (see below)
 ```
 
