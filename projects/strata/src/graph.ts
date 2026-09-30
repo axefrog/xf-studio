@@ -1368,22 +1368,24 @@ export class StrataGraph implements GraphView {
   private forgetGone(): void {
     this.purgedRefs.clear();
     const gone = (id: string) => !this.records.has(id) && !this.inlined.has(id) && !this.layerIndex.has(id);
-    const candidates = new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()].filter(gone));
-    if (!candidates.size) return;
+    const nodesOf = (id: string) => [this.effectiveNodes.get(id), this.entitySeeds.get(id)].filter((node): node is KNode => !!node);
+    // The gone nodes whose kernel nodes nothing else wires in, where the gone nodes that go with them don't count.
+    const going = new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()].filter(gone));
+    for (let changed = true; changed;) {
+      changed = false;
+      const doomed = new Set([...going].flatMap(nodesOf));
+      for (const id of going) if (nodesOf(id).some(node => [...node.demands.keys()].some(consumer => consumer instanceof KNode && !doomed.has(consumer)))) {
+        going.delete(id);
+        changed = true;
+      }
+    }
     kernelInternals.release(this.env, () => {
-      for (let removed = true; removed;) {
-        removed = false;
-        for (const id of candidates) {
-          const nodes = [this.effectiveNodes.get(id), this.entitySeeds.get(id)].filter((node): node is KNode => !!node);
-          if (nodes.some(node => [...node.demands.keys()].some(consumer => consumer instanceof KNode && !nodes.includes(consumer)))) continue;
-          for (const node of nodes) kernelInternals.removeNow(this.env, node);
-          this.effectiveNodes.delete(id); this.entitySeeds.delete(id); candidates.delete(id);
-          removed = true;
-        }
+      for (const id of going) {
+        for (const node of nodesOf(id)) kernelInternals.removeNow(this.env, node);
+        this.effectiveNodes.delete(id); this.entitySeeds.delete(id);
       }
     });
   }
-
 
   private indexLayers(id: string, before: NodeState | null, after: NodeState | null): void {
     if (before && after && before.layers === after.layers) return;

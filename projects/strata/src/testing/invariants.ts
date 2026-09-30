@@ -252,6 +252,8 @@ export function tableSizes(graph: Graph) {
     outbox: t.outbox, rejected: t.rejected, ackedCommits: t.ackedCommits.size, entitySeeds: t.entitySeeds.size, effectiveNodes: t.effectiveNodes.size,
     goneMachinery: count(new Set([...t.entitySeeds.keys(), ...t.effectiveNodes.keys()]), id => !machineryKept(id)),
     assembled: t.assembled.size, reports: t.reports, flushWaiters: t.flushWaiters,
+    // Listeners on the store run's token: each store task's watcher lets go once it settles.
+    storeListeners: (graph.storeProcess?.signal as { listeners?: unknown[] } | undefined)?.listeners?.length ?? 0,
   };
 }
 

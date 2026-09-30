@@ -1,9 +1,9 @@
 {
   "full": {
     "mutants": {
-      "killed": 4257,
+      "killed": 4365,
       "survived": 0,
-      "equivalent": 506,
+      "equivalent": 440,
       "percent": 100
     },
     "coverage": {

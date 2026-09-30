@@ -57,15 +57,13 @@ A key is the file (from the repository root), the function, the kind of change, 
   A host demand's label is kept for a person inspecting it; nothing reads it.
 - ``projects/strata/src/kernel/kernel.ts|Environment.cycleAt|number changed|0|1|0|fn:f8e0b4cdad2086fc``
   `cycleAt` is set when each cycle starts and read only while one runs.
-- ``projects/strata/src/kernel/kernel.ts|Environment.constructor|statement removed|this.scopes.set(this.root, this.rootScope);|;|0|fn:2d42af309c404406``
-  The root never finishes, and only a finishing process looks its scope up; the root's scope is used directly.
-- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|test → true|consumer instanceof HostDemand|true|0|fn:d6080e9f0746c364``
+- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|test → true|consumer instanceof HostDemand|true|0|fn:3b7a557c3d860c1b``
   Releasing a node consumer's edge on a node being forgotten changes nothing observable: the forgotten node is deactivated either way, and a consumer releasing it later finds no edge.
-- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|test → true|node.kind === "effect"|true|0|fn:d6080e9f0746c364``
+- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|test → true|node.kind === "effect"|true|0|fn:3b7a557c3d860c1b``
   Disconnecting a node that isn't a connected effect returns at once (it has no scope).
-- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|test → true|node.active && node.kind !== "effect"|true|0|fn:d6080e9f0746c364``
+- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|test → true|node.active && node.kind !== "effect"|true|0|fn:3b7a557c3d860c1b``
   Deactivating a node that is already inactive, or an effect just disconnected, changes nothing.
-- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|&& → |||&&||||0|fn:d6080e9f0746c364``
+- ``projects/strata/src/kernel/kernel.ts|Environment.removeNow|&& → |||&&||||0|fn:3b7a557c3d860c1b``
   As above: the extra cases are inactive nodes, which deactivating again leaves as they are.
 - ``projects/strata/src/kernel/kernel.ts|Environment.release|push → unshift|push|unshift|0|fn:5d168e9f721f4389``
   Every change that adds something (a demand, a connection, an effect) checks its token before it applies, and rewiring an inactive node demands nothing: releases running first end in the same state.
@@ -143,19 +141,7 @@ A key is the file (from the repository root), the function, the kind of change, 
   A connected effect is always in its scope's list (it is pushed when connected), so the index is never -1.
 - ``projects/strata/src/kernel/kernel.ts|Environment.disconnect|test → true|effect.active|true|0|fn:68e139fa1bd57d4``
   Deactivating an inactive effect changes nothing.
-- ``projects/strata/src/kernel/kernel.ts|Environment.forgetEffect|test → false|index >= 0|false|0|fn:176f5611cdc8b687``
-  Only the run's own list of its effects differs: an effect forgotten early stays in it until the run ends, whose end forgets it again (idempotently); nothing else reads the list, and the effect is disconnected and out of the environment either way.
-- ``projects/strata/src/kernel/kernel.ts|Environment.forgetEffect|>= → <|>=|<|0|fn:176f5611cdc8b687``
-  Only the run's own list of its effects differs: an effect forgotten early stays in it until the run ends, whose end forgets it again (idempotently); nothing else reads the list, and the effect is disconnected and out of the environment either way.
-- ``projects/strata/src/kernel/kernel.ts|Environment.forgetEffect|number changed|0|1|0|fn:176f5611cdc8b687``
-  Only the run's own list of its effects differs: an effect forgotten early stays in it until the run ends, whose end forgets it again (idempotently); nothing else reads the list, and the effect is disconnected and out of the environment either way.
-- ``projects/strata/src/kernel/kernel.ts|Environment.forgetEffect|>= → >|>=|>|0|fn:176f5611cdc8b687``
-  Only the run's own list of its effects differs: an effect forgotten early stays in it until the run ends, whose end forgets it again (idempotently); nothing else reads the list, and the effect is disconnected and out of the environment either way.
-- ``projects/strata/src/kernel/kernel.ts|Environment.forgetEffect|statement removed|scope.nodes.splice(index, 1);|;|0|fn:176f5611cdc8b687``
-  Only the run's own list of its effects differs: an effect forgotten early stays in it until the run ends, whose end forgets it again (idempotently); nothing else reads the list, and the effect is disconnected and out of the environment either way.
 - ``projects/strata/src/kernel/kernel.ts|Environment.forgetEffect|test → true|this.nodes.get(effect.id) === effect|true|0|fn:176f5611cdc8b687``
-  Only the run's own list of its effects differs: an effect forgotten early stays in it until the run ends, whose end forgets it again (idempotently); nothing else reads the list, and the effect is disconnected and out of the environment either way.
-- ``projects/strata/src/kernel/kernel.ts|Environment.forgetEffect|number changed|1|0|0|fn:176f5611cdc8b687``
   Only the run's own list of its effects differs: an effect forgotten early stays in it until the run ends, whose end forgets it again (idempotently); nothing else reads the list, and the effect is disconnected and out of the environment either way.
 - ``projects/strata/src/kernel/kernel.ts|Environment.connect|test → false|signal.aborted|false|0|fn:2bcab0bac2ce4ed``
   With the token already aborted, the queued change checks it and connects nothing, and `onAbort` registers nothing.
@@ -175,10 +161,8 @@ A key is the file (from the repository root), the function, the kind of change, 
   A role of undefined is left out of the process tree like no role.
 - ``projects/strata/src/kernel/kernel.ts|Environment.startDriver|early return removed|return;|;|0|fn:6b2f23c7059d517e``
   It is the only statement of a function that does nothing (the run of a definition returning nothing waits for its token).
-- ``projects/strata/src/kernel/kernel.ts|Environment.runContext.effect|push → unshift|push|unshift|0|fn:c55a87678e9e5d59``
+- ``projects/strata/src/kernel/kernel.ts|Environment.runContext.effect|push → unshift|push|unshift|0|fn:343787499c27ab5d``
   The order of a run's own effects doesn't matter: its end forgets all of them.
-- ``projects/strata/src/kernel/kernel.ts|finish|statement removed|this.scopes.delete(process);|;|0|fn:14e446f23beaeeef``
-  A finished process never finishes again (`terminal`), so its scope entry is never looked up again.
 - ``projects/strata/src/kernel/kernel.ts|Environment.begin|test → true|!signal.aborted|true|1|fn:10aae0fd4aad80d4``
   A finish after the token aborted returns at once: the process already finished as aborted.
 - ``projects/strata/src/kernel/kernel.ts|finish|statement removed|this.disconnect(effect);|;|0|fn:14e446f23beaeeef``
@@ -221,15 +205,15 @@ A key is the file (from the repository root), the function, the kind of change, 
   An abort signal fires once; the listener runs once either way.
 - ``projects/strata/src/graph.ts|StrataGraph.defaultsOf|test → true|!this.defaultsMemo.has(type)|true|0|fn:5c46a4dfe7a1da0b``
   A memo: a type's defaults are computed afresh as an equal, frozen value.
-- ``projects/strata/src/graph.ts|StrataGraph.load|push → unshift|push|unshift|0|fn:2111c4217a764c01``
+- ``projects/strata/src/graph.ts|StrataGraph.load|push → unshift|push|unshift|0|fn:e67050fb1d9dde87``
   Only the order the stale-snapshot streams are read in changes; each is installed whole.
-- ``projects/strata/src/graph.ts|StrataGraph.load|statement removed|this.storeHead = Math.max(this.storeHead, stored.head);|;|0|fn:2111c4217a764c01``
+- ``projects/strata/src/graph.ts|StrataGraph.load|statement removed|this.storeHead = Math.max(this.storeHead, stored.head);|;|0|fn:e67050fb1d9dde87``
   It is read only while handling a store reply, after the reply's positions (all above the loaded head) have raised it past the loaded head.
-- ``projects/strata/src/graph.ts|StrataGraph.load|max → min|max|min|0|fn:2111c4217a764c01``
+- ``projects/strata/src/graph.ts|StrataGraph.load|max → min|max|min|0|fn:e67050fb1d9dde87``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.load|test → true|rec|true|0|fn:2111c4217a764c01``
+- ``projects/strata/src/graph.ts|StrataGraph.load|test → true|rec|true|0|fn:e67050fb1d9dde87``
   Unreachable: a node noted as slow to fold was installed by this load, and nothing removes records during it.
-- ``projects/strata/src/graph.ts|StrataGraph.load|statement removed|this.slowFolds.clear();|;|0|fn:2111c4217a764c01``
+- ``projects/strata/src/graph.ts|StrataGraph.load|statement removed|this.slowFolds.clear();|;|0|fn:e67050fb1d9dde87``
   A node snapshotted by one load has nothing to snapshot again at the next unless it has newer acknowledged entries, and those are snapshotted at the interval anyway. The set is only read by load.
 - ``projects/strata/src/graph.ts|StrataGraph.installRecord|test → true|entry.pos > this.headPos|true|0|fn:a6753fde8551d366``
   A load and a sync both raise the head position to the store's head, which is at or past every stored entry, before anything reads it.
@@ -297,16 +281,12 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above (with no entries, the fold is the base's state, which is the head).
 - ``projects/strata/src/graph.ts|StrataGraph.stateAt|> → >=|>|>=|0|fn:73bad2c39aa36594``
   A base at seq 0 is at position 0, which is never after a point read.
-- ``projects/strata/src/graph.ts|StrataGraph.modelAt|test → false|model|false|0|fn:fff1242aaac46f5b``
+- ``projects/strata/src/graph.ts|StrataGraph.modelAt|test → false|model|false|0|fn:2f6a725a2d37a09e``
   A cache: the model at a point is built again from the same records.
 - ``projects/strata/src/graph.ts|reader.state|test → true|!states.has(ref.id)|true|0|fn:8a8ad4e394b25684``
   A memo: the state is folded again from the same entries.
 - ``projects/strata/src/graph.ts|reader.state|test → true|!states.has(ref.id)|true|1|fn:8a8ad4e394b25684``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.modelAt|statement removed|this.timeModels.delete(this.timeModels.keys().next().value);|;|0|fn:fff1242aaac46f5b``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.modelAt|statement removed|this.timeModels.set(pos, model);|;|0|fn:fff1242aaac46f5b``
-  As above: a model not cached is built again when asked for.
 - ``projects/strata/src/graph.ts|StrataGraph.pinnedModel|test → false|!layer.at|false|0|fn:2a9583bfd1401b7``
   Unreachable: the resolver asks for a pinned model only for a layer with a pin (see `uncovered-branches.md`).
 - ``projects/strata/src/graph.ts|StrataGraph.at|test → true|typeof point !== "number" && point !== "head"|true|0|fn:d7982cc8273e3a75``
@@ -345,9 +325,9 @@ A key is the file (from the repository root), the function, the kind of change, 
   The cycle walk visits every source either way; only the order differs.
 - ``projects/strata/src/graph.ts|StrataGraph.layerCycle|push → unshift|push|unshift|0|fn:b9f9b8a30e0a9646``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.restoreRecords|statement removed|this.records.set(id, rec);|;|0|fn:572174efdb447667``
+- ``projects/strata/src/graph.ts|StrataGraph.restoreRecords|statement removed|this.records.set(id, rec);|;|0|fn:fc0f32c6c5f24540``
   The saved record is the one still in the map (applying a change updates records in place).
-- ``projects/strata/src/graph.ts|StrataGraph.restoreRecords|test → true|current|true|0|fn:572174efdb447667``
+- ``projects/strata/src/graph.ts|StrataGraph.restoreRecords|test → true|current|true|0|fn:fc0f32c6c5f24540``
   Unreachable: every node of the refused change has a record by then (see `uncovered-branches.md`).
 - ``projects/strata/src/graph.ts|StrataGraph.touchOf|push → unshift|push|unshift|0|fn:36689372ffa286ef``
   The paths touched are a set; their order doesn't matter.
@@ -413,33 +393,35 @@ A key is the file (from the repository root), the function, the kind of change, 
   Only re-evaluates more subjects; a rule gives the same conflicts for an unchanged subject.
 - ``projects/strata/src/graph.ts|StrataGraph.refresh|push → unshift|push|unshift|3|fn:230af3f2eb987be6``
   The walk visits every referrer either way; only the order differs.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|test → false|!ref|false|0|fn:66ff72d66f3111fe``
-  Unreachable: every node in a change is recorded or remembered as purged (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.emit|continue removed|continue;|;|0|fn:66ff72d66f3111fe``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|0|fn:66ff72d66f3111fe``
+- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|0|fn:8ca6c3084303827d``
   The list is empty when `created` is added.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|1|fn:66ff72d66f3111fe``
+- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|1|fn:8ca6c3084303827d``
   The list is empty when `retracted` or `purged` is added.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|2|fn:66ff72d66f3111fe``
+- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|2|fn:8ca6c3084303827d``
   The list is empty when `name` is added.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|5|fn:66ff72d66f3111fe``
+- ``projects/strata/src/graph.ts|StrataGraph.emit|push → unshift|push|unshift|5|fn:8ca6c3084303827d``
   The change set's nodes are sorted by ID after they are assembled.
 - ``projects/strata/src/graph.ts|batch|test → true|label|true|0|fn:161f95478ceef130``
   The batch is internal, and an absent label reads the same as `label: undefined` where it is read.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|?? → &&|??|&&|0|fn:66ff72d66f3111fe``
-  Only rewires more: after a node loses every layer, its combinator keeps inputs it no longer reads, so it recomputes to an unchanged value.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|statement removed|this.assembled.delete(commit);|;|0|fn:66ff72d66f3111fe``
-  Only memory: an assembled change set is read once, right after its cycle, and at most 64 are kept.
-- ``projects/strata/src/graph.ts|StrataGraph.emit|test → true|label|true|0|fn:66ff72d66f3111fe``
-  Unreachable: every change runs its cycle at once, so the assembled change set is always there (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.emit|test → false|label|false|0|fn:66ff72d66f3111fe``
+- ``projects/strata/src/graph.ts|StrataGraph.emit|test → true|label|true|0|fn:8ca6c3084303827d``
+  The fallback change set is returned only to callers that ignore it (a store reply, a sync or a purge applied during a cycle): a commit is never applied during one.
+- ``projects/strata/src/graph.ts|StrataGraph.emit|test → false|label|false|0|fn:8ca6c3084303827d``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|0|fn:906c74d7b2ae62f``
+- ``projects/strata/src/graph.ts|orphaned|boolean flip|!1|!0|0|fn:b14252bb1eb809a``
+  Only saves work: forgetting when nothing has gone finds nothing to forget.
+- ``projects/strata/src/graph.ts|StrataGraph.emit|test → true|this.effectiveNodes.has(layer.from.id) && !this.records.has(layer.from.id) && !this.inline|true|0|fn:8ca6c3084303827d``
+  As above.
+- ``projects/strata/src/graph.ts|StrataGraph.emit|&& → |||&&||||5|fn:8ca6c3084303827d``
+  As above.
+- ``projects/strata/src/graph.ts|StrataGraph.emit|&& → |||&&||||6|fn:8ca6c3084303827d``
+  As above.
+- ``projects/strata/src/graph.ts|StrataGraph.emit|test → true|orphaned|true|0|fn:8ca6c3084303827d``
+  As above.
+- ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|0|fn:fdcd0ba8b419da6a``
   The change set's nodes are sorted by ID after they are assembled.
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|1|fn:906c74d7b2ae62f``
+- ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|1|fn:fdcd0ba8b419da6a``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|2|fn:906c74d7b2ae62f``
+- ``projects/strata/src/graph.ts|StrataGraph.onCycle|push → unshift|push|unshift|2|fn:fdcd0ba8b419da6a``
   As above.
 - ``projects/strata/src/graph.ts|set.nodes|< → <=|<|<=|0|fn:e21e5d028d986958``
   Node IDs in a change set are distinct.
@@ -455,12 +437,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above (`1 → 0` on the greater case).
 - ``projects/strata/src/graph.ts|set.nodes|number changed|0|1|0|fn:e21e5d028d986958``
   Node IDs in a change set are distinct: the equal case never occurs.
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle|test → false|this.assembled.size > 64|false|0|fn:906c74d7b2ae62f``
-  Only memory: an assembled change set is read once, right after its cycle (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle|> → >=|>|>=|0|fn:906c74d7b2ae62f``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.onCycle|statement removed|this.assembled.delete(this.assembled.keys().next().value);|;|0|fn:906c74d7b2ae62f``
-  As above.
 - ``projects/strata/src/graph.ts|value|test → true|state|true|0|fn:8288b42c15142444``
   The resolver's effective value of a node with no state is undefined as well.
 - ``projects/strata/src/graph.ts|out.trashed|negation removed|!!state?.trashed|(!state?.trashed)|0|fn:946c05c15831166b``
@@ -483,10 +459,6 @@ A key is the file (from the repository root), the function, the kind of change, 
   A shortcut: removing a node's layer rows and adding the same ones back gives the same index.
 - ``projects/strata/src/graph.ts|StrataGraph.indexLayers|early return removed|return;|;|0|fn:1a1deabeccd3e371``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.indexLayers|test → false|deps && !deps.size|false|0|fn:1a1deabeccd3e371``
-  Only memory: an empty set of dependents reads the same as none.
-- ``projects/strata/src/graph.ts|StrataGraph.indexLayers|statement removed|this.layerIndex.delete(layer.from.id);|;|0|fn:1a1deabeccd3e371``
-  As above.
 - ``projects/strata/src/graph.ts|StrataGraph.indexLayers|push → unshift|push|unshift|0|fn:1a1deabeccd3e371``
   Every reader of a dependent's layers from one source looks at all of them; their order doesn't matter.
 - ``projects/strata/src/graph.ts|StrataGraph.indexUnique|test → false|!spec.unique|false|0|fn:8f47858b85c795c8``
@@ -501,35 +473,17 @@ A key is the file (from the repository root), the function, the kind of change, 
   Removing a row for an absent value removes nothing.
 - ``projects/strata/src/graph.ts|StrataGraph.indexUnique|&& → |||&&||||0|fn:8f47858b85c795c8``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.indexUnique|test → true|b !== void 0 && b !== null|true|0|fn:8f47858b85c795c8``
-  Only indexes more: a row for an absent value is never looked up (the unique check skips absent values).
-- ``projects/strata/src/graph.ts|StrataGraph.indexUnique|&& → |||&&||||1|fn:8f47858b85c795c8``
-  As above.
 - ``projects/strata/src/graph.ts|StrataGraph.ensureRefIndex|test → false|this.refIndexReady|false|0|fn:419fec1cb2d0820e``
   Building the index again gives the same index: each node's rows are replaced.
 - ``projects/strata/src/graph.ts|StrataGraph.ensureRefIndex|early return removed|return;|;|0|fn:419fec1cb2d0820e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.indexRefs|test → false|referrers && !referrers.size|false|0|fn:b106cfe9b84da689``
-  Only memory: an empty set of referrers reads the same as none.
-- ``projects/strata/src/graph.ts|StrataGraph.indexRefs|statement removed|this.refIndex.delete(item.target.id);|;|0|fn:b106cfe9b84da689``
-  As above.
 - ``projects/strata/src/graph.ts|out|test → true|this.headState(ref)|true|0|fn:b28dd8cfa9c2143``
   A node with no state has no references either.
-- ``projects/strata/src/graph.ts|StrataGraph.indexRefs|test → true|out.length|true|0|fn:b106cfe9b84da689``
-  An empty list of references reads the same as none.
-- ``projects/strata/src/graph.ts|StrataGraph.indexRefs|statement removed|this.refsOut.delete(ref.id);|;|0|fn:b106cfe9b84da689``
-  As above: the empty list is replaced the next time the node is indexed.
-- ``projects/strata/src/graph.ts|StrataGraph.subscribeAll|test → true|!rec.constant|true|0|fn:57160fea9365ad63``
-  Only demands more: a constant never changes, so its combinator never reports.
-- ``projects/strata/src/graph.ts|StrataGraph.subscribeAll|statement removed|this.allDemand = null;|;|0|fn:57160fea9365ad63``
+- ``projects/strata/src/graph.ts|StrataGraph.subscribeAll|statement removed|this.allDemand = null;|;|0|fn:17529e6d665d8c3``
   The next first subscriber makes a new demand token either way.
 - ``projects/strata/src/graph.ts|StrataGraph.subscribeAll.once|boolean flip|!0|!1|0|fn:261af11272655aee``
   An abort signal fires once; the listener runs once either way.
-- ``projects/strata/src/graph.ts|StrataGraph.subscribe|test → false|options.signal.aborted|false|0|fn:b59d6f1a3e95db13``
-  Connecting an effect with an aborted signal connects nothing, so the listener is never called; nothing else is demanded.
-- ``projects/strata/src/graph.ts|StrataGraph.subscribe|early return removed|return;|;|0|fn:b59d6f1a3e95db13``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.subscribe|test → true|options.follows|true|0|fn:b59d6f1a3e95db13``
+- ``projects/strata/src/graph.ts|StrataGraph.subscribe|test → true|options.follows|true|0|fn:616b9368c90048ed``
   Only builds the reference index earlier; it is the same index.
 - ``projects/strata/src/graph.ts|via|slice → splice|slice|splice|0|fn:767191a197898a64``
   The same inputs are returned; the list they are cut from isn't read again.
@@ -541,17 +495,17 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above: the first input is always the node itself, so the test is always true and the same inputs are set again.
 - ``projects/strata/src/graph.ts|effect.run|test → true|context.inputs[0].changed|true|0|fn:880bdb0976e12363``
   The effect has one input and runs only when it changed.
-- ``projects/strata/src/graph.ts|StrataGraph.storeTask|test → false|run.signal.aborted|false|0|fn:405204db8e7a5313``
+- ``projects/strata/src/graph.ts|StrataGraph.storeTask|test → false|run.signal.aborted|false|0|fn:de303328dc5b6d85``
   A task started under a stopped run is aborted at once, and settles with the same "stopped" failure.
-- ``projects/strata/src/graph.ts|StrataGraph.storeTask|&& → |||&&||||0|fn:405204db8e7a5313``
+- ``projects/strata/src/graph.ts|StrataGraph.storeTask|&& → |||&&||||0|fn:de303328dc5b6d85``
   Only a done task has a result: an abort settles the task synchronously, before the work's result could be recorded (a microtask later), and a failed task never records one.
 - ``projects/strata/src/graph.ts|token|++/-- swapped|++this.token|--this.token|0|fn:3e682652e78e9939``
   The append token is only compared with itself; counting down gives distinct tokens as well.
-- ``projects/strata/src/graph.ts|StrataGraph.whenSettled|test → false|run.signal.aborted|false|0|fn:d21b725783a5e816``
-  A process spawned under a stopped run is already aborted, and its result effect settles it with that state, which every caller treats as it treats "stopped".
-- ``projects/strata/src/graph.ts|StrataGraph.whenSettled|statement removed|stopped();|;|0|fn:d21b725783a5e816``
+- ``projects/strata/src/graph.ts|StrataGraph.whenSettled|test → false|run.signal.aborted|false|0|fn:8acb89a54e2b1839``
+  Only store work asked for after the store driver stopped reaches it (a store task checks first): an append or a retry, whose result nothing reads once the graph has stopped.
+- ``projects/strata/src/graph.ts|StrataGraph.whenSettled|statement removed|stopped();|;|0|fn:8acb89a54e2b1839``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.whenSettled|early return removed|return;|;|0|fn:d21b725783a5e816``
+- ``projects/strata/src/graph.ts|StrataGraph.whenSettled|early return removed|return;|;|0|fn:8acb89a54e2b1839``
   As above.
 - ``projects/strata/src/graph.ts|moved|boolean flip|!1|!0|0|fn:9b4fccf22741f079``
   Only refreshes pins more often; a pin read again at an unchanged point reads the same.
@@ -579,30 +533,24 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above.
 - ``projects/strata/src/graph.ts|StrataGraph.refreshPinned|early return removed|return;|;|1|fn:9406659a5a63062b``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|test → false|this.outbox.length <= from|false|0|fn:805b03c8ddc53ae``
+- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|test → false|this.outbox.length <= from|false|0|fn:b48df8c40b76ee94``
   Unreachable: callers drop from a pending commit they found in the outbox (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|<= → <|<=|<|0|fn:805b03c8ddc53ae``
+- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|<= → <|<=|<|0|fn:b48df8c40b76ee94``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|early return removed|return;|;|0|fn:805b03c8ddc53ae``
+- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|early return removed|return;|;|0|fn:b48df8c40b76ee94``
   As above.
 - ``projects/strata/src/graph.ts|dropped|slice → splice|slice|splice|0|fn:1174283394c7430f``
   Cutting the dropped commits out of the outbox leaves it holding what the next line assigns it anyway.
-- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|slice → splice|slice|splice|0|fn:805b03c8ddc53ae``
+- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|slice → splice|slice|splice|0|fn:b48df8c40b76ee94``
   `splice(0, from)` returns the same commits `slice(0, from)` does, and the outbox is replaced by them.
 - ``projects/strata/src/graph.ts|beforeStates|statement removed|rec.ackedSeq = Math.min(rec.ackedSeq, rec.headSeq);|;|0|fn:7653e891a454295c``
   The dropped entries were never acknowledged, so the acknowledged seq is already at or below the new head's.
 - ``projects/strata/src/graph.ts|beforeStates|min → max|min|max|0|fn:7653e891a454295c``
   A kept pending entry of the node is acknowledged before anything reads the acknowledged seq: snapshots are written at acknowledgements or after a flush, and compaction flushes first.
-- ``projects/strata/src/graph.ts|beforeStates|statement removed|this.purgedRefs.set(id, rec.ref);|;|0|fn:7653e891a454295c``
-  A node's purge reaches subscribers through its own combinator, which reports it; without a subscriber the change set reaches no one.
-- ``projects/strata/src/graph.ts|StrataGraph.rollbackPending|statement removed|this.commits.delete(id);|;|0|fn:805b03c8ddc53ae``
-  The Undo and Redo stacks are filtered of the dropped commits just before, and the commit records are read only through them.
 - ``projects/strata/src/graph.ts|StrataGraph.flush||| → &&||||&&|1|fn:1d860b1410e80869``
   A graph has a store run exactly when it has a store, so either test alone decides.
 - ``projects/strata/src/graph.ts|StrataGraph.flush|push → unshift|push|unshift|0|fn:1d860b1410e80869``
   Every waiter is resolved in the same call; only the order their promises settle in differs.
-- ``projects/strata/src/graph.ts|StrataGraph.resolveFlush|statement removed|this.flushWaiters = [];|;|0|fn:9ce6d6a69afb7294``
-  Only memory: resolving a settled promise again does nothing.
 - ``projects/strata/src/graph.ts|StrataGraph.recover|push → unshift|push|unshift|0|fn:d130d4acc627f5eb``
   A commit sent back because a snapshot covers it is already stored: the store answers it as a duplicate wherever it stands in the outbox.
 - ``projects/strata/src/graph.ts|already|every → some|every|some|0|fn:a658410003395eb0``
@@ -639,31 +587,31 @@ A key is the file (from the repository root), the function, the kind of change, 
   Each node's snapshot write refuses a graph without a store or one that writes none, so the count is 0 either way.
 - ``projects/strata/src/graph.ts|StrataGraph.snapshotAll||| → &&||||&&|0|fn:10f1608698f88c38``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → false|!record|false|0|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → false|!record|false|0|fn:86130ae0fdc9133e``
   Unreachable: the Undo and Redo stacks hold only steps whose records are kept (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → false|!rec|false|0|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → false|!rec|false|0|fn:86130ae0fdc9133e``
   Unreachable: the stacks drop the steps of purged nodes (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|continue removed|continue;|;|0|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|continue removed|continue;|;|0|fn:86130ae0fdc9133e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → false|!after || !current|false|0|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → false|!after || !current|false|0|fn:86130ae0fdc9133e``
   Unreachable: a node with a step has a state after it and a head (a retraction is a state, not its absence).
-- ``projects/strata/src/graph.ts|StrataGraph.compensate||| → &&||||&&|0|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate||| → &&||||&&|0|fn:86130ae0fdc9133e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|continue removed|continue;|;|1|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|continue removed|continue;|;|1|fn:86130ae0fdc9133e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → true|!current.retracted|true|0|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|test → true|!current.retracted|true|0|fn:86130ae0fdc9133e``
   Unreachable: only a creation step is undone by retracting, and it is undone only while the node is live (undo and redo alternate).
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|0|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|0|fn:86130ae0fdc9133e``
   The ops of one compensation touch disjoint parts of the state (each path, the layers, the name, the trash flag, retraction), so their order doesn't change the result.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|1|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|1|fn:86130ae0fdc9133e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|2|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|2|fn:86130ae0fdc9133e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|3|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|3|fn:86130ae0fdc9133e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|4|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|4|fn:86130ae0fdc9133e``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|5|fn:1e20cd209c26fc6a``
+- ``projects/strata/src/graph.ts|StrataGraph.compensate|push → unshift|push|unshift|5|fn:86130ae0fdc9133e``
   As above.
 - ``projects/strata/src/graph.ts|StrataGraph.compensate.kind|test → false|before.retracted|false|0|fn:f8d640a087f30a62``
   Unreachable true branch: this line runs only when the state before the step wasn't retracted.
@@ -693,14 +641,8 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above.
 - ``projects/strata/src/graph.ts|all|test → true|global.length|true|0|fn:154ac0cca920e79b``
   Only visits more nodes; a node outside the subjects is evaluated only by global rules, and there are none then.
-- ``projects/strata/src/graph.ts|StrataGraph.reevaluate|test → true|inSubjects|true|0|fn:600bb72c99584048``
+- ``projects/strata/src/graph.ts|StrataGraph.reevaluate|test → true|inSubjects|true|0|fn:4ff5a61c7a562c6f``
   Only re-evaluates more; a rule gives the same conflicts for an unchanged subject.
-- ``projects/strata/src/graph.ts|StrataGraph.reevaluate|test → true|ids.size|true|0|fn:600bb72c99584048``
-  Only memory: an empty set of produced conflicts drops nothing.
-- ``projects/strata/src/graph.ts|StrataGraph.dropProduced|statement removed|this.produced.delete(producer);|;|0|fn:951e083bc6c8660f``
-  Dropping a producer again removes it from sets that no longer hold it; a conflict it no longer produces is gone already or held by its other producers.
-- ``projects/strata/src/graph.ts|StrataGraph.dropProduced|statement removed|this.producers.delete(id);|;|0|fn:951e083bc6c8660f``
-  Only memory: an empty set of producers reads the same as none.
 - ``projects/strata/src/graph.ts|StrataGraph.conflicts|< → <=|<|<=|0|fn:aad59c5cbb5cbd06``
   Conflict IDs are distinct.
 - ``projects/strata/src/graph.ts|StrataGraph.conflicts|number changed|1|0|0|fn:aad59c5cbb5cbd06``
@@ -719,9 +661,9 @@ A key is the file (from the repository root), the function, the kind of change, 
   Route IDs of one conflict are distinct.
 - ``projects/strata/src/graph.ts|StrataGraph.fix|test → false|!edits.length|false|0|fn:6e3501a25828c4d7``
   A commit of no edits is refused as empty the same way.
-- ``projects/strata/src/graph.ts|StrataGraph.record|test → false|exists|false|0|fn:da33d4937ab0b833``
+- ``projects/strata/src/graph.ts|StrataGraph.record|test → false|exists|false|0|fn:4d0bcfd254ed79``
   A source is a value stream: every op becomes a whole-state entry (create for a new node, state after), and a create for an existing source holds the same name and value.
-- ``projects/strata/src/graph.ts|StrataGraph.compactingConflict|test → false|!this.compacting.size|false|0|fn:6396e9724b46562``
+- ``projects/strata/src/graph.ts|StrataGraph.compactingConflict|test → false|!this.compacting.size|false|0|fn:1f4de12f26786838``
   With nothing being compacted, the loop finds nothing either.
 - ``projects/strata/src/graph.ts|StrataGraph.compact|statement removed|await this.flush();|;|0|fn:95f466bd9d9fa002``
   The sync right after flushes first; for a session node there is nothing to flush.
@@ -747,37 +689,33 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above.
 - ``projects/strata/src/graph.ts|StrataGraph.inlinedStream|find → findLast|find|findLast|0|fn:3d8eddcd36e93217``
   An entry holds each inlined node once.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|await this.flush();|;|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|await this.flush();|;|0|fn:4b5c45cf31aebce8``
   Nothing is pending that the host entry's rewrite depends on: it takes only entries up to the host entry, which are acknowledged.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|await this.loadHistory(item.host.node);|;|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|await this.loadHistory(item.host.node);|;|0|fn:4b5c45cf31aebce8``
   A host holding inlined streams is never snapshotted, so its history is always in memory.
 - ``projects/strata/src/graph.ts|strip||| → &&||||&&|0|fn:ed9fb9d7a3da480b``
   Other entries holding inlined streams don't hold this node, so filtering it out leaves them equal.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|test → true|host|true|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|test → true|host|true|0|fn:4b5c45cf31aebce8``
   Unreachable: a host's purge takes its collapsed nodes with it (see `uncovered-branches.md`).
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|host.snapshotSeq = 0;|;|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|host.snapshotSeq = 0;|;|0|fn:4b5c45cf31aebce8``
   While it held the inlined stream the host wasn't snapshotted, so its snapshot seq is already 0.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|number changed|0|1|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|number changed|0|1|0|fn:4b5c45cf31aebce8``
   As above.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|test → true|rec.head?.layers.some((layer) => layer.at)|true|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|test → true|rec.head?.layers.some((layer) => layer.at)|true|0|fn:4b5c45cf31aebce8``
   Only refreshes more nodes; a node read again with unchanged inputs reads the same.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|this.purgedRefs.set(ref.id, item.ref);|;|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|this.purgedRefs.set(ref.id, item.ref);|;|0|fn:4b5c45cf31aebce8``
   A node's purge reaches subscribers through its own combinator, which reports it; without a subscriber the change set reaches no one.
 - ``projects/strata/src/graph.ts|beforeStates|statement removed|this.indexLayers(ref.id, item.state, null);|;|0|fn:7d547beee016eaea``
   Only memory: layer dependents are listed from records, and a gone node's rows are skipped when changes propagate.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|this.forgetTimes();|;|0|fn:75300a96d3d6338c``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeInlined|statement removed|this.forgetTimes();|;|0|fn:4b5c45cf31aebce8``
   The refresh just before, for a purge, forgets cached points and views itself.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeNow|test → true|other.head?.layers.some((layer) => layer.at)|true|0|fn:944fee10e863f0d5``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeNow|test → true|other.head?.layers.some((layer) => layer.at)|true|0|fn:b4fe93541c4b38c``
   Only refreshes more nodes, as above.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeNow|statement removed|this.purgedRefs.set(ref.id, rec.ref);|;|0|fn:944fee10e863f0d5``
-  A node's purge reaches subscribers through its own combinator, which reports it; without a subscriber the change set reaches no one.
 - ``projects/strata/src/graph.ts|beforeStates|statement removed|this.indexLayers(id, this.inlined.get(id)?.state ?? null, null);|;|0|fn:a2dc7fd67c6551a8``
   Only memory: layer dependents are listed from records, and a gone node's rows are skipped when changes propagate.
 - ``projects/strata/src/graph.ts|beforeStates|?? → &&|??|&&|0|fn:a2dc7fd67c6551a8``
   As above.
-- ``projects/strata/src/graph.ts|beforeStates|statement removed|this.indexLayers(ref.id, before, null);|;|0|fn:a2dc7fd67c6551a8``
-  As above.
-- ``projects/strata/src/graph.ts|StrataGraph.purgeNow|statement removed|this.forgetTimes();|;|0|fn:944fee10e863f0d5``
+- ``projects/strata/src/graph.ts|StrataGraph.purgeNow|statement removed|this.forgetTimes();|;|0|fn:b4fe93541c4b38c``
   The refresh just before, for a purge, forgets cached points and views itself.
 - ``projects/strata/src/graph.ts|StrataGraph.inspectorRow|> → >=|>|>=|0|fn:3715a17d3de25082``
   Replacing the worst severity by an equal one changes nothing.
@@ -813,6 +751,12 @@ A key is the file (from the repository root), the function, the kind of change, 
   The equal case returns just before.
 - ``projects/strata/src/graph.ts|entryAt|early return removed|return;|;|0|fn:6a922509982bd72``
   The function's last statement: it returns undefined either way.
+- ``projects/strata/src/graph.ts|StrataGraph.subscribe|test → true|!this.records.has(target.id) && !this.inlined.has(target.id)|true|0|fn:616b9368c90048ed``
+  Only saves work: forgetting a live node's kernel nodes finds nothing to forget.
+- ``projects/strata/src/graph.ts|StrataGraph.subscribe|&& → |||&&||||0|fn:616b9368c90048ed``
+  As above: the extra cases are live nodes.
+- ``projects/strata/src/graph.ts|StrataGraph.collapsingConflict|test → false|!this.collapsing.size|false|0|fn:6573007a7c425aab``
+  With nothing being collapsed, the loop finds nothing either.
 
 ## projects/strata/src/fold.ts
 
@@ -890,18 +834,14 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above.
 - ``projects/strata/src/model.ts|ReadModel.followCycle|test → true|this.exists(start)|true|0|fn:33fa07949018b861``
   A node that doesn't exist has no references, so no cycle is found from it.
-- ``projects/strata/src/model.ts|ReadModel.derive|slice → splice|slice|splice|0|fn:692f4ead4cd5c71e``
+- ``projects/strata/src/model.ts|ReadModel.derive|slice → splice|slice|splice|0|fn:fca0b74237654a2e``
   The cycle named is the same; the stack is unwound by the pops that follow, and nothing reads it in between.
 - ``projects/strata/src/model.ts|context.derived|test → true|found.ok|true|0|fn:1e5c62bacf3f78ed``
   A result that isn't ok has no value: undefined either way.
-- ``projects/strata/src/model.ts|ReadModel.derive|test → true|this.deriving.length === 0 || result.ok|true|0|fn:692f4ead4cd5c71e``
-  Only memoises more: a nested cycle result names the same cycle as the one the outer derivation returns and memoises.
-- ``projects/strata/src/model.ts|ReadModel.derive|=== → !==|===|!==|0|fn:692f4ead4cd5c71e``
-  As above.
-- ``projects/strata/src/model.ts|ReadModel.derive|number changed|0|1|1|fn:692f4ead4cd5c71e``
-  As above.
-- ``projects/strata/src/model.ts|ReadModel.derive|test → true|!memo2|true|0|fn:692f4ead4cd5c71e``
+- ``projects/strata/src/model.ts|ReadModel.derive|test → true|!memo2|true|0|fn:fca0b74237654a2e``
   A memo: another derivation of the node is computed again from the same states.
+- ``projects/strata/src/model.ts|fromFirst|< → <=|<|<=|0|fn:da2b4d7ee561bd29``
+  Two places on one cycle share an ID only when a node's derivations read each other, and the cycle is then named from that ID either way.
 
 ## projects/strata/src/compaction.ts
 
@@ -923,27 +863,25 @@ A key is the file (from the repository root), the function, the kind of change, 
   As above.
 - ``projects/strata/src/compaction.ts|nodeReferences|push → unshift|push|unshift|3|fn:62ffc2b014d37597``
   As above.
-- ``projects/strata/src/compaction.ts|keepSet|test → true|entry.op.kind === "untag"|true|0|fn:f8d93a3a87149a37``
+- ``projects/strata/src/compaction.ts|keepSet|test → true|entry.op.kind === "untag"|true|0|fn:727cfcc855368d0a``
   Another op has no tag number, and no tag is looked up by an undefined number.
-- ``projects/strata/src/compaction.ts|readingNeeds|test → true|!byId.has(stream.ref.id)|true|0|fn:32840ac596408a73``
+- ``projects/strata/src/compaction.ts|readingNeeds|test → true|!byId.has(stream.ref.id)|true|0|fn:b11856677eb57301``
   Node IDs are unique across the records and the streams inlined in them.
 - ``projects/strata/src/compaction.ts|stateThrough|statement removed|folded.set(stream.ref.id, states);|;|0|fn:de80a44455de5593``
   A memo: the states are folded again from the same entries.
 - ``projects/strata/src/compaction.ts|stateThrough|test → true|i|true|0|fn:de80a44455de5593``
   At the first entry the previous state is undefined, which folds like null.
-- ``projects/strata/src/compaction.ts|read|test → false|seen.has(`read ${id}@${point}`)|false|0|fn:bc330a56a425c19``
+- ``projects/strata/src/compaction.ts|read|test → false|seen.has(`read ${id}@${point}`)|false|0|fn:c95e663fec63ee4``
   Layers never form a cycle, so reading again what was read gives the same needs.
-- ``projects/strata/src/compaction.ts|read|early return removed|return;|;|0|fn:bc330a56a425c19``
+- ``projects/strata/src/compaction.ts|read|early return removed|return;|;|0|fn:c95e663fec63ee4``
   As above.
-- ``projects/strata/src/compaction.ts|read|statement removed|seen.add(`read ${id}@${point}`);|;|0|fn:bc330a56a425c19``
+- ``projects/strata/src/compaction.ts|read|statement removed|seen.add(`read ${id}@${point}`);|;|0|fn:c95e663fec63ee4``
   As above.
-- ``projects/strata/src/compaction.ts|read|statement removed|queue.push(layer.at);|;|0|fn:bc330a56a425c19``
+- ``projects/strata/src/compaction.ts|read|statement removed|queue.push(layer.at);|;|0|fn:c95e663fec63ee4``
   A pinned layer's entry is itself among the referenced entries whose needs are read.
-- ``projects/strata/src/compaction.ts|read|push → unshift|push|unshift|0|fn:bc330a56a425c19``
+- ``projects/strata/src/compaction.ts|read|push → unshift|push|unshift|0|fn:c95e663fec63ee4``
   The queue is worked through until empty; the order doesn't change what is kept.
-- ``projects/strata/src/compaction.ts|entry|find → findLast|find|findLast|0|fn:ed818738d622a17a``
-  Seqs are unique in a stream.
-- ``projects/strata/src/compaction.ts|readingNeeds|statement removed|seen.add(entryKey(entry));|;|0|fn:32840ac596408a73``
+- ``projects/strata/src/compaction.ts|readingNeeds|statement removed|seen.add(entryKey(entry));|;|0|fn:b11856677eb57301``
   Reading an entry's node again at the same point is skipped by `read` itself.
 - ``projects/strata/src/compaction.ts|rollupDeltaStream|statement removed|flush();|;|1|fn:9dbd90f5763eaea5``
   The last entry is always kept, which flushes the run before it, so the run is empty at the end.
@@ -951,6 +889,14 @@ A key is the file (from the repository root), the function, the kind of change, 
   Stream IDs are unique.
 - ``projects/strata/src/compaction.ts|collapseInline|push → unshift|push|unshift|0|fn:ca35f95261581f2b``
   Only the count of referring entries matters, and the host is taken only when there is exactly one.
+- ``projects/strata/src/compaction.ts|keepSet|push → unshift|push|unshift|0|fn:727cfcc855368d0a``
+  The points to read are a set; their order doesn't change what is kept.
+- ``projects/strata/src/compaction.ts|keepSet|test → true|options.undoReach?.size && (entry.op.kind === "compensate" || entry.inlined?.length)|true|0|fn:727cfcc855368d0a``
+  Only reads references again: with undo reach, an entry that isn't a compensation and holds no inlined streams has the same references either way.
+- ``projects/strata/src/compaction.ts|keepSet|&& → |||&&||||1|fn:727cfcc855368d0a``
+  As above: without undo reach the two readings are the same.
+- ``projects/strata/src/compaction.ts|entryAt|test → true|!index|true|0|fn:b6d3db0c957dc6e2``
+  A memo: the index by seq is built again from the same stream.
 
 ## projects/strata/src/define.ts
 

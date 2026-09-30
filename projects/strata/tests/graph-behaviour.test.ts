@@ -6,12 +6,14 @@
  */
 import { expect, test } from "bun:test";
 import { Aborter, createGraph, defineRule, defineSink, defineSource, defineType, MemoryStore } from "strata";
-import { Scheduler, seededRandom, settle, simClock, SimStore, STRATA_DEBUG, SYNTHETIC_TYPES } from "strata/testing";
+import { Scheduler, seededRandom, settle, simClock, SimStore, STRATA_DEBUG, SYNTHETIC_TYPES, tableSizes } from "strata/testing";
 import { GROUP, ITEM, SYNTHETIC_RULES as SYNTHETIC_RULES_FOR_TESTS } from "../src/testing/synthetic";
 import { entryReferences, keepSet, nodeReferences, rollupDeltaStream } from "../src/compaction";
 import { fold, upcast } from "../src/fold";
 import { pathKey } from "strata";
-import type { DeriveResult } from "strata";
+import type { DeriveResult, Graph } from "strata";
+import type { Stream } from "../src/compaction";
+import type { Entry } from "../src/types";
 import { create, drive, harness, ok } from "./helpers";
 
 function sessions(extra: Record<string, unknown> = {}) {
@@ -1528,4 +1530,211 @@ test("a redo of a creation brings the node back as it was", () => {
   expect(graph.read(a)).toBeUndefined();
   ok(graph.redo("s"));
   expect(graph.resolve(a, ["title"])).toBe("made");
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Deep review 8's slice: mutants the tables invariant and the rewritten functions left alive. A gone node's kernel
+// nodes are forgotten through every path that leaves them, a named scope's history ends alone, an acknowledgement
+// survives a re-evaluation that keeps its conflict, catching up keeps a commit already on its way, a derivation that
+// reads itself is a cycle, and the keep-set keeps what a compensation in undo reach reverses and nothing a pin can't read.
+// ---------------------------------------------------------------------------------------------------------------
+
+const machinery = (graph: Graph) => { const t = tableSizes(graph); return [t.entitySeeds, t.effectiveNodes, t.goneMachinery]; };
+
+test("a force-purged source's kernel nodes go once the last node layering from it lets go", async () => {
+  const { graph, scheduler } = harness();
+  const all = new Aborter();
+  graph.subscribeAll(() => undefined, { signal: all.signal });
+  const base = create(graph, ITEM, { title: "base" });
+  const fork = ok(graph.commit([{ op: "create", type: ITEM, as: "f", from: { fork: base } }])).created.f;
+  ok(await drive(scheduler, graph.purge(base, { force: true })));
+  // The fork still names it as its base.
+  expect(machinery(graph)).toEqual([2, 2, 0]);
+  ok(graph.commit([{ op: "detach", node: fork }]));
+  expect(machinery(graph)).toEqual([1, 1, 0]);
+  all.abort("done");
+});
+
+test("a gone node's kernel nodes stay while a subscription holds them, and go when it ends", async () => {
+  const { graph, scheduler } = harness();
+  const node = create(graph, ITEM, { title: "n" });
+  const other = create(graph, ITEM, { title: "o" });
+  const watching = new Aborter(), otherWatch = new Aborter();
+  graph.subscribe(node, () => undefined, { signal: watching.signal });
+  graph.subscribe(other, () => undefined, { signal: otherWatch.signal });
+  ok(await drive(scheduler, graph.purge(node)));
+  expect(machinery(graph)).toEqual([2, 2, 0]);
+  // Ending a subscription to a live node forgets nothing.
+  otherWatch.abort("done");
+  expect(machinery(graph)).toEqual([2, 2, 0]);
+  watching.abort("done");
+  await settle();
+  expect(machinery(graph)).toEqual([1, 1, 0]);
+});
+
+test("a chain of gone nodes is forgotten whole: one freed by another's going goes in the same pass", async () => {
+  const { graph, scheduler } = harness();
+  const all = new Aborter();
+  graph.subscribeAll(() => undefined, { signal: all.signal });
+  const a = create(graph, ITEM, { title: "a" });
+  const b = ok(graph.commit([{ op: "create", type: ITEM, as: "b", from: { fork: a } }])).created.b;
+  ok(await drive(scheduler, graph.purge(a, { force: true })));
+  expect(machinery(graph)).toEqual([2, 2, 0]);
+  ok(await drive(scheduler, graph.purge(b)));
+  expect(machinery(graph)).toEqual([0, 0, 0]);
+  all.abort("done");
+});
+
+test("a gone node that a kept gone node layers from is kept with it, and both go when the last hold ends", async () => {
+  const { graph, scheduler } = harness();
+  const a = create(graph, ITEM, { title: "a" });
+  const b = ok(graph.commit([{ op: "create", type: ITEM, as: "b", from: { fork: a } }])).created.b;
+  const watching = new Aborter();
+  graph.subscribe(b, () => undefined, { signal: watching.signal });
+  ok(await drive(scheduler, graph.purge(a, { force: true })));
+  ok(await drive(scheduler, graph.purge(b)));
+  // B's subscription holds B's layering combinator, which reads A's.
+  expect(machinery(graph)).toEqual([2, 2, 0]);
+  watching.abort("done");
+  await settle();
+  expect(machinery(graph)).toEqual([0, 0, 0]);
+});
+
+test("a fix undone for the blocking conflict it would add leaves no kernel nodes for the nodes it created", () => {
+  // A route whose patch creates a node and closes a follows cycle through it: a new blocking conflict, so it is undone.
+  const loop = defineRule({ id: "wants-a-loop", owner: "t", subject: ITEM, severity: "warning", evaluate: subject => [{
+    sentence: "Loop me.", routes: [{ id: "loop", label: "Loop", consequence: "A loop.", patch: [
+      { op: "create", type: ITEM, as: "x", fields: { title: "x", link: subject } },
+      { op: "set", node: subject, path: ["link"], value: { created: "x" } },
+    ] as never }] }] });
+  const { graph } = harness({ extra: { rules: [...SYNTHETIC_RULES_FOR_TESTS, loop] } });
+  const all = new Aborter();
+  graph.subscribeAll(() => undefined, { signal: all.signal });
+  const y = create(graph, ITEM, { title: "y" });
+  const before = machinery(graph);
+  const warning = graph.conflicts(y).find(item => item.rule === "wants-a-loop")!;
+  const refused = graph.fix(warning.id, "loop");
+  expect(refused.ok ? "ok" : refused.reason).toBe("conflict");
+  expect(machinery(graph)).toEqual(before);
+  all.abort("done");
+});
+
+test("purging a collapsed node forgets its kernel nodes", async () => {
+  const { graph, scheduler } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const all = new Aborter();
+  graph.subscribeAll(() => undefined, { signal: all.signal });
+  const x = create(graph, ITEM, { title: "x" });
+  create(graph, GROUP, { label: "h", members: { x } });
+  ok(await drive(scheduler, graph.collapseInline(x)));
+  expect(machinery(graph)[0]).toBe(2);
+  ok(await drive(scheduler, graph.purge(x)));
+  expect(machinery(graph)).toEqual([1, 1, 0]);
+  all.abort("done");
+});
+
+test("ending one scope's history keeps the other scopes' steps undoable", () => {
+  const { graph } = harness();
+  const a = create(graph, ITEM, { title: "a" });
+  ok(graph.commit([{ op: "set", node: a, path: ["title"], value: "one" }], { scope: "one" }));
+  ok(graph.commit([{ op: "set", node: a, path: ["tags", "t"], value: 2 }], { scope: "two" }));
+  graph.forgetHistory("one");
+  expect([graph.canUndo("one"), graph.canUndo("two")]).toEqual([false, true]);
+  ok(graph.undo("two"));
+  expect(graph.resolve(a, ["tags"])).toEqual({ base: 1 });
+  expect(tableSizes(graph).commitsOffStacks).toBe(0);
+});
+
+test("an acknowledgement stays when a re-evaluation keeps its conflict", () => {
+  const { graph } = harness();
+  const target = create(graph, ITEM, { title: "t" });
+  const holder = create(graph, ITEM, { title: "h", link: target });
+  ok(graph.commit([{ op: "trash", node: target }]));
+  const [warning] = graph.conflicts(holder);
+  expect(graph.acknowledge(warning.id)).toEqual({ ok: true });
+  // The holder is evaluated again (what it follows changed); its warning is the same, still left alone.
+  ok(graph.commit([{ op: "rename", node: target, name: "renamed" }]));
+  expect(graph.conflicts(holder)).toEqual([]);
+  expect(graph.conflicts(holder, { acknowledged: true }).map(item => item.id)).toEqual([warning.id]);
+});
+
+test("catching up before a sent commit is answered keeps it, and rejects only from the stale one on", async () => {
+  const scheduler = new Scheduler(), memory = new MemoryStore(), store = new SimStore(memory, scheduler);
+  const open = async (name: string) => {
+    const graph = createGraph({ types: SYNTHETIC_TYPES, store, sources: { clock: simClock(scheduler), random: seededRandom(name) }, signal: new Aborter().signal });
+    await drive(scheduler, graph.load());
+    return graph;
+  };
+  const a = await open("a"), b = await open("b");
+  const x = create(a, ITEM, { title: "x" }), y = create(a, ITEM, { title: "y" });
+  await drive(scheduler, a.flush());
+  await drive(scheduler, b.sync());
+  ok(b.commit([{ op: "set", node: y, path: ["title"], value: "b's y" }]));
+  await drive(scheduler, b.flush());
+  let synced = false;
+  void a.sync().then(() => { synced = true; });
+  // Once the catching up has asked the store (after its flush), two commits: the first is sent, the second waits.
+  for (let i = 0; i < 100; i++) { await settle(); if (scheduler.pending().some(event => !event.label.startsWith("append"))) break; scheduler.deliver(0); }
+  const first = ok(a.commit([{ op: "set", node: x, path: ["title"], value: "a's x" }]));
+  const second = ok(a.commit([{ op: "set", node: y, path: ["title"], value: "a's y" }]));
+  // The catching up is answered before the append that is on its way.
+  for (let i = 0; i < 100 && !synced; i++) {
+    await settle();
+    const at = scheduler.pending().findIndex(event => !event.label.startsWith("append"));
+    if (at >= 0) scheduler.deliver(at); else break;
+  }
+  expect(synced).toBe(true);
+  expect(a.pending().map(item => item.commit)).toEqual([first.commit]);
+  await drive(scheduler, a.flush());
+  expect([a.acknowledged(first.commit), a.rejected().map(item => item.commit)]).toEqual([true, [second.commit]]);
+});
+
+test("reverting to a version compaction rolled away is refused: the node's state then is gone from memory", async () => {
+  const { graph, scheduler } = harness({ store: true });
+  await drive(scheduler, graph.load());
+  const node = create(graph, ITEM, { title: "v1" });
+  for (const title of ["v2", "v3", "v4"]) ok(graph.commit([{ op: "set", node, path: ["title"], value: title }]));
+  await drive(scheduler, graph.flush());
+  graph.forgetHistory();
+  ok(await drive(scheduler, graph.compact(node)));
+  const refused = graph.commit([{ op: "revert", node, to: 2 }]);
+  expect(refused.ok ? "ok" : [refused.reason, refused.message]).toEqual(["missing", "The node didn't exist at that version."]);
+});
+
+test("a derivation that reads itself is a cycle of one node", () => {
+  const selfish = defineType({ type: "selfish", owner: "t", schema: "1", fields: { v: { kind: "value" } },
+    derive: { self: context => context.derived(context.node, "self") } });
+  const graph = createGraph({ types: [selfish], sources: { clock: simClock(new Scheduler()), random: seededRandom("self") } });
+  const node = ok(graph.commit([{ op: "create", type: "selfish", as: "n" }])).created.n;
+  expect(graph.derive(node, "self")).toEqual({ ok: false, reason: "cycle", cycle: [node, node] });
+});
+
+const r8Entry = (id: string, seq: number, pos: number, op: Entry["op"], commit = `${id}-${seq}`): Entry =>
+  ({ node: { type: ITEM, id }, seq, pos, commit, actor: "a", actorSeq: pos, at: pos, schema: "2", op }) as Entry;
+const r8Created = (name: string, layers: unknown[] = []) => ({ kind: "create", state: { name, own: {}, layers, trashed: false, retracted: false } }) as Entry["op"];
+const r8Defs = (type: string) => SYNTHETIC_TYPES.find(def => def.type === type);
+
+test("the keep-set keeps what a compensation in undo reach reverses, and nothing a pin can't read", () => {
+  const set = (value: string): Entry["op"] => ({ kind: "set", path: ["title"], value });
+  const node: Stream = { ref: { type: ITEM, id: "n" }, entries: [
+    r8Entry("n", 1, 1, r8Created("n")), r8Entry("n", 2, 2, set("a")), r8Entry("n", 3, 3, set("b")),
+    r8Entry("n", 4, 4, { kind: "compensate", reverses: [{ node: { type: ITEM, id: "n" }, seq: 2 }], ops: [] }, "undo"),
+    r8Entry("n", 5, 5, set("c")),
+  ] };
+  expect(keepSet([node], r8Defs, { undoReach: new Set(["undo"]) }).has("n@2")).toBe(true);
+  expect(keepSet([node], r8Defs, { undoReach: new Set(["other"]) }).has("n@2")).toBe(false);
+  // A pin reads its node at its commit's end (position 5), whose live source had no entry yet: none of it is needed.
+  const source: Stream = { ref: { type: ITEM, id: "s" }, entries: [r8Entry("s", 1, 10, r8Created("s")), r8Entry("s", 2, 11, set("s2"))] };
+  const layered: Stream = { ref: { type: ITEM, id: "l" }, entries: [r8Entry("l", 1, 5, r8Created("l", [{ from: { type: ITEM, id: "s" }, role: "base", paths: "*" }]))] };
+  const pin: Stream = { ref: { type: ITEM, id: "p" }, entries: [r8Entry("p", 1, 12, r8Created("p")), r8Entry("p", 2, 13, { kind: "set", path: ["pin"], value: { node: { type: ITEM, id: "l" }, seq: 1 } })] };
+  const kept = keepSet([source, layered, pin], r8Defs);
+  expect([kept.has("l@1"), kept.has("s@1"), kept.has("s@2")]).toEqual([true, false, true]);
+});
+
+test("a subscription asked for with a token already aborted leaves nothing behind, even for a node that doesn't exist", () => {
+  const { graph } = harness();
+  const ended = new Aborter();
+  ended.abort("before");
+  graph.subscribe({ type: ITEM, id: "nobody" }, () => undefined, { signal: ended.signal });
+  expect(machinery(graph)).toEqual([0, 0, 0]);
 });

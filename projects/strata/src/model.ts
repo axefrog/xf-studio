@@ -31,8 +31,7 @@ function fromFirst(cycle: readonly NodeRef[]): NodeRef[] {
   const around = cycle.slice(0, -1);
   let start = 0;
   around.forEach((ref, i) => { if (ref.id < around[start].id) start = i; });
-  const rotated = [...around.slice(start), ...around.slice(0, start)];
-  return [...rotated, rotated[0]];
+  return [...around, around[0]].map((_, i) => around[(start + i) % around.length]);
 }
 
 export class ReadModel {
