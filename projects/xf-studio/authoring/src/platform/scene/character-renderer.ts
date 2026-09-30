@@ -160,7 +160,8 @@ export function createCharacterRenderer(input: {
     mesh.userData.xfsPrepared = true;
     const material = mesh.material as THREE.MeshStandardMaterial;
     const strand = isStrand(item, mesh);
-    mesh.castShadow = SHADOW_CASTER_SLOTS.has(item.component.slot) || strand;
+    // A glass pane (arm cyberware's window) casts nothing, whatever its slot.
+    mesh.castShadow = (SHADOW_CASTER_SLOTS.has(item.component.slot) || strand) && !material.userData.xfsCastsNoShadow;
     if (strand) keepOutOfBodyOnlyShadows(mesh);
     if (mesh.castShadow && mesh.isSkinnedMesh) mesh.customDepthMaterial = fullSkinDepthMaterial(mesh, { strandAlpha: strand });
     // A component kept from the previous details already carries the skinning extension.

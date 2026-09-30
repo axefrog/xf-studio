@@ -284,7 +284,7 @@ test("a host of another version is reported with the version-skew code, not as s
   const { createCharacterDetailHandler } = await import("../src/character-detail-server");
   const handler = createCharacterDetailHandler({ request: () => { throw Error("unused"); }, state: () => { throw Error("unused"); } } as never);
   const refused = await handler(new Request("http://127.0.0.1/api/preview-character", { method: "POST", headers: { "Content-Type": "application/json",
-    Origin: "http://127.0.0.1" }, body: JSON.stringify({ schema: "xfs/character-request-9", source: "default", bodyGender: "female" }) }));
+    Origin: "http://127.0.0.1" }, body: JSON.stringify({ schema: "xfs/character-request-10", source: "default", bodyGender: "female" }) }));
   expect(refused.status).toBe(409);
   expect(await refused.json()).toMatchObject({ code: "unsupported_version", request: CHARACTER_REQUEST_SCHEMA, record: CHARACTER_DETAIL_SCHEMA });
 });

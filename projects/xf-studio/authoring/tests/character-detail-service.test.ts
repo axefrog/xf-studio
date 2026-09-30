@@ -611,6 +611,15 @@ test("two face choices drawing one shared mesh are two components with their own
 });
 
 describe("the body in the character record", () => {
+  test("equipped arm cyberware the host can't follow (no TweakDB here) draws the default arms, and the record says why", async () => {
+    const { record } = await prepare({ ...BODY_REQUEST, arms: "179425979353" });
+    expect(record.components.filter(c => c.slot === "body").map(c => c.component)).toContain("a0_arms");
+    expect(record.components.some(c => c.component.startsWith("a0_strong"))).toBe(false);
+    expect(record.provenance.notes.some(line => line.includes("TweakDB couldn't be read") && line.includes("179425979353"))).toBe(true);
+    // Without arm cyberware nothing is said.
+    expect((await prepare(BODY_REQUEST)).record.provenance.notes.some(line => line.includes("arms are drawn"))).toBe(false);
+  });
+
   test("the V's body parts with their own shapes; the head's parts are served as without the body", async () => {
     const { record } = await prepare(BODY_REQUEST);
     const body = record.components.filter(c => c.slot === "body");

@@ -14,6 +14,7 @@ import { createEyeMaterial, createEyeShellMaterial, eyeParameters, gradientTextu
 import type { DetailLimit } from "./detail-limits";
 import { createMetalBaseMaterial, metalBaseParameters } from "./metal-base-material";
 import { attachInteriorOcclusion, type MouthInteriorUniforms } from "./mouth-occlusion";
+import { createGlassMaterial, glassParameters } from "./glass-material";
 
 /**
  * Renderer material adapters: one per game material template the preview draws (render-templates.ts).
@@ -411,9 +412,26 @@ const metalBase: MaterialAdapter = {
   },
 };
 
+/**
+ * `glass_onesided.mt`: the transmission pass (glass-material.ts): what is behind the pane is multiplied by its tint. A pane that reflects
+ * (a non-black `GlassSpecularColor`) says that its reflection isn't drawn; the Gorilla Arms' window reflects nothing [resource].
+ */
+const glass: MaterialAdapter = {
+  id: "glass",
+  create(chunk, textures) {
+    const parameters = glassParameters(chunk.scalars, chunk.colours);
+    const notes = parameters.specular.some(value => value > 0) ? ["the pane's reflection isn't drawn, only its tint"] : [];
+    const glassTint = textures("GlassTint", "colour", "repeat"), mask = textures("MaskTexture", "data", "repeat");
+    const material = createGlassMaterial({ ...(glassTint ? { glassTint } : {}), ...(mask ? { mask } : {}) }, parameters);
+    // A pane casts no shadow in the preview's maps (the renderer reads this).
+    material.userData.xfsCastsNoShadow = true;
+    return { material, owned: [], notes };
+  },
+};
+
 export const MATERIAL_ADAPTERS: Readonly<Record<RenderAdapterId, MaterialAdapter>> = Object.freeze({
   skin: skinAdapter, "hair-strand": hairStrand, "hair-cap-decal": hairCapDecal, "double-diffuse-decal": doubleDiffuseDecal,
-  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, layered, "metal-base": metalBase, "decal-placeholder": decalPlaceholder });
+  "mesh-decal": faceDecal, eye: eyeball, "eye-shell": eyeShell, layered, "metal-base": metalBase, glass, "decal-placeholder": decalPlaceholder });
 
 /**
  * The adapter for a chunk's template (by its own name when known), or undefined when the preview does not draw that

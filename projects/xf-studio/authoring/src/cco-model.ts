@@ -45,10 +45,17 @@ export type CcoOption =
   | (OptionBase & { type: "morph"; morphNames: MorphChoice[] })
   | (OptionBase & { type: "switcher"; uiSlots: string[]; options: SwitcherChoice[] });
 export interface CcoGroup { name: string; options: string[] }
+/**
+ * One `perspectiveInfo` entry (`gameuiPerspectiveInfo`): a perspective pair's name and its first- and third-person groups, e.g. the
+ * feminine `holstered_strong` → `holstered_strong_fpp` / `holstered_strong_tpp` [resource] (knowledge/body-rendering.md §1.1).
+ */
+export interface CcoPerspective { name: string; fpp: string; tpp: string }
 export interface CcoResource {
   label: string;
   parts: Record<CcoPart, { options: CcoOption[]; groups: CcoGroup[] }>;
   version: number | null;
+  /** The resource's perspective pairs (absent where a reader or an older cached resource didn't read them). */
+  perspectives?: CcoPerspective[];
 }
 
 const bool = (value: unknown) => value === 1 || value === true || value === "1";
@@ -93,11 +100,13 @@ export function readCco(root: JsonObject, label: string): CcoResource {
       .map(data => readOption(data, label)).filter((option): option is CcoOption => !!option),
     groups: asArray(groups).filter(isObject).map(group => ({ name: cname(group.name), options: asArray(group.options).map(cname).filter(Boolean) })),
   });
+  const perspectives = asArray(root.perspectiveInfo).filter(isObject)
+    .map(entry => ({ name: cname(entry.name), fpp: cname(entry.fpp), tpp: cname(entry.tpp) })).filter(entry => entry.name);
   return { label, version: typeof root.version === "number" ? root.version : null, parts: {
     head: part(root.headCustomizationOptions, root.headGroups),
     body: part(root.bodyCustomizationOptions, root.bodyGroups),
     arms: part(root.armsCustomizationOptions, root.armsGroups),
-  } };
+  }, ...(perspectives.length ? { perspectives } : {}) };
 }
 
 /** `(app hash, definition)` → the app hash ArchiveXL rewrites the descriptor to. */

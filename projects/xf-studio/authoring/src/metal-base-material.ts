@@ -13,14 +13,19 @@ import * as THREE from "three";
  *   RoughnessBias)`: each the **red** channel of its own map, unlike Three's packed G/B;
  * - the normal: `t = 2·Normal.rg − 1`, `n = normalize(t · NormalStrength, sqrt(max(1 − t·t, 0)))`, in the mesh's tangent frame;
  * - lit as the Standard class (one GGX lobe, F0 0.04 for dielectrics), so Three's standard light draws it.
- * Not drawn: emission (`EmissiveEV` > 0; no character instance read uses it), the alpha test of an instance with `enableMask` (the
- * resolved chain does not carry the flag yet, so a masked chunk draws opaque), the weather variant and the `post_gbuffer` mode.
+ * - the Discarded variant's alpha test (PREV-117): where the instance sets `enableMask` (the Gorilla Arms and Mantis Blades decal and logo
+ *   chunks), `discard` where `BaseColor.a < AlphaThreshold` (default 0.38), the raw texture alpha at the tiled UV. That `enableMask`
+ *   selects this variant is [hypothesis] (shader-metal-glass.md §3.3); the resolver carries the flag (`ResolvedChunkMaterial.enableMask`).
+ * Not drawn: emission (`EmissiveEV` > 0; no character instance read uses it), the variant's per-draw dither dissolve (a gameplay fade),
+ * the weather variant and the `post_gbuffer` mode.
  */
 export type MetalBaseParameters = {
   baseColorScale: [number, number, number];
   metalnessScale: number; metalnessBias: number;
   roughnessScale: number; roughnessBias: number;
   normalStrength: number; layerTile: number;
+  /** The instance's `enableMask`: alpha-test `BaseColor.a` against `alphaThreshold`. */
+  masked: boolean; alphaThreshold: number;
 };
 export type MetalBaseTextures = { baseColor: THREE.Texture; metalness: THREE.Texture; roughness: THREE.Texture; normal: THREE.Texture };
 
@@ -34,6 +39,7 @@ export function metalBaseParameters(scalars: Readonly<Record<string, number>>): 
     metalnessScale: scalar("MetalnessScale", 1), metalnessBias: scalar("MetalnessBias", 0),
     roughnessScale: scalar("RoughnessScale", 1), roughnessBias: scalar("RoughnessBias", 0),
     normalStrength: scalar("NormalStrength", 1), layerTile: scalar("LayerTile", 1),
+    masked: scalars.enableMask === 1, alphaThreshold: scalar("AlphaThreshold", 0.38),
   };
 }
 
@@ -51,6 +57,9 @@ export function metalBaseSurface(sample: { baseColor: readonly number[]; metalne
     roughness: saturate(sample.roughness * p.roughnessScale + p.roughnessBias), normal: [nx / length, ny / length, z / length] };
 }
 
+/** Whether a texel survives the masked variant's alpha test (CPU reference of the program's test): kept unless masked and below the threshold. */
+export const metalBaseKeeps = (alpha: number, p: Pick<MetalBaseParameters, "masked" | "alphaThreshold">) => !p.masked || alpha >= p.alphaThreshold;
+
 const DECLARATIONS = /* glsl */`
 uniform vec3 xfsMetalScales;
 uniform vec3 xfsMetalBias;
@@ -59,7 +68,11 @@ uniform float xfsNormalFlipY;
 /** The surface, replacing Three's map, roughness, metalness and normal-map chunks (the red channels, scale and bias, RG normal). */
 const MAP_GLSL = /* glsl */`
 vec2 xfsUv = vMapUv * xfsMetalScales.z;
-diffuseColor.rgb = clamp( diffuseColor.rgb * texture2D( map, xfsUv ).rgb, 0.0, 1.0 );`;
+vec4 xfsBase = texture2D( map, xfsUv );
+diffuseColor.rgb = clamp( diffuseColor.rgb * xfsBase.rgb, 0.0, 1.0 );
+#ifdef USE_ALPHATEST
+diffuseColor.a = xfsBase.a; // the masked variant tests the texture's own alpha (alphatest_fragment discards below AlphaThreshold)
+#endif`;
 const ROUGHNESS_GLSL = /* glsl */`
 float roughnessFactor = clamp( texture2D( roughnessMap, xfsUv ).r * xfsMetalScales.y + xfsMetalBias.y, 0.0, 1.0 );`;
 const METALNESS_GLSL = /* glsl */`
@@ -93,7 +106,7 @@ export function patchMetalBaseShader(shader: { fragmentShader: string }) {
  */
 export function createMetalBaseMaterial(textures: MetalBaseTextures, parameters: MetalBaseParameters): THREE.MeshStandardMaterial {
   const material = new THREE.MeshStandardMaterial({ map: textures.baseColor, roughnessMap: textures.roughness, metalnessMap: textures.metalness,
-    normalMap: textures.normal, roughness: 1, metalness: 1, side: THREE.FrontSide });
+    normalMap: textures.normal, roughness: 1, metalness: 1, side: THREE.FrontSide, ...(parameters.masked ? { alphaTest: parameters.alphaThreshold } : {}) });
   material.color.setRGB(...parameters.baseColorScale, THREE.LinearSRGBColorSpace);
   const uniforms = {
     xfsMetalScales: { value: new THREE.Vector3(parameters.metalnessScale, parameters.roughnessScale, parameters.layerTile) },
@@ -104,7 +117,7 @@ export function createMetalBaseMaterial(textures: MetalBaseTextures, parameters:
     Object.assign((shader as unknown as { uniforms: Record<string, unknown> }).uniforms, uniforms);
     patchMetalBaseShader(shader);
   };
-  material.customProgramCacheKey = () => "xfs-metal-base-1";
+  material.customProgramCacheKey = () => `xfs-metal-base-2${parameters.masked ? "-masked" : ""}`;
   material.name = "xfs_metal_base";
   return material;
 }

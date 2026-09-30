@@ -91,9 +91,16 @@ export type SavedLoadout = {
   readonly visuals: readonly { readonly area: ClothingArea; readonly hidden: boolean; readonly item: string | null }[];
   /** The active wardrobe set (0–6), or null when none is active or the save doesn't say. */
   readonly wardrobeSet: number | null;
+  /**
+   * The active item of the arm cyberware area (`ArmsCW`), whose holstered item selects the arms' holster state (knowledge/body-rendering.md
+   * §1.1); null with no arm cyberware equipped. Absent in a loadout an earlier XF Studio stored (it didn't read the area).
+   */
+  readonly arms?: string | null;
   /** Evidence: the player's owner ID, how many owners the save lists, and fields the reader could not read (type names only). */
   readonly evidence: { readonly owner: string | null; readonly owners: number; readonly skipped: readonly string[] };
 };
+/** The equipment area of arm cyberware (`gamedataEquipmentArea.ArmsCW`) [source: game 2.31 scripts, `UpdateArmSlot`]. */
+export const ARMS_AREA = "ArmsCW";
 /** The wardrobe's set slots (`gameWardrobeClothingSetIndex.Slot1`…`Slot7`). */
 export const WARDROBE_SETS = 7;
 
@@ -123,11 +130,13 @@ export function parseSavedLoadout(value: unknown): SavedLoadout {
   if (!v || v.schema !== "xfs/saved-loadout-1" || !Array.isArray(v.equipped) || !Array.isArray(v.visuals) || v.equipped.length > CLOTHING_AREAS.length ||
     v.visuals.length > CLOTHING_AREAS.length || !v.equipped.every(entry => entry && isClothingArea(entry.area) && item(entry.item)) ||
     !v.visuals.every(entry => entry && isClothingArea(entry.area) && typeof entry.hidden === "boolean" && (entry.item === null || item(entry.item))) ||
-    !(v.wardrobeSet === null || (Number.isInteger(v.wardrobeSet) && v.wardrobeSet >= 0 && v.wardrobeSet < WARDROBE_SETS)) || !v.evidence ||
+    !(v.wardrobeSet === null || (Number.isInteger(v.wardrobeSet) && v.wardrobeSet >= 0 && v.wardrobeSet < WARDROBE_SETS)) ||
+    !(v.arms === undefined || v.arms === null || item(v.arms)) || !v.evidence ||
     !(v.evidence.owner === null || (typeof v.evidence.owner === "string" && v.evidence.owner.length <= 24)) || !Number.isInteger(v.evidence.owners) ||
     !Array.isArray(v.evidence.skipped) || v.evidence.skipped.length > 32 || !v.evidence.skipped.every(entry => typeof entry === "string" && entry.length <= 512))
     throw Error("Invalid stored loadout");
   return { schema: v.schema, equipped: v.equipped.map(entry => ({ area: entry.area, item: entry.item })),
     visuals: v.visuals.map(entry => ({ area: entry.area, hidden: entry.hidden, item: entry.item })), wardrobeSet: v.wardrobeSet,
+    ...(v.arms === undefined ? {} : { arms: v.arms }),
     evidence: { owner: v.evidence.owner, owners: v.evidence.owners, skipped: [...v.evidence.skipped] } };
 }

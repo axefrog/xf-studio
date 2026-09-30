@@ -54,7 +54,7 @@ describe("the request (xfs/character-request-7 `nudity`)", () => {
   const context = () => new CharacterContextActions({ creator: {} as CreatorPort, showSave: () => {} }, { save: undefined, stored: undefined });
 
   test("the character context asks for the uncensored body only while the setting is on and the body shown; the same V either way", () => {
-    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-8");
+    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-9");
     const ctx = context();
     let published = 0;
     ctx.subscribe(() => published++);
@@ -89,7 +89,7 @@ describe("the request (xfs/character-request-7 `nudity`)", () => {
     expect(v6).toEqual({ schema: CHARACTER_REQUEST_SCHEMA, source: "default", bodyGender: "female", body: false });
     expect(censorshipOf(v6)).toBe("censored");
     // A later page than this host is a version skew, said as such.
-    expect(() => parseCharacterRequest({ ...request, schema: "xfs/character-request-9" })).toThrow(CharacterRequestVersionError);
+    expect(() => parseCharacterRequest({ ...request, schema: "xfs/character-request-10" })).toThrow(CharacterRequestVersionError);
   });
 });
 

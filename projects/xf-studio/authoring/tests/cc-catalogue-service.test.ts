@@ -137,10 +137,10 @@ describe("the creator catalogue service", () => {
     const preset = await (await post({ kind: "preset", name: "Mine", request: { ...DEFAULT_CHARACTER, choices: [{ part: "head", option: "eyes_color", choice: "he__02_blue" }] },
       kept: { schema: CC_PRESET_SCHEMA, bodyGender: "female", values: [] } })).json();
     expect(JSON.parse(preset.text)).toMatchObject({ schema: CC_PRESET_SCHEMA, name: "Mine" });
-    expect((await post({ kind: "view", request: { schema: "xfs/character-request-9", source: "default", bodyGender: "female" } })).status).toBe(409);
+    expect((await post({ kind: "view", request: { schema: "xfs/character-request-10", source: "default", bodyGender: "female" } })).status).toBe(409);
     expect((await post({ kind: "view", request: { ...DEFAULT_CHARACTER, choices: [{ part: "head" }] } })).status).toBe(400);
     expect((await post({ kind: "view", request: DEFAULT_CHARACTER }, "http://evil.example")).status).toBe(403);
-    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-8");
+    expect(CHARACTER_REQUEST_SCHEMA).toBe("xfs/character-request-9");
   });
 });
 

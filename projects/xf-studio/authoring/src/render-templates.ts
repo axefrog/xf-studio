@@ -12,7 +12,7 @@
  * not be read, the vanilla depot path is the fallback key. Nothing here names a mod or framework.
  */
 export type RenderAdapterId = "skin" | "hair-strand" | "hair-cap-decal" | "double-diffuse-decal" | "mesh-decal" | "eye" | "eye-shell"
-  | "layered" | "metal-base" | "decal-placeholder";
+  | "layered" | "metal-base" | "glass" | "decal-placeholder";
 /** Members of the post-G-buffer decal family that the face-detail path draws through one shared material (face-decal-material.ts). */
 export type DecalKind = "mesh-decal" | "double-diffuse" | "gradient-recolor";
 /**
@@ -116,6 +116,11 @@ export const RENDER_TEMPLATES: Readonly<Record<string, RenderTemplateInputs>> = 
   // (research/materials/shader-metal-glass.md §3). Every input has a neutral template default, so none is required.
   metal_base: { adapter: "metal-base", path: "engine\\materials\\metal_base.remt", textures: ["BaseColor", "Metalness", "Roughness", "Normal"],
     required: [], vectors: ["BaseColorScale"], ...none },
+  // The engine's one-sided glass (research/materials/shader-metal-glass.md §4): the Gorilla Arms' window, garment and accessory panes. The
+  // adapter draws the transmission pass (glass-material.ts); every input has a neutral template default. `glass.mt` (two-sided, drawn
+  // twice) is not listed: its programs are unread, and the hair shadow proxies that use it never draw in the scene.
+  glass_onesided: { adapter: "glass", path: "base\\materials\\glass_onesided.mt", textures: ["GlassTint", "MaskTexture"], required: [],
+    vectors: ["GlassTintTileAndOffset"], ...none },
   // The rest of the 2.31 decal family (names from the installed shader cache's compiled templates): recorded, not drawn yet.
   ...Object.fromEntries(["mesh_decal__blackbody", "mesh_decal_blendable", "mesh_decal_emissive", "mesh_decal_emissive_subsurface", "mesh_decal_gradient",
     "mesh_decal_gradientmap_recolor_2", "mesh_decal_gradientmap_recolor_blendable", "mesh_decal_gradientmap_recolor_emissive", "mesh_decal_morph",

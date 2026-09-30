@@ -167,6 +167,8 @@ export type TemplateDefaults = ReadonlyMap<string, readonly ResolvedParam[]>;
 /** A template's own `name` and `materialPriority` per template depot path (lower case), read by the host from the `.mt`. */
 export type TemplateIdentities = ReadonlyMap<string, { name: string | null; priority: string | null }>;
 
+/** The scalar key the chunk's instance `enableMask` flag travels under (not a template parameter; `ResolvedChunkMaterial.enableMask`). */
+export const ENABLE_MASK = "enableMask";
 /** Plain words per slot (render-detail.ts, where the record reader uses them too). */
 export { SLOT_WORDS };
 
@@ -281,6 +283,8 @@ export function planChunk(material: ResolvedChunkMaterial, defaults: TemplateDef
   }
   const override = morphTextureOverride(rule, textureInputs);
   if (override) chunk.textures[override[0]] = override[1];
+  // The instance's `enableMask` (a property, not a parameter) travels with the scalars, where the adapter reads it (metal_base's alpha test).
+  if (material.enableMask) chunk.scalars[ENABLE_MASK] = 1;
   return chunk;
 }
 
@@ -455,8 +459,9 @@ function planFace(resolved: ResolvedCharacter, cco: CcoResource, defaults: Templ
  * - body part: `TPP_Body` (the third-person half of the `FPP_Body` perspective pair: the body skin, nipples, body tattoos and scars, the
  *   censorship underwear) and `genitals` (the genitals controller's lower group), plus the feet controller's group for the feet state
  *   (`FEET_GROUPS`);
- * - arms part: the default holster state's third-person group, `holstered_default_tpp` (feminine; the masculine creator resource does
- *   not split it: `holstered_default`). The other states belong to equipped arm cyberware, which a creator V never has.
+ * - arms part: the holster state's third-person group (`BodyState.arms`, arm-cyberware.ts: the equipped arm cyberware's state, e.g.
+ *   `holstered_strong_tpp`); without one, the default state's, `holstered_default_tpp` (feminine; the masculine creator resource does not
+ *   split it: `holstered_default`).
  * The breast size (group `breast`) and nail length (`nails`) are morphs, applied to every body component that carries the pair.
  */
 export const BODY_GROUPS: Readonly<Record<"body" | "arms", readonly string[]>> = Object.freeze({
@@ -468,8 +473,11 @@ export const BODY_GROUPS: Readonly<Record<"body" | "arms", readonly string[]>> =
  */
 export type FeetState = "flat" | "lifted";
 export const FEET_GROUPS: Readonly<Record<FeetState, string>> = Object.freeze({ flat: "flat_feet", lifted: "lifted_feet" });
-/** The body's state as worn items would set it; the default is the V with no clothing. */
-export type BodyState = { readonly feet: FeetState };
+/**
+ * The body's state as worn and equipped items set it; the default is the V with no clothing and no arm cyberware. `arms`: the holster
+ * state's third-person group (arm-cyberware.ts `armsStateFor`); absent, the default state's groups (`BODY_GROUPS.arms`).
+ */
+export type BodyState = { readonly feet: FeetState; readonly arms?: string };
 export const DEFAULT_BODY_STATE: BodyState = Object.freeze({ feet: "flat" });
 /**
  * The character creator's puppet (`Character.Player_Puppet_Menu`, `player_wa_tpp.ent`) wears the appearance `character_creation`
@@ -488,13 +496,14 @@ export function creatorPuppetFeet(cco: CcoResource): FeetState | null {
  * The body state a request draws: footwear lifts the feet; bare feet stand as the request's puppet draws them (the creator's, for its
  * idles), else flat, as in the inventory and in gameplay.
  */
-export function bodyStateFor(footwear: FeetState | null | undefined, puppet: "creator" | undefined, cco: CcoResource): BodyState {
-  if (footwear === "lifted") return { feet: "lifted" };
-  return { feet: (puppet === "creator" ? creatorPuppetFeet(cco) : null) ?? "flat" };
+export function bodyStateFor(footwear: FeetState | null | undefined, puppet: "creator" | undefined, cco: CcoResource, arms?: string | null): BodyState {
+  const withArms = arms ? { arms } : {};
+  if (footwear === "lifted") return { feet: "lifted", ...withArms };
+  return { feet: (puppet === "creator" ? creatorPuppetFeet(cco) : null) ?? "flat", ...withArms };
 }
 /** The groups the third-person body reads in one part for a body state. */
 export const bodyGroups = (part: "body" | "arms", state: BodyState = DEFAULT_BODY_STATE): readonly string[] =>
-  part === "body" ? [...BODY_GROUPS.body, FEET_GROUPS[state.feet]] : BODY_GROUPS.arms;
+  part === "body" ? [...BODY_GROUPS.body, FEET_GROUPS[state.feet]] : state.arms ? [state.arms] : BODY_GROUPS.arms;
 /** Plain words for the body's parts, by creator slot, for the label only (selection never uses them); others read "arms" or "body detail". */
 export const BODY_DETAIL_WORDS: Readonly<Record<string, string>> = Object.freeze({
   body_color: "body", flat_feet: "feet", lifted_feet: "feet", underpants: "underwear", body_tattoo: "tattoo", body_scars: "scars",

@@ -95,7 +95,9 @@ export const P = {
   flatFeetMesh: "base\\fixture\\body\\feet_flat.mesh", liftedFeetMesh: "base\\fixture\\body\\feet_lifted.mesh",
   fppBodyApp: "base\\fixture\\body\\fpp_torso.app", fppBodyMesh: "base\\fixture\\body\\fpp_torso.mesh",
   armsApp: "base\\fixture\\arms\\arms_full.app", armsMesh: "base\\fixture\\arms\\arms_hq.mesh", strongArmsApp: "base\\fixture\\arms\\strong_arms.app",
-  strongArmsMesh: "base\\fixture\\arms\\strong_arms.mesh", nailsApp: "base\\fixture\\arms\\nails.app", nailsMorph: "base\\fixture\\arms\\nails.morphtarget",
+  strongArmsMesh: "base\\fixture\\arms\\strong_arms.mesh", strongCyberApp: "base\\fixture\\arms\\strong_arms_cyberware.app",
+  strongCyberMesh: "base\\fixture\\arms\\strong_arms_cyberware.mesh", strongDecalD: "base\\fixture\\arms\\tex\\strong_decals_d.xbm",
+  glassOnesidedMt: "base\\materials\\glass_onesided.mt", nailsApp: "base\\fixture\\arms\\nails.app", nailsMorph: "base\\fixture\\arms\\nails.morphtarget",
   nailsMesh: "base\\fixture\\arms\\nails.mesh", nailsD: "base\\fixture\\arms\\tex\\nails_d.xbm",
   teethApp: "base\\fixture\\teeth\\ht_basehead.app", teethMorph: "base\\fixture\\teeth\\ht_morphs.morphtarget",
   teethAddMorph: "fixture_mod\\teeth\\ht_morphs_additions.morphtarget", teethMesh: "base\\fixture\\teeth\\ht_basehead.mesh",
@@ -279,11 +281,15 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       arms: { options: [
         appearanceOption("h_default_arms_colors_tpp", P.armsApp, [BODY.arms], { hidden: 1, link: "skin color" }),
         appearanceOption("h_strong_arms_colors_base_tpp", P.strongArmsApp, [BODY.arms], { hidden: 1, link: "skin color" }),
+        // The Gorilla Arms state's second half (the cyberware): a masked metal decal and the glass window.
+        appearanceOption("h_strong_arms_colors_cyberware01_tpp", P.strongCyberApp, [BODY.arms], { hidden: 1 }),
         appearanceOption("nails_color_tpp", P.nailsApp, [BODY.nails], { uiSlot: "nails_color", link: "nails_color", linkController: 1 }),
         morphOption("nails_l", ["nails_long_l"], { link: "nails_size", linkController: 1 }),
         morphOption("nails_r", ["nails_long_r"], { link: "nails_size", hidden: 1 }),
-      ], groups: { holstered_default_tpp: ["h_default_arms_colors_tpp", "nails_color_tpp"], holstered_strong_tpp: ["h_strong_arms_colors_base_tpp"],
-        nails: ["nails_l", "nails_r"], character_customization: ["h_default_arms_colors_tpp", "nails_l", "nails_r", "nails_color_tpp"] } } }),
+      ], groups: { holstered_default_tpp: ["h_default_arms_colors_tpp", "nails_color_tpp"], holstered_strong_tpp: ["h_strong_arms_colors_base_tpp", "h_strong_arms_colors_cyberware01_tpp"],
+        nails: ["nails_l", "nails_r"], character_customization: ["h_default_arms_colors_tpp", "nails_l", "nails_r", "nails_color_tpp"] } },
+      perspectives: [["FPP_Body", "FPP_Body", "TPP_Body"], ["holstered_default", "holstered_default_fpp", "holstered_default_tpp"],
+        ["holstered_strong", "holstered_strong_fpp", "holstered_strong_tpp"]] }),
     // Skin: the type's .app names the tone's mesh appearance on the one head morph component (plus a part the preview doesn't draw).
     [P.skinApp1]: app(toneAppearances("").map(entry => ({ ...entry, components: [...entry.components, meshComponent("seam_fix", P.shadowMesh)] }))),
     // Skin type 3 also brings the personal-link decal, as every vanilla skin type does.
@@ -455,6 +461,14 @@ export function detailFixture(options: { skinPatch?: boolean; jewellery?: boolea
       entries: [{ name: "skin", local: true, index: 0 }, { name: "link", local: false, index: 0 }],
       local: [instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)])], external: [P.silverMi], chunks: 3 }),
     [P.strongArmsApp]: app([{ name: BODY.arms, components: [meshComponent("a0_strong_arms", P.strongArmsMesh, "pale")] }]),
+    [P.strongCyberApp]: app([{ name: BODY.arms, components: [meshComponent("a0_strong_arms_cyberware", P.strongCyberMesh, "cyberware01")] }]),
+    [P.strongCyberMesh]: mesh({ appearances: [{ name: "cyberware01", chunkMaterials: ["decals", "glass"] }],
+      entries: [{ name: "decals", local: true, index: 0 }, { name: "glass", local: true, index: 1 }],
+      local: [instance(P.metalBaseRemt, [tex("BaseColor", P.strongDecalD), scalar("MetalnessBias", 0.425)], { enableMask: 1 }),
+        instance(P.glassOnesidedMt, [colour("TintColor", 240, 235, 228), colour("GlassSpecularColor", 0, 0, 0), scalar("IOR", 1.32)])], chunks: 2 }),
+    [P.glassOnesidedMt]: namedTemplate("glass_onesided", "EMP_Normal", [sParam("Opacity", 1), sParam("FresnelBias", 1), cParam("TintColor", 229, 229, 229),
+      cParam("GlassSpecularColor", 255, 255, 255)]),
+    [P.strongDecalD]: xbm(true),
     [P.strongArmsMesh]: mesh({ appearances: [{ name: "pale", chunkMaterials: ["skin"] }], entries: [{ name: "skin", local: true, index: 0 }],
       local: [instance(P.paleMi, [tex("Albedo", P.bodyD), tex("Normal", P.bodyN)])], chunks: 1 }),
     // Nails: a morph component with the length shape of its hand.
@@ -608,6 +622,7 @@ export const BODY_REQUEST = saved([...REQUEST_A.appearances.map(entry => [entry.
   ["genitals", "genitals_04", P.genitalsApp, "genitals_none__01_ca_pale", "body"],
   ["lifted_feet", "lifted_feet", P.liftedFeetApp, BODY.feet, "body"], ["flat_feet", "flat_feet", P.flatFeetApp, BODY.feet, "body"],
   ["holstered_default_tpp", "h_default_arms_colors_tpp", P.armsApp, BODY.arms, "arms"], ["holstered_default_tpp", "nails_color_tpp", P.nailsApp, BODY.nails, "arms"],
-  ["holstered_strong_tpp", "h_strong_arms_colors_base_tpp", P.strongArmsApp, BODY.arms, "arms"]],
+  ["holstered_strong_tpp", "h_strong_arms_colors_base_tpp", P.strongArmsApp, BODY.arms, "arms"],
+  ["holstered_strong_tpp", "h_strong_arms_colors_cyberware01_tpp", P.strongCyberApp, BODY.arms, "arms"]],
   [...REQUEST_A.morphs, { part: "body", group: "breast", region: "breast", target: "breast_big" },
     { part: "arms", group: "nails", region: "nails_l", target: "nails_long_l" }]);

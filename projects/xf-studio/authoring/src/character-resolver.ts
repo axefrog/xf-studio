@@ -44,6 +44,12 @@ export interface ResolvedChunkMaterial {
   readonly template: Provenance | null;
   readonly params: readonly ResolvedParam[];
   readonly gaps: readonly string[];
+  /**
+   * The instance's `enableMask` flag (a `CMaterialInstance` property, not a parameter): the nearest instance of the chain that stores it.
+   * It selects the template's alpha-tested variant (`metal_base`: `BaseColor.a` against `AlphaThreshold`; research/materials/
+   * shader-metal-glass.md §3.3) [hypothesis: that the flag selects the variant]. Absent when no instance stores it.
+   */
+  readonly enableMask?: boolean;
 }
 export interface ResolvedComponent {
   readonly name: string;
@@ -304,7 +310,7 @@ const paramText = (value: MaterialParamValue): string =>
 async function materialChain(ctx: Context, start: { label: string; instance: JsonObject; provenance: Provenance | null },
   dynamic: { context: ReadonlyMap<string, string>; material: ReadonlyMap<string, string>; contextParams: [string, MaterialParamValue][] } | null) {
   const chain: MaterialLink[] = [], params = new Map<string, ResolvedParam>(), gaps: string[] = [];
-  let template: Provenance | null = null;
+  let template: Provenance | null = null, enableMask: boolean | undefined;
   let current: { label: string; instance: JsonObject; provenance: Provenance | null } | null = start;
   for (let depth = 0; current && depth < 12; depth++) {
     let values = materialParams(current.instance.values);
@@ -312,6 +318,8 @@ async function materialChain(ctx: Context, start: { label: string; instance: Jso
       const override = dynamic.contextParams.find(([contextName, contextValue]) => contextName === name && contextValue.kind === value.kind);
       return override ? [name, override[1]] as [string, MaterialParamValue] : [name, value];
     });
+    const mask = current.instance.enableMask;
+    if (enableMask === undefined && (typeof mask === "boolean" || typeof mask === "number")) enableMask = mask === true || mask === 1;
     for (const [name, value] of values) {
       if (params.has(name)) continue;
       let resource: Provenance | undefined, expansion: ResolvedParam["dynamic"];
@@ -343,7 +351,7 @@ async function materialChain(ctx: Context, start: { label: string; instance: Jso
     if (nextType !== "CMaterialInstance") { template = next.provenance; break; }
     current = { label: refLabel(next.ref), instance: next.root, provenance: next.provenance };
   }
-  return { chain, params: [...params.values()], template, gaps };
+  return { chain, params: [...params.values()], template, gaps, ...(enableMask !== undefined ? { enableMask } : {}) };
 }
 
 /** ArchiveXL ProcessAppearance expansion of an appearance without chunk materials [source: Mesh/Extension.cpp 88–166]. */

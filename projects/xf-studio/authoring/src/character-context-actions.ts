@@ -529,7 +529,7 @@ export class CharacterContextActions {
     const next = this.withChoices([change]);
     if (next.choices.length > CREATOR_LIMITS.choices || sameChoices(next.choices, this.state.choices)) return;
     const request = characterRequestOf({ bodyGender: next.bodyGender, saved: next.save?.saved ?? null }, next.choices, undefined, this.dressing(),
-      this.bodyShown, this.uncensored, this.creatorPuppet);
+      this.bodyShown, this.uncensored, this.creatorPuppet, this.armsCyberware());
     entry.controller = new AbortController();
     void this.ports.details!.preload!(request, entry.controller.signal);
   }
@@ -615,8 +615,13 @@ export class CharacterContextActions {
    */
   detailRequest(): CharacterRequest {
     return characterRequestOf({ bodyGender: this.state.bodyGender, saved: this.state.save?.saved ?? null }, this.state.choices, undefined, this.dressing(),
-      this.bodyShown, this.uncensored, this.creatorPuppet);
+      this.bodyShown, this.uncensored, this.creatorPuppet, this.armsCyberware());
   }
+  /**
+   * The arm cyberware the loaded save equips (its `ArmsCW` item), whose holster state the arms draw (arm-cyberware.ts); none for the default
+   * V, a save without it, or one read before XF Studio read the area.
+   */
+  private armsCyberware(): string | null { return this.state.save?.value?.loadout?.arms ?? null; }
   /**
    * Whether the viewer shows V's body (the preview's Body switch): with it off, the request asks for the head alone, so the host neither
    * dresses nor prepares the body and the scene releases what it drew (PREV-108). A composition root keeps it in step with the switch.
