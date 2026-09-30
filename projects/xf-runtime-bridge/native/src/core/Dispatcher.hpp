@@ -46,6 +46,7 @@ enum class Access
     WriteShowroom,  // XF Finish Showroom props and light rigs (showroom.*); off unless the list has "showroom"
     WritePlayer,    // 0.6: reversible player changes (teleport, look, crouch, weapons, menus, behaviours that move V); "player"
     ActPlayer,      // 0.6: irreversible actions in the world (using devices, dialogue, consuming); "act"
+    WriteNpc,       // 0.8: NPC direction (npc.*: XF actors, commands, lines, gestures, dialogue choices); "npc"
     Notify,         // shows a message in the bridge's own in-game label (ui.message); not a write, never changes the game
     Control         // changes only the bridge itself (bridge.kill); always allowed, never touches the game
 };

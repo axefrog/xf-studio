@@ -9,6 +9,10 @@
 //   r6/tweaks/XFRuntimeBridge/xf_runtime_bridge.yaml     (TweakXL)
 //   r6/tweaks/XFRuntimeBridge/^xf_photo_mode_presets.yaml (TweakXL; diagnostic and writes packages only; the
 //                                                         "^" makes TweakXL read it last, after other mods' presets)
+//   r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml         (TweakXL; writes package only: the XF actor records npc.spawn
+//                                                         brings in, clones of base-game civilians, 0.8)
+//   archive/pc/mod/xfs_bridge_npc_gestures.archive       (writes package only, when built: the XF gesture carrier for
+//                                                         npc.act, tools/npc/gesture-carrier.ts; 0.8)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/init.lua   (CET)
 //   bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge/panel.lua  (CET panel; diagnostic and writes packages only)
 // The live-pose carrier is a separate test package (tools/live-pose/build-carrier.ts), never in these.
@@ -45,6 +49,10 @@ export const STAGING_NOTES: readonly string[] = [
   `${PRESETS_FILE} is read after every other tweak file, so for the whole profile it overrides any other mod's photo_mode.std_preset_6..9 (Portrait Enhancer's among them); stage this package only in the dedicated test profile.`,
 ];
 export const CET_DIR = "bin/x64/plugins/cyber_engine_tweaks/mods/xf_runtime_bridge";
+/** 0.8: the XF actor records (TweakXL), in the -writes package only. */
+export const NPC_ACTORS_FILE = "r6/tweaks/XFRuntimeBridge/xf_npc_actors.yaml";
+/** 0.8: the XF gesture carrier's archive (npc.act), in the -writes package only and only when it has been built. */
+export const NPC_CARRIER_ARCHIVE = "archive/pc/mod/xfs_bridge_npc_gestures.archive";
 export const PANEL_FILE = `${CET_DIR}/panel.lua`;
 export const THEME_FILE = `${CET_DIR}/theme.lua`;
 
@@ -63,11 +71,14 @@ function listFiles(dir: string): string[] {
 /** The variant's config.ini, from the project's (which must keep every switch off). */
 /**
  * The -writes package's write classes: inventory only with --allow-inventory (the maintainer's approval); showroom (XF Finish
- * Showroom's test heads and lights, bridge 0.5) and player (0.6: teleport, look, crouch, weapons, menus, glides) in every
- * -writes build, which only the dedicated test profile stages. act (irreversible actions for V) stays off: no command uses it yet.
+ * Showroom's test heads and lights, bridge 0.5), player (0.6: teleport, look, crouch, weapons, menus, glides) and npc (0.8: XF
+ * actors and NPC direction) in every -writes build, which only the dedicated test profile stages. act (irreversible actions
+ * for V) stays off: no command uses it yet.
  */
 export const WRITES_CLASSES = (options: { allowInventory?: boolean } = {}) =>
-  options.allowInventory ? ["photo", "world", "character", "inventory", "save", "showroom", "player"] : ["photo", "world", "character", "save", "showroom", "player"];
+  options.allowInventory
+    ? ["photo", "world", "character", "inventory", "save", "showroom", "player", "npc"]
+    : ["photo", "world", "character", "save", "showroom", "player", "npc"];
 
 /** The [bridge] section's enabled line (after the section's comment lines). */
 const BRIDGE_ENABLED = (on: boolean) => new RegExp(`^\\[bridge\\]\\n(?:;.*\\n)*enabled = ${on}$`, "m");
@@ -121,6 +132,8 @@ export type StageOptions = {
   commit: string;
   /** -writes only: also allow the inventory write class (only with the maintainer's approval). */
   allowInventory?: boolean;
+  /** -writes only (0.8): the built XF gesture carrier archive to include (tools/npc/gesture-carrier.ts); none when absent. */
+  npcCarrier?: string;
 };
 
 export type StagedFile = { path: string; bytes: number; sha256: string };
@@ -141,6 +154,10 @@ export type Manifest = {
   cet_panel: boolean;
   /** 0.7: whether the XF overlay host is on ([overlay] enabled): the test packages only. */
   overlay_host: boolean;
+  /** 0.8: whether the XF actor records (npc.spawn) are in the package: the -writes package only. */
+  npc_actors: boolean;
+  /** 0.8: whether the XF gesture carrier (npc.act) is in the package; without it gestures are refused carrier_missing. */
+  npc_gesture_carrier: boolean;
   commit: string;
   source_tree_clean: true;
   built_for: Record<string, string>;
@@ -176,6 +193,10 @@ export function stageVariant(options: StageOptions): Manifest {
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "panel.lua"), PANEL_FILE);
   // 0.7: the panel's XF Studio theme (generated from the Studio's tokens, tools/overlay/theme.ts) goes with the panel.
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "theme.lua"), THEME_FILE);
+  // 0.8: the XF actor records and (when built) the gesture carrier: the test profile's -writes package only.
+  if (variant === "writes") put(join(projectDir, "tweaks", "test-profile", "xf_npc_actors.yaml"), NPC_ACTORS_FILE);
+  const carrier = variant === "writes" && options.npcCarrier ? options.npcCarrier : undefined;
+  if (carrier) put(carrier, NPC_CARRIER_ARCHIVE);
 
   const files = listFiles(stageDir).map((path) => ({
     path: relative(stageDir, path).replaceAll("\\", "/"),
@@ -196,6 +217,8 @@ export function stageVariant(options: StageOptions): Manifest {
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
     overlay_host: variant !== "default",
+    npc_actors: variant === "writes",
+    npc_gesture_carrier: carrier !== undefined,
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {
@@ -204,7 +227,7 @@ export function stageVariant(options: StageOptions): Manifest {
       redscript: "0.5.31",
       cet: "1.37.1",
       tweakxl: "1.11.4 (optional; the data marker and the test profile's camera presets need it)",
-      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather and Equipment-EX's route need it)",
+      codeware: "1.20.5 (optional; the showroom, the ink panel and its answer keys, the weather, Equipment-EX's route and NPC direction need it)",
     },
     files,
   };

@@ -3397,6 +3397,9 @@ void Bridge070ReviewTests()
     }
 }
 
+// Bridge 0.8's NPC direction (selftest/UnitTestsNpc.cpp): answers its own failure count.
+int RunNpcUnitTests();
+
 int RunUnitTests()
 {
     SanitizeTests();
@@ -3427,6 +3430,7 @@ int RunUnitTests()
     Bridge061Tests();
     Bridge070Tests();
     Bridge070ReviewTests();
+    gFailures += RunNpcUnitTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

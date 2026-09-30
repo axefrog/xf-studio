@@ -54,6 +54,8 @@ public:
     // What the bridge holds on V (game.save's refusal, RB-83): its status effects and "behaviours running".
     json Holds();
     EventLog& Events();
+    // 0.8: V now, {position, yaw, busy}, for the simulated NPC street (selftest/SimNpc.cpp).
+    json PlayerNow();
 
 private:
     struct State;

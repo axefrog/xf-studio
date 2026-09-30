@@ -1,0 +1,281 @@
+// Bridge 0.8's NPC direction (research/runtime/npc-direction-design.md): list and pick NPCs near V, spawn XF actors (our own
+// clones of base-game civilians, never saved), walk, follow, turn and place them, give them lines (text and vanilla voice
+// lines), a gaze, a face and a gesture, offer V dialogue choices in the game's own widget, release them, and run a whole
+// scene as data (npc.scenario, tools/npc/scenario.ts). catalogue.ts places these; only types come from there, so the two
+// modules don't load each other.
+
+import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
+import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
+import { point3 } from "./catalogue060.ts";
+
+type Json = Record<string, any>;
+
+/** The XF actors npc.spawn offers (core/Npc.cpp Casts(); tweaks/test-profile/xf_npc_actors.yaml). */
+export const NPC_CASTS = ["woman_corpo", "man_corpo", "woman_nightlife", "man_youngster", "woman_lowlife", "man_lowlife", "research_crowd_record", "research_npc_base"] as const;
+/** Facial reactions (core/Npc.cpp Expressions()). */
+export const NPC_EXPRESSIONS = ["neutral", "joy", "smile", "sad", "surprise", "aggressive", "anger", "interested", "disinterested", "disappointed", "disgust", "nervous", "fear"] as const;
+/** Vanilla voice triggers npc.say may play (core/Npc.cpp VoiceTriggers()). */
+export const NPC_TRIGGERS = ["greeting", "bump", "stlh_curious_grunt", "coop_irritation", "battlecry_curse", "fear_foll", "fear_beg", "fear_run", "danger", "vehicle_bump"] as const;
+/** Gestures in the XF gesture carrier (core/Npc.cpp Gestures()). */
+export const NPC_GESTURES = ["talk", "talk_hips", "wave", "shrug", "nod", "arms_crossed"] as const;
+/** The npc.* events in the session's event stream (session_wait's kinds). */
+export const NPC_WAIT_KINDS = [
+  "npc.spawned",
+  "npc.arrived",
+  "npc.move_failed",
+  "npc.follow_ended",
+  "npc.said",
+  "npc.act_done",
+  "npc.choice",
+  "npc.released",
+  "npc.lost",
+  "npc.died",
+  "npc.auto_released",
+] as const;
+
+const HANDLE = "^[ap][0-9]{1,5}$";
+const TARGET = "^(v|[ap][0-9]{1,5})$";
+const who = (description = "The NPC: its handle from npc_spawn (a1, a2, ...) or npc_pick (p1, ...).") => str(description, { pattern: HANDLE });
+const target = (description: string) => str(description, { pattern: TARGET });
+const gait = oneOf("How it moves: walk (default), run or sprint.", ["walk", "run", "sprint"]);
+
+/** Catalogue input to the bridge's parameters: the point forms join their plain form (to_point -> to, and so on). */
+export function npcParams(input: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...input };
+  const join = (plain: string, point: string) => {
+    if (out[point] !== undefined) {
+      out[plain] = out[point];
+      delete out[point];
+    }
+  };
+  join("to", "to_point");
+  join("at", "at_point");
+  join("face", "face_point");
+  if (out.ahead_m !== undefined || out.side_m !== undefined) {
+    out.at = { ahead_m: out.ahead_m ?? 0, ...(out.side_m !== undefined ? { side_m: out.side_m } : {}) };
+    delete out.ahead_m;
+    delete out.side_m;
+  }
+  return out;
+}
+
+const bridgeNpc = (method: string) => ({ method, params: npcParams });
+
+export const COMMANDS_080_NPC: CommandDef[] = [
+  {
+    name: "npc.list",
+    title: "List the NPCs near V",
+    description:
+      "The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting), and which are the session's own. Changes nothing.",
+    permission: "read",
+    input: obj({ radius_m: num("How far from V to look, 1 to 40 metres. Default 15.", 1, 40), max: int("At most this many, 1 to 40. Default 20.", 1, 40) }),
+    bridge: { method: "npc.list" },
+  },
+  {
+    name: "npc.pick",
+    title: "Pick an NPC near V",
+    description:
+      "Adopts one NPC near V (its id from npc_list) so the bridge can make it look at someone, change its face and say a line; it is never moved or given a gesture, and it keeps walking its own way. Protected NPCs (story characters, companions, vendors, police, children, bosses, anyone in a scene) and busy ones are refused. Answers the NPC's handle (p1, p2, ...). Changes nothing by itself.",
+    permission: "read",
+    input: obj({ id: str("The NPC's id from npc_list.", { minLength: 1, maxLength: 64 }) }, ["id"]),
+    bridge: { method: "npc.pick" },
+  },
+  {
+    name: "npc.status",
+    title: "Read the NPCs the bridge directs",
+    description:
+      "The session's actors and picked NPCs: each one's handle, cast or record, whether it has appeared, where it is, what it is doing (walking, following, turning), its lines still showing, its gaze, face and gesture; the dialogue choices showing, if any; and the limits (3 actors, 4 picks, 30 m). Changes nothing.",
+    permission: "read",
+    input: obj({}),
+    bridge: { method: "npc.status" },
+  },
+  {
+    name: "npc.spawn",
+    title: "Bring in an XF actor",
+    description:
+      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_view waits until the spot isn't on screen. The actor is friendly to V, can't be killed, and is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Needs Codeware and the -writes package's actor records.",
+    permission: "write-npc",
+    input: obj(
+      {
+        cast: oneOf("Which actor: woman_corpo, man_corpo, woman_nightlife, man_youngster, woman_lowlife or man_lowlife (research_crowd_record and research_npc_base are for the session-9 comparison only).", [...NPC_CASTS]),
+        ahead_m: num("Metres along V's facing (negative: behind her), -30 to 30.", -30, 30),
+        side_m: num("Metres to V's right (negative: left), -30 to 30. Default 0.", -30, 30),
+        at_point: point3("A world point instead of ahead_m and side_m."),
+        face: target("Face V (\"v\", the default) or another NPC (its handle)."),
+        face_point: point3("Face this world point instead."),
+        appearance: str("One of the actor's appearances by name (default random).", { pattern: "^[A-Za-z0-9_]+$", maxLength: 64 }),
+        out_of_view: bool("Appear only when the spot isn't on screen."),
+        label: str("The name its lines and dialogue choices show (default Stranger).", { minLength: 1, maxLength: 40 }),
+      },
+      ["cast"],
+    ),
+    undo: "The result's undo releases the actor (npc_release with how despawn); the kill switch and loading a save remove it too.",
+    bridge: bridgeNpc("npc.spawn"),
+  },
+  {
+    name: "npc.move",
+    title: "Walk an actor somewhere",
+    description:
+      "Sends one of the bridge's actors walking (or running) to V (\"v\"), to another NPC (its handle) or to a world point (to_point), stopping stop_m metres short (default 1.6) and turning to face V at the end when going to V (face_v). It uses the game's own walking along walkable ground. npc.arrived follows when it gets there, or npc.move_failed with the reason (no path, interrupted, or max_s passed, default 60). A new move replaces the last one. Picked NPCs aren't moved.",
+    permission: "write-npc",
+    input: obj(
+      {
+        who: who("The actor (a1, a2, a3)."),
+        to: target("Where to: \"v\" or another NPC's handle."),
+        to_point: point3("A world point instead."),
+        gait,
+        stop_m: num("Stop this far short of the target, 0.3 to 10 m. Default 1.6.", 0.3, 10),
+        face_v: bool("Turn to face V on arrival (default true when going to V)."),
+        max_s: num("Give up after this many seconds, 1 to 60. Default 60.", 1, 60),
+      },
+      ["who"],
+    ),
+    undo: "npc_stop halts the actor where it is; it doesn't walk back.",
+    bridge: bridgeNpc("npc.move"),
+  },
+  {
+    name: "npc.follow",
+    title: "Have an actor follow",
+    description:
+      "One of the bridge's actors follows V (the default) or another NPC at distance_m (default 2), matching its pace, until npc_stop or max_s (default 300 seconds); npc.follow_ended says when it stopped by itself.",
+    permission: "write-npc",
+    input: obj(
+      {
+        who: who("The actor."),
+        target: target("Follow V (\"v\") or another NPC (its handle)."),
+        distance_m: num("Keep this far behind, 1 to 10 m. Default 2.", 1, 10),
+        gait,
+        max_s: num("Stop following after this many seconds, 1 to 300. Default 300.", 1, 300),
+      },
+      ["who"],
+    ),
+    undo: "npc_stop ends the follow where the actor is.",
+    bridge: bridgeNpc("npc.follow"),
+  },
+  {
+    name: "npc.turn",
+    title: "Turn an actor",
+    description: "One of the bridge's actors turns on the spot to face V (\"v\"), another NPC (its handle) or a world point (to_point).",
+    permission: "write-npc",
+    input: obj({ who: who("The actor."), to: target("Face V (\"v\") or another NPC (its handle)."), to_point: point3("Face this world point instead.") }, ["who"]),
+    undo: "npc_stop ends the turn where it is.",
+    bridge: bridgeNpc("npc.turn"),
+  },
+  {
+    name: "npc.place",
+    title: "Place an actor",
+    description: "Puts one of the bridge's actors at a world point within 30 m of V, facing yaw degrees if given, at once (for staging a shot, not for drama). The answer's undo puts it back where it stood.",
+    permission: "write-npc",
+    input: obj({ who: who("The actor."), at: point3("The world point [x, y, z]."), yaw: num("Its facing in degrees (the game's yaw).", -360, 360) }, ["who", "at"]),
+    undo: "The result's undo places the actor back where it stood.",
+    bridge: { method: "npc.place" },
+  },
+  {
+    name: "npc.stop",
+    title: "Stop an actor",
+    description: "Stops one of the bridge's actors walking, following or turning; it stays where it is.",
+    permission: "write-npc",
+    input: obj({ who: who("The actor.") }, ["who"]),
+    undo: "Nothing to undo: the actor holds its place.",
+    bridge: { method: "npc.stop" },
+  },
+  {
+    name: "npc.say",
+    title: "Give an NPC a line",
+    description:
+      "An NPC (an actor or a picked one) says something: text (up to 200 characters) shown as a subtitle with its name (style subtitle, the default), in a bubble above its head (overhead) or in the holocall style, for seconds seconds (default from its length); and/or trigger, one of the game's own voice lines for that NPC's voice (greeting, bump, stlh_curious_grunt, coop_irritation, battlecry_curse, fear_foll, fear_beg, fear_run, danger, vehicle_bump: the voice picks the words, not us). The player's subtitle settings still apply. npc.said follows when the line's time ends. hide takes a shown line down by its id.",
+    permission: "write-npc",
+    input: obj(
+      {
+        who: who(),
+        text: str("The line, up to 200 characters.", { minLength: 1, maxLength: 200 }),
+        trigger: oneOf("A vanilla voice line in the NPC's own voice.", [...NPC_TRIGGERS]),
+        style: oneOf("How the text shows: subtitle (default), overhead or holocall.", ["subtitle", "overhead", "holocall"]),
+        seconds: num("How long the text shows, 1 to 15 seconds.", 1, 15),
+        hide: str("Take down this line (its id from an earlier answer, such as l3) instead.", { pattern: "^l[0-9]{1,9}$" }),
+      },
+      ["who"],
+    ),
+    undo: "The result's undo hides the line; a voice line can't be taken back once it plays.",
+    bridge: { method: "npc.say" },
+  },
+  {
+    name: "npc.look",
+    title: "Point an NPC's gaze",
+    description: "An NPC (an actor or a picked one) looks at V (\"v\"), another NPC (its handle) or a world point (at_point), with its eyes, head and a little of its upper body; off: true gives its gaze back.",
+    permission: "write-npc",
+    input: obj({ who: who(), at: target("Look at V (\"v\") or another NPC (its handle)."), at_point: point3("Look at this world point instead."), off: bool("Stop looking.") }, ["who"]),
+    undo: "The result's undo gives the gaze back (or to the earlier target).",
+    bridge: bridgeNpc("npc.look"),
+  },
+  {
+    name: "npc.face",
+    title: "Set an NPC's expression",
+    description: `An NPC (an actor or a picked one) shows a facial expression: ${NPC_EXPRESSIONS.join(", ")}; off: true relaxes it again.`,
+    permission: "write-npc",
+    input: obj({ who: who(), expression: oneOf("The expression.", [...NPC_EXPRESSIONS]), off: bool("Relax the face again.") }, ["who"]),
+    undo: "The result's undo gives the face back.",
+    bridge: { method: "npc.face" },
+  },
+  {
+    name: "npc.act",
+    title: "Play a gesture",
+    description: `One of the bridge's actors plays a body gesture standing where it is: ${NPC_GESTURES.join(", ")}, for seconds (default the gesture's own length); npc.act_done follows. Needs the XF gesture carrier from the -writes package; without it the gesture is refused (carrier_missing) and lines, faces and looks still work. Not while it walks.`,
+    permission: "write-npc",
+    input: obj({ who: who("The actor."), gesture: oneOf("The gesture.", [...NPC_GESTURES]), off: bool("End the gesture now."), seconds: num("How long it plays, 0.5 to 30 seconds.", 0.5, 30) }, ["who"]),
+    undo: "The result's undo ends the gesture.",
+    bridge: { method: "npc.act" },
+  },
+  {
+    name: "npc.choices",
+    title: "Offer V dialogue choices",
+    description:
+      "Shows 2 to 4 dialogue choices for V in the game's own dialogue widget, titled with the NPC's name (or title), while V stands within 4 m of that NPC and the game shows no choices or interaction prompt of its own (choices_busy otherwise). The player picks with their usual keys; the pick arrives in the event stream as npc.choice with its index and text (session_wait with kinds npc.choice returns it), or with timeout after max_s (default 120), or walked_away when V leaves. One set at a time; withdraw takes one down by its hub number.",
+    permission: "write-npc",
+    input: obj(
+      {
+        who: who("The NPC V is talking to."),
+        title: str("The widget's title (default the NPC's name).", { minLength: 1, maxLength: 40 }),
+        choices: { type: "array", description: "What V can say: 2 to 4 short lines.", items: str("One choice, up to 90 characters.", { minLength: 1, maxLength: 90 }), minItems: 2, maxItems: 4 },
+        max_s: num("Take the choices down after this many seconds, 5 to 120. Default 120.", 5, 120),
+        withdraw: int("Take down the choices with this hub number (an earlier answer's hub) instead.", 1, 2147483647),
+      },
+    ),
+    undo: "The result's undo withdraws the choices.",
+    bridge: { method: "npc.choices" },
+  },
+  {
+    name: "npc.release",
+    title: "Release an NPC",
+    description:
+      "Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default) or walks 15 m away from V first and is removed there (walk_away), and a picked NPC goes back to its own business (leave). who all releases everyone. npc.released follows.",
+    permission: "write-npc",
+    input: obj({ who: str("The NPC's handle, or all.", { pattern: "^(all|[ap][0-9]{1,5})$" }), how: oneOf("despawn (actors, default), walk_away (actors) or leave (picked NPCs).", ["despawn", "walk_away", "leave"]) }, ["who"]),
+    undo: "Nothing to undo; spawn a new actor if wanted.",
+    bridge: { method: "npc.release" },
+  },
+  {
+    name: "npc.scenario",
+    title: "Run an NPC scene",
+    description:
+      "Runs a short NPC scene written as data (tools/npc/scenarios): name picks a bundled one (stranger_question: an XF actor walks up to V, greets her, asks a question, offers two answers and reacts to the one the player picks), or file a scene file. Each step is an npc command or a wait for an event; the player's pick decides the branch. When the scene ends, fails or is stopped, every actor it brought in is released. dry_run checks the scene and lists its steps without touching the game. Answers the steps taken, the events, the player's answer and how long each part took.",
+    permission: "write-npc",
+    input: obj({
+      name: oneOf("A bundled scene.", ["stranger_question"]),
+      file: str("A scene file (JSON) instead.", { minLength: 1, maxLength: 400 }),
+      dry_run: bool("Check the scene and list its steps; nothing reaches the game."),
+    }),
+    undo: "The scene releases every actor it brought in when it ends, fails or is stopped; the kill switch and loading a save do too.",
+    local: async (input: Json, context: CommandContext): Promise<CommandResult> => {
+      const { loadScenario, runScenario, SCENARIO_DIR } = await import("../npc/scenario.ts");
+      const { join } = await import("node:path");
+      if (!input.name && !input.file) throw Object.assign(new Error("give name or file"), { plain: { code: "bad_input", message: "Give name (a bundled scene) or file (a scene file)." } });
+      const path = input.file ? String(input.file) : join(SCENARIO_DIR, `${input.name}.json`);
+      const scenario = loadScenario(path);
+      const report = await runScenario(scenario, context, { dryRun: input.dry_run === true });
+      return { value: report };
+    },
+  },
+];
+
+export type { JsonSchema };

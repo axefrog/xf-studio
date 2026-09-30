@@ -199,10 +199,14 @@ Config ParseConfig(const std::string& aText)
                 {
                     config.writeClasses |= kActPlayer;
                 }
+                else if (name == "npc")
+                {
+                    config.writeClasses |= kWriteNpc;
+                }
                 else if (!name.empty())
                 {
                     config.warnings.push_back("line " + std::to_string(lineNumber) + ": unknown write class '" +
-                                              name.substr(0, 32) + "' ignored (photo, world, character, inventory, save, showroom, player, act)");
+                                              name.substr(0, 32) + "' ignored (photo, world, character, inventory, save, showroom, player, act, npc)");
                 }
             }
         }
@@ -361,6 +365,10 @@ std::vector<std::string> WriteClassList(const Config& aConfig)
     if (aConfig.writeClasses & kActPlayer)
     {
         out.emplace_back("act");
+    }
+    if (aConfig.writeClasses & kWriteNpc)
+    {
+        out.emplace_back("npc");
     }
     return out;
 }

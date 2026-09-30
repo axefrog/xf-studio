@@ -1805,6 +1805,16 @@ void RestoreAfterKill()
     {
         log::Warn("bridge.kill_clear_showroom_failed", std::string("what=") + e.what(), "kill-restore");
     }
+    // 0.8: every NPC the bridge directs, in one step (hub withdrawn, lines hidden, commands cancelled, look-ats removed, faces
+    // reset, gestures stopped, actors deleted); nothing to do when none are held.
+    try
+    {
+        RestoreNpcAfterKill();
+    }
+    catch (const std::exception& e)
+    {
+        log::Warn("bridge.kill_release_npcs_failed", std::string("what=") + e.what(), "kill-restore");
+    }
     // photo.camera.preset's TweakDB rewrites (RB-90): they outlive loads until the game restarts, so the kill switch writes
     // the first values it saw back.
     try
@@ -1837,6 +1847,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
 {
     RegisterMethods060(aDispatcher);
     RegisterMethods070(aDispatcher);
+    RegisterMethodsNpc(aDispatcher);
     auto& state = Get();
 
     aDispatcher.Register({"bridge.info", Access::Read, RunOn::BridgeThread,

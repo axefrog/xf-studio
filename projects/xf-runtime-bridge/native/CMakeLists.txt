@@ -127,6 +127,7 @@ add_library(xfb_core STATIC
   src/core/LivePose.cpp
   src/core/Log.cpp
   src/core/Messages.cpp
+  src/core/Npc.cpp
   src/core/OptionsExchange.cpp
   src/core/Params.cpp
   src/core/PipeServer.cpp
@@ -154,6 +155,7 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/GameHandlers.cpp
   src/plugin/Handlers060.cpp
   src/plugin/Handlers070.cpp
+  src/plugin/HandlersNpc.cpp
   src/plugin/LivePoseMemory.cpp
   src/plugin/Overlay.cpp
   src/plugin/ScriptCall.cpp
@@ -171,6 +173,6 @@ set_target_properties(XFRuntimeBridge PROPERTIES OUTPUT_NAME "XFRuntimeBridge")
 # -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
 # -----------------------------------------------------------------------------
-add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/UnitTests.cpp)
+add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimNpc.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsNpc.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)

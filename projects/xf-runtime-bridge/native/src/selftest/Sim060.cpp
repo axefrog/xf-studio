@@ -165,6 +165,11 @@ EventLog& Sim060::Events()
     return m_events;
 }
 
+json Sim060::PlayerNow()
+{
+    return m_ops.player();
+}
+
 void Sim060::Register()
 {
     auto& st = *m_state;

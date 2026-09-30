@@ -7,6 +7,8 @@
 //                                                                                        the XF test profile only)
 //   bun tools/package.ts --allow-inventory   the same, with the inventory write class in the -writes zip (only after
 //                                            the maintainer approves writes to V's inventory)
+//   bun tools/package.ts --npc-carrier <archive>   0.8: the -writes zip also carries the XF gesture carrier archive
+//                                            (built by tools/npc/gesture-carrier.ts; without it npc.act is refused)
 //
 // What each package holds is tools/packaging.ts (tested by tools/test/package.test.ts). This file adds
 // the provenance gate and the zips: it refuses to package unless the project tree is clean and the DLL
@@ -59,16 +61,24 @@ if (builtDirty !== "0" || builtCommit !== head) {
 // --allow-inventory: the -writes package also allows the inventory write class (inventory.equip/unequip).
 // Only once the maintainer has approved writes to V's inventory; the manifest records it (inventory_writes).
 const allowInventory = process.argv.includes("--allow-inventory");
+// --npc-carrier <archive> (0.8): the XF gesture carrier for npc.act, in the -writes zip only.
+const carrierIndex = process.argv.indexOf("--npc-carrier");
+const npcCarrier = carrierIndex >= 0 ? resolve(process.argv[carrierIndex + 1] ?? "") : undefined;
+if (npcCarrier && !existsSync(npcCarrier)) {
+  console.error(`--npc-carrier: no archive at ${npcCarrier}`);
+  process.exit(2);
+}
 
 function build(variant: Variant) {
   const stageDir = join(projectDir, "dist", "stage", variant);
-  const manifest = stageVariant({ projectDir, variant, dll, stageDir, version: version!, commit: builtCommit, allowInventory });
+  const manifest = stageVariant({ projectDir, variant, dll, stageDir, version: version!, commit: builtCommit, allowInventory, npcCarrier });
   const zip = join(projectDir, "dist", `xf-runtime-bridge-${version}${SUFFIX[variant]}.zip`);
   rmSync(zip, { force: true });
   // Windows' own bsdtar (not Git's GNU tar) writes a zip when the name ends in .zip and -a is given.
   const tarExe = join(process.env.SystemRoot ?? "C:/Windows", "System32", "tar.exe");
   // Name the top-level folders explicitly so entries carry no "./" prefix.
-  const tar = spawnSync(tarExe, ["-a", "-c", "-f", zip, "-C", stageDir, "bin", "r6", "red4ext"], { encoding: "utf8" });
+  const roots = ["bin", "r6", "red4ext", ...(manifest.npc_gesture_carrier ? ["archive"] : [])];
+  const tar = spawnSync(tarExe, ["-a", "-c", "-f", zip, "-C", stageDir, ...roots], { encoding: "utf8" });
   if (tar.status !== 0) throw new Error(`tar failed: ${tar.stderr}`);
   console.log(`${zip}\n  sha256 ${sha256(zip)}  (${manifest.files.length} files, ${DESCRIBE[variant]})`);
   for (const file of manifest.files) console.log(`  ${file.sha256.slice(0, 16)}  ${file.path}`);
