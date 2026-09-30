@@ -9,6 +9,7 @@
  */
 import { Database } from "bun:sqlite";
 import type { AppendRequest, AppendResult, Entry, GraphStore, NodeIndexRow, NodeRef, Op, Snapshot, StoredNode } from "strata";
+import { useWriteAheadLog, type LibraryWrites } from "./library-durability";
 
 /** The graph's `events` table. */
 const EVENTS_TABLE = `(pos INTEGER PRIMARY KEY AUTOINCREMENT, node TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL,
@@ -101,6 +102,8 @@ export type SqliteGraphStoreOptions = {
   readonly beforeMigration?: (label: string) => void;
   /** Wall time for the snapshots' `made_at` and pending purges (the host clock by default). */
   readonly now?: () => number;
+  /** The file's durability, told of each commit (library-durability.ts). */
+  readonly writes?: LibraryWrites;
 };
 
 export class SqliteGraphStore implements GraphStore {
@@ -110,10 +113,11 @@ export class SqliteGraphStore implements GraphStore {
   constructor(readonly path: string, private readonly options: SqliteGraphStoreOptions = {}) {
     this.db = new Database(path, { create: true, strict: true });
     // Purged rows are overwritten on disk, not merely unlinked (removal, not hiding).
-    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON;");
+    this.db.exec("PRAGMA busy_timeout=5000; PRAGMA secure_delete=ON;");
+    useWriteAheadLog(this.db);
     // A migration that can't run now (no backup could be taken, the file is busy) never stops the Studio: the
     // library keeps working as it is and the migration is tried again the next time it opens.
-    try { migratePositions(this.db, () => options.beforeMigration?.("graph-positions")); }
+    try { if (migratePositions(this.db, () => options.beforeMigration?.("graph-positions"))) options.writes?.wrote(); }
     catch (error) { this.migrationError = error instanceof Error ? error.message : String(error); }
     this.db.exec(GRAPH_TABLES);
     this.retryPurges();
@@ -170,7 +174,7 @@ export class SqliteGraphStore implements GraphStore {
   }
 
   async append(request: AppendRequest): Promise<AppendResult> {
-    return this.db.transaction((): AppendResult => {
+    return this.committed(this.db.transaction((): AppendResult => {
       const existing = this.db.query("SELECT pos FROM events WHERE commit_id = ? ORDER BY pos").all(request.commit) as { pos: number }[];
       if (existing.length) return { ok: true, positions: existing.map(row => row.pos), duplicate: true };
       const stale = request.expect.filter(([id, seq]) =>
@@ -187,8 +191,11 @@ export class SqliteGraphStore implements GraphStore {
       }
       this.bump();
       return { ok: true, positions };
-    }).immediate();
+    }).immediate());
   }
+
+  /** A committed write's result, after telling the file's durability. */
+  private committed<T>(value: T): T { this.options.writes?.wrote(); return value; }
 
   private indexEntry(entry: Entry): void {
     const current = this.db.query("SELECT name, trashed FROM node_index WHERE node = ?").get(entry.node.id) as { name: string; trashed: number } | null;
@@ -217,9 +224,10 @@ export class SqliteGraphStore implements GraphStore {
       schema = excluded.schema, value = excluded.value, made_at = excluded.made_at WHERE excluded.seq >= snapshots.seq`)
       .run(snapshot.node.id, snapshot.node.type, snapshot.seq, snapshot.pos, snapshot.schema, JSON.stringify(snapshot.state),
         (this.options.now ?? Date.now)());
+    this.committed(undefined);
   }
 
-  async dropSnapshots(node: NodeRef): Promise<void> { this.db.query("DELETE FROM snapshots WHERE node = ?").run(node.id); }
+  async dropSnapshots(node: NodeRef): Promise<void> { this.db.query("DELETE FROM snapshots WHERE node = ?").run(node.id); this.committed(undefined); }
 
   async compact(node: NodeRef, entries: readonly Entry[], at: number): Promise<void> {
     const through = entries[entries.length - 1]?.seq ?? 0;
@@ -233,6 +241,7 @@ export class SqliteGraphStore implements GraphStore {
       this.db.query("DELETE FROM snapshots WHERE node = ?").run(node.id);
       this.bump();
     }).immediate();
+    this.committed(undefined);
   }
 
   /**
@@ -246,6 +255,7 @@ export class SqliteGraphStore implements GraphStore {
       this.db.query("INSERT INTO purge_pending VALUES (?, ?) ON CONFLICT(node) DO NOTHING").run(node.id, (this.options.now ?? Date.now)());
       this.bump();
     }).immediate();
+    this.committed(undefined);
     this.retryPurges();
   }
 
@@ -270,6 +280,7 @@ export class SqliteGraphStore implements GraphStore {
     if (finished.length) {
       const remove = this.db.query("DELETE FROM purge_pending WHERE node = ?");
       this.db.transaction(() => { for (const node of finished) remove.run(node); })();
+      this.committed(undefined);
     }
     return this.pendingPurges();
   }

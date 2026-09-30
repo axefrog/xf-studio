@@ -52,3 +52,14 @@ export function trialWindowPosition(userData: string, env: Record<string, string
   if (env.XFS_TRIAL_WINDOW_OFFSCREEN !== "1") return null;
   return /[\\/]dev\.axefrog\.xf-studio-ui-trial-[a-z0-9]+([\\/]|$)/i.test(userData) ? { x: -9000, y: 0 } : null;
 }
+
+/**
+ * How the main window opens: a trial window placed off-screen is also shown without activation. Electrobun otherwise shows a
+ * new window activated and, when Windows refuses it the foreground, takes it anyway by attaching to the foreground window's
+ * input thread, so an off-screen trial would still take keyboard focus from whatever the person is doing (a game included).
+ * The real app opens where it always has, activated.
+ */
+export function mainWindowPlacement(userData: string, env: Record<string, string | undefined>): { position: { x: number; y: number } | null; activate: boolean } {
+  const position = trialWindowPosition(userData, env);
+  return { position, activate: position === null };
+}

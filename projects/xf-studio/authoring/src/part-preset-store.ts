@@ -4,6 +4,7 @@ import { isNewerData, modNameIssue, type PartEnvelope } from "./platform/api";
 import type { PartRegistry } from "./platform/core/document";
 import { LibraryError } from "./library-store";
 import { hostFailure } from "./diagnostics/host-log";
+import { useWriteAheadLog, type LibraryWrites } from "./platform/graph-adapters/library-durability";
 
 /**
  * Named part presets in the local library (research/authoring/editor-invariants.md "Part presets"): one feature's part saved on its
@@ -56,9 +57,12 @@ function setBody(set: SetRow): Record<string, unknown> | null {
 
 export class PartPresetLibrary {
   private db: Database;
-  constructor(path: string, private parts: PartRegistry, private newId: () => string = () => crypto.randomUUID()) {
+  /** `writes`: the file's durability, told of each commit (library-durability.ts). */
+  constructor(path: string, private parts: PartRegistry, private newId: () => string = () => crypto.randomUUID(),
+    private readonly writes?: LibraryWrites) {
     this.db = new Database(path, { create: true, strict: true });
-    this.db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+    this.db.exec("PRAGMA busy_timeout=5000;");
+    useWriteAheadLog(this.db);
     this.db.exec(`CREATE TABLE IF NOT EXISTS part_presets (feature TEXT NOT NULL, id TEXT PRIMARY KEY, name TEXT NOT NULL,
       revision INTEGER NOT NULL, schema TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS part_presets_feature ON part_presets(feature, name);
@@ -66,6 +70,8 @@ export class PartPresetLibrary {
         body TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`);
   }
   close() { this.db.close(); }
+  /** A committed write's result, after telling the file's durability. */
+  private committed<T>(value: T): T { this.writes?.wrote(); return value; }
 
   private registered(feature: unknown): string {
     if (typeof feature !== "string" || !this.parts.feature(feature)) throw new LibraryError("That kind of preset isn't known to this version of XF Studio.");
@@ -101,7 +107,7 @@ export class PartPresetLibrary {
     catch (error) { throw new LibraryError(isNewerData(error) ? "That preset was made with a newer version of XF Studio." : "That preset is damaged; nothing was saved.", 422); }
     const id = this.newId(), now = new Date().toISOString();
     this.db.query("INSERT INTO part_presets VALUES (?, ?, ?, 1, ?, ?, ?, ?)").run(feature, id, name, part.schema, JSON.stringify(part.body), now, now);
-    return { id, feature, name, revision: 1, part, updatedAt: now };
+    return this.committed({ id, feature, name, revision: 1, part, updatedAt: now });
   }
 
   private current(id: string, revision: unknown) {
@@ -118,7 +124,7 @@ export class PartPresetLibrary {
   rename(id: string, value: unknown): { id: string; name: string; revision: number; part?: PartEnvelope } {
     const input = value as { name?: unknown; revision?: unknown; part?: unknown } | null;
     const name = this.name(input?.name);
-    return this.db.transaction(() => {
+    return this.committed(this.db.transaction(() => {
       const row = this.current(id, input?.revision), revision = row.revision + 1, now = new Date().toISOString();
       if (input?.part === undefined) {
         this.db.query("UPDATE part_presets SET name=?, revision=?, updated_at=? WHERE id=?").run(name, revision, now, id);
@@ -129,14 +135,14 @@ export class PartPresetLibrary {
       catch (error) { throw new LibraryError(isNewerData(error) ? "That preset was made with a newer version of XF Studio." : "That preset is damaged; nothing was saved.", 422); }
       this.db.query("UPDATE part_presets SET name=?, revision=?, schema=?, body=?, updated_at=? WHERE id=?").run(name, revision, part.schema, JSON.stringify(part.body), now, id);
       return { id, name, revision, part };
-    }).immediate();
+    }).immediate());
   }
   /**
    * Delete a preset, guarded by its revision, and take it out of every set of its feature in the same step. The answer carries what
    * `restore` needs to put both back (the Undo a person gets right after deleting).
    */
   delete(id: string, revision: unknown): { id: string; restore?: PartPresetRestore } {
-    return this.db.transaction(() => {
+    return this.committed(this.db.transaction(() => {
       this.current(id, revision);
       const row = this.db.query("SELECT feature, name, schema, body, created_at AS createdAt FROM part_presets WHERE id=?").get(id) as
         { feature: string; name: string; schema: string; body: string; createdAt: string };
@@ -157,7 +163,7 @@ export class PartPresetLibrary {
       let body: unknown;
       try { body = JSON.parse(row.body); } catch { return { id }; }
       return { id, restore: { feature: row.feature, id, name: row.name, part: { schema: row.schema, body }, createdAt: row.createdAt, memberships } };
-    }).immediate();
+    }).immediate());
   }
   /** Put a deleted preset back under its own ID, and back in the sets it was in (where they still exist), at its old places. */
   restore(value: unknown): PartPresetSummary {
@@ -168,7 +174,7 @@ export class PartPresetLibrary {
     try { part = this.parts.readPart(feature, input.part); }
     catch { throw new LibraryError("That preset can't be restored.", 422); }
     const id = input.id, now = new Date().toISOString(), created = typeof input.createdAt === "string" ? input.createdAt : now;
-    return this.db.transaction(() => {
+    return this.committed(this.db.transaction(() => {
       if (this.db.query("SELECT 1 FROM part_presets WHERE id=?").get(id)) throw new LibraryError("That preset is already back.", 409);
       this.db.query("INSERT INTO part_presets VALUES (?, ?, ?, 1, ?, ?, ?, ?)").run(feature, id, name, part.schema, JSON.stringify(part.body), created, now);
       for (const membership of input.memberships!) {
@@ -183,7 +189,7 @@ export class PartPresetLibrary {
         this.db.query("UPDATE part_preset_sets SET revision=?, body=?, updated_at=? WHERE id=?").run(set.revision + 1, JSON.stringify(body), now, set.id);
       }
       return { id, feature, name, revision: 1, part, updatedAt: now };
-    }).immediate();
+    }).immediate());
   }
 
   // ---- Sets: named, ordered lists of a feature's presets (an expression set exports as one mod) ----
@@ -225,7 +231,7 @@ export class PartPresetLibrary {
     const members = input?.members === undefined ? [] : this.members(input.members);
     const id = this.newId(), now = new Date().toISOString();
     this.db.query("INSERT INTO part_preset_sets VALUES (?, ?, ?, 1, ?, ?, ?)").run(feature, id, name, JSON.stringify({ members }), now, now);
-    return { id, feature, name, revision: 1, members, updatedAt: now };
+    return this.committed({ id, feature, name, revision: 1, members, updatedAt: now });
   }
   /**
    * Change a set, guarded by the revision it was shown: its `name`, `members` (the whole ordered list), `modName` (an empty string goes
@@ -243,7 +249,7 @@ export class PartPresetLibrary {
       modName = trimmed || null;
     }
     if (input?.table !== undefined && input.table !== "installed" && input.table !== "sharing") throw new LibraryError("That table choice isn't known.", 422);
-    return this.db.transaction(() => {
+    return this.committed(this.db.transaction(() => {
       const row = this.currentSet(id, input?.revision);
       const body = JSON.parse(row.body) as Record<string, unknown>;
       if (members) body.members = members;
@@ -252,14 +258,14 @@ export class PartPresetLibrary {
       const revision = row.revision + 1, now = new Date().toISOString(), text = JSON.stringify(body);
       this.db.query("UPDATE part_preset_sets SET name=?, revision=?, body=?, updated_at=? WHERE id=?").run(name ?? row.name, revision, text, now, id);
       return this.readSet({ ...row, name: name ?? row.name, revision, body: text, updatedAt: now });
-    }).immediate();
+    }).immediate());
   }
   deleteSet(id: string, revision: unknown): { id: string } {
-    return this.db.transaction(() => {
+    return this.committed(this.db.transaction(() => {
       this.currentSet(id, revision);
       this.db.query("DELETE FROM part_preset_sets WHERE id=?").run(id);
       return { id };
-    }).immediate();
+    }).immediate());
   }
   private currentSet(id: string, revision: unknown): SetRow {
     if (!UUID.test(id)) throw new LibraryError("Not found.", 404);

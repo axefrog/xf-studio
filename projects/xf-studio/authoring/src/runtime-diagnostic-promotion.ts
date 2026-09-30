@@ -3,12 +3,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync,
   readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isWithin as within, overlaps } from "./platform/api/path-containment";
+import { assertNoLinkedPath, inspectLocalPackageCandidate, installedDuplicates, writeJsonDurably } from "./mod-install-transport";
 import { frameworkModNames } from "./framework-versions";
-import { candidateModName, diagnosticModlist, installedPlaces, legacyModFolder, profileFrameworks, type RuntimeDiagnosticOptions,
+import { candidateModName, diagnosticModlist, enabledMo2Mods, installedPlaces, legacyModFolder, profileFrameworks, type RuntimeDiagnosticOptions,
   type RuntimeDiagnosticPlan } from "./runtime-diagnostic-stage";
 import { EYE_MAKEUP_MOD, eyeMakeupModFolders, isEyeMakeupModFolder } from "./mod-branding";
+import { readConfiguredMo2Instance } from "./install-detection-host";
 
 const metadata = ["modlist.txt", "plugins.txt", "loadorder.txt", "settings.ini", "archives.txt",
   "lockedorder.txt", "initweaks.ini", "UserSettings.json"];
@@ -25,16 +27,7 @@ type Record = { schema: "xfs/runtime-promotion-record-1"; preview: PromotionPrev
 
 function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw Error(message); }
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const within = (child: string, root: string) => {
-  const rel = relative(root, child);
-  return !rel || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
-};
-function noLinks(path: string) {
-  let at = resolve(path);
-  while (!existsSync(at)) { const parent = dirname(at); requireValue(parent !== at, "Missing path root."); at = parent; }
-  for (;;) { requireValue(!lstatSync(at).isSymbolicLink(), `Linked path is forbidden: ${at}`);
-    const parent = dirname(at); if (parent === at) break; at = parent; }
-}
+const noLinks = (path: string) => assertNoLinkedPath(path, "Linked path is forbidden");
 function file(path: string) { noLinks(path); requireValue(lstatSync(path).isFile(), `Expected file: ${path}`); }
 function directory(path: string) { noLinks(path); requireValue(lstatSync(path).isDirectory(), `Expected directory: ${path}`); }
 function profileName(name: string) {
@@ -63,14 +56,7 @@ function sameModTree(root: string, entries: Entry[]) {
   requireValue(readdirSync(root).join() === "archive" && readdirSync(join(root, "archive")).join() === "pc" &&
     readdirSync(join(root, "archive", "pc")).join() === "mod", "Promoted mod has additional content.");
 }
-function durableJson(path: string, value: unknown) {
-  requireValue(!existsSync(path), `Record already exists: ${path}`);
-  const temp = `${path}.${randomUUID()}.tmp`;
-  const fd = openSync(temp, "wx");
-  try { writeFileSync(fd, JSON.stringify(value, null, 2) + "\n"); fsyncSync(fd); }
-  finally { closeSync(fd); }
-  renameSync(temp, path);
-}
+const durableJson = (path: string, value: unknown) => writeJsonDurably(path, value, { exclusive: true });
 function recordPaths(stage: string) { return { journal: join(stage, "promotion-journal.json"),
   receipt: join(stage, "promotion-receipt.json") }; }
 function validate(options: PromotionOptions) {
@@ -80,8 +66,10 @@ function validate(options: PromotionOptions) {
   requireValue(options.profileId.toLowerCase() !== options.newProfileId.toLowerCase(),
     "Promotion requires a different, new profile name.");
   const stage = resolve(options.stagingRoot), mo2 = resolve(options.mo2Root);
-  for (const source of [mo2, resolve(options.candidateStore), resolve(options.gameRoot)])
-    requireValue(!within(stage, source) && !within(source, stage),
+  // The instance's own folders: its ModOrganizer.ini may keep mods and profiles elsewhere (PIPE-05).
+  const instance = readConfiguredMo2Instance(mo2).paths;
+  for (const source of [mo2, instance.mods, instance.profiles, instance.overwrite, resolve(options.candidateStore), resolve(options.gameRoot)])
+    requireValue(!overlaps(stage, source),
       "Diagnostic stage must be outside every source root.");
   directory(stage); directory(mo2);
   const { journal, receipt } = recordPaths(stage);
@@ -95,7 +83,7 @@ function validate(options: PromotionOptions) {
     saved.candidateId === options.candidateId && saved.stageReceipt?.schema === "xfs/install-receipt-1" &&
     saved.stageReceipt.route === "mo2" && saved.stageReceipt.candidateId === options.candidateId,
   "Stage plan or receipt does not match these inputs.");
-  const sourceProfile = join(mo2, "profiles", options.profileId);
+  const sourceProfile = join(instance.profiles, options.profileId);
   const sourceModlist = join(sourceProfile, "modlist.txt"); file(sourceModlist);
   requireValue(sha(sourceModlist) === saved.sourceProfileModlistSha256,
     "Source profile modlist changed since staging.");
@@ -142,8 +130,7 @@ function validate(options: PromotionOptions) {
     modFiles[i].bytes === candidate.manifest.files[i].bytes, "Staged payload differs from candidate.");
   const game = resolve(options.gameRoot); directory(game);
   file(join(game, "bin", "x64", "Cyberpunk2077.exe"));
-  const sourceLines = readFileSync(sourceModlist, "utf8").split(/\r?\n/);
-  const enabled = sourceLines.filter(line => line.startsWith("+")).map(line => line.slice(1));
+  const enabled = enabledMo2Mods(readFileSync(sourceModlist, "utf8"));
   const enabledMod = enabled.find(name => name.toLowerCase() === modName.toLowerCase() || isEyeMakeupModFolder(name));
   requireValue(!enabledMod, `Source profile already enables ${modName}` +
     (enabledMod?.toLowerCase() === modName.toLowerCase() ? "." : ` under its earlier name "${enabledMod}".`));
@@ -152,31 +139,31 @@ function validate(options: PromotionOptions) {
     requireValue(!existsSync(join(game, "archive", "pc", "mod", name)), `Direct game archive collision: ${name}`);
     for (const mod of enabled) {
       requireValue(!/[\\/:\x00-\x1f]/.test(mod) && mod !== "..", "Unsafe source mod name.");
-      requireValue(!existsSync(join(mo2, "mods", mod, "archive", "pc", "mod", name)),
+      requireValue(!existsSync(join(instance.mods, mod, "archive", "pc", "mod", name)),
         `Enabled MO2 archive filename collision: ${mod}/${name}`);
     }
   }
-  const profiles = join(mo2, "profiles"), mods = join(mo2, "mods");
+  const profiles = instance.profiles, mods = instance.mods;
   absentCaseInsensitive(profiles, options.newProfileId); absentCaseInsensitive(mods, modName);
   // A feature may be present in only one installed XF mod: refuse when any installed mod, whichever stage or install put
   // it there, already holds part of this build (the stage's own receipts can't see those; PIPE-90).
   const duplicates = installedDuplicates(readFileSync(join(candidate.root, ...candidate.manifest.files[1].path.split("/")), "utf8"),
-    installedPlaces(mo2, game));
+    installedPlaces(mods, game));
   requireValue(!duplicates.length, `Part of this build is already installed in ${duplicates.join(", ")}. Remove it first, or build both mods ` +
     "from the same package plan. Nothing was changed.");
   // An earlier diagnostic install under a legacy folder name is the same mod: never create a second copy beside it.
   const legacy = legacyModFolder(mods);
   requireValue(!legacy, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} diagnostic install in the legacy ` +
     `folder "${legacy}". Roll back that promotion (or remove the folder in MO2) before promoting another copy.`);
-  return { stage, mo2, sourceProfile, sourceModlist, stageProfile, stageMod, modName,
+  return { stage, mo2, profiles, mods, sourceProfile, sourceModlist, stageProfile, stageMod, modName,
     profileFiles: stageProfileFiles, modFiles, candidate, saved };
 }
 
 /** Pure filesystem read: no directory, receipt, or profile is created. */
 export function planRuntimePromotion(options: PromotionOptions): PromotionPreview {
   const v = validate(options);
-  const newProfile = join(v.mo2, "profiles", options.newProfileId);
-  const dedicatedMod = join(v.mo2, "mods", v.modName);
+  const newProfile = join(v.profiles, options.newProfileId);
+  const dedicatedMod = join(v.mods, v.modName);
   return { schema: "xfs/runtime-promotion-preview-1", sourceProfile: v.sourceProfile,
     newProfile, dedicatedMod, stageProfile: v.stageProfile, stageMod: v.stageMod, modName: v.modName,
     candidateId: options.candidateId, namespace: v.candidate.manifest.namespace,
@@ -213,18 +200,18 @@ function ownedRecord(path: string): Record {
   return value;
 }
 function removeOwned(record: Record, options: PromotionOptions) {
-  const mo2 = resolve(options.mo2Root), stage = resolve(options.stagingRoot);
+  const stage = resolve(options.stagingRoot), instance = readConfiguredMo2Instance(resolve(options.mo2Root)).paths;
   // Records from before mod branding name the legacy folder, and records from before PIPE-90 the brand's; recovery and
   // rollback still accept them. A newer record names its mod.
   const folders = [...(record.preview.modName !== undefined ? [record.preview.modName] : []), ...eyeMakeupModFolders];
-  const folder = folders.find(name => record.preview.dedicatedMod === join(mo2, "mods", name));
-  requireValue(folder !== undefined && record.preview.newProfile === join(mo2, "profiles", options.newProfileId) &&
+  const folder = folders.find(name => record.preview.dedicatedMod === join(instance.mods, name));
+  requireValue(folder !== undefined && record.preview.newProfile === join(instance.profiles, options.newProfileId) &&
     record.preview.stageProfile === join(stage, "mo2", "profiles", options.profileId) &&
     record.preview.stageMod === join(stage, "mo2", "mods", folder) &&
     record.preview.candidateId === options.candidateId, "Promotion record target mismatch.");
   const profile = record.preview.newProfile, mod = record.preview.dedicatedMod;
-  const tempProfile = join(mo2, "profiles", `.xfs-promotion-${record.transactionId}`);
-  const tempMod = join(mo2, "mods", `.xfs-promotion-${record.transactionId}`);
+  const tempProfile = join(instance.profiles, `.xfs-promotion-${record.transactionId}`);
+  const tempMod = join(instance.mods, `.xfs-promotion-${record.transactionId}`);
   // Precheck every possible destination before removing any one of them.
   for (const path of [profile, tempProfile]) if (existsSync(path)) sameInventory(path, record.profileFiles);
   for (const path of [mod, tempMod]) if (existsSync(path)) sameModTree(path, record.modFiles);
@@ -238,8 +225,8 @@ export function promoteRuntimeDiagnostic(options: PromotionOptions): PromotionPr
   const transactionId = randomUUID();
   const record: Record = { schema: "xfs/runtime-promotion-record-1", preview,
     profileFiles: v.profileFiles, modFiles: v.modFiles, transactionId };
-  const temporaryProfile = join(v.mo2, "profiles", `.xfs-promotion-${transactionId}`);
-  const temporaryMod = join(v.mo2, "mods", `.xfs-promotion-${transactionId}`);
+  const temporaryProfile = join(v.profiles, `.xfs-promotion-${transactionId}`);
+  const temporaryMod = join(v.mods, `.xfs-promotion-${transactionId}`);
   requireValue(!existsSync(temporaryProfile) && !existsSync(temporaryMod), "Temporary destination exists.");
   try {
     copyChecked(v.stageProfile, temporaryProfile, v.profileFiles);

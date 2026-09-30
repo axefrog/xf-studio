@@ -3,7 +3,7 @@
 // Most of these functions are pure: they take facts the wrapper gathered (whether Electrobun's setup started, the installed files,
 // the uninstall entry, the last "error: <Name>" line Electrobun printed) and return an outcome or a plain sentence. The last two
 // read the disk: PhysicalPath (where a folder really is) and InstallFolderRedirected (the Microsoft Store app check). The wrapper decides
-// success by what is actually installed, never by Electrobun's exit code alone: Electrobun 2.0.1 returns 1 for any error, including
+// success by what is actually installed, never by Electrobun's exit code alone: Electrobun 2.0.2 (like 2.0.1) returns 1 for any error, including
 // one raised after the app's files were already committed (its Start menu and uninstall integration runs last). They are tested by
 // tests/install-outcome.test.ts, which compiles tests/install-outcome-harness.iss around this file and runs it with fake facts
 // (and PhysicalPath with a real folder).

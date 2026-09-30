@@ -5,7 +5,8 @@
  * `Profile::refreshModStatus`/`doWriteModlist` (profile.cpp) for `modlist.txt` priority. Evidence and
  * limits are recorded in research/authoring/source-discovery-foundation.md.
  */
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+import { compareCopies, type VirtualCopy } from "./archive-precedence";
 
 export type IniSections = ReadonlyMap<string, ReadonlyMap<string, string>>;
 
@@ -163,6 +164,39 @@ export interface Mo2Modlist {
   readonly notes: readonly { code: "duplicate_ignored" | "overwrite_row_ignored"; line: number }[];
 }
 
+/**
+ * A `modlist.txt` exactly as written (INSTALL-05): each line's text (trailing spaces kept) and its own line ending (CRLF, LF,
+ * or none for a last line without one), with a BOM kept aside. Every reader and writer of the list splits it here (PIPE-10).
+ */
+export function splitMo2ModlistLines(text: string): { bom: string; lines: string[]; endings: string[] } {
+  const bom = text.startsWith("﻿") ? "﻿" : "";
+  const body = text.slice(bom.length);
+  const lines: string[] = [], endings: string[] = [];
+  const breaks = /\r?\n/g;
+  let start = 0, match: RegExpExecArray | null;
+  while ((match = breaks.exec(body))) { lines.push(body.slice(start, match.index)); endings.push(match[0]); start = match.index + match[0].length; }
+  if (start < body.length) { lines.push(body.slice(start)); endings.push(""); }
+  return { bom, lines, endings };
+}
+
+/** One line of the list that names an entry: its 0-based line, its prefix as written, and the name. */
+export interface Mo2ModlistRow { readonly index: number; readonly prefix: "" | "+" | "-" | "*"; readonly name: string }
+
+/**
+ * Each line as MO2 reads it (`Profile::refreshModStatus`): surrounding spaces ignored, blank and `#` lines name nothing,
+ * `+`, `-` or `*` is a prefix and the rest (trimmed) the name. Null for a line that names nothing. The one row reader
+ * (PIPE-10): `parseMo2Modlist`, the placement and the diagnostics all read rows through it.
+ */
+export function mo2ModlistRows(text: string): (Mo2ModlistRow | null)[] {
+  return splitMo2ModlistLines(text).lines.map((raw, index) => {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) return null;
+    const prefix = (["+", "-", "*"] as const).find(sign => line[0] === sign) ?? "";
+    const name = (prefix ? line.slice(1) : line).trim();
+    return name ? { index, prefix, name } : null;
+  });
+}
+
 /** Interpret modlist.txt as Profile::refreshModStatus does. MO2 writes the list in reverse priority
  * order, so the FIRST row wins conflicts against later rows; `-` disables, `+`/`*`/no prefix enables
  * (`*` marks a foreign, unmanaged entry), a repeated name keeps its first row, and names ending in
@@ -171,19 +205,41 @@ export function parseMo2Modlist(text: string): Mo2Modlist {
   const rows: Omit<Mo2ModlistEntry, "priority">[] = [];
   const notes: { code: "duplicate_ignored" | "overwrite_row_ignored"; line: number }[] = [];
   const seen = new Set<string>();
-  text.replace(/^﻿/, "").split(/\r?\n/).forEach((raw, index) => {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) return;
-    const prefix = line[0]!;
-    const name = ["+", "-", "*"].includes(prefix) ? line.slice(1).trim() : line;
-    if (!name) return;
-    if (name.toLowerCase() === "overwrite") { notes.push({ code: "overwrite_row_ignored", line: index + 1 }); return; }
+  for (const row of mo2ModlistRows(text)) {
+    if (!row) continue;
+    const { name, prefix } = row, line = row.index + 1;
+    if (name.toLowerCase() === "overwrite") { notes.push({ code: "overwrite_row_ignored", line }); continue; }
     // MO2 compares names exactly here; mod folder names are unique case-insensitively on Windows.
-    if (seen.has(name)) { notes.push({ code: "duplicate_ignored", line: index + 1 }); return; }
+    if (seen.has(name)) { notes.push({ code: "duplicate_ignored", line }); continue; }
     seen.add(name);
-    rows.push({ name, enabled: prefix !== "-", line: index + 1,
+    rows.push({ name, enabled: prefix !== "-", line,
       kind: prefix === "*" ? "foreign" : /_separator$/i.test(name) ? "separator" : "mod" });
-  });
+  }
   return { entries: rows.map((row, index) => ({ ...row, priority: rows.length - index - 1 })),
     overwritePriority: rows.length, notes };
+}
+
+/** A modlist row names one folder in MO2's mods folder: never a path, `.`/`..`, a padded or dot-ended name, or a control character. */
+export const isMo2ModFolderName = (name: string) => name !== "." && name !== ".." && name.trim() === name &&
+  !/[\\/:\x00-\x1f]/.test(name) && !name.endsWith(".") && name.length > 0 && name.length <= 255;
+
+/** A folder that can provide game files, as a copy of every virtual path below it. */
+export interface ProviderFolder extends VirtualCopy {
+  /** The folder the game's paths are joined to (the copy's id). */
+  readonly folder: string;
+}
+
+/**
+ * The folders that can provide a game file on the MO2 route, in the order their copies shadow each other, visible
+ * first (`compareCopies`, knowledge/mod-loading.md rule 1; PIPE-06): MO2's overwrite, the profile's enabled mods by
+ * priority, then the game folder when given. Separators and foreign (`*`) rows carry no files, and a row that isn't a
+ * single folder name is left out, so no path is ever joined outside the mods folder.
+ */
+export function mo2ProviderFolders(modlist: Mo2Modlist, paths: Pick<Mo2InstancePaths, "mods" | "overwrite">, gameRoot?: string | null): ProviderFolder[] {
+  const folder = (provider: ProviderFolder["provider"], providerName: string, path: string, priority: number | null): ProviderFolder =>
+    ({ id: path, folder: path, provider, providerName, active: true, priority });
+  return [folder("mo2-overwrite", "Overwrite", paths.overwrite, modlist.overwritePriority),
+    ...modlist.entries.filter(entry => entry.kind === "mod" && entry.enabled && isMo2ModFolderName(entry.name))
+      .map(entry => folder("mo2-mod", entry.name, join(paths.mods, entry.name), entry.priority)),
+    ...(gameRoot ? [folder("game", "Game folder", gameRoot, null)] : [])].sort(compareCopies);
 }

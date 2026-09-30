@@ -14,6 +14,7 @@
  *    does not. Loose rows at the top of the pane are never used.
  * 4. If every section holds frameworks, fall back to MO2's own default (bottom of the pane).
  */
+import { mo2ModlistRows, splitMo2ModlistLines, type Mo2ModlistRow } from "./mo2-instance";
 
 export type Mo2PlacementRule = "existing" | "beside-related" | "section" | "list-end" | "fallback";
 export interface Mo2Placement {
@@ -40,31 +41,10 @@ export const FRAMEWORK_SECTION_NAME =
   /\b(?:frameworks?|core|libs?|librar(?:y|ies)|requirements?|dependenc(?:y|ies)|prerequisites?)\b/i;
 const SEPARATOR = /_separator$/i;
 
-type Row = { index: number; name: string; prefix: string } | null;
-/**
- * The file's rows exactly as written: each line's text (trailing spaces kept) and its own line ending (CRLF, LF, or none for a
- * last line without one), so a rewrite changes only the row it adds or switches on (INSTALL-05). A BOM is kept aside.
- */
-function lines(text: string) {
-  const bom = text.startsWith("\uFEFF") ? "\uFEFF" : "";
-  const body = text.slice(bom.length);
-  const rows: string[] = [], endings: string[] = [];
-  const breaks = /\r?\n/g;
-  let start = 0, match: RegExpExecArray | null;
-  while ((match = breaks.exec(body))) { rows.push(body.slice(start, match.index)); endings.push(match[0]); start = match.index + match[0].length; }
-  if (start < body.length) { rows.push(body.slice(start)); endings.push(""); }
-  return { bom, rows, endings };
-}
+type Row = Mo2ModlistRow | null;
+/** The file's lines as written and each line's row, read by the one modlist row reader (PIPE-10). */
 function rows(text: string) {
-  const { rows: raw } = lines(text);
-  const parsed: Row[] = raw.map((line, index) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return null;
-    const prefix = ["+", "-", "*"].includes(trimmed[0]!) ? trimmed[0]! : "";
-    const name = (prefix ? trimmed.slice(1) : trimmed).trim();
-    return name ? { index, name, prefix } : null;
-  });
-  return { lines: raw, parsed };
+  return { lines: splitMo2ModlistLines(text).lines, parsed: mo2ModlistRows(text) };
 }
 /** A mod's row in a mod list: "+" on, "-" off, null when it isn't listed (separators and `*` rows count as listed as written). */
 export function mo2ModlistEntry(text: string, modName: string): "+" | "-" | null {
@@ -127,7 +107,7 @@ export function planMo2Placement(text: string, modName: string, options: Mo2Plac
  * file's usual one at the end).
  */
 export function applyMo2Placement(text: string, placement: Mo2Placement, enabled = true): string {
-  const { bom, rows: list, endings } = lines(text);
+  const { bom, lines: list, endings } = splitMo2ModlistLines(text);
   const crlf = endings.filter(ending => ending === "\r\n").length, lf = endings.filter(ending => ending === "\n").length;
   const usual = crlf >= lf && crlf > 0 ? "\r\n" : "\n";
   const sign = enabled ? "+" : "-";
@@ -144,6 +124,21 @@ export function applyMo2Placement(text: string, placement: Mo2Placement, enabled
     if (placement.row === list.length && list.length && !endings.at(-1)) { endings[list.length - 1] = usual; ending = ""; }
     list.splice(placement.row, 0, `${sign}${placement.modName}`);
     endings.splice(placement.row, 0, ending);
+  }
+  return bom + list.map((line, index) => line + endings[index]).join("");
+}
+
+/**
+ * Switch off the listed mods named (case-insensitively, as Windows names folders): each enabled row (`+` or no prefix) of
+ * one of them becomes `-`; every other row, and every byte of the rows it changes but the sign, stays as it was.
+ */
+export function disableMo2Mods(text: string, names: readonly string[]): string {
+  const wanted = new Set(names.map(name => name.toLowerCase()));
+  const { bom, lines: list, endings } = splitMo2ModlistLines(text);
+  for (const row of mo2ModlistRows(text)) {
+    if (!row || (row.prefix !== "+" && row.prefix !== "") || !wanted.has(row.name.toLowerCase())) continue;
+    const line = list[row.index]!, start = line.length - line.trimStart().length;
+    list[row.index] = line.slice(0, start) + "-" + line.slice(start + row.prefix.length);
   }
   return bom + list.map((line, index) => line + endings[index]).join("");
 }

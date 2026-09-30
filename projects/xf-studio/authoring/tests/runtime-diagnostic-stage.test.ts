@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/runtime-diagnostic-stage";
@@ -142,5 +142,17 @@ test("a legacy XF Studio folder or entry is recognised as an earlier XF Eye Arti
     writeFileSync(modlist, f.original + `+${EYE_MAKEUP_MOD.modName}\r\n`);
     expect(() => planRuntimeDiagnostic(f.options)).toThrow(`already enables ${EYE_MAKEUP_MOD.modName}`);
     expect(existsSync(f.options.stagingRoot)).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test("a staging root that is a dangling link is refused before anything is written through it (PIPE-10)", () => {
+  const f = fixture();
+  try {
+    // A junction (a symbolic link elsewhere) to a folder that doesn't exist: `exists` follows it and says no, so the old
+    // link walk climbed past it, and only the stage's mkdir failing (EEXIST) stopped it, with a raw error.
+    const target = join(f.root, "elsewhere");
+    symlinkSync(target, f.options.stagingRoot, process.platform === "win32" ? "junction" : "dir");
+    expect(() => stageRuntimeDiagnostic(f.options)).toThrow(/Linked path/);
+    expect(existsSync(target)).toBe(false);
   } finally { f.cleanup(); }
 });

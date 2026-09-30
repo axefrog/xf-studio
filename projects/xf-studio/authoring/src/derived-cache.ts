@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isBelow } from "./platform/api/path-containment";
 
 /**
  * Storage adapter for assets XF Studio derives from the player's own game files. A cache
@@ -66,7 +67,7 @@ export class DerivedCache {
   }
   remove(path: string): void {
     const target = resolve(path);
-    if (!target.startsWith(this.root + sep)) throw Error(`Refusing to remove outside the ${this.label} cache.`);
+    if (!isBelow(target, this.root)) throw Error(`Refusing to remove outside the ${this.label} cache.`);
     rmSync(target, { recursive: true, force: true });
   }
   entry(name: string): string { return join(this.root, name); }

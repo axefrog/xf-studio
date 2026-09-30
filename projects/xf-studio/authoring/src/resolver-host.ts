@@ -21,7 +21,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, stat as statAsync, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
-import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan } from "./archive-precedence";
+import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan, visibleCopy } from "./archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "./archivexl-config";
 import { depotHash, type DepotRef } from "./depot-path";
 import { depotPathRegex } from "./eye-plate-wolvenkit";
@@ -155,17 +155,16 @@ function gameBundleFiles(gameRoot: string, watched: WatchedPath[], byListing: bo
 const toArchiveFile = (candidate: SourceCandidate): ArchiveFile => ({ id: candidate.physicalPath, virtualPath: candidate.virtualPath,
   provider: candidate.provider, providerName: candidate.providerName, active: candidate.active, priority: candidate.priority });
 
-/** Visible winner of each loose virtual file (same VFS rule as archives). */
+/** Visible copy of each loose virtual file: the one rule archives follow too (`visibleCopy`, PIPE-06). */
 function visibleLoose(candidates: readonly SourceCandidate[]): SourceCandidate[] {
   const byPath = new Map<string, SourceCandidate[]>();
   for (const candidate of candidates) {
-    if (!candidate.active) continue;
     const key = lower(candidate.virtualPath);
     byPath.set(key, [...(byPath.get(key) ?? []), candidate]);
   }
-  return [...byPath.values()].map(copies => {
-    const mo2 = copies.filter(c => c.provider.startsWith("mo2-")).sort((a, b) => (b.priority ?? -1) - (a.priority ?? -1));
-    return mo2[0] ?? copies[0]!;
+  return [...byPath].flatMap(([key, copies]) => {
+    const visible = visibleCopy(copies.map(copy => ({ ...copy, id: copy.physicalPath, candidate: copy })), key).visible;
+    return visible ? [visible.candidate] : [];
   });
 }
 

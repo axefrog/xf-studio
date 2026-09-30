@@ -3,7 +3,8 @@ import { type Dirent, lstatSync, opendirSync, readFileSync, statSync, type Stats
 import { readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseLocalSettings, type LocalSettings } from "./local-settings";
-import { describeMo2Instance, parseMo2Modlist } from "./mo2-instance";
+import { visibleCopy } from "./archive-precedence";
+import { describeMo2Instance, isMo2ModFolderName, parseMo2Modlist } from "./mo2-instance";
 import { folderStampMode, type FolderStampMode } from "./volume-info";
 import { attributeVortexFile, type VortexAttribution } from "./vortex-deployment";
 import { readVortexManifests } from "./vortex-host";
@@ -117,8 +118,6 @@ const extensions: Record<string, SourceFileKind> = {
 };
 const defaults = { maxEntries: 150_000, maxDepth: 12, maxProfileBytes: 4 * 1024 * 1024 };
 const archiveLimit = "Archive members, hash winners, ArchiveXL patches/merges, REDmod, and actual game loading are unresolved.";
-const safeName = (name: string) => name !== "." && name !== ".." && name.trim() === name &&
-  !/[\\/:\x00-\x1f]/.test(name) && !name.endsWith(".") && name.length <= 255;
 const iniBytes = 4 * 1024 * 1024;
 const key = (path: string) => path.replaceAll("\\", "/").toLowerCase();
 const linkedAncestor = (path: string): boolean => {
@@ -274,7 +273,7 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
       for (const entry of modlist.entries) {
         // Separators carry no files; foreign rows are game-plugin entries outside the mods directory.
         if (entry.kind !== "mod") continue;
-        if (!safeName(entry.name)) { issue("profile_row_invalid", `Invalid MO2 profile row ${entry.line}.`); continue; }
+        if (!isMo2ModFolderName(entry.name)) { issue("profile_row_invalid", `Invalid MO2 profile row ${entry.line}.`); continue; }
         scan(join(instance.paths.mods, entry.name), "mo2-mod", entry.name, entry.enabled, entry.priority, "", profileId,
           `MO2 modlist.txt row ${entry.line}; MO2 writes the list highest priority first, so earlier rows win`);
       }
@@ -317,18 +316,19 @@ export function discoverSources(input: LocalSettings, requested: ScanLimits = {}
     const contenders = rows.slice().sort((a, b) => a.id.localeCompare(b.id));
     const active = contenders.filter(c => c.active);
     let selected: SourceCandidate | null = null;
-    let reason = "No active candidate in the selected route.";
+    let reason = "No active candidate in the selected route.", confidence: SourceConfidence = "unknown";
+    // The resolver's own rule (`visibleCopy`, PIPE-06), so this assessment never disagrees with what the resolver reads.
+    const chosen = visibleCopy(contenders, key(contenders[0]!.virtualPath));
     if (!complete) reason = "Incomplete scan prevents a precedence conclusion.";
-    else if (active.length === 1) { selected = active[0]!; reason = "Only one active physical candidate in the scanned roots."; }
-    else if (active.length > 1 && active.every(c => c.provider === "mo2-mod" || c.provider === "mo2-overwrite")) {
-      const ordered = active.slice().sort((a, b) => (b.priority ?? -1) - (a.priority ?? -1));
-      if (ordered[0]!.priority !== ordered[1]!.priority) {
-        selected = ordered[0]!; reason = "MO2 virtual-file priority from the selected modlist/overwrite.";
-      }
-    } else if (active.length > 1) reason = "Game, manual, and MO2 mounts need a separate precedence model.";
+    else if (chosen.visible) {
+      selected = chosen.visible;
+      confidence = chosen.ambiguities.length ? "ambiguous" : "source-derived";
+      reason = active.length === 1 ? "Only one active physical candidate in the scanned roots."
+        : chosen.ambiguities.length ? `Chosen by the resolver's rule, which rests on a hypothesis here: ${chosen.ambiguities.map(item => item.detail).join(" ")}`
+          : "MO2 virtual-file priority from the selected modlist/overwrite.";
+    }
     return { virtualPath: contenders[0]!.virtualPath, contenders, sourceDerivedFirst: selected,
-      runtimeObservedWinner: null, confidence: selected ? "source-derived" : active.length > 1 && complete
-        ? "ambiguous" : "unknown", reason };
+      runtimeObservedWinner: null, confidence, reason };
   });
   return { route, profileId, discoveredAt, complete, candidates, looseFiles, issues, watched,
     limitations: [archiveLimit, "MO2 '+' is activation intent, not a loaded-file or archive-resource winner.",

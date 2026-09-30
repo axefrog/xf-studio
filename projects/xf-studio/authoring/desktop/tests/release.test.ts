@@ -87,7 +87,7 @@ describe("release staging and notes", () => {
   const lock = resolve(root, "dependencies.lock");
   const commit = "0123456789abcdef0123456789abcdef01234567";
   writeFileSync(setupExe, "MZ fake setup");
-  writeFileSync(lock, JSON.stringify({ objects: [{ product: "electrobun", version: "2.0.1", relativeRoot: "releases/electrobun/2.0.1/windows-x64" }] }));
+  writeFileSync(lock, JSON.stringify({ objects: [{ product: "electrobun", version: "2.0.2", relativeRoot: "releases/electrobun/2.0.2/windows-x64" }] }));
 
   test("stages the named single setup program, build information and sha256sum-format checksums", () => {
     writeFileSync(updateJson, JSON.stringify({ identifier: "dev.axefrog.xf-studio", version: "0.1.0-alpha.1", channel: "canary", hash: "abc123" }));
@@ -158,7 +158,7 @@ describe("release staging and notes", () => {
 describe("third-party notices", () => {
   const notices = readFileSync(resolve(import.meta.dir, "../../../THIRD_PARTY_NOTICES.md"), "utf8");
   const facts = { binaries: ["bun.exe", "launcher.exe", "ElectrobunCore.dll", "libNativeWrapper.dll", "libasar.dll",
-    "bspatch.exe", "zig-zstd.exe"], bunVersion: "1.4.0", electrobunVersion: "2.0.1", threeVersion: "0.186.0",
+    "bspatch.exe", "zig-zstd.exe"], bunVersion: "1.4.0", electrobunVersion: "2.0.2", threeVersion: "0.186.0",
     innoSetupVersion: "6.7.3" };
 
   test("the checked-in notices cover the known shipped programs and versions", () => {

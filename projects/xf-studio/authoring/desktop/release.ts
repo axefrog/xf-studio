@@ -14,7 +14,7 @@ import electrobunConfig from "./electrobun.config";
 export const repository = "axefrog/xf-studio";
 export const desktopRoot = import.meta.dir;
 export const changelogPath = resolve(desktopRoot, "../../CHANGELOG.md");
-/** Electrobun 2.0.1 knows only dev/canary/stable; every pre-release channel builds as `canary`. */
+/** Electrobun 2.0.2 knows only dev/canary/stable; every pre-release channel builds as `canary`. */
 export const electrobunChannel = "canary";
 /**
  * Electrobun names its artifacts after the app name without spaces: `XFStudio` for the real app, `XFStudioUITrial` or

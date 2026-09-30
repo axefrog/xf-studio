@@ -11,6 +11,7 @@
 import { spawn } from "node:child_process";
 import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, win32 } from "node:path";
+import { isBelow } from "./platform/api/path-containment";
 import { DESKTOP_APP_IDENTITY, DESKTOP_BUILD_COMMAND, DESKTOP_BUILD_FOLDER, DESKTOP_INSTALLER_FOLDER, type DesktopAppStatus } from "./desktop-app";
 
 /** Windows' per-user list of installed apps, where Electrobun's setup registers its uninstaller. */
@@ -59,7 +60,8 @@ export function parseRegQuery(text: string): Map<string, Map<string, string>> {
 }
 
 const lower = (path: string) => win32.resolve(path).toLowerCase();
-const inside = (root: string, path: string) => lower(path).startsWith(lower(root) + "\\");
+/** `path` is below `root`, as Windows compares folders (PIPE-08). */
+const inside = (root: string, path: string) => isBelow(path, root, "win32");
 /** The program a registry value names: `"C:\x\uninstall.exe" --uninstall` or `C:\x\launcher.exe,0`. */
 function programOf(value: string | undefined): string | null {
   if (!value) return null;

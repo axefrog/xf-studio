@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import type { Recipe } from "./engines/layered-makeup/recipe";
 import { readRecipe as parseRecipe, recipeFile } from "./recipe-schema";
 import { hostFailure } from "./diagnostics/host-log";
+import { useWriteAheadLog, type LibraryWrites } from "./platform/graph-adapters/library-durability";
 
 export type LookSummary = { id: string; name: string; revision: number; updatedAt: string };
 export type StoredLook = LookSummary & { recipe: Recipe };
@@ -12,14 +13,16 @@ export class LibraryError extends Error {
 /** Local editable source library. Exported game resources are separate build artifacts. */
 export class LookLibrary {
   private db: Database;
-  constructor(path: string) {
+  /** `writes`: the file's durability, told of each commit (library-durability.ts). */
+  constructor(path: string, private readonly writes?: LibraryWrites) {
     this.db = new Database(path, { create: true, strict: true });
     const version = this.db.query("PRAGMA user_version").get() as { user_version: number };
     if (version.user_version > 2) {
       this.db.close();
       throw Error("This library needs a newer version of XF Studio.");
     }
-    this.db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+    this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
+    useWriteAheadLog(this.db);
     if (version.user_version === 0) this.db.transaction(() => {
       this.db.exec(`
         CREATE TABLE looks (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
@@ -31,6 +34,7 @@ export class LookLibrary {
         PRAGMA user_version=1;
       `);
     })();
+    if (version.user_version === 0) writes?.wrote();
   }
   close() { this.db.close(); }
   list(): LookSummary[] {
@@ -56,7 +60,7 @@ export class LookLibrary {
     if (id && (!Number.isSafeInteger(input.revision) || Number(input.revision) < 1))
       throw new LibraryError("A revision is required to update a look.");
     const name = input.name.trim();
-    return this.db.transaction(() => {
+    const saved = this.db.transaction(() => {
       const lookId = id ?? crypto.randomUUID();
       let revision = 1;
       if (id) {
@@ -72,6 +76,8 @@ export class LookLibrary {
         .run(lookId, revision, name, JSON.stringify(recipeFile(recipe) ?? recipe), now);
       return { id: lookId, name, revision, updatedAt: now, recipe };
     }).immediate();
+    this.writes?.wrote();
+    return saved;
   }
 }
 

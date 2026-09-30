@@ -1,4 +1,5 @@
 import { resolve, sep } from "node:path";
+import { isBelow } from "./src/platform/api/path-containment";
 import { existsSync, mkdirSync } from "node:fs";
 import { LookLibrary, libraryRequest } from "./src/library-store";
 import { CollectionLibrary, collectionRequest } from "./src/collection-store";
@@ -7,6 +8,7 @@ import { PartPresetLibrary, partPresetRequest } from "./src/part-preset-store";
 // graph design, G1). Nothing in the page uses it yet; later slices move V, presets and profiles onto it.
 import { createGraphHandler, GraphLibrary } from "./src/platform/graph-adapters/graph-host";
 import { hostClock, hostRandom } from "./src/platform/graph-adapters/host-sources";
+import { LibraryDurability } from "./src/platform/graph-adapters/library-durability";
 import { STUDIO_GRAPH_RULES, STUDIO_GRAPH_TYPES } from "./src/compose/graph";
 // A composition root: the part registry is built once and injected (CORE-29).
 import { STUDIO_PARTS } from "./src/compose/studio-registry";
@@ -61,16 +63,22 @@ const diagnostics = hostDiagnosticsAt(dataRoot, { echo: consoleEcho });
 setProcessDiagnostics(diagnostics);
 // A background failure nobody caught is logged; it never ends the dev server (PREV-101).
 logUnhandledRejections();
-const library = new LookLibrary(resolve(dataRoot, "library.sqlite"));
-const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"));
-const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
-const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
-// Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
-const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS);
-const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS);
 const graphOptions = { types: STUDIO_GRAPH_TYPES, rules: STUDIO_GRAPH_RULES, clock: hostClock(), random: hostRandom() };
-const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), graphOptions);
-const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), graphOptions);
+// Each library file's durability (library-durability.ts): commits don't wait for the disk, and a flush a few seconds after the last
+// one makes them durable, so a power cut loses at most those seconds. Open for the process's lifetime (a kill loses nothing: the commits are already with the OS).
+const libraryLife = new AbortController();
+const durable = (file: string) => new LibraryDurability(resolve(dataRoot, file), { clock: graphOptions.clock, signal: libraryLife.signal,
+  report: error => hostFailure("library", "flush_failed", "The library couldn't be flushed to disk yet; it will try again.", error, "warn") });
+const libraryFile = durable("library.sqlite"), verificationFile = durable("verification.sqlite");
+const library = new LookLibrary(resolve(dataRoot, "library.sqlite"), libraryFile);
+const verificationLibrary = new LookLibrary(resolve(dataRoot, "verification.sqlite"), verificationFile);
+const collections = new CollectionLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, libraryFile);
+const verificationCollections = new CollectionLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, verificationFile);
+// Named part presets (an expression today) in their own table of the same library files (part-preset-store.ts).
+const partPresets = new PartPresetLibrary(resolve(dataRoot, "library.sqlite"), STUDIO_PARTS, undefined, libraryFile);
+const verificationPartPresets = new PartPresetLibrary(resolve(dataRoot, "verification.sqlite"), STUDIO_PARTS, undefined, verificationFile);
+const graphLibrary = new GraphLibrary(resolve(dataRoot, "library.sqlite"), { ...graphOptions, writes: libraryFile });
+const verificationGraphLibrary = new GraphLibrary(resolve(dataRoot, "verification.sqlite"), { ...graphOptions, writes: verificationFile });
 const graphRequests = [["/api/graph", createGraphHandler(graphLibrary, "/api/graph")],
   ["/api/verification/graph", createGraphHandler(verificationGraphLibrary, "/api/verification/graph")]] as const;
 // The library's daily backup, a moment after starting (never for an isolated server's own library).
@@ -310,10 +318,10 @@ const server = Bun.serve({
     } catch {
       return new Response("Bad path", { status: 400 });
     }
-    if (!path.startsWith(root + sep))
+    if (!isBelow(path, root))
       return new Response("Not found", { status: 404 });
     let file = Bun.file(path);
-    const assetName = path.startsWith(resolve(root, "assets") + sep) ? path.slice(resolve(root, "assets").length + 1) : null;
+    const assetName = isBelow(path, resolve(root, "assets")) ? path.slice(resolve(root, "assets").length + 1) : null;
     // The retired piercing intakes' payloads may still sit in an old checkout's ignored public/assets; piercings come only from the
     // resolver now, so nothing serves them (UI-50).
     if (assetName !== null && RETIRED_ASSET_DIRS.test(assetName)) return new Response("Not found", { status: 404 });
@@ -329,7 +337,7 @@ const server = Bun.serve({
     // read-only link to another checkout). Files present in the overlay win.
     else if (assetOverlay && assetName !== null) {
       const overlayPath = resolve(assetOverlay, "." + path.slice(resolve(root, "assets").length));
-      if (overlayPath.startsWith(assetOverlay + sep) && await Bun.file(overlayPath).exists())
+      if (isBelow(overlayPath, assetOverlay) && await Bun.file(overlayPath).exists())
         file = Bun.file(overlayPath);
     }
     if (!(await file.exists()))

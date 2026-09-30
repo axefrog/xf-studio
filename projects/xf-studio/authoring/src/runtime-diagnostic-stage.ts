@@ -4,12 +4,14 @@
  * manifest's mod name (a renamed mod keeps its name, PIPE-90), else eye makeup's brand. */
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isWithin as within, overlaps } from "./platform/api/path-containment";
 import { defaultLocalSettings } from "./local-settings";
 import { checkFrameworkVersions, frameworkModNames, type FrameworkRouteReport } from "./framework-versions";
-import { createWindowsDetectionHost } from "./install-detection-host";
-import { applyMo2Placement, planMo2Placement, type Mo2Placement } from "./mo2-placement";
-import { createModInstallTransport, inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
+import { createWindowsDetectionHost, readConfiguredMo2Instance } from "./install-detection-host";
+import { applyMo2Placement, disableMo2Mods, mo2ModlistEntry, planMo2Placement, type Mo2Placement } from "./mo2-placement";
+import { isMo2ModFolderName, parseMo2Modlist } from "./mo2-instance";
+import { assertNoLinkedPath, createModInstallTransport, inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
 import { modNameIssue } from "./platform/api";
 import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries, isEyeMakeupModFolder } from "./mod-branding";
 
@@ -57,9 +59,11 @@ export function diagnosticPlacement(source: string, frameworkMods: Iterable<stri
  * (or enables) only the mod's row and switches off an enabled predecessor of the same mod. */
 export function diagnosticModlist(source: string, frameworkMods: Iterable<string> = [], modName: string = EYE_MAKEUP_MOD.modName): string {
   const placed = applyMo2Placement(source, diagnosticPlacement(source, frameworkMods, modName), true);
-  const newline = placed.includes("\r\n") ? "\r\n" : "\n";
-  const predecessors = EYE_MAKEUP_MOD.predecessorMods.map(name => `+${name}`);
-  return placed.split(newline).map(line => predecessors.includes(line) ? `-${line.slice(1)}` : line).join(newline);
+  return disableMo2Mods(placed, EYE_MAKEUP_MOD.predecessorMods);
+}
+/** The enabled mods of a profile's list, as MO2 reads it (`+` or no prefix; not separators or foreign rows). */
+export function enabledMo2Mods(text: string): string[] {
+  return parseMo2Modlist(text).entries.filter(entry => entry.enabled && entry.kind === "mod").map(entry => entry.name);
 }
 /** The mod a candidate is (its manifest's mod name, else eye makeup's brand), checked as a folder name (PIPE-90). */
 export function candidateModName(manifest: { modName?: string }): string {
@@ -71,12 +75,12 @@ export function candidateModName(manifest: { modName?: string }): string {
  * The installed places a candidate's duplicate must not already be in (PIPE-90): every mod folder of the MO2 instance,
  * enabled or not (a feature may be present in only one installed XF mod), and the game's own archive/pc/mod folder.
  */
-export function installedPlaces(mo2: string, game: string): { label: string; folder: string }[] {
+export function installedPlaces(modsFolder: string, game: string): { label: string; folder: string }[] {
   let mods: string[] = [];
   // A promotion's own in-flight copy (`.xfs-promotion-<transaction>`) is not an installed mod.
-  try { mods = readdirSync(join(mo2, "mods")).filter(name => !name.startsWith(".xfs-promotion-")); }
+  try { mods = readdirSync(modsFolder).filter(name => !name.startsWith(".xfs-promotion-")); }
   catch { /* No mods folder: nothing installed there. */ }
-  return [...mods.map(name => ({ label: `the Mod Organizer 2 mod “${name}”`, folder: join(mo2, "mods", name, "archive", "pc", "mod") })),
+  return [...mods.map(name => ({ label: `the Mod Organizer 2 mod “${name}”`, folder: join(modsFolder, name, "archive", "pc", "mod") })),
     { label: "the game's archive/pc/mod folder", folder: join(game, "archive", "pc", "mod") }];
 }
 /** An existing MO2 mod folder that holds an earlier install of this mod under a legacy name. */
@@ -85,23 +89,7 @@ export function legacyModFolder(modsRoot: string): string | null {
     EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
 }
 const sha = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
-const within = (child: string, root: string) => {
-  const rel = relative(root, child);
-  return !rel || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
-};
-function noLinks(path: string) {
-  let at = resolve(path);
-  while (!existsSync(at)) {
-    const parent = dirname(at);
-    requireValue(parent !== at, "Path root does not exist."); at = parent;
-  }
-  for (;;) {
-    requireValue(!lstatSync(at).isSymbolicLink(), `Linked path is not allowed: ${at}`);
-    const parent = dirname(at);
-    if (parent === at) break;
-    at = parent;
-  }
-}
+const noLinks = (path: string) => assertNoLinkedPath(path, "Linked path is not allowed");
 function regular(path: string) {
   noLinks(path);
   const info = lstatSync(path);
@@ -112,9 +100,7 @@ function profileName(value: string) {
     value !== ".." && value.trim() === value && !value.endsWith("."), "Invalid MO2 profile name.");
 }
 function modName(value: string) {
-  requireValue(value.length > 0 && value.length <= 255 && !/[\\/:\x00-\x1f]/.test(value) &&
-    value !== "." && value !== ".." && value.trim() === value && !value.endsWith("."),
-  "Unsafe enabled MO2 mod name.");
+  requireValue(isMo2ModFolderName(value), "Unsafe enabled MO2 mod name.");
 }
 function checked(options: RuntimeDiagnosticOptions) {
   const { candidateStore, gameRoot, mo2Root, stagingRoot } = options;
@@ -122,26 +108,27 @@ function checked(options: RuntimeDiagnosticOptions) {
     requireValue(isAbsolute(value), `${label} must be absolute.`);
   profileName(options.profileId);
   const store = resolve(candidateStore), game = resolve(gameRoot), mo2 = resolve(mo2Root), stage = resolve(stagingRoot);
-  for (const source of [store, game, mo2]) {
-    requireValue(!within(stage, source) && !within(source, stage), "Diagnostic staging must be outside every source root.");
+  // The instance's own folders: its ModOrganizer.ini may keep mods, profiles and overwrite elsewhere (PIPE-05).
+  const instance = readConfiguredMo2Instance(mo2).paths;
+  for (const source of [store, game, mo2, instance.mods, instance.profiles, instance.overwrite]) {
+    requireValue(!overlaps(stage, source), "Diagnostic staging must be outside every source root.");
     noLinks(source);
   }
   noLinks(stage);
   requireValue(!existsSync(stage), "Diagnostic staging root must not already exist.");
-  const profile = join(mo2, "profiles", options.profileId), modlist = join(profile, "modlist.txt");
+  const profile = join(instance.profiles, options.profileId), modlist = join(profile, "modlist.txt");
   regular(modlist);
   regular(join(game, "bin", "x64", "Cyberpunk2077.exe"));
   requireValue(statSync(join(game, "archive", "pc")).isDirectory(), "Game archive/pc is missing.");
-  requireValue(statSync(join(mo2, "mods")).isDirectory(), "MO2 mods directory is missing.");
+  requireValue(statSync(instance.mods).isDirectory(), "MO2 mods directory is missing.");
   const candidate = inspectLocalPackageCandidate(store, options.candidateId);
-  return { store, game, mo2, stage, profile, modlist, candidate };
+  return { store, game, mo2, mods: instance.mods, profiles: instance.profiles, stage, profile, modlist, candidate };
 }
 
 export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): RuntimeDiagnosticPlan {
   const paths = checked(options);
   const text = readFileSync(paths.modlist, "utf8");
-  const lines = text.split(/\r?\n/);
-  const names = lines.filter(line => line.startsWith("+")).map(line => line.slice(1));
+  const names = enabledMo2Mods(text);
   for (const name of names) modName(name);
   const mod = candidateModName(paths.candidate.manifest);
   const enabledMod = names.find(name => name.toLowerCase() === mod.toLowerCase() || isEyeMakeupModFolder(name));
@@ -152,23 +139,23 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   // Part of this build already installed elsewhere (another stage's promotion, a split-off mod): refused at staging (PIPE-90).
   const xl = paths.candidate.manifest.files[1];
   const duplicateInstalls = installedDuplicates(readFileSync(join(paths.candidate.root, ...xl.path.split("/")), "utf8"),
-    installedPlaces(paths.mo2, paths.game));
+    installedPlaces(paths.mods, paths.game));
   const exactFilenameConflicts: string[] = [];
   for (const entry of paths.candidate.manifest.files) {
     const file = basename(entry.path);
     if (existsSync(join(paths.game, "archive", "pc", "mod", file)))
       exactFilenameConflicts.push(`Direct game archive already has ${file}`);
     for (const name of names) {
-      const target = join(paths.mo2, "mods", name, "archive", "pc", "mod", file);
+      const target = join(paths.mods, name, "archive", "pc", "mod", file);
       if (existsSync(target)) exactFilenameConflicts.push(`Enabled MO2 mod ${name} has ${file}`);
     }
   }
   // Either manifest version: the looks its verifiers checked (PIPE-09).
   requireValue(paths.candidate.manifest.presetCount > 0, "Diagnostic candidate has no recorded presets.");
   const legacy = EYE_MAKEUP_MOD.predecessorMods.some(name => names.includes(name));
-  const dedicatedModExists = existsSync(join(paths.mo2, "mods", mod));
-  const legacyFolder = legacyModFolder(join(paths.mo2, "mods"));
-  const listed = (name: string) => lines.some(line => /^[+-]/.test(line) && line.slice(1).toLowerCase() === name.toLowerCase());
+  const dedicatedModExists = existsSync(join(paths.mods, mod));
+  const legacyFolder = legacyModFolder(paths.mods);
+  const listed = (name: string) => mo2ModlistEntry(text, name) !== null;
   const cautions = [
     "This checks paired payload hashes and the manifest claim; it does not rerun the independent archive verifier.",
     "The source profile and old runtime logs do not prove which archives will win in a future session.",

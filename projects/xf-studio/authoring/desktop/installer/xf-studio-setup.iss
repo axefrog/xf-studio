@@ -1,6 +1,6 @@
 ; XF Studio single-file Windows setup (Inno Setup 6.7.3), built by single-installer.ts.
 ;
-; Electrobun 2.0.1's setup program only works with its hidden `.installer` payload folder beside
+; Electrobun 2.0.2's setup program (like 2.0.1's) only works with its hidden `.installer` payload folder beside
 ; it, which is why Electrobun ships it as a ZIP. This wrapper carries that unmodified setup and
 ; payload inside one executable: it unpacks them into Inno Setup's private temporary folder and
 ; runs Electrobun's own setup there, which installs for the current Windows user, creates the

@@ -11,7 +11,8 @@ import { createHash } from "node:crypto";
 import {
   copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
-import { dirname, join, parse, resolve, sep } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
+import { canonicalPath, containmentKey, isWithin as within, overlaps } from "../api/path-containment";
 import {
   archiveXlText, ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, type PackageBuildStage, type FeatureBuildContext, type FeatureExporterEntry, type FeatureVerification,
   type GeneratedFile, type PackageBuildResult, type PackageCheckResult, type ProductBuild, type ResourceTools, type VerifierTools,
@@ -54,13 +55,8 @@ export interface ProductCommandOptions {
   readonly verifierTools: (wolvenkit: string, gamepath: string) => VerifierTools;
 }
 
-const windows = process.platform === "win32";
-const key = (path: string) => windows ? path.toLowerCase() : path;
-const same = (a: string, b: string) => key(a) === key(b);
-/** `ancestor` is `path` or one of its parents. */
-const within = (path: string, ancestor: string) => same(path, ancestor) ||
-  key(path).startsWith(key(ancestor).endsWith(sep) ? key(ancestor) : key(ancestor) + sep);
-const overlaps = (a: string, b: string) => within(a, b) || within(b, a);
+/** The same folder, as containment compares folders (PIPE-08). */
+const same = (a: string, b: string) => { const key = containmentKey(a); return key !== null && key === containmentKey(b); };
 const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
 const isDirectory = (path: string) => { try { return statSync(path).isDirectory(); } catch { return false; } };
 const fileHash = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -68,17 +64,9 @@ const textHash = (text: string) => createHash("sha256").update(text, "utf8").dig
 function fail(code: string, message: string): never { throw new ExportRefusal(code, message); }
 
 /** Canonical absolute path: the nearest existing ancestor's real path plus the not-yet-created remainder. */
-function canonical(path: string): string {
-  let current = resolve(path);
-  const rest: string[] = [];
-  while (!existsSync(current)) {
-    const parent = dirname(current);
-    if (parent === current) return resolve(path);
-    rest.unshift(current.slice(parent.length).replace(/^[\\/]+/, ""));
-    current = parent;
-  }
-  return resolve(realpathSync.native(current), ...rest);
-}
+const canonical = (path: string) => canonicalPath(path, HOST_PATHS);
+/** The host's file-system reads for the containment checks. */
+const HOST_PATHS = { exists: existsSync, realpath: realpathSync.native };
 
 /** Canonical path of an input that must exist. */
 function existing(path: string, label: string): string {

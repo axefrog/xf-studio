@@ -2,6 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, lstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
+import { canonicalPath, isWithin, isWithinReal, overlaps } from "../src/platform/api/path-containment";
+
+/** The host's file-system reads for the containment checks. */
+const HOST_PATHS = { exists: existsSync, realpath: realpathSync.native };
 import type { LocalSettings } from "../src/local-settings";
 import { eyePlateHeadOverride, type EyePlateTools } from "../src/eye-plate-service";
 import { eyePlatePrerequisite, masculineEyePlatePrerequisite } from "../src/eye-plate-prerequisite";
@@ -26,11 +30,6 @@ const signature = (path: string, expected: string) => {
     } finally { closeSync(handle); }
   }
   catch { return false; }
-};
-const inside = (path: string, root: string) => {
-  const target = process.platform === "win32" ? path.toLowerCase() : path;
-  const base = process.platform === "win32" ? root.toLowerCase() : root;
-  return target === base || target.startsWith(base + sep);
 };
 export type WolvenKitProbe = (path: string) => string | null;
 export type BunProbe = (path: string) => string | null;
@@ -129,15 +128,35 @@ function toolHash(path: string): string {
 
 function privatePath(root: string, target: string): void {
   const base = resolve(root), path = resolve(target);
-  if (!inside(path, base) || lstatSync(base).isSymbolicLink()) throw Error("Private build root uses a linked path.");
-  const canonical = realpathSync(base);
+  if (!isWithin(path, base) || lstatSync(base).isSymbolicLink() || !isWithinReal(path, base, HOST_PATHS)) throw Error("Private build root uses a linked path.");
   let current = base;
   for (const part of path.slice(base.length).split(sep).filter(Boolean)) {
     current = resolve(current, part);
-    if (!existsSync(current)) continue;
-    if (lstatSync(current).isSymbolicLink() || !inside(realpathSync(current), canonical))
-      throw Error("Private build root uses a linked path.");
+    if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw Error("Private build root uses a linked path.");
   }
+}
+
+/**
+ * Why the host's writable build folders below `dataRoot` can't be used, or null: one of them is (or passes through) a
+ * link, or overlaps a configured input. Compared on canonical paths, so a Windows 8.3 short name and its long form
+ * are one folder (PIPE-08).
+ */
+export function privateBuildRootsIssue(dataRoot: string, inputs: readonly string[]): string | null {
+  try {
+    for (const name of privateRoots) privatePath(dataRoot, resolve(dataRoot, name));
+  } catch { return "Private build storage uses a linked path."; }
+  // Electrobun installs app resources below userData. Its read-only tool bundle
+  // may share that parent, but none of the writable package roots may overlap
+  // an input (including an MO2 root unknown to the package builder).
+  try {
+    const output = canonicalPath(dataRoot, HOST_PATHS);
+    const writable = privateRoots.map(name => resolve(output, name));
+    for (const input of inputs) {
+      const source = realpathSync.native(input);
+      if (writable.some(path => overlaps(path, source))) return "Private build data overlaps a configured input.";
+    }
+  } catch { return "A configured build path is unavailable."; }
+  return null;
 }
 
 /** Writable host-owned roots below the desktop user-data directory. */
@@ -153,10 +172,9 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
     if (manifest.schema !== BUILD_TOOLS_SCHEMA || !manifest.files ||
       JSON.stringify(Object.keys(manifest.files).sort()) !== JSON.stringify([...toolNames].sort()))
       return "The packaged build tools are incomplete.";
-    const actualTools = realpathSync(toolsRoot);
     for (const name of toolNames) {
       const path = resolve(toolsRoot, name);
-      if (!file(path) || !inside(realpathSync(path), actualTools) ||
+      if (!file(path) || !isWithinReal(path, toolsRoot, HOST_PATHS) ||
         toolHash(path) !== manifest.files[name])
         return "The packaged build tools failed integrity checks.";
     }
@@ -174,23 +192,7 @@ export function desktopBuildIssue(settings: LocalSettings, dataRoot: string, too
   if (!file(bun)) return "XF Studio's own build runtime is missing. Reinstall XF Studio to repair it.";
   const bunIssue = bunProbe(bun);
   if (bunIssue) return bunIssue;
-  try {
-    for (const name of privateRoots) privatePath(dataRoot, resolve(dataRoot, name));
-  } catch { return "Private build storage uses a linked path."; }
-  // Electrobun installs app resources below userData. Its read-only tool bundle
-  // may share that parent, but none of the writable package roots may overlap
-  // an input (including an MO2 root unknown to the package builder).
-  try {
-    const output = realpathSync(dataRoot);
-    const writable = privateRoots.map(name => resolve(output, name));
-    for (const input of [toolsRoot, settings.gameRoot,
-      settings.wolvenKitCli, bun, settings.mo2Root].filter((v): v is string => !!v)) {
-      const source = realpathSync(input);
-      if (writable.some(path => inside(path, source) || inside(source, path)))
-        return "Private build data overlaps a configured input.";
-    }
-  } catch { return "A configured build path is unavailable."; }
-  return null;
+  return privateBuildRootsIssue(dataRoot, [toolsRoot, settings.gameRoot, settings.wolvenKitCli, bun, settings.mo2Root].filter((v): v is string => !!v));
 }
 
 /** Eye makeup's plate prerequisite for these desktop settings: cut from the head the saved launch route loads (PIPE-36). */

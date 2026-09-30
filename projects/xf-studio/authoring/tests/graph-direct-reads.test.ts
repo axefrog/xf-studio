@@ -150,7 +150,7 @@ const GRANDFATHERED: Readonly<Record<string, Readonly<Record<string, number>>>> 
   "resolver-host": { clock: 3, timers: 1, network: 2, files: 2, environment: 1 }, // previously undetected (review 7): environment
   "resource-graph": { network: 1 },
   "route-fingerprint": { files: 1 },
-  "runtime-diagnostic-promotion": { random: 2, files: 1 }, // previously undetected: random
+  "runtime-diagnostic-promotion": { random: 1, files: 1 }, // previously undetected: random
   "runtime-diagnostic-stage": { files: 1 },
   "saves-host-sources": { files: 1, environment: 2 }, // previously undetected (review 7): environment
   "showroom/build": { clock: 2, files: 1 }, // previously undetected: clock

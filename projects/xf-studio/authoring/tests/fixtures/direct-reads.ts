@@ -35,7 +35,8 @@ export const DIRECT_READS: Readonly<Record<string, { readonly code?: RegExp; rea
 };
 
 /** Adapter modules: they implement a source, and may read directly. */
-export const ADAPTERS: ReadonlySet<string> = new Set(["platform/graph-adapters/host-sources", "platform/graph-adapters/sqlite-store", "platform/graph-adapters/backups"]);
+export const ADAPTERS: ReadonlySet<string> = new Set(["platform/graph-adapters/host-sources", "platform/graph-adapters/sqlite-store", "platform/graph-adapters/backups",
+  "platform/graph-adapters/library-durability"]);
 
 /** The direct reads in a module's text, counted by kind (kinds it doesn't read are absent). */
 export function readsIn(text: string): Record<string, number> {

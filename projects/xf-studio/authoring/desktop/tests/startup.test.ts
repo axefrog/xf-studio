@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "nod
 import { homedir, tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { detectWebView2, parseRegVersion, WEBVIEW2_KEYS } from "../webview2";
-import { blankWindowNotice, trialWindowPosition } from "../startup-watchdog";
+import { blankWindowNotice, mainWindowPlacement, trialWindowPosition } from "../startup-watchdog";
 import { createHostLog } from "../host-log";
 import { DesktopWorkspaceClose } from "../workspace-close";
 import { createDesktopServer } from "../server";
@@ -194,6 +194,10 @@ test("only a disposable UI-trial identity opens off-screen, and only when asked"
   expect(trialWindowPosition(trial, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toEqual({ x: -9000, y: 0 });
   expect(trialWindowPosition(trial, {})).toBeNull();
   expect(trialWindowPosition(real, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toBeNull();
+  // An off-screen trial window never takes the foreground; every other window opens activated, as before.
+  expect(mainWindowPlacement(trial, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toEqual({ position: { x: -9000, y: 0 }, activate: false });
+  expect(mainWindowPlacement(trial, {})).toEqual({ position: null, activate: true });
+  expect(mainWindowPlacement(real, { XFS_TRIAL_WINDOW_OFFSCREEN: "1" })).toEqual({ position: null, activate: true });
 });
 
 test("the page's hand-written scripts parse (a stray quote in welcome copy once broke every desktop build)", () => {
