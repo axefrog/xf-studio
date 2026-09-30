@@ -39,3 +39,6 @@ public static native func XFBridge_Answer(id: Int32, choice: Int32, source: Stri
 public static native func XFBridge_Comment(text: String) -> Bool
 // The CET layer reports its overlay opening and closing (ui.state, the capture pre-check, the overlay host's yield rule).
 public static native func XFBridge_CetOverlay(open: Bool) -> Bool
+// Bridge 0.8 (the UI review): the ink panel reports the question it draws and whether it is on screen now, about five times a
+// second, so the CET label shows only the status and the answer keys instead of the question a third time.
+public static native func XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool

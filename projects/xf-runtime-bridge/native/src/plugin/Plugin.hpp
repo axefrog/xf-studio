@@ -99,6 +99,14 @@ struct State
     std::atomic<bool> cetOverlayOpen{false};
     std::atomic<bool> cetOverlaySeen{false};
 
+    // 0.8 (the UI review: the question showed three times): the question the ink panel reports drawing on screen now
+    // (XFBridge_InkDrawn, about five times a second while it draws one) and when, in steady-clock milliseconds; stale after
+    // kInkShownMs. The CET label then shows only the status and the answer keys.
+    static constexpr int64_t kInkShownMs = 1500;
+    std::atomic<uint64_t> inkShownAsk{0};
+    std::atomic<int64_t> inkShownAtMs{0};
+    uint64_t InkShownAsk() const;
+
     // 0.7: the XF ImGui overlay host (P0, draw-only; core/overlay/Host.hpp, plugin/Overlay.cpp), configured from [overlay].
     xfb::overlay::OverlayHost overlayHost;
 
@@ -116,4 +124,6 @@ std::string GameStateName(int aState);
 nlohmann::json InfoJson();
 // XFBridge_Hud's answer: the panel's settings, the bridge's state and the message lines as a text frame (core/InkUi.hpp).
 std::string HudFrame();
+// 0.8: the bridge's state as every panel's status line reads it (core/InkUi.hpp Summarize).
+inkui::BridgeView BridgeViewNow();
 } // namespace xfb::plugin

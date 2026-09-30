@@ -80,12 +80,18 @@ export function variantConfig(base: string, variant: Variant, options: { allowIn
   // 0.7: two sections now have an "enabled" key, so both checks name their section.
   if (!BRIDGE_ENABLED(false).test(config)) throw new Error("native/config/config.ini must keep enabled = false");
   if (!/^\[overlay\]\n(?:;.*\n)*enabled = false$/m.test(config)) throw new Error("native/config/config.ini must keep [overlay] enabled = false");
+  if (!/^diagnostics = false$/m.test(config)) throw new Error("native/config/config.ini must keep [overlay] diagnostics = false");
   if (variant !== "default") {
     config = config.replace(BRIDGE_ENABLED(false), (line) => line.replace(/enabled = false$/, "enabled = true"));
     if (!BRIDGE_ENABLED(true).test(config)) throw new Error(`${variant} config did not enable the bridge`);
     // 0.7: the XF overlay host (P0, draw-only) is on in the test packages only; the distribution package keeps it off.
     config = config.replace(/^(\[overlay\]\n(?:;.*\n)*)enabled = false$/m, "$1enabled = true");
     if (!/^\[overlay\]\n(?:;.*\n)*enabled = true$/m.test(config)) throw new Error(`${variant} config did not switch the overlay host on`);
+  }
+  if (variant === "diagnostic") {
+    // 0.8 (the UI review): the overlay panel's diagnostic lines and moving bar in the diagnostic package only.
+    config = config.replace(/^diagnostics = false$/m, "diagnostics = true");
+    if (!/^diagnostics = true$/m.test(config)) throw new Error("diagnostic config did not switch the overlay's diagnostics on");
   }
   if (variant === "writes") {
     config = config.replace(/^allow_writes = false$/m, "allow_writes = true");
@@ -141,6 +147,8 @@ export type Manifest = {
   cet_panel: boolean;
   /** 0.7: whether the XF overlay host is on ([overlay] enabled): the test packages only. */
   overlay_host: boolean;
+  /** 0.8: whether the overlay panel shows its diagnostic lines ([overlay] diagnostics): the diagnostic package only. */
+  overlay_diagnostics: boolean;
   commit: string;
   source_tree_clean: true;
   built_for: Record<string, string>;
@@ -196,6 +204,7 @@ export function stageVariant(options: StageOptions): Manifest {
     staging_notes: variant !== "default" ? [...STAGING_NOTES] : [],
     cet_panel: variant !== "default",
     overlay_host: variant !== "default",
+    overlay_diagnostics: variant === "diagnostic",
     commit: options.commit, // read from the DLL's build marker; equals HEAD at packaging time
     source_tree_clean: true,
     built_for: {

@@ -56,14 +56,19 @@ std::string GameStateName(int aState)
     }
 }
 
-std::string HudFrame()
+uint64_t State::InkShownAsk() const
+{
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    return now - inkShownAtMs.load() <= kInkShownMs ? inkShownAsk.load() : 0;
+}
+
+inkui::BridgeView BridgeViewNow()
 {
     auto& state = Get();
     inkui::BridgeView view;
     view.pluginEnabled = state.config.bridgeEnabled;
     view.allowWrites = state.config.allowWrites;
     view.scriptReady = state.scriptLayer.Ready();
-    std::vector<inkui::MessageLine> lines;
     if (state.bridge)
     {
         auto& dispatcher = state.bridge->GetDispatcher();
@@ -72,25 +77,14 @@ std::string HudFrame()
         view.listening = state.bridge->IsListening();
         view.hasClient = state.bridge->HasClient();
     }
-    if (!view.killed)
-    {
-        for (auto& [level, text] : state.messages.Lines())
-        {
-            lines.push_back({level, text});
-        }
-    }
-    // 0.7: the pending ask with the key that answers each choice ([ui] answer_keys).
-    inkui::AskView ask;
-    PendingAsk pending;
-    if (!view.killed && state.messages.Pending(pending))
-    {
-        ask.id = pending.id;
-        for (size_t i = 0; i < pending.choices.size() && i < state.config.answerKeys.size(); ++i)
-        {
-            ask.keyed.emplace_back(state.config.answerKeys[i], pending.choices[i]);
-        }
-    }
-    return inkui::Frame(state.hud.Current(), view, lines, &ask);
+    return view;
+}
+
+std::string HudFrame()
+{
+    // 0.8: made in one place (core BuildFrame), shared with the self-test's selftest.hud.
+    auto& state = Get();
+    return inkui::BuildFrame(state.hud.Current(), BridgeViewNow(), state.messages, state.config.answerKeys, state.InkShownAsk());
 }
 
 nlohmann::json InfoJson()
@@ -117,7 +111,12 @@ nlohmann::json InfoJson()
         {"script_layer", state.scriptLayer.Describe()},
         {"rearm_pending", state.rearmRequested.load()},
         // 0.7: the overlay host's switches (the CET window takes its theme from here) and the answer keys.
-        {"overlay", {{"enabled", state.config.overlayEnabled}, {"theme", state.config.overlayTheme}, {"phase", xfb::overlay::PhaseName(state.overlayHost.CurrentPhase())}}},
+        {"overlay", {{"enabled", state.config.overlayEnabled}, {"theme", state.config.overlayTheme}, {"phase", xfb::overlay::PhaseName(state.overlayHost.CurrentPhase())},
+                     // 0.8 (the UI review): the CET label says so when frame generation keeps the overlay off.
+                     {"off_for_frame_generation", state.overlayHost.OffForFrameGeneration()},
+                     {"diagnostics", state.config.overlayDiagnostics}}},
+        // 0.8 (the UI review): the status wording every surface shows, made in one place (core/InkUi.cpp Summarize).
+        {"status", inkui::StatusJson(BridgeViewNow())},
         {"answer_keys", state.config.answerKeys},
         {"last_rearm", [&state] {
              std::scoped_lock _(state.rearmMutex);

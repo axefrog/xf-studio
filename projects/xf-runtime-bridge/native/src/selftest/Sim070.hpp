@@ -24,6 +24,8 @@ struct Sim070Hooks
     // {id, text, choices} of the pending ask, or null (the message board).
     std::function<nlohmann::json()> pendingAsk;
     std::function<bool()> killed;
+    // 0.8: whether V has a weapon out (Sim060's player.action); with arm cyberware equipped that is XFCyberware.ArmsDrawn.
+    std::function<bool()> weaponDrawn;
 };
 
 void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue& aQueue, const Config& aConfig, Sim070Hooks aHooks);

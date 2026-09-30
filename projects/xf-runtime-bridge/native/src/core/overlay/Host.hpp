@@ -33,7 +33,11 @@ struct DeviceFacts
     int hdrMode = 0;               // SSwapChainData::startupHdrMode: 0 Disabled, 1 PQ, 2 scRGB
     std::string format;            // the back buffer's DXGI format name, "R8G8B8A8_UNORM"
     bool directQueue = false;      // the engine's direct command queue is a DIRECT queue
-    bool sameDevice = false;       // the swap chain belongs to the engine's device
+    bool sameDevice = false;       // the swap chain belongs to the engine's device (directly or through a proxy, below)
+    // 0.8 (session 8's I5c: DLSS frame generation put Streamline's proxy between the engine and DXGI, and the host refused):
+    // "streamline" when the swap chain or the engine's device is one of Streamline's proxies and the two matched only once
+    // each was resolved to its native object (DeviceMatch); "" otherwise.
+    std::string proxy;
     std::string windowClass;       // the swap chain's window class ("W2ViewportClass")
     uint32_t bufferCount = 0;
     uint32_t width = 0, height = 0;
@@ -41,6 +45,23 @@ struct DeviceFacts
 
 // The reason the host refuses to draw with these facts, or "" when it may.
 std::string RefusalFor(const DeviceFacts& aFacts);
+
+// 0.8: whether the swap chain's device and the engine's device are one device. Each identity is the object's IUnknown as
+// given and, when it is a Streamline proxy, the native object behind it (Streamline answers that through its documented
+// interface ID; 0 when the object isn't a proxy). Streamline's DLSS frame generation hands the engine proxies for the swap
+// chain and possibly the device, so the two can differ as given and still be one device underneath [source] Streamline
+// 2.14.1 docs/ProgrammingGuide.md §5.3, source/core/sl.interposer/dxgi/dxgiSwapchain.cpp (QueryInterface, GetDevice).
+struct DeviceIdentity
+{
+    uintptr_t given = 0;
+    uintptr_t native = 0; // 0: not a proxy
+};
+struct DeviceMatch
+{
+    bool same = false;
+    bool throughProxy = false; // the match needed the native objects
+};
+DeviceMatch MatchDevices(const DeviceIdentity& aSwapChainDevice, const DeviceIdentity& aEngineDevice);
 // RB-97: after a resize the renderer reads the swap chain again. Refuses what RefusalFor refuses (HDR switched on without a
 // restart, a float or 10-bit format) and any change the renderer was built for: the back buffer's format (the pipeline
 // state keeps the first) or its count (the heaps and allocators were sized for the first). "" when drawing may go on.
@@ -50,7 +71,8 @@ std::string RefusalAfterResize(const DeviceFacts& aFirst, const DeviceFacts& aNo
 // ranges (Latin, Latin-1, Latin Extended-A, general punctuation, the euro and trade marks, arrows, U+FFFD). Nothing outside
 // them is ever drawn, so Dear ImGui never uploads a new glyph from the render thread.
 const std::vector<std::pair<uint32_t, uint32_t>>& GlyphRanges();
-// Panel text limited to GlyphRanges(): other code points and invalid UTF-8 become U+FFFD, control characters spaces.
+// Panel text limited to GlyphRanges(): other code points and invalid UTF-8 become the bridge's one replacement mark, U+00A4
+// (0.8: session 8 saw "?" where Segoe UI lacks U+FFFD; core/InkUi.hpp kReplacementMark), control characters spaces.
 std::string LimitToGlyphs(const std::string& aText);
 
 enum class Phase
@@ -72,7 +94,8 @@ struct PanelData
     std::string tone;         // ok, write, paused, killed, off
     bool scriptsLive = false;
     uint64_t requests = 0;
-    std::string pendingAsk;   // the question waiting for an answer, if any
+    std::string pendingAsk;   // the question waiting for an answer, if any (0.8: not drawn; the ink panel and CET window show it)
+    bool diagnostics = false; // 0.8: [overlay] diagnostics: the panel's diagnostic lines and moving bar
     uint64_t tick = 0;
 };
 
@@ -99,6 +122,9 @@ public:
     double CpuMs() const { return m_cpuMicros.load() / 1000.0; }
     double CpuMsMax() const { return m_cpuMicrosMax.load() / 1000.0; }
     void NoteFrameGeneration(const std::vector<std::string>& aModules);
+    // 0.8 (the UI review): the host was refused or stopped while a frame-generation module is loaded, so the CET label says
+    // the overlay is off while frame generation is on.
+    bool OffForFrameGeneration() const;
 
     // Render thread, every present: draw now? (enabled, drawing, not hidden for a capture, not yielding to CET, not killed)
     bool ShouldDraw(std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now()) const;

@@ -445,17 +445,41 @@ public abstract class XFGame {
 
   public static func LoadRefusal() -> String {
     let phase = XFBridgeActions.Phase();
-    if Equals(phase, "gameplay") || Equals(phase, "menu") || Equals(phase, "paused") {
+    // 0.8: the main menu too (its own Continue and Load paths).
+    if Equals(phase, "gameplay") || Equals(phase, "menu") || Equals(phase, "paused") || Equals(phase, "main_menu") {
       return "";
     }
-    return XFJson.Fail("not_in_gameplay", "a save is loaded from normal play or the pause menu; the game is in '" + phase + "' (leave photo mode or the appearance screen first)");
+    return XFJson.Fail("not_in_gameplay", "a save is loaded from normal play, the pause menu or the main menu; the game is in '" + phase + "' (leave photo mode or the appearance screen first)");
   }
 
-  // game.load latest: the game's quick-load path (the most recent save of this playthrough).
+  // 0.8: the main menu's controller while it is on screen, or null.
+  public static func MainMenu() -> wref<SingleplayerMenuGameController> {
+    let registry = XFBridgeRegistry.Get();
+    return IsDefined(registry) ? registry.MainMenu() : null;
+  }
+
+  public static func MainMenuMissing() -> String {
+    return XFJson.Fail("unavailable", "the main menu isn't ready yet (its list of choices hasn't appeared); try again in a moment");
+  }
+
+  // game.load latest: the game's quick-load path (the most recent save of this playthrough); 0.8: at the main menu, the
+  // menu's own Continue.
   public static func LoadLatest(cid: String) -> String {
     let refusal = XFGame.LoadRefusal();
     if StrLen(refusal) > 0 {
       return refusal;
+    }
+    if Equals(XFBridgeActions.Phase(), "main_menu") {
+      let menu = XFGame.MainMenu();
+      if !IsDefined(menu) {
+        return XFGame.MainMenuMissing();
+      }
+      let route = menu.XFBridgeContinue();
+      if Equals(route, "none") {
+        return XFJson.Fail("unavailable", "the game has no save to continue from");
+      }
+      XFBridgeLog.Warn(cid, "game.load: the main menu's Continue (" + route + ")");
+      return "{\"ok\":true,\"requested\":true,\"route\":\"main_menu_continue\",\"modded\":" + XFJson.Flag(Equals(route, "modded")) + "}";
     }
     let handler = XFGame.Handler();
     if !IsDefined(handler) || !handler.HasLastCheckpoint() {
@@ -478,6 +502,7 @@ public abstract class XFGame {
       return XFJson.Fail("unavailable", "the game's save handler isn't available");
     }
     registry.ClearSaves();
+    registry.ClearDetailsKnown();
     handler.RegisterToCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesReady");
     handler.RequestSavesForLoad();
     return "{\"ok\":true,\"requested\":true}";
@@ -504,13 +529,16 @@ public abstract class XFGame {
   // game.saves (0.7, read), step 1: asks the game for its save list and collects the metadata it sends for each save
   // (OnSaveMetadataReady, the load menu's own callback). Unlike ListSaves it works in any phase with a live session: it
   // loads nothing.
-  public static func SavesRequest(cid: String) -> String {
+  // 0.8 (session 8's H1): limit is how many of the newest saves' details to ask for (see XFBridgeRegistry.RequestDetail).
+  public static func SavesRequest(cid: String, limit: Int32) -> String {
     let handler = XFGame.Handler();
     let registry = XFBridgeRegistry.Get();
     if !IsDefined(handler) || !IsDefined(registry) {
       return XFJson.Fail("unavailable", "the game's save handler isn't available");
     }
     registry.ClearListed();
+    registry.DropDetails(handler);
+    registry.SetDetailsLimit(Max(1, Min(limit, 200)));
     registry.StartMetadata();
     handler.RegisterToCallback(n"OnSavesForLoadReady", registry, n"OnXFBridgeSavesListed");
     handler.RegisterToCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
@@ -549,6 +577,7 @@ public abstract class XFGame {
     if done {
       registry.StopMetadata();
       let handler = XFGame.Handler();
+      registry.DropDetails(handler);
       if IsDefined(handler) {
         handler.UnregisterFromCallback(n"OnSaveMetadataReady", registry, n"OnXFBridgeSaveMetadata");
         if !ready {
@@ -586,6 +615,23 @@ public abstract class XFGame {
     }
     if index < 0 {
       return XFJson.Fail("save_not_found", "the game's save list no longer has '" + name + "'; nothing was loaded");
+    }
+    // 0.8: at the main menu, the Load menu's own path, which needs to know whether the save was made with mods; its details
+    // are asked for once and the plugin tries again while they arrive (metadata_pending).
+    if Equals(XFBridgeActions.Phase(), "main_menu") {
+      let modded = registry.DetailsModded(index);
+      if modded < 0 {
+        registry.WatchDetails(handler);
+        registry.RequestDetail(handler, index);
+        return XFJson.Fail("metadata_pending", "the game hasn't sent the details of '" + name + "' yet; nothing was loaded");
+      }
+      let menu = XFGame.MainMenu();
+      if !IsDefined(menu) {
+        return XFGame.MainMenuMissing();
+      }
+      XFBridgeLog.Warn(cid, "game.load: the main menu loads '" + name + "' (position " + IntToString(index) + ", made with mods " + XFJson.Flag(modded == 1) + ")");
+      menu.XFBridgeLoad(index, modded == 1);
+      return "{\"ok\":true,\"requested\":true,\"route\":\"main_menu_load\",\"name\":" + XFJson.Str(name) + ",\"modded\":" + XFJson.Flag(modded == 1) + "}";
     }
     XFBridgeLog.Warn(cid, "game.load: loading '" + name + "' (position " + IntToString(index) + "); everything since it is discarded, the bridge's save lock with it");
     handler.LoadSavedGame(index);

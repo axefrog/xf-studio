@@ -107,7 +107,7 @@ describe("0.7 review against the self-test host", () => {
   }, HOOK_TIMEOUT_MS);
 
   test("RB-96: an answer given before session.wait starts is returned at once", async () => {
-    const ask = await ok(api, "ui.message", { text: "Answered before the wait?", level: "ask", seconds: 60 });
+    const ask = await ok(api, "ui.message", { text: "Answered before the wait?", level: "ask", seconds: 60, choices: ["Ready", "Yes", "No"] });
     await bridge(api, "selftest.answer", { id: ask.id, choice: 1, via: "ink_key" });
     const started = Date.now();
     const out = await ok(api, "session.wait", { message_id: ask.id, timeout_s: 10, poll_ms: 200 });

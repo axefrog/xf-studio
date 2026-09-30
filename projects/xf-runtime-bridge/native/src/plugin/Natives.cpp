@@ -13,6 +13,8 @@
 
 #include <RED4ext/RED4ext.hpp>
 
+#include <chrono>
+
 #include "core/Writes.hpp"
 #include "plugin/Natives.hpp"
 #include "plugin/Plugin.hpp"
@@ -333,7 +335,8 @@ void Messages(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CStr
         }
         else
         {
-            text = state.messages.Snapshot();
+            // 0.8 (session 8: CET's font turned Polish into "?"): the CET layer's Latin-1 copy (core/InkUi.hpp ForCet).
+            text = state.messages.Snapshot(MessageBoard::Clock::now(), &inkui::ForCet);
         }
         if (aOut)
         {
@@ -506,6 +509,29 @@ void CetOverlay(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
     });
 }
 
+// XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool   (0.8, the UI review: the ink panel reports, about five times a second,
+// the question it draws and whether it is on screen now, so the CET label can show only the status and the answer keys
+// instead of the question a third time). Stores two numbers; reads nothing else.
+void InkDrawn(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
+{
+    int32_t id = 0;
+    bool shown = false;
+    RED4ext::GetParameter(aFrame, &id);
+    RED4ext::GetParameter(aFrame, &shown);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_InkDrawn", [&] {
+        auto& state = Get();
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        state.inkShownAsk.store(shown && id > 0 ? static_cast<uint64_t>(id) : 0);
+        state.inkShownAtMs.store(now);
+        if (aOut)
+        {
+            *aOut = true;
+        }
+    });
+}
+
 void RegisterGlobal(RED4ext::CRTTISystem* aRtti, const char* aName, auto aFunction, const char* aReturnType,
                     std::initializer_list<const char*> aStringParams, const char* aParamType = "String")
 {
@@ -570,7 +596,9 @@ void PostRegisterTypes()
         RegisterGlobalTyped(rtti, "XFBridge_Answer", &Answer, "String", {{"Int32", "id"}, {"Int32", "choice"}, {"String", "source"}});
         RegisterGlobal(rtti, "XFBridge_Comment", &Comment, "Bool", {"text"});
         RegisterGlobal(rtti, "XFBridge_CetOverlay", &CetOverlay, "Bool", {"open"}, "Bool");
-        log::Info("rtti.register_types", "phase=post_register natives=18");
+        // 0.8 (bridge-080a): the ink panel's report of the question it shows.
+        RegisterGlobalTyped(rtti, "XFBridge_InkDrawn", &InkDrawn, "Bool", {{"Int32", "id"}, {"Bool", "shown"}});
+        log::Info("rtti.register_types", "phase=post_register natives=19");
     }
     catch (const std::exception& e)
     {

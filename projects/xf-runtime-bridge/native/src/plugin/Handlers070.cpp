@@ -241,7 +241,14 @@ json GameSaves(const MethodContext& aContext)
     const auto request = h::ParseSaves(aContext.params);
     const auto cid = aContext.cid;
     h::SavesOps ops;
-    ops.request = [cid] { Game([cid] { return ScriptCall("XFGame", "SavesRequest", {}, {}, cid); }, "game.saves.request"); };
+    ops.request = [cid](int32_t aLimit) {
+        Game(
+            [cid, aLimit] {
+                int32_t limit = aLimit;
+                return ScriptCall("XFGame", "SavesRequest", {"Int32"}, {&limit}, cid);
+            },
+            "game.saves.request");
+    };
     ops.read = [cid](bool aDone) {
         return Game(
             [cid, aDone] {

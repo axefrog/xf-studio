@@ -496,7 +496,7 @@ json RunPhotoScene(const PhotoSceneRequest& aRequest, const PhotoSceneOps& aOps)
 
 json RunSaves(const SavesRequest& aRequest, const SavesOps& aOps)
 {
-    aOps.request();
+    aOps.request(aRequest.limit);
     json answer;
     std::exception_ptr failure;
     try
@@ -512,7 +512,9 @@ json RunSaves(const SavesRequest& aRequest, const SavesOps& aOps)
             const auto names = answer.value("names", json::array()).size();
             stable = count == lastCount ? stable + 1 : 0;
             lastCount = count;
-            if (answer.value("ready", false) && (count >= names || stable >= 3))
+            // 0.8: done when every asked-for save's details are in (the newest `limit`), or nothing new came for a second.
+            const auto wanted = std::min(names, static_cast<size_t>(std::max(aRequest.limit, 1)));
+            if (answer.value("ready", false) && (count >= wanted || stable >= 5))
             {
                 break;
             }

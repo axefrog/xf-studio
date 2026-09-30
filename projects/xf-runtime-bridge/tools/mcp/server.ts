@@ -14,7 +14,8 @@ import type { CommandApi, CommandOutcome } from "../api/command-api.ts";
 import { lockPath, readSessionLock, sessionRunningMessage } from "../session-lock.ts";
 
 export const SERVER_NAME = "xf-runtime-bridge";
-export const SERVER_VERSION = "0.3.0";
+/** 0.8: the tools' own version, from package.json (it said 0.3.0 since the first MCP build). */
+export const SERVER_VERSION: string = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version;
 
 export type McpServerOptions = {
   /** Permission classes to expose; a future consent screen fills this in. Default: all. */

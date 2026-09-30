@@ -251,6 +251,10 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseU32(value, 50, 300, config.overlayScalePercent);
         }
+        else if (key == "overlay.diagnostics")
+        {
+            ok = ParseBool(value, config.overlayDiagnostics);
+        }
         else if (key == "log.level")
         {
             ok = ParseLevel(Lower(value), config.logLevel);
@@ -322,7 +326,7 @@ std::string DescribeConfig(const Config& aConfig)
     }
     text += " ui.answer_keys=" + keys;
     text += " overlay.enabled=" + std::string(aConfig.overlayEnabled ? "true" : "false") + " overlay.theme=" + aConfig.overlayTheme +
-            " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent);
+            " overlay.scale_percent=" + std::to_string(aConfig.overlayScalePercent) + " overlay.diagnostics=" + (aConfig.overlayDiagnostics ? "true" : "false");
     text += " log.level=" + std::string(LevelName(aConfig.logLevel));
     text += " capture.root=" + (aConfig.captureRoot.empty() ? std::string("<default>") : std::string("<custom>"));
     return text;

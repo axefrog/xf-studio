@@ -181,7 +181,11 @@ describe("0.7 against the self-test host", () => {
   });
 
   test("in-game driving: an ask with answers, the player's answer, session.wait returns it with its message id", async () => {
-    const posted = await ok(api, "ui.message", { text: "Is V standing in the street?", level: "ask", seconds: 120 });
+    // 0.8 (session 8): an ask without choices shows one Done button; this one passes the answers it wants.
+    const plain = await ok(api, "ui.message", { text: "Tell me when you're ready.", level: "ask", seconds: 5 });
+    expect(plain.choices).toEqual(["Done"]);
+    await ok(api, "ui.message", { withdraw: plain.id });
+    const posted = await ok(api, "ui.message", { text: "Is V standing in the street?", level: "ask", seconds: 120, choices: ["Ready", "Yes", "No"] });
     expect(posted.choices).toEqual(["Ready", "Yes", "No"]);
     const hud = await api.callBridge("selftest.hud", {}, "t-hud");
     const frame = (hud.ok ? hud.result : {}) as Any;

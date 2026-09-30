@@ -42,6 +42,10 @@ inline constexpr size_t kMaxBehaviours = 4;
 inline constexpr double kMaxSeconds = 600.0;
 // A glide's own cap (player-control design §4.3: a motion lasts at most 30 s).
 inline constexpr double kMaxGlideSeconds = 30.0;
+// 0.8 (session 8's D4): a look ends user_took_over when the camera turns this much further from its point than the
+// closest it came, after the first kLookDriftGraceS seconds (the game's look-at only ever turns the camera towards it).
+inline constexpr double kLookDriftDeg = 4.0;
+inline constexpr double kLookDriftGraceS = 0.25;
 
 // The game-side steps a behaviour may take. Each throws MethodError on a refusal (the behaviour stops with that code).
 struct Ops

@@ -15,7 +15,7 @@ import { screenSpace, type ScreenPoint, type SubjectReading } from "../api/frami
 import type { CommandContext } from "../api/catalogue.ts";
 import type { Pixels } from "../capture/win32.ts";
 import { lightAt, readShowroom, toLocal, type RigLight, type Showroom } from "../showroom/plan.ts";
-import { add, boundsOf, calibrate, framing, poseOf, project, scale, sub, type Bounds, type Calibration, type CameraModel, type Vec3 } from "./camera.ts";
+import { add, boundsOf, framing, modelForRead, poseOf, project, scale, sub, type Bounds, type Calibration, type CameraModel, type Vec3 } from "./camera.ts";
 
 type Json = Record<string, any>;
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
@@ -284,7 +284,8 @@ export function buildReport(raw: Json, options: ReportOptions, extra: { showroom
     warnings.push("the game reported no active camera");
     return { ...out, warnings, subjects: [], lights: [] };
   }
-  const model = calibrate(pose, raw.calibration as Calibration | undefined);
+  // 0.8 (session 8's G3): photo mode's drone camera isn't what the game's projection uses (camera.ts modelForRead).
+  const model = modelForRead(pose, raw.calibration as Calibration | undefined, raw.camera?.mode ?? raw.phase);
   if (model.game_projection === "inconsistent" && model.projection_note) warnings.push(model.projection_note);
   if (include.has("camera")) {
     out.camera = {

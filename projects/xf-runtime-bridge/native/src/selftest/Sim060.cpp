@@ -816,6 +816,12 @@ void Sim060::OnDetach()
     m_state->looking = false;
 }
 
+bool Sim060::WeaponDrawn()
+{
+    std::scoped_lock _(m_state->mutex);
+    return m_state->weaponDrawn;
+}
+
 json Sim060::Holds()
 {
     json held = json::array();

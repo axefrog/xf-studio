@@ -143,7 +143,9 @@ SavesRequest ParseSaves(const json& aParams);
 // step that stops collecting (even when a read throws), so the load menu's callback never stays registered.
 struct SavesOps
 {
-    std::function<void()> request;
+    // 0.8 (session 8's H1): the request names how many of the newest saves' details to ask for (each one's screenshot
+    // request, as the Load menu makes; the game answers with the details).
+    std::function<void(int32_t aLimit)> request;
     std::function<json(bool)> read; // read(done): the names and metadata so far; done stops collecting
     std::function<void(std::chrono::milliseconds)> sleep;
     std::function<std::chrono::steady_clock::time_point()> now;

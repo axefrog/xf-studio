@@ -1627,7 +1627,8 @@ void MessageTests()
     Check("message text: control characters become single spaces, the ends are trimmed",
           xfb::CleanMessageText("  Open\tthe\n\ncreator  ", 200) == "Open the creator");
     const auto longText = xfb::CleanMessageText(std::string(10, 'a') + "\xC3\xA9\xC3\xA9", 11, &cut);
-    Check("message text is cut at a character boundary, never inside a UTF-8 sequence", longText == std::string(10, 'a') + "\xC3\xA9" && cut, longText);
+    // 0.8: a cut text ends with an ellipsis (U+2026), which takes one of the characters.
+    Check("message text is cut at a character boundary, never inside a UTF-8 sequence", longText == std::string(10, 'a') + "\xE2\x80\xA6" && cut, longText);
     Check("invalid UTF-8 becomes U+FFFD", xfb::CleanMessageText("a\xFF" "b", 20) == "a\xEF\xBF\xBD" "b");
     Check("an overlong encoding is invalid too", xfb::CleanMessageText("\xC0\xAF", 20) == "\xEF\xBF\xBD\xEF\xBF\xBD");
 
@@ -2604,7 +2605,7 @@ void InkUiTests()
     const auto moved = panel.Configure(json{{"show", true}, {"anchor", "bottom_left"}, {"x", 40}, {"y", -20.5}, {"scale", 1.5}});
     Check("ui.hud shows and moves the panel; its undo puts back the earlier settings",
           moved["changed"] == true && moved["settings"]["anchor"] == "bottom_left" && moved["settings"]["y"] == -20.5 &&
-              moved["undo"]["method"] == "ui.hud" && moved["undo"]["params"]["show"] == false && moved["undo"]["params"]["anchor"] == "top_right");
+              moved["undo"]["method"] == "ui.hud" && moved["undo"]["params"]["show"] == false && moved["undo"]["params"]["anchor"] == "top_left");
     panel.Configure(moved["undo"]["params"]);
     Check("ui.hud's undo, replayed, restores exactly the earlier settings", k::ToJson(panel.Current()) == k::ToJson(defaults));
     Check("ui.hud refuses an unknown anchor, layer, scale out of range, a non-boolean, an unknown key",
@@ -2642,8 +2643,8 @@ void InkUiTests()
     const auto frame = k::Frame(shown, view, lines);
     const auto parsed = k::ParseFrame(frame);
     Check("the frame starts with its version and carries settings, gate, tone and message lines",
-          frame.rfind("xfhud\t1\n", 0) == 0 && parsed["version"] == 1 && parsed["show"] == true && parsed["anchor"] == "top_right" &&
-              parsed["x"] == 72.0 && parsed["live"] == true && parsed["tone"] == "write" && parsed["messages"].size() == 2 &&
+          frame.rfind("xfhud\t1\n", 0) == 0 && parsed["version"] == 1 && parsed["show"] == true && parsed["anchor"] == "top_left" &&
+              parsed["x"] == 40.0 && parsed["y"] == 360.0 && parsed["live"] == true && parsed["tone"] == "write" && parsed["messages"].size() == 2 &&
               parsed["messages"][0]["level"] == "ask");
     Check("message text never breaks the frame (tabs and newlines become spaces)",
           parsed["messages"][0]["text"] == "Press the photo-mode key now");
@@ -2665,11 +2666,12 @@ void InkUiTests()
           atPoint.target == k::PinRequest::Target::Position && atPoint.label == "XF test pin" && atPoint.variant == "custom" &&
               atPoint.lift == 0.0 && atPoint.x == -1200.5);
     const auto onPiece = k::ParsePin(json{{"piece", 3}, {"label", "Gloss A"}, {"variant", "clothes"}});
-    Check("world.pin on a showroom head: 0.45 m above its eyes by default", onPiece.target == k::PinRequest::Target::Piece && onPiece.piece == 3 &&
-                                                                           onPiece.lift == 0.45 && onPiece.variant == "clothes");
+    Check("world.pin on a showroom head: 0.25 m above its eyes by default (0.8)", onPiece.target == k::PinRequest::Target::Piece && onPiece.piece == 3 &&
+                                                                           onPiece.lift == 0.25 && onPiece.variant == "clothes");
     Check("world.pin above V", k::ParsePin(json{{"at", "v"}, {"label", "V"}, {"lift_m", 1.0}}).lift == 1.0);
     const std::string longLabel(80, 'x');
-    Check("world.pin cuts a long label to 48 characters", k::ParsePin(json{{"at", "v"}, {"label", longLabel}}).label.size() == 48);
+    Check("world.pin cuts a long label to 48 characters (0.8: the last one an ellipsis)",
+          k::ParsePin(json{{"at", "v"}, {"label", longLabel}}).label == std::string(47, 'x') + "\xE2\x80\xA6");
     Check("world.pin refuses no target, two targets, a bad position, a piece out of range, an empty label, an unknown variant",
           ParamsCode([&] { k::ParsePin(json{{"label", "x"}}); }) == "bad_params" &&
               ParamsCode([&] { k::ParsePin(json{{"at", "v"}, {"piece", 1}, {"label", "x"}}); }) == "bad_params" &&
@@ -3077,8 +3079,11 @@ void Bridge070Tests()
     const auto t0 = xfb::MessageBoard::Clock::now();
     {
         xfb::MessageBoard board;
-        const auto ask = board.Post({"Is V in the apartment?", 60, "ask", false}, t0);
-        Check("0.7 an ask gets Ready, Yes and No by default", ask["choices"] == json::array({"Ready", "Yes", "No"}), ask.dump());
+        xfb::MessageBoard defaults;
+        const auto plain = defaults.Post({"Is V in the apartment?", 60, "ask", false}, t0);
+        Check("0.8 an ask without choices gets one Done button (session 8: Ready, Yes and No confused the maintainer)",
+              plain["choices"] == json::array({"Done"}), plain.dump());
+        const auto ask = board.Post({"Is V in the apartment?", 60, "ask", false, {"Ready", "Yes", "No"}}, t0);
         for (int i = 0; i < 5; ++i)
         {
             board.Post({"info " + std::to_string(i), 60, "info", false}, t0);
@@ -3098,7 +3103,8 @@ void Bridge070Tests()
         Check("0.7 the snapshot names the pending ask for the CET window", json::parse(board.Snapshot(t0)).contains("pending_ask"));
         Check("0.7 an expired ask isn't pending", !board.Pending(pending, t0 + std::chrono::seconds(31)));
         const auto longPost = board.Post({std::string(900, 'a'), 5, "info", false}, t0);
-        Check("0.7 messages show up to 600 characters", longPost["text"].get<std::string>().size() == 600 && longPost["truncated"] == true);
+        Check("0.7 messages show up to 600 characters (0.8: the 600th an ellipsis)",
+              longPost["text"].get<std::string>() == std::string(599, 'a') + "\xE2\x80\xA6" && longPost["truncated"] == true);
         Check("0.7 choices go with asks only", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"choices", {"A"}}}); }) == "bad_params");
         Check("0.7 at most four choices", ParamsCode([] { p::ParseMessage(json{{"text", "hi"}, {"level", "ask"}, {"choices", {"A", "B", "C", "D", "E"}}}); }) == "bad_params");
         Check("0.7 a message may be up to 2000 characters long when sent", ParamsCode([] { p::ParseMessage(json{{"text", std::string(1500, 'b')}}); }) == "ok");
@@ -3246,7 +3252,7 @@ void Bridge070ReviewTests()
         board.Answer(askId, 0, t0);
         const auto answered = board.StateOf(askId, t0);
         Check("RB-96 an answered question says so with its answer, even after its line fades",
-              answered.state == "answered" && answered.label == "Ready" && board.StateOf(askId, t0 + std::chrono::seconds(30)).state == "answered");
+              answered.state == "answered" && answered.label == "Done" && board.StateOf(askId, t0 + std::chrono::seconds(30)).state == "answered");
         const auto second = board.Post({"And now?", 60, "ask", false}, t0)["id"].get<uint64_t>();
         const auto withdrawn = board.Post({"", 8, "info", false, {}, false, second}, t0);
         Check("RB-103 a withdrawn question is gone", withdrawn.value("withdrawn", false) && board.StateOf(second, t0).state == "gone");
@@ -3331,7 +3337,7 @@ void Bridge070ReviewTests()
         int reads = 0;
         bool done = false;
         auto now = std::chrono::steady_clock::now();
-        ops.request = [] {};
+        ops.request = [](int32_t) {};
         ops.read = [&](bool aDone) -> json {
             if (aDone)
             {
@@ -3386,14 +3392,288 @@ void Bridge070ReviewTests()
 
         const std::string baked = "Ready? \xE2\x80\x94 caf\xC3\xA9 \xE2\x82\xAC" "5";
         Check("RB-99 baked text passes unchanged", o::LimitToGlyphs(baked) == baked);
-        Check("RB-99 glyphs outside the baked ranges become U+FFFD", o::LimitToGlyphs("\xE6\x97\xA5\xF0\x9F\x98\x80x") == "\xEF\xBF\xBD\xEF\xBF\xBDx");
-        Check("RB-99 invalid UTF-8 and control characters are replaced", o::LimitToGlyphs("a\xFF\tb") == "a\xEF\xBF\xBD b");
+        Check("RB-99 glyphs outside the baked ranges become the mark (0.8: U+00A4)", o::LimitToGlyphs("\xE6\x97\xA5\xF0\x9F\x98\x80x") == "\xC2\xA4\xC2\xA4x");
+        Check("RB-99 invalid UTF-8 and control characters are replaced", o::LimitToGlyphs("a\xFF\tb") == "a\xC2\xA4 b");
         bool covered = true;
         for (const auto& [lo, hi] : o::GlyphRanges())
         {
             covered = covered && lo <= hi && hi <= 0xFFFF;
         }
-        Check("RB-99 the ranges fit Dear ImGui's 16-bit glyph type and include U+FFFD", covered && o::LimitToGlyphs("\xEF\xBF\xBD") == "\xEF\xBF\xBD");
+        Check("RB-99 the ranges fit Dear ImGui's 16-bit glyph type; U+FFFD becomes the mark too (Segoe UI lacks it)",
+              covered && o::LimitToGlyphs("\xEF\xBF\xBD") == "\xC2\xA4");
+    }
+}
+
+// Bridge 0.8 (bridge-080a): session 8's findings and the UI review's fixes.
+size_t Chars(const std::string& aText)
+{
+    size_t n = 0;
+    for (const auto c : aText)
+    {
+        n += (static_cast<unsigned char>(c) & 0xC0) != 0x80 ? 1 : 0;
+    }
+    return n;
+}
+
+void Bridge080Tests()
+{
+    namespace k = xfb::inkui;
+    namespace o = xfb::overlay;
+    namespace b = xfb::behave;
+    const auto t0 = xfb::MessageBoard::Clock::now();
+
+    // The UI review's 10: a cut text backs up to a word and adds an ellipsis.
+    bool cut = false;
+    Check("0.8 a cut text ends at a word with an ellipsis", xfb::CleanMessageText("The quick brown fox jumps", 12, &cut) == "The quick\xE2\x80\xA6" && cut);
+    Check("0.8 a text with no space near the cut is cut mid-word, ellipsis added",
+          xfb::CleanMessageText(std::string(30, 'z'), 10) == std::string(9, 'z') + "\xE2\x80\xA6");
+    Check("0.8 an uncut text has no ellipsis", xfb::CleanMessageText("short", 10, &cut) == "short" && !cut);
+
+    // Session 8's I7 and the UI review: one mark on every surface; CET gets a Latin-1 copy.
+    const std::string mixed = "\xC5\x81\xC3\xB3" "d\xC5\xBA \xE2\x80\x94 \xE6\x9D\xB1\xE4\xBA\xAC \xF0\x9F\x8C\x86";
+    Check("0.8 the ink panel keeps Latin Extended-A and the em dash, marks the rest",
+          k::ForInk(mixed) == "\xC5\x81\xC3\xB3" "d\xC5\xBA \xE2\x80\x94 \xC2\xA4\xC2\xA4 \xC2\xA4", k::ForInk(mixed));
+    Check("0.8 the CET copy transliterates Polish and punctuation to Latin-1, marks the rest",
+          k::ForCet(mixed) == "L\xC3\xB3" "dz - \xC2\xA4\xC2\xA4 \xC2\xA4", k::ForCet(mixed));
+    Check("0.8 the CET copy: zolc gesla jazn, the ellipsis, OE, euro",
+          k::ForCet("\xC5\xBC\xC3\xB3\xC5\x82\xC4\x87 g\xC4\x99\xC5\x9Bl\xC4\x85 ja\xC5\xBA\xC5\x84\xE2\x80\xA6 \xC5\x92 \xE2\x82\xAC" "5") ==
+              "z\xC3\xB3lc gesla jazn... OE EUR5");
+    Check("0.8 the CET copy keeps Latin-1 (caf\xC3\xA9) and turns invalid bytes into the mark", k::ForCet("caf\xC3\xA9\xFF") == "caf\xC3\xA9\xC2\xA4");
+    Check("0.8 every surface uses the same mark", std::string(k::kReplacementMark) == "\xC2\xA4" && o::LimitToGlyphs("\xE6\x97\xA5") == k::kReplacementMark);
+
+    // Session 8's item 17: a 600-character question reaches the ink panel and the CET layer whole.
+    {
+        xfb::MessageBoard board;
+        std::string question;
+        while (Chars(question) < 590)
+        {
+            question += "word ";
+        }
+        question += "end?";
+        const auto posted = board.Post({question, 60, "ask", false}, t0);
+        const auto text = posted["text"].get<std::string>();
+        k::HudSettings settings;
+        k::BridgeView view;
+        view.pluginEnabled = view.listening = view.allowWrites = view.hasClient = view.scriptReady = true;
+        const auto frame = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6", "IK_F7"}, 0));
+        const auto cet = json::parse(board.Snapshot(t0, &k::ForCet));
+        Check("0.8 a 594-character question is kept whole (no cut)", !posted["truncated"].get<bool>() && Chars(text) == Chars(question));
+        Check("0.8 the ink frame and the CET copy carry it whole", frame["messages"][0]["text"] == text && cet["pending_ask"]["text"] == text);
+        const auto full = board.Post({std::string(700, 'q'), 60, "info", false}, t0);
+        const auto cetText = json::parse(board.Snapshot(t0, &k::ForCet))["messages"].back()["text"].get<std::string>();
+        Check("0.8 the cap is 600 characters; the CET copy writes the ellipsis as three dots", Chars(full["text"].get<std::string>()) == 600 &&
+                                                                                              cetText == std::string(599, 'q') + "...");
+    }
+
+    // The UI review's 9: an answered ask keeps its question, shows the answer where its keys were, until the next message.
+    {
+        xfb::MessageBoard board;
+        const auto ask = board.Post({"Fully visible?", 60, "ask", false, {"Fully visible", "Partly cut off"}}, t0);
+        const auto id = ask["id"].get<uint64_t>();
+        k::HudSettings settings;
+        k::BridgeView view;
+        view.pluginEnabled = view.listening = view.allowWrites = view.hasClient = view.scriptReady = true;
+        const auto before = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6", "IK_F7", "IK_F8", "IK_F11"}, id));
+        Check("0.8 the frame carries the ask's keys and the ink panel's report of it", before["ask"]["choices"].size() == 2 &&
+                                                                                        before["ask"]["choices"][0]["key"] == "IK_F6" && before.value("ink_shows", 0ull) == id);
+        Check("0.8 a report for another question isn't passed on", !k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6"}, id + 7)).contains("ink_shows"));
+        board.Answer(id, 1, t0);
+        xfb::AnsweredAsk answered;
+        const auto after = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6", "IK_F7"}, id));
+        Check("0.8 once answered: the question stays, the answer replaces the keys",
+              board.Answered(answered, t0) && answered.label == "Partly cut off" && after["messages"][0]["text"] == "Fully visible?" &&
+                  !after.contains("ask") && after["answered"]["label"] == "Partly cut off" && after["answered"]["id"] == id);
+        const auto snap = json::parse(board.Snapshot(t0 + std::chrono::seconds(20)));
+        Check("0.8 the answered ask outlasts the old six seconds", snap["answered_ask"]["label"] == "Partly cut off" && !snap.contains("pending_ask"));
+        board.Post({"Next step", 8, "info", false}, t0);
+        Check("0.8 the next message takes the answered ask away", !board.Answered(answered, t0) && board.Active(t0) == 1 &&
+                                                                   board.StateOf(id, t0).state == "answered");
+    }
+
+    // The UI review's 3, 4 and 14: one wording, plain words, the colour meaning.
+    {
+        k::BridgeView view;
+        view.pluginEnabled = view.listening = view.allowWrites = view.hasClient = true;
+        const auto connected = k::Summarize(view);
+        Check("0.8 the status: XF Studio connected · changes allowed, amber",
+              connected.text == "XF Studio connected \xC2\xB7 changes allowed" && connected.label == "XF Runtime Bridge \xC2\xB7 XF Studio connected \xC2\xB7 changes allowed" &&
+                  connected.tone == "write" && connected.connection == "XF Studio connected" && connected.connectionTone == "ok" && connected.changesTone == "write");
+        auto readOnly = view;
+        readOnly.allowWrites = false;
+        auto waiting = view;
+        waiting.hasClient = false;
+        auto off = view;
+        off.pluginEnabled = false;
+        auto idle = view;
+        idle.listening = false;
+        auto killed = view;
+        killed.killed = true;
+        Check("0.8 the status: read-only green, not connected grey, off grey, not ready grey, stopped red",
+              k::Summarize(readOnly).tone == "ok" && k::Summarize(readOnly).text == "XF Studio connected \xC2\xB7 read-only" &&
+                  k::Summarize(waiting).text == "XF Studio not connected \xC2\xB7 changes allowed" && k::Summarize(waiting).connectionTone == "idle" &&
+                  k::Summarize(off).text == "Switched off in the bridge's settings." && k::Summarize(off).tone == "off" &&
+                  k::Summarize(idle).text == "Not ready yet. Restart the game if this stays." && k::Summarize(idle).tone == "idle" &&
+                  k::Summarize(killed).tone == "killed" &&
+                  k::Summarize(killed).text == "Stopped. Reconnect in the XF Runtime Bridge window (CET overlay), or restart the game.");
+        bool plain = true;
+        for (const auto& v : {view, readOnly, waiting, off, idle, killed})
+        {
+            const auto status = k::Summarize(v);
+            for (const auto* word : {"listening", "writes ON", "client", "an XF tool", "config.ini"})
+            {
+                plain = plain && status.text.find(word) == std::string::npos && status.connection.find(word) == std::string::npos;
+            }
+        }
+        Check("0.8 no jargon in any state (listening, writes ON, client, an XF tool, config.ini)", plain);
+        Check("0.8 the CET layer reads the same wording (StatusJson)", k::StatusJson(view)["label"] == connected.label && k::StatusJson(view)["changes_tone"] == "write");
+        Check("0.8 key labels drop IK_", k::KeyLabel("IK_F6") == "F6" && k::KeyLabel("F9") == "F9");
+    }
+
+    // Session 8's item 1: every documented anchor, center among them; the default top left below the overlay panel.
+    {
+        k::HudPanel panel;
+        panel.SetDefaults({});
+        Check("0.8 the default panel: top left, 40 by 360 of the visible screen", panel.Current().anchor == "top_left" && panel.Current().x == 40.0 &&
+                                                                                   panel.Current().y == 360.0);
+        bool all = true;
+        for (const auto* anchor : {"top_left", "top_center", "top_right", "center_left", "center", "center_right", "bottom_left", "bottom_center", "bottom_right"})
+        {
+            all = all && panel.Configure(json{{"anchor", anchor}})["settings"]["anchor"] == anchor;
+        }
+        Check("0.8 ui.hud takes all nine anchors, center included", all);
+        Check("0.8 center takes negative offsets from the middle", panel.Configure(json{{"anchor", "center"}, {"x", -300}, {"y", -120}})["settings"]["x"] == -300.0);
+    }
+
+    // Session 8's I5c: Streamline's proxies resolved to their native objects before the device check.
+    {
+        Check("0.8 overlay: one object is one device", o::MatchDevices({10, 0}, {10, 0}).same && !o::MatchDevices({10, 0}, {10, 0}).throughProxy);
+        Check("0.8 overlay: a proxy swap chain's device and the engine's native device match through the proxy",
+              o::MatchDevices({20, 10}, {10, 0}).same && o::MatchDevices({20, 10}, {10, 0}).throughProxy && o::MatchDevices({10, 0}, {30, 10}).same &&
+                  o::MatchDevices({20, 10}, {30, 10}).same);
+        Check("0.8 overlay: two different native devices, or an unknown one, never match",
+              !o::MatchDevices({20, 11}, {30, 10}).same && !o::MatchDevices({0, 0}, {10, 0}).same && !o::MatchDevices({20, 0}, {30, 0}).same);
+        o::DeviceFacts facts;
+        facts.deviceData = facts.swapChain = facts.directQueue = true;
+        facts.format = "R8G8B8A8_UNORM";
+        facts.windowClass = "W2ViewportClass";
+        facts.bufferCount = 3;
+        facts.sameDevice = false;
+        Check("0.8 overlay: a device that doesn't match even through the proxy is still refused, and says so",
+              o::RefusalFor(facts).find("Streamline") != std::string::npos);
+        facts.sameDevice = true;
+        facts.proxy = "streamline";
+        Check("0.8 overlay: through Streamline's proxy the host may draw", o::RefusalFor(facts).empty());
+        o::OverlayHost host;
+        host.Configure(true, o::ThemeKind::Dark, 100);
+        host.NoteHooks(true, true, true, "");
+        host.NoteFrameGeneration({"sl.dlss_g.dll"});
+        host.NoteInit(facts, "");
+        Check("0.8 overlay: drawing with frame generation isn't 'off for frame generation'; the answer names the proxy",
+              !host.OffForFrameGeneration() && host.Snapshot()["swap_chain_proxy"] == "streamline");
+        auto refused = facts;
+        refused.sameDevice = false;
+        host.NoteInit(refused, o::RefusalFor(refused));
+        Check("0.8 overlay: refused while a frame-generation module is loaded tells the CET label", host.OffForFrameGeneration());
+        Check("0.8 config: the overlay's diagnostics are off unless asked for", !xfb::ParseConfig("").overlayDiagnostics &&
+                                                                                 xfb::ParseConfig("[overlay]\ndiagnostics = true\n").overlayDiagnostics);
+    }
+
+    // Session 8's D4: the camera turning away from a look's point ends it user_took_over (camera_drift).
+    {
+        b::Runner runner;
+        xfb::EventLog events;
+        runner.SetEvents(&events);
+        const auto allow = [](xfb::Access) {};
+        double camYaw = 0.0; // degrees, 0 = +Y, 90 = -X
+        b::Ops fake;
+        fake.camera = [&] {
+            const double r = camYaw * 3.14159265358979 / 180.0;
+            return json{{"position", {0, 0, 0}}, {"forward", {-std::sin(r), std::cos(r), 0.0}}};
+        };
+        fake.lookAt = [](const b::Vec3&, double) {};
+        fake.watchInput = [](bool) {};
+        fake.player = [] { return json{{"position", {0, 0, 0}}, {"yaw", 0.0}, {"busy", ""}, {"took_over", ""}}; };
+        runner.Start(b::StartParams("look", json{{"turn", {{"yaw", 90}}}, {"duration_s", 4}}), allow);
+        runner.Tick(0.1, fake, true); // starting
+        for (int i = 0; i < 4; ++i)
+        {
+            camYaw += 10.0; // the look turning the camera towards its point
+            runner.Tick(0.1, fake, true);
+        }
+        Check("0.8 behave.look: turning towards its point keeps it running", runner.Active());
+        camYaw -= 12.0; // the player's mouse turns it back
+        runner.Tick(0.1, fake, true);
+        const auto all = events.Read(0, 100, {"behaviour"})["events"];
+        const auto stop = all.empty() ? json() : all.back()["data"];
+        Check("0.8 behave.look: the camera turning away ends it user_took_over, input camera_drift",
+              !runner.Active() && stop.value("reason", std::string()) == "user_took_over" && stop.value("input", std::string()) == "camera_drift", stop.dump());
+        runner.Start(b::StartParams("look", json{{"turn", {{"yaw", 90}}}}), allow);
+        camYaw = 0.0;
+        runner.Tick(0.1, fake, true);
+        camYaw = -5.0; // at once, inside the grace time: not yet the player's
+        runner.Tick(0.1, fake, true);
+        Check("0.8 behave.look: a wobble in the first quarter second doesn't end it", runner.Active());
+        runner.DropAll("test");
+    }
+
+    // Session 8's H1: game.saves asks for the newest limit saves' details and stops once they are in.
+    {
+        namespace h = xfb::hooks;
+        h::SavesOps ops;
+        int32_t asked = 0;
+        int reads = 0;
+        auto now = std::chrono::steady_clock::now();
+        ops.request = [&](int32_t aLimit) { asked = aLimit; };
+        ops.read = [&](bool aDone) -> json {
+            ++reads;
+            json metadata = json::array();
+            for (int i = 0; i < std::min(reads, 5); ++i)
+            {
+                metadata.push_back({{"index", i}, {"name", "Save-" + std::to_string(i)}, {"timestamp", 100 - i}});
+            }
+            json names = json::array();
+            for (int i = 0; i < 40; ++i)
+            {
+                names.push_back("Save-" + std::to_string(i));
+            }
+            return json{{"ready", true}, {"names", names}, {"metadata", aDone ? metadata : metadata}};
+        };
+        ops.sleep = [&](std::chrono::milliseconds aMs) { now += aMs; };
+        ops.now = [&] { return now; };
+        h::SavesRequest request;
+        request.limit = 3;
+        const auto out = h::RunSaves(request, ops);
+        Check("0.8 game.saves asks the game for the newest limit saves' details", asked == 3);
+        Check("0.8 game.saves stops once the asked-for details are in (not after the whole list)", reads <= 5 && out["saves"].size() == 3, out.dump());
+    }
+
+    // Loading from the main menu: the load step is tried again while the save's details arrive.
+    {
+        namespace w = xfb::writes;
+        namespace p = xfb::params;
+        auto now = std::chrono::steady_clock::now();
+        int tries = 0;
+        std::string loaded;
+        w::LoadOps ops;
+        ops.guard = [] {};
+        ops.latest = [] { return json{{"route", "main_menu_continue"}}; };
+        ops.list = [] { return json{{"requested", true}}; };
+        ops.saves = [] { return json{{"ready", true}, {"saves", {"ManualSave-9", "AutoSave-1"}}}; };
+        ops.load = [&](const std::string& aName) -> json {
+            if (++tries < 3)
+            {
+                throw xfb::MethodError("metadata_pending", "details not in yet");
+            }
+            loaded = aName;
+            return json{{"route", "main_menu_load"}, {"modded", true}};
+        };
+        ops.sleep = [&](std::chrono::milliseconds aMs) { now += aMs; };
+        ops.now = [&] { return now; };
+        const auto out = w::GameLoad(p::ParseGameLoad(json{{"name", "ManualSave-9"}, {"discard_unsaved", true}}), ops);
+        Check("0.8 game.load at the main menu waits for the save's details, then loads it", loaded == "ManualSave-9" && tries == 3 && out["route"] == "main_menu_load");
+        tries = -1000;
+        const auto code = ParamsCode([&] { w::GameLoad(p::ParseGameLoad(json{{"name", "AutoSave-1"}, {"discard_unsaved", true}}), ops); });
+        Check("0.8 game.load gives up with timeout when the details never come, having loaded nothing", code == "timeout" && loaded == "ManualSave-9");
     }
 }
 
@@ -3426,6 +3706,7 @@ int RunUnitTests()
     Bridge060Tests();
     Bridge061Tests();
     Bridge070Tests();
+    Bridge080Tests();
     Bridge070ReviewTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;

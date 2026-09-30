@@ -245,14 +245,12 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
                 auto& dispatcher = state.bridge->GetDispatcher();
                 killed = dispatcher.IsKilled();
                 panel.requests = dispatcher.RequestCount();
-                panel.tone = killed ? "killed" : dispatcher.WritesPaused() ? "paused" : state.config.allowWrites ? "write" : "ok";
-                panel.bridgeStatus = killed ? "Stopped by the kill switch" : state.bridge->HasClient() ? "Connected to an XF tool" : "Listening";
             }
-            else
-            {
-                panel.tone = "off";
-                panel.bridgeStatus = "The bridge is off in this build";
-            }
+            // 0.8 (the UI review): the status line every surface shows, made in one place.
+            const auto status = inkui::Summarize(BridgeViewNow());
+            panel.tone = status.tone;
+            panel.bridgeStatus = status.text;
+            panel.diagnostics = state.config.overlayDiagnostics;
             PendingAsk ask;
             if (state.messages.Pending(ask))
             {

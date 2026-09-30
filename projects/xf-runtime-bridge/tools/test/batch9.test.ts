@@ -40,9 +40,9 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
     await host?.stop();
   });
 
-  test("the panel shows by default, top right, with the bridge's state; ui.message lines reach its frame", async () => {
+  test("the panel shows by default, top left (0.8), with the bridge's state; ui.message lines reach its frame", async () => {
     const start = await frame(api);
-    expect(start).toMatchObject({ show: true, anchor: "top_right", layer: "hud", nameplates: true, cet_label: true, live: true, tone: "write" });
+    expect(start).toMatchObject({ show: true, anchor: "top_left", x: 40, y: 360, layer: "hud", nameplates: true, cet_label: true, live: true, tone: "write" });
     expect(start.status).toMatch(/changes allowed/);
     const posted = await api.run("ui.message", { text: "Press the photo-mode key", level: "ask", seconds: 30 });
     expect(posted.ok, JSON.stringify(posted)).toBe(true);
@@ -63,7 +63,7 @@ describe("bridge 0.5.3 Demo A: the ink HUD panel (ui.hud)", () => {
     // Undo the move first (its settings still include show: true), then everything is as it started.
     const undone = await api.run(result.undo.method, result.undo.params);
     expect(undone.ok, JSON.stringify(undone)).toBe(true);
-    expect(await frame(api)).toMatchObject({ show: true, anchor: "top_right", x: 72, y: 300, scale: 1, cet_label: true });
+    expect(await frame(api)).toMatchObject({ show: true, anchor: "top_left", x: 40, y: 360, scale: 1, cet_label: true });
   });
 
   test("ui.hud with nothing only reads; reset goes back to the configured panel; bad values are refused in plain words", async () => {

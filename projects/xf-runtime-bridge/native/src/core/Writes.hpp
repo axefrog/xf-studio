@@ -217,6 +217,9 @@ struct LoadOps
     Clock now;
 };
 inline constexpr int32_t kSaveListWaitMs = 5000;
+// 0.8 (loading from the main menu): how long the load step is tried again while the game sends the save's details
+// (the script layer answers metadata_pending until they are in).
+inline constexpr int32_t kSaveDetailsWaitMs = 3000;
 
 // A save's position in the game's list: the exact name, else the one name equal ignoring case; -1 when
 // none, -2 when several match ignoring case.

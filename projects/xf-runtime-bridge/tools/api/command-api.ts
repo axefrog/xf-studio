@@ -206,7 +206,7 @@ export class CommandApi {
           if (command.permission !== "read") this.audit({ event: "refused", command: name, cid, code: error.code });
           return { ok: false, command: name, cid, error };
         }
-        result = { value: response.result };
+        result = { value: command.bridge!.result ? command.bridge!.result(response.result, params) : response.result };
       }
       if (command.permission !== "read") this.audit({ event: "done", command: name, cid, result: result.value });
       return {

@@ -9,8 +9,9 @@ import {
   choosePieces, eyesOf, facingOf, PEDESTAL_BELOW_M, planError, planLayout, planOnRay, readShowroom, spill, spacingFor, toWorld, yawFacing,
   type Anchor, type Placement, type RigPlacement, type RigProfile, type Showroom, type Vec3,
 } from "./plan.ts";
-import { calibrate, modelFromFov, poseOf, project, type Calibration, type CameraModel, type CameraPose } from "../scene/camera.ts";
+import { modelForRead, modelFromFov, poseOf, project, type Calibration, type CameraModel, type CameraPose } from "../scene/camera.ts";
 import { frameOf } from "../scene/report.ts";
+import { withOverlayCleared } from "../api/catalogue060.ts";
 
 type Json = Record<string, any>;
 
@@ -77,7 +78,8 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
   // 0.7 (session 7: a head spawned half inside a wall and a bench): each head's eyes are probed for free space (level rays
   // CLEARANCE_M long) and a clear sight line from the anchor; a blocked head steps back towards the anchor, then sideways,
   // until a place is clear, and the answer says where it moved and why.
-  const adjusted = input.avoid_walls === false ? [] : await findFreeSpace(context, placements, from === "camera" ? anchor.origin : [anchor.origin[0], anchor.origin[1], anchor.ground + eyes[2]], anchor.forward);
+  const space: SpaceReport[] = [];
+  const adjusted = input.avoid_walls === false ? [] : await findFreeSpace(context, placements, from === "camera" ? anchor.origin : [anchor.origin[0], anchor.origin[1], anchor.ground + eyes[2]], anchor.forward, space);
   const raise = Math.round((height - eyes[2]) * 1000) / 1000;
   const notes: string[] = [];
   if (raise > PEDESTAL_BELOW_M) notes.push(`The heads stand ${raise} m above their natural height; the pedestals reach only ${PEDESTAL_BELOW_M} m down, so they end in the air.`);
@@ -95,6 +97,13 @@ export async function runShowroomSpawn(input: Json, context: CommandContext): Pr
       ...(projected ? { eyes_on_screen: projected[i] } : {}) })),
     ...(projected ? { projection: { by: projected[0]?.by, units: "window heights from the window's centre, x right, y down; in frame while |y| <= 0.5 and |x| <= aspect/2" } } : {}),
     ...(adjusted.length ? { moved_for_space: adjusted.map(({ note: _n, ...rest }) => rest) } : {}),
+    // 0.8 (session 8's G6: moved_for_space was absent, read as null, when the head stood clear): whether the free space was
+    // checked at all, and for each head its clearance and whether it moved.
+    space_check: input.avoid_walls === false
+      ? { checked: false, why: "avoid_walls: false" }
+      : space.length
+        ? { checked: true, radius_m: CLEARANCE_M, heads: space }
+        : { checked: false, why: "this bridge has no world.probe (an older build)" },
     ...(notes.length ? { notes } : {}),
     ...placed } };
 }
@@ -106,6 +115,11 @@ const STEPS: { back: number; side: number }[] = [
 ];
 
 type Adjustment = { index: number; from: Vec3; to: Vec3 | null; why: string; note: string; checked?: false };
+/**
+ * 0.8: one head's free-space check: clear where it stands, moved (and how far), or not placed clear; clearance_m is the
+ * nearest static geometry around its eyes within the check's radius (the radius itself when nothing was hit).
+ */
+export type SpaceReport = { index: number; checked: boolean; clear: boolean; clearance_m: number | null; sight_blocked: boolean | null; moved_m: number; why?: string };
 
 /**
  * Probes each placement's eyes (world.probe: level rays and a sight line from the anchor) and moves a blocked one to the
@@ -113,7 +127,7 @@ type Adjustment = { index: number; from: Vec3; to: Vec3 | null; why: string; not
  * is checked. Any other failed probe (RB-117: a timeout, a rate limit, the game gate) is reported for that head as not
  * checked, and the other heads are still probed.
  */
-export async function findFreeSpace(context: CommandContext, placements: Placement[], anchorEye: Vec3, forward: Vec3): Promise<Adjustment[]> {
+export async function findFreeSpace(context: CommandContext, placements: Placement[], anchorEye: Vec3, forward: Vec3, report: SpaceReport[] = []): Promise<Adjustment[]> {
   const out: Adjustment[] = [];
   const probe = async (point: Vec3) => {
     const response = await context.api.callBridge("world.probe", { points: [point], clearance_m: CLEARANCE_M, sight_from: anchorEye }, context.cid);
@@ -121,7 +135,8 @@ export async function findFreeSpace(context: CommandContext, placements: Placeme
     const r = ((response.result as Json).probes as Json[])[0] ?? {};
     const blockedSides = Number(r.clearance?.blocked ?? 0);
     const sight = r.sight?.blocked === true;
-    return { clear: blockedSides === 0 && !sight, why: sight ? "static geometry between the anchor and the head" : blockedSides ? `static geometry within ${CLEARANCE_M} m of the head's eyes (${blockedSides} of 8 directions)` : "" };
+    const nearest = typeof r.clearance?.nearest_m === "number" ? Math.round(r.clearance.nearest_m * 1000) / 1000 : null;
+    return { clear: blockedSides === 0 && !sight, nearest, sight, why: sight ? "static geometry between the anchor and the head" : blockedSides ? `static geometry within ${CLEARANCE_M} m of the head's eyes (${blockedSides} of 8 directions)` : "" };
   };
   const h = Math.hypot(forward[0], forward[1]) || 1;
   const f: Vec3 = [forward[0] / h, forward[1] / h, 0];
@@ -130,14 +145,22 @@ export async function findFreeSpace(context: CommandContext, placements: Placeme
     if (!p.eyes) continue;
     const first = await probe(p.eyes);
     if ("failed" in first) {
-      if (first.failed === "unknown_method") return out; // no world.probe: an older bridge
+      if (first.failed === "unknown_method") {
+        report.length = 0;
+        return out; // no world.probe: an older bridge
+      }
       out.push({ index: p.index, from: [...p.position] as Vec3, to: null, why: `not checked (${first.failed})`, checked: false,
         note: `Head ${p.index}'s free space wasn't checked: the probe failed (${first.failed}: ${first.message}); it stands where it was placed.` });
+      report.push({ index: p.index, checked: false, clear: false, clearance_m: null, sight_blocked: null, moved_m: 0, why: `the probe failed (${first.failed})` });
       continue;
     }
-    if (first.clear) continue;
+    if (first.clear) {
+      report.push({ index: p.index, checked: true, clear: true, clearance_m: first.nearest, sight_blocked: false, moved_m: 0 });
+      continue;
+    }
     const from = [...p.position] as Vec3;
     let moved: Vec3 | null = null;
+    let clearance: number | null = null;
     for (const step of STEPS) {
       const d: Vec3 = [-f[0] * step.back + right[0] * step.side, -f[1] * step.back + right[1] * step.side, 0];
       const eyes: Vec3 = [p.eyes[0] + d[0], p.eyes[1] + d[1], p.eyes[2]];
@@ -146,9 +169,12 @@ export async function findFreeSpace(context: CommandContext, placements: Placeme
         p.position = [p.position[0] + d[0], p.position[1] + d[1], p.position[2]].map((v) => Math.round(v * 1000) / 1000) as Vec3;
         p.eyes = eyes.map((v) => Math.round(v * 1000) / 1000) as Vec3;
         moved = p.position;
+        clearance = check.nearest;
         break;
       }
     }
+    const movedM = moved ? Math.round(Math.hypot(moved[0] - from[0], moved[1] - from[1]) * 100) / 100 : 0;
+    report.push({ index: p.index, checked: true, clear: moved !== null, clearance_m: moved ? clearance : first.nearest, sight_blocked: moved ? false : first.sight, moved_m: movedM, why: first.why });
     out.push({
       index: p.index,
       from,
@@ -172,10 +198,12 @@ async function projectEyes(context: CommandContext, pose: CameraPose, points: Ve
   try {
     const read = await call(context, "scene.read", { points, parts: ["camera"] });
     const camera = poseOf(read.camera) ?? pose;
-    model = calibrate(camera, read.calibration as Calibration | undefined);
+    // 0.8 (session 8's G3: (-5.2, -48.5) for a centred head under photo mode's drone camera): in photo mode the model
+    // from the photo camera's own pose and field of view (the game's projection follows the gameplay camera there);
+    // elsewhere the game's projection when it passes the consistency checks.
+    model = modelForRead(camera, read.calibration as Calibration | undefined, read.camera?.mode ?? read.phase);
     const shown = (read.points as { screen: unknown }[] | undefined) ?? [];
-    // 0.7: the game's projection only when it agrees with its own camera (session 7: photo mode's drone camera didn't).
-    if (shown.length === points.length && read.calibration && model.game_projection !== "inconsistent") {
+    if (shown.length === points.length && read.calibration && model.game_projection === "consistent") {
       const toFrame = frameOf(read.calibration as Calibration, camera.aspect);
       game = shown.map((p) => toFrame(p.screen as never));
     }
@@ -184,10 +212,16 @@ async function projectEyes(context: CommandContext, pose: CameraPose, points: Ve
   }
   return points.map((point, index) => {
     const m = project(model, point);
-    const g = game?.[index];
+    let g = game?.[index];
+    // 0.8 (session 8's G6 read (-2.5, -77) in normal play): a game projection far from the camera model's isn't trusted.
+    if (g && (!Number.isFinite(g.x) || !Number.isFinite(g.y) || Math.hypot(g.x - m.x, g.y - m.y) > 0.25)) g = undefined;
     const at = g ?? { x: m.x, y: m.y };
     return { index, x: Math.round(at.x * 1e4) / 1e4, y: Math.round(at.y * 1e4) / 1e4, in_frame: !m.behind && Math.abs(at.y) <= 0.5 && Math.abs(at.x) <= model.aspect / 2,
-      by: g ? "game" : model.by === "game" ? "model (calibrated by the game)" : model.game_projection === "inconsistent" ? "model (field of view read as vertical; the game's projection disagreed with its camera)" : "model (field of view read as vertical)" };
+      by: g ? "game"
+        : model.game_projection === "not_used" ? "model (photo mode's camera: its pose and field of view)"
+        : model.by === "game" ? "model (calibrated by the game)"
+        : model.game_projection === "inconsistent" ? "model (field of view read as vertical; the game's projection disagreed with its camera)"
+        : "model (field of view read as vertical)" };
   });
 }
 
@@ -234,6 +268,9 @@ export async function runShowroomLight(input: Json, context: CommandContext): Pr
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** 0.8: the sweep's capture step (a test replaces it to see that the overlay is out of every frame). */
+export const SWEEP_CAPTURE = { capture: captureWindow };
+
 /** showroom.rotate: turn heads to a yaw relative to how they were set down, by a delta, or through a sweep with captures. */
 export async function runShowroomRotate(input: Json, context: CommandContext): Promise<CommandResult> {
   const state = await call(context, "showroom.state", {});
@@ -259,9 +296,12 @@ export async function runShowroomRotate(input: Json, context: CommandContext): P
       const frame: Json = { step: i + 1, angle_deg: Math.round(angle * 100) / 100 };
       if (sweep.capture === true) {
         try {
-          const record: CaptureRecord = captureWindow({ target: context.api.captureTarget(), region: sweep.region ? { name: sweep.region } as never : undefined,
-            name: `${(sweep.name as string | undefined) ?? "showroom-sweep"}-${String(i + 1).padStart(2, "0")}`, outDir: context.captureRoot, route: "auto" });
+          // 0.8 (session 8's G4: the sweep's frames showed the XF overlay): the same hide as capture_screenshot's.
+          const shot = await withOverlayCleared(context, () => SWEEP_CAPTURE.capture({ target: context.api.captureTarget(), region: sweep.region ? { name: sweep.region } as never : undefined,
+            name: `${(sweep.name as string | undefined) ?? "showroom-sweep"}-${String(i + 1).padStart(2, "0")}`, outDir: context.captureRoot, route: "auto" }));
+          const record: CaptureRecord = shot.value;
           frame.capture = { full: record.full?.path ?? null, view: record.view.path };
+          frame.overlay = shot.overlay;
           images.push({ path: record.view.path, width: record.view.width, height: record.view.height, mimeType: "image/png", role: "view" });
         } catch (error) {
           if (error instanceof CaptureError) throw planError(`capture_${error.code}`, error.message);

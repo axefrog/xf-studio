@@ -232,6 +232,7 @@ struct Behaviour
     double tolerance = 2.0;
     double firstAngle = -1.0;
     double lastAngle = -1.0;
+    double minAngle = -1.0; // 0.8: the closest the camera came to the look's point so far (the drift check)
     // glide_path
     std::vector<Vec3> path;
     double pathLength = 0.0;
@@ -723,12 +724,27 @@ void StepLook(Behaviour& aB, const Ops& aOps, double aDt)
     aB.summary["angle_deg"] = Round4(angle);
     if (aOps.watchInput && aOps.player)
     {
+        // The player's own input: the watch's first action or, 0.8, a raw mouse or stick movement (Codeware's Input/Axis,
+        // which sees the device even while the game's look-at keeps the camera's actions from the player's listeners;
+        // session 8's D4 ran to reached with the mouse moving).
         const auto tookOver = aOps.player().value("took_over", std::string());
         if (!tookOver.empty())
         {
             Finish(aB, "user_took_over", "info", {{"input", tookOver}, {"angle_deg", Round4(angle)}});
             return;
         }
+    }
+    // 0.8 (session 8's D4): the camera's own drift. The look only ever brings the camera closer to its point, so once it is
+    // under way, an angle more than kLookDriftDeg wider than the closest it came means something else turned the camera:
+    // the player's mouse or stick.
+    if (aB.minAngle < 0.0 || angle < aB.minAngle)
+    {
+        aB.minAngle = angle;
+    }
+    else if (aB.t > kLookDriftGraceS && angle > aB.minAngle + kLookDriftDeg)
+    {
+        Finish(aB, "user_took_over", "info", {{"input", "camera_drift"}, {"angle_deg", Round4(angle)}, {"closest_deg", Round4(aB.minAngle)}});
+        return;
     }
     if (angle <= aB.tolerance)
     {

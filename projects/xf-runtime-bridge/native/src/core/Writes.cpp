@@ -1347,8 +1347,30 @@ json GameLoad(const params::GameLoadRequest& aRequest, const LoadOps& aOps)
         {
             aOps.guard();
         }
-        // The load step looks this exact name up in the game's list again and loads that position.
-        out = aOps.load(saves[static_cast<size_t>(index)]);
+        // The load step looks this exact name up in the game's list again and loads that position. 0.8: from the main menu it
+        // first needs the save's details (whether it was made with mods), which the game sends a moment after they are
+        // asked for; the step answers metadata_pending until then and is tried again for up to kSaveDetailsWaitMs.
+        const auto detailsDeadline = Now(aOps.now) + std::chrono::milliseconds(kSaveDetailsWaitMs);
+        while (true)
+        {
+            try
+            {
+                out = aOps.load(saves[static_cast<size_t>(index)]);
+                break;
+            }
+            catch (const MethodError& e)
+            {
+                if (e.code != "metadata_pending")
+                {
+                    throw;
+                }
+                if (Now(aOps.now) >= detailsDeadline)
+                {
+                    throw MethodError("timeout", "the game didn't send the details of '" + aRequest.name + "' in time; nothing was loaded");
+                }
+                aOps.sleep(std::chrono::milliseconds(150));
+            }
+        }
     }
     out["undo"] = nullptr;
     out["undo_note"] = "loading can't be undone: everything since that save was discarded, the bridge's save lock with it";

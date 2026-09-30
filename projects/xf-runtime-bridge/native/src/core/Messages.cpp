@@ -1,6 +1,7 @@
 #include "core/Messages.hpp"
 
 #include <algorithm>
+#include <vector>
 
 namespace xfb
 {
@@ -64,8 +65,9 @@ size_t CodePointLength(const std::string& aText, size_t aPos, uint32_t& aCodePoi
 
 std::string CleanMessageText(const std::string& aText, size_t aMaxChars, bool* aTruncated)
 {
+    // Each kept character's first byte, so a cut can back up by characters (0.8).
     std::string out;
-    size_t chars = 0;
+    std::vector<size_t> starts;
     bool truncated = false;
     bool pendingSpace = false;
     size_t pos = 0;
@@ -91,19 +93,40 @@ std::string CleanMessageText(const std::string& aText, size_t aMaxChars, bool* a
             continue;
         }
         const size_t needed = (pendingSpace ? 1 : 0) + 1;
-        if (chars + needed > aMaxChars)
+        if (starts.size() + needed > aMaxChars)
         {
             truncated = true;
             break;
         }
         if (pendingSpace)
         {
+            starts.push_back(out.size());
             out.push_back(' ');
-            ++chars;
             pendingSpace = false;
         }
+        starts.push_back(out.size());
         out += piece;
-        ++chars;
+    }
+    if (truncated && aMaxChars >= 2)
+    {
+        // 0.8 (the UI review): room for the ellipsis, then back to the last space if one lies in the last third, so the text
+        // never stops mid-word; trailing spaces go.
+        size_t keep = std::min(starts.size(), aMaxChars - 1);
+        size_t space = keep;
+        while (space > 0 && out[starts[space - 1]] != ' ')
+        {
+            --space;
+        }
+        if (space > 0 && space - 1 >= (keep * 2) / 3)
+        {
+            keep = space - 1;
+        }
+        while (keep > 0 && out[starts[keep - 1]] == ' ')
+        {
+            --keep;
+        }
+        out.resize(keep < starts.size() ? starts[keep] : out.size());
+        out += "\xE2\x80\xA6"; // U+2026
     }
     if (aTruncated)
     {
@@ -208,6 +231,9 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
             }
         }
     }
+    // 0.8: an answered ask stays until the next message; this is it.
+    m_messages.erase(std::remove_if(m_messages.begin(), m_messages.end(), [](const Message& aMessage) { return !aMessage.answered.empty(); }),
+                     m_messages.end());
     json dropped = json::array();
     while (m_messages.size() >= kMaxMessages)
     {
@@ -234,7 +260,7 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
     return out;
 }
 
-std::string MessageBoard::Snapshot(Clock::time_point aNow)
+std::string MessageBoard::Snapshot(Clock::time_point aNow, SurfaceText aSurface)
 {
     std::scoped_lock _(m_mutex);
     DropExpired(aNow);
@@ -242,14 +268,27 @@ std::string MessageBoard::Snapshot(Clock::time_point aNow)
     {
         return {};
     }
+    const auto surface = [aSurface](const std::string& aText) { return aSurface ? aSurface(aText) : aText; };
+    const auto labels = [&surface](const std::vector<std::string>& aList) {
+        json out = json::array();
+        for (const auto& label : aList)
+        {
+            out.push_back(surface(label));
+        }
+        return out;
+    };
     json list = json::array();
     for (const auto& message : m_messages)
     {
         const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(message.expires - aNow).count();
-        json line{{"id", message.id}, {"text", message.text}, {"level", message.level}, {"remaining_ms", remaining}};
+        json line{{"id", message.id}, {"text", surface(message.text)}, {"level", message.level}, {"remaining_ms", remaining}};
         if (!message.choices.empty())
         {
-            line["choices"] = message.choices;
+            line["choices"] = labels(message.choices);
+        }
+        if (!message.answered.empty())
+        {
+            line["answered"] = surface(message.answered);
         }
         list.push_back(line);
     }
@@ -257,14 +296,42 @@ std::string MessageBoard::Snapshot(Clock::time_point aNow)
     PendingAsk ask;
     if (PendingLocked(ask, aNow))
     {
-        out["pending_ask"] = {{"id", ask.id}, {"text", ask.text}, {"choices", ask.choices}};
+        out["pending_ask"] = {{"id", ask.id}, {"text", surface(ask.text)}, {"choices", labels(ask.choices)}};
+    }
+    AnsweredAsk answered;
+    if (AnsweredLocked(answered, aNow))
+    {
+        out["answered_ask"] = {{"id", answered.id}, {"text", surface(answered.text)}, {"label", surface(answered.label)}};
     }
     return out.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 std::vector<std::string> MessageBoard::DefaultChoices()
 {
-    return {"Ready", "Yes", "No"};
+    // 0.8 (session 8): one button. A question that needs Yes or No, or a choice, passes its own labels.
+    return {"Done"};
+}
+
+bool MessageBoard::AnsweredLocked(AnsweredAsk& aOut, Clock::time_point aNow) const
+{
+    for (auto it = m_messages.rbegin(); it != m_messages.rend(); ++it)
+    {
+        if (!it->answered.empty() && it->expires > aNow)
+        {
+            aOut.id = it->id;
+            aOut.text = it->text;
+            aOut.label = it->answered;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MessageBoard::Answered(AnsweredAsk& aOut, Clock::time_point aNow)
+{
+    std::scoped_lock _(m_mutex);
+    DropExpired(aNow);
+    return AnsweredLocked(aOut, aNow);
 }
 
 bool MessageBoard::PendingLocked(PendingAsk& aOut, Clock::time_point aNow) const
@@ -317,10 +384,10 @@ json MessageBoard::Answer(uint64_t aId, int32_t aChoice, Clock::time_point aNow)
         {
             m_answered.pop_front();
         }
+        // 0.8 (the UI review): the question stays as it was, with the answer where its keys were, until the next message.
         message.choices.clear();
-        message.level = "done";
-        message.text = CleanMessageText("Answered: " + label + " (" + message.text + ")", kMaxChars);
-        message.expires = aNow + std::chrono::seconds(kAnsweredSeconds);
+        message.answered = label;
+        message.expires = std::max(message.expires, aNow + std::chrono::seconds(kAnsweredSeconds));
         return out;
     }
     return json{{"ok", false}, {"why", id == 0 ? "no question is waiting for an answer" : "that question isn't showing any more"}, {"message_id", id}};

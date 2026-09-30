@@ -33,6 +33,7 @@ import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showro
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, withOverlayCleared } from "./catalogue060.ts";
 import { COMMANDS_070 } from "./catalogue070.ts";
+import { applyCatalogue080 } from "./catalogue080.ts";
 import { frameStatsInCapture, judgeAfter, judgeBefore, pickSubject, runSceneReport, type Expectation } from "../scene/report.ts";
 import { decodePng } from "../capture/image.ts";
 import { readFileSync } from "node:fs";
@@ -110,9 +111,19 @@ export type CommandDef = {
   input: JsonSchema;
   /** How to undo a write, in plain words. */
   undo?: string;
-  /** timeoutMs: how long the tools wait for the bridge's answer, for a method that waits on the game (default: the client's 8 s). */
-  bridge?: { method: string; params?: (input: Record<string, unknown>) => Record<string, unknown>; timeoutMs?: (input: Record<string, unknown>) => number };
+  /**
+   * timeoutMs: how long the tools wait for the bridge's answer, for a method that waits on the game (default: the client's
+   * 8 s). result (0.8): the answer as the tools pass it on (catalogue080.ts: the wardrobe as V looks).
+   */
+  bridge?: {
+    method: string;
+    params?: (input: Record<string, unknown>) => Record<string, unknown>;
+    timeoutMs?: (input: Record<string, unknown>) => number;
+    result?: (value: unknown, input: Record<string, unknown>) => unknown;
+  };
   local?: (input: Record<string, unknown>, context: CommandContext) => Promise<CommandResult>;
+  /** 0.8: the command's own refusal codes (catalogue080.ts REFUSALS), for the MCP reference; the shared ones are listed there once. */
+  refusals?: readonly string[];
 };
 
 /** MCP (and the Claude API) allow only [A-Za-z0-9_-] in tool names: dots become underscores. */
@@ -593,12 +604,13 @@ function loadParams(input: Record<string, unknown>): Record<string, unknown> {
 export const SERVER_STEP_MS = 2000 + 1000;
 export const SAVE_UNLOCK_WAIT_MS = 3000; // writes::kSaveUnlockWaitMs
 export const SAVE_LIST_WAIT_MS = 5000; // writes::kSaveListWaitMs
+export const SAVE_DETAILS_WAIT_MS = 3000; // writes::kSaveDetailsWaitMs (0.8: a load from the main menu waits for the save's details)
 /** The pipe's round trip and the bridge thread's own work, on top of the server's worst case. */
 export const CLIENT_SLACK_MS = 2000;
 /** game.save: timeout_ms + the unlock wait + 5 steps (prepare, a status overshoot twice, save, relock). */
 export const saveClientTimeoutMs = (timeoutMs = 20000) => timeoutMs + SAVE_UNLOCK_WAIT_MS + 5 * SERVER_STEP_MS + CLIENT_SLACK_MS;
-/** game.load: the list wait + 3 steps (list, a status overshoot, load). */
-export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + 3 * SERVER_STEP_MS + CLIENT_SLACK_MS;
+/** game.load: the list wait + the details wait + 4 steps (list, a status overshoot, the last details try, load). */
+export const loadClientTimeoutMs = () => SAVE_LIST_WAIT_MS + SAVE_DETAILS_WAIT_MS + 4 * SERVER_STEP_MS + CLIENT_SLACK_MS;
 
 /** cc.apply: exactly one of index, value and label (the schema can't say "one of", so the tools check it too). */
 function characterApplyParams(input: Record<string, unknown>): Record<string, unknown> {
@@ -676,7 +688,7 @@ async function runOptionsRead(input: Record<string, unknown>, context: CommandCo
 
 // --- the catalogue -------------------------------------------------------------------------------
 
-export const CATALOGUE: readonly CommandDef[] = [
+export const CATALOGUE: readonly CommandDef[] = applyCatalogue080([
   // Bridge
   {
     name: "bridge.ping",
@@ -761,21 +773,32 @@ export const CATALOGUE: readonly CommandDef[] = [
       interval_ms: int("Target time between frames in milliseconds (0 = as fast as possible). Default 100.", 0, 10000),
       route: oneOf("How to grab the window (see capture_screenshot).", ["auto", "printwindow", "screen"]),
     }),
-    local: async (input, { api, captureRoot, signal }) => {
+    local: async (input, context) => {
+      const { api, captureRoot, signal } = context;
       try {
-        const record = await captureBurst({
-          target: api.captureTarget(),
-          region: regionOf(input),
-          view: viewOf(input),
-          route: (input.route as "auto" | "printwindow" | "screen" | undefined) ?? "auto",
-          name: (input.name as string | undefined) ?? "burst",
-          outDir: captureRoot,
-          frames: (input.frames as number | undefined) ?? 10,
-          intervalMs: (input.interval_ms as number | undefined) ?? 100,
-          signal,
-        });
+        const frames = (input.frames as number | undefined) ?? 10;
+        const intervalMs = (input.interval_ms as number | undefined) ?? 100;
+        // 0.8 (session 8's G4 found the sweep's frames showing the XF overlay; a burst had the same gap): the same hide as
+        // capture_screenshot's, held for the burst's length.
+        const shot = await withOverlayCleared(
+          context,
+          () =>
+            captureBurst({
+              target: api.captureTarget(),
+              region: regionOf(input),
+              view: viewOf(input),
+              route: (input.route as "auto" | "printwindow" | "screen" | undefined) ?? "auto",
+              name: (input.name as string | undefined) ?? "burst",
+              outDir: captureRoot,
+              frames,
+              intervalMs,
+              signal,
+            }),
+          frames * (intervalMs + 60) + 2000,
+        );
+        const record = shot.value;
         return {
-          value: record,
+          value: { ...record, overlay: shot.overlay },
           images: [{ path: record.contact_sheet.path, width: record.contact_sheet.width, height: record.contact_sheet.height, mimeType: "image/png", role: "view" }],
         };
       } catch (error) {
@@ -1395,7 +1418,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "game.load",
     title: "Load a save",
     description:
-      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. From normal play or the pause menu, not photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.",
+      "Loads the most recent save of this playthrough (latest: true, the game's quick load) or one save by its name in the game's list (for example ManualSave-12); an unknown name is refused with some of the names the game lists. From normal play or the pause menu, and from the main menu (0.8: the menu's own paths, so the player only has to launch the game: latest is its Continue, a name its Load menu's, both through the modded-save path for a save made with mods). Everything since that save is discarded, unsaved progress and the bridge's save lock with it, and the game doesn't ask first, so discard_unsaved: true is required. Not from photo mode or the appearance screen. Wait with game_wait for phase gameplay afterwards. Needs the save permission.",
     permission: "write-save",
     input: obj(
       {
@@ -1414,13 +1437,13 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "ui.message",
     title: "Show a message in the game",
     description:
-      "Shows a message to the player under the bridge's status label in the top-left corner of the game and in the XF panel (so the player never has to leave the game): up to 600 characters, wrapped, for seconds seconds (default 8). At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. An ask shows answer buttons: choices (1 to 4 labels), or Ready, Yes and No by default; the player answers with the key the XF panel shows next to each (F6, F7, F8, F11 by default) or the button in the XF window of the Cyber Engine Tweaks overlay, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it. clear: true takes the lines down but leaves a question still waiting for its answer (clear_asks: true withdraws it too); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
+      "Shows a message to the player in the game, so the player never has to leave it: under the bridge's status label in the top-left corner and in the XF panel, and a question also in the XF window of the Cyber Engine Tweaks overlay. Up to 600 characters, wrapped, for seconds seconds (default 8); a longer text is cut at a word with an ellipsis. At most four show at once; a new one pushes out the oldest, except the newest unanswered question, which stays pinned until it is answered or its seconds end. level colours it: info, ask (a question for the player), warn or done. A question (level ask) shows only the answers choices gives (1 to 4 short labels, such as Fully visible and Partly cut off, or Yes and No); without choices it shows one Done button, for a step the player confirms. The player answers with the key the XF panel shows next to each answer (F6, F7, F8, F11 by default) or the button in the XF window, and the answer (with this message's id) goes into the session's event stream, where session_wait returns it; the question stays with Answered: and the answer until the next message. Characters a surface can't draw show as one replacement mark there, and Cyber Engine Tweaks' label writes Polish and other Latin letters without their accents. clear: true takes the lines down but leaves a question still waiting for its answer (clear_asks: true withdraws it too); withdraw takes one message down by its id (a question's undo). The kill switch clears them all.",
     permission: "notify",
     input: obj({
       text: str("The message (at most 600 characters are shown).", { minLength: 1, maxLength: 2000 }),
       seconds: int("How long it shows, 1 to 600 seconds. Default 8; give a question long enough for the player to answer.", 1, 600),
       level: oneOf("info (default), ask, warn or done.", ["info", "ask", "warn", "done"]),
-      choices: { type: "array", description: "With level ask: the answers offered, 1 to 4 short labels (default Ready, Yes, No).", items: str("An answer's label (1 to 24 characters).", { minLength: 1, maxLength: 24 }), minItems: 1, maxItems: 4 },
+      choices: { type: "array", description: "With level ask: the answers offered, only these, 1 to 4 short labels (default one Done button).", items: str("An answer's label (1 to 24 characters).", { minLength: 1, maxLength: 24 }), minItems: 1, maxItems: 4 },
       clear: bool("Remove the lines first (alone: only that); a question still waiting for its answer stays."),
       clear_asks: bool("With clear: withdraw a waiting question too (a session_wait on it ends with question_gone)."),
       withdraw: int("Take down the message with this id (ui_message's id); a question withdrawn this way ends its session_wait with question_gone.", 1, 1e9),
@@ -1432,13 +1455,13 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "ui.hud",
     title: "Show, hide or move the XF panel in the game",
     description:
-      "Temporary test feature (bridge 0.5.3). The XF panel is drawn in the game's own HUD (ink, in the game's font and colours; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_right, bottom_left, bottom_right, top_center, center_left, center_right) with x and y (distance from that corner, in units of 1/2160 of the screen's height) places it; scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research: which of these stay visible in photo mode is being checked). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the Cyber Engine Tweaks status label. With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
+      "Temporary test feature (bridge 0.5.3). The XF panel is drawn in the game's own HUD (ink, in the game's font and colours on the game's own dark plate; it needs Codeware, not Cyber Engine Tweaks): the bridge's connection state and the messages ui.message shows. show hides or shows it; anchor (top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right) with x and y (distance inwards from that corner or edge of the visible screen, in the HUD's design units: the HUD is laid out on a 3840 by 2160 canvas that covers the screen, so a 21:9 or 32:9 screen shows its full width and the middle of its height; for center, x and y move it from the middle) places it, and it is kept whole on screen; the default is top_left, 40, 360, below the CET label and the overlay panel. scale sizes it (0.5 to 2.5). layer chooses where it draws: hud (default; hidden wherever the game hides its HUD: menus, photo mode, the appearance screen), notifications or top (research). nameplates switches XF Finish Showroom's pedestal name labels; cet_label switches the Cyber Engine Tweaks status label. With no values it only reads the settings; reset: true goes back to the bridge's configured settings. Changes nothing in the game itself.",
     permission: "notify",
     input: obj({
       show: bool("true shows the panel, false hides it."),
-      anchor: oneOf("The screen corner or edge the panel sits against. Default top_right.", ["top_left", "top_right", "bottom_left", "bottom_right", "top_center", "center_left", "center_right"]),
-      x: num("Horizontal distance from the anchor's edge, in 1/2160 of the screen's height (-4000 to 4000). Default 72.", -4000, 4000),
-      y: num("Vertical distance from the anchor's edge, in the same units. Default 300.", -4000, 4000),
+      anchor: oneOf("The visible screen's corner, edge or middle the panel sits against. Default top_left.", ["top_left", "top_center", "top_right", "center_left", "center", "center_right", "bottom_left", "bottom_center", "bottom_right"]),
+      x: num("Horizontal distance inwards from the anchor's edge (from the middle for center), in the HUD's design units, 3840 across a 16:9 screen (-4000 to 4000). Default 40.", -4000, 4000),
+      y: num("Vertical distance inwards from the anchor's edge (from the middle for center), in the same units. Default 360.", -4000, 4000),
       scale: num("Size, 0.5 to 2.5. Default 1.", 0.5, 2.5),
       layer: oneOf("Where the panel draws: hud (default), notifications or top (research).", ["hud", "notifications", "top"]),
       nameplates: bool("Show each XF Finish Showroom head's preset name on its pedestal."),
@@ -1480,7 +1503,7 @@ export const CATALOGUE: readonly CommandDef[] = [
     name: "world.pin",
     title: "Place an XF map pin",
     description:
-      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands above its eyes; 0.7: placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and fallback icon it uses: custom (default), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.45 above a head or V). At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
+      "Temporary test feature (bridge 0.5.3). Places a map pin with an XF badge and a label, shown on the world map (with the label in its tooltip), on the minimap and in the world through walls, the way the game shows its own markers: the game's own pin icon, with the XF badge above it and the label on the pin's name line. Give exactly one of position [x, y, z] (a world point in metres, as game_status and showroom_state report them), piece (a showroom head's index: the pin stands just above its eyes, 0.25 m by default; placed there, so turning the head leaves it and clearing the heads removes it) or at: \"v\" (above where V stands now). label names it (1-48 characters). variant picks the game's pin type whose map filter and icon it uses: custom (default; the one the minimap draws for any placed pin), interaction (in the world only), apartment, clothes or default. lift_m raises it (metres; default 0 at a position, 0.25 above a head's eyes, 0.45 above V). The answer's pins list which views have drawn each pin so far (drawn_by: world, minimap, world_map), and the plugin log names each one the first time. At most 8 pins. world.pin.clear, the kill switch and loading a save remove them.",
     permission: "write-world",
     input: obj(
       {
@@ -1488,7 +1511,7 @@ export const CATALOGUE: readonly CommandDef[] = [
         piece: int("A showroom head's index (0 to 23), from showroom_state.", 0, 23),
         at: oneOf("v: above where V stands now.", ["v"]),
         label: str("The pin's name, 1 to 48 characters (longer is cut).", { minLength: 1, maxLength: 400 }),
-        variant: oneOf("The game's pin type it borrows its map filter and fallback icon from. Default custom.", ["custom", "apartment", "clothes", "default"]),
+        variant: oneOf("The game's pin type it borrows its map filter and icon from. Default custom.", ["custom", "interaction", "apartment", "clothes", "default"]),
         lift_m: num("Metres above the point (-5 to 5).", -5, 5),
       },
       ["label"],
@@ -1597,7 +1620,7 @@ export const CATALOGUE: readonly CommandDef[] = [
   ...PLAYER_COMMANDS,
   // Bridge 0.7 (research/runtime/bridge-hook-inventory.md).
   ...COMMANDS_070,
-];
+]);
 
 export function findCommand(name: string): CommandDef | undefined {
   return CATALOGUE.find((command) => command.name === name || toolName(command) === name);

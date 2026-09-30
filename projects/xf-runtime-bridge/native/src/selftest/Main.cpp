@@ -1453,8 +1453,10 @@ int wmain(int argc, wchar_t** argv)
                              return xfb::AskStateJson(id, messages.StateOf(id));
                          }});
     dispatcher.Register({"selftest.messages", xfb::Access::Read, xfb::RunOn::BridgeThread, "The message lines the CET layer would draw (self-test only).",
-                         [](const xfb::MethodContext&) {
-                             const auto text = messages.Snapshot();
+                         [](const xfb::MethodContext& aContext) {
+                             // 0.8: surface "cet" answers the CET layer's Latin-1 copy, as XFBridge_Messages does.
+                             const bool cet = aContext.params.is_object() && aContext.params.value("surface", std::string()) == "cet";
+                             const auto text = cet ? messages.Snapshot(xfb::MessageBoard::Clock::now(), &xfb::inkui::ForCet) : messages.Snapshot();
                              return text.empty() ? json{{"messages", json::array()}} : json::parse(text);
                          }});
     // Bridge 0.5.3, TEMPORARY TEST FEATURES (the ink UI demos): ui.hud with the plugin's own panel settings, selftest.hud
@@ -1469,6 +1471,15 @@ int wmain(int argc, wchar_t** argv)
                              out["panel_attached"] = true;
                              return out;
                          }});
+    // 0.8: what the ink panel last reported drawing (XFBridge_InkDrawn in the plugin): selftest.ink_drawn {id, shown}.
+    static uint64_t inkShown = 0;
+    dispatcher.Register({"selftest.ink_drawn", xfb::Access::Read, xfb::RunOn::BridgeThread, "The ink panel reports the question it draws (self-test only).",
+                         [](const xfb::MethodContext& aContext) {
+                             const auto& p = aContext.params;
+                             const auto id = p.is_object() ? p.value("id", 0ll) : 0ll;
+                             inkShown = p.is_object() && p.value("shown", false) && id > 0 ? static_cast<uint64_t>(id) : 0;
+                             return json{{"ok", true}, {"ink_shown", inkShown}};
+                         }});
     dispatcher.Register({"selftest.hud", xfb::Access::Read, xfb::RunOn::BridgeThread, "The frame the ink HUD panel would draw (self-test only).",
                          [&bridge, &config](const xfb::MethodContext&) {
                              xfb::inkui::BridgeView view;
@@ -1479,25 +1490,11 @@ int wmain(int argc, wchar_t** argv)
                              view.listening = bridge.IsListening();
                              view.hasClient = bridge.HasClient();
                              view.scriptReady = simLayer.Ready();
-                             std::vector<xfb::inkui::MessageLine> lines;
-                             for (auto& [level, text] : messages.Lines())
-                             {
-                                 lines.push_back({level, text});
-                             }
-                             // 0.7: the pending ask with its answer keys, as the plugin builds it.
-                             xfb::inkui::AskView ask;
-                             xfb::PendingAsk pending;
-                             if (!view.killed && messages.Pending(pending))
-                             {
-                                 ask.id = pending.id;
-                                 for (size_t i = 0; i < pending.choices.size() && i < config.answerKeys.size(); ++i)
-                                 {
-                                     ask.keyed.emplace_back(config.answerKeys[i], pending.choices[i]);
-                                 }
-                             }
-                             const auto frame = xfb::inkui::Frame(hud.Current(), view, lines, &ask);
+                             // 0.8: the plugin's own frame builder (core BuildFrame), and the status every surface shows.
+                             const auto frame = xfb::inkui::BuildFrame(hud.Current(), view, messages, config.answerKeys, inkShown);
                              auto out = xfb::inkui::ParseFrame(frame);
                              out["frame"] = frame;
+                             out["status_all"] = xfb::inkui::StatusJson(view);
                              return out;
                          }});
     // 0.7 (session 7, in-game driving): what XFBridge_Answer and XFBridge_Comment do in the plugin, for the tests: the player
@@ -2496,6 +2493,7 @@ int wmain(int argc, wchar_t** argv)
             return messages.Pending(ask) ? json{{"id", ask.id}, {"text", ask.text}, {"choices", ask.choices}} : json(nullptr);
         };
         hooks070.killed = [&bridge] { return bridge.GetDispatcher().IsKilled(); };
+        hooks070.weaponDrawn = [] { return sim060 && sim060->WeaponDrawn(); };
         xfb::selftest::RegisterSim070(dispatcher, queue, config, std::move(hooks070));
     }
 

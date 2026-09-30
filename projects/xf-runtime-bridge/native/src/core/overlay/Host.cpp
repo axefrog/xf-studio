@@ -26,7 +26,7 @@ std::string RefusalFor(const DeviceFacts& aFacts)
     }
     if (!aFacts.sameDevice)
     {
-        return "the swap chain doesn't belong to the engine's device";
+        return "the swap chain doesn't belong to the engine's device (not even through Streamline's proxy)";
     }
     if (!aFacts.directQueue)
     {
@@ -57,6 +57,24 @@ std::string RefusalAfterResize(const DeviceFacts& aFirst, const DeviceFacts& aNo
     {
         return "after a resize the swap chain has " + std::to_string(aNow.bufferCount) + " back buffers, not " + std::to_string(aFirst.bufferCount) +
                " (the overlay's heaps and allocators were made for the first)";
+    }
+    return {};
+}
+
+DeviceMatch MatchDevices(const DeviceIdentity& aSwapChainDevice, const DeviceIdentity& aEngineDevice)
+{
+    if (aSwapChainDevice.given == 0 || aEngineDevice.given == 0)
+    {
+        return {};
+    }
+    if (aSwapChainDevice.given == aEngineDevice.given)
+    {
+        return {true, false};
+    }
+    const auto native = [](const DeviceIdentity& aId) { return aId.native != 0 ? aId.native : aId.given; };
+    if (native(aSwapChainDevice) == native(aEngineDevice))
+    {
+        return {true, true};
     }
     return {};
 }
@@ -122,7 +140,7 @@ std::string LimitToGlyphs(const std::string& aText)
         }
         if (!valid)
         {
-            put(out, 0xFFFD);
+            put(out, 0xA4);
             i += 1;
             continue;
         }
@@ -133,7 +151,7 @@ std::string LimitToGlyphs(const std::string& aText)
         }
         else
         {
-            put(out, baked(cp) ? cp : 0xFFFD);
+            put(out, baked(cp) && cp != 0xFFFD ? cp : 0xA4);
         }
     }
     return out;
@@ -233,6 +251,13 @@ void OverlayHost::NoteFrameGeneration(const std::vector<std::string>& aModules)
     m_frameGeneration = aModules;
 }
 
+bool OverlayHost::OffForFrameGeneration() const
+{
+    std::scoped_lock _(m_mutex);
+    const auto phase = m_phase.load();
+    return m_enabled.load() && (phase == Phase::Refused || phase == Phase::Failed) && !m_frameGeneration.empty();
+}
+
 bool OverlayHost::ShouldDraw(std::chrono::steady_clock::time_point aNow) const
 {
     return m_enabled.load() && !m_passThrough.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && !m_cetOpen.load() &&
@@ -285,6 +310,8 @@ json OverlayHost::Snapshot(std::chrono::steady_clock::time_point aNow) const
     if (phase == Phase::Drawing || phase == Phase::Refused || phase == Phase::Failed)
     {
         out["back_buffer"] = {{"format", m_facts.format}, {"count", m_facts.bufferCount}, {"width", m_facts.width}, {"height", m_facts.height}};
+        // 0.8: "streamline" when the host draws (or refused) through Streamline's proxy swap chain (DLSS frame generation).
+        out["swap_chain_proxy"] = m_facts.proxy.empty() ? json(nullptr) : json(m_facts.proxy);
         out["hdr_mode"] = m_facts.hdrMode == 0 ? "disabled" : m_facts.hdrMode == 1 ? "pq" : "scrgb";
     }
     if (!m_enabled.load())

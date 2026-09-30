@@ -7,6 +7,7 @@
 import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
 import { bool, int, num, obj, oneOf, str, type JsonSchema } from "./schema.ts";
 import { point3 } from "./catalogue060.ts";
+import { HOLSTER_FIRST, runCyberwareChange } from "./catalogue080.ts";
 
 type Json = Record<string, any>;
 
@@ -160,7 +161,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "cyberware.state",
     title: "Read V's cyberware",
     description:
-      "What each of V's cyberware areas holds (ArmsCW, HandsCW, EyesCW, FaceCW, FrontalCortexCW, SystemReplacementCW, NervousSystemCW, CardiovascularSystemCW, ImmuneSystemCW, IntegumentarySystemCW, MusculoskeletalSystemCW, LegsCW), slot by slot with each item's record and name; for the arms, the chain the character creator's holster state follows (the ArmsCW item's holstered item and its appearance, such as holstered_mantis, and the creator group that draws it), what the right-arm and weapon slots hold now (holstered or drawn), and whether a no-arm-cyberware effect is on; V's humanity. areas limits the list.",
+      "What each of V's cyberware areas holds (ArmsCW, HandsCW, EyesCW, FaceCW, FrontalCortexCW, SystemReplacementCW, NervousSystemCW, CardiovascularSystemCW, ImmuneSystemCW, IntegumentarySystemCW, MusculoskeletalSystemCW, LegsCW), slot by slot with each item's record and name; for the arms, the chain the character creator's holster state follows (the ArmsCW item's holstered item and its appearance, such as holstered_mantis, and the creator group that draws it), what the right-arm and weapon slots hold now, drawn (the arm cyberware is out, by the rule cyberware changes are refused by), and whether a no-arm-cyberware effect is on; V's humanity. areas limits the list.",
     permission: "read",
     input: obj({ areas: { type: "array", description: "Only these areas (default all).", items: oneOf("A cyberware area.", [...CYBERWARE_AREAS]), minItems: 1, maxItems: CYBERWARE_AREAS.length } }),
     bridge: { method: "cyberware.state" },
@@ -169,7 +170,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "cyberware.equip",
     title: "Equip a cyberware item",
     description:
-      "Puts a cyberware item into its area's slot through the game's own equipment request, as a ripperdoc's screen does (the earlier item in that slot comes out first): item is its record (Items.StrongArms, Items.MantisBlades, Items.NanoWires, Items.ProjectileLauncher, ...), slot the slot (default the first empty one), add_if_missing adds it to V's inventory first and remembers it. Only in normal play, outside combat and scenes, and not while the arm cyberware is drawn (arms_drawn); the game's own equip requirements are checked before anything changes (not_equippable leaves nothing added). The answer reads the slot back and carries the undo (the exact earlier copy back, with a copy the bridge added removed, or the slot emptied and an added item removed); if the slot can't be read back, equipped is unknown and the undo is still given. V's look and stats change until the undo, the kill switch or a load; the save lock is held meanwhile and game_save refuses until it is undone. In the inventory class, off unless allowed.",
+      "Puts a cyberware item into its area's slot through the game's own equipment request, as a ripperdoc's screen does (the earlier item in that slot comes out first): item is its record (Items.StrongArms, Items.MantisBlades, Items.NanoWires, Items.ProjectileLauncher, ...), slot the slot (default the first empty one), add_if_missing adds it to V's inventory first and remembers it. Only in normal play, outside combat and scenes; while the arm cyberware is drawn (after photo mode it stays drawn) the tools holster it first with the game's own request (holster_first: false refuses arms_drawn instead); the game's own equip requirements are checked before anything changes (not_equippable leaves nothing added). The answer reads the slot back and carries the undo (the exact earlier copy back, with a copy the bridge added removed, or the slot emptied and an added item removed); if the slot can't be read back, equipped is unknown and the undo is still given. V's look and stats change until the undo, the kill switch or a load; the save lock is held meanwhile and game_save refuses until it is undone. In the inventory class, off unless allowed.",
     permission: "write-inventory",
     input: obj(
       {
@@ -178,26 +179,28 @@ export const COMMANDS_070: CommandDef[] = [
         add_if_missing: bool("Add the item to V's inventory first if V doesn't have it (removed again by the undo)."),
         id: str("The exact copy to equip, as an undo names it (digits).", { pattern: "^[0-9]{1,24}$" }),
         remove_added_item: recordName("After the equip, remove the copy of this record the bridge added (a swap's undo gives it)."),
+        holster_first: HOLSTER_FIRST,
       },
       ["item"],
     ),
     undo: "The result's undo puts the earlier item back, or empties the slot and removes an item the bridge added; loading the save undoes it too.",
-    bridge: { method: "cyberware.equip", timeoutMs: () => 12000 },
+    local: (input, context) => runCyberwareChange("cyberware.equip", input, context),
   },
   {
     name: "cyberware.unequip",
     title: "Empty a cyberware slot",
     description:
-      "Takes a cyberware item out of its slot through the game's own unequip request: area (ArmsCW, ...) and slot (one of the area's unlocked slots), or item (its record; its own slot is found). remove_added also removes an item the bridge itself added this session. Normal play only, and not while the arm cyberware is drawn (arms_drawn). The answer reads the slot back and carries the undo (the item equipped again).",
+      "Takes a cyberware item out of its slot through the game's own unequip request: area (ArmsCW, ...) and slot (one of the area's unlocked slots), or item (its record; its own slot is found). remove_added also removes an item the bridge itself added this session. Normal play only; while the arm cyberware is drawn the tools holster it first (holster_first: false refuses arms_drawn instead). The answer reads the slot back and carries the undo (the item equipped again).",
     permission: "write-inventory",
     input: obj({
       area: oneOf("The cyberware area.", [...CYBERWARE_AREAS]),
       item: recordName("The item's record (instead of area)."),
       slot: int("The slot, 0 to 9 (default 0, or the item's slot).", 0, 9),
       remove_added: bool("Also remove the item from V's inventory when the bridge added it (with item)."),
+      holster_first: HOLSTER_FIRST,
     }),
     undo: "The result's undo equips the item again; loading the save undoes it too.",
-    bridge: { method: "cyberware.unequip", timeoutMs: () => 12000 },
+    local: (input, context) => runCyberwareChange("cyberware.unequip", input, context),
   },
   {
     name: "world.state",
@@ -253,7 +256,7 @@ export const COMMANDS_070: CommandDef[] = [
     name: "game.saves",
     title: "List the saves",
     description:
-      "The game's save list with each save's details as the Load menu shows them: its name, type (manual, auto, quick, point of no return), location, tracked quest, level, life path, time, play time, game version and whether it was made with mods, newest first (limit, default 20). The game sends the details a moment after the list; wait_ms (default 3000) waits for them. Loads nothing.",
+      "The game's save list with each save's details as the Load menu shows them: its name, type (manual, auto, quick, point of no return), location, tracked quest, level, life path, time, play time, game version and whether it was made with mods, newest first (limit, default 20), from normal play, the pause menu or the main menu. The details of the newest limit saves are asked for the way the Load menu asks (each save's screenshot request), and the game sends them a moment after the list; wait_ms (default 3000) waits for them. Loads nothing.",
     permission: "read",
     input: obj({ limit: int("How many saves' details, 1 to 200. Default 20.", 1, 200), wait_ms: int("How long to wait for the details, 500 to 10000 ms. Default 3000.", 500, 10000) }),
     bridge: { method: "game.saves", timeoutMs: (input) => ((input.wait_ms as number | undefined) ?? 3000) + 6000 },

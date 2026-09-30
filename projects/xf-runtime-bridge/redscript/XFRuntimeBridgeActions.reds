@@ -117,6 +117,18 @@ public class XFBridgeRegistry extends ScriptableSystem {
   // game.saves (RB-118): its own list, apart from game.load's (a load in between no longer mixes the two).
   private let m_listedSaves: array<String>;
   private let m_listedReady: Bool;
+  // 0.8 (session 8's H1: no details outside the Load menu): the game sends a save's details when something asks for that
+  // save's screenshot, as the Load menu does for each row it builds (loadGameMenu.script CreateLoadItem:
+  // RequestSavedGameScreenshot, then OnSaveMetadataReady). The images are only targets for those requests, kept until the
+  // answer's last step cancels them. m_detailsLimit: how many of the newest saves game.saves asked about.
+  private let m_detailImages: array<ref<inkImage>>;
+  private let m_detailsRequested: array<Int32>;
+  private let m_detailsLimit: Int32;
+  // 0.8 (loading from the main menu): which saves' details arrived (their list index), and which of them were made with
+  // mods, since the menu loads those through its own modded-save path.
+  private let m_detailsKnown: array<Int32>;
+  private let m_detailsModded: array<Int32>;
+  private let m_mainMenu: wref<SingleplayerMenuGameController>;
   // cyberware (RB-102): the slots before the bridge's first cyberware change this session.
   private let m_cyberwareSnapshot: ref<XFCyberwareSnapshot>;
   // wardrobe.equip (0.5.2): the wardrobe before the bridge's first change this session (the kill switch puts it back),
@@ -130,6 +142,8 @@ public class XFBridgeRegistry extends ScriptableSystem {
   private let m_playerEffects: array<TweakDBID>;
   // A glide's watch on the player's own input while it holds V's movement (RB-81).
   private let m_glideInput: ref<XFGlideInput>;
+  // 0.8 (session 8's D4): the raw mouse and stick watch beside it (Codeware's Input/Axis; null without Codeware).
+  private let m_rawInput: ref<IScriptable>;
 
   // Null until a game session has scriptable systems. Guarded step by step: the cursor wrap below
   // runs in every menu, including the main menu, and a method called on a missing container would
@@ -543,12 +557,15 @@ public class XFBridgeRegistry extends ScriptableSystem {
       player.RegisterInputListener(watch, name);
     }
     this.m_glideInput = watch;
+    this.m_rawInput = XFRawAxisWatch.Start(watch);
   }
 
   public func StopGlideInputWatch(player: ref<PlayerPuppet>) -> Void {
     if IsDefined(this.m_glideInput) && IsDefined(player) {
       player.UnregisterInputListener(this.m_glideInput);
     }
+    XFRawAxisWatch.Stop(this.m_rawInput);
+    this.m_rawInput = null;
     this.m_glideInput = null;
   }
 
@@ -641,7 +658,7 @@ public class XFBridgeRegistry extends ScriptableSystem {
     this.m_savesReady = false;
   }
 
-  // game.saves' own answer to RequestSavesForLoad (RB-118).
+  // game.saves' own answer to RequestSavesForLoad (RB-118). 0.8: then asks for the details of the newest saves it wants.
   protected cb func OnXFBridgeSavesListed(saves: array<String>) -> Bool {
     let handler = new inkMenuScenario().GetSystemRequestsHandler();
     if IsDefined(handler) {
@@ -649,7 +666,69 @@ public class XFBridgeRegistry extends ScriptableSystem {
     }
     this.m_listedSaves = saves;
     this.m_listedReady = true;
+    if this.m_collectMetadata && IsDefined(handler) {
+      let count = Min(this.m_detailsLimit, ArraySize(saves));
+      let i = 0;
+      while i < count {
+        this.RequestDetail(handler, i);
+        i += 1;
+      }
+    }
     return true;
+  }
+
+  // 0.8: asks the game for one listed save's details (its screenshot request, as the Load menu makes), once.
+  public func RequestDetail(handler: ref<inkISystemRequestsHandler>, index: Int32) -> Void {
+    if !IsDefined(handler) || index < 0 || ArrayContains(this.m_detailsRequested, index) || ArraySize(this.m_detailImages) >= 200 {
+      return;
+    }
+    let image = new inkImage();
+    ArrayPush(this.m_detailImages, image);
+    ArrayPush(this.m_detailsRequested, index);
+    handler.RequestSavedGameScreenshot(index, image);
+  }
+
+  // 0.8: the details' callback registered once (a second registration would answer twice).
+  public func WatchDetails(handler: ref<inkISystemRequestsHandler>) -> Void {
+    if IsDefined(handler) {
+      handler.UnregisterFromCallback(n"OnSaveMetadataReady", this, n"OnXFBridgeSaveMetadata");
+      handler.RegisterToCallback(n"OnSaveMetadataReady", this, n"OnXFBridgeSaveMetadata");
+    }
+  }
+
+  // 0.8: the requests' images let go of (and the game's pending screenshot requests cancelled), the details forgotten.
+  public func DropDetails(handler: ref<inkISystemRequestsHandler>) -> Void {
+    if IsDefined(handler) && ArraySize(this.m_detailImages) > 0 {
+      handler.CancelSavedGameScreenshotRequests();
+    }
+    ArrayClear(this.m_detailImages);
+    ArrayClear(this.m_detailsRequested);
+  }
+
+  public func ClearDetailsKnown() -> Void {
+    ArrayClear(this.m_detailsKnown);
+    ArrayClear(this.m_detailsModded);
+  }
+
+  // 0.8: -1 when a listed save's details haven't arrived, 1 when it was made with mods, else 0.
+  public func DetailsModded(index: Int32) -> Int32 {
+    if !ArrayContains(this.m_detailsKnown, index) {
+      return -1;
+    }
+    return ArrayContains(this.m_detailsModded, index) ? 1 : 0;
+  }
+
+  public func SetDetailsLimit(limit: Int32) -> Void {
+    this.m_detailsLimit = limit;
+  }
+
+  // 0.8: the main menu's controller while it is on screen (for game.load from the main menu).
+  public func SetMainMenu(menu: wref<SingleplayerMenuGameController>) -> Void {
+    this.m_mainMenu = menu;
+  }
+
+  public func MainMenu() -> wref<SingleplayerMenuGameController> {
+    return this.m_mainMenu;
   }
 
   public func ClearListed() -> Void {
@@ -667,6 +746,12 @@ public class XFBridgeRegistry extends ScriptableSystem {
 
   // game.saves (0.7): the load menu's own metadata callback (loadGameMenu.script:110, 412). Record data only.
   protected cb func OnXFBridgeSaveMetadata(info: ref<SaveMetadataInfo>) -> Bool {
+    if IsDefined(info) && !ArrayContains(this.m_detailsKnown, info.saveIndex) && ArraySize(this.m_detailsKnown) < 400 {
+      ArrayPush(this.m_detailsKnown, info.saveIndex);
+      if info.isModded {
+        ArrayPush(this.m_detailsModded, info.saveIndex);
+      }
+    }
     if !this.m_collectMetadata || !IsDefined(info) || ArraySize(this.m_saveMetadata) >= 200 {
       return true;
     }
@@ -3235,5 +3320,42 @@ public abstract class XFSettings {
     }
     XFBridgeLog.Debug(cid, "settings read: " + groups);
     return out + "}}";
+  }
+}
+
+// 0.8 (loading from the main menu, so the maintainer only has to launch the game): the main menu's controller is kept while
+// it is on screen, and game.load goes through its own paths: Continue (the menu's QuickLoad: the latest save, through the
+// modded-save path when that save was made with mods) and the Load menu's (LoadSaveInGame, or LoadModdedSave for a save made
+// with mods) [source] 2.31 singleplayerMenu.script HandleMenuItemActivate (PauseMenuAction.QuickLoad), OnSaveMetadataReady;
+// loadGameMenu.script LoadGame.
+@wrapMethod(SingleplayerMenuGameController)
+protected cb func OnInitialize() -> Bool {
+  let result = wrappedMethod();
+  let registry = XFBridgeRegistry.Get();
+  if IsDefined(registry) {
+    registry.SetMainMenu(this);
+  }
+  return result;
+}
+
+@addMethod(SingleplayerMenuGameController)
+public func XFBridgeContinue() -> String {
+  if this.m_savesCount <= 0 {
+    return "none";
+  }
+  if this.m_isModded {
+    this.LoadModdedSave(0);
+    return "modded";
+  }
+  this.GetSystemRequestsHandler().LoadLastCheckpoint(false);
+  return "latest";
+}
+
+@addMethod(SingleplayerMenuGameController)
+public func XFBridgeLoad(index: Int32, modded: Bool) -> Void {
+  if modded {
+    this.LoadModdedSave(index);
+  } else {
+    this.LoadSaveInGame(index);
   }
 }

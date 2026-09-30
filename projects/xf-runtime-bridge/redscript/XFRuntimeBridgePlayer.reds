@@ -173,9 +173,17 @@ public abstract class XFPlayer {
     out += ",\"psm_detail\":{\"fall\":" + IntToString(XFPlayer.Psm(player, defs.Fall)) + ",\"landing\":" + IntToString(XFPlayer.Psm(player, defs.Landing)) + ",\"swimming\":" + IntToString(XFPlayer.Psm(player, defs.Swimming)) + ",\"workspot\":" + IntToString(XFPlayer.Psm(player, defs.IsInWorkspot)) + ",\"takedown\":" + IntToString(XFPlayer.Psm(player, defs.Takedown)) + ",\"body_carrying\":" + IntToString(XFPlayer.Psm(player, defs.BodyCarrying));
     // 0.7 (session 7: a teleport mid-jump was refused while a later player_state read all zeros): the locomotion state
     // (Jump, DodgeAir, SlideFall ...) and whether V stands on the ground now, sampled with the busy state above.
+    // 0.8 (session 8's D3: on_ground stayed true mid-jump): the navigation system's check only asks whether walkable
+    // ground lies within 0.35 m, which it does during a jump; on_ground is now the player state machine's own IsOnGround
+    // flag (blackboardDefinitions.script PlayerStateMachine.IsOnGround, the flag isPlayerOnGroundPrereq.script listens to),
+    // and false in an airborne locomotion state (Jump, DodgeAir, SlideFall) or a fall. near_navmesh keeps the old reading.
     let locomotion = XFPlayer.Psm(player, defs.Locomotion);
-    let grounded = GameInstance.GetNavigationSystem(game).IsOnGround(player, 0.35);
-    out += ",\"locomotion\":" + IntToString(locomotion) + ",\"locomotion_name\":" + XFJson.Str(EnumValueToString("gamePSMLocomotionStates", Cast<Int64>(locomotion))) + ",\"on_ground\":" + XFJson.Flag(grounded) + "}";
+    let board = player.GetPlayerStateMachineBlackboard();
+    let psmGround = IsDefined(board) ? board.GetBool(defs.IsOnGround) : true;
+    let airborne = locomotion == 4 || locomotion == 7 || locomotion == 10 || XFPlayer.Psm(player, defs.Fall) > 0;
+    let nearNavmesh = GameInstance.GetNavigationSystem(game).IsOnGround(player, 0.35);
+    out += ",\"locomotion\":" + IntToString(locomotion) + ",\"locomotion_name\":" + XFJson.Str(EnumValueToString("gamePSMLocomotionStates", Cast<Int64>(locomotion))) + ",\"on_ground\":" + XFJson.Flag(psmGround && !airborne);
+    out += ",\"psm_on_ground\":" + XFJson.Flag(psmGround) + ",\"near_navmesh\":" + XFJson.Flag(nearNavmesh) + "}";
     out += ",\"look_at\":" + XFScene.LookedAt(player) + ",\"hud_prompt\":" + XFScene.Prompt(game);
     let registry = XFBridgeRegistry.Get();
     if IsDefined(registry) {
@@ -519,6 +527,13 @@ public abstract class XFPlayer {
 public class XFGlideInput extends IScriptable {
   public let touched: String;
 
+  // 0.8: the raw watch reports here (the first input seen wins, as for the actions).
+  public func Touch(name: String) -> Void {
+    if StrLen(this.touched) == 0 {
+      this.touched = name;
+    }
+  }
+
   public static func Actions() -> array<CName> {
     let names: array<CName>;
     ArrayPush(names, n"MoveX");
@@ -557,4 +572,58 @@ public class XFGlideInput extends IScriptable {
     }
     return false;
   }
+}
+
+// 0.8 (session 8's D4: the maintainer's mouse didn't end a look; the game's look-at keeps the camera actions from the
+// player's listeners while it turns the camera): the raw devices themselves, through Codeware's Input/Axis callback (the
+// engine's raw input buffer, before any action mapping; Codeware src/App/Callback/Controllers/RawInputHook.hpp). Registered
+// only while a watch is on. A deliberate mouse move (15 counts in total, or 6 in one report) or a stick past its dead zone
+// ends the look or glide, named "raw:<key>". Without Codeware nothing is registered and the action listener and the
+// behaviour's own camera-drift check remain.
+@if(ModuleExists("Codeware"))
+public class XFRawAxisWatch extends IScriptable {
+  public let watch: wref<XFGlideInput>;
+  public let mouse: Float;
+
+  public static func Start(watch: ref<XFGlideInput>) -> ref<IScriptable> {
+    let raw = new XFRawAxisWatch();
+    raw.watch = watch;
+    GameInstance.GetCallbackSystem().RegisterCallback(n"Input/Axis", raw, n"OnXFAxis");
+    return raw;
+  }
+
+  public static func Stop(raw: ref<IScriptable>) -> Void {
+    let me = raw as XFRawAxisWatch;
+    if IsDefined(me) {
+      GameInstance.GetCallbackSystem().UnregisterCallback(n"Input/Axis", me, n"OnXFAxis");
+    }
+  }
+
+  private cb func OnXFAxis(event: ref<AxisInputEvent>) {
+    if !IsDefined(this.watch) {
+      return;
+    }
+    let key = event.GetKey();
+    let value = AbsF(event.GetValue());
+    let name = EnumValueToString("EInputKey", Cast<Int64>(EnumInt(key)));
+    if Equals(key, EInputKey.IK_MouseX) || Equals(key, EInputKey.IK_MouseY) {
+      this.mouse += value;
+      if value >= 6.0 || this.mouse >= 15.0 {
+        this.watch.Touch("raw:" + name);
+      }
+    } else {
+      if (Equals(key, EInputKey.IK_Pad_RightAxisX) || Equals(key, EInputKey.IK_Pad_RightAxisY) || Equals(key, EInputKey.IK_Pad_LeftAxisX) || Equals(key, EInputKey.IK_Pad_LeftAxisY)) && value >= 0.3 {
+        this.watch.Touch("raw:" + name);
+      }
+    }
+  }
+}
+
+@if(!ModuleExists("Codeware"))
+public class XFRawAxisWatch extends IScriptable {
+  public static func Start(watch: ref<XFGlideInput>) -> ref<IScriptable> {
+    return null;
+  }
+
+  public static func Stop(raw: ref<IScriptable>) -> Void {}
 }

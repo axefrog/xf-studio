@@ -90,13 +90,14 @@ std::string Num(double aValue)
 
 const std::vector<std::string>& Anchors()
 {
-    static const std::vector<std::string> anchors{"top_left", "top_right", "bottom_left", "bottom_right", "top_center", "center_left", "center_right"};
+    // 0.8: center and bottom_center too (session 8: "center" was refused, so the panel stayed where it was).
+    static const std::vector<std::string> anchors{"top_left", "top_center", "top_right", "center_left", "center", "center_right", "bottom_left", "bottom_center", "bottom_right"};
     return anchors;
 }
 
 const std::vector<std::string>& Variants()
 {
-    static const std::vector<std::string> variants{"custom", "apartment", "clothes", "default"};
+    static const std::vector<std::string> variants{"custom", "apartment", "clothes", "default", "interaction"};
     return variants;
 }
 
@@ -198,28 +199,222 @@ HudSettings ApplyHudParams(const HudSettings& aCurrent, const HudSettings& aDefa
 
 Status Summarize(const BridgeView& aView)
 {
+    // 0.8 (the UI review): one wording for the ink panel, the overlay panel, the CET label and the CET window, no jargon
+    // ("listening", "writes ON", "client", "an XF tool"). Session 8's maintainer asked what "Waiting for XF Studio · changes
+    // allowed" meant: not connected now says so.
+    Status out;
+    const auto whole = [&out](const std::string& aTone, const std::string& aText) {
+        out.tone = aTone;
+        out.text = aText;
+        out.connection = aText;
+        out.connectionTone = aTone;
+    };
     if (!aView.pluginEnabled)
     {
-        return {"off", "Off: the bridge is switched off in its settings"};
+        whole("off", "Switched off in the bridge's settings.");
     }
-    if (aView.killed)
+    else if (aView.killed)
     {
-        return {"killed", "Stopped by the kill switch. Reconnect in the XF panel or restart the game."};
+        whole("killed", "Stopped. Reconnect in the XF Runtime Bridge window (CET overlay), or restart the game.");
+        out.connection = "Stopped.";
     }
-    if (!aView.listening)
+    else if (!aView.listening)
     {
-        return {"idle", "Not listening yet"};
+        whole("idle", "Not ready yet. Restart the game if this stays.");
     }
-    const std::string client = aView.hasClient ? "XF Studio connected" : "Waiting for XF Studio";
-    if (!aView.allowWrites)
+    else
     {
-        return {"ok", client + " · read-only"};
+        out.connection = aView.hasClient ? "XF Studio connected" : "XF Studio not connected";
+        out.connectionTone = aView.hasClient ? "ok" : "idle";
+        if (!aView.allowWrites)
+        {
+            out.changes = "read-only";
+            out.changesTone = "ok";
+        }
+        else if (aView.writesPaused)
+        {
+            out.changes = "changes paused";
+            out.changesTone = "paused";
+        }
+        else
+        {
+            out.changes = "changes allowed";
+            out.changesTone = "write";
+        }
+        out.tone = out.changesTone;
+        out.text = out.connection + " \xC2\xB7 " + out.changes;
     }
-    if (aView.writesPaused)
+    out.label = "XF Runtime Bridge \xC2\xB7 " + out.text;
+    return out;
+}
+
+json StatusJson(const BridgeView& aView)
+{
+    const auto status = Summarize(aView);
+    return json{{"tone", status.tone},
+                {"text", status.text},
+                {"label", status.label},
+                {"connection", status.connection},
+                {"connection_tone", status.connectionTone},
+                {"changes", status.changes},
+                {"changes_tone", status.changesTone}};
+}
+
+namespace
+{
+// The next code point of UTF-8 text at aPos (its byte length), or 0 bytes for an invalid sequence.
+size_t NextCodePoint(const std::string& aText, size_t aPos, uint32_t& aCp)
+{
+    const auto lead = static_cast<unsigned char>(aText[aPos]);
+    const size_t length = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : (lead & 0xF8) == 0xF0 ? 4 : 0;
+    if (length == 0 || aPos + length > aText.size())
     {
-        return {"paused", client + " · changes paused"};
+        return 0;
     }
-    return {"write", client + " · changes allowed"};
+    uint32_t cp = length == 1 ? lead : length == 2 ? (lead & 0x1Fu) : length == 3 ? (lead & 0x0Fu) : (lead & 0x07u);
+    for (size_t k = 1; k < length; ++k)
+    {
+        const auto next = static_cast<unsigned char>(aText[aPos + k]);
+        if ((next & 0xC0) != 0x80)
+        {
+            return 0;
+        }
+        cp = (cp << 6) | (next & 0x3Fu);
+    }
+    if ((length == 2 && cp < 0x80) || (length == 3 && cp < 0x800) || (length == 4 && cp < 0x10000) || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF))
+    {
+        return 0;
+    }
+    aCp = cp;
+    return length;
+}
+
+// Walks the text and hands each code point to aPut (control characters as a space, invalid bytes as 0xFFFFFFFF).
+template<typename Put>
+std::string Remap(const std::string& aText, Put aPut)
+{
+    std::string out;
+    out.reserve(aText.size());
+    size_t i = 0;
+    while (i < aText.size())
+    {
+        uint32_t cp = 0;
+        const size_t length = NextCodePoint(aText, i, cp);
+        if (length == 0)
+        {
+            out += kReplacementMark;
+            i += 1;
+            continue;
+        }
+        const std::string raw = aText.substr(i, length);
+        i += length;
+        if (cp < 0x20 || cp == 0x7F || (cp >= 0x80 && cp < 0xA0))
+        {
+            out.push_back(' ');
+            continue;
+        }
+        aPut(out, cp, raw);
+    }
+    return out;
+}
+
+bool InkHas(uint32_t aCp)
+{
+    return (aCp >= 0x20 && aCp <= 0x7E) || (aCp >= 0xA0 && aCp <= 0x17F) || (aCp >= 0x2010 && aCp <= 0x2027) || (aCp >= 0x2030 && aCp <= 0x203A) ||
+           aCp == 0x20AC || aCp == 0x2122;
+}
+
+// Latin Extended-A (U+0100 to U+017F) in Basic Latin or Latin-1 letters, one entry per code point.
+const char* const kLatinExtendedA[128] = {
+    "A", "a", "A", "a", "A", "a", "C", "c", "C", "c", "C", "c", "C", "c", "D", "d", //
+    "D", "d", "E", "e", "E", "e", "E", "e", "E", "e", "E", "e", "G", "g", "G", "g", //
+    "G", "g", "G", "g", "H", "h", "H", "h", "I", "i", "I", "i", "I", "i", "I", "i", //
+    "I", "i", "IJ", "ij", "J", "j", "K", "k", "k", "L", "l", "L", "l", "L", "l", "L", //
+    "l", "L", "l", "N", "n", "N", "n", "N", "n", "n", "N", "n", "O", "o", "O", "o", //
+    "\xC3\x96", "\xC3\xB6", "OE", "oe", "R", "r", "R", "r", "R", "r", "S", "s", "S", "s", "S", "s", //
+    "S", "s", "T", "t", "T", "t", "T", "t", "U", "u", "U", "u", "U", "u", "U", "u", //
+    "\xC3\x9C", "\xC3\xBC", "U", "u", "W", "w", "Y", "y", "Y", "Z", "z", "Z", "z", "Z", "z", "s", //
+};
+
+const char* CetPunctuation(uint32_t aCp)
+{
+    switch (aCp)
+    {
+    case 0x2010:
+    case 0x2011:
+    case 0x2012:
+    case 0x2013:
+    case 0x2014:
+    case 0x2015:
+        return "-";
+    case 0x2018:
+    case 0x2019:
+    case 0x201A:
+    case 0x201B:
+    case 0x2032:
+        return "'";
+    case 0x201C:
+    case 0x201D:
+    case 0x201E:
+    case 0x201F:
+    case 0x2033:
+        return "\"";
+    case 0x2022:
+        return "\xC2\xB7";
+    case 0x2026:
+        return "...";
+    case 0x2039:
+        return "<";
+    case 0x203A:
+        return ">";
+    case 0x20AC:
+        return "EUR";
+    case 0x2122:
+        return "TM";
+    case 0x0218:
+        return "S";
+    case 0x0219:
+        return "s";
+    case 0x021A:
+        return "T";
+    case 0x021B:
+        return "t";
+    default:
+        return nullptr;
+    }
+}
+} // namespace
+
+std::string ForInk(const std::string& aText)
+{
+    return Remap(aText, [](std::string& aOut, uint32_t aCp, const std::string& aRaw) { aOut += InkHas(aCp) ? aRaw : std::string(kReplacementMark); });
+}
+
+std::string ForCet(const std::string& aText)
+{
+    return Remap(aText, [](std::string& aOut, uint32_t aCp, const std::string& aRaw) {
+        if (aCp <= 0xFF)
+        {
+            aOut += aRaw;
+        }
+        else if (aCp >= 0x100 && aCp <= 0x17F)
+        {
+            aOut += kLatinExtendedA[aCp - 0x100];
+        }
+        else if (const char* ascii = CetPunctuation(aCp))
+        {
+            aOut += ascii;
+        }
+        else
+        {
+            aOut += kReplacementMark;
+        }
+    });
+}
+
+std::string KeyLabel(const std::string& aKey)
+{
+    return aKey.rfind("IK_", 0) == 0 ? aKey.substr(3) : aKey;
 }
 
 std::string CleanField(const std::string& aText)
@@ -249,24 +444,67 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
     out += std::string("cet_label\t") + (aSettings.cetLabel ? "1" : "0") + "\n";
     out += std::string("live\t") + (aView.scriptReady ? "1" : "0") + "\n";
     out += "tone\t" + status.tone + "\n";
-    out += "status\t" + CleanField(status.text) + "\n";
+    out += "status\t" + CleanField(ForInk(status.text)) + "\n";
     if (!aView.killed)
     {
         for (const auto& message : aMessages)
         {
-            out += "msg\t" + CleanField(message.level) + "\t" + CleanField(message.text) + "\n";
+            out += "msg\t" + CleanField(message.level) + "\t" + CleanField(ForInk(message.text)) + "\n";
         }
         if (aAsk && aAsk->id != 0 && !aAsk->keyed.empty())
         {
             out += "ask\t" + std::to_string(aAsk->id);
             for (const auto& [key, label] : aAsk->keyed)
             {
-                out += "\t" + CleanField(key) + "\t" + CleanField(label);
+                out += "\t" + CleanField(key) + "\t" + CleanField(ForInk(label));
             }
             out += "\n";
         }
+        else if (aAsk && aAsk->answeredId != 0)
+        {
+            out += "answered\t" + std::to_string(aAsk->answeredId) + "\t" + CleanField(ForInk(aAsk->answeredLabel)) + "\n";
+        }
+        if (aAsk && aAsk->inkShown != 0)
+        {
+            out += "inkask\t" + std::to_string(aAsk->inkShown) + "\n";
+        }
     }
     return out;
+}
+
+std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, MessageBoard& aBoard, const std::vector<std::string>& aAnswerKeys,
+                       uint64_t aInkShownAsk)
+{
+    std::vector<MessageLine> lines;
+    AskView ask;
+    if (!aView.killed)
+    {
+        for (auto& [level, text] : aBoard.Lines())
+        {
+            lines.push_back({level, text});
+        }
+        PendingAsk pending;
+        if (aBoard.Pending(pending))
+        {
+            ask.id = pending.id;
+            for (size_t i = 0; i < pending.choices.size() && i < aAnswerKeys.size(); ++i)
+            {
+                ask.keyed.emplace_back(aAnswerKeys[i], pending.choices[i]);
+            }
+            ask.inkShown = aInkShownAsk == pending.id ? aInkShownAsk : 0;
+        }
+        else
+        {
+            AnsweredAsk answered;
+            if (aBoard.Answered(answered))
+            {
+                ask.answeredId = answered.id;
+                ask.answeredLabel = answered.label;
+                ask.inkShown = aInkShownAsk == answered.id ? aInkShownAsk : 0;
+            }
+        }
+    }
+    return Frame(aSettings, aView, lines, &ask);
 }
 
 json ParseFrame(const std::string& aFrame)
@@ -292,6 +530,14 @@ json ParseFrame(const std::string& aFrame)
         if (key == "msg" && fields.size() >= 3)
         {
             messages.push_back({{"level", fields[1]}, {"text", fields[2]}});
+        }
+        else if (key == "answered" && fields.size() >= 3)
+        {
+            out["answered"] = {{"id", std::stoull(fields[1])}, {"label", fields[2]}};
+        }
+        else if (key == "inkask" && fields.size() >= 2)
+        {
+            out["ink_shows"] = std::stoull(fields[1]);
         }
         else if (key == "ask" && fields.size() >= 4)
         {
@@ -399,7 +645,7 @@ PinRequest ParsePin(const json& aParams)
         }
         request.target = PinRequest::Target::Piece;
         request.piece = static_cast<int32_t>(piece.get<int64_t>());
-        request.lift = 0.45;
+        request.lift = kPieceLift; // 0.8: just above the crown (session 8 G5 asked for "just above its eyes")
     }
     else
     {

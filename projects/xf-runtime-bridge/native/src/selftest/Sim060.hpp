@@ -54,6 +54,8 @@ public:
     // What the bridge holds on V (game.save's refusal, RB-83): its status effects and "behaviours running".
     json Holds();
     EventLog& Events();
+    // 0.8: whether V has a weapon out (player.action weapon.* in the simulation), for 0.7's arms_drawn.
+    bool WeaponDrawn();
 
 private:
     struct State;
