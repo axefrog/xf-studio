@@ -1,44 +1,27 @@
-# Handoff: Build speed first pass (PIPE-130, PIPE-131, PIPE-133)
+# Handoff: Electrobun 2.0.1 → 2.0.2
 
-Branch `claude/build-speed` from main `a78931c`. Not merged. Worktree `D:/Dev/worktrees/build-speed`.
-
-## Results (two-preset collection, both bodies' plates, development PC, WolvenKit 9.0.1, through the host service)
-
-| | Before (main) | After |
-|---|---|---|
-| Warm Build | 58.8–59.7 s (3 runs) | 27.8–28.9 s (7 runs) |
-| First Build (plates cut) | 115.4 s | 70.7 s |
-| WolvenKit launches, warm | 14, one at a time | 8, at most two at a time |
-| Peak memory of the tree | 2.2 GB | 2.9–3.0 GB |
-
-Warm stages after: prepare 0.2 s, compose 1.7 s, convert 9.2–9.8 s, pack 2.4 s, verify 14.4 s. Before: plate serialize ×2 9.2 s, bake 1.4 s, imports ×3 10.7 s, deserialize ×3 12 s, pack 2.3 s, verify (unbundle, serialize ×3, export) 21.6 s. Each launch costs about 2.3 s before doing any work and about 1.2 GB.
-
-Measured with scratch harnesses (host service + traced builder), not the installed app the audit used; the audit's 64–80 s was on an installed-layout app.
+Branch `claude/electrobun-202` from main `2d6752b`. Not merged. Worktree `D:/Dev/worktrees/electrobun-202`.
 
 ## What changed
 
-- **Cached:** the eye plate cache keeps WolvenKit's JSON of each plate (`json-<id>/` in the entry, `readKeptJson`/`publishKeptJson` in `src/derived-cache.ts`), bound to the resource SHA-256 and the WolvenKit identity; new plates keep their verifying readback, older entries get it once. The builder reads it (hash-checked) instead of two serializes and falls back on any mismatch. The plate entry itself was already keyed by archive stamps. The independent verifier never reads it.
-- **Batched:** one `convert deserialize` over the model/app/customization folders (flat output, then moved); one verifier `convert serialize` over members + plate inputs (copies renamed `plate-input.*`); the plate cut reads and reads back mesh+morph per launch. Imports stay one per group (import settings are process-wide env values) but run beside the deserialize via `concurrencyGate(2)`.
-- **Progress (PIPE-131):** builder prints `XFS_PACKAGE_PROGRESS=`; `PackageHostService.buildProgress()`; `GET /api/package/progress` on both hosts; collection service polls every 400 ms via the host clock source; panel shows "Step 3 of 5: Converting 2 looks…" and fills the existing `progressBar` (no new controls, no library edits).
-- **PIPE-133:** each plate preparation settled the route's `.xl` additions on the event loop (55–90 ms ×2 per Build); now kept per opened installation, with an early-exit `DepotIndex.has`.
-- Knowledge: WolvenKit packs bodies at Kraken Normal and imports/deserializes buffers at Optimal2 (34/34 segments reproduced byte for byte); per-level costs in `knowledge/archive-format.md` §2.
+- **Versions.** `electrobun` 2.0.2 in `desktop/package.json` (every `bunx electrobun@…` script) and `hutch.config.ts`. The paired Hutch 0.27.1 is selected the way local builds already did: `ELECTROBUN_HUTCH_BINARY` pointing at a copy from the official v2.0.2 release, now in `D:/Dev/tools/hutch/0.27.1/` (archive SHA-256 matches the release's `hutch-artifacts.json`; row added to `D:/Dev/tools/README.md`). CI needs nothing: the shim downloads the paired Hutch itself. The devkit lock now records Electrobun core 2.0.2, Cottontail 0.7.1 and the Bun 1.4.0 toolchain.
+- **Capabilities.** The app runs a **Bun** main process (`build.mainProcess: "bun"`): the package ships Bun 1.4.0's `bun.exe` (byte-identical under 2.0.1 and 2.0.2) and no Cottontail, so `build.cottontail.capabilities` doesn't change the build. Upstream's docs confirm it applies only to Cottontail main processes, and Hutch logs no scan for a Bun main process. The list is declared anyway and kept complete: `compression`, `ffi`, `hashing`, `sqlite`, `yaml`. `desktop/runtime-capabilities.ts` walks the main process, both Bun workers and the Build tool (390 files) for module imports, module-name literals (`import.meta.require("bun:ffi")` in `oodle.ts`) and global APIs (`Bun.YAML`, `Bun.CryptoHasher`), all of which Hutch's scan would miss. `tests/runtime-capabilities.test.ts` fails if the declaration and the walk differ; a fixture proves it catches the hidden kinds, and it checks the names against the installed Cottontail 0.7.1 manifest. Workers, child processes, sockets, HTTP and fs are core runtime, not capabilities.
+- **Desktop typecheck fixed (it had failed on main in CI since `fdac5e5`).** The desktop `tsconfig.json`'s own `paths` (Strata) replaced the devkit's `electrobun` map and inherited the devkit's `baseUrl`, so neither `electrobun` nor `strata` resolved. It now sets `baseUrl: "."` and repeats the SDK entries it imports.
+- **Trial windows never take focus.** Electrobun (2.0.1 and 2.0.2) shows a new window activated and, when refused the foreground, forces it with `AttachThreadInput`; that is what took focus from the maintainer's game today, even though the trials were started through WMI. `mainWindowPlacement` (`startup-watchdog.ts`) gives an off-screen UI-trial window `activate: false`; the real app is unchanged. Tested in `tests/startup.test.ts`. Builds made before this commit still steal focus.
+- **`desktop/tools/measure-installed-start.ts`:** measures start-up of an unpacked or installed UI-trial build. It launches through WMI inside the guard under `pythonw.exe` (no console window anywhere), attaches only to a UI-trial page, and times launcher → first paint and launcher → whole V drawn, plus the SQLite library through the host API. It lists the run's process tree, closes with a posted WM_CLOSE and waits for everything it started to end. Settings are seeded fresh (game folder and WolvenKit only).
+- **Docs:** `docs/toolchain.md`, the desktop README (build notes, the Bun-vs-Cottontail note, the trial-driving steps corrected: no `.cmd` through WMI, no claim that WMI prevents focus theft), desktop packaging/release/update-gate research, DESK-09 (still `--disable-web-security` at `v2.0.2`), `THIRD_PARTY_NOTICES.md` and its tests, and the performance backlog. Electrobun's Updater and setup extractor are unchanged between the tags, so those findings stand. The WebView2 profile-folder hashing doesn't touch our window (no partition), so existing users' WebView2 data stays where it is.
 
-## Equivalence
+## Results
 
-Resources are byte-identical to main's: all 15 files, every stored segment and raw size, across 4 branch Builds (including a fresh plate cut) against a main Build; the `.archive.xl` is identical. The archive files themselves differ run to run on main too (index timestamps). Every Build passed the independent verifier and the host result gate. Check/Build agreement unchanged (full suite).
+- **Canary:** `build:installer` (→ `build:canary`, `single-installer.ts`, `verify-canary.ts`) passes: build `qhuqwqrepxnp`, a 44,349,328-byte setup, wrapper 5,255,742 bytes (budget 5,300,000), 20 packaged text files scanned clean, 63 s, peak 1.4 GB. The only break on the way was the notices gate asking for 2.0.2, which was fixed.
+- **Smoke (unpacked installed layout, UI-trial identity, scratch `LOCALAPPDATA`):** starts, serves the page, library available (200 looks saved, listed and read back through SQLite), workers run (host native-decode workers prepared the V; the page reported `Worker=true`), 3D preview prepared (14.2 s) and the V drawn, WM_CLOSE closes cleanly. Cold peak 3.5–3.7 GB of the 4 GB budget (WolvenKit included).
+- **Start-up A/B (same commit, only Electrobun differs), from launcher creation:** warm first paint median 2.02 s (2.0.1, 9 runs) against 2.04 s (2.0.2, 7 runs); whole V 6.5 s against 6.6 s; cold V about 50 s on both. Library: 200 saves 8–21 s on both (40–100 ms each, fsync-bound, `synchronous=FULL` under WAL), 20 listings 25–46 ms, 200 reads 234–347 ms. No difference beyond spread, as expected with an identical `bun.exe`. Details are in `research/backlog/performance.md`.
+- **Tests:** desktop 101 pass / 7 skip / 0 fail; full authoring suite 3004 pass / 32 skip / 0 fail (peak 3.0 GB); both typechecks clean; `check_links` and `check_private_paths` clean.
 
-## Tests
+## Not done / needs a decision
 
-`tests/build-speed.test.ts` (kept-JSON invalidation, gate, batching call lists, stage lines, stdout lines, host snapshot), plus additions in `tests/eye-plate.test.ts`, `tests/collection-service.test.ts`; call-order expectations updated for batching. Full authoring suite under the guard: 3006 pass, 27 skip, 0 fail (6 GB limit, peak 3.1 GB); `tsc` clean; links and private paths clean.
-
-## UI gate evidence (ignored, `local-evidence/build-progress/`)
-
-`1-convert-*`, `2-verify-*`, `3-done-*` at light/dark × 300/480 px (group and row crops) from an isolated `?verify=1` server on port 4496 running a real Build (`tools/build-progress-look.ts`); `run.json` records every line shown and the progress box: 23 px high and the result area at the same top in every state, no text overflow at either width.
-
-## Needs a call
-
-1. **UI gate:** PIPE-131 needs the UI lead's PASS. The style guide's "Mod package progress" composition specimen (`src/studio-ui/style-guide/compositions.ts`) still shows the old line; UI track to update.
-2. **Remaining PIPE-133 stall:** one 100–155 ms host stall per warm Build while two WolvenKit processes saturate the CPU. Running the Build's WolvenKit below normal priority removed it with no measurable slowdown on an idle PC, but PIPE-96 says foreground waits run at normal priority, so I left it. Maintainer's call.
-3. **Next speed steps** (still ~28 s, bar is "no multi-second wait"): native resource writing with WolvenKit as verifier (the 8 launches are ~90 % of the time); verifier serialize beside texture export (−4 s, needs an async verifier API); a third concurrent WolvenKit (−3 s for +1.2 GB).
-4. **Fast local-test Build:** not worth offering while WolvenKit writes resources (compression is ≤ 2 s CPU in total, the CLI has no level option).
-5. Mistake to note: an unguarded trial of `WolvenKit uncook -u -s` on our archive with `-gp` uncooked the game (27 GB private, 13 GB written to scratch) before I stopped it; removed. Don't use `uncook` for verification.
+- **Install through the real setup program** (as opposed to the unpacked installed layout) was not run: the coordinator paused all app launches during the maintainer's game session. Resume with a fresh UI-trial build (so the no-activation fix is in it), the setup started through WMI with `/VERYSILENT` from `pythonw.exe`, then `uninstall.exe --quiet --delete-data`. Electrobun's setup puts a Desktop and a Start-menu shortcut in the real known folders (they can't be redirected by `LOCALAPPDATA`), so a trial shortcut appears on the Desktop until the uninstall.
+- **`appdata://`** (opt-in per view, serves the app's writable userData with traversal and symlink escapes rejected) could serve prepared assets such as the V's parts, maps and icons straight from the data folder. That would skip the loopback server for bytes the host already wrote. It is worth a load-time experiment, not adopted: our page is served from the loopback origin and every asset request is authenticated there, so an `appdata://` origin would need its own CSP and cookie story. The first-run cost it wouldn't touch is the host's about 3 s before its server answers on a cold start.
+- **A Cottontail main process** is where 2.0.2's start-up and SQL gains would land (and it would drop the 88 MB `bun.exe`). The capability list is ready for it, but switching is an R&D question (Bun API coverage: `Bun.serve`, workers, `bun:ffi`, `Bun.spawn`).
+- **Library saves at 40–100 ms each:** `synchronous=NORMAL` under WAL would cut that. It's a durability decision (safe against an app crash, not a power cut), so it's banked in the performance backlog, not changed here.
+- **Side effects outside the worktree:** the global Hutch launcher in `%USERPROFILE%\.hutch` downloaded Hutch 0.27.1 into its releases when I probed its version, and the 2.0.1 baseline build used that global Hutch. Both are additive. Measurement scratch (`local/eb-measure/`) is deleted. The clone at `D:/Dev/clones/electrobun` (tags v2.0.1, v2.0.2) is a read-only research clone.
