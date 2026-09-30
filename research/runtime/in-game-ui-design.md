@@ -76,12 +76,12 @@ Test plan (one session, after the template build): spawn one head; expect the pl
 | | Own ImGui host (native) | Ink interact layer (engine UI) |
 |---|---|---|
 | Look | tool-like, not the game's | the game's own |
-| Drawing | hook the engine's present (as CET), before frame generation | the top ink layer, drawn by the engine |
-| Input | window-procedure subclass, Raw Input filtering for the mouse, a hotkey interact mode | make `inkWatermarksLayer` interactive with the game's cursor (as Red Hot Tools does), hotkey from Input Loader or the bridge |
-| Cost | about a week of native work plus a session; crash risk in the render path | about three days (layer toggling in the plugin, widgets in script); lower risk |
+| Drawing | a chained hook on the engine's present (`GpuApi::Present`, where CET draws), on the engine's direct queue; before ReShade and frame generation, which may tint, ghost or drop its pixels | the top ink layer, drawn by the engine |
+| Input | window-procedure subclass swallowing only the mouse's Raw Input in a hotkey interact mode (default F10), the engine's cursor, keyboard left to the game, yielding while CET's overlay is open | make `inkWatermarksLayer` interactive with the game's cursor (as Red Hot Tools does), hotkey from Input Loader or the bridge |
+| Cost | about two weeks in three stages (draw-only, interact mode, HDR renderer and kit), a session after each of the first two; crash risk in the render path, contained by refusal gates | about three days (layer toggling in the plugin, widgets in script); lower risk |
 | Use | development tools (live-pose gizmos, graphs) | player-facing and development panels |
 
-Recommendation: try the ink interact layer first (it also answers the demos' open layer questions); build the ImGui host only if a development tool needs immediate-mode drawing the ink route can't give. Both belong in XF Core ([XF Core architecture](xf-core-architecture.md)), not in feature plugins.
+Recommendation: try the ink interact layer first for anything player-facing (it also answers the demos' open layer questions). The ImGui host is feasible and is the recommended route for dense development tools; its architecture, first prototype and test card are in [ImGui overlay feasibility](imgui-overlay-feasibility.md), and its draw-only first stage is small enough to run beside the ink work. Both belong in XF Core ([XF Core architecture](xf-core-architecture.md)), not in feature plugins.
 
 ## Session-7 proofs
 
