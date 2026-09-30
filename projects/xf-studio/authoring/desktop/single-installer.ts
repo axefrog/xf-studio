@@ -10,7 +10,7 @@ export { INNO_SETUP };
 
 // Wraps Electrobun's setup ZIP into one self-contained setup executable with Inno Setup.
 //
-// Electrobun 2.0.1's setup program reads its payload from a hidden `.installer` folder beside it
+// Electrobun 2.0.2's setup program (unchanged from 2.0.1) reads its payload from a hidden `.installer` folder beside it
 // and fails without it, so the release used to be a ZIP that users had to extract first. The
 // wrapper (installer/xf-studio-setup.iss) carries the same unmodified setup program and payload,
 // unpacks them to a private temporary folder and runs Electrobun's setup (hidden, behind the
