@@ -42,6 +42,14 @@ Design decisions made while writing the catalogue, or left open, each with a rec
 21. **Synchronous runtime queries.** Picking on the head (`operator:hit-target`) asks a runtime synchronously inside the input's cycle. *Recommendation:* sanction a query port on runtimes that returns plain data only, with a budget per query.
 22. **Faults to `person` and `diagnostics`** end at the window's `diagnostics` driver through the `report-failure` request. *Recommendation:* keep until the engine routes faults along the request chain itself.
 
+## Requests, faults and linger (30 September 2026, for the next model review)
+
+23. **New members.** Requests gain `key`, `deadline`, `linger` and `standIn`; processes gain `results` and `suspend`. A process's `deadline` is its time budget (a number of ms where it is known, such as the native decoder's 10 s). *Recommendation:* keep; they carry what the engine's next release needs to be told per request and per piece of work.
+24. **Linger replaces claiming.** The part pool, preloading and superseded loads keep parts for 30 s after their last use instead of holding them for a later claim until another V clears the pool. A hover's demand lingers, so the click finds the parts. *Recommendation:* keep; it removes the claim step and the manual clearing, and bounds memory by time.
+25. **The feminine head as a stand-in.** `prepare-core` declares the feminine core as its stand-in instead of the scene choosing it by hand. *Recommendation:* keep; the stand-in is shared with any scene already showing the feminine core.
+26. **A runtime per V and scene** (`runtime:v-runtime`) with a 2 s linger, so two Vs can be shown at once (G2). *Recommendation:* keep; the linger makes flicking between Vs in one view free for 2 s.
+27. **Keys that name their target.** Two preparation runs on one page share the page's identity as requester, so a request's key must name the V (`prepare-v-on-host` is keyed by page and V). *Recommendation:* keep, and apply the same rule to every keyed request.
+
 ## Model review decisions (29 September 2026)
 
 The coordinator's model review accepted the catalogue with these decisions. Each is a coordinator default that the maintainer may reverse.

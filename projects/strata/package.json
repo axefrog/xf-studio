@@ -13,8 +13,10 @@
     "test": "bun test",
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.tests.json",
     "example": "bun examples/minimal",
-    "bench": "bun tests/bench/load-budget.ts",
-    "sim:long": "bun tests/sim/long-run.ts"
+    "bench": "bun tests/bench/load-budget.ts && bun tests/bench/compaction.ts",
+    "sim:long": "bun tests/sim/long-run.ts",
+    "coverage:ratchet": "bun tools/coverage.ts --ratchet",
+    "mutate:ratchet": "bun tools/mutate.ts --ratchet"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",

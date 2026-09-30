@@ -52,6 +52,7 @@
   "cleanup": "Nothing half-written is kept.",
   "deadline": "none",
   "lane": "host, the person's own before prefetch",
+  "suspend": "Paused while the person's own request runs, and while it waits for WolvenKit to be set up; it carries on where it stopped.",
   "faults": [
     {
       "code": "needs-wolvenkit",

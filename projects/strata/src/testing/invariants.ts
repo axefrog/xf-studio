@@ -1,12 +1,14 @@
 /**
  * The standard invariants, as functions returning problem strings (empty when they hold). Each problem starts with
- * its invariant's ID: `stale`, `conflicts`, `structure`, `snapshot`, `cut`, `undo`, `lost-work`, `preempt`.
+ * its invariant's ID: `stale`, `conflicts`, `structure`, `snapshot`, `cut`, `undo`, `lost-work`, `preempt`, `tables`.
  */
 import { canonical, equal } from "../json";
 import type { TypeSpec } from "../define";
 import { fold } from "../fold";
 import { STRATA_DEBUG } from "../graph";
 import type { Graph } from "../graph";
+import { KNode } from "../kernel/kernel";
+import type { KernelTables } from "../kernel/kernel";
 import type { MemoryStore } from "../store";
 import type { Entry, FieldKind, Layer, NodeRef, NodeState } from "../types";
 import { referenceModel, replayTo } from "./reference";
@@ -192,4 +194,103 @@ export async function checkConsistentCut(graph: Graph, types: readonly TypeSpec[
     if (!equal(actual, expected)) problems.push(`cut: at ${pos}, ${ref.id.slice(0, 8)} reads ${short(actual)}, a replay gives ${short(expected)}`);
   }
   return problems;
+}
+
+/** The cap on the graph's cache of views of the past. */
+const CACHE_CAPS = { timeModels: 16 } as const;
+
+/** The kernel's table sizes, and how many rows belong to nothing live (`finishedScopes`, `…InScopes`, `staleDemands`). */
+export function kernelTableSizes(t: KernelTables) {
+  let finishedScopes = 0, scopeNodes = 0, forgottenInScopes = 0, scopeEffects = 0, strayEffects = 0, demandEdges = 0, staleDemands = 0;
+  for (const [process, scope] of t.scopes) {
+    if (process.terminal) finishedScopes++;
+    scopeNodes += scope.nodes.length;
+    for (const node of scope.nodes) if (t.nodes.get(node.id) !== node) forgottenInScopes++;
+    scopeEffects += scope.effects.length;
+    for (const effect of scope.effects) if (effect.scope !== scope) strayEffects++;
+  }
+  for (const node of t.nodes.values()) for (const consumer of node.demands.keys()) {
+    demandEdges++;
+    if (consumer instanceof KNode && t.nodes.get(consumer.id) !== consumer) staleDemands++;
+  }
+  return { nodes: t.nodes.size, scopes: t.scopes.size, finishedScopes, scopeNodes, forgottenInScopes, scopeEffects, strayEffects, demandEdges, staleDemands,
+    primed: t.primed.size, pendingChanges: t.pendingChanges, pendingObservations: t.pendingObservations, transactionBuffer: t.transactionBuffer };
+}
+
+/** The graph's table sizes, and how many rows belong to nothing live (the counts `checkTables` wants at 0). */
+export function tableSizes(graph: Graph) {
+  const t = graph[STRATA_DEBUG]().tables;
+  const live = (id: string) => t.records.has(id) || t.inlined.has(id);
+  const onStacks = new Set(t.stacks.flat());
+  const count = <T>(items: Iterable<T>, test: (item: T) => boolean) => { let n = 0; for (const item of items) if (test(item)) n++; return n; };
+  let layerRows = 0, emptyLayerSets = 0, goneDependents = 0, refRows = 0, emptyReferrerSets = 0, strayReferrers = 0;
+  for (const deps of t.layerIndex.values()) { layerRows += deps.size; if (!deps.size) emptyLayerSets++; goneDependents += count(deps.keys(), id => !live(id)); }
+  for (const referrers of t.refIndex.values()) {
+    refRows += referrers.size;
+    if (!referrers.size) emptyReferrerSets++;
+    strayReferrers += count(referrers.keys(), id => !t.refsOut.has(id));
+  }
+  // A gone node's kernel nodes stay only while a node still layers from it, or a kernel node other than its own wires them in.
+  const machineryKept = (id: string) => {
+    if (live(id) || t.layerIndex.has(id)) return true;
+    const own: (KNode | undefined)[] = [t.effectiveNodes.get(id), t.entitySeeds.get(id)];
+    return own.some(node => !!node && [...node.demands.keys()].some(consumer => consumer instanceof KNode && !own.includes(consumer)));
+  };
+  return {
+    kernel: kernelTableSizes(t.kernel),
+    records: t.records.size, inlined: t.inlined.size, defaultsMemo: t.defaultsMemo.size, timeModels: t.timeModels.size, commitEnds: t.commitEnds.size,
+    collapsing: t.collapsing.size, collapsingInto: t.collapsingInto.size, purging: t.purging.size, compacting: t.compacting.size, slowFolds: t.slowFolds.size,
+    sourceRings: t.sourceRings.size, purgedRefs: t.purgedRefs.size,
+    layerIndex: t.layerIndex.size, layerRows, emptyLayerSets, goneDependents, refIndex: t.refIndex.size, refRows, emptyReferrerSets, strayReferrers,
+    refsOut: t.refsOut.size, goneRefsOut: count(t.refsOut.keys(), id => !live(id)),
+    uniqueIndex: t.uniqueIndex.size, goneUnique: count(t.uniqueIndex.values(), id => !live(id)),
+    conflicts: t.conflicts.size, producers: t.producers.size, produced: t.produced.size,
+    orphanProducers: count(t.producers, ([id, set]) => !set.size || !t.conflicts.has(id)) + count(t.conflicts.keys(), id => !t.producers.has(id)),
+    orphanProduced: count(t.produced.values(), ids => !ids.size || [...ids].some(id => !t.conflicts.has(id))),
+    acknowledgements: t.acknowledgements.size, orphanAcknowledgements: count(t.acknowledgements.keys(), id => !t.conflicts.has(id)),
+    commits: t.commits.size, commitsOffStacks: count(t.commits.keys(), id => !onStacks.has(id)), onStacks: onStacks.size,
+    outbox: t.outbox, rejected: t.rejected, ackedCommits: t.ackedCommits.size, entitySeeds: t.entitySeeds.size, effectiveNodes: t.effectiveNodes.size,
+    goneMachinery: count(new Set([...t.entitySeeds.keys(), ...t.effectiveNodes.keys()]), id => !machineryKept(id)),
+    assembled: t.assembled.size, reports: t.reports, flushWaiters: t.flushWaiters,
+    // Listeners on the store run's token: each store task's watcher lets go once it settles.
+    storeListeners: (graph.storeProcess?.signal as { listeners?: unknown[] } | undefined)?.listeners?.length ?? 0,
+  };
+}
+
+/**
+ * `tables`: every internal table of the graph and its kernel is bounded by the live set. Rows that belong to nothing
+ * live (a finished run's scope, an empty or gone row in an index, a conflict's producer or acknowledgement after the
+ * conflict, a commit record off the Undo and Redo stacks, a gone node's kernel nodes that nothing wires in) are
+ * leaks; the caches stay within their caps. `settled`: nothing is in flight either (no queued change, no compaction,
+ * purge or flush waiting).
+ */
+export function checkTables(graph: Graph, options: { readonly settled?: boolean } = {}): string[] {
+  const t = tableSizes(graph);
+  const problems = kernelTableProblems(graph[STRATA_DEBUG]().tables.kernel, options);
+  const zero: Record<string, number> = {
+    "empty layer-dependent sets": t.emptyLayerSets, "gone layer dependents": t.goneDependents, "empty referrer sets": t.emptyReferrerSets,
+    "referrers with no references out": t.strayReferrers, "gone nodes' references out": t.goneRefsOut, "gone nodes' unique values": t.goneUnique,
+    "orphan conflict producers": t.orphanProducers, "orphan produced sets": t.orphanProduced, "acknowledgements of gone conflicts": t.orphanAcknowledgements,
+    "commit records off the Undo and Redo stacks": t.commitsOffStacks, "gone nodes' kernel nodes": t.goneMachinery, "purged references": t.purgedRefs,
+  };
+  if (options.settled) Object.assign(zero, {
+    "collapses": t.collapsing + t.collapsingInto, "purges": t.purging, "compactions": t.compacting,
+    "slow folds": t.slowFolds, "unassembled reports": t.reports, "change sets not taken": t.assembled, "flush waiters": t.flushWaiters,
+  });
+  for (const [what, count] of Object.entries(zero)) if (count) problems.push(`tables: ${count} ${what}`);
+  for (const [cache, cap] of Object.entries(CACHE_CAPS)) if (t[cache as keyof typeof CACHE_CAPS] > cap) problems.push(`tables: ${t[cache as keyof typeof CACHE_CAPS]} ${cache}, over the cap of ${cap}`);
+  return problems;
+}
+
+/** `tables` for a kernel: no finished run keeps its scope, no scope keeps a forgotten node or a disconnected effect, no forgotten node keeps demand. */
+export function kernelTableProblems(tables: KernelTables, options: { readonly settled?: boolean } = {}): string[] {
+  const t = kernelTableSizes(tables);
+  const zero: Record<string, number> = {
+    "finished runs' scopes": t.finishedScopes, "forgotten nodes in run scopes": t.forgottenInScopes,
+    "disconnected effects in run scopes": t.strayEffects, "demand edges from forgotten nodes": t.staleDemands,
+  };
+  if (options.settled) Object.assign(zero, {
+    "queued changes": t.pendingChanges, "queued observations": t.pendingObservations, "buffered observations": t.transactionBuffer, "primed nodes": t.primed,
+  });
+  return Object.entries(zero).filter(([, count]) => count).map(([what, count]) => `tables: ${count} ${what}`);
 }

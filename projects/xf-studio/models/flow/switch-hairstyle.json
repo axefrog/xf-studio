@@ -85,7 +85,7 @@
       "Never prepared: under 1 s typical with progress at once (0.34–2.3 s measured; over for three 4096² maps).",
       "No main-thread task over 50 ms."
     ],
-    "memory": "The part pool holds the previous V's parts until another V clears it."
+    "memory": "The part pool keeps the previous hairstyle's parts for 30 s after they were last shown, so switching back is free."
   },
   "invariants": [
     "The tile shows the choice selected in the same cycle as the click, and rolls back only on refusal.",

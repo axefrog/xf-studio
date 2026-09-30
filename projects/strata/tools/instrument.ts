@@ -38,20 +38,24 @@ function* children(node: Node): Iterable<Node> {
   }
 }
 
-/** Walks the tree depth first in source order, with each node's parent and the name of the function it is in. */
-function walk(root: Node, visit: (node: Node, parent: Node | undefined, fn: string) => void): void {
-  const go = (node: Node, parent: Node | undefined, fn: string) => {
-    let name = fn;
-    if (node.type === "FunctionDeclaration" && node.id) name = (node.id as { name: string }).name;
+/**
+ * Walks the tree depth first in source order, with each node's parent, the name of the function it is in and the
+ * node that names it (the function, method, property, variable or class; the program at the top level).
+ */
+function walk(root: Node, visit: (node: Node, parent: Node | undefined, fn: string, owner: Node) => void): void {
+  const go = (node: Node, parent: Node | undefined, fn: string, owner: Node) => {
+    let name = fn, named = owner;
+    if (node.type === "FunctionDeclaration" && node.id) { name = (node.id as { name: string }).name; named = node; }
     else if (node.type === "MethodDefinition" || node.type === "PropertyDefinition" || node.type === "Property") {
       const key = node.key as { name?: string; value?: unknown };
       name = `${fn ? `${fn}.` : ""}${key.name ?? String(key.value ?? "?")}`;
-    } else if (node.type === "VariableDeclarator" && (node.id as Node).type === "Identifier") name = (node.id as unknown as { name: string }).name;
-    else if (node.type === "ClassDeclaration" && node.id) name = (node.id as { name: string }).name;
-    visit(node, parent, name);
-    for (const child of children(node)) go(child, node, name);
+      named = node;
+    } else if (node.type === "VariableDeclarator" && (node.id as Node).type === "Identifier") { name = (node.id as unknown as { name: string }).name; named = node; }
+    else if (node.type === "ClassDeclaration" && node.id) { name = (node.id as { name: string }).name; named = node; }
+    visit(node, parent, name, named);
+    for (const child of children(node)) go(child, node, name, named);
   };
-  go(root, undefined, "");
+  go(root, undefined, "", root);
 }
 
 /**
@@ -171,7 +175,8 @@ function spliceAll(js: string, splices: readonly Splice[], header: string): stri
 // Mutants
 // ---------------------------------------------------------------------------------------------------------------
 
-export type Mutant = { readonly id: number; readonly line: number; readonly fn: string; readonly operator: string; readonly original: string; readonly replacement: string; readonly start: number; readonly end: number };
+/** A mutant; `fnHash` is a hash of the JavaScript text of the function (method, property, variable or class) it is in. */
+export type Mutant = { readonly id: number; readonly line: number; readonly fn: string; readonly fnHash: string; readonly operator: string; readonly original: string; readonly replacement: string; readonly start: number; readonly end: number };
 
 const SWAP: Readonly<Record<string, readonly string[]>> = {
   "===": ["!=="], "!==": ["==="], "==": ["!="], "!=": ["=="],
@@ -192,10 +197,15 @@ export async function mutants(ts: string): Promise<{ js: string; mutants: Mutant
   const tree = parser.parse(js, { ecmaVersion: "latest", sourceType: "module" });
   const finder = new LineFinder(ts);
   const out: Mutant[] = [];
+  const hashes = new Map<Node, string>();
+  let owner: Node = tree;
+  const fnHashOf = (named: Node) => { let hash = hashes.get(named); if (!hash) hashes.set(named, hash = Bun.hash(js.slice(named.start, named.end)).toString(16)); return hash; };
   const add = (node: Node, fn: string, operator: string, start: number, end: number, replacement: string, line = finder.find(snippetOf(js, node))) =>
-    out.push({ id: out.length, line, fn, operator, original: js.slice(start, end).replace(/\s+/g, " ").slice(0, 90), replacement: replacement.replace(/\s+/g, " ").slice(0, 90), start, end });
+    out.push({ id: out.length, line, fn, fnHash: fnHashOf(owner), operator, original: js.slice(start, end).replace(/\s+/g, " ").slice(0, 90), replacement: replacement.replace(/\s+/g, " ").slice(0, 90), start, end });
   const isStringy = (node: Node) => (node.type === "Literal" && typeof node.value === "string") || node.type === "TemplateLiteral";
-  walk(tree, (node, parent, fn) => {
+  walk(tree, (node, parent, fn, named) => {
+    owner = named;
+
     // Nothing in import/export plumbing or class field declarations' names.
     switch (node.type) {
       case "BinaryExpression": case "LogicalExpression": {

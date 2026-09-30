@@ -26,6 +26,14 @@ export type Referrer = { readonly node: NodeRef; readonly path: Path; readonly f
 
 class CycleError extends Error { constructor(readonly cycle: NodeRef[]) { super("derivation cycle"); } }
 
+/** A cycle (`[x, …, x]`) named from its node whose ID sorts first, so the name doesn't depend on where it was entered. */
+function fromFirst(cycle: readonly NodeRef[]): NodeRef[] {
+  const around = cycle.slice(0, -1);
+  let start = 0;
+  around.forEach((ref, i) => { if (ref.id < around[start].id) start = i; });
+  return [...around, around[0]].map((_, i) => around[(start + i) % around.length]);
+}
+
 export class ReadModel {
   readonly resolver: Resolver;
   private derived = new Map<string, Map<string, DeriveResult>>();
@@ -107,7 +115,10 @@ export class ReadModel {
     return this.exists(start) ? visit(start) : null;
   }
 
-  /** A derived value, computed on demand and memoised; a circle of `follows` derivations is a cycle, not a loop. */
+  /**
+   * A derived value, computed on demand and memoised; a circle of derivations is a cycle, not a loop, named from its
+   * node whose ID sorts first (SPEC §11.14).
+   */
   derive(ref: NodeRef, name: string): DeriveResult {
     const memo = this.derived.get(ref.id)?.get(name);
     if (memo) return memo;
@@ -115,7 +126,7 @@ export class ReadModel {
     if (!fn) return { ok: false, reason: "unknown" };
     if (!this.reader.state(ref)) return { ok: false, reason: "missing" };
     const at = this.deriving.findIndex(item => item.id === ref.id && item.name === name);
-    if (at >= 0) throw new CycleError([...this.deriving.slice(at).map(item => item.ref), ref]);
+    if (at >= 0) throw new CycleError(fromFirst([...this.deriving.slice(at).map(item => item.ref), ref]));
     this.deriving.push({ id: ref.id, name, ref });
     let result: DeriveResult;
     try {
@@ -134,11 +145,10 @@ export class ReadModel {
       if (!(error instanceof CycleError)) throw error;
       result = { ok: false, reason: "cycle", cycle: error.cycle };
     } finally { this.deriving.pop(); }
-    if (this.deriving.length === 0 || result.ok) {
-      let memo2 = this.derived.get(ref.id);
-      if (!memo2) this.derived.set(ref.id, memo2 = new Map());
-      memo2.set(name, result);
-    }
+    // A cycle's name doesn't depend on where it was entered, so a result met inside another derivation is kept too.
+    let memo2 = this.derived.get(ref.id);
+    if (!memo2) this.derived.set(ref.id, memo2 = new Map());
+    memo2.set(name, result);
     return result;
   }
 

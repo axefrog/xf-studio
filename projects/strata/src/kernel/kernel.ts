@@ -93,6 +93,8 @@ export class KNode<T = unknown> {
   run?: Run;
   /** @internal Effects: the run scope connecting them. */
   scope?: Scope;
+  /** @internal A run's own effect: the run whose scope lists it until it is forgotten. */
+  owner?: Scope;
   /** @internal Keep every entry (debugging, entity streams managed elsewhere). */
   retainAll = false;
   constructor(readonly env: Environment, readonly id: string, readonly kind: NodeKind, readonly name: string) {}
@@ -316,7 +318,9 @@ export class Environment {
 
   /** Within a change: forgets a node at once (an effect is disconnected, host demand on it released). */
   private removeNow(node: KNode): void {
-    if (node.kind === "effect") this.disconnect(node);
+    // A run's own effect leaves its run's list too (the erector forgets effects it replaces while its run goes on).
+    if (node.kind === "effect") { if (node.owner) this.forgetEffect(node, node.owner); else this.disconnect(node); }
+
     for (const consumer of [...node.demands.keys()]) if (consumer instanceof HostDemand) this.releaseDemand(node, consumer);
     if (node.active && node.kind !== "effect") this.deactivate(node);
     if (this.nodes.get(node.id) === node) this.nodes.delete(node.id);
@@ -723,6 +727,7 @@ export class Environment {
       env: this, signal: scope.signal, process: scope.process,
       effect: spec => {
         const effect = this.effect({ id: spec.id, name: spec.name, inputs: spec.inputs, run: spec.run });
+        effect.owner = scope;
         scope.nodes.push(effect);
         this.change(() => { if (!scope.signal.aborted && !spec.signal?.aborted) this.connectEffect(effect, scope); else this.forgetEffect(effect, scope); });
         // An effect may end before its run, by its own token; either way it is forgotten.
@@ -817,7 +822,21 @@ export const kernelInternals = {
   setInputsNow: (env: Environment, node: KNode, inputs: readonly Input[]): void => env["setInputsNow"](node, inputs),
   startDriver: (env: Environment, driver: Driver, options: { readonly signal?: AbortSignalLike; readonly parent?: Process; readonly params?: Json; readonly role?: string }): Process =>
     env["startDriver"](driver, options),
+  /** Runs `fn` as a release: a change that only ends things, never dropped at the activation bound. */
+  release: (env: Environment, fn: () => void): void => env["release"](fn),
+  /** Test-only: the kernel's internal tables, read by the "bounded by the live set" invariant (`strata/testing`). */
+  tables: (env: Environment): KernelTables => ({
+    nodes: env["nodes"], scopes: env["scopes"], primed: env["primed"], pendingChanges: env["pendingChanges"].length,
+    pendingObservations: env["pendingObservations"].length, transactionBuffer: env["transactionBuffer"].length,
+  }),
 };
+
+/** The kernel's internal tables (test-only, read-only). */
+export type KernelTables = {
+  readonly nodes: ReadonlyMap<string, KNode>; readonly scopes: ReadonlyMap<Process, Scope>; readonly primed: ReadonlySet<KNode>;
+  readonly pendingChanges: number; readonly pendingObservations: number; readonly transactionBuffer: number;
+};
+
 
 // -------------------------------------------------------------------------------------------------------------------
 // Helpers

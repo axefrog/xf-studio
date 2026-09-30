@@ -14,7 +14,7 @@ import { layerOrder, Resolver } from "./resolve";
 import type { StateReader } from "./resolve";
 import { ReadModel, hasRefs } from "./model";
 import type { DeriveResult, NodeSnapshot, Reference, Referrer } from "./model";
-import { collapseInline as collapsePrimitive, entryKey, entryReferences, keepSet, rollupDeltaStream, rollupValueStream } from "./compaction";
+import { collapseInline as collapsePrimitive, entryKey, entryReferences, keepSet, nodeReferences, rollupDeltaStream, rollupValueStream } from "./compaction";
 import type { KeepOptions, Stream } from "./compaction";
 import { page as inspectorPage } from "./inspect";
 import type { InspectorDetail, InspectorEdge, InspectorPage, InspectorRow } from "./inspect";
@@ -22,7 +22,7 @@ import type { GraphStore, AppendResult } from "./store";
 import type { Sink, SinkDef, SourceDef, Sources } from "./sources";
 import { resolveClaims, trustSelf } from "./trust";
 import type { Claim, FramePolicies, TrustPolicy } from "./trust";
-import { Aborter } from "./kernel/abort";
+import { Aborter, onAbort } from "./kernel/abort";
 import type { AbortSignalLike } from "./kernel/abort";
 import { Environment, kernelInternals, KNode, LATEST, UNCHANGED } from "./kernel/kernel";
 import type { Process, ProcessState, RunContext } from "./kernel/kernel";
@@ -200,8 +200,8 @@ export class StrataGraph implements GraphView {
   /** The pending commits (the recovery copy) whenever they change. */
   private readonly pendingSeed: KNode;
   private reports: NodeChange[] = [];
-  private readonly assembled = new Map<string, ChangeSet>();
-  private lastBatchSeq = 0;
+  /** The change sets an emit is waiting for (its cycle runs at once), by commit; filled in by `onCycle`. */
+  private readonly assembled = new Map<string, ChangeSet | undefined>();
   private allDemand: Aborter | null = null;
   private allSubscribers = 0;
   /** The store driver's run: appends, loads and snapshots are its child processes (SPEC §19.5). */
@@ -358,7 +358,7 @@ export class StrataGraph implements GraphView {
 
   /** Loads every node from its latest snapshot plus tail. */
   async load(): Promise<{ readonly nodes: number; readonly entries: number; readonly foldMs: number }> {
-    if (!this.store) { this.loaded = true; return { nodes: 0, entries: 0, foldMs: 0 }; }
+    if (!this.store) return { nodes: 0, entries: 0, foldMs: 0 };
     const clock = this.sources.clock;
     const store = this.store;
     const stored = await this.storeTask("load", () => store.load());
@@ -580,7 +580,7 @@ export class StrataGraph implements GraphView {
       if (rec) for (const entry of rec.entries) if (entry.pos <= pos) seq = entry.seq;
       return { seq: rec && rec.base.pos <= pos ? Math.max(seq, rec.base.seq) : seq, constant: !!rec?.constant };
     });
-    if (this.timeModels.size > 16) this.timeModels.delete(this.timeModels.keys().next().value!);
+    if (this.timeModels.size >= 16) this.timeModels.delete(this.timeModels.keys().next().value!);
     this.timeModels.set(pos, model);
     return model;
   }
@@ -646,7 +646,7 @@ export class StrataGraph implements GraphView {
   private applyWork(work: Working, options: CommitOptions, cause: ChangeSet["cause"], check?: () => Refusal | null, track = true): CommitResult {
     // Refused before anything is taken: no commit ID, position or actor counter is used by a refused commit (§17.1).
     if (this.env.inCycle) return BUSY();
-    const compacting = this.compactingConflict(work);
+    const compacting = this.compactingConflict(work) ?? this.collapsingConflict(work);
     if (compacting) return compacting;
     if (work.order.some(id => this.collapsing.has(id))) return refusal("busy", "That is being moved into the entry that refers to it.");
     const cycle = this.layerCycle(work);
@@ -700,6 +700,8 @@ export class StrataGraph implements GraphView {
       this.commits.set(commitId, record);
       if (cause === "commit" || cause === "fix") {
         this.stack(this.undoStacks, scope).push(commitId);
+        // A new commit ends the scope's Redo history: its records go with it.
+        for (const id of this.redoStacks.get(scope) ?? []) this.commits.delete(id);
         this.redoStacks.set(scope, []);
       }
     }
@@ -812,9 +814,9 @@ export class StrataGraph implements GraphView {
         return;
       }
       case "reset": {
-        const { ref, def, state } = this.editable(work, edit.node);
+        const { ref, def } = this.editable(work, edit.node);
         this.leafPath(def, edit.path, "field");
-        if (state.own[pathKey(edit.path)] !== undefined) work.push(ref, { kind: "reset", path: [...edit.path] });
+        work.push(ref, { kind: "reset", path: [...edit.path] });
         return;
       }
       case "tombstone": {
@@ -843,9 +845,9 @@ export class StrataGraph implements GraphView {
         return;
       }
       case "rename": {
-        const { ref, state } = this.editable(work, edit.node);
+        const { ref } = this.editable(work, edit.node);
         if (typeof edit.name !== "string") refuse("value", "A name is text.");
-        if (edit.name !== state.name) work.push(ref, { kind: "rename", name: edit.name });
+        work.push(ref, { kind: "rename", name: edit.name });
         return;
       }
       case "trash": case "restore": {
@@ -854,8 +856,7 @@ export class StrataGraph implements GraphView {
         return;
       }
       case "detach": {
-        const { ref, state } = this.editable(work, edit.node);
-        if (!state.layers.length) return;
+        const { ref } = this.editable(work, edit.node);
         const resolver = work.resolver();
         for (const path of resolver.leafPaths(ref)) {
           const found = resolver.leaf(ref, path);
@@ -964,8 +965,7 @@ export class StrataGraph implements GraphView {
       layers = [{ from: source, role: "base", paths: "*", ...(edit.from.at ? { at: { node: source, seq: edit.from.at } } : {}) }, ...layers];
     }
     const own = { ...this.identityOf(def), ...this.ownOf(def, this.withCreated(work, edit.fields ?? {}) as Record<string, unknown>) };
-    work.refs.set(id, ref);   // so layer checks can name it
-    const checked = layers.length ? this.checkLayers(work, ref, def, layers) : [];
+    const checked = this.checkLayers(work, ref, def, layers);
     work.push(ref, { kind: "create", state: freeze({ ...EMPTY_STATE, name: name ?? "", own, layers: checked }) });
     if (edit.as !== undefined) work.created.set(edit.as, ref);
   }
@@ -1012,7 +1012,6 @@ export class StrataGraph implements GraphView {
     for (const plan of plans) {
       const own = { ...plan.state.own };
       for (const path of plan.refPaths) own[pathKey(path)] = remap(own[pathKey(path)]);
-      work.refs.set(plan.ref.id, plan.ref);
       work.push(plan.ref, { kind: "create", state: freeze({ ...plan.state, own }) });
     }
     return cloned;
@@ -1107,6 +1106,7 @@ export class StrataGraph implements GraphView {
     }, "rollback");
     this.headPos = state.headPos;
     this.actorSeq = state.actorSeq;
+    this.forgetGone();
   }
 
   /** Paths an op changes (`"all"` for whole-state and layer changes). */
@@ -1270,15 +1270,21 @@ export class StrataGraph implements GraphView {
       meta.push({ node: ref, paths: [], meta: items, via: [] });
     }
     const batch = { commit, cause, ...(label ? { label } : {}), meta };
+    // Waiting for the change set: a cycle that runs later (this one is queued mid-cycle) assembles one nobody takes.
+    this.assembled.set(commit, undefined);
     this.env.transaction(() => {
       for (const id of before.keys()) { const seed = this.entitySeeds.get(id); if (seed) this.env.observe(seed, commit); }
       this.env.observe(this.batchSeed, batch as unknown as Json);
     });
-    // Rewire demanded layering combinators whose layers changed (after the cycle that reported the change).
+    // Rewire demanded layering combinators whose layers changed (after the cycle that reported the change). A gone
+    // node no longer layered from lets go of its kernel nodes.
+    let orphaned = false;
     for (const [id, was] of before) {
       const node = this.effectiveNodes.get(id), rec = this.records.get(id);
       if (node && rec && !equal(was?.layers ?? [], rec.head?.layers ?? [])) this.env.setInputs(node, this.effectiveInputs(rec.ref));
+      for (const layer of was?.layers ?? []) if (this.effectiveNodes.has(layer.from.id) && !this.records.has(layer.from.id) && !this.inlined.has(layer.from.id)) orphaned = true;
     }
+    if (orphaned) this.forgetGone();
     const set = this.assembled.get(commit);
     this.assembled.delete(commit);
     return set ?? freeze({ commit, ...(label ? { label } : {}), cause, nodes: meta.filter(item => item.meta.length) });
@@ -1287,8 +1293,7 @@ export class StrataGraph implements GraphView {
   /** After each kernel cycle: a cycle carrying a batch assembles its change set from the combinators' reports. */
   private onCycle(): void {
     const batchEntry = this.batchSeed.latest();
-    if (!batchEntry || batchEntry.cycle !== this.env.cycle || batchEntry.seq === this.lastBatchSeq) return;
-    this.lastBatchSeq = batchEntry.seq;
+    if (!batchEntry || batchEntry.cycle !== this.env.cycle) return;
     const batch = batchEntry.value as unknown as { commit: string; cause: ChangeSet["cause"]; label?: string; meta: NodeChange[] };
     const reported = new Map<string, NodeChange>();
     for (const change of this.reports) reported.set(change.node.id, change);
@@ -1302,8 +1307,7 @@ export class StrataGraph implements GraphView {
     nodes.push(...reported.values());
     const set: ChangeSet = freeze({ commit: batch.commit, ...(batch.label ? { label: batch.label } : {}), cause: batch.cause,
       nodes: nodes.sort((a, b) => a.node.id < b.node.id ? -1 : a.node.id > b.node.id ? 1 : 0) });
-    this.assembled.set(batch.commit, set);
-    if (this.assembled.size > 64) this.assembled.delete(this.assembled.keys().next().value!);
+    if (this.assembled.has(batch.commit)) this.assembled.set(batch.commit, set);
     if (set.nodes.length && this.commitsSeed.active) this.env.observe(this.commitsSeed, set as unknown as Json);
   }
 
@@ -1353,6 +1357,36 @@ export class StrataGraph implements GraphView {
   }
 
   private readonly purgedRefs = new Map<string, NodeRef>();
+
+  /**
+   * Forgets the kernel nodes (seed and layering combinator) of nodes that are gone, once nothing wires them in: no
+   * node layers from it any more and no kernel node other than another gone node's demands it (a subscription to
+   * everything demands every node's combinator as the host, and that demand goes with it). Also forgets the gone
+   * nodes' references, which only the change set announcing them needed. Runs after a purge, a rollback and an
+   * unsubscription from a gone node.
+   */
+  private forgetGone(): void {
+    this.purgedRefs.clear();
+    const gone = (id: string) => !this.records.has(id) && !this.inlined.has(id) && !this.layerIndex.has(id);
+    const nodesOf = (id: string) => [this.effectiveNodes.get(id), this.entitySeeds.get(id)].filter((node): node is KNode => !!node);
+    // Decided when the release runs (it may wait for a cycle to end): the gone nodes whose kernel nodes nothing else
+    // wires in, where the gone nodes that go with them don't count.
+    kernelInternals.release(this.env, () => {
+      const going = new Set([...this.entitySeeds.keys(), ...this.effectiveNodes.keys()].filter(gone));
+      for (let changed = true; changed;) {
+        changed = false;
+        const doomed = new Set([...going].flatMap(nodesOf));
+        for (const id of going) if (nodesOf(id).some(node => [...node.demands.keys()].some(consumer => consumer instanceof KNode && !doomed.has(consumer)))) {
+          going.delete(id);
+          changed = true;
+        }
+      }
+      for (const id of going) {
+        for (const node of nodesOf(id)) kernelInternals.removeNow(this.env, node);
+        this.effectiveNodes.delete(id); this.entitySeeds.delete(id);
+      }
+    });
+  }
 
   private indexLayers(id: string, before: NodeState | null, after: NodeState | null): void {
     if (before && after && before.layers === after.layers) return;
@@ -1419,7 +1453,7 @@ export class StrataGraph implements GraphView {
       this.allDemand = new Aborter();
       for (const rec of this.records.values()) if (!rec.constant) this.effectiveNode(rec.ref).demand(LATEST, this.allDemand.signal, "all");
     }
-    const effect = this.env.effect({ name: "subscribe all", inputs: [this.commitsSeed], run: context => {
+    const effect = this.env.effect({ name: "subscribe all", inputs: [this.commitsSeed], signal: options.signal, run: context => {
       for (const entry of context.inputs[0].fresh) listener(entry.value as unknown as ChangeSet);
     } });
     this.env.connect(effect, options.signal);
@@ -1439,7 +1473,7 @@ export class StrataGraph implements GraphView {
     const self = this.effectiveNode(target);
     const inputsFor = () => options.follows ? [self, ...this.followsClosure(target).map(item => this.effectiveNode(item))] : [self];
     let effect: KNode;
-    effect = this.env.effect({ name: `subscribe ${ref.id}`, inputs: inputsFor(), run: context => {
+    effect = this.env.effect({ name: `subscribe ${ref.id}`, inputs: inputsFor(), signal: options.signal, run: context => {
       const own = context.inputs[0].changed ? (context.inputs[0].value as EffectiveOut | undefined)?.change : undefined;
       const via = context.inputs.slice(1).filter(input => input.changed && (input.value as EffectiveOut | undefined)?.change)
         .map(input => (input.value as EffectiveOut).change!.node);
@@ -1450,11 +1484,13 @@ export class StrataGraph implements GraphView {
       }
     } });
     this.env.connect(effect, options.signal);
+    // A subscription to a node that has gone meanwhile was the last thing holding its kernel nodes.
+    onAbort(options.signal, () => { if (!this.records.has(target.id) && !this.inlined.has(target.id)) this.forgetGone(); });
   }
 
   /** The pending (unacknowledged) commits whenever they change, until `signal` aborts: the host's recovery copy. */
   subscribePending(listener: (pending: readonly PendingCommit[]) => void, options: { readonly signal: AbortSignalLike }): void {
-    const effect = this.env.effect({ name: "pending", inputs: [this.pendingSeed], run: context => {
+    const effect = this.env.effect({ name: "pending", inputs: [this.pendingSeed], signal: options.signal, run: context => {
       if (context.inputs[0].changed) listener(context.inputs[0].value as unknown as PendingCommit[]);
     } });
     this.env.connect(effect, options.signal);
@@ -1506,8 +1542,7 @@ export class StrataGraph implements GraphView {
    * and a task asked for after the store driver stopped fails at once instead of waiting for ever.
    */
   private storeTask<T>(name: string, work: (signal: AbortSignalLike) => Promise<T>): Promise<T> {
-    const run = this.storeRun;
-    if (!run) return Promise.reject(new Error("The graph has no store."));
+    const run = this.storeRun!;
     if (run.signal.aborted) return Promise.reject(new Error("The graph's store has stopped."));
     return new Promise<T>((resolve, reject) => {
       let result: { value: T } | undefined;
@@ -1525,11 +1560,11 @@ export class StrataGraph implements GraphView {
    * retried after a `retry` process (a timer) completes.
    */
   private pump(): void {
-    if (!this.store || !this.storeRun || this.inflight !== null || this.retrying || !this.outbox.length) {
+    if (this.inflight !== null || this.retrying || !this.outbox.length) {
       if (!this.outbox.length) this.resolveFlush();
       return;
     }
-    const run = this.storeRun, store = this.store, item = this.outbox[0], token = ++this.token;
+    const run = this.storeRun!, store = this.store!, item = this.outbox[0], token = ++this.token;
     this.inflight = token;
     const process = run.spawn("append", signal => new Promise<Json>((resolve, reject) => {
       // The wait for a reply ends with the reply (or the process): no timer outlives the append.
@@ -1540,7 +1575,6 @@ export class StrataGraph implements GraphView {
         error => { waiting.abort("answered"); reject(error); });
     }));
     this.whenSettled(process, state => {
-      if (this.inflight !== token) return;
       this.inflight = null;
       if (state.status === "done") this.onReply(item, state.result as unknown as AppendResult);
       else if (state.status === "failed") this.scheduleRetry();
@@ -1553,10 +1587,8 @@ export class StrataGraph implements GraphView {
    */
   private whenSettled(process: Process, then: (state: ProcessState) => void): void {
     const run = this.storeRun!, done = new Aborter();
-    let settled = false;
+    // Settles once: whichever of the abort listener and the result effect comes first ends the other.
     const settle = (state: ProcessState) => {
-      if (settled) return;
-      settled = true;
       run.signal.removeEventListener("abort", stopped);
       done.abort("settled");
       this.env.change(() => then(state));
@@ -1572,9 +1604,8 @@ export class StrataGraph implements GraphView {
   }
 
   private scheduleRetry(): void {
-    if (this.retrying || !this.storeRun) return;
     this.retrying = true;
-    const timer = this.storeRun.spawn("retry", signal => new Promise<Json>(resolve => this.sources.clock.after(this.retryMs, () => resolve(null), signal)));
+    const timer = this.storeRun!.spawn("retry", signal => new Promise<Json>(resolve => this.sources.clock.after(this.retryMs, () => resolve(null), signal)));
     this.whenSettled(timer, () => { this.retrying = false; this.pump(); });
   }
 
@@ -1668,6 +1699,7 @@ export class StrataGraph implements GraphView {
     for (const id of ids) this.commits.delete(id);
     this.notifyPending();
     this.emit(beforeStates, "rollback", `rollback:${dropped[0].commit}`);
+    this.forgetGone();
     // A pin may have pointed into what was dropped.
     this.refreshPinned(`rollback-pins:${dropped[0].commit}`);
   }
@@ -1844,6 +1876,7 @@ export class StrataGraph implements GraphView {
    */
   forgetHistory(scope?: string): void {
     for (const stacks of [this.undoStacks, this.redoStacks]) {
+      for (const [name, stack] of stacks) if (scope === undefined || name === scope) for (const id of stack) this.commits.delete(id);
       if (scope === undefined) stacks.clear(); else stacks.delete(scope);
     }
   }
@@ -1862,7 +1895,8 @@ export class StrataGraph implements GraphView {
     const id = stack?.[stack.length - 1];
     if (!id) return refusal("nothing-to-undo", "There is nothing to undo.");
     const result = this.compensate(id, "undo");
-    if (result.ok) { stack!.pop(); this.stack(this.redoStacks, scope).push(result.commit); }
+    // The undone commit's record is read only through the stacks: its compensation's record stands in for it.
+    if (result.ok) { stack!.pop(); this.commits.delete(id); this.stack(this.redoStacks, scope).push(result.commit); }
     return result;
   }
 
@@ -1872,7 +1906,7 @@ export class StrataGraph implements GraphView {
     const id = stack?.[stack.length - 1];
     if (!id) return refusal("nothing-to-undo", "There is nothing to redo.");
     const result = this.compensate(id, "redo");
-    if (result.ok) { stack!.pop(); this.stack(this.undoStacks, scope).push(result.commit); }
+    if (result.ok) { stack!.pop(); this.commits.delete(id); this.stack(this.undoStacks, scope).push(result.commit); }
     return result;
   }
 
@@ -1902,8 +1936,7 @@ export class StrataGraph implements GraphView {
       if (!ops.length) continue;
       const reverses: EventRef[] = [];
       for (let seq = first; seq <= last; seq++) reverses.push({ node: rec.ref, seq });
-      work.refs.set(ref.id, rec.ref);
-      work.push(rec.ref, { kind: "compensate", reverses, ops }, true);
+      work.push(rec.ref, { kind: "compensate", reverses, ops });
     }
     if (!work.order.length) return refusal("empty", "That step no longer changes anything.");
     return this.applyWork(work, { label: record.label, scope: record.scope }, cause);
@@ -1942,13 +1975,13 @@ export class StrataGraph implements GraphView {
   }
 
   private reevaluate(subjects: Set<string>): void {
-    const global = this.rules.filter(rule => rule.scope === "global");
+    const global = this.rules.filter(rule => rule.scope === "global"), dropped = new Set<string>();
     const all = global.length ? new Set([...subjects, ...this.records.keys()]) : subjects;
     for (const id of all) {
       const rec = this.records.get(id), inSubjects = subjects.has(id);
       const rules = rec ? this.rulesFor(rec.ref.type).filter(rule => inSubjects || rule.scope === "global") : [];
       // Drop what this subject produced before, for the rules re-evaluated now.
-      for (const rule of inSubjects ? this.rules : global) this.dropProduced(`${rule.id}\u0000${id}`);
+      for (const rule of inSubjects ? this.rules : global) this.dropProduced(`${rule.id}\u0000${id}`, dropped);
       if (!rec || !this.headState(rec.ref)) continue;
       for (const rule of rules) {
         const producer = `${rule.id}\u0000${id}`;
@@ -1963,16 +1996,19 @@ export class StrataGraph implements GraphView {
         if (ids.size) this.produced.set(producer, ids);
       }
     }
+    // A conflict gone after the re-evaluation takes its acknowledgement with it.
+    for (const id of dropped) if (!this.conflictsById.has(id)) this.acknowledgements.delete(id);
   }
 
-  private dropProduced(producer: string): void {
+  /** Drops what a producer produced; a conflict nothing produces any more goes, and is added to `dropped`. */
+  private dropProduced(producer: string, dropped: Set<string>): void {
     const ids = this.produced.get(producer);
     if (!ids) return;
     this.produced.delete(producer);
     for (const id of ids) {
       const producers = this.producers.get(id);
       producers?.delete(producer);
-      if (!producers?.size) { this.producers.delete(id); this.conflictsById.delete(id); }
+      if (!producers?.size) { this.producers.delete(id); this.conflictsById.delete(id); dropped.add(id); }
     }
   }
 
@@ -2056,7 +2092,6 @@ export class StrataGraph implements GraphView {
     this.sourceRings.set(ref.id, def.ring);
     const exists = this.records.has(ref.id);
     const work = new Working(this);
-    work.refs.set(ref.id, ref);
     work.push(ref, exists ? { kind: "set", path: ["value"], value } : { kind: "create", state: freeze({ ...EMPTY_STATE, name: def.name, own: { [pathKey(["value"])]: value } }) });
     this.applyWork(work, { scope: `source:${def.name}` }, "commit", undefined, false);
   }
@@ -2076,11 +2111,28 @@ export class StrataGraph implements GraphView {
     if (!this.compacting.size) return null;
     for (const id of work.order) {
       const def = this.types.get(work.refs.get(id)!.type);
-      for (const op of work.ops.get(id) ?? []) {
+      for (const op of work.ops.get(id)!) {
         for (const target of entryReferences({ op, commit: "" } as Entry, def)) {
           if (this.compacting.get(target.node.id)?.has(target.seq))
             return refusal("busy", "That history is being tidied up right now; try again in a moment.");
         }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * A commit that would add a reference to a node being collapsed, or to one of its entries, is refused while the
+   * collapse is under way (SPEC §16.6): the collapse was allowed because exactly one entry referenced the node.
+   */
+  private collapsingConflict(work: Working): Refusal | null {
+    if (!this.collapsing.size) return null;
+    for (const id of work.order) {
+      const def = this.types.get(work.refs.get(id)!.type);
+      for (const op of work.ops.get(id)!) {
+        const entry = { op, commit: "" } as Entry;
+        if (entryReferences(entry, def).some(target => this.collapsing.has(target.node.id)) || nodeReferences(entry, def).some(ref => this.collapsing.has(ref.id)))
+          return refusal("busy", "What this refers to is being moved into the entry that refers to it; try again in a moment.");
       }
     }
     return null;
@@ -2234,6 +2286,7 @@ export class StrataGraph implements GraphView {
     const beforeStates = this.refresh(touched, () => { this.inlined.delete(ref.id); this.indexLayers(ref.id, item.state, null); }, "purge");
     this.forgetTimes();
     this.emit(beforeStates, "purge", `purge:${ref.id}`);
+    this.forgetGone();
     return { ok: true };
   }
 
@@ -2284,9 +2337,14 @@ export class StrataGraph implements GraphView {
       this.indexUnique(rec, before, null);
     }, "purge");
     for (const stacks of [this.undoStacks, this.redoStacks]) for (const [scope, stack] of stacks)
-      stacks.set(scope, stack.filter(id => !this.commits.get(id)?.touches.has(ref.id)));
+      stacks.set(scope, stack.filter(id => {
+        const touched = !!this.commits.get(id)?.touches.has(ref.id);
+        if (touched) this.commits.delete(id);
+        return !touched;
+      }));
     this.forgetTimes();
     this.emit(beforeStates, "purge", `purge:${ref.id}`);
+    this.forgetGone();
     return { ok: true };
   }
 
@@ -2294,13 +2352,10 @@ export class StrataGraph implements GraphView {
   // The inspector's data
   // -------------------------------------------------------------------------------------------------------------
 
-  private depthOf(id: string, seen = new Set<string>()): number {
-    if (seen.has(id)) return 0;
-    seen.add(id);
+  private depthOf(id: string): number {
     const state = this.records.get(id)?.head;
     let depth = 0;
-    for (const layer of state?.layers ?? []) depth = Math.max(depth, 1 + this.depthOf(layer.from.id, seen));
-    seen.delete(id);
+    for (const layer of state?.layers ?? []) depth = Math.max(depth, 1 + this.depthOf(layer.from.id));
     return depth;
   }
 
@@ -2353,6 +2408,17 @@ export class StrataGraph implements GraphView {
       resolver: this.head.resolver,
       layerIndex: this.layerIndex,
       outbox: this.outbox,
+      // The internal tables, for the "bounded by the live set" invariant (`checkTables`).
+      tables: {
+        kernel: kernelInternals.tables(this.env), records: this.records, inlined: this.inlined, defaultsMemo: this.defaultsMemo,
+        timeModels: this.timeModels, commitEnds: this.commitEnds, collapsing: this.collapsing, collapsingInto: this.collapsingInto,
+        purging: this.purging, compacting: this.compacting, slowFolds: this.slowFolds, sourceRings: this.sourceRings, purgedRefs: this.purgedRefs,
+        layerIndex: this.layerIndex, refIndex: this.refIndex, refsOut: this.refsOut, uniqueIndex: this.uniqueIndex, conflicts: this.conflictsById,
+        producers: this.producers, produced: this.produced, acknowledgements: this.acknowledgements, commits: this.commits,
+        stacks: [...this.undoStacks.values(), ...this.redoStacks.values()] as readonly (readonly string[])[], outbox: this.outbox.length,
+        rejected: this.rejectedCommits.length, ackedCommits: this.ackedCommits, entitySeeds: this.entitySeeds, effectiveNodes: this.effectiveNodes,
+        assembled: this.assembled, reports: this.reports.length, flushWaiters: this.flushWaiters.length,
+      } as const,
     };
   }
 }
@@ -2403,28 +2469,20 @@ class Working {
     return this.base(ref);
   }
   seqOf(ref: NodeRef): number { return this.seqs.get(ref.id) ?? this.graph.seqOf(ref); }
-  push(ref: NodeRef, op: Op, raw = false): void {
-    if (!this.ops.has(ref.id)) {
-      this.ops.set(ref.id, []);
-      this.order.push(ref.id);
-      this.refs.set(ref.id, ref);
-      this.states.set(ref.id, raw ? (this.graph as unknown as { records: Map<string, Rec> }).records.get(ref.id)?.head ?? null : this.base(ref));
-    }
-    const before = this.states.get(ref.id) ?? null;
+  push(ref: NodeRef, op: Op): void {
+    const fresh = !this.ops.has(ref.id);
+    const before = fresh ? this.base(ref) : this.states.get(ref.id) as NodeState | null;
     const after = fold(before, [{ op } as Entry]);
     // An edit that changes nothing is not recorded: no entry, nothing to undo.
     const primitive = op.kind === "set" || op.kind === "reset" || op.kind === "tombstone" || op.kind === "layers" || op.kind === "rename";
-    if (primitive && before && equal(before, after)) { if (!this.ops.get(ref.id)!.length) this.drop(ref.id); return; }
+    if (primitive && before && equal(before, after)) return;
+    if (fresh) { this.ops.set(ref.id, []); this.order.push(ref.id); this.refs.set(ref.id, ref); }
     this.ops.get(ref.id)!.push(op);
     this.states.set(ref.id, after);
     this.seqs.set(ref.id, this.seqOf(ref) + 1);
     this.temp?.clear();
   }
-  private drop(id: string): void {
-    this.ops.delete(id); this.states.delete(id); this.refs.delete(id); this.seqs.delete(id);
-    const index = this.order.indexOf(id);
-    if (index >= 0) this.order.splice(index, 1);
-  }
+
   /** A resolver over this change's working states (for detach, clone and apply-to-source). */
   resolver(): Resolver {
     const graph = this.graph as unknown as { headReader: StateReader };

@@ -32,6 +32,10 @@
   "servedBy": [
     "driver:v-host"
   ],
+  "key": [
+    "the requesting page",
+    "the V it is for"
+  ],
   "faults": [
     {
       "code": "unknown-request",
@@ -39,6 +43,13 @@
       "fault": "requester",
       "goesTo": "diagnostics",
       "then": "fail"
+    }
+  ],
+  "x-friction": [
+    {
+      "gap": "The host run for one character request is shared by every page that asks for it, while a page's newer request replaces only that page's older one for the same V.",
+      "capability": "reasons-for-work",
+      "closes": "Requests that name who they are for, shared by equal goals, superseded per requester and key."
     }
   ]
 }

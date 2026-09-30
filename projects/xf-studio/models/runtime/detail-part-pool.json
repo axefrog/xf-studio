@@ -2,14 +2,15 @@
   "kind": "runtime",
   "id": "detail-part-pool",
   "owner": "character",
-  "summary": "GPU parts of V details kept for reuse, keyed by component content, so unchanged and preloaded parts cost nothing.",
+  "summary": "GPU parts of V details, one per part content, kept while any V shows them and for 30 s after, so unchanged and preloaded parts cost nothing.",
   "status": "both",
   "replaces": [
     "character-detail-loader"
   ],
   "environment": "page",
   "key": [
-    "runtime:gl-renderer"
+    "runtime:gl-renderer",
+    "the part's content hash"
   ],
   "factory": "character-detail-loader",
   "ready": "driver:v-details",
@@ -43,9 +44,9 @@
   "linger": 30000,
   "x-friction": [
     {
-      "gap": "Parts outlive the load that made them and are claimed later; another V clears the pool.",
+      "gap": "A part stays while any V shows it and for 30 s after its last use, so a flip back or a click after a hover finds it; today another V clears the pool by hand.",
       "capability": "keep-after-use",
-      "closes": "Results kept for a later claim with an eviction rule."
+      "closes": "Demand that lingers for a set time after its last consumer, with host objects made per key and collected after."
     }
   ]
 }

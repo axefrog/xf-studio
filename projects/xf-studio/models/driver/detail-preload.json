@@ -26,9 +26,9 @@
   "lifetime": "Per hovered choice, from a 0.4 s rest until the pointer leaves or the choice is shown.",
   "x-friction": [
     {
-      "gap": "A preloaded part waits in the pool for the click, then is claimed.",
+      "gap": "A hover asks for the choice's parts; that demand lingers after the pointer leaves, so the click finds them in the pool.",
       "capability": "keep-after-use",
-      "closes": "Results kept after their demand ends for a later claim."
+      "closes": "Demand that lingers for a set time after its last consumer."
     }
   ]
 }

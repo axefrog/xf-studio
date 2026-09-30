@@ -1,6 +1,7 @@
 # XF Strata, the graph engine (projects/strata): its own suite (kernel, entity and stream tests, property
 # tests, deterministic simulation, budgets, boundary and API surface), its two typechecks and the minimal example, on
-# every push to main and every pull request that touches it. The Studio's workflow also runs when it changes.
+# every push to main and every pull request that touches it, and the branch coverage ratchet against its public
+# baseline. The Studio's workflow also runs when it changes.
 name: Strata
 
 on:
@@ -50,3 +51,9 @@ jobs:
 
       - name: Example
         run: bun examples/minimal
+
+      # The public baseline in tools/quality.json (the suite alone); acorn parses the engine for the probes.
+      - name: Branch coverage ratchet
+        run: |
+          npm install --prefix "$RUNNER_TEMP/acorn" --no-save --ignore-scripts --no-audit --no-fund acorn@8.18.0
+          STRATA_ACORN="$RUNNER_TEMP/acorn/node_modules/acorn/dist/acorn.mjs" bun run coverage:ratchet

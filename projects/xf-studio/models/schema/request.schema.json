@@ -68,6 +68,49 @@
         "pattern": "^(driver):[a-z0-9]+(-[a-z0-9]+)*$"
       }
     },
+    "standIn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal",
+        "summary"
+      ],
+      "properties": {
+        "goal": {
+          "description": "The goal served instead when every approach fails for the request's own goal.",
+          "type": "object"
+        },
+        "summary": {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      },
+      "description": "A weaker goal served when the request's own can't be, shown with a notice."
+    },
+    "key": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "common.schema.json#/$defs/text"
+      },
+      "description": "What a newer request replaces: a request from the same requester with the same key supersedes the older one."
+    },
+    "deadline": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      ],
+      "description": "The time by which it must be answered (ms from raising), carried through fallbacks and retries."
+    },
+    "linger": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How long (ms) the work serving it is kept after the last request for it ends, so asking again is free."
+    },
     "faults": {
       "$ref": "common.schema.json#/$defs/faults"
     },

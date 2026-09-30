@@ -75,12 +75,33 @@ export function defineType(spec: TypeSpec): TypeDef {
     if (name.startsWith("$")) throw fieldError(spec.type, name, "field names may not start with $");
     checkKind(spec.type, name, field, 0);
   }
+  checkUpcasters(spec);
   const names = new Set<string>();
   for (const constant of spec.constants ?? []) {
     if (names.has(constant.name)) throw new Error(`Type ${spec.type} declares constant ${constant.name} twice.`);
     names.add(constant.name);
   }
   return Object.freeze({ ...spec, kind: "strata/type" as const });
+}
+
+/**
+ * A type's upcasters form chains that each reach its current schema (SPEC §15.3): one step from each schema, none from
+ * the current one, and from every schema a step starts from, the steps reach the current schema without repeating one.
+ */
+function checkUpcasters(spec: TypeSpec): void {
+  const steps = new Map<string, string>();
+  for (const step of spec.upcasters ?? []) {
+    if (steps.has(step.from)) throw new Error(`Type ${spec.type} declares two upcasters from schema ${step.from}.`);
+    if (step.from === spec.schema) throw new Error(`Type ${spec.type} declares an upcaster from its current schema ${spec.schema}.`);
+    steps.set(step.from, step.to);
+  }
+  for (const from of steps.keys()) {
+    const seen = new Set<string>();
+    for (let schema: string | undefined = from; schema !== spec.schema; schema = steps.get(schema)) {
+      if (schema === undefined || seen.has(schema)) throw new Error(`Type ${spec.type}'s upcasters from schema ${from} never reach schema ${spec.schema}.`);
+      seen.add(schema);
+    }
+  }
 }
 
 /** The ID of a type's constant. */

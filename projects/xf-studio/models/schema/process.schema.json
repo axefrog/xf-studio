@@ -80,6 +80,14 @@
     },
     "faults": {
       "$ref": "common.schema.json#/$defs/faults"
+    },
+    "results": {
+      "$ref": "common.schema.json#/$defs/jsonSchema",
+      "description": "Each result the work streams, one at a time, as far as its consumers ask for."
+    },
+    "suspend": {
+      "$ref": "common.schema.json#/$defs/text",
+      "description": "What happens to the work while it is suspended (paused for the person's own work, or waiting for a fix)."
     }
   },
   "allOf": [

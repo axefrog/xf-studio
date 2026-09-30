@@ -9,7 +9,7 @@ import { createGraph, STRATA_DEBUG, STRATA_FAULTS } from "../graph";
 import type { Faults, Graph, GraphOptions, PendingCommit } from "../graph";
 import { MemoryStore } from "../store";
 import type { Edit, NodeRef, NodeState } from "../types";
-import { checkConflictIndex, checkConsistentCut, checkResolution, checkSnapshots, checkStructure } from "./invariants";
+import { checkConflictIndex, checkConsistentCut, checkResolution, checkSnapshots, checkStructure, checkTables } from "./invariants";
 import { Scheduler, settle, simClock, SimJobs } from "./sim-sources";
 import { seededRandom } from "../random";
 import { SimStore } from "./sim-store";
@@ -201,6 +201,16 @@ const actions: SimAction<GraphWorld>[] = [
     if (!node) return;
     void world.graph.collapseInline(node).then(result => { if (result.ok) world.collapsed.add(node.id); }, stopped);
   } },
+  // "Leave it" on a warning: the acknowledgement goes when the warning does.
+  { name: "acknowledge", weight: 0.5, run(world, [a]) {
+    const warning = pickFrom(world.graph.conflicts().filter(conflict => conflict.severity !== "blocking"), a);
+    if (warning) world.graph.acknowledge(warning.id);
+  } },
+  // A view of the past (the views cache is bounded).
+  { name: "past-view", weight: 0.5, run(world, [a]) {
+    const position = world.graph.position;
+    if (position) void world.graph.at(1 + (a % position)).then(view => { view.list(); }, stopped);
+  } },
   // A session's Undo history ends: compaction then rolls up what it no longer needs.
   { name: "forget-history", weight: 0.3, run(world) { world.graph.forgetHistory(); } },
   { name: "compact", weight: 0.3, run(world, [a, b]) {
@@ -278,6 +288,7 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
         if (nodes > world.baseline.nodes[index]) problems.push(`lifetime: ${name} holds ${nodes - world.baseline.nodes[index]} kernel nodes more than after setup`);
         const listeners = listenerCount((index ? world.otherLife : world.life).signal);
         if (listeners > world.baseline.listeners[index]) problems.push(`lifetime: ${name}'s lifetime token has ${listeners - world.baseline.listeners[index]} listeners more than after setup`);
+        problems.push(...checkTables(graph, { settled: true }).map(problem => `${problem} (${name})`));
       }
       // Both windows converge: once each has caught up with the store, it resolves what a graph loaded from it does.
       const settleAll = async (promise: Promise<unknown>) => {
@@ -325,6 +336,7 @@ export function graphScenario(faults?: Faults): Scenario<GraphWorld> {
       problems.push(...checkConflictIndex(graph));
       problems.push(...checkStructure(graph, SYNTHETIC_TYPES, world.memory));
       problems.push(...checkSnapshots(world.memory, SYNTHETIC_TYPES));
+      for (const peer of [graph, world.other]) problems.push(...checkTables(peer));
       // No lost work: every accepted commit is stored, pending (the recovery copy), or rejected (kept for the person).
       const stored = new Set(world.memory.allEntries().map(entry => entry.commit));
       const pending = new Set(graph.pending().map(item => item.commit));

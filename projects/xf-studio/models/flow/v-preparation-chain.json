@@ -1,0 +1,132 @@
+{
+  "kind": "flow",
+  "id": "v-preparation-chain",
+  "owner": "character",
+  "summary": "Preparing a shown V as a chain of requests, each with its reason, its fallbacks and its owner for every failure, from the view to the decoded resources and back to her parts on screen.",
+  "status": "target",
+  "steps": [
+    {
+      "model": "driver:view",
+      "does": "A visible view shows a scene; the scene asks for the V it shows, for the reason that it is shown."
+    },
+    {
+      "model": "request:prepare-v",
+      "does": "Keyed by the V: a newer request for the same V replaces the older; asking again within 30 s joins the work already there."
+    },
+    {
+      "model": "driver:v-preparation",
+      "does": "Asks the host for the V's character request, naming this page as the requester."
+    },
+    {
+      "model": "request:prepare-v-on-host",
+      "does": "Shared by every page asking for the same character request; superseded only by the same page's newer request for the same V."
+    },
+    {
+      "model": "driver:v-host",
+      "does": "Answers from a kept record, or prepares it, asking for each resource it needs."
+    },
+    {
+      "model": "request:export-asset",
+      "does": "One export per resource, shared by every preparation that needs it."
+    },
+    {
+      "model": "request:decode-resource",
+      "does": "Ranked approaches: the native decoder first, WolvenKit next."
+    },
+    {
+      "model": "process:native-decode",
+      "does": "Runs within a 10 s budget that pauses while it is suspended; over budget or unsupported, the request moves to WolvenKit with the time it has left."
+    },
+    {
+      "model": "driver:wolvenkit",
+      "does": "The second approach; with no usable WolvenKit it suspends and asks for it to be set up."
+    },
+    {
+      "model": "request:set-up-wolvenkit",
+      "does": "Raised to fix the suspended work, for the reason that the person consented to exactly this release; answering it resumes everything waiting."
+    },
+    {
+      "model": "request:load-v-details",
+      "does": "The page loads the record into the V's runtime in that scene."
+    },
+    {
+      "model": "runtime:v-runtime",
+      "does": "One per V and scene, made on first demand and collected 2 s after no view shows her."
+    },
+    {
+      "model": "runtime:detail-part-pool",
+      "does": "One per part content; a part lingers 30 s after its last use, so flicking back or clicking a hovered choice is free."
+    },
+    {
+      "model": "driver:v-details",
+      "does": "Swaps the new parts in at once and releases the old ones to linger."
+    }
+  ],
+  "demand": "The visible view: view → scene → V → preparation → exports → decodes; nothing is prepared for a V no visible view shows, except what lingers.",
+  "faults": [
+    {
+      "code": "unknown-request",
+      "when": "The page sends a character request the host doesn't accept.",
+      "fault": "requester",
+      "goesTo": "diagnostics",
+      "then": "fail"
+    },
+    {
+      "code": "over-time-budget",
+      "when": "A native decode runs past its budget.",
+      "fault": "owner",
+      "goesTo": "request:decode-resource",
+      "then": "fallback"
+    },
+    {
+      "code": "unsupported-resource",
+      "when": "The native reader doesn't read this kind of resource.",
+      "fault": "owner",
+      "goesTo": "request:decode-resource",
+      "then": "fallback"
+    },
+    {
+      "code": "needs-wolvenkit",
+      "when": "No usable WolvenKit; the preparation waits, and the person sees one next step.",
+      "fault": "owner",
+      "goesTo": "request:set-up-wolvenkit",
+      "then": "suspend"
+    },
+    {
+      "code": "no-consent",
+      "when": "The person's consent was for another release, or was withdrawn; the setup ends and asks again.",
+      "fault": "requester",
+      "goesTo": "person",
+      "then": "suspend"
+    },
+    {
+      "code": "masculine-core-unavailable",
+      "when": "The masculine core can't be prepared; the feminine core stands in, with a notice.",
+      "fault": "owner",
+      "goesTo": "request:prepare-core",
+      "then": "fallback"
+    },
+    {
+      "code": "preparation-failed",
+      "when": "Every approach failed; the V stays as shown, with Try again, which retries from the first approach.",
+      "fault": "owner",
+      "goesTo": "person",
+      "then": "fail"
+    }
+  ],
+  "budget": {
+    "latency": [
+      "Prepared and lingering: shown again in under 200 ms, with no work redone.",
+      "Kept record on the host: shown in under 1 s.",
+      "Cold preparation: progress shown in place at once; no decode waits more than 10 s before WolvenKit takes over."
+    ],
+    "memory": "Parts linger 30 s and V runtimes 2 s after their last use; nothing else is kept for a V no view shows."
+  },
+  "invariants": [
+    "Every running piece of work traces to a visible view through a chain of requests, each with a reason.",
+    "A page's newer request for a V ends only that page's older request for the same V.",
+    "Every failure has one holder: the page for its own bad input, the next approach for a failed one, then the person.",
+    "Work waiting for WolvenKit is paused, not torn down, and carries on once it is set up.",
+    "A view never shows a V's parts from two different records at once."
+  ]
+}
