@@ -4,7 +4,8 @@
  * manifest's mod name (a renamed mod keeps its name, PIPE-90), else eye makeup's brand. */
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isWithin as within, overlaps } from "./platform/api/path-containment";
 import { defaultLocalSettings } from "./local-settings";
 import { checkFrameworkVersions, frameworkModNames, type FrameworkRouteReport } from "./framework-versions";
 import { createWindowsDetectionHost } from "./install-detection-host";
@@ -85,10 +86,6 @@ export function legacyModFolder(modsRoot: string): string | null {
     EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
 }
 const sha = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
-const within = (child: string, root: string) => {
-  const rel = relative(root, child);
-  return !rel || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
-};
 function noLinks(path: string) {
   let at = resolve(path);
   while (!existsSync(at)) {
@@ -123,7 +120,7 @@ function checked(options: RuntimeDiagnosticOptions) {
   profileName(options.profileId);
   const store = resolve(candidateStore), game = resolve(gameRoot), mo2 = resolve(mo2Root), stage = resolve(stagingRoot);
   for (const source of [store, game, mo2]) {
-    requireValue(!within(stage, source) && !within(source, stage), "Diagnostic staging must be outside every source root.");
+    requireValue(!overlaps(stage, source), "Diagnostic staging must be outside every source root.");
     noLinks(source);
   }
   noLinks(stage);

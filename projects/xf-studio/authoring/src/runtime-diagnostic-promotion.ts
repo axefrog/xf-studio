@@ -3,7 +3,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync,
   readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isWithin as within, overlaps } from "./platform/api/path-containment";
 import { inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
 import { frameworkModNames } from "./framework-versions";
 import { candidateModName, diagnosticModlist, installedPlaces, legacyModFolder, profileFrameworks, type RuntimeDiagnosticOptions,
@@ -25,10 +26,6 @@ type Record = { schema: "xfs/runtime-promotion-record-1"; preview: PromotionPrev
 
 function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw Error(message); }
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const within = (child: string, root: string) => {
-  const rel = relative(root, child);
-  return !rel || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
-};
 function noLinks(path: string) {
   let at = resolve(path);
   while (!existsSync(at)) { const parent = dirname(at); requireValue(parent !== at, "Missing path root."); at = parent; }
@@ -81,7 +78,7 @@ function validate(options: PromotionOptions) {
     "Promotion requires a different, new profile name.");
   const stage = resolve(options.stagingRoot), mo2 = resolve(options.mo2Root);
   for (const source of [mo2, resolve(options.candidateStore), resolve(options.gameRoot)])
-    requireValue(!within(stage, source) && !within(source, stage),
+    requireValue(!overlaps(stage, source),
       "Diagnostic stage must be outside every source root.");
   directory(stage); directory(mo2);
   const { journal, receipt } = recordPaths(stage);

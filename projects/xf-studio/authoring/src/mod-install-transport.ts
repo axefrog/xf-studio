@@ -11,13 +11,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync,
   readdirSync, readFileSync, readSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { LocalSettings } from "./local-settings";
 import { EYE_MAKEUP_MOD } from "./mod-branding";
 import { readConfiguredMo2Instance } from "./install-detection-host";
 import { duplicatedNamespaces, isOverlayArchive, readPackageManifest, type PackageManifestView } from "./platform/export/manifest";
 import { EYE_MAKEUP_FEATURE } from "./recipe-schema";
 import { modNameIssue } from "./platform/api";
+import { isBelow as inside, overlaps } from "./platform/api/path-containment";
 
 const schema = "xfs/install-receipt-1" as const;
 const fileNames = ["archive", "archive.xl"] as const;
@@ -79,10 +80,6 @@ const flush = (file: string) => { const fd = openSync(file, "r+");
   try { fsyncSync(fd); } finally { closeSync(fd); } };
 const id = (text: string) => createHash("sha256").update(text.toLowerCase()).digest("hex").slice(0, 24);
 function assert(ok: unknown, message: string): asserts ok { if (!ok) throw Error(message); }
-const inside = (child: string, root: string) => {
-  const rel = relative(root, child);
-  return !!rel && rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);
-};
 const safeName = (value: string) => /^[a-zA-Z0-9_-]{1,128}$/.test(value);
 // MO2 profile directories can contain spaces and parentheses. Mirror the
 // settings parser's single-segment rule; package/candidate IDs stay stricter.
@@ -280,7 +277,7 @@ export function findInstalledDuplicates<P extends { label: string; folder: strin
 /** The host owns this object; never expose its root paths as renderer-editable options. */
 export function createModInstallTransport(config: InstallTransportConfig) {
   const store = resolve(config.candidateStore), receipts = resolve(config.receiptsRoot);
-  assert(isAbsolute(config.candidateStore) && isAbsolute(config.receiptsRoot) && store !== receipts,
+  assert(isAbsolute(config.candidateStore) && isAbsolute(config.receiptsRoot) && !overlaps(store, receipts),
     "Candidate and receipt roots must be distinct absolute directories.");
   directory(store);
   noLinks(store); noLinks(receipts);
@@ -289,9 +286,8 @@ export function createModInstallTransport(config: InstallTransportConfig) {
   // The name becomes a folder in the mod manager: it must be one Windows can hold, and never a path (PIPE-90).
   assert(modName === modName.trim() && modNameIssue(modName) === undefined, "This mod's name can't be used as a mod folder. Rename it in Mod package, then try again.");
   const target = targetFor(config.settings, modName);
-  assert(target.target !== store && target.target !== receipts &&
-    !inside(target.target, store) && !inside(target.target, receipts) &&
-    !inside(store, target.target) && !inside(receipts, target.target),
+  // Compared as Windows compares folders (case, separators): the same folder written differently still overlaps (PIPE-08).
+  assert(!overlaps(target.target, store) && !overlaps(target.target, receipts),
     "Install target and private stores must be separate.");
   const targetId = id(`${target.route}\0${resolve(target.target)}`);
   const receiptFile = join(receipts, `${targetId}.json`);

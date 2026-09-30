@@ -11,13 +11,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync,
   statSync, writeFileSync } from "node:fs";
-import { basename, relative, resolve, sep } from "node:path";
+import { basename, resolve } from "node:path";
 import {
   ExportRefusal, PACKAGE_BUILD_2, PACKAGE_BUILD_STAGES, PACKAGE_PROGRESS_PREFIX, type ExportOmission, type PackageBuildProgress, type PackageBuildStage, type FeatureCheck, type FeatureExporterEntry, type PackageBuildResult, type PackageCheckResult, type ProductBuild,
 } from "../api/export";
 import { checkProducts, type ProductsCheck } from "./product-check";
 import { runWorkerCheck, type CheckOutcome, type CheckRequest } from "./check-runner";
 import { LOCAL_PACKAGE_2, readPackageManifest } from "./manifest";
+import { isBelowReal } from "../api/path-containment";
+
+/** The host's file-system reads for the containment checks. */
+const HOST_PATHS = { exists: existsSync, realpath: realpathSync.native };
 
 /** One Check's deadline (a fresh worker; small compiles only). */
 export const PACKAGE_CHECK_DEADLINE_MS = 15_000;
@@ -132,22 +136,15 @@ export function verifyProductBuildResult(built: PackageBuildResult, planned: Pro
       built.originalPresetCount !== expected.originalPresetCount || JSON.stringify(built.omissions) !== JSON.stringify(expected.omissions) ||
       !Array.isArray(built.products) || built.products.length !== expected.products.length) throw mismatch();
   const canonical = (path: string) => { try { return realpathSync.native(path); } catch { throw outside(); } };
-  const canonicalRoot = canonical(resolve(root));
-  const fold = (path: string) => process.platform === "win32" ? path.toLowerCase() : path;
   built.products.forEach((product, index) => {
     const { package: pkg, manifest: manifestPath, archiveSha256, xlSha256, verifiedUnpackedFiles, installed, gameRenderingVerified, ...check } = product;
     if (JSON.stringify(check) !== JSON.stringify(expected.products[index]) || installed !== false || gameRenderingVerified !== false) throw mismatch();
-    // Containment on canonical paths (a Windows 8.3 short form and its long form name one folder; a link must not lead out),
-    // and lexically: the result must name the same folders below the root as its canonical path does.
+    // Containment as written and on canonical paths (PIPE-08, PIPE-31): a Windows 8.3 short form and its long form name one
+    // folder, a link must not lead out, and an outside path must not reach in through a link.
     const final = resolve(pkg ?? ""), manifestFile = resolve(manifestPath ?? "");
     const canonicalFinal = canonical(final);
     const isFile = (path: string) => { try { return statSync(path).isFile(); } catch { return false; } };
-    if (!canonicalFinal.startsWith(canonicalRoot + sep) || !isFile(manifestFile) || canonical(manifestFile) !== resolve(canonicalFinal, "manifest.json"))
-      throw outside();
-    const below = relative(canonicalRoot, canonicalFinal).split(sep), parts = final.split(sep);
-    const lexicalRoot = parts.slice(0, parts.length - below.length).join(sep);
-    if (parts.length <= below.length || fold(parts.slice(-below.length).join(sep)) !== fold(below.join(sep)) ||
-        ![resolve(root), canonicalRoot].some(item => fold(resolve(lexicalRoot)) === fold(item)))
+    if (!isBelowReal(final, root, HOST_PATHS) || !isFile(manifestFile) || canonical(manifestFile) !== resolve(canonicalFinal, "manifest.json"))
       throw outside();
     if (lstatSync(final).isSymbolicLink() || lstatSync(manifestFile).isSymbolicLink() || resolve(manifestFile) !== resolve(final, "manifest.json"))
       throw Error("Package result is outside the local dist directory or uses a linked path.");
@@ -164,7 +161,7 @@ export function verifyProductBuildResult(built: PackageBuildResult, planned: Pro
       throw Error("Package contains unexpected files.");
     for (const entry of manifest.files) {
       const payload = resolve(final, entry.path);
-      if (!canonical(payload).startsWith(canonicalFinal + sep) || statSync(payload).size !== entry.bytes || fileSha256(payload) !== entry.sha256)
+      if (!(canonical(payload) && isBelowReal(payload, final, HOST_PATHS)) || statSync(payload).size !== entry.bytes || fileSha256(payload) !== entry.sha256)
         throw Error("Package payload does not match its manifest.");
     }
     const features = check.features.map((feature: FeatureCheck) => ({ feature: feature.feature, exporter: feature.exporter, exporterVersion: feature.exporterVersion,
