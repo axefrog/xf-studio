@@ -212,9 +212,10 @@ At the adopted calibration the preview's ash brown is 1.25 times the game's leve
 - **Candidates** [hypothesis]:
   - ray-traced diffuse light reaching the hair through its ambient path, which carries albedo twice (§5); the reference install runs ray-traced lighting at Ultra;
   - the preview's Rim_Top fold, which under-lights the crown about twofold ([creator lighting §12.4](creator-lighting.md#124-what-remains));
-  - the TRT lobe's response to the cool rims.
+  - the TRT lobe's response to the cool rims;
+  - the fills' calibrated gain (×0.35, [creator lighting §12.6](creator-lighting.md#126-refit-from-two-captures-28-september)), fitted on luminance over mostly skin regions: the game's hair is cooler than the preview's in every colour, which fits more cyan light on hair than that gain allows.
 
-  The same ladder with ray-traced lighting off separates the first candidate from the others.
+  The same ladder with ray-traced lighting off separates the first candidate from the others; a per-light refit on hair pixels alone tests the last. The steps are planned in the [render gap plans §2](../research/character-customization/render-gap-plans.md#2-hair-the-ladders-missing-light).
 
 **The usual preset** [runtime, one frame each; pose-independent means over every hair pixel]. Arkhe Balanced renders the same ash-brown hair at 0.72 of the Vanilla level on average (median 0.88; upper quartile 0.63, where the highlights sit). AlbedoMultiplier alone would give 0.81. The rest comes from the wider roughness and the weaker TRT (`EXP_BIAS` 2.58). The Vanilla frames span 0.0207–0.0220 over 18 frames, so the drop is well outside the pose's noise. Skin keeps its luminance under both presets and reads about 6/255 bluer under Arkhe Balanced, from its specular tint.
 
